@@ -45,3 +45,15 @@ def test_child_file_contains_all_hierarchical_ports():
     assert '(hierarchical_label "GND" (shape passive)' in content
     assert '(hierarchical_label "VOUT" (shape output)' in content
     assert '(path "/11111111-1111-4111-8111-111111111111/22222222-2222-4222-8222-222222222222"' in content
+
+
+def test_tristate_uses_native_sexpr_token():
+    pins = parse_pins("ALERT:tristate")
+    content = build_child_schematic(
+        "Alert",
+        pins,
+        "11111111-1111-4111-8111-111111111111",
+        "22222222-2222-4222-8222-222222222222",
+    )
+    assert '(hierarchical_label "ALERT" (shape tri_state)' in content
+    assert "shape tristate" not in content
