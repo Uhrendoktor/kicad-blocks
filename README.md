@@ -1,53 +1,58 @@
 # KiCad Encapsulated Blocks
 
-A KiCad 11 development/nightly schematic IPC plugin that creates a **symbol-like hierarchical block**: one sheet symbol with named electrical pins on the parent schematic, backed by a separate editable child schematic containing matching hierarchical labels.
+An early KiCad 11 nightly/development IPC plugin for creating **sheet-backed schematic blocks**. A block appears as one hierarchical sheet symbol with named electrical ports; its implementation is a normal editable child schematic.
 
-> **Compatibility:** schematic IPC editing and schematic plugin actions are KiCad 11 features. KiCad 10 and earlier cannot run this action in Eeschema. KiCad 11 schematic IPC is still under active development. This MVP has passed its pure-Python tests, but has not yet been exercised in a live KiCad desktop session; treat the first run as an integration test and keep a project backup.
+This uses KiCad's native hierarchy and net connectivity. It does not create a duplicate facade symbol, hidden global nets, or an alternate netlist.
 
-## MVP scope
+## What this MVP does
 
-- Create a new block from a name and comma-separated typed pins.
-- Place a native hierarchical sheet symbol at a user-entered coordinate.
-- Create a child `.kicad_sch` under `.kicad_blocks/` with one matching hierarchical label per pin.
-- The child sheet is a normal schematic: add real components and wires there. KiCad's normal hierarchy, ERC and netlist model remains in use.
+- Prompts for a block name, external pins and placement coordinates.
+- Creates one native hierarchical sheet symbol with input/output/bidirectional/tristate/passive ports.
+- Creates the matching hierarchical labels in the child schematic using KiCad's schematic IPC API.
+- Uses KiCad's own document model to create and save the child sheet file.
+- Keeps the child implementation as an ordinary schematic that can contain normal components, wires and labels.
+- Double-click the sheet symbol to open the internal implementation.
 
-Not included yet: extracting a selected circuit, a browsable block library, linked/shared updates, automatic detaching, custom arbitrary symbol outlines, and bulk synchronization.
+## Requirements
 
-## Install (KiCad 11 nightly/development build)
+- **KiCad 11 nightly/development build.** KiCad 9 and 10 do not expose the Schematic Editor plugin actions and sheet-editing API used here.
+- Enable the KiCad IPC API in Preferences → Plugins.
+- Python interpreter selected for KiCad's plugin environment must have Tkinter available for the simple input dialogs. On Debian/Ubuntu this may require `python3-tk`.
+- The plugin installs the current `kicad-python` development bindings from the official KiCad GitLab repository because the in-development schematic types are not yet part of every stable PyPI release.
 
-1. Close KiCad.
-2. Copy the **`plugin/kicad-blocks`** directory into the KiCad 11 user plugin directory:
+## Install
+
+1. Download or clone this repository.
+2. Copy the **`plugin/kicad-blocks`** folder into the KiCad 11 user plugin directory:
    - Linux: `~/.local/share/KiCad/11.0/plugins/kicad-blocks`
    - Windows: `%USERPROFILE%\Documents\KiCad\11.0\plugins\kicad-blocks`
    - macOS: `~/Documents/KiCad/11.0/plugins/kicad-blocks`
-3. Make sure the directory contains `plugin.json`, `main.py`, `requirements.txt`, and `kicad_blocks/`.
-4. Start the KiCad 11 development build and open a project in the Schematic Editor. Enable the IPC API/plugin system in Preferences if it is not already enabled.
-5. KiCad should create a plugin Python environment and install the dependency listed in `requirements.txt`. The dependency currently points to the official `kicad-python` `main` branch because the stable PyPI release does not yet contain the in-development schematic API.
-6. Run **Create Encapsulated Block** from the Schematic Editor's plugin toolbar/action menu.
+3. Ensure the folder contains `plugin.json`, `requirements.txt`, `main.py`, and `kicad_blocks/`.
+4. Start KiCad 11 nightly, open a saved project schematic and enable the IPC API.
+5. Wait for KiCad to create the plugin environment and install `requirements.txt`.
+6. Run **Create Encapsulated Block** from the Schematic Editor plugin actions.
 
 ## Use
 
-The action asks for:
+Example pin definition:
 
-- **Block name**, for example `Buck_Converter`.
-- **Pins**, for example `VIN:input, GND:passive, VOUT:output, EN:input`.
-- **Position**, the top-left corner in millimetres, for example `100,100`.
+```text
+VIN:input, GND:passive, VOUT:output, EN:input
+```
 
-Supported pin types: `input`, `output`, `bidirectional` (alias `bidir`), `tristate`, and `passive`. A pin without a type defaults to `passive`.
+Pin types: `input`, `output`, `bidirectional` (or `bidir`), `tristate`, and `passive`. A pin without a type defaults to passive. Up to 32 pins are supported.
 
-After creation, the parent sheet contains a native sheet-backed block and the child implementation is saved under `.kicad_blocks/`. Double-click the sheet symbol to open the implementation sheet, then add normal KiCad symbols and wires. The parent pins and child hierarchical labels are matched by name.
+The plugin creates a file such as `buck_converter_block_01.kicad_sch` in the project directory. The parent symbol uses a hidden filename field and displays its instance name and pin interface. The child sheet contains the corresponding hierarchical labels, ready to connect to the internal circuit.
 
-The action uses the native `SheetSymbol`/`SheetPin` object model—not a second electrical facade symbol—so this MVP avoids duplicate pins in the netlist.
+## Current scope and limitations
 
-## Known limitations
+- The graphical body is KiCad's native rectangular sheet symbol. Arbitrary custom symbol outlines are not implemented yet.
+- The plugin creates a fresh implementation sheet; circuit extraction from a selected region is not implemented.
+- Every placement gets its own child implementation file. Shared block libraries and linked-instance synchronization are not implemented.
+- The current KiCad 11 schematic API is experimental and can change before KiCad 11 is released.
+- This repository's automated tests mock the IPC object model. A live Eeschema integration run is still required to confirm behavior with the user's exact KiCad nightly build and plugin runtime.
 
-- The visible interface is currently KiCad's standard rectangular sheet-symbol body, with the name and electrical ports. A future version can add a custom drawn body/graphics while preserving the same sheet object as the electrical and navigation backend.
-- The child sheet is a fresh template; the plugin does not yet move an existing circuit into it.
-- This first version creates one independent implementation sheet per placed block. It does not manage a reusable source library or propagate updates.
-- Schematic IPC is experimental in the KiCad 11 development line. Pin orientation, child sheet path handling, ERC, netlist export and GUI navigation need a real KiCad 11 smoke test before production use.
-- The dependency is fetched from the official KiCad bindings development branch. If KiCad's Python environment cannot access GitLab, install the current `kicad-python` development build manually in that plugin environment.
-
-## Development
+## Development checks
 
 ```bash
 python -m pip install pytest ruff
@@ -56,10 +61,4 @@ pytest -q
 python -m compileall -q plugin
 ```
 
-## Architecture
-
-- `plugin/kicad-blocks/kicad_blocks/model.py`: validates pin definitions and calculates block geometry.
-- `plugin/kicad-blocks/kicad_blocks/plugin.py`: connects to the active Eeschema document and creates a native `SheetSymbol` with `SheetPin`s.
-- `plugin/kicad-blocks/kicad_blocks/sheet_file.py`: emits the child schematic with matching hierarchical labels and a hierarchical instance path.
-
-The implementation uses KiCad's native hierarchy as the electrical backend. It deliberately does not introduce hidden global-net links or duplicate symbol pins.
+The test suite validates pin parsing and the plugin's IPC call sequence with test doubles. It does not replace an actual KiCad GUI/CLI integration test.
