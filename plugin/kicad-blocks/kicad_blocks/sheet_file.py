@@ -55,9 +55,13 @@ def build_child_schematic(
             y = 76.2 + row * 12.7
             angle = 180
             justify = "right"
+
+        # KiCad's S-expression token is tri_state, while the API's enum name is
+        # tristate. The model keeps one normalized UI spelling for both.
+        shape_token = "tri_state" if pin.electrical_type == "tristate" else pin.electrical_type
         lines.extend(
             [
-                f"  (hierarchical_label {_q(pin.name)} (shape {"tri_state" if pin.electrical_type == "tristate" else pin.electrical_type}) (at {x:.4f} {y:.4f} {angle})",
+                f"  (hierarchical_label {_q(pin.name)} (shape {shape_token}) (at {x:.4f} {y:.4f} {angle})",
                 f"    (effects (font (size 1.27 1.27)) (justify {justify}))",
                 f'    (uuid {_q(str(uuid.uuid4()))})',
                 "  )",
@@ -70,7 +74,7 @@ def build_child_schematic(
             "  (sheet_instances",
             f"    (path {_q(hierarchy_path)} (page {_q(page_number)}))",
             "  )",
-                "  (embedded_fonts no)",
+            "  (embedded_fonts no)",
             ")",
             "",
         ]
@@ -79,6 +83,7 @@ def build_child_schematic(
 
 
 def write_child_schematic(path: Path, contents: str) -> None:
+    """Write a child sheet atomically and never overwrite an existing file."""
     path.parent.mkdir(parents=True, exist_ok=True)
     if path.exists():
         raise FileExistsError(f"Refusing to overwrite existing block sheet: {path}")
