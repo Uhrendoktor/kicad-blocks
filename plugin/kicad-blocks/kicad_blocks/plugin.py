@@ -171,9 +171,6 @@ def create_encapsulated_block(
     sheet-creation path requires an absolute filename for the initial create,
     followed by an update to the project-relative Sheetfile path.
     """
-    from kipy.geometry import Vector2  # noqa: F401 - fail early if API bindings are absent
-
-    del Vector2
     project_dir = _project_directory(schematic)
     existing_names = {
         sheet.name_field.text.value.casefold()
@@ -204,11 +201,13 @@ def create_encapsulated_block(
         # Change the Sheetfile path only after KiCad has resolved the absolute
         # path and created its internal child-screen object.
         sheet.filename_field.text.value = relative_filename
-        _commit(
+        updated = _commit(
             schematic,
             f"Set implementation filename and pins: {name}",
             lambda: schematic.update_items([sheet]),
         )
+        if updated:
+            sheet = updated[0]
 
         child_instance = _find_child_instance(
             schematic, relative_filename, name
