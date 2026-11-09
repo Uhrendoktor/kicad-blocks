@@ -1,48 +1,29 @@
 name: CI
+
 on:
   push:
     branches: [main]
   pull_request:
 
-permissions:
-  contents: write
-
 jobs:
-  publish-and-validate:
+  python-and-kicad:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
-      - name: Install the black-box block MVP source tree
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        run: |
-          if [[ -d .github/bootstrap ]]; then
-            cat .github/bootstrap/part-* | base64 --decode > /tmp/kicad-blocks-mvp.zip
-            rm -rf plugin tests
-            unzip -oq /tmp/kicad-blocks-mvp.zip -d .
-            rm -rf .github/bootstrap /tmp/kicad-blocks-mvp.zip
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add -A
-            git commit -m "Replace sheet prototype with black-box block MVP"
-            git push origin HEAD:main
-          fi
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
       - name: Install KiCad CLI
         run: |
-          sudo apt-get update
-          sudo apt-get install -y software-properties-common
           sudo add-apt-repository --yes ppa:kicad/kicad-10.0-releases
           sudo apt-get update
-          sudo apt-get install -y kicad
-          kicad-cli version
+          sudo apt-get install -y --no-install-recommends kicad
       - name: Install Python checks
         run: python -m pip install --upgrade pip pytest ruff
-      - name: Lint, test, and compile
+      - name: Lint, test and compile
         run: |
           ruff check plugin tests
           pytest -q
           python -m compileall -q plugin tests
-      - name: Validate generated files with KiCad parsers
+      - name: Validate generated files with KiCad
         run: python tests/validate_kicad_cli.py

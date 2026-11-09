@@ -1,64 +1,81 @@
 # KiCad Encapsulated Blocks
 
-An early KiCad 11 nightly/development IPC plugin for creating **sheet-backed schematic blocks**. A block appears as one hierarchical sheet symbol with named electrical ports; its implementation is a normal editable child schematic.
+KiCad Blocks is an IPC schematic plugin for **black-box, library-backed schematic symbols**. A placed block is one ordinary KiCad symbol with external pins. Its implementation remains in a separate `.kicad_block` library asset; the plugin does not create a child sheet or copy the internal circuit into the project schematic.
 
-This uses KiCad's native hierarchy and net connectivity. It does not create a duplicate facade symbol, hidden global nets, or an alternate netlist.
+## MVP behavior
 
-## What this MVP does
+- Create a block from an external pin interface (`NAME:type`). The plugin generates a normal `.kicad_sym` facade and a separate editable `implementation.kicad_sch` document.
+- Register the block's symbol library in the current project's `sym-lib-table`, reload it through KiCad's IPC API, and place the facade symbol in the active schematic.
+- Place existing blocks from the configured library.
+- Convert a selected library-linked instance into an independent project-local copy. The plugin changes the selected instance's library identifier without replacing its schematic UUID or coordinates, so existing wire connections are intended to remain attached.
+- Synchronize a selected local copy from its source. Unchanged files are updated; local-only edits are preserved; conflicting edits are rejected without overwriting either side. An upstream external-pin interface change is rejected for manual migration.
+- Edit a block's separate implementation in another Eeschema window; publish its changed files to advance the library revision.
+- Add nested block dependencies to the library manifest. Dependencies are stored as a graph and cycles are rejected; no hierarchical sheets are created.
+- Optionally store a pre-routed `.kicad_pcb` file with the block asset.
 
-- Prompts for a block name, external pins and placement coordinates.
-- Creates one native hierarchical sheet symbol with input/output/bidirectional/tristate/passive ports.
-- Creates the matching hierarchical labels in the child schematic using KiCad's schematic IPC API.
-- Uses KiCad's own document model to create and save the child sheet file.
-- Keeps the child implementation as an ordinary schematic that can contain normal components, wires and labels.
-- Double-click the sheet symbol to open the internal implementation.
+## Important functional boundary
+
+The facade symbol is what KiCad sees in the parent schematic's native ERC, netlist and BOM. The internal components in `implementation.kicad_sch` are a separate document and are **not** automatically included in those project-level outputs. The MVP does not yet provide a merged block BOM, recursive internal ERC, or a PCB-layout application/import operation. Nested dependencies are recorded and cycle-checked, but inserting a child implementation into a parent implementation is not yet automated. An optional PCB layout is stored and versioned with the block, but is not yet merged into the active board. These are not hidden behind a fake native hierarchy.
+
+The internal schematic is editable: open the `implementation.kicad_sch` file from the block's library directory in Eeschema. It starts with global interface labels matching the facade pin names. Internal circuitry can be built with ordinary KiCad symbols and wires.
 
 ## Requirements
 
-- **KiCad 11 nightly/development build.** KiCad 9 and 10 do not expose the Schematic Editor plugin actions and sheet-editing API used here.
-- Enable the KiCad IPC API in Preferences → Plugins.
-- Python interpreter selected for KiCad's plugin environment must have Tkinter available for the simple input dialogs. On Debian/Ubuntu this may require `python3-tk`.
-- The plugin installs the current `kicad-python` development bindings from the official KiCad GitLab repository because the in-development schematic types are not yet part of every stable PyPI release.
+- KiCad 11 nightly/development build with its Schematic Editor IPC API enabled (Preferences → Plugins).
+- Python runtime managed by KiCad for the plugin, with Tkinter available.
+- The KiCad `kicad-python` development bindings, installed from the official GitLab `master` branch via `requirements.txt`. The new schematic API is still under development and is not included in the released PyPI package version used here.
+
+Schematic placement, selection and library reload APIs used here are part of KiCad's newer schematic IPC interface. This plugin does not support the old SWIG-only plugin interface.
 
 ## Install
 
-1. Download or clone this repository.
-2. Copy the **`plugin/kicad-blocks`** folder into the KiCad 11 user plugin directory:
+1. Copy `plugin/kicad-blocks` into the KiCad user plugin folder. Typical locations:
    - Linux: `~/.local/share/KiCad/11.0/plugins/kicad-blocks`
-   - Windows: `%USERPROFILE%\Documents\KiCad\11.0\plugins\kicad-blocks`
+   - Windows: `%USERPROFILE%\\Documents\\KiCad\\11.0\\plugins\\kicad-blocks`
    - macOS: `~/Documents/KiCad/11.0/plugins/kicad-blocks`
-3. Ensure the folder contains `plugin.json`, `requirements.txt`, `main.py`, and `kicad_blocks/`.
-4. Start KiCad 11 nightly, open a saved project schematic and enable the IPC API.
-5. Wait for KiCad to create the plugin environment and install `requirements.txt`.
-6. Run **Create Encapsulated Block** from the Schematic Editor plugin actions.
+2. Enable the IPC API in KiCad Preferences → Plugins.
+3. Restart KiCad and enable the **KiCad Blocks Manager** schematic action.
+4. Use the action and enter one of `create`, `place`, `local`, `sync`, `edit`, `publish`, or `nest`.
 
-## Use
+The default shared library location is `~/Documents/KiCad/Blocks`. The create/nest action lets you select another directory; the selection is remembered in `~/.config/kicad-blocks/settings.json`. Set `KICAD_BLOCKS_LIBRARY` to override it. Local symbol-library entries use `${KIPRJMOD}` paths so project-local block copies remain portable when the project folder moves.
 
-Example pin definition:
+## Pin definitions
+
+Example:
 
 ```text
 VIN:input, GND:passive, VOUT:output, EN:input
 ```
 
-Pin types: `input`, `output`, `bidirectional` (or `bidir`), `tristate`, and `passive`. A pin without a type defaults to passive. Up to 32 pins are supported.
+Supported electrical types: `input`, `output`, `bidirectional` (`bidir` alias), `tristate`, and `passive`. Pins are numbered in the order entered.
 
-The plugin creates a file such as `buck_converter_block_01.kicad_sch` in the project directory. The parent symbol uses a hidden filename field and displays its instance name and pin interface. The child sheet contains the corresponding hierarchical labels, ready to connect to the internal circuit.
+## On-disk format
 
-## Current scope and limitations
+Each block is stored as a folder ending in `.kicad_block`:
 
-- The graphical body is KiCad's native rectangular sheet symbol. Arbitrary custom symbol outlines are not implemented yet.
-- The plugin creates a fresh implementation sheet; circuit extraction from a selected region is not implemented.
-- Every placement gets its own child implementation file. Shared block libraries and linked-instance synchronization are not implemented.
-- The current KiCad 11 schematic API is experimental and can change before KiCad 11 is released.
-- This repository's automated tests mock the IPC object model. A live Eeschema integration run is still required to confirm behavior with the user's exact KiCad nightly build and plugin runtime.
-
-## Development checks
-
-```bash
-python -m pip install pytest ruff
-ruff check plugin tests
-pytest -q
-python -m compileall -q plugin
+```text
+Buck_Converter_<id>.kicad_block/
+  manifest.json
+  block.kicad_sym
+  implementation.kicad_sch
+  layout.kicad_pcb        # optional
 ```
 
-The test suite validates pin parsing and the plugin's IPC call sequence with test doubles. It does not replace an actual KiCad GUI/CLI integration test.
+A local copy is stored under the project directory:
+
+```text
+<project>/.kicad_blocks/local/<block>_<local-id>.kicad_block/
+```
+
+Its manifest records the source block, source revision and per-file sync baseline. Local copies are not silently overwritten when both the library and local version have changed the same file.
+
+## Development and verification
+
+Run unit tests and syntax checks:
+
+```bash
+python -m unittest discover -s tests -v
+python -m compileall -q plugin tests
+```
+
+The GitHub Actions workflow installs KiCad CLI, exports the generated facade symbol and implementation schematic to SVG, and runs `pytest`/`ruff`. That checks KiCad's native parsers for generated files; it does not substitute for a live KiCad 11 GUI/IPC session test of the instance-localization and synchronization actions.

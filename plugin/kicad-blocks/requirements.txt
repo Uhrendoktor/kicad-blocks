@@ -1,2 +1,1 @@
-# Schematic IPC support is in the current kicad-python development branch.
-kicad-python @ git+https://gitlab.com/kicad/code/kicad-python.git@main
+git+https://gitlab.com/kicad/code/kicad-python.git@master

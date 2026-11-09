@@ -1,16 +1,16 @@
 {
   "identifier": "kicad-blocks",
-  "name": "Encapsulated Blocks",
-  "description": "Create symbol-like schematic blocks backed by native hierarchical sheets.",
+  "name": "KiCad Blocks",
+  "description": "Place opaque library-backed schematic symbols with external implementations.",
   "runtime": {
     "type": "python",
     "min_version": "3.10"
   },
   "actions": [
     {
-      "identifier": "create-encapsulated-block",
-      "name": "Create Encapsulated Block",
-      "description": "Create a symbol-like block with hierarchical pins and an editable implementation sheet.",
+      "identifier": "kicad-blocks-manager",
+      "name": "KiCad Blocks Manager",
+      "description": "Create, place, localize, synchronize and compose library-backed blocks.",
       "show-button": true,
       "scopes": ["schematic"],
       "entrypoint": "main.py"

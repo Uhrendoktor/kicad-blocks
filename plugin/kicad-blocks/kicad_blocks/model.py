@@ -1,13 +1,17 @@
-"""Pure validation and layout helpers for encapsulated sheet blocks."""
+"""Pure data model and KiCad S-expression generators for black-box blocks."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+import hashlib
+import json
 import re
 import unicodedata
+import uuid
+from typing import Iterable
 
 PIN_TYPES = ("input", "output", "bidirectional", "tristate", "passive")
-S_EXPRESSION_SHAPES = {
+_KICAD_PIN_TYPES = {
     "input": "input",
     "output": "output",
     "bidirectional": "bidirectional",
@@ -18,75 +22,201 @@ S_EXPRESSION_SHAPES = {
 
 @dataclass(frozen=True, slots=True)
 class BlockPin:
-    """One electrical port on a block interface."""
+    """One external electrical pin on a block facade."""
 
     name: str
     electrical_type: str = "passive"
+    number: str = ""
 
-    @property
-    def shape_token(self) -> str:
-        """Return the shape spelling used in KiCad schematic S-expressions."""
-        return S_EXPRESSION_SHAPES[self.electrical_type]
+    def as_manifest(self, index: int) -> dict[str, str]:
+        return {
+            "name": self.name,
+            "number": self.number or str(index),
+            "electrical_type": self.electrical_type,
+        }
 
 
 def slugify(value: str) -> str:
-    """Convert a display name to a safe, portable filename stem."""
+    """Return a safe, deterministic KiCad symbol and file name."""
     normalized = unicodedata.normalize("NFKD", value).encode("ascii", "ignore").decode()
-    slug = re.sub(r"[^A-Za-z0-9_-]+", "_", normalized).strip("_-").lower()
-    if not slug:
+    slug = re.sub(r"[^A-Za-z0-9_]+", "_", normalized).strip("_").lower()
+    if not slug or not re.match(r"[a-z0-9_]", slug):
         raise ValueError("Block name must contain at least one letter or number.")
     return slug[:48]
 
 
 def parse_pins(spec: str) -> list[BlockPin]:
-    """Parse `NAME:type, NAME:type` pin definitions."""
+    """Parse comma-separated NAME:type definitions. Type defaults to passive."""
     pins: list[BlockPin] = []
-    seen: set[str] = set()
+    seen_names: set[str] = set()
 
     for raw in spec.split(","):
         token = raw.strip()
         if not token:
             continue
         if ":" in token:
-            name, electrical_type = (part.strip() for part in token.split(":", 1))
+            name, raw_type = (part.strip() for part in token.split(":", 1))
         else:
-            name, electrical_type = token, "passive"
-
-        if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_./+\\-]*", name):
-            raise ValueError(
-                f"Invalid pin name: {name!r}. Start with a letter or underscore; "
-                "use letters, numbers, _, ., /, + or -."
-            )
-
-        electrical_type = electrical_type.lower().replace("bi-directional", "bidirectional")
+            name, raw_type = token, "passive"
+        electrical_type = raw_type.casefold().replace("bi-directional", "bidirectional")
         if electrical_type == "bidir":
             electrical_type = "bidirectional"
         if electrical_type not in PIN_TYPES:
             raise ValueError(
-                f"Unknown pin type {electrical_type!r}; choose {', '.join(PIN_TYPES)}."
+                f"Unknown pin type {raw_type!r}; choose {', '.join(PIN_TYPES)}."
             )
-
+        if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_./+\\-]*", name):
+            raise ValueError(
+                f"Invalid pin name {name!r}. Use letters, numbers, _, ., /, + or -; "
+                "the first character must be a letter or underscore."
+            )
         key = name.casefold()
-        if key in seen:
+        if key in seen_names:
             raise ValueError(f"Duplicate pin name: {name}")
-        seen.add(key)
-        pins.append(BlockPin(name, electrical_type))
+        seen_names.add(key)
+        pins.append(BlockPin(name, electrical_type, str(len(pins) + 1)))
 
     if not pins:
-        raise ValueError("Define at least one pin.")
-    if len(pins) > 32:
-        raise ValueError("The MVP supports at most 32 pins per block.")
+        raise ValueError("Define at least one external pin.")
+    if len(pins) > 64:
+        raise ValueError("The MVP supports up to 64 external pins per block.")
     return pins
 
 
-def block_geometry(pin_count: int, pin_pitch_mm: float = 5.08) -> tuple[float, int, int]:
-    """Return (height, left_count, right_count) for a two-sided sheet symbol."""
-    if pin_count < 1:
-        raise ValueError("pin_count must be positive")
-    if pin_pitch_mm <= 0:
-        raise ValueError("pin_pitch_mm must be positive")
-    left_count = (pin_count + 1) // 2
-    right_count = pin_count - left_count
-    max_side = max(left_count, right_count)
-    height_mm = max(20.32, (max_side + 1) * pin_pitch_mm)
-    return height_mm, left_count, right_count
+def sexpr_quote(value: str) -> str:
+    """Quote a string using KiCad's S-expression string conventions."""
+    return json.dumps(str(value), ensure_ascii=False)
+
+
+def _pin_y(row: int, row_count: int, pitch: float = 2.54) -> float:
+    return round(((row_count - 1) / 2.0 - row) * pitch, 4)
+
+
+def render_symbol_library(
+    symbol_name: str,
+    display_name: str,
+    block_id: str,
+    pins: Iterable[BlockPin],
+    *,
+    reference_prefix: str = "X",
+) -> str:
+    """Generate a one-symbol .kicad_sym library with an opaque IC-like facade."""
+    pins = list(pins)
+    if not pins:
+        raise ValueError("A block symbol must have at least one pin.")
+    if not re.fullmatch(r"[A-Za-z0-9_]+", symbol_name):
+        raise ValueError("Symbol name must contain only letters, numbers and underscores.")
+    if not re.fullmatch(r"[A-Za-z][A-Za-z0-9]*", reference_prefix):
+        raise ValueError("Reference prefix must start with a letter and contain alphanumerics.")
+
+    left_count = (len(pins) + 1) // 2
+    right_count = len(pins) - left_count
+    rows = max(left_count, right_count)
+    half_height = max(5.08, ((rows - 1) * 2.54) / 2.0 + 2.54)
+    top = round(half_height, 4)
+    bottom = round(-half_height, 4)
+    half_width = 5.08
+    pin_x = half_width + 2.54
+    lines = [
+        "(kicad_symbol_lib",
+        "  (version 20250114)",
+        '  (generator "kicad_blocks")',
+        f"  (symbol {sexpr_quote(symbol_name)}",
+        "    (pin_names (offset 0.762))",
+        "    (exclude_from_sim no)",
+        "    (in_bom yes)",
+        "    (on_board yes)",
+        "    (property \"Reference\" " + sexpr_quote(reference_prefix) +
+        " (at 0 " + str(round(top + 2.54, 4)) +
+        ' 0) (effects (font (size 1.27 1.27)) (justify left bottom)))',
+        "    (property \"Value\" " + sexpr_quote(display_name) +
+        " (at 0 " + str(round(bottom - 2.54, 4)) +
+        ' 0) (effects (font (size 1.27 1.27)) (justify left top)))',
+        '    (property "Footprint" "" (at 0 0 0) (effects (font (size 1.27 1.27)) hide))',
+        '    (property "Datasheet" "" (at 0 0 0) (effects (font (size 1.27 1.27)) hide))',
+        '    (property "Block ID" ' + sexpr_quote(block_id) +
+        ' (at 0 0 0) (effects (font (size 1.0 1.0)) hide))',
+        '    (property "Block Type" "kicad-blocks" (at 0 0 0) (effects (font (size 1.0 1.0)) hide))',
+        f"    (symbol {sexpr_quote(symbol_name + '_0_1')}",
+        "      (rectangle (start " + str(-half_width) + " " + str(top) +
+        ") (end " + str(half_width) + " " + str(bottom) +
+        ") (stroke (width 0.254) (type default)) (fill (type background)))",
+        "    )",
+        f"    (symbol {sexpr_quote(symbol_name + '_1_1')}",
+    ]
+
+    for index, pin in enumerate(pins):
+        if index < left_count:
+            row = index
+            x, angle = -pin_x, 0
+        else:
+            row = index - left_count
+            x, angle = pin_x, 180
+        y = _pin_y(row, rows)
+        number = pin.number or str(index + 1)
+        lines.extend(
+            [
+                f"      (pin {_KICAD_PIN_TYPES[pin.electrical_type]} line (at {x} {y} {angle}) (length 2.54)",
+                f"        (name {sexpr_quote(pin.name)} (effects (font (size 1.0 1.0))))",
+                f"        (number {sexpr_quote(number)} (effects (font (size 1.0 1.0))))",
+                "      )",
+            ]
+        )
+    lines.extend(["    )", "  )", ")", ""])
+    return "\n".join(lines)
+
+
+def render_implementation_schematic(
+    display_name: str, block_id: str, pins: Iterable[BlockPin]
+) -> str:
+    """Generate a separate editable schematic document with interface net labels.
+
+    This is a standalone asset in the block library. It is not included in the
+    project hierarchy and creates no child-sheet file when a facade is placed.
+    """
+    pins = list(pins)
+    document_uuid = str(uuid.uuid4())
+    lines = [
+        '(kicad_sch (version 20250114) (generator "kicad_blocks")',
+        f"  (uuid {sexpr_quote(document_uuid)})",
+        '  (paper "A4")',
+        '  (title_block (title ' + sexpr_quote(display_name) +
+        ') (comment 1 ' + sexpr_quote("Block ID: " + block_id) + '))',
+        "  (lib_symbols)",
+    ]
+    for index, pin in enumerate(pins):
+        x = 50.8 if index < 32 else 152.4
+        row = index if index < 32 else index - 32
+        y = 38.1 + row * 5.08
+        lines.extend(
+            [
+                f"  (global_label {sexpr_quote(pin.name)}",
+                f"    (shape {_KICAD_PIN_TYPES[pin.electrical_type]})",
+                f"    (at {x} {y} 0)",
+                '    (effects (font (size 1.27 1.27)) (justify left bottom))',
+                f"    (uuid {sexpr_quote(str(uuid.uuid4()))})",
+                "  )",
+            ]
+        )
+    lines.extend(
+        [
+            '  (sheet_instances (path "/" (page "1")))',
+            "  (embedded_fonts no)",
+            ")",
+            "",
+        ]
+    )
+    return "\n".join(lines)
+
+
+def sha256_file(path) -> str:
+    digest = hashlib.sha256()
+    with open(path, "rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def revision_for_hashes(hashes: dict[str, str]) -> str:
+    payload = json.dumps(hashes, sort_keys=True, separators=(",", ":")).encode()
+    return hashlib.sha256(payload).hexdigest()
