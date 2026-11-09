@@ -4,9 +4,6 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-import tkinter as tk
-from tkinter import messagebox, simpledialog
-
 from .model import BlockPin, block_geometry, parse_pins, slugify
 
 LOG = logging.getLogger("kicad_blocks")
@@ -153,7 +150,7 @@ def _commit(document, message: str, operation):
 
 def _find_child_instance(schematic, filename: str, name: str):
     for instance in schematic.get_hierarchy():
-        if instance.filename.replace("\\", "/") == filename or instance.name == name:
+        if instance.filename.replace("\\", "/") == filename:
             return instance
     raise RuntimeError(
         f"KiCad created the sheet symbol but did not add its implementation "
@@ -227,7 +224,7 @@ def create_encapsulated_block(
             else:
                 row = index - left_count
                 label_x = 152.4
-            label_y = 76.2 + row * 12.7
+            label_y = 76.2 + row * 7.62
             labels.append(_build_hierarchical_label(pin, label_x, label_y))
 
         _commit(
@@ -265,6 +262,9 @@ def create_encapsulated_block(
 
 
 def _collect_user_input() -> tuple[str, list[BlockPin], float, float] | None:
+    import tkinter as tk
+    from tkinter import simpledialog
+
     root = tk.Tk()
     root.withdraw()
     try:
@@ -324,6 +324,9 @@ def run() -> None:
         name, pins, x_mm, y_mm = values
         child = create_encapsulated_block(schematic, name, pins, x_mm, y_mm)
 
+        import tkinter as tk
+        from tkinter import messagebox
+
         root = tk.Tk()
         root.withdraw()
         messagebox.showinfo(
@@ -337,6 +340,9 @@ def run() -> None:
     except Exception as exc:
         LOG.exception("Create Encapsulated Block failed")
         try:
+            import tkinter as tk
+            from tkinter import messagebox
+
             root = tk.Tk()
             root.withdraw()
             messagebox.showerror("Encapsulated Blocks", str(exc), parent=root)
