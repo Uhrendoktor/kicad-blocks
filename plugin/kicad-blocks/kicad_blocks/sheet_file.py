@@ -28,7 +28,7 @@ def build_child_schematic(
     lines = [
         "(kicad_sch",
         "  (version 20250114)",
-        '  (generator "eeschema")',
+        '  (generator "kicad-blocks")',
         f"  (uuid {_q(sheet_uuid)})",
         '  (paper "A4")',
         "  (lib_symbols)",
@@ -57,7 +57,7 @@ def build_child_schematic(
             justify = "right"
         lines.extend(
             [
-                f"  (hierarchical_label {_q(pin.name)} (shape {pin.electrical_type}) (at {x:.4f} {y:.4f} {angle})",
+                f"  (hierarchical_label {_q(pin.name)} (shape {"tri_state" if pin.electrical_type == "tristate" else pin.electrical_type}) (at {x:.4f} {y:.4f} {angle})",
                 f"    (effects (font (size 1.27 1.27)) (justify {justify}))",
                 f'    (uuid {_q(str(uuid.uuid4()))})',
                 "  )",
@@ -70,8 +70,7 @@ def build_child_schematic(
             "  (sheet_instances",
             f"    (path {_q(hierarchy_path)} (page {_q(page_number)}))",
             "  )",
-            "  (symbol_instances)",
-            "  (embedded_fonts no)",
+                "  (embedded_fonts no)",
             ")",
             "",
         ]
