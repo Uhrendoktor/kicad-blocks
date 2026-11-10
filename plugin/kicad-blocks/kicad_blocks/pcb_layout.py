@@ -360,6 +360,75 @@ def _netclass_signature(netclass: dict[str, Any]) -> str:
     return json.dumps(values, sort_keys=True, separators=(",", ":"))
 
 
+def _expand_netclass_bus_pattern(pattern: str) -> list[str] | None:
+    """Expand KiCad vector/group bus notation used in netclass pattern rules.
+
+    Returns None when the expression looks like a bus pattern but uses syntax
+    this file-level importer does not safely expand.
+    """
+    vector = re.fullmatch(r"(.*?)\[(\d+)\.\.(\d+)\]([+-PN]*)", pattern)
+    if vector:
+        prefix, start_text, end_text, suffix = vector.groups()
+        start, end = int(start_text), int(end_text)
+        if start == end:
+            return None
+        lo, hi = sorted((start, end))
+        width = max(len(start_text), len(end_text))
+        padded = (len(start_text) > 1 and start_text.startswith("0")) or (
+            len(end_text) > 1 and end_text.startswith("0")
+        )
+        return [
+            f"{prefix}{str(value).zfill(width) if padded else value}{suffix}"
+            for value in range(lo, hi + 1)
+        ]
+
+    group = re.fullmatch(r"(.*?)\{(.+)\}", pattern)
+    if group:
+        _prefix, body = group.groups()
+        members = [item for item in re.split(r"[\s,]+", body.strip()) if item]
+        if not members:
+            return None
+        expanded: list[str] = []
+        for member in members:
+            member_expansion = _expand_netclass_bus_pattern(member)
+            if member_expansion is None:
+                if any(char in member for char in "[]{}"):
+                    return None
+                expanded.append(member)
+            else:
+                expanded.extend(member_expansion)
+        return expanded
+
+    # An unmatched bracket/brace is not a valid KiCad bus expression. Leave
+    # it out of the exact-net expansion rather than changing its semantics.
+    if any(char in pattern for char in "[]{}"):
+        return None
+    return [pattern]
+
+
+def _matches_netclass_pattern(pattern: str, net_name: str) -> bool:
+    """Mirror KiCad's anchored CTX_NETCLASS regex + wildcard matcher.
+
+    KiCad tries a regular expression first and an anchored wildcard matcher
+    second. In wildcard patterns, '*' matches any run and '?' matches one
+    character; other regex metacharacters are escaped by the wildcard matcher.
+    """
+    try:
+        if re.fullmatch(pattern, net_name):
+            return True
+    except re.error:
+        pass
+
+    wildcard_regex = "".join(
+        ".*" if char == "*" else "." if char == "?" else re.escape(char)
+        for char in pattern
+    )
+    try:
+        return re.fullmatch(wildcard_regex, net_name) is not None
+    except re.error:
+        return False
+
+
 def _merge_project_net_settings(
     target_project: Path,
     source_project: Path | None,
@@ -368,13 +437,16 @@ def _merge_project_net_settings(
     instance_reference: str,
     layout_ports: dict[str, str],
     pin_to_board_net: dict[str, str],
+    source_net_to_board_net: dict[str, str] | None = None,
 ) -> dict[str, Any] | None:
     """Build a copied project file with block netclasses/assignments merged.
 
     The target project's settings remain authoritative. Named block netclasses
-    are reused if identical, otherwise namespaced on collision. Exact net
-    assignments are remapped to project net names. Pattern assignments and
-    other broad rules are intentionally not imported.
+    are reused if identical, otherwise namespaced on collision. Exact assignments
+    are remapped to project net names. Netclass regex/wildcard rules are resolved
+    against only the nets physically present in the stored block PCB, then
+    converted to exact assignments on the corresponding imported project nets.
+    This avoids copying a broad pattern that could affect unrelated project nets.
     """
     if not target_project.is_file() and (source_project is None or not source_project.is_file()):
         return None
@@ -500,6 +572,59 @@ def _merge_project_net_settings(
             if destination_net not in assigned_nets:
                 assigned_nets.append(destination_net)
 
+    applied_patterns: list[dict[str, Any]] = []
+    unmatched_patterns: list[str] = []
+    source_net_map = source_net_to_board_net or {}
+    source_patterns = source_settings.get("netclass_patterns") or []
+    if not isinstance(source_patterns, list):
+        raise TypeError("KiCad net_settings.netclass_patterns must be an array.")
+
+    for entry in source_patterns:
+        if not isinstance(entry, dict):
+            unmatched_patterns.append(repr(entry))
+            continue
+        pattern = entry.get("pattern")
+        class_name = entry.get("netclass")
+        if not isinstance(pattern, str) or not isinstance(class_name, str):
+            unmatched_patterns.append(repr(entry))
+            continue
+        if class_name not in class_map:
+            raise ValueError(
+                f"Block netclass pattern {pattern!r} references undefined netclass "
+                f"{class_name!r}."
+            )
+        expanded_patterns = _expand_netclass_bus_pattern(pattern)
+        if expanded_patterns is None:
+            unmatched_patterns.append(pattern)
+            continue
+
+        resolved_nets: list[str] = []
+        for source_net_name, destination_net in source_net_map.items():
+            if not any(
+                _matches_netclass_pattern(member_pattern, str(source_net_name))
+                for member_pattern in expanded_patterns
+            ):
+                continue
+            mapped_class = class_map[class_name]
+            if mapped_class.casefold() == "default":
+                continue
+            current = target_assignments.setdefault(str(destination_net), [])
+            if mapped_class not in current:
+                current.append(mapped_class)
+            if str(destination_net) not in resolved_nets:
+                resolved_nets.append(str(destination_net))
+
+        if resolved_nets:
+            applied_patterns.append(
+                {
+                    "pattern": pattern,
+                    "netclass": class_name,
+                    "resolved_nets": resolved_nets,
+                }
+            )
+        else:
+            unmatched_patterns.append(pattern)
+
     target_settings["netclass_assignments"] = target_assignments
     metadata = target_data.setdefault("meta", {})
     if not isinstance(metadata, dict):
@@ -507,14 +632,18 @@ def _merge_project_net_settings(
     metadata["filename"] = output_project.name
     metadata.setdefault("version", 3)
 
-    ignored_patterns = bool(source_settings.get("netclass_patterns"))
-    ignored_chain_classes = bool(source_settings.get("net_chain_classes"))
+    ignored_patterns = bool(unmatched_patterns)
+    ignored_chain_classes = bool(
+        source_settings.get("net_chain_classes") or source_settings.get("net_chain_netclasses")
+    )
     return {
         "data": target_data,
         "output": str(output_project),
         "merged_classes": merged_classes,
         "assigned_nets": assigned_nets,
         "ignored_patterns": ignored_patterns,
+        "applied_patterns": applied_patterns,
+        "unmatched_patterns": unmatched_patterns,
         "ignored_chain_classes": ignored_chain_classes,
     }
 
@@ -680,6 +809,11 @@ def merge_block_layout(
         instance_reference=instance_reference,
         layout_ports={str(key): str(value) for key, value in ports.items()},
         pin_to_board_net=pin_to_board_net,
+        source_net_to_board_net={
+            source_name: net_map[code][1]
+            for code, source_name in source_nets.items()
+            if code in net_map and code != 0
+        },
     )
     _atomic_write(output_board, _dump(target) + "\n")
     try:
@@ -701,6 +835,8 @@ def merge_block_layout(
         "merged_netclasses": project_merge["merged_classes"] if project_merge is not None else [],
         "assigned_project_nets": project_merge["assigned_nets"] if project_merge is not None else [],
         "ignored_project_patterns": project_merge["ignored_patterns"] if project_merge is not None else False,
+        "applied_project_patterns": project_merge["applied_patterns"] if project_merge is not None else [],
+        "unmatched_project_patterns": project_merge["unmatched_patterns"] if project_merge is not None else [],
         "ignored_project_chain_classes": project_merge["ignored_chain_classes"] if project_merge is not None else False,
         "footprints": imported_references,
         "footprint_count": len(imported_references),

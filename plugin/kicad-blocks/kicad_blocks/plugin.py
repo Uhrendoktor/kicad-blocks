@@ -503,16 +503,23 @@ def _apply_block_pcb_layout(schematic, project_dir: Path, library_root: Path, pa
         f"Rotation applied: {result['rotation_deg']:g} degrees counter-clockwise.\n"
         f"Project settings copy: {result['project_file'] or 'not available'}\n"
         f"Merged netclasses: {', '.join(result['merged_netclasses']) or 'none'}\n"
-        f"Updated net assignments: {', '.join(result['assigned_project_nets']) or 'none'}\n\n"
+        f"Updated net assignments: {', '.join(result['assigned_project_nets']) or 'none'}\n"
+        f"Resolved netclass patterns: {len(result['applied_project_patterns'])}\n\n"
         "The original project board and project settings were not modified. Review the generated board, "
         "then open it in PCB Editor."
     )
     if warning:
         message += "\n\nSkipped board-level item types: " + ", ".join(warning)
-    if result["ignored_project_patterns"] or result["ignored_project_chain_classes"]:
+    if result["ignored_project_patterns"]:
         message += (
-            "\n\nThe block's project-wide netclass patterns/chain rules were not imported; "
-            "only explicit net assignments are merged."
+            "\n\nSome block netclass patterns did not match a net in the stored PCB "
+            "or used unsupported bus syntax: "
+            + (", ".join(result["unmatched_project_patterns"]) or "unknown")
+        )
+    if result["ignored_project_chain_classes"]:
+        message += (
+            "\n\nNet-chain class and chain-to-netclass rules were not imported because "
+            "their chain membership is stored separately from the PCB net list."
         )
     messagebox.showinfo("PCB Block Layout Applied", message, parent=parent)
 

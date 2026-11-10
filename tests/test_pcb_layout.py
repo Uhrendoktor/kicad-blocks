@@ -149,7 +149,10 @@ def main() -> None:
                             "VIN": ["HighSpeed"],
                             "SW": ["HighSpeed"],
                         },
-                        "netclass_patterns": [{"pattern": ".*", "netclass": "HighSpeed"}],
+                        "netclass_patterns": [
+                            {"pattern": "G*", "netclass": "HighSpeed"},
+                            {"pattern": "S*", "netclass": "HighSpeed"},
+                        ],
                     },
                 },
                 indent=2,
@@ -258,6 +261,15 @@ def main() -> None:
             raise AssertionError(f"External netclass assignments were not merged: {assignments!r}")
         if assignments.get("X1_SW") != ["X1_HighSpeed"]:
             raise AssertionError(f"Internal namespaced netclass assignment missing: {assignments!r}")
+        if assignments.get("GND_BOARD") != ["X1_HighSpeed"]:
+            raise AssertionError(f"Wildcard pattern was not mapped to external board net: {assignments!r}")
+        if result["applied_project_patterns"] != [
+            {"pattern": "G*", "netclass": "HighSpeed", "resolved_nets": ["GND_BOARD"]},
+            {"pattern": "S*", "netclass": "HighSpeed", "resolved_nets": ["X1_SW"]},
+        ]:
+            raise AssertionError(f"Unexpected resolved netclass patterns: {result['applied_project_patterns']!r}")
+        if result["ignored_project_patterns"]:
+            raise AssertionError(f"All fixture patterns should have resolved: {result['unmatched_project_patterns']!r}")
         if merged_project["meta"]["filename"] != output_project.name:
             raise AssertionError("Merged project metadata filename was not updated.")
         if result["merged_netclasses"] != ["X1_HighSpeed"]:

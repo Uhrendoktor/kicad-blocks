@@ -100,7 +100,11 @@ class PCBNetRewriteTests(unittest.TestCase):
                                 "VIN": ["Fast"],
                                 "SW": ["Fast"],
                             },
-                            "netclass_patterns": [{"pattern": ".*", "netclass": "Fast"}],
+                            "netclass_patterns": [
+                                {"pattern": "G*", "netclass": "Fast"},
+                                {"pattern": "S*", "netclass": "Fast"},
+                                {"pattern": "NO_MATCH*", "netclass": "Fast"},
+                            ],
                         },
                     }
                 ),
@@ -116,11 +120,24 @@ class PCBNetRewriteTests(unittest.TestCase):
                 instance_reference="X1",
                 layout_ports={"VIN": "VIN", "GND": "GND"},
                 pin_to_board_net={"VIN": "VIN_BOARD", "GND": "GND_BOARD"},
+                source_net_to_board_net={
+                    "VIN": "VIN_BOARD",
+                    "GND": "GND_BOARD",
+                    "SW": "X1_SW",
+                },
             )
 
             self.assertEqual(result["merged_classes"], ["X1_Fast"])
             self.assertEqual(result["assigned_nets"], ["VIN_BOARD", "X1_SW"])
             self.assertTrue(result["ignored_patterns"])
+            self.assertEqual(
+                result["applied_patterns"],
+                [
+                    {"pattern": "G*", "netclass": "Fast", "resolved_nets": ["GND_BOARD"]},
+                    {"pattern": "S*", "netclass": "Fast", "resolved_nets": ["X1_SW"]},
+                ],
+            )
+            self.assertEqual(result["unmatched_patterns"], ["NO_MATCH*"])
             self.assertEqual(target.read_bytes(), original_target)
             self.assertEqual(source.read_bytes(), original_source)
             merged = result["data"]
@@ -133,6 +150,58 @@ class PCBNetRewriteTests(unittest.TestCase):
                 ["X1_Fast"],
             )
             self.assertEqual(merged["meta"]["filename"], output.name)
+
+    def test_kicad_netclass_regex_and_bus_vector_patterns(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            target = root / "target.kicad_pro"
+            source = root / "layout.kicad_pro"
+            output = root / "merged.kicad_pro"
+            target.write_text(
+                json.dumps({"net_settings": {"classes": [{"name": "Default", "priority": 2147483647}]} }),
+                encoding="utf-8",
+            )
+            source.write_text(
+                json.dumps(
+                    {
+                        "net_settings": {
+                            "classes": [
+                                {"name": "Default", "priority": 2147483647},
+                                {"name": "BusClass", "priority": 0},
+                            ],
+                            "netclass_patterns": [
+                                {"pattern": "D[0..2]", "netclass": "BusClass"},
+                                {"pattern": "^CLK(_N)?$", "netclass": "BusClass"},
+                            ],
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+            result = _merge_project_net_settings(
+                target,
+                source,
+                output,
+                instance_reference="U1",
+                layout_ports={},
+                pin_to_board_net={},
+                source_net_to_board_net={
+                    "D0": "U1_D0",
+                    "D1": "U1_D1",
+                    "D2": "U1_D2",
+                    "CLK": "CLK_BOARD",
+                    "CLK_N": "U1_CLK_N",
+                    "CLK_P": "U1_CLK_P",
+                },
+            )
+            assignments = result["data"]["net_settings"]["netclass_assignments"]
+            self.assertEqual(assignments["U1_D0"], ["BusClass"])
+            self.assertEqual(assignments["U1_D1"], ["BusClass"])
+            self.assertEqual(assignments["U1_D2"], ["BusClass"])
+            self.assertEqual(assignments["CLK_BOARD"], ["BusClass"])
+            self.assertEqual(assignments["U1_CLK_N"], ["BusClass"])
+            self.assertNotIn("U1_CLK_P", assignments)
+            self.assertEqual(result["unmatched_patterns"], [])
 
     def test_unknown_net_code_is_rejected(self):
         segment = parse_sexpr('(segment (net 99))')
