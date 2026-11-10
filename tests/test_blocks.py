@@ -12,10 +12,10 @@ sys.path.insert(0, str(PLUGIN))
 from kicad_blocks.model import (
     facade_pin_connection_points,
     parse_pins,
+    render_symbol_library,
     rotate_label_spin_style,
     schematic_symbol_orientation,
     transform_symbol_point_to_schematic,
-    render_symbol_library,
 )
 from kicad_blocks.repository import (
     add_dependency,

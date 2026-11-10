@@ -15,8 +15,8 @@ from .model import (
     revision_for_hashes,
     rotate_label_spin_style,
     schematic_symbol_orientation,
-    transform_symbol_point_to_schematic,
     sha256_file,
+    transform_symbol_point_to_schematic,
 )
 from .repository import (
     BlockRecord,
