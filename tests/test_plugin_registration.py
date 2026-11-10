@@ -211,6 +211,17 @@ def main() -> None:
         schematic = block.implementation
 
         env = os.environ.copy()
+        # Ensure the test does not inherit a runner-local pip mirror or
+        # find-links override; KiCad must install from the published wheel URL
+        # declared in the unmodified production requirements.txt.
+        for key in (
+            "PIP_FIND_LINKS",
+            "PIP_NO_INDEX",
+            "PIP_EXTRA_INDEX_URL",
+            "PIP_INDEX_URL",
+            "PIP_CONFIG_FILE",
+        ):
+            env.pop(key, None)
         env.update(
             {
                 "HOME": str(home),
@@ -252,9 +263,9 @@ def main() -> None:
             encoding="utf-8",
         )
 
-        # Install through the same package installer users run. Replace only
-        # the test copy's requirements with local CI wheels to keep the test
-        # deterministic and avoid another GitLab source build.
+        # Install through the same package installer users run. Keep the
+        # production wheel URL unchanged: this test verifies the actual
+        # binary-only requirements path used by KiCad on first discovery.
         subprocess.run(
             [
                 sys.executable,
@@ -333,7 +344,13 @@ def main() -> None:
                 [
                     str(env_python),
                     "-c",
-                    "from kipy import KiCad; print('kicad-python plugin environment ready')",
+                    "import importlib.metadata, pathlib, sys, kipy; "
+                    "from kipy import KiCad; "
+                    "package_path = pathlib.Path(kipy.__file__).resolve(); "
+                    "environment = pathlib.Path(sys.prefix).resolve(); "
+                    "assert environment in package_path.parents, (package_path, environment); "
+                    "print('kicad-python plugin environment ready', "
+                    "importlib.metadata.version('kicad-python'), package_path)",
                 ],
                 capture_output=True,
                 text=True,
