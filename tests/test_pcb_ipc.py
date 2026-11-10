@@ -5,8 +5,8 @@ from __future__ import annotations
 import os
 import shutil
 import tempfile
-from pathlib import Path
 import xml.etree.ElementTree as ET
+from pathlib import Path
 
 from kipy import KiCad
 
