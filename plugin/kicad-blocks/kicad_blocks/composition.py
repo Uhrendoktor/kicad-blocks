@@ -3,12 +3,17 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 import shutil
 import tempfile
+from pathlib import Path
 from typing import Any
 
-from .model import BlockPin, facade_pin_connection_points, revision_for_hashes, sha256_file
+from .model import (
+    BlockPin,
+    facade_pin_connection_points,
+    revision_for_hashes,
+    sha256_file,
+)
 from .repository import (
     BlockRecord,
     _dependency_path,
