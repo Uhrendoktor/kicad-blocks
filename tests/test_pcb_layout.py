@@ -82,7 +82,7 @@ def main() -> None:
         baseline_svg_dir = root / "baseline-svg"
         baseline_svg_dir.mkdir()
         subprocess.run(
-            [cli, "pcb", "export", "svg", "--output", str(baseline_svg_dir), str(target)],
+            [cli, "pcb", "export", "svg", "--layers", "F.Cu,B.Cu", "--output", str(baseline_svg_dir), str(target)],
             check=True,
         )
         if not list(baseline_svg_dir.glob("*.svg")):
@@ -158,7 +158,7 @@ def main() -> None:
         svg_dir = root / "svg"
         svg_dir.mkdir()
         export_result = subprocess.run(
-            [cli, "pcb", "export", "svg", "--output", str(svg_dir), str(output)],
+            [cli, "pcb", "export", "svg", "--layers", "F.Cu,B.Cu", "--output", str(svg_dir), str(output)],
             capture_output=True,
             text=True,
             check=False,
