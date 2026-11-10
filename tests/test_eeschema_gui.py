@@ -9,11 +9,14 @@ import sys
 import tempfile
 import time
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 PLUGIN = ROOT / "plugin" / "kicad-blocks"
 sys.path.insert(0, str(PLUGIN))
 
+from kicad_blocks import plugin as plugin_actions
 from kicad_blocks.model import parse_pins
 from kicad_blocks.repository import create_block
 
@@ -51,23 +54,48 @@ def main() -> None:
         implementation = block.implementation
         before = implementation.read_bytes()
 
-        env = os.environ.copy()
-        env["HOME"] = str(home)
-        env["XDG_CONFIG_HOME"] = str(home / ".config")
-        env["KICAD_BLOCKS_GUI_TEST"] = "1"
-
-        command = [eeschema, str(implementation)]
         log_path = root / "eeschema.log"
+        selected_instance = SimpleNamespace(
+            id="00000000-0000-0000-0000-000000000abc",
+            definition=SimpleNamespace(
+                id=SimpleNamespace(
+                    library=block.manifest["library_nickname"],
+                    name=block.manifest["symbol_name"],
+                )
+            ),
+        )
+        schematic = SimpleNamespace(get_selection=lambda: [selected_instance])
+        kicad = SimpleNamespace(get_kicad_binary_path=lambda name: eeschema)
+        parent_window = object()
+        silent_messagebox = SimpleNamespace(showinfo=lambda *args, **kwargs: None)
         window_id = None
         deadline = time.monotonic() + 35.0
         with log_path.open("w", encoding="utf-8") as log_stream:
-            process = subprocess.Popen(
-                command,
-                env=env,
-                stdout=log_stream,
-                stderr=subprocess.STDOUT,
-                text=True,
-            )
+            # Exercise the plugin's actual selected-library-instance edit
+            # helper. The fake instance supplies a real catalog library ID;
+            # process creation and the GUI itself are not mocked.
+            with (
+                patch.dict(
+                    os.environ,
+                    {
+                        "HOME": str(home),
+                        "XDG_CONFIG_HOME": str(home / ".config"),
+                        "KICAD_BLOCKS_GUI_TEST": "1",
+                    },
+                ),
+                patch.object(plugin_actions, "messagebox", silent_messagebox),
+            ):
+                process = plugin_actions._edit_block_implementation(
+                    library,
+                    schematic,
+                    kicad,
+                    root / "project",
+                    parent_window,
+                )
+            if process.args != [eeschema, str(implementation)]:
+                raise AssertionError(
+                    f"Plugin edit action opened unexpected command: {process.args!r}"
+                )
             try:
                 setup_steps = 0
                 while time.monotonic() < deadline:
