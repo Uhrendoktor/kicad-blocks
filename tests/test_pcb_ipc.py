@@ -8,7 +8,6 @@ import tempfile
 from pathlib import Path
 
 from kipy import KiCad
-from kipy.geometry import Vector2
 
 
 def _find_cli() -> str:
@@ -24,37 +23,7 @@ def _find_cli() -> str:
 def _write_minimal_board(path: Path) -> None:
     """Write a small but valid empty board document for an IPC test."""
     path.write_text(
-        """(kicad_pcb
-  (version 20250114)
-  (generator "pcbnew")
-  (general (thickness 1.6))
-  (paper "A4")
-  (layers
-    (0 "F.Cu" signal)
-    (31 "B.Cu" signal)
-    (32 "B.Adhes" user "B.Adhesive")
-    (33 "F.Adhes" user "F.Adhesive")
-    (34 "B.Paste" user)
-    (35 "F.Paste" user)
-    (36 "B.SilkS" user)
-    (37 "F.SilkS" user)
-    (38 "B.Mask" user)
-    (39 "F.Mask" user)
-    (40 "Dwgs.User" user)
-    (41 "Cmts.User" user)
-    (42 "Eco1.User" user)
-    (43 "Eco2.User" user)
-    (44 "Edge.Cuts" user)
-    (45 "Margin" user)
-    (46 "B.CrtYd" user)
-    (47 "F.CrtYd" user)
-    (48 "B.Fab" user)
-    (49 "F.Fab" user)
-  )
-  (setup)
-  (net 0 "")
-)
-""",
+        "(kicad_pcb\n  (version 20250114)\n  (generator \"pcbnew\")\n  (general (thickness 1.6))\n  (paper \"A4\")\n  (layers\n    (0 \"F.Cu\" signal)\n    (31 \"B.Cu\" signal)\n    (32 \"B.Adhes\" user \"B.Adhesive\")\n    (33 \"F.Adhes\" user \"F.Adhesive\")\n    (34 \"B.Paste\" user)\n    (35 \"F.Paste\" user)\n    (36 \"B.SilkS\" user)\n    (37 \"F.SilkS\" user)\n    (38 \"B.Mask\" user)\n    (39 \"F.Mask\" user)\n    (40 \"Dwgs.User\" user)\n    (41 \"Cmts.User\" user)\n    (42 \"Eco1.User\" user)\n    (43 \"Eco2.User\" user)\n    (44 \"Edge.Cuts\" user)\n    (45 \"Margin\" user)\n    (46 \"B.CrtYd\" user)\n    (47 \"F.CrtYd\" user)\n    (48 \"B.Fab\" user)\n    (49 \"F.Fab\" user)\n  )\n  (setup)\n  (net 0 \"\")\n  (footprint \"Test:BlockResistor\"\n    (layer \"F.Cu\")\n    (at 100 100 0)\n    (property \"Reference\" \"R1\" (at 100 98 0) (layer \"F.SilkS\") (effects (font (size 1 1))))\n    (property \"Value\" \"10k\" (at 100 102 0) (layer \"F.Fab\") (effects (font (size 1 1))))\n    (fp_text reference \"R1\" (at 0 -1.5 0) (layer \"F.SilkS\") (effects (font (size 1 1))))\n    (fp_text value \"10k\" (at 0 1.5 0) (layer \"F.Fab\") (effects (font (size 1 1))))\n    (pad \"1\" smd rect (at -0.75 0 0) (size 0.8 1.2) (layers \"F.Cu\" \"F.Paste\" \"F.Mask\") (net 0 \"\"))\n    (pad \"2\" smd rect (at 0.75 0 0) (size 0.8 1.2) (layers \"F.Cu\" \"F.Paste\" \"F.Mask\") (net 0 \"\"))\n  )\n)\n",
         encoding="utf-8",
     )
 
@@ -80,20 +49,23 @@ def main() -> None:
             if "" not in existing_nets:
                 raise AssertionError(f"Empty net missing from board: {existing_nets!r}")
 
-            # Exercise library loading and footprint insertion through IPC.
-            kicad.load_all_libraries(types=[2])
-            kicad.wait_for_libraries(types=[2], timeout_s=120.0)
-            footprint = board.place_footprint_from_library(
-                "Resistor_SMD:R_0603_1608Metric",
-                Vector2.from_xy_mm(100.0, 100.0),
-            )
-            footprint.reference_field.text.value = "R1"
-            board.save()
-
+            # The fixture contains a fully embedded footprint. The block
+            # importer copies existing footprint instances; it should not
+            # depend on a global footprint library being installed.
             footprints = list(board.get_footprints())
-            references = {item.reference_field.text.value for item in footprints}
-            if "R1" not in references:
-                raise AssertionError(f"Placed footprint reference missing: {references!r}")
+            footprint = next(
+                (
+                    item
+                    for item in footprints
+                    if item.reference_field.text.value == "R1"
+                ),
+                None,
+            )
+            if footprint is None:
+                raise AssertionError(
+                    "Embedded fixture footprint was not loaded: "
+                    + repr([item.reference_field.text.value for item in footprints])
+                )
 
             pads = [pad for pad in board.get_pads() if pad.parent == footprint.id]
             if not pads:
