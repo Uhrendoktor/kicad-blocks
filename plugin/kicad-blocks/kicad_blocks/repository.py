@@ -501,7 +501,6 @@ def publish_local_copy(local_block: BlockRecord) -> dict:
             elif not existed:
                 path.unlink(missing_ok=True)
 
-    all_changed_files = sorted(set(push_files) | set(pull_files))
     try:
         for file_name in push_files:
             backup_file(source.path, source_backup, file_name, source_originals)

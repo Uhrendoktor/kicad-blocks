@@ -288,6 +288,47 @@ class BlockRepositoryTests(unittest.TestCase):
         self.assertEqual(local_manifest["base_hashes"], source_manifest["hashes"])
         self.assertEqual(publish_local_copy(local)["published"], [])
 
+    def test_local_sync_merges_independent_local_and_upstream_edits(self):
+        source = create_block(self.root, "Bidirectional Merge", self.pins)
+        local = make_local_copy(source, self.project)
+        local.implementation.write_text(
+            local.implementation.read_text(encoding="utf-8") + "\n; local side\n",
+            encoding="utf-8",
+        )
+        source.symbol_library.write_text(
+            source.symbol_library.read_text(encoding="utf-8") + "\n; upstream side\n",
+            encoding="utf-8",
+        )
+
+        result = publish_local_copy(local)
+
+        self.assertEqual(result["published"], ["implementation.kicad_sch"])
+        self.assertEqual(result["pulled"], ["block.kicad_sym"])
+        self.assertIn("; local side", source.implementation.read_text(encoding="utf-8"))
+        self.assertIn("; local side", local.implementation.read_text(encoding="utf-8"))
+        self.assertIn("; upstream side", source.symbol_library.read_text(encoding="utf-8"))
+        self.assertIn("; upstream side", local.symbol_library.read_text(encoding="utf-8"))
+        local_manifest = read_manifest(local.path)
+        source_manifest = read_manifest(source.path)
+        self.assertEqual(local_manifest["base_hashes"], source_manifest["hashes"])
+        self.assertEqual(local_manifest["source_revision"], source_manifest["revision"])
+
+    def test_identical_concurrent_local_and_upstream_edits_converge(self):
+        source = create_block(self.root, "Converged Edit", self.pins)
+        local = make_local_copy(source, self.project)
+        identical = source.implementation.read_text(encoding="utf-8") + "\n; identical edit\n"
+        local.implementation.write_text(identical, encoding="utf-8")
+        source.implementation.write_text(identical, encoding="utf-8")
+        original_version = source.manifest["version"]
+
+        result = publish_local_copy(local)
+
+        self.assertEqual(result["published"], [])
+        self.assertEqual(result["pulled"], [])
+        self.assertEqual(result["converged"], ["implementation.kicad_sch"])
+        self.assertEqual(result["version"], original_version)
+        self.assertEqual(read_manifest(local.path)["base_hashes"], read_manifest(source.path)["hashes"])
+
     def test_local_publish_rejects_divergent_library_edit_without_overwrite(self):
         source = create_block(self.root, "Publish Conflict", self.pins)
         local = make_local_copy(source, self.project)
