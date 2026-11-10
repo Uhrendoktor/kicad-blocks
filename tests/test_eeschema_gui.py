@@ -78,13 +78,7 @@ def main() -> None:
                             f"(exit {process.returncode}). Output:\n{output[-6000:]}"
                         )
                     search = subprocess.run(
-                        [
-                            xdotool,
-                            "search",
-                            "--onlyvisible",
-                            "--name",
-                            "Eeschema",
-                        ],
+                        [xdotool, "search", "--onlyvisible", "--name", ".*"],
                         capture_output=True,
                         text=True,
                         check=False,
@@ -94,17 +88,71 @@ def main() -> None:
                         for line in search.stdout.splitlines()
                         if line.strip().isdigit()
                     ]
-                    if matches:
-                        window_id = matches[-1]
+                    for candidate in reversed(matches):
+                        name = subprocess.run(
+                            [xdotool, "getwindowname", candidate],
+                            capture_output=True,
+                            text=True,
+                            check=False,
+                        ).stdout.strip()
+                        window_class = subprocess.run(
+                            [xdotool, "getwindowclassname", candidate],
+                            capture_output=True,
+                            text=True,
+                            check=False,
+                        ).stdout.strip()
+                        if "eeschema" in (name + " " + window_class).casefold():
+                            window_id = candidate
+                            break
+                    if window_id:
                         break
                     time.sleep(0.25)
 
                 if window_id is None:
                     log_stream.flush()
                     output = log_path.read_text(encoding="utf-8")
+                    search_all = subprocess.run(
+                        [xdotool, "search", "--name", ".*"],
+                        capture_output=True,
+                        text=True,
+                        check=False,
+                    )
+                    window_diagnostics = []
+                    for candidate in search_all.stdout.splitlines():
+                        if not candidate.strip().isdigit():
+                            continue
+                        name = subprocess.run(
+                            [xdotool, "getwindowname", candidate],
+                            capture_output=True,
+                            text=True,
+                            check=False,
+                        ).stdout.strip()
+                        window_class = subprocess.run(
+                            [xdotool, "getwindowclassname", candidate],
+                            capture_output=True,
+                            text=True,
+                            check=False,
+                        ).stdout.strip()
+                        pid = subprocess.run(
+                            [xdotool, "getwindowpid", candidate],
+                            capture_output=True,
+                            text=True,
+                            check=False,
+                        ).stdout.strip()
+                        window_diagnostics.append(
+                            {"id": candidate, "title": name, "class": window_class, "pid": pid}
+                        )
+                    geometry = subprocess.run(
+                        ["xdotool", "getdisplaygeometry"],
+                        capture_output=True,
+                        text=True,
+                        check=False,
+                    )
                     raise TimeoutError(
                         "Eeschema did not create a visible window within 35 seconds. "
-                        f"Process alive={process.poll() is None}. Output:\n{output[-6000:]}"
+                        f"Process alive={process.poll() is None}; DISPLAY={os.environ.get('DISPLAY')!r}; "
+                        f"geometry={geometry.stdout.strip()!r}; windows={window_diagnostics!r}; "
+                        f"search_stderr={search_all.stderr.strip()!r}. Output:\\n{output[-6000:]}"
                     )
 
                 subprocess.run(
