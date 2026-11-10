@@ -33,6 +33,7 @@ def _minimal_board(path: Path) -> None:
         "(kicad_pcb\n"
         "  (version 20250114)\n"
         "  (generator \"pcbnew\")\n"
+        "  (uuid \"00000000-0000-0000-0000-000000000010\")\n"
         "  (general (thickness 1.6))\n"
         "  (paper \"A4\")\n"
         "  (layers\n"
@@ -50,14 +51,14 @@ def _minimal_board(path: Path) -> None:
         "  (setup)\n"
         "  (net 0 \"\")\n"
         "  (footprint \"Test:BlockResistor\"\n"
-        "    (layer \"F.Cu\") (at 100 100 0)\n"
+        "    (layer \"F.Cu\") (uuid \"00000000-0000-0000-0000-000000000001\") (at 100 100 0)\n"
         "    (path \"/00000000-0000-0000-0000-000000000001\")\n"
         "    (property \"Reference\" \"R1\" (at 100 98 0) (layer \"F.SilkS\") (effects (font (size 1 1))))\n"
         "    (property \"Value\" \"10k\" (at 100 102 0) (layer \"F.Fab\") (effects (font (size 1 1))))\n"
         "    (fp_text reference \"R1\" (at 0 -1.5 0) (layer \"F.SilkS\") (effects (font (size 1 1))))\n"
         "    (fp_text value \"10k\" (at 0 1.5 0) (layer \"F.Fab\") (effects (font (size 1 1))))\n"
-        "    (pad \"1\" smd rect (at -0.75 0 0) (size 0.8 1.2) (layers \"F.Cu\" \"F.Paste\" \"F.Mask\") (net 0 \"\"))\n"
-        "    (pad \"2\" smd rect (at 0.75 0 0) (size 0.8 1.2) (layers \"F.Cu\" \"F.Paste\" \"F.Mask\") (net 0 \"\"))\n"
+        "    (pad \"1\" smd rect (at -0.75 0 0) (size 0.8 1.2) (layers \"F.Cu\" \"F.Paste\" \"F.Mask\") (uuid \"00000000-0000-0000-0000-000000000011\") (net 0 \"\"))\n"
+        "    (pad \"2\" smd rect (at 0.75 0 0) (size 0.8 1.2) (layers \"F.Cu\" \"F.Paste\" \"F.Mask\") (uuid \"00000000-0000-0000-0000-000000000012\") (net 0 \"\"))\n"
         "  )\n"
         ")\n",
         encoding="utf-8",
@@ -75,6 +76,18 @@ def main() -> None:
         block_dir.mkdir()
         _minimal_board(target)
         _minimal_board(source)
+
+        # Verify the fixture boards are valid KiCad files before testing the
+        # serializer/merge path; otherwise a malformed fixture could masquerade
+        # as a merge failure.
+        baseline_svg_dir = root / "baseline-svg"
+        baseline_svg_dir.mkdir()
+        subprocess.run(
+            [cli, "pcb", "export", "svg", "--output", str(baseline_svg_dir), str(target)],
+            check=True,
+        )
+        if not list(baseline_svg_dir.glob("*.svg")):
+            raise AssertionError("KiCad CLI did not accept the baseline project board.")
 
         source_text = source.read_text(encoding="utf-8")
         source_text = source_text.replace(
