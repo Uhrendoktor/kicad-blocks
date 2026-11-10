@@ -221,6 +221,14 @@ def _compose_direct_children(
                         "position": repr(label.position),
                         "text": repr(label.text),
                         "spin_style": repr(label.spin_style),
+                        "item_id": repr(label.id),
+                        "item_id_type": str(type(label.id)),
+                        "item_id_source": inspect.getsource(type(label.id)),
+                        "shape": repr(label.shape),
+                        "shape_type": str(type(label.shape)),
+                        "shape_proto_enum": repr(
+                            getattr(label.proto, "shape", None)
+                        ),
                         "intersheet_refs_field": repr(
                             getattr(label, "intersheet_refs_field", None)
                         ),
