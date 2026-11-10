@@ -12,6 +12,9 @@ sys.path.insert(0, str(PLUGIN))
 from kicad_blocks.model import (
     facade_pin_connection_points,
     parse_pins,
+    rotate_label_spin_style,
+    schematic_symbol_orientation,
+    transform_symbol_point_to_schematic,
     render_symbol_library,
 )
 from kicad_blocks.repository import (
@@ -57,6 +60,40 @@ def _balanced_sexpr(text: str) -> bool:
 
 
 class BlockModelTests(unittest.TestCase):
+    def test_nested_symbol_pin_coordinates_transform_for_all_rotations(self):
+        points = {
+            0: (-7.62, -1.27),
+            90: (-1.27, 7.62),
+            180: (7.62, 1.27),
+            270: (1.27, -7.62),
+        }
+        for rotation, expected in points.items():
+            with self.subTest(rotation=rotation):
+                self.assertEqual(
+                    transform_symbol_point_to_schematic(-7.62, 1.27, rotation),
+                    expected,
+                )
+
+    def test_nested_label_spin_styles_rotate_with_the_child_symbol(self):
+        expected = {
+            0: (1, 3),
+            90: (4, 2),
+            180: (3, 1),
+            270: (2, 4),
+        }
+        for rotation, (left_pin, right_pin) in expected.items():
+            with self.subTest(rotation=rotation):
+                self.assertEqual(rotate_label_spin_style(1, rotation), left_pin)
+                self.assertEqual(rotate_label_spin_style(3, rotation), right_pin)
+
+    def test_nested_rotation_maps_to_kicad_ipc_orientation_enum(self):
+        self.assertEqual(
+            {angle: schematic_symbol_orientation(angle) for angle in (0, 90, 180, 270)},
+            {0: 1, 90: 2, 180: 3, 270: 4},
+        )
+        with self.assertRaises(ValueError):
+            schematic_symbol_orientation(45)
+
     def test_facade_connection_points_match_generated_symbol_pin_endpoints(self):
         pins = parse_pins("VIN:input, GND:passive, VOUT:output")
         points = facade_pin_connection_points(pins)

@@ -13,6 +13,9 @@ from .model import (
     BlockPin,
     facade_pin_connection_points,
     revision_for_hashes,
+    rotate_label_spin_style,
+    schematic_symbol_orientation,
+    transform_symbol_point_to_schematic,
     sha256_file,
 )
 from .repository import (
@@ -85,12 +88,6 @@ def _compose_direct_children(
     if not dependencies:
         return {"placed": [], "labels": 0}
 
-    for dependency, _ in dependencies:
-        if int(dependency.get("orientation", 0)) != 0:
-            raise NotImplementedError(
-                "Nested facade placement currently supports orientation 0 only."
-            )
-
     backup_dir = Path(
         tempfile.mkdtemp(prefix=".kicad-block-compose-backup-", dir=parent.path)
     )
@@ -144,6 +141,8 @@ def _compose_direct_children(
             reference = str(dependency.get("reference") or "B1")
             nickname = child.manifest["library_nickname"]
             symbol_name = child.manifest["symbol_name"]
+            rotation_deg = int(dependency.get("orientation", 0))
+            orientation = schematic_symbol_orientation(rotation_deg)
             existing = symbols_by_reference.get(reference)
             if existing is not None:
                 lib_id = existing.definition.id
@@ -155,6 +154,13 @@ def _compose_direct_children(
                         f"Reference {reference!r} already belongs to another symbol in "
                         f"{parent.name!r}; refusing to replace it."
                     )
+                existing_orientation = int(existing.transform.orientation)
+                if existing_orientation != orientation:
+                    raise ValueError(
+                        f"Nested instance {reference!r} is already placed at orientation "
+                        f"{existing_orientation}; stored block orientation is {rotation_deg}°. "
+                        "Recreate the parent implementation to change an existing child rotation."
+                    )
             else:
                 position = dependency.get("position_mm", [100.0, 160.0])
                 if len(position) != 2:
@@ -162,7 +168,7 @@ def _compose_direct_children(
                 existing = schematic.place_symbol_from_library(
                     f"{nickname}:{symbol_name}",
                     Vector2.from_xy_mm(float(position[0]), float(position[1])),
-                    orientation=0,
+                    orientation=orientation,
                     reference=reference,
                 )
                 symbols_by_reference[reference] = existing
@@ -180,7 +186,11 @@ def _compose_direct_children(
             origin_x, origin_y = float(position[0]), float(position[1])
             for pin_name, (offset_x, offset_y, spin_style) in pin_points.items():
                 net_name = str(pin_map[pin_name])
-                point = Vector2.from_xy_mm(origin_x + offset_x, origin_y + offset_y)
+                delta_x, delta_y = transform_symbol_point_to_schematic(
+                    offset_x, offset_y, rotation_deg
+                )
+                point = Vector2.from_xy_mm(origin_x + delta_x, origin_y + delta_y)
+                spin_style = rotate_label_spin_style(spin_style, rotation_deg)
                 key = _point_key(point)
                 current = labels_by_position.get(key)
                 if current is not None:

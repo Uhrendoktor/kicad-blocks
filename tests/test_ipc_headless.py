@@ -15,7 +15,14 @@ ROOT = Path(__file__).resolve().parents[1]
 PLUGIN = ROOT / "plugin" / "kicad-blocks"
 sys.path.insert(0, str(PLUGIN))
 
-from kicad_blocks.model import parse_pins, render_implementation_schematic
+from kicad_blocks.model import (
+    facade_pin_connection_points,
+    parse_pins,
+    render_implementation_schematic,
+    rotate_label_spin_style,
+    schematic_symbol_orientation,
+    transform_symbol_point_to_schematic,
+)
 from kicad_blocks.plugin import (
     _register_block,
     make_selected_local,
@@ -254,6 +261,7 @@ def main() -> None:
             child,
             reference="B1",
             position_mm=(100.0, 100.0),
+            orientation=90,
             pin_map={"IN": "VIN_CHILD", "GND": "GND_CHILD", "OUT": "VOUT_CHILD"},
         )
         composition = compose_block_implementation(parent, nested_library, cli)
@@ -282,9 +290,37 @@ def main() -> None:
                 raise AssertionError(
                     f"Nested composition created {len(nested_sheets)} hierarchical sheets."
                 )
-            mapped_labels = {label.text.value for label in parent_schematic.get_labels()}
-            if not {"VIN_CHILD", "GND_CHILD", "VOUT_CHILD"}.issubset(mapped_labels):
-                raise AssertionError(f"Mapped nested labels missing: {sorted(mapped_labels)}")
+            if int(nested_symbols[0].transform.orientation) != schematic_symbol_orientation(90):
+                raise AssertionError("Nested facade was not placed at its stored 90-degree orientation.")
+
+            labels_by_name = {
+                label.text.value: label
+                for label in parent_schematic.get_labels()
+            }
+            expected_names = {"VIN_CHILD", "GND_CHILD", "VOUT_CHILD"}
+            if not expected_names.issubset(labels_by_name):
+                raise AssertionError(
+                    f"Mapped nested labels missing: {sorted(set(labels_by_name) ^ expected_names)}"
+                )
+
+            pin_points = facade_pin_connection_points(parse_pins("IN:input, GND:passive, OUT:output"))
+            pin_map = {"IN": "VIN_CHILD", "GND": "GND_CHILD", "OUT": "VOUT_CHILD"}
+            for pin_name, (local_x, local_y, spin) in pin_points.items():
+                offset_x, offset_y = transform_symbol_point_to_schematic(local_x, local_y, 90)
+                expected_point = Vector2.from_xy_mm(100.0 + offset_x, 100.0 + offset_y)
+                actual_label = labels_by_name[pin_map[pin_name]]
+                if (
+                    int(actual_label.position.x) != int(expected_point.x)
+                    or int(actual_label.position.y) != int(expected_point.y)
+                ):
+                    raise AssertionError(
+                        f"Label {pin_map[pin_name]} is not on the rotated pin endpoint: "
+                        f"got {actual_label.position}, expected {expected_point}."
+                    )
+                if int(actual_label.spin_style) != rotate_label_spin_style(spin, 90):
+                    raise AssertionError(
+                        f"Label {pin_map[pin_name]} has the wrong orientation for the rotated pin."
+                    )
         finally:
             parent_kicad.close()
 

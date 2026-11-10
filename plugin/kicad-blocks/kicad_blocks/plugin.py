@@ -548,6 +548,18 @@ def _add_nested_dependency(root, parent, parent_window) -> None:
     )
     if mapping_text is None:
         return
+    orientation_deg = simpledialog.askinteger(
+        "Nested Block Orientation",
+        "Rotate the child facade counter-clockwise by 0, 90, 180 or 270 degrees:",
+        initialvalue=0,
+        minvalue=0,
+        maxvalue=270,
+        parent=parent_window,
+    )
+    if orientation_deg is None:
+        return
+    if orientation_deg not in (0, 90, 180, 270):
+        raise ValueError("Nested block rotation must be 0, 90, 180 or 270 degrees.")
     pin_map = {}
     for entry in mapping_text.split(","):
         token = entry.strip()
@@ -563,7 +575,9 @@ def _add_nested_dependency(root, parent, parent_window) -> None:
     manifest_path = parent_record.path / "manifest.json"
     original_manifest = manifest_path.read_bytes()
     try:
-        updated = add_dependency(parent_record, child_record, pin_map=pin_map)
+        updated = add_dependency(
+            parent_record, child_record, pin_map=pin_map, orientation=orientation_deg
+        )
         result = compose_block_implementation(updated, root, find_kicad_cli())
     except Exception:
         manifest_path.write_bytes(original_manifest)
@@ -575,7 +589,7 @@ def _add_nested_dependency(root, parent, parent_window) -> None:
     messagebox.showinfo(
         "Nested Block Composed",
         f"Added {child_record.name} to {parent_record.name} as "
-        f"{updated.manifest['dependencies'][-1]['reference']}.\n"
+        f"{updated.manifest['dependencies'][-1]['reference']} at {orientation_deg}°.\n"
         f"New facade symbols: {len(outcome['placed'])}; new net labels: {outcome['labels']}.\n"
         "The implementation is composed inline with no hierarchical sheet.",
         parent=parent_window,

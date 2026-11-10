@@ -116,6 +116,50 @@ def facade_pin_connection_points(
     return points
 
 
+def transform_symbol_point_to_schematic(
+    x_mm: float, y_mm: float, rotation_deg: int = 0
+) -> tuple[float, float]:
+    """Transform a symbol-local Y-up point into sheet Y-down coordinates.
+
+    The four transforms match KiCad's SCH_SYMBOL orientation matrix:
+    0°=(x,-y), 90°=(-y,-x), 180°=(-x,y), 270°=(y,x).
+    """
+    transforms = {
+        0: (x_mm, -y_mm),
+        90: (-y_mm, -x_mm),
+        180: (-x_mm, y_mm),
+        270: (y_mm, x_mm),
+    }
+    try:
+        return transforms[rotation_deg]
+    except KeyError as exc:
+        raise ValueError("Rotation must be 0, 90, 180 or 270 degrees.") from exc
+
+
+def schematic_symbol_orientation(rotation_deg: int = 0) -> int:
+    """Return the KiCad IPC SchematicSymbolOrientation enum value."""
+    try:
+        return {0: 1, 90: 2, 180: 3, 270: 4}[rotation_deg]
+    except KeyError as exc:
+        raise ValueError("Rotation must be 0, 90, 180 or 270 degrees.") from exc
+
+
+def rotate_label_spin_style(spin_style: int, rotation_deg: int = 0) -> int:
+    """Rotate a KiCad SchematicLabelSpinStyle enum with its owning symbol."""
+    maps = {
+        0: {1: 1, 2: 2, 3: 3, 4: 4},
+        90: {1: 4, 2: 1, 3: 2, 4: 3},
+        180: {1: 3, 2: 4, 3: 1, 4: 2},
+        270: {1: 2, 2: 3, 3: 4, 4: 1},
+    }
+    try:
+        return maps[rotation_deg][spin_style]
+    except KeyError as exc:
+        raise ValueError(
+            "Spin style must be LEFT/UP/RIGHT/BOTTOM and rotation must be 0, 90, 180 or 270."
+        ) from exc
+
+
 def render_symbol_library(
     symbol_name: str,
     display_name: str,
