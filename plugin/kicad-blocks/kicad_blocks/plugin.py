@@ -148,38 +148,51 @@ def _set_symbol_identifier(instance, library_nickname: str, symbol_name: str) ->
 
 
 def _switch_instance_to_local(instance, schematic, local):
-    """Retarget a placed symbol by replacing it with a copied instance proto.
+    """Retarget a placed facade in-place, preserving its KIID and wiring.
 
-    The current KiCad nightly's Schematic UpdateItems response is not decoded
-    correctly by the matching development kipy wheel for symbols. Create and
-    remove operations use the supported Any response path. Copying the full
-    instance proto preserves its KIID, placement, transform, unit, fields,
-    variants, and embedded pin geometry; only the library identifier changes.
+    The matching KiCad nightly/kipy combination can apply UpdateItems on the
+    server but currently returns an incorrectly decoded empty Any payload.
+    Treat that client-side decode error as non-fatal only if a fresh IPC read
+    proves the selected item now carries the local library ID.
     """
-    from kipy.schematic_types import SchematicSymbolInstance
-
-    proto = type(instance.proto)()
-    proto.CopyFrom(instance.proto)
-    # Raw protobuf field names differ from the Python wrapper properties:
-    # LibraryIdentifier.library -> proto.library_nickname, name -> entry_name.
+    original_id = str(instance.id)
+    proto = instance.proto
     proto.definition.id.library_nickname = local.manifest["library_nickname"]
     proto.definition.id.entry_name = local.manifest["symbol_name"]
-    replacement = SchematicSymbolInstance(proto=proto)
 
     commit = schematic.begin_commit()
     try:
-        schematic.remove_items([instance])
-        created = schematic.create_items([replacement])
-        if len(created) != 1:
+        decode_error = None
+        try:
+            schematic.update_items([instance])
+        except AttributeError as exc:
+            if "type_url" not in str(exc):
+                raise
+            decode_error = exc
+
+        symbols = list(schematic.get_symbols())
+        matches = [item for item in symbols if str(item.id) == original_id]
+        if len(matches) != 1:
             raise RuntimeError(
-                f"KiCad created {len(created)} replacement symbol instances; expected one."
-            )
+                "KiCad did not preserve exactly one symbol with the original KIID "
+                "during local-copy conversion."
+            ) from decode_error
+        updated = matches[0]
+        identifier = updated.definition.id
+        if (
+            identifier.library != local.manifest["library_nickname"]
+            or identifier.name != local.manifest["symbol_name"]
+        ):
+            raise RuntimeError(
+                "KiCad did not apply the local block library identifier during "
+                "the in-place symbol update."
+            ) from decode_error
         schematic.push_commit(commit, "Make block instance a local copy")
     except Exception:
         schematic.drop_commit(commit)
         raise
     schematic.save()
-    return created[0]
+    return updated
 
 
 def make_selected_local(schematic, kicad, project_dir: Path, library_root: Path) -> Path:
