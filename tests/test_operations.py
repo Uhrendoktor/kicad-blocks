@@ -57,6 +57,30 @@ class RecursiveBlockOperationTests(unittest.TestCase):
         )
         self.assertEqual({row["Block"] for row in rows}, {"Power Stage", "Controller"})
 
+    def test_repeated_child_instances_produce_separate_recursive_bom_rows(self):
+        self.parent = add_dependency(self.parent, self.child, reference="B2")
+        output = Path(self.temp.name) / "repeated.csv"
+
+        def fake_run(command, capture_output, text, check):
+            output_path = Path(command[command.index("--output") + 1])
+            implementation_path = Path(command[-1])
+            reference = "R1" if implementation_path == self.child.implementation else "U1"
+            output_path.write_text(
+                f"Reference,Qty,Value\\n{reference},1,10k\\n",
+                encoding="utf-8",
+            )
+            return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+        with patch("kicad_blocks.operations.subprocess.run", side_effect=fake_run):
+            result = export_block_bom(self.parent, output, "kicad-cli", self.root)
+
+        self.assertEqual(result["block_count"], 3)
+        with output.open("r", encoding="utf-8", newline="") as stream:
+            rows = list(csv.DictReader(stream))
+        refs = [row["Reference"] for row in rows]
+        self.assertEqual(refs.count("B1/Power Stage::R1"), 1)
+        self.assertEqual(refs.count("B2/Power Stage::R1"), 1)
+
     def test_recursive_erc_runs_once_for_each_block_and_records_violations(self):
         def fake_run(command, capture_output, text, check):
             report = Path(command[command.index("--output") + 1])

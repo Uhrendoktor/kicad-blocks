@@ -11,7 +11,7 @@ import tempfile
 from typing import Any
 
 from .model import slugify
-from .repository import BlockRecord, resolve_dependency_graph
+from .repository import BlockOccurrence, BlockRecord, resolve_dependency_occurrences
 
 
 def find_kicad_cli() -> str:
@@ -29,8 +29,8 @@ def find_kicad_cli() -> str:
 
 def _ordered_block_tree(
     block: BlockRecord, library_root: Path | None
-) -> list[BlockRecord]:
-    return [*resolve_dependency_graph(block, library_root), block]
+) -> list[BlockOccurrence]:
+    return resolve_dependency_occurrences(block, library_root)
 
 
 def export_block_bom(
@@ -53,7 +53,8 @@ def export_block_bom(
     rows: list[dict[str, str]] = []
     fieldnames: list[str] = []
     with tempfile.TemporaryDirectory(prefix="kicad-blocks-bom-") as temp:
-        for index, record in enumerate(blocks):
+        for index, occurrence in enumerate(blocks):
+            record = occurrence.record
             block_csv = Path(temp) / f"{index:03d}_{record.manifest['block_id'][:8]}.csv"
             command = [
                 cli,
@@ -97,8 +98,14 @@ def export_block_bom(
                     item = {name: value or "" for name, value in row.items() if name}
                     reference = item.get(reference_column, "").strip()
                     if reference:
-                        item[reference_column] = f"{record.name}::{reference}"
-                    item["Block"] = record.name
+                        instance_prefix = "/".join(occurrence.instance_path)
+                        owner = f"{instance_prefix}/{record.name}" if instance_prefix else record.name
+                        item[reference_column] = f"{owner}::{reference}"
+                    item["Block"] = (
+                        "/".join(occurrence.instance_path + (record.name,))
+                        if occurrence.instance_path
+                        else record.name
+                    )
                     rows.append(item)
 
     if "Block" not in fieldnames:
@@ -110,7 +117,12 @@ def export_block_bom(
 
     return {
         "output": str(output_file),
-        "blocks": [record.name for record in blocks],
+        "blocks": [
+            "/".join(item.instance_path + (item.record.name,))
+            if item.instance_path
+            else item.record.name
+            for item in blocks
+        ],
         "block_count": len(blocks),
         "row_count": len(rows),
     }
@@ -133,9 +145,11 @@ def validate_block_tree(
     report_directory.mkdir(parents=True, exist_ok=True)
 
     reports: list[dict[str, Any]] = []
-    for record in blocks:
+    for index, occurrence in enumerate(blocks):
+        record = occurrence.record
+        owner = "_".join(occurrence.instance_path + (record.name,))
         report_path = report_directory / (
-            f"{slugify(record.name)}_{record.manifest['block_id'][:8]}.erc.json"
+            f"{index:03d}_{slugify(owner)}_{record.manifest['block_id'][:8]}.erc.json"
         )
         command = [
             cli,

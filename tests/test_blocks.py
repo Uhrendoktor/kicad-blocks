@@ -19,6 +19,7 @@ from kicad_blocks.repository import (
     read_manifest,
     refresh_library_block,
     register_project_symbol_library,
+    resolve_dependency_occurrences,
     resolve_dependency_graph,
     revision_for_hashes,
     sha256_file,
@@ -367,6 +368,41 @@ class BlockRepositoryTests(unittest.TestCase):
             local_manifest["base_dependencies"],
             source_manifest["dependencies"],
         )
+
+    def test_same_child_can_be_instantiated_twice_with_unique_occurrence_metadata(self):
+        parent = create_block(self.root, "Dual Power Controller", self.pins)
+        child = create_block(self.root, "Reusable Power Stage", self.pins)
+        parent = add_dependency(
+            parent, child, reference="B1", position_mm=(80.0, 100.0)
+        )
+        parent = add_dependency(
+            parent,
+            child,
+            reference="B2",
+            position_mm=(160.0, 100.0),
+            pin_map={"VIN": "VIN_SW", "GND": "GND", "VOUT": "VOUT_A"},
+        )
+
+        occurrences = resolve_dependency_occurrences(parent, self.root)
+        children = [item for item in occurrences if item.record.manifest["block_id"] == child.manifest["block_id"]]
+
+        self.assertEqual(len(children), 2)
+        self.assertEqual(
+            [item.instance_path for item in children],
+            [("B1",), ("B2",)],
+        )
+        parent_manifest = read_manifest(parent.path)
+        dependencies = parent_manifest["dependencies"]
+        self.assertNotEqual(dependencies[0]["instance_id"], dependencies[1]["instance_id"])
+        self.assertEqual(dependencies[1]["pin_map"]["VIN"], "VIN_SW")
+
+    def test_nested_instance_requires_complete_valid_pin_map(self):
+        parent = create_block(self.root, "Mapped Parent", self.pins)
+        child = create_block(self.root, "Mapped Child", self.pins)
+        with self.assertRaisesRegex(ValueError, "map every child pin"):
+            add_dependency(parent, child, pin_map={"VIN": "VIN_PARENT"})
+        with self.assertRaisesRegex(ValueError, "Invalid parent net name"):
+            add_dependency(parent, child, pin_map={"VIN": "bad net", "GND": "GND", "VOUT": "VOUT"})
 
     def test_nested_dependency_graph_resolves_after_library_folder_move(self):
         parent = create_block(self.root, "Portable Controller", self.pins)

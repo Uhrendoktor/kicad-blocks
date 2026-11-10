@@ -9,6 +9,7 @@ from .repository import (
     publish_local_copy,
     refresh_library_block,
     resolve_dependency_graph,
+    resolve_dependency_occurrences,
     synchronize_local_copy,
 )
 
@@ -23,5 +24,6 @@ __all__ = [
     "refresh_library_block",
     "render_symbol_library",
     "resolve_dependency_graph",
+    "resolve_dependency_occurrences",
     "synchronize_local_copy",
 ]

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import re
 import shutil
@@ -26,6 +27,15 @@ IMPLEMENTATION_NAME = "implementation.kicad_sch"
 LAYOUT_NAME = "layout.kicad_pcb"
 LIBRARY_NICKNAME_PREFIX = "KBlocks_"
 LOCAL_NICKNAME_PREFIX = "KBLocal_"
+
+
+@dataclass(frozen=True, slots=True)
+class BlockOccurrence:
+    """One specific occurrence of a block in a nested implementation tree."""
+
+    record: "BlockRecord"
+    instance_path: tuple[str, ...] = ()
+    instance_ids: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -598,17 +608,78 @@ def publish_local_copy(local_block: BlockRecord) -> dict:
     }
 
 
-def add_dependency(parent: BlockRecord, child: BlockRecord) -> BlockRecord:
-    """Add a nested block reference, refusing self-links and dependency cycles."""
+def add_dependency(
+    parent: BlockRecord,
+    child: BlockRecord,
+    *,
+    reference: str | None = None,
+    position_mm: tuple[float, float] | None = None,
+    orientation: int = 0,
+    pin_map: dict[str, str] | None = None,
+) -> BlockRecord:
+    """Add one nestable block *instance* to a parent implementation.
+
+    The same reusable child block may be instantiated more than once. Each
+    occurrence receives its own reference, UUID, placement, and external-pin
+    to parent-net mapping.
+    """
     if parent.manifest["block_id"] == child.manifest["block_id"]:
         raise ValueError("A block cannot depend on itself.")
-    dependencies = list(parent.manifest.get("dependencies", []))
-    if any(item.get("block_id") == child.manifest["block_id"] for item in dependencies):
-        return parent
     if _depends_on(child.path, parent.manifest["block_id"], set()):
         raise ValueError("This dependency would create a cycle.")
+
+    dependencies = list(parent.manifest.get("dependencies", []))
+    used_references = {
+        str(item.get("reference", "")).casefold()
+        for item in dependencies
+        if item.get("reference")
+    }
+    if reference is None:
+        index = 1
+        while f"B{index}".casefold() in used_references:
+            index += 1
+        reference = f"B{index}"
+    reference = reference.strip()
+    if not re.fullmatch(r"[A-Za-z][A-Za-z0-9]*", reference):
+        raise ValueError("Nested block reference must start with a letter and contain only letters and digits.")
+    if reference.casefold() in used_references:
+        raise ValueError(f"Nested block reference {reference!r} is already used by this parent.")
+
+    if orientation not in (0, 90, 180, 270):
+        raise ValueError("Nested block orientation must be 0, 90, 180 or 270 degrees.")
+    if position_mm is None:
+        index = len(dependencies)
+        position_mm = (100.0 + (index % 2) * 65.0, 160.0 + (index // 2) * 50.0)
+    if len(position_mm) != 2 or not all(
+        isinstance(value, (int, float)) and math.isfinite(value) for value in position_mm
+    ):
+        raise ValueError("Nested block position must contain two finite millimetre coordinates.")
+
+    child_pins = {
+        str(pin["name"])
+        for pin in child.manifest.get("pins", [])
+    }
+    mapping = dict(pin_map) if pin_map is not None else {name: name for name in child_pins}
+    if set(mapping) != child_pins:
+        missing = sorted(child_pins - set(mapping))
+        extra = sorted(set(mapping) - child_pins)
+        raise ValueError(
+            "Nested block pin map must map every child pin exactly once. "
+            f"Missing: {missing}; unknown: {extra}."
+        )
+    for child_pin, net_name in mapping.items():
+        if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_./+\\-]*", str(net_name)):
+            raise ValueError(
+                f"Invalid parent net name {net_name!r} for child pin {child_pin!r}."
+            )
+
     dependencies.append(
         {
+            "instance_id": str(uuid.uuid4()),
+            "reference": reference,
+            "position_mm": [float(position_mm[0]), float(position_mm[1])],
+            "orientation": orientation,
+            "pin_map": mapping,
             "block_id": child.manifest["block_id"],
             "name": child.manifest["name"],
             "path": os.path.relpath(
@@ -621,7 +692,10 @@ def add_dependency(parent: BlockRecord, child: BlockRecord) -> BlockRecord:
     updated = dict(parent.manifest)
     updated["dependencies"] = dependencies
     updated["version"] = int(updated.get("version", 1)) + 1
-    atomic_write(parent.path / MANIFEST_NAME, json.dumps(updated, indent=2) + "\n")
+    atomic_write(
+        parent.path / MANIFEST_NAME,
+        json.dumps(updated, indent=2, ensure_ascii=False) + "\n",
+    )
     return _record(parent.path)
 
 
@@ -660,15 +734,13 @@ def _depends_on(block_path: Path, target_id: str, visited: set[str]) -> bool:
     return False
 
 
-def resolve_dependency_graph(
+def resolve_dependency_occurrences(
     block: BlockRecord, library_root: Path | None = None
-) -> list[BlockRecord]:
-    """Resolve a block's nested dependencies depth-first.
+) -> list[BlockOccurrence]:
+    """Resolve every nested *instance* depth-first, preserving repetitions.
 
-    Returned children are ordered with deepest dependencies first and each
-    block appears once. Relative dependency references remain valid when the
-    library folder is moved as a whole. Stale or missing dependencies fail
-    explicitly instead of silently using an arbitrary block version.
+    Cycle detection uses the current ancestry rather than a global visited
+    set, because reusing the same child block at two references is valid.
     """
     source_path = (
         Path(block.manifest["source_path"]).expanduser().resolve()
@@ -678,18 +750,19 @@ def resolve_dependency_graph(
     root = Path(library_root).expanduser().resolve() if library_root else source_path.parent
     records = {record.manifest["block_id"]: record for record in list_blocks(root)}
     records[block.manifest["block_id"]] = block
-    ordered: list[BlockRecord] = []
+    ordered: list[BlockOccurrence] = []
     visiting: set[str] = set()
-    visited: set[str] = set()
 
-    def visit(current: BlockRecord) -> None:
+    def visit(
+        current: BlockRecord,
+        instance_path: tuple[str, ...],
+        instance_ids: tuple[str, ...],
+    ) -> None:
         block_id = current.manifest["block_id"]
         if block_id in visiting:
             raise ValueError(f"Nested block dependency cycle detected at {current.name!r}.")
-        if block_id in visited:
-            return
         visiting.add(block_id)
-        for dependency in current.manifest.get("dependencies", []):
+        for index, dependency in enumerate(current.manifest.get("dependencies", []), start=1):
             child_id = dependency.get("block_id")
             child = records.get(child_id)
             if child is None:
@@ -710,14 +783,26 @@ def resolve_dependency_graph(
                     f"({expected_revision} -> {actual_revision}); update the dependency "
                     "reference deliberately before using this composition."
                 )
-            visit(child)
+            reference = str(dependency.get("reference") or f"B{index}")
+            instance_id = str(dependency.get("instance_id") or f"{block_id}:{index}")
+            visit(
+                child,
+                instance_path + (reference,),
+                instance_ids + (instance_id,),
+            )
         visiting.remove(block_id)
-        visited.add(block_id)
-        if block_id != block.manifest["block_id"]:
-            ordered.append(current)
+        ordered.append(BlockOccurrence(current, instance_path, instance_ids))
 
-    visit(block)
+    visit(block, (), ())
     return ordered
+
+
+def resolve_dependency_graph(
+    block: BlockRecord, library_root: Path | None = None
+) -> list[BlockRecord]:
+    """Resolve nested child block definitions in depth-first instance order."""
+    occurrences = resolve_dependency_occurrences(block, library_root)
+    return [occurrence.record for occurrence in occurrences[:-1]]
 
 
 def settings_file() -> Path:
