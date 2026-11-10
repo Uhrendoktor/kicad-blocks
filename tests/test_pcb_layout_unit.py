@@ -1,13 +1,13 @@
 """Unit tests for KiCad PCB net-reference serialization rules."""
 
-from pathlib import Path
 import sys
 import unittest
+from pathlib import Path
 
 PLUGIN = Path(__file__).resolve().parents[1] / "plugin" / "kicad-blocks"
 sys.path.insert(0, str(PLUGIN))
 
-from kicad_blocks.pcb_layout import _Quoted, _dump, _rewrite_nets, parse_sexpr
+from kicad_blocks.pcb_layout import _dump, _Quoted, _rewrite_nets, parse_sexpr
 
 
 class PCBNetRewriteTests(unittest.TestCase):
