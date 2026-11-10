@@ -44,7 +44,7 @@ Schematic placement, selection and library reload APIs used here are part of KiC
 4. The plugin uses the reverse-DNS KiCad IPC identifier `org.uhrendoktor.kicadblocks`. The first time KiCad discovers the plugin, it creates an isolated environment and installs the package dependencies declared in `plugin/kicad-blocks/requirements.txt`. The **KiCad Blocks Manager** action appears after environment setup completes. This may take a little while on the first launch. Do not manually pip-install the same requirements into the KiCad environment.
 5. Use the action with one of `create`, `place`, `local`, `sync`, `edit`, `publish`, `bom`, `erc`, `pcb`, or `nest`. The `sync` action on a selected local copy performs bidirectional three-way synchronization.
 
-To reinstall after changing the plugin's requirements or if its environment is damaged, right-click one of its actions in Preferences → Plugins and choose **Recreate Plugin Environment**, or remove the existing plugin folder and run the installer again. The plugin environment is stored by KiCad under `KICAD_CACHE_HOME/python-environments/org.uhrendoktor.kicadblocks`.
+To reinstall after changing the plugin's requirements or if its environment is damaged, right-click one of its actions in Preferences → Plugins and choose **Recreate Plugin Environment**, or remove the existing plugin folder and run the installer again. The plugin environment is stored under KiCad's versioned cache directory, typically `~/.cache/kicad/<version>/python-environments/org.uhrendoktor.kicadblocks` on Linux.
 
 See the official [KiCad add-on developer documentation](https://dev-docs.kicad.org/en/apis-and-binding/ipc-api/for-addon-developers/) for plugin discovery, action registration, and isolated Python environments.
 

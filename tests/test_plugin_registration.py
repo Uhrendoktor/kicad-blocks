@@ -207,7 +207,7 @@ def main() -> None:
         home = root / "home"
         home.mkdir()
         documents_home = home / ".local" / "share" / "KiCad"
-        cache_home = home / ".cache" / "KiCad" / version
+        cache_home = home / ".cache"
         project = root / "project"
         project.mkdir()
         block = create_block(
@@ -300,7 +300,9 @@ def main() -> None:
         log_path = root / "eeschema-plugin-discovery.log"
         process, window_id = _launch(eeschema, schematic, env, xdotool, log_path)
         try:
-            environment = cache_home / "python-environments" / PLUGIN_IDENTIFIER
+            environment = (
+                cache_home / "kicad" / version / "python-environments" / PLUGIN_IDENTIFIER
+            )
             env_python = environment / "bin" / "python"
             deadline = time.monotonic() + 180.0
             ready_log = False
