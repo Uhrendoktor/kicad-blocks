@@ -61,8 +61,29 @@ jobs:
           python3 --version
           echo "KiCad CLI: $KICAD_CLI"
 
+      - name: Resolve KiCad Python IPC binding revision
+        id: kipy
+        shell: bash
+        run: |
+          set -euo pipefail
+          KIPY_SHA="$(git ls-remote https://gitlab.com/kicad/code/kicad-python.git refs/heads/main | cut -f1)"
+          if [[ -z "$KIPY_SHA" ]]; then
+            echo "::error::Could not resolve official kicad-python main branch."
+            exit 1
+          fi
+          echo "sha=$KIPY_SHA" >> "$GITHUB_OUTPUT"
+          echo "Using kicad-python commit $KIPY_SHA"
+
+      - name: Restore cached KiCad Python IPC wheels
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/kicad-blocks-wheelhouse
+          key: kicad-python-${{ runner.os }}-${{ runner.arch }}-py312-${{ steps.kipy.outputs.sha }}
+
       - name: Create isolated Python environment
         shell: bash
+        env:
+          KIPY_SHA: ${{ steps.kipy.outputs.sha }}
         run: |
           set -euo pipefail
           python3 -m venv "${RUNNER_TEMP}/kicad-blocks-venv"
@@ -70,15 +91,11 @@ jobs:
           PY="${RUNNER_TEMP}/kicad-blocks-venv/bin/python"
           "$PY" -m pip install pytest ruff
 
-          # The 0.8.0 PyPI release is PCB-focused. Schematic IPC support is
-          # available on the official development branch. Build it once for
-          # each upstream branch SHA and retain the wheelhouse on this runner.
-          KIPY_SHA="$(git ls-remote https://gitlab.com/kicad/code/kicad-python.git refs/heads/main | cut -f1)"
-          if [[ -z "$KIPY_SHA" ]]; then
-            echo "::error::Could not resolve official kicad-python main branch."
-            exit 1
-          fi
-          WHEELHOUSE="$HOME/.cache/kicad-blocks/kicad-python/$KIPY_SHA"
+          # The released PyPI package is PCB-focused. Schematic IPC support is
+          # on the official development branch. Cache wheels by immutable
+          # upstream SHA because this self-hosted runner uses ephemeral Docker
+          # job containers and its filesystem does not persist between runs.
+          WHEELHOUSE="${RUNNER_TEMP}/kicad-blocks-wheelhouse"
           mkdir -p "$WHEELHOUSE"
           if ! compgen -G "$WHEELHOUSE/kicad_python-*.whl" >/dev/null; then
             "$PY" -m pip wheel --wheel-dir "$WHEELHOUSE" \
