@@ -65,10 +65,12 @@ def project_directory(schematic) -> Path:
 
 def _reload_symbol_library(kicad, nickname: str) -> None:
     """Load or reload a project symbol library, including new table entries."""
+    from kipy.errors import LibraryCommandError
+
     # kiapi.common.types: LT_SYMBOL=1; LibraryTableScope.LTS_PROJECT=2.
     try:
         kicad.reload_library(type=1, scope=2, nicknames=[nickname])
-    except Exception as first_error:
+    except LibraryCommandError:
         # A library added to sym-lib-table after KiCad startup may not yet be
         # present in the IPC library manager's cache. Ask KiCad to load the
         # current project table, then retry the exact nickname.
@@ -76,7 +78,7 @@ def _reload_symbol_library(kicad, nickname: str) -> None:
             kicad.load_all_libraries(types=[1])
             kicad.wait_for_libraries(types=[1], timeout_s=120.0)
             kicad.reload_library(type=1, scope=2, nicknames=[nickname])
-        except Exception as retry_error:
+        except LibraryCommandError as retry_error:
             raise RuntimeError(
                 f"KiCad has not picked up the new symbol library {nickname!r}. "
                 "Its project sym-lib-table entry was written, but this Eeschema "
