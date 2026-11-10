@@ -240,7 +240,7 @@ def _create_and_place(root, schematic, kicad, project_dir, parent) -> None:
         description=description,
         layout_file=Path(layout) if layout else None,
     )
-    _register_block(project_dir, record, kicad)
+    record = _register_block(project_dir, record, kicad)
     instance = place_block(schematic, record, x_mm, y_mm)
     messagebox.showinfo(
         "Block Created",
@@ -270,19 +270,11 @@ def _place_existing(root, schematic, kicad, project_dir, parent) -> None:
 
 
 def _edit_block_implementation(root, schematic, kicad, project_dir, parent) -> None:
-    """Open a selected library or local implementation in a separate Eeschema window."""
+    """Open a selected local implementation or the shared library implementation."""
     selected = list(schematic.get_selection())
-    record = None
     if len(selected) == 1 and hasattr(selected[0], "definition"):
-        nickname, symbol_name = _symbol_identifier(selected[0])
-        if nickname.startswith(LOCAL_NICKNAME_PREFIX):
-            local_root = project_dir / ".kicad_blocks" / "local"
-            for manifest_path in local_root.glob("*.kicad_block/manifest.json"):
-                manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-                if manifest.get("library_nickname") == nickname and manifest.get("symbol_name") == symbol_name:
-                    record = type("Record", (), {"path": manifest_path.parent, "manifest": manifest, "implementation": manifest_path.parent / manifest["implementation_file"]})()
-                    break
-        else:
+        record = local_copy_for_instance(project_dir, str(selected[0].id))
+        if record is None:
             record = _library_record_for_instance(root, selected[0])
     else:
         record = _pick_record(list_blocks(root), parent, "Edit Block Implementation")
@@ -290,14 +282,15 @@ def _edit_block_implementation(root, schematic, kicad, project_dir, parent) -> N
         raise FileNotFoundError("The selected block implementation could not be found.")
     executable = kicad.get_kicad_binary_path("eeschema")
     import subprocess
+
     subprocess.Popen([executable, str(record.implementation)], close_fds=True)
     messagebox.showinfo(
         "Block Implementation",
         f"Opened {record.name} implementation in Eeschema.\n\n"
-        "After editing a shared library block, run the publish action to record its new revision.",
+        "After editing a shared library block, run Publish. "
+        "A project-local implementation remains independent until explicitly synchronized.",
         parent=parent,
     )
-
 
 def _export_recursive_bom(root: Path, parent) -> None:
     record = _pick_record(list_blocks(root), parent, "Export Recursive Block BOM")
@@ -351,7 +344,7 @@ def _publish_block(root, kicad, project_dir, parent) -> None:
         return
     result = refresh_library_block(record)
     if result["changed"]:
-        _reload_symbol_library(kicad, record.manifest["library_nickname"])
+        _reload_symbol_library(kicad, LIBRARY_NICKNAME)
     messagebox.showinfo(
         "Library Block Published",
         f"Version: {result['version']}\n"
@@ -362,35 +355,11 @@ def _publish_block(root, kicad, project_dir, parent) -> None:
 
 
 def _block_record_for_instance(library_root: Path, project_dir: Path, instance):
-    """Resolve either a configured library block or the selected local copy."""
-    library_nickname, symbol_name = _symbol_identifier(instance)
-    for record in list_blocks(library_root):
-        if (
-            record.manifest.get("library_nickname") == library_nickname
-            and record.manifest.get("symbol_name") == symbol_name
-        ):
-            return record
-
-    local_root = project_dir / ".kicad_blocks" / "local"
-    for manifest_path in local_root.glob("*.kicad_block/manifest.json"):
-        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-        if (
-            manifest.get("library_nickname") == library_nickname
-            and manifest.get("symbol_name") == symbol_name
-        ):
-            return type(
-                "LocalBlockRecord",
-                (),
-                {
-                    "path": manifest_path.parent,
-                    "manifest": manifest,
-                    "name": str(manifest.get("name", symbol_name)),
-                },
-            )()
-    raise FileNotFoundError(
-        f"No KiCad block asset was found for selected symbol {library_nickname}:{symbol_name}."
-    )
-
+    """Resolve the selected instance to its local copy or shared library block."""
+    local_record = local_copy_for_instance(project_dir, str(instance.id))
+    if local_record is not None:
+        return local_record
+    return _library_record_for_instance(library_root, instance)
 
 def _parse_pin_net_map(value: str, pins: list[str]) -> dict[str, str]:
     mapping: dict[str, str] = {}
