@@ -16,7 +16,11 @@ PLUGIN = ROOT / "plugin" / "kicad-blocks"
 sys.path.insert(0, str(PLUGIN))
 
 from kicad_blocks.model import parse_pins, render_implementation_schematic
-from kicad_blocks.plugin import _register_block, make_selected_local, sync_selected_local
+from kicad_blocks.plugin import (
+    _register_block,
+    make_selected_local,
+    sync_selected_local,
+)
 from kicad_blocks.repository import (
     create_block,
     local_copy_for_instance,
@@ -141,7 +145,7 @@ def main() -> None:
 
             local_text = local.implementation.read_text(encoding="utf-8")
             local.implementation.write_text(
-                local_text + "\\n; local IPC publish test\\n",
+                local_text + "\n; local IPC publish test\n",
                 encoding="utf-8",
             )
             published = sync_selected_local(selection, kicad, project_dir)
@@ -152,7 +156,7 @@ def main() -> None:
 
             source_text = block.implementation.read_text(encoding="utf-8")
             block.implementation.write_text(
-                source_text + "\\n; upstream IPC pull test\\n",
+                source_text + "\n; upstream IPC pull test\n",
                 encoding="utf-8",
             )
             pulled = sync_selected_local(selection, kicad, project_dir)
@@ -164,11 +168,11 @@ def main() -> None:
             local_before_conflict = local.implementation.read_text(encoding="utf-8")
             source_before_conflict = block.implementation.read_text(encoding="utf-8")
             local.implementation.write_text(
-                local_before_conflict + "\\n; local concurrent edit\\n",
+                local_before_conflict + "\n; local concurrent edit\n",
                 encoding="utf-8",
             )
             block.implementation.write_text(
-                source_before_conflict + "\\n; library concurrent edit\\n",
+                source_before_conflict + "\n; library concurrent edit\n",
                 encoding="utf-8",
             )
             try:
