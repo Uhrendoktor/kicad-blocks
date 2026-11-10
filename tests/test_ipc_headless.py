@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import shutil
+import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -17,7 +18,6 @@ from kicad_blocks.repository import (
     create_block,
     register_project_symbol_library,
 )
-
 from kipy import KiCad
 from kipy.geometry import Vector2
 
