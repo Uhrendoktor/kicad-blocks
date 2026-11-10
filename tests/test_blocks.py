@@ -9,7 +9,7 @@ from pathlib import Path
 PLUGIN = Path(__file__).resolve().parents[1] / "plugin" / "kicad-blocks"
 sys.path.insert(0, str(PLUGIN))
 
-from kicad_blocks.model import parse_pins, render_symbol_library
+from kicad_blocks.model import facade_pin_connection_points, parse_pins, render_symbol_library
 from kicad_blocks.repository import (
     add_dependency,
     create_block,
@@ -51,6 +51,18 @@ def _balanced_sexpr(text: str) -> bool:
 
 
 class BlockModelTests(unittest.TestCase):
+    def test_facade_connection_points_match_generated_symbol_pin_endpoints(self):
+        pins = parse_pins("VIN:input, GND:passive, VOUT:output")
+        points = facade_pin_connection_points(pins)
+
+        # render_symbol_library places the electrical connection endpoints at
+        # +/- (body half-width 5.08 mm + pin length 2.54 mm).
+        self.assertEqual(points["VIN"][0], -7.62)
+        self.assertEqual(points["GND"][0], -7.62)
+        self.assertEqual(points["VOUT"][0], 7.62)
+        self.assertEqual(points["VIN"][2], 1)   # SLSS_LEFT, extending outward
+        self.assertEqual(points["VOUT"][2], 3)  # SLSS_RIGHT, extending outward
+
     def test_plugin_manifest_has_valid_schematic_action_contract(self):
         manifest = json.loads(
             (PLUGIN / "plugin.json").read_text(encoding="utf-8")
