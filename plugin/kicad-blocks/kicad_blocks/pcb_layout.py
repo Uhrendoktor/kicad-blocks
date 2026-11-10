@@ -195,17 +195,66 @@ def _rewrite_nets(
         _rewrite_nets(child, mapping, include_net_name=include_net_name)
 
 
-def _translate_item(node: list, dx: float, dy: float) -> None:
-    """Translate board-absolute geometry, preserving footprint-local geometry."""
+def _transform_point(
+    node: list,
+    *,
+    anchor_mm: tuple[float, float],
+    position_mm: tuple[float, float],
+    rotation_deg: float,
+) -> None:
+    """Rotate a board-absolute point about the stored anchor, then place it."""
+    if len(node) < 3:
+        raise ValueError(f"Malformed coordinate node {_dump(node)}")
+    source_x = _num(node[1]) - anchor_mm[0]
+    source_y = _num(node[2]) - anchor_mm[1]
+    radians = math.radians(rotation_deg)
+    cosine = math.cos(radians)
+    sine = math.sin(radians)
+    # KiCad board coordinates have positive Y downward. A positive angle
+    # therefore uses this sign convention for the documented CCW rotation.
+    node[1] = _fmt(position_mm[0] + source_x * cosine + source_y * sine)
+    node[2] = _fmt(position_mm[1] - source_x * sine + source_y * cosine)
+
+
+def _rotate_angle_node(node: list, rotation_deg: float) -> None:
+    """Add the block rotation to an item's existing absolute orientation."""
+    if len(node) >= 4:
+        try:
+            angle = _num(node[3])
+        except ValueError:
+            return
+        node[3] = _fmt((angle + rotation_deg) % 360.0)
+
+
+def _transform_item(
+    node: list,
+    *,
+    anchor_mm: tuple[float, float],
+    position_mm: tuple[float, float],
+    rotation_deg: float,
+) -> None:
+    """Rotate and translate board-absolute geometry, preserving footprint-local data."""
     if _head(node) == "footprint":
         at = _direct(node, "at")
         if at is None:
             raise ValueError("Stored PCB footprint has no placement coordinate.")
-        _xy(at, dx, dy)
+        _transform_point(
+            at,
+            anchor_mm=anchor_mm,
+            position_mm=position_mm,
+            rotation_deg=rotation_deg,
+        )
+        _rotate_angle_node(at, rotation_deg)
         for prop in _all(node, "property"):
             prop_at = _direct(prop, "at")
             if prop_at is not None:
-                _xy(prop_at, dx, dy)
+                _transform_point(
+                    prop_at,
+                    anchor_mm=anchor_mm,
+                    position_mm=position_mm,
+                    rotation_deg=rotation_deg,
+                )
+                _rotate_angle_node(prop_at, rotation_deg)
         return
 
     absolute_tags = {"at", "start", "mid", "end", "center", "xy", "pts"}
@@ -218,14 +267,28 @@ def _translate_item(node: list, dx: float, dy: float) -> None:
             if tag == "pts":
                 for point in item[1:]:
                     if _head(point) == "xy":
-                        _xy(point, dx, dy)
+                        _transform_point(
+                            point,
+                            anchor_mm=anchor_mm,
+                            position_mm=position_mm,
+                            rotation_deg=rotation_deg,
+                        )
             else:
-                _xy(item, dx, dy)
+                _transform_point(
+                    item,
+                    anchor_mm=anchor_mm,
+                    position_mm=position_mm,
+                    rotation_deg=rotation_deg,
+                )
+                if tag == "at":
+                    _rotate_angle_node(item, rotation_deg)
             return
         for child in item[1:]:
             walk(child)
 
     walk(node)
+
+
 
 
 def _rewrite_footprint(footprint: list, reference: str, dx: float, dy: float) -> None:
@@ -280,6 +343,7 @@ def merge_block_layout(
     position_mm: tuple[float, float],
     pin_to_board_net: dict[str, str],
     layout_anchor_mm: tuple[float, float] = (0.0, 0.0),
+    rotation_deg: float = 0.0,
 ) -> dict[str, Any]:
     """Merge a stored block layout into a new copy of a project board.
 
@@ -304,8 +368,10 @@ def merge_block_layout(
         raise ValueError("Placement position and layout anchor must each contain two coordinates.")
     x, y = map(float, position_mm)
     anchor_x, anchor_y = map(float, layout_anchor_mm)
-    if not all(math.isfinite(value) for value in (x, y, anchor_x, anchor_y)):
-        raise ValueError("Placement position and layout anchor must be finite.")
+    rotation_deg = float(rotation_deg)
+    if not all(math.isfinite(value) for value in (x, y, anchor_x, anchor_y, rotation_deg)):
+        raise ValueError("Placement position, layout anchor and rotation must be finite.")
+    rotation_deg %= 360.0
 
     pins = {str(pin["name"]) for pin in block.manifest.get("pins", [])}
     if set(pin_to_board_net) != pins:
@@ -368,7 +434,8 @@ def merge_block_layout(
     imported: list[list] = []
     imported_references: list[str] = []
     skipped: set[str] = set()
-    dx, dy = x - anchor_x, y - anchor_y
+    anchor = (anchor_x, anchor_y)
+    position = (x, y)
     for raw_item in source[1:]:
         kind = _head(raw_item)
         if kind in {"version", "generator", "general", "paper", "layers", "setup", "net", "net_class", "embedded_fonts", "uuid"}:
@@ -383,10 +450,21 @@ def merge_block_layout(
             if not old_reference:
                 raise ValueError("Every stored layout footprint must have a Reference property.")
             new_reference = _unique_reference(f"{instance_reference}_{old_reference}", existing_references)
-            _rewrite_footprint(item, new_reference, dx, dy)
+            _rewrite_footprint(item, new_reference, 0.0, 0.0)
+            _transform_item(
+                item,
+                anchor_mm=anchor,
+                position_mm=position,
+                rotation_deg=rotation_deg,
+            )
             imported_references.append(new_reference)
         else:
-            _translate_item(item, dx, dy)
+            _transform_item(
+                item,
+                anchor_mm=anchor,
+                position_mm=position,
+                rotation_deg=rotation_deg,
+            )
             _refresh_ids(item)
         _rewrite_nets(item, net_map, include_net_name=(kind == "footprint"))
         imported.append(item)
@@ -402,6 +480,7 @@ def merge_block_layout(
         "output": str(output_board),
         "block": block.name,
         "instance_reference": instance_reference,
+        "rotation_deg": rotation_deg,
         "footprints": imported_references,
         "footprint_count": len(imported_references),
         "object_count": len(imported),

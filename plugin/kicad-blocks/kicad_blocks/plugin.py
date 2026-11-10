@@ -446,6 +446,19 @@ def _apply_block_pcb_layout(schematic, project_dir: Path, library_root: Path, pa
     except ValueError as exc:
         raise ValueError("Layout anchor coordinates must be numeric millimetres.") from exc
 
+    rotation_text = simpledialog.askstring(
+        "PCB block rotation",
+        "Enter the block rotation in degrees (positive is counter-clockwise).",
+        initialvalue="0",
+        parent=parent,
+    )
+    if rotation_text is None:
+        return
+    try:
+        rotation = float(rotation_text)
+    except ValueError as exc:
+        raise ValueError("Block rotation must be a numeric degree value.") from exc
+
     source_board = Path(board_path)
     default_output = (
         source_board.with_name(f"{source_board.stem}_{instance.reference}_blocks.kicad_pcb")
@@ -469,13 +482,15 @@ def _apply_block_pcb_layout(schematic, project_dir: Path, library_root: Path, pa
         position_mm=position,
         pin_to_board_net=pin_map,
         layout_anchor_mm=anchor,
+        rotation_deg=rotation,
     )
     warning = result["skipped_top_level_items"]
     message = (
         f"Created a new board copy:\n{result['output']}\n\n"
         f"Footprints added: {result['footprint_count']}\n"
         f"Board objects added: {result['object_count']}\n"
-        f"New internal nets: {', '.join(result['new_nets']) or 'none'}\n\n"
+        f"New internal nets: {', '.join(result['new_nets']) or 'none'}\n"
+        f"Rotation applied: {result['rotation_deg']:g} degrees counter-clockwise.\n\n"
         "The original project board was not modified. Review the generated board, "
         "then open it in PCB Editor."
     )

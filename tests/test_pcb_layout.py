@@ -144,10 +144,15 @@ def main() -> None:
             position_mm=(120.0, 130.0),
             layout_anchor_mm=(100.0, 100.0),
             pin_to_board_net={"VIN": "VIN_BOARD", "GND": "GND_BOARD"},
+            rotation_deg=90.0,
         )
         if not output.is_file() or target.read_bytes() == output.read_bytes():
             raise AssertionError("Merged board output was not written separately from the source board.")
-        if result["footprints"] != ["X1_R1"] or result["new_nets"] != ["VIN_BOARD", "GND_BOARD", "X1_SW"]:
+        if (
+            result["footprints"] != ["X1_R1"]
+            or result["new_nets"] != ["VIN_BOARD", "GND_BOARD", "X1_SW"]
+            or result["rotation_deg"] != 90.0
+        ):
             raise AssertionError(f"Unexpected merge report: {result!r}")
 
         # Parse result independently and assert net codes, reference and translated geometry.
@@ -196,8 +201,26 @@ def main() -> None:
         if copied_pad_nets != {"1": (1, "VIN_BOARD"), "2": (2, "GND_BOARD")}:
             raise AssertionError(f"Imported pad nets were not mapped: {copied_pad_nets!r}")
         fp_at = next(x for x in imported_footprints[0][1:] if isinstance(x, list) and x and x[0] == "at")
-        if (float(fp_at[1]), float(fp_at[2])) != (120.0, 130.0):
-            raise AssertionError(f"Footprint was not translated: {fp_at!r}")
+        if (float(fp_at[1]), float(fp_at[2]), float(fp_at[3])) != (120.0, 130.0, 90.0):
+            raise AssertionError(f"Footprint was not rotated/translated: {fp_at!r}")
+        ref_property = next(
+            x for x in imported_footprints[0][1:]
+            if isinstance(x, list) and x and x[0] == "property"
+            and str(x[1]).casefold() == "reference"
+        )
+        ref_at = next(x for x in ref_property[1:] if isinstance(x, list) and x and x[0] == "at")
+        if (float(ref_at[1]), float(ref_at[2]), float(ref_at[3])) != (118.0, 130.0, 90.0):
+            raise AssertionError(f"Footprint reference field was not rotated: {ref_at!r}")
+        merged_segment = next(
+            item for item in parsed[1:]
+            if isinstance(item, list) and item and item[0] == "segment"
+        )
+        segment_start = next(x for x in merged_segment[1:] if isinstance(x, list) and x and x[0] == "start")
+        segment_end = next(x for x in merged_segment[1:] if isinstance(x, list) and x and x[0] == "end")
+        if (float(segment_start[1]), float(segment_start[2])) != (120.0, 130.0):
+            raise AssertionError(f"Track start was not transformed: {segment_start!r}")
+        if (float(segment_end[1]), float(segment_end[2])) != (120.0, 125.0):
+            raise AssertionError(f"Track end was not transformed: {segment_end!r}")
 
         # KiCad CLI parser/export validates the complete generated board.
         svg_dir = root / "svg"

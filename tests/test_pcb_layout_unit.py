@@ -7,7 +7,13 @@ from pathlib import Path
 PLUGIN = Path(__file__).resolve().parents[1] / "plugin" / "kicad-blocks"
 sys.path.insert(0, str(PLUGIN))
 
-from kicad_blocks.pcb_layout import _dump, _Quoted, _rewrite_nets, parse_sexpr
+from kicad_blocks.pcb_layout import (
+    _dump,
+    _Quoted,
+    _rewrite_nets,
+    _transform_item,
+    parse_sexpr,
+)
 
 
 class PCBNetRewriteTests(unittest.TestCase):
@@ -24,6 +30,38 @@ class PCBNetRewriteTests(unittest.TestCase):
             _dump(segment),
             '(segment (start 1 2) (end 3 4) (net 9))',
         )
+
+    def test_rotation_transforms_footprint_and_absolute_fields_but_not_local_pads(self):
+        footprint = parse_sexpr(
+            '(footprint "Test:Part" '
+            '(at 100 100 0) '
+            '(property "Reference" "R1" (at 100 98 0)) '
+            '(pad "1" smd rect (at -0.75 0 0) (size 1 1) (net 0 "")))'
+        )
+        _transform_item(
+            footprint,
+            anchor_mm=(100.0, 100.0),
+            position_mm=(120.0, 130.0),
+            rotation_deg=90.0,
+        )
+
+        self.assertIn('(at 120 130 90)', _dump(footprint))
+        self.assertIn('(at 118 130 90)', _dump(footprint))
+        self.assertIn('(at -0.75 0 0)', _dump(footprint))
+
+    def test_rotation_transforms_track_endpoints_about_layout_anchor(self):
+        segment = parse_sexpr(
+            '(segment (start 100 100) (end 105 100) (width 0.25) '
+            '(layer "F.Cu") (net 3) (uuid "old"))'
+        )
+        _transform_item(
+            segment,
+            anchor_mm=(100.0, 100.0),
+            position_mm=(120.0, 130.0),
+            rotation_deg=90.0,
+        )
+        self.assertIn('(start 120 130)', _dump(segment))
+        self.assertIn('(end 120 125)', _dump(segment))
 
     def test_unknown_net_code_is_rejected(self):
         segment = parse_sexpr('(segment (net 99))')
