@@ -6,6 +6,7 @@ from .repository import (
     create_block,
     list_blocks,
     make_local_copy,
+    publish_local_copy,
     refresh_library_block,
     synchronize_local_copy,
 )
@@ -17,6 +18,7 @@ __all__ = [
     "list_blocks",
     "make_local_copy",
     "parse_pins",
+    "publish_local_copy",
     "refresh_library_block",
     "render_symbol_library",
     "synchronize_local_copy",

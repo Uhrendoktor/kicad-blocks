@@ -15,6 +15,7 @@ from kicad_blocks.repository import (
     create_block,
     list_blocks,
     make_local_copy,
+    publish_local_copy,
     read_manifest,
     refresh_library_block,
     register_project_symbol_library,
@@ -263,6 +264,67 @@ class BlockRepositoryTests(unittest.TestCase):
         )
         with self.assertRaisesRegex(RuntimeError, "manifest.dependencies"):
             synchronize_local_copy(type("Record", (), {"path": local.path, "manifest": local_manifest})())
+
+    def test_local_copy_can_publish_local_edit_to_library(self):
+        source = create_block(self.root, "Publish Local Edit", self.pins)
+        local = make_local_copy(source, self.project)
+        original_version = source.manifest["version"]
+        local.implementation.write_text(
+            local.implementation.read_text(encoding="utf-8") + "\n; local publication\n",
+            encoding="utf-8",
+        )
+
+        result = publish_local_copy(local)
+
+        self.assertEqual(result["published"], ["implementation.kicad_sch"])
+        self.assertGreater(result["version"], original_version)
+        self.assertIn(
+            "local publication",
+            source.implementation.read_text(encoding="utf-8"),
+        )
+        source_manifest = read_manifest(source.path)
+        local_manifest = read_manifest(local.path)
+        self.assertEqual(local_manifest["source_revision"], source_manifest["revision"])
+        self.assertEqual(local_manifest["base_hashes"], source_manifest["hashes"])
+        self.assertEqual(publish_local_copy(local)["published"], [])
+
+    def test_local_publish_rejects_divergent_library_edit_without_overwrite(self):
+        source = create_block(self.root, "Publish Conflict", self.pins)
+        local = make_local_copy(source, self.project)
+        local.implementation.write_text("; local implementation\n", encoding="utf-8")
+        source.implementation.write_text("; library implementation\n", encoding="utf-8")
+
+        with self.assertRaisesRegex(RuntimeError, "Publish conflict"):
+            publish_local_copy(local)
+
+        self.assertEqual(
+            local.implementation.read_text(encoding="utf-8"),
+            "; local implementation\n",
+        )
+        self.assertEqual(
+            source.implementation.read_text(encoding="utf-8"),
+            "; library implementation\n",
+        )
+
+    def test_local_publish_can_publish_nested_dependency_reference(self):
+        source = create_block(self.root, "Publish Dependency Parent", self.pins)
+        child = create_block(self.root, "Publish Dependency Child", self.pins)
+        local = make_local_copy(source, self.project)
+        local = add_dependency(local, child)
+
+        result = publish_local_copy(local)
+
+        self.assertEqual(result["published"], ["manifest.dependencies"])
+        source_manifest = read_manifest(source.path)
+        local_manifest = read_manifest(local.path)
+        self.assertEqual(
+            source_manifest["dependencies"][0]["block_id"],
+            child.manifest["block_id"],
+        )
+        self.assertEqual(
+            local_manifest["base_dependencies"],
+            source_manifest["dependencies"],
+        )
 
     def test_nested_dependencies_are_recorded_and_cycles_rejected(self):
         parent = create_block(self.root, "Controller", self.pins)

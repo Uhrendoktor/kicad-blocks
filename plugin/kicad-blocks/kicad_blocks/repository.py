@@ -492,7 +492,7 @@ def publish_local_copy(local_block: BlockRecord) -> dict:
         source_manifest["version"] = int(source_manifest.get("version", 1)) + 1
         atomic_write(
             original_manifest,
-            json.dumps(source_manifest, indent=2, ensure_ascii=False) + "\\n",
+            json.dumps(source_manifest, indent=2, ensure_ascii=False) + "\n",
         )
     except Exception:
         # Restore source files and its manifest on any partial write failure.
@@ -520,7 +520,7 @@ def publish_local_copy(local_block: BlockRecord) -> dict:
     local_manifest["base_dependencies"] = source_manifest.get("dependencies", [])
     atomic_write(
         local_block.path / MANIFEST_NAME,
-        json.dumps(local_manifest, indent=2, ensure_ascii=False) + "\\n",
+        json.dumps(local_manifest, indent=2, ensure_ascii=False) + "\n",
     )
     return {
         "published": changes,
