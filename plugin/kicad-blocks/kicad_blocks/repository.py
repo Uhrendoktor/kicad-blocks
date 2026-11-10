@@ -33,7 +33,7 @@ LOCAL_NICKNAME_PREFIX = "KBLocal_"
 class BlockOccurrence:
     """One specific occurrence of a block in a nested implementation tree."""
 
-    record: "BlockRecord"
+    record: BlockRecord
     instance_path: tuple[str, ...] = ()
     instance_ids: tuple[str, ...] = ()
 
@@ -760,9 +760,10 @@ def _depends_on(block_path: Path, target_id: str, visited: set[str]) -> bool:
         if dependency.get("block_id") == target_id:
             return True
         child_path = _dependency_path(block_path, manifest, dependency)
-        if child_path is not None and child_path.is_dir():
-            if _depends_on(child_path, target_id, visited):
-                return True
+        if child_path is not None and child_path.is_dir() and _depends_on(
+            child_path, target_id, visited
+        ):
+            return True
     return False
 
 
