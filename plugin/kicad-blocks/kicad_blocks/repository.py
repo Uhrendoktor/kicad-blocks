@@ -677,6 +677,7 @@ def publish_local_copy(local_block: BlockRecord) -> dict:
     )
     source_originals: dict[str, bool] = {}
     local_originals: dict[str, bool] = {}
+    catalog_originals: dict[str, bool] = {}
     source_manifest_path = source.path / MANIFEST_NAME
     local_manifest_path = local_block.path / MANIFEST_NAME
     shutil.copy2(source_manifest_path, source_backup / MANIFEST_NAME)
@@ -710,7 +711,7 @@ def publish_local_copy(local_block: BlockRecord) -> dict:
             backup_file(local_block.path, local_backup, file_name, local_originals)
         if SYMBOL_NAME in push_files:
             catalog_name = str(source.manifest.get("catalog_file", LIBRARY_CATALOG_NAME))
-            backup_file(source.path.parent, source_backup, catalog_name, source_originals)
+            backup_file(source.path.parent, source_backup, catalog_name, catalog_originals)
 
         for file_name in push_files:
             source_file = source.path / file_name
@@ -779,6 +780,7 @@ def publish_local_copy(local_block: BlockRecord) -> dict:
         )
     except Exception:
         restore_files(source.path, source_backup, source_originals)
+        restore_files(source.path.parent, source_backup, catalog_originals)
         restore_files(local_block.path, local_backup, local_originals)
         shutil.copy2(source_backup / MANIFEST_NAME, source_manifest_path)
         shutil.copy2(local_backup / MANIFEST_NAME, local_manifest_path)
