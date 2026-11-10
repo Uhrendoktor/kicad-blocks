@@ -225,6 +225,10 @@ def main() -> None:
         env.update(
             {
                 "HOME": str(home),
+                # Force GTK/wxWidgets onto the virtual X11 display. Some CI
+                # containers inherit a stale WAYLAND_DISPLAY from the runner.
+                "GDK_BACKEND": "x11",
+                "DISPLAY": os.environ["DISPLAY"],
                 "XDG_CONFIG_HOME": str(home / ".config"),
                 "XDG_DATA_HOME": str(home / ".local" / "share"),
                 "XDG_CACHE_HOME": str(home / ".cache"),
