@@ -99,7 +99,7 @@ def merge_symbol_catalog(library_root: Path, symbol_file: Path) -> Path:
         if _head(existing) != "kicad_symbol_lib":
             raise ValueError(f"Invalid KiCad symbol catalog: {catalog}")
     else:
-        existing = [incoming[0], *incoming[1:-1]]
+        existing = incoming
     existing_symbols = [
         (index, item)
         for index, item in enumerate(existing[1:], start=1)
