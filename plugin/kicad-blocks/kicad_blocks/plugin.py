@@ -160,8 +160,10 @@ def _switch_instance_to_local(instance, schematic, local):
 
     proto = type(instance.proto)()
     proto.CopyFrom(instance.proto)
-    proto.definition.id.library = local.manifest["library_nickname"]
-    proto.definition.id.name = local.manifest["symbol_name"]
+    # Raw protobuf field names differ from the Python wrapper properties:
+    # LibraryIdentifier.library -> proto.library_nickname, name -> entry_name.
+    proto.definition.id.library_nickname = local.manifest["library_nickname"]
+    proto.definition.id.entry_name = local.manifest["symbol_name"]
     replacement = SchematicSymbolInstance(proto=proto)
 
     commit = schematic.begin_commit()
