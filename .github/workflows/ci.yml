@@ -5,6 +5,12 @@ on:
     branches: [main]
   pull_request:
 
+# Keep only the newest pending validation for each ref. This runner is local
+# and serial; stale commit snapshots must not build an unbounded queue.
+concurrency:
+  group: kicad-blocks-${{ github.ref }}
+  cancel-in-progress: true
+
 # The runner is owned by the repository maintainer. Do not execute fork PR code
 # on it: only pull requests whose head branch is in this repository are eligible.
 jobs:
