@@ -339,6 +339,186 @@ def _atomic_write(path: Path, content: str) -> None:
         raise
 
 
+
+def _normalise_class_assignment(value: Any) -> list[str]:
+    """Normalize old single-class and current list-valued project assignments."""
+    if value is None:
+        return []
+    if isinstance(value, str):
+        return [value] if value else []
+    if isinstance(value, list) and all(isinstance(item, str) for item in value):
+        return list(value)
+    raise ValueError(f"Invalid KiCad netclass assignment value: {value!r}")
+
+
+def _netclass_signature(netclass: dict[str, Any]) -> str:
+    """Compare classes by their electrical properties, excluding identity/order."""
+    values = dict(netclass)
+    values.pop("name", None)
+    values.pop("priority", None)
+    values.pop("nets", None)
+    return json.dumps(values, sort_keys=True, separators=(",", ":"))
+
+
+def _merge_project_net_settings(
+    target_project: Path,
+    source_project: Path | None,
+    output_project: Path,
+    *,
+    instance_reference: str,
+    layout_ports: dict[str, str],
+    pin_to_board_net: dict[str, str],
+) -> dict[str, Any] | None:
+    """Build a copied project file with block netclasses/assignments merged.
+
+    The target project's settings remain authoritative. Named block netclasses
+    are reused if identical, otherwise namespaced on collision. Exact net
+    assignments are remapped to project net names. Pattern assignments and
+    other broad rules are intentionally not imported.
+    """
+    if not target_project.is_file() and (source_project is None or not source_project.is_file()):
+        return None
+
+    if target_project.is_file():
+        target_data = json.loads(target_project.read_text(encoding="utf-8"))
+        if not isinstance(target_data, dict):
+            raise ValueError(f"Invalid KiCad project JSON: {target_project}")
+    else:
+        target_data = {
+            "meta": {"filename": output_project.name, "version": 3},
+            "net_settings": {"classes": [], "netclass_assignments": {}},
+        }
+
+    if source_project is not None and source_project.is_file():
+        source_data = json.loads(source_project.read_text(encoding="utf-8"))
+        if not isinstance(source_data, dict):
+            raise ValueError(f"Invalid block project-settings JSON: {source_project}")
+        source_settings = source_data.get("net_settings", {})
+        if not isinstance(source_settings, dict):
+            raise ValueError("Block project file has an invalid net_settings section.")
+    else:
+        source_settings = {}
+
+    target_settings = target_data.setdefault("net_settings", {})
+    if not isinstance(target_settings, dict):
+        raise ValueError("Target project file has an invalid net_settings section.")
+    target_classes = target_settings.setdefault("classes", [])
+    source_classes = source_settings.get("classes", [])
+    if not isinstance(target_classes, list) or not isinstance(source_classes, list):
+        raise ValueError("KiCad net_settings.classes must be arrays.")
+
+    class_by_name: dict[str, dict[str, Any]] = {
+        str(item["name"]): item
+        for item in target_classes
+        if isinstance(item, dict) and isinstance(item.get("name"), str)
+    }
+    priorities = [
+        int(item.get("priority", 0))
+        for item in target_classes
+        if isinstance(item, dict)
+        and str(item.get("name", "")).casefold() != "default"
+        and isinstance(item.get("priority", 0), int)
+    ]
+    next_priority = max(priorities, default=-1) + 1
+    class_map: dict[str, str] = {}
+    merged_classes: list[str] = []
+
+    for source_class in source_classes:
+        if not isinstance(source_class, dict) or not isinstance(source_class.get("name"), str):
+            raise ValueError(f"Malformed block netclass definition: {source_class!r}")
+        original_name = source_class["name"]
+        if original_name.casefold() == "default":
+            class_map[original_name] = "Default"
+            continue
+
+        signature = _netclass_signature(source_class)
+        current = class_by_name.get(original_name)
+        if current is not None and _netclass_signature(current) == signature:
+            class_map[original_name] = original_name
+            continue
+
+        desired_name = original_name
+        if current is not None:
+            safe_class = re.sub(r"[^A-Za-z0-9_]+", "_", original_name).strip("_") or "Class"
+            base_name = f"{instance_reference}_{safe_class}"
+            desired_name = base_name
+            suffix = 2
+            while desired_name in class_by_name:
+                candidate = class_by_name[desired_name]
+                if _netclass_signature(candidate) == signature:
+                    break
+                desired_name = f"{base_name}_{suffix}"
+                suffix += 1
+        if desired_name not in class_by_name:
+            copied = dict(source_class)
+            copied.pop("nets", None)
+            copied["name"] = desired_name
+            copied["priority"] = next_priority
+            next_priority += 1
+            target_classes.append(copied)
+            class_by_name[desired_name] = copied
+            merged_classes.append(desired_name)
+        class_map[original_name] = desired_name
+
+    source_assignments = source_settings.get("netclass_assignments") or {}
+    target_assignments = target_settings.get("netclass_assignments") or {}
+    if not isinstance(source_assignments, dict) or not isinstance(target_assignments, dict):
+        raise ValueError("KiCad net_settings.netclass_assignments must be an object.")
+    target_assignments = {
+        str(net_name): _normalise_class_assignment(classes)
+        for net_name, classes in target_assignments.items()
+    }
+
+    reverse_ports: dict[str, str] = {}
+    for pin_name, source_net in layout_ports.items():
+        destination = str(pin_to_board_net[pin_name]).strip()
+        if source_net in reverse_ports and reverse_ports[source_net] != destination:
+            raise ValueError(f"Layout port net {source_net!r} maps to two project nets.")
+        reverse_ports[str(source_net)] = destination
+
+    assigned_nets: list[str] = []
+    for source_net, classes in source_assignments.items():
+        destination_net = reverse_ports.get(str(source_net))
+        if destination_net is None:
+            safe_net = re.sub(r"[^A-Za-z0-9_./+-]+", "_", str(source_net)).strip("_")
+            destination_net = f"{instance_reference}_{safe_net or 'NET'}"
+        mapped_classes = []
+        for source_class_name in _normalise_class_assignment(classes):
+            if source_class_name not in class_map:
+                raise ValueError(
+                    f"Block net {source_net!r} references undefined netclass "
+                    f"{source_class_name!r}."
+                )
+            target_class_name = class_map[source_class_name]
+            if target_class_name.casefold() != "default" and target_class_name not in mapped_classes:
+                mapped_classes.append(target_class_name)
+        if mapped_classes:
+            current = target_assignments.setdefault(destination_net, [])
+            for class_name in mapped_classes:
+                if class_name not in current:
+                    current.append(class_name)
+            if destination_net not in assigned_nets:
+                assigned_nets.append(destination_net)
+
+    target_settings["netclass_assignments"] = target_assignments
+    metadata = target_data.setdefault("meta", {})
+    if not isinstance(metadata, dict):
+        raise ValueError("KiCad project meta section must be an object.")
+    metadata["filename"] = output_project.name
+    metadata.setdefault("version", 3)
+
+    ignored_patterns = bool(source_settings.get("netclass_patterns"))
+    ignored_chain_classes = bool(source_settings.get("net_chain_classes"))
+    return {
+        "data": target_data,
+        "output": str(output_project),
+        "merged_classes": merged_classes,
+        "assigned_nets": assigned_nets,
+        "ignored_patterns": ignored_patterns,
+        "ignored_chain_classes": ignored_chain_classes,
+    }
+
+
 def merge_block_layout(
     target_board: Path,
     block,
@@ -363,6 +543,10 @@ def merge_block_layout(
     if not layout_name:
         raise ValueError(f"Block {block.name!r} has no stored PCB layout.")
     source_board = (Path(block.path) / str(layout_name)).resolve()
+    layout_project_file = block.manifest.get("layout_project_file", "layout.kicad_pro")
+    source_project = (Path(block.path) / str(layout_project_file)).resolve() if layout_project_file else None
+    target_project = target_board.with_suffix(".kicad_pro")
+    output_project = output_board.with_suffix(".kicad_pro")
     if not target_board.is_file() or not source_board.is_file():
         raise FileNotFoundError("Project board or stored block PCB layout does not exist.")
     if output_board == target_board:
@@ -480,12 +664,36 @@ def merge_block_layout(
     for offset, net_node in enumerate(new_net_nodes, start=1):
         target.insert(last_net + offset, net_node)
     target.extend(imported)
+
+    project_merge = _merge_project_net_settings(
+        target_project,
+        source_project,
+        output_project,
+        instance_reference=instance_reference,
+        layout_ports={str(key): str(value) for key, value in ports.items()},
+        pin_to_board_net=pin_to_board_net,
+    )
     _atomic_write(output_board, _dump(target) + "\n")
+    try:
+        if project_merge is not None:
+            _atomic_write(
+                output_project,
+                json.dumps(project_merge["data"], indent=2, ensure_ascii=False) + "\n",
+            )
+    except Exception:
+        output_board.unlink(missing_ok=True)
+        raise
+
     return {
         "output": str(output_board),
         "block": block.name,
         "instance_reference": instance_reference,
         "rotation_deg": rotation_deg,
+        "project_file": project_merge["output"] if project_merge is not None else None,
+        "merged_netclasses": project_merge["merged_classes"] if project_merge is not None else [],
+        "assigned_project_nets": project_merge["assigned_nets"] if project_merge is not None else [],
+        "ignored_project_patterns": project_merge["ignored_patterns"] if project_merge is not None else False,
+        "ignored_project_chain_classes": project_merge["ignored_chain_classes"] if project_merge is not None else False,
         "footprints": imported_references,
         "footprint_count": len(imported_references),
         "object_count": len(imported),

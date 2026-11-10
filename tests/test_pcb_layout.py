@@ -115,6 +115,48 @@ def main() -> None:
         source.write_text(source_text, encoding="utf-8")
         (block_dir / "layout.kicad_pcb").write_text(source_text, encoding="utf-8")
 
+        target_project = target.with_suffix(".kicad_pro")
+        target_project.write_text(
+            json.dumps(
+                {
+                    "meta": {"filename": target_project.name, "version": 3},
+                    "net_settings": {
+                        "classes": [
+                            {"name": "Default", "priority": 2147483647, "clearance": 0.2},
+                            {"name": "LowNoise", "priority": 0, "clearance": 0.3, "track_width": 0.3},
+                        ],
+                        "netclass_assignments": {"VIN_BOARD": ["LowNoise"]},
+                        "netclass_patterns": [],
+                    },
+                },
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+        source_project = block_dir / "layout.kicad_pro"
+        source_project.write_text(
+            json.dumps(
+                {
+                    "meta": {"filename": source_project.name, "version": 3},
+                    "net_settings": {
+                        "classes": [
+                            {"name": "Default", "priority": 2147483647, "clearance": 0.2},
+                            {"name": "HighSpeed", "priority": 0, "clearance": 0.1, "track_width": 0.15, "via_diameter": 0.5, "via_drill": 0.25},
+                        ],
+                        "netclass_assignments": {
+                            "VIN": ["HighSpeed"],
+                            "SW": ["HighSpeed"],
+                        },
+                        "netclass_patterns": [{"pattern": ".*", "netclass": "HighSpeed"}],
+                    },
+                },
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+        original_target_project = target_project.read_bytes()
+        original_source_project = source_project.read_bytes()
+
         source_svg_dir = root / "source-layout-svg"
         source_svg_dir.mkdir()
         subprocess.run(
@@ -134,6 +176,7 @@ def main() -> None:
                 "layout_file": "layout.kicad_pcb",
                 "pins": [{"name": "VIN"}, {"name": "GND"}],
                 "layout_ports": {"VIN": "VIN", "GND": "GND"},
+                "layout_project_file": "layout.kicad_pro",
             },
         )
         result = merge_block_layout(
@@ -148,6 +191,27 @@ def main() -> None:
         )
         if not output.is_file() or target.read_bytes() == output.read_bytes():
             raise AssertionError("Merged board output was not written separately from the source board.")
+        output_project = output.with_suffix(".kicad_pro")
+        if not output_project.is_file():
+            raise AssertionError("Merged output did not receive a matching KiCad project file.")
+        if target_project.read_bytes() != original_target_project or source_project.read_bytes() != original_source_project:
+            raise AssertionError("Project-settings merge modified one of its input project files.")
+        merged_project = json.loads(output_project.read_text(encoding="utf-8"))
+        net_settings = merged_project["net_settings"]
+        class_names = {item["name"] for item in net_settings["classes"]}
+        if "X1_HighSpeed" not in class_names or "LowNoise" not in class_names:
+            raise AssertionError(f"Netclass definitions were not merged: {sorted(class_names)}")
+        assignments = net_settings["netclass_assignments"]
+        if assignments.get("VIN_BOARD") != ["LowNoise", "X1_HighSpeed"]:
+            raise AssertionError(f"External netclass assignments were not merged: {assignments!r}")
+        if assignments.get("X1_SW") != ["X1_HighSpeed"]:
+            raise AssertionError(f"Internal namespaced netclass assignment missing: {assignments!r}")
+        if merged_project["meta"]["filename"] != output_project.name:
+            raise AssertionError("Merged project metadata filename was not updated.")
+        if result["merged_netclasses"] != ["X1_HighSpeed"]:
+            raise AssertionError(f"Unexpected netclass merge summary: {result!r}")
+        if not result["ignored_project_patterns"]:
+            raise AssertionError("Broad project netclass patterns should be reported as skipped.")
         if (
             result["footprints"] != ["X1_R1"]
             or result["new_nets"] != ["VIN_BOARD", "GND_BOARD", "X1_SW"]

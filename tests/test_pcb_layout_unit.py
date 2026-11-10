@@ -11,6 +11,7 @@ from kicad_blocks.pcb_layout import (
     _dump,
     _Quoted,
     _rewrite_nets,
+    _merge_project_net_settings,
     _transform_item,
     parse_sexpr,
 )
@@ -62,6 +63,74 @@ class PCBNetRewriteTests(unittest.TestCase):
         )
         self.assertIn('(start 120 130)', _dump(segment))
         self.assertIn('(end 120 125)', _dump(segment))
+
+    def test_project_netclasses_merge_namespaced_and_external_assignments(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            target = root / "target.kicad_pro"
+            source = root / "layout.kicad_pro"
+            output = root / "merged.kicad_pro"
+            target.write_text(
+                json.dumps(
+                    {
+                        "meta": {"filename": "target.kicad_pro", "version": 3},
+                        "net_settings": {
+                            "classes": [
+                                {"name": "Default", "priority": 2147483647, "clearance": 0.2},
+                                {"name": "Fast", "priority": 0, "clearance": 0.2, "track_width": 0.2},
+                            ],
+                            "netclass_assignments": {"VIN_BOARD": ["Fast"]},
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            source.write_text(
+                json.dumps(
+                    {
+                        "meta": {"filename": "layout.kicad_pro", "version": 3},
+                        "net_settings": {
+                            "classes": [
+                                {"name": "Default", "priority": 2147483647, "clearance": 0.2},
+                                {"name": "Fast", "priority": 0, "clearance": 0.1, "track_width": 0.15},
+                            ],
+                            "netclass_assignments": {
+                                "VIN": ["Fast"],
+                                "SW": ["Fast"],
+                            },
+                            "netclass_patterns": [{"pattern": ".*", "netclass": "Fast"}],
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            original_target = target.read_bytes()
+            original_source = source.read_bytes()
+
+            result = _merge_project_net_settings(
+                target,
+                source,
+                output,
+                instance_reference="X1",
+                layout_ports={"VIN": "VIN", "GND": "GND"},
+                pin_to_board_net={"VIN": "VIN_BOARD", "GND": "GND_BOARD"},
+            )
+
+            self.assertEqual(result["merged_classes"], ["X1_Fast"])
+            self.assertEqual(result["assigned_nets"], ["VIN_BOARD", "X1_SW"])
+            self.assertTrue(result["ignored_patterns"])
+            self.assertEqual(target.read_bytes(), original_target)
+            self.assertEqual(source.read_bytes(), original_source)
+            merged = result["data"]
+            self.assertEqual(
+                merged["net_settings"]["netclass_assignments"]["VIN_BOARD"],
+                ["Fast", "X1_Fast"],
+            )
+            self.assertEqual(
+                merged["net_settings"]["netclass_assignments"]["X1_SW"],
+                ["X1_Fast"],
+            )
+            self.assertEqual(merged["meta"]["filename"], output.name)
 
     def test_unknown_net_code_is_rejected(self):
         segment = parse_sexpr('(segment (net 99))')

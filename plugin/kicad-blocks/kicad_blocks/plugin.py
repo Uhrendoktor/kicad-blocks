@@ -490,12 +490,20 @@ def _apply_block_pcb_layout(schematic, project_dir: Path, library_root: Path, pa
         f"Footprints added: {result['footprint_count']}\n"
         f"Board objects added: {result['object_count']}\n"
         f"New internal nets: {', '.join(result['new_nets']) or 'none'}\n"
-        f"Rotation applied: {result['rotation_deg']:g} degrees counter-clockwise.\n\n"
-        "The original project board was not modified. Review the generated board, "
+        f"Rotation applied: {result['rotation_deg']:g} degrees counter-clockwise.\n"
+        f"Project settings copy: {result['project_file'] or 'not available'}\n"
+        f"Merged netclasses: {', '.join(result['merged_netclasses']) or 'none'}\n"
+        f"Updated net assignments: {', '.join(result['assigned_project_nets']) or 'none'}\n\n"
+        "The original project board and project settings were not modified. Review the generated board, "
         "then open it in PCB Editor."
     )
     if warning:
         message += "\n\nSkipped board-level item types: " + ", ".join(warning)
+    if result["ignored_project_patterns"] or result["ignored_project_chain_classes"]:
+        message += (
+            "\n\nThe block's project-wide netclass patterns/chain rules were not imported; "
+            "only explicit net assignments are merged."
+        )
     messagebox.showinfo("PCB Block Layout Applied", message, parent=parent)
 
 
