@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 import json
+import pathlib
 import subprocess
 import sys
 import tempfile
 import unittest
-import pathlib
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
