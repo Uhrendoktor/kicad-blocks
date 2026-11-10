@@ -82,7 +82,7 @@ def main() -> None:
         baseline_svg_dir = root / "baseline-svg"
         baseline_svg_dir.mkdir()
         subprocess.run(
-            [cli, "pcb", "export", "svg", "--layers", "F.Cu,B.Cu", "--output", str(baseline_svg_dir), str(target)],
+            [cli, "pcb", "export", "svg", "--mode-multi", "--layers", "F.Cu,B.Cu", "--output", str(baseline_svg_dir), str(target)],
             check=True,
         )
         if not list(baseline_svg_dir.glob("*.svg")):
