@@ -11,9 +11,9 @@ sys.path.insert(0, str(PLUGIN))
 
 from kicad_blocks.pcb_layout import (
     _dump,
+    _merge_project_net_settings,
     _Quoted,
     _rewrite_nets,
-    _merge_project_net_settings,
     _transform_item,
     parse_sexpr,
 )

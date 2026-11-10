@@ -401,11 +401,11 @@ def _merge_project_net_settings(
 
     target_settings = target_data.setdefault("net_settings", {})
     if not isinstance(target_settings, dict):
-        raise ValueError("Target project file has an invalid net_settings section.")
+        raise TypeError("Target project file has an invalid net_settings section.")
     target_classes = target_settings.setdefault("classes", [])
     source_classes = source_settings.get("classes", [])
     if not isinstance(target_classes, list) or not isinstance(source_classes, list):
-        raise ValueError("KiCad net_settings.classes must be arrays.")
+        raise TypeError("KiCad net_settings.classes must be arrays.")
 
     class_by_name: dict[str, dict[str, Any]] = {
         str(item["name"]): item
@@ -425,7 +425,7 @@ def _merge_project_net_settings(
 
     for source_class in source_classes:
         if not isinstance(source_class, dict) or not isinstance(source_class.get("name"), str):
-            raise ValueError(f"Malformed block netclass definition: {source_class!r}")
+            raise TypeError(f"Malformed block netclass definition: {source_class!r}")
         original_name = source_class["name"]
         if original_name.casefold() == "default":
             class_map[original_name] = "Default"
@@ -463,7 +463,7 @@ def _merge_project_net_settings(
     source_assignments = source_settings.get("netclass_assignments") or {}
     target_assignments = target_settings.get("netclass_assignments") or {}
     if not isinstance(source_assignments, dict) or not isinstance(target_assignments, dict):
-        raise ValueError("KiCad net_settings.netclass_assignments must be an object.")
+        raise TypeError("KiCad net_settings.netclass_assignments must be an object.")
     target_assignments = {
         str(net_name): _normalise_class_assignment(classes)
         for net_name, classes in target_assignments.items()
@@ -503,7 +503,7 @@ def _merge_project_net_settings(
     target_settings["netclass_assignments"] = target_assignments
     metadata = target_data.setdefault("meta", {})
     if not isinstance(metadata, dict):
-        raise ValueError("KiCad project meta section must be an object.")
+        raise TypeError("KiCad project meta section must be an object.")
     metadata["filename"] = output_project.name
     metadata.setdefault("version", 3)
 
