@@ -8,6 +8,7 @@ from .repository import (
     make_local_copy,
     publish_local_copy,
     refresh_library_block,
+    resolve_dependency_graph,
     synchronize_local_copy,
 )
 
@@ -21,5 +22,6 @@ __all__ = [
     "publish_local_copy",
     "refresh_library_block",
     "render_symbol_library",
+    "resolve_dependency_graph",
     "synchronize_local_copy",
 ]

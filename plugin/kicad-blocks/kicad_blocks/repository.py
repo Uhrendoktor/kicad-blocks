@@ -611,7 +611,10 @@ def add_dependency(parent: BlockRecord, child: BlockRecord) -> BlockRecord:
         {
             "block_id": child.manifest["block_id"],
             "name": child.manifest["name"],
-            "path": str(child.path.resolve()),
+            "path": os.path.relpath(
+                child.path.resolve(),
+                _dependency_anchor(parent.path, parent.manifest),
+            ),
             "revision": child.manifest.get("revision"),
         }
     )
@@ -622,19 +625,99 @@ def add_dependency(parent: BlockRecord, child: BlockRecord) -> BlockRecord:
     return _record(parent.path)
 
 
+def _dependency_anchor(block_path: Path, manifest: dict) -> Path:
+    """Return the canonical source directory for resolving relative children."""
+    source_path = manifest.get("source_path") if manifest.get("local_copy") else None
+    return Path(source_path).expanduser().resolve() if source_path else Path(block_path).resolve()
+
+
+def _dependency_path(block_path: Path, manifest: dict, dependency: dict) -> Path | None:
+    raw_path = dependency.get("path")
+    if not raw_path:
+        return None
+    candidate = Path(raw_path).expanduser()
+    if not candidate.is_absolute():
+        candidate = _dependency_anchor(block_path, manifest) / candidate
+    return candidate.resolve()
+
+
 def _depends_on(block_path: Path, target_id: str, visited: set[str]) -> bool:
+    block_path = Path(block_path).expanduser().resolve()
     manifest = read_manifest(block_path)
     block_id = manifest["block_id"]
+    if block_id == target_id:
+        return True
     if block_id in visited:
         return False
     visited.add(block_id)
     for dependency in manifest.get("dependencies", []):
         if dependency.get("block_id") == target_id:
             return True
-        child_path = dependency.get("path")
-        if child_path and Path(child_path).is_dir() and _depends_on(Path(child_path), target_id, visited):
-            return True
+        child_path = _dependency_path(block_path, manifest, dependency)
+        if child_path is not None and child_path.is_dir():
+            if _depends_on(child_path, target_id, visited):
+                return True
     return False
+
+
+def resolve_dependency_graph(
+    block: BlockRecord, library_root: Path | None = None
+) -> list[BlockRecord]:
+    """Resolve a block's nested dependencies depth-first.
+
+    Returned children are ordered with deepest dependencies first and each
+    block appears once. Relative dependency references remain valid when the
+    library folder is moved as a whole. Stale or missing dependencies fail
+    explicitly instead of silently using an arbitrary block version.
+    """
+    source_path = (
+        Path(block.manifest["source_path"]).expanduser().resolve()
+        if block.manifest.get("local_copy")
+        else block.path.resolve()
+    )
+    root = Path(library_root).expanduser().resolve() if library_root else source_path.parent
+    records = {record.manifest["block_id"]: record for record in list_blocks(root)}
+    records[block.manifest["block_id"]] = block
+    ordered: list[BlockRecord] = []
+    visiting: set[str] = set()
+    visited: set[str] = set()
+
+    def visit(current: BlockRecord) -> None:
+        block_id = current.manifest["block_id"]
+        if block_id in visiting:
+            raise ValueError(f"Nested block dependency cycle detected at {current.name!r}.")
+        if block_id in visited:
+            return
+        visiting.add(block_id)
+        for dependency in current.manifest.get("dependencies", []):
+            child_id = dependency.get("block_id")
+            child = records.get(child_id)
+            if child is None:
+                child_path = _dependency_path(current.path, current.manifest, dependency)
+                if child_path is not None and child_path.is_dir():
+                    child = _record(child_path)
+                    records[child_id] = child
+            if child is None:
+                raise FileNotFoundError(
+                    f"Nested block {dependency.get('name', child_id)!r} "
+                    f"({child_id}) referenced by {current.name!r} was not found."
+                )
+            expected_revision = dependency.get("revision")
+            actual_revision = child.manifest.get("revision")
+            if expected_revision and actual_revision != expected_revision:
+                raise RuntimeError(
+                    f"Nested block {child.name!r} changed revision "
+                    f"({expected_revision} -> {actual_revision}); update the dependency "
+                    "reference deliberately before using this composition."
+                )
+            visit(child)
+        visiting.remove(block_id)
+        visited.add(block_id)
+        if block_id != block.manifest["block_id"]:
+            ordered.append(current)
+
+    visit(block)
+    return ordered
 
 
 def settings_file() -> Path:

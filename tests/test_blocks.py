@@ -19,6 +19,7 @@ from kicad_blocks.repository import (
     read_manifest,
     refresh_library_block,
     register_project_symbol_library,
+    resolve_dependency_graph,
     revision_for_hashes,
     sha256_file,
     synchronize_local_copy,
@@ -365,6 +366,30 @@ class BlockRepositoryTests(unittest.TestCase):
         self.assertEqual(
             local_manifest["base_dependencies"],
             source_manifest["dependencies"],
+        )
+
+    def test_nested_dependency_graph_resolves_after_library_folder_move(self):
+        parent = create_block(self.root, "Portable Controller", self.pins)
+        child = create_block(self.root, "Portable Power Stage", self.pins)
+        parent = add_dependency(parent, child)
+        self.assertFalse(Path(parent.manifest["dependencies"][0]["path"]).is_absolute())
+
+        relocated_root = self.root.parent / "relocated-library"
+        self.root.rename(relocated_root)
+        relocated_parent = type(
+            "Record",
+            (),
+            {
+                "path": relocated_root / parent.path.name,
+                "manifest": read_manifest(relocated_root / parent.path.name),
+            },
+        )()
+
+        graph = resolve_dependency_graph(relocated_parent, relocated_root)
+
+        self.assertEqual(
+            [item.manifest["block_id"] for item in graph],
+            [child.manifest["block_id"]],
         )
 
     def test_nested_dependencies_are_recorded_and_cycles_rejected(self):
