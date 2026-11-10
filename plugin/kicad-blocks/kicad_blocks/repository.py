@@ -454,6 +454,7 @@ def publish_local_copy(local_block: BlockRecord) -> dict:
             "version": int(source.manifest.get("version", 1)),
             "revision": source.manifest.get("revision"),
             "dependencies_updated": False,
+            "converged": [],
         }
 
     # Optimistic concurrency check before the first mutation.
