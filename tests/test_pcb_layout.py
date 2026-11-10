@@ -176,7 +176,7 @@ def main() -> None:
                     if isinstance(item, list) and item
                 ]
                 parser_status = f"custom parser accepted; top-level items={top_level!r}"
-            except Exception as parse_error:
+            except ValueError as parse_error:
                 parser_status = f"custom parser rejected: {parse_error!r}"
             raise RuntimeError(
                 "KiCad rejected the merged PCB board: "
