@@ -13,8 +13,8 @@ filedialog = None
 messagebox = None
 simpledialog = None
 
-from .model import parse_pins
 from .composition import compose_block_implementation
+from .model import parse_pins
 from .operations import export_block_bom, find_kicad_cli, validate_block_tree
 from .repository import (
     LOCAL_NICKNAME_PREFIX,
