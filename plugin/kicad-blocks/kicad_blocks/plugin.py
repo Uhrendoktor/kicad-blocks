@@ -24,7 +24,6 @@ from .repository import (
     refresh_library_block,
     register_project_symbol_library,
     set_library_root,
-    synchronize_local_copy,
 )
 
 LOG = logging.getLogger("kicad_blocks")
@@ -147,32 +146,6 @@ def make_selected_local(schematic, kicad, project_dir: Path, library_root: Path)
     return local.path
 
 
-def publish_selected_local(schematic, project_dir: Path) -> dict:
-    """Publish edits from the selected local instance and merge upstream changes."""
-    instance = _selected_symbol(schematic)
-    library_nickname, symbol_name = _symbol_identifier(instance)
-    if not library_nickname.startswith(LOCAL_NICKNAME_PREFIX):
-        raise ValueError("Select a project-local block copy to publish.")
-
-    local_root = project_dir / ".kicad_blocks" / "local"
-    local_record = None
-    for manifest_path in local_root.glob("*.kicad_block/manifest.json"):
-        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-        if (
-            manifest.get("library_nickname") == library_nickname
-            and manifest.get("symbol_name") == symbol_name
-        ):
-            local_record = type(
-                "Record",
-                (),
-                {"path": manifest_path.parent, "manifest": manifest},
-            )()
-            break
-    if local_record is None:
-        raise FileNotFoundError("The selected local block asset directory could not be found.")
-    return publish_local_copy(local_record)
-
-
 def sync_selected_local(schematic, kicad, project_dir: Path) -> dict:
     """Synchronize the selected project-local block without clobbering edits."""
     instance = _selected_symbol(schematic)
@@ -193,7 +166,7 @@ def sync_selected_local(schematic, kicad, project_dir: Path) -> dict:
     if local_record is None:
         raise FileNotFoundError("The selected local block asset directory could not be found.")
 
-    result = synchronize_local_copy(local_record)
+    result = publish_local_copy(local_record)
     _reload_symbol_library(kicad, library_nickname)
 
     # Refresh only this selected instance from the updated local library. The
@@ -406,7 +379,6 @@ def run() -> None:
             "sync    — synchronize the selected local copy\n"
             "edit    — open the selected block implementation\n"
             "publish — publish edited library files as a new revision\n"
-            "publish-local — publish selected local copy to its library source\n"
             "nest    — add a nested block dependency",
             initialvalue="create",
             parent=root,
@@ -430,31 +402,20 @@ def run() -> None:
             result = sync_selected_local(schematic, kicad, project_dir)
             messagebox.showinfo(
                 "Local Block Synchronized",
-                "Updated files: " + (", ".join(result["copied"]) or "none") +
-                "\nPreserved local files: " + (", ".join(result["preserved"]) or "none"),
+                "Published local edits: " + (", ".join(result["published"]) or "none") +
+                "\nPulled library edits: " + (", ".join(result["pulled"]) or "none") +
+                "\nConverged edits: " + (", ".join(result["converged"]) or "none"),
                 parent=root,
             )
         elif action == "edit":
             _edit_block_implementation(library_root, schematic, kicad, project_dir, root)
         elif action == "publish":
             _publish_block(library_root, kicad, project_dir, root)
-        elif action == "publish-local":
-            result = publish_selected_local(schematic, project_dir)
-            messagebox.showinfo(
-                "Local Block Synchronized",
-                "Published local changes: "
-                + (", ".join(result["published"]) or "none")
-                + "\\nPulled library changes: "
-                + (", ".join(result["pulled"]) or "none")
-                + "\\nConverged: "
-                + (", ".join(result["converged"]) or "none"),
-                parent=root,
-            )
         elif action == "nest":
             library_root = _choose_library_root(root)
             _add_nested_dependency(library_root, root, root)
         else:
-            raise ValueError("Choose one of: create, place, local, sync, edit, publish, publish-local, nest.")
+            raise ValueError("Choose one of: create, place, local, sync, edit, publish, nest.")
     except Exception as exc:
         LOG.exception("KiCad Blocks action failed")
         messagebox.showerror("KiCad Blocks", str(exc), parent=root)
