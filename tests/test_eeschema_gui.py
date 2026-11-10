@@ -69,13 +69,14 @@ def main() -> None:
                 text=True,
             )
             try:
+                setup_steps = 0
                 while time.monotonic() < deadline:
                     if process.poll() is not None:
                         log_stream.flush()
                         output = log_path.read_text(encoding="utf-8")
                         raise RuntimeError(
                             f"Eeschema exited before opening the implementation "
-                            f"(exit {process.returncode}). Output:\n{output[-6000:]}"
+                            f"(exit {process.returncode}). Output:\\n{output[-6000:]}"
                         )
                     search = subprocess.run(
                         [xdotool, "search", "--onlyvisible", "--name", ".*"],
@@ -83,12 +84,10 @@ def main() -> None:
                         text=True,
                         check=False,
                     )
-                    matches = [
-                        line.strip()
-                        for line in search.stdout.splitlines()
-                        if line.strip().isdigit()
-                    ]
-                    for candidate in reversed(matches):
+                    windows = []
+                    for candidate in search.stdout.splitlines():
+                        if not candidate.strip().isdigit():
+                            continue
                         name = subprocess.run(
                             [xdotool, "getwindowname", candidate],
                             capture_output=True,
@@ -101,10 +100,48 @@ def main() -> None:
                             text=True,
                             check=False,
                         ).stdout.strip()
-                        if "eeschema" in (name + " " + window_class).casefold():
-                            window_id = candidate
-                            break
-                    if window_id:
+                        windows.append((candidate, name, window_class))
+
+                    setup = next(
+                        (
+                            item for item in windows
+                            if "kicad setup" in (item[1] + " " + item[2]).casefold()
+                        ),
+                        None,
+                    )
+                    if setup is not None and setup_steps < 12:
+                        # KiCad shows a first-run setup wizard in a clean HOME.
+                        # Accept its default choices to let the requested
+                        # implementation schematic finish opening.
+                        subprocess.run(
+                            [xdotool, "windowactivate", "--sync", setup[0]],
+                            check=False,
+                            capture_output=True,
+                            text=True,
+                        )
+                        subprocess.run(
+                            [xdotool, "key", "--window", setup[0], "Return"],
+                            check=False,
+                            capture_output=True,
+                            text=True,
+                        )
+                        setup_steps += 1
+                        time.sleep(0.75)
+                        continue
+
+                    editor = next(
+                        (
+                            item for item in reversed(windows)
+                            if implementation.stem.casefold() in item[1].casefold()
+                            and (
+                                "schematic editor" in item[1].casefold()
+                                or "eeschema" in item[2].casefold()
+                            )
+                        ),
+                        None,
+                    )
+                    if editor is not None:
+                        window_id = editor[0]
                         break
                     time.sleep(0.25)
 
@@ -149,9 +186,12 @@ def main() -> None:
                         check=False,
                     )
                     raise TimeoutError(
-                        "Eeschema did not create a visible window within 35 seconds. "
-                        f"Process alive={process.poll() is None}; DISPLAY={os.environ.get('DISPLAY')!r}; "
-                        f"geometry={geometry.stdout.strip()!r}; windows={window_diagnostics!r}; "
+                        "Eeschema did not open the requested implementation in a visible editor "
+                        "window within 35 seconds. "
+                        f"Process alive={process.poll() is None}; "
+                        f"DISPLAY={os.environ.get('DISPLAY')!r}; "
+                        f"geometry={geometry.stdout.strip()!r}; "
+                        f"setup_steps={setup_steps}; windows={window_diagnostics!r}; "
                         f"search_stderr={search_all.stderr.strip()!r}. Output:\\n{output[-6000:]}"
                     )
 
