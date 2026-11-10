@@ -735,8 +735,10 @@ def _merge_project_net_settings(
     chain_name_map = source_chain_name_map or {}
     source_chain_classes = source_settings.get("net_chain_classes") or {}
     source_chain_netclasses = source_settings.get("net_chain_netclasses") or {}
-    target_chain_classes = target_settings.setdefault("net_chain_classes", {})
-    target_chain_netclasses = target_settings.setdefault("net_chain_netclasses", {})
+    target_chain_classes = target_settings.get("net_chain_classes") or {}
+    target_chain_netclasses = target_settings.get("net_chain_netclasses") or {}
+    target_settings["net_chain_classes"] = target_chain_classes
+    target_settings["net_chain_netclasses"] = target_chain_netclasses
     if not all(
         isinstance(value, dict)
         for value in (
@@ -905,7 +907,7 @@ def merge_block_layout(
     position = (x, y)
     for raw_item in source[1:]:
         kind = _head(raw_item)
-        if kind in {"version", "generator", "general", "paper", "layers", "setup", "net", "net_class", "embedded_fonts", "uuid"}:
+        if kind in {"version", "generator", "general", "paper", "layers", "setup", "net", "net_class", "net_chains", "embedded_fonts", "uuid"}:
             continue
         if kind not in supported:
             if kind:
