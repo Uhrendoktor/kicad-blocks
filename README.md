@@ -37,7 +37,28 @@ Schematic placement, selection and library reload APIs used here are part of KiC
    - macOS: `~/Documents/KiCad/11.0/plugins/kicad-blocks`
 2. Enable the IPC API in KiCad Preferences → Plugins.
 3. Restart KiCad and enable the **KiCad Blocks Manager** schematic action.
-4. Use the action and enter one of `create`, `place`, `local`, `sync`, `edit`, `publish`, `bom`, `erc`, `pcb`, or `nest`. The `sync` action on a selected local copy performs bidirectional three-way synchronization.
+4. Launch the action once so KiCad creates the plugin's isolated Python environment, then close KiCad.
+5. Install the official IPC bindings into that KiCad-managed environment using the matching interpreter below. The plugin identifier is `kicad-blocks`; replace `11.0` with the installed KiCad version if different.
+
+   Linux:
+   ```bash
+   ~/.cache/KiCad/11.0/python-environments/kicad-blocks/bin/python -m pip install -r ~/.local/share/KiCad/11.0/plugins/kicad-blocks/requirements.txt
+   ```
+
+   macOS:
+   ```bash
+   ~/Library/Caches/KiCad/11.0/python-environments/kicad-blocks/bin/python -m pip install -r ~/Documents/KiCad/11.0/plugins/kicad-blocks/requirements.txt
+   ```
+
+   Windows PowerShell:
+   ```powershell
+   & "$env:LOCALAPPDATA\\KiCad\\11.0\\python-environments\\kicad-blocks\\Scripts\\python.exe" -m pip install -r "$env:USERPROFILE\\Documents\\KiCad\\11.0\\plugins\\kicad-blocks\\requirements.txt"
+   ```
+
+   The exact plugin-environment root can be changed by KiCad's `KICAD_CACHE_HOME` setting. Reinstall the requirements after using KiCad's **Recreate Plugin Environment** command or after updating the KiCad-managed environment.
+6. Restart KiCad and use the action with one of `create`, `place`, `local`, `sync`, `edit`, `publish`, `bom`, `erc`, `pcb`, or `nest`. The `sync` action on a selected local copy performs bidirectional three-way synchronization.
+
+See the official [KiCad add-on developer documentation](https://dev-docs.kicad.org/en/apis-and-binding/ipc-api/for-addon-developers/) for how IPC Python plug-ins are launched and where KiCad stores their isolated environments.
 
 The default shared library location is `~/Documents/KiCad/Blocks`. The create/nest action lets you select another directory; the selection is remembered in `~/.config/kicad-blocks/settings.json`. Set `KICAD_BLOCKS_LIBRARY` to override it. The shared folder contains one `KBlocks.kicad_sym` catalog plus individual `.kicad_block` asset directories. The project registers only the catalog path. Per-instance local links are stored as paths relative to the project directory, so local implementation copies remain portable when the project folder moves.
 
