@@ -450,7 +450,7 @@ class BlockRepositoryTests(unittest.TestCase):
             replace_existing=True,
         )
         updated = first.read_text(encoding="utf-8")
-        self.assertIn("../different/relocated.kicad_sym", updated)
+        self.assertIn("../../project/different/relocated.kicad_sym", updated)
         self.assertNotIn(child.path.name + "/block.kicad_sym", updated)
 
     def test_nested_dependencies_are_recorded_and_cycles_rejected(self):
