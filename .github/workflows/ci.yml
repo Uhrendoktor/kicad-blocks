@@ -153,3 +153,7 @@ jobs:
       - name: Verify PCB IPC primitives (headless)
         shell: bash
         run: "${RUNNER_TEMP}/kicad-blocks-venv/bin/python tests/test_pcb_ipc.py"
+
+      - name: Verify PCB block layout merge (headless)
+        shell: bash
+        run: "${RUNNER_TEMP}/kicad-blocks-venv/bin/python tests/test_pcb_layout.py"
