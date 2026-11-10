@@ -74,6 +74,10 @@ class PluginInstallerTests(unittest.TestCase):
             self.assertIn(str(user_data / "kicad" / "11.0" / "plugins" / PLUGIN_IDENTIFIER), result.stdout)
             self.assertFalse(user_data.exists())
 
+    def test_plugin_runtime_minimum_matches_published_wheel_python_abi(self):
+        manifest = json.loads((SOURCE / "plugin.json").read_text(encoding="utf-8"))
+        self.assertEqual(manifest["runtime"]["min_version"], "3.12")
+
     def test_plugin_requirements_use_a_published_binary_wheel(self):
         requirements = (SOURCE / "requirements.txt").read_text(encoding="utf-8")
         self.assertIn(

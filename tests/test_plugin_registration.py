@@ -288,6 +288,10 @@ def main() -> None:
         )
         plugin_manifest_path = installed_plugin / "plugin.json"
         manifest = json.loads(plugin_manifest_path.read_text(encoding="utf-8"))
+        if manifest.get("runtime", {}).get("min_version") != "3.12":
+            raise AssertionError(
+                "Plugin metadata must require CPython 3.12 to match its published cp312 wheel."
+            )
         action = next(
             item
             for item in manifest["actions"]
