@@ -371,6 +371,165 @@ def refresh_library_block(block: BlockRecord) -> dict:
     return {"changed": changed, "version": manifest["version"], "revision": manifest["revision"]}
 
 
+def publish_local_copy(local_block: BlockRecord) -> dict:
+    """Publish local edits to the source library using the saved three-way baseline.
+
+    A file or dependency is pushed only when the source has not changed since
+    the last synchronization. Concurrent divergent edits are rejected before
+    any source file is modified. The local copy remains local after publishing.
+    """
+    manifest = read_manifest(local_block.path)
+    if not manifest.get("local_copy"):
+        raise ValueError("Only a project-local block copy can be published.")
+    source_path = Path(manifest["source_path"]).expanduser().resolve()
+    source = _record(source_path)
+    if source.manifest.get("block_id") != manifest.get("source_block_id"):
+        raise ValueError("The recorded source path now points to a different block.")
+    if manifest.get("pins") != source.manifest.get("pins"):
+        raise RuntimeError(
+            "The local block's external pin interface differs from the library. "
+            "Publishing pin/interface changes is blocked pending an explicit migration."
+        )
+
+    base_hashes = manifest.get("base_hashes", {})
+    local_hashes = _asset_hashes(local_block.path, manifest)
+    source_hashes = _asset_hashes(source.path, source.manifest)
+    base_dependencies = manifest.get(
+        "base_dependencies", source.manifest.get("dependencies", [])
+    )
+    local_dependencies = manifest.get("dependencies", [])
+    source_dependencies = source.manifest.get("dependencies", [])
+    local_dependencies_changed = local_dependencies != base_dependencies
+    source_dependencies_changed = source_dependencies != base_dependencies
+    dependency_conflict = (
+        local_dependencies_changed
+        and source_dependencies_changed
+        and local_dependencies != source_dependencies
+    )
+
+    conflicts = ["manifest.dependencies"] if dependency_conflict else []
+    publish_files: list[str] = []
+    for file_name in sorted(set(base_hashes) | set(local_hashes) | set(source_hashes)):
+        base_hash = base_hashes.get(file_name)
+        local_hash = local_hashes.get(file_name)
+        upstream_hash = source_hashes.get(file_name)
+        local_changed = local_hash != base_hash
+        upstream_changed = upstream_hash != base_hash
+        if local_changed and upstream_changed and local_hash != upstream_hash:
+            conflicts.append(file_name)
+        elif local_changed and not upstream_changed:
+            publish_files.append(file_name)
+
+    if conflicts:
+        raise RuntimeError(
+            "Publish conflict: both the local copy and library changed "
+            + ", ".join(conflicts)
+            + ". Resolve those changes manually; the library was not modified."
+        )
+
+    push_dependencies = local_dependencies_changed and not source_dependencies_changed
+    changes = sorted(publish_files)
+    if push_dependencies:
+        changes.append("manifest.dependencies")
+    if not changes:
+        return {
+            "published": [],
+            "version": int(source.manifest.get("version", 1)),
+            "revision": source.manifest.get("revision"),
+            "upstream_changed": sorted(
+                file_name
+                for file_name in sorted(set(base_hashes) | set(source_hashes))
+                if source_hashes.get(file_name) != base_hashes.get(file_name)
+            ),
+        }
+
+    # Optimistic concurrency check: ensure the source still matches the exact
+    # snapshot analysed above before copying any local edits into it.
+    latest_source = _record(source.path)
+    latest_hashes = _asset_hashes(latest_source.path, latest_source.manifest)
+    latest_dependencies = latest_source.manifest.get("dependencies", [])
+    if latest_hashes != source_hashes or latest_dependencies != source_dependencies:
+        raise RuntimeError(
+            "The library changed during publish. Refresh the local copy and retry; "
+            "the library was not modified by this operation."
+        )
+
+    backup_dir = Path(
+        tempfile.mkdtemp(prefix=".kicad-block-publish-backup-", dir=source.path.parent)
+    )
+    original_manifest = source.path / MANIFEST_NAME
+    shutil.copy2(original_manifest, backup_dir / MANIFEST_NAME)
+    original_files: dict[str, bool] = {}
+    try:
+        for file_name in publish_files:
+            source_file = source.path / file_name
+            local_file = local_block.path / file_name
+            existed = source_file.is_file()
+            original_files[file_name] = existed
+            if existed:
+                backup_file = backup_dir / file_name
+                backup_file.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(source_file, backup_file)
+            if local_file.is_file():
+                source_file.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(local_file, source_file)
+            else:
+                source_file.unlink(missing_ok=True)
+
+        source_manifest = read_manifest(source.path)
+        if push_dependencies:
+            source_manifest["dependencies"] = local_dependencies
+        candidate_files = set(source_manifest.get("files", []))
+        candidate_files.update(manifest.get("files", []))
+        source_manifest["files"] = sorted(
+            file_name
+            for file_name in candidate_files
+            if (source.path / file_name).is_file()
+        )
+        new_hashes = _asset_hashes(source.path, source_manifest)
+        source_manifest["hashes"] = new_hashes
+        source_manifest["revision"] = revision_for_hashes(new_hashes)
+        source_manifest["version"] = int(source_manifest.get("version", 1)) + 1
+        atomic_write(
+            original_manifest,
+            json.dumps(source_manifest, indent=2, ensure_ascii=False) + "\\n",
+        )
+    except Exception:
+        # Restore source files and its manifest on any partial write failure.
+        for file_name, existed in original_files.items():
+            source_file = source.path / file_name
+            backup_file = backup_dir / file_name
+            if existed and backup_file.is_file():
+                source_file.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(backup_file, source_file)
+            elif not existed:
+                source_file.unlink(missing_ok=True)
+        shutil.copy2(backup_dir / MANIFEST_NAME, original_manifest)
+        raise
+    finally:
+        shutil.rmtree(backup_dir, ignore_errors=True)
+
+    # Advance the local three-way baseline only after the library update commits.
+    local_manifest = read_manifest(local_block.path)
+    local_manifest["files"] = source_manifest["files"]
+    local_manifest["hashes"] = _asset_hashes(local_block.path, local_manifest)
+    local_manifest["revision"] = revision_for_hashes(local_manifest["hashes"])
+    local_manifest["source_version"] = source_manifest["version"]
+    local_manifest["source_revision"] = source_manifest["revision"]
+    local_manifest["base_hashes"] = dict(source_manifest["hashes"])
+    local_manifest["base_dependencies"] = source_manifest.get("dependencies", [])
+    atomic_write(
+        local_block.path / MANIFEST_NAME,
+        json.dumps(local_manifest, indent=2, ensure_ascii=False) + "\\n",
+    )
+    return {
+        "published": changes,
+        "version": source_manifest["version"],
+        "revision": source_manifest["revision"],
+        "upstream_changed": [],
+    }
+
+
 def add_dependency(parent: BlockRecord, child: BlockRecord) -> BlockRecord:
     """Add a nested block reference, refusing self-links and dependency cycles."""
     if parent.manifest["block_id"] == child.manifest["block_id"]:
