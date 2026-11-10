@@ -186,7 +186,7 @@ def main() -> None:
         # selected through the save dialogs.
         collision_board = root / "already-exists.kicad_pcb"
         collision_board.write_text("preserve this PCB", encoding="utf-8")
-        with self.assertRaisesRegex(FileExistsError, "Output PCB already exists"):
+        try:
             merge_block_layout(
                 target,
                 block,
@@ -197,6 +197,11 @@ def main() -> None:
                 pin_to_board_net={"VIN": "VIN_BOARD", "GND": "GND_BOARD"},
                 rotation_deg=90.0,
             )
+        except FileExistsError as exc:
+            if "Output PCB already exists" not in str(exc):
+                raise AssertionError(f"Unexpected PCB collision error: {exc}") from exc
+        else:
+            raise AssertionError("Existing output PCB was not rejected.")
         if collision_board.read_text(encoding="utf-8") != "preserve this PCB":
             raise AssertionError("Existing output PCB was overwritten.")
         if collision_board.with_suffix(".kicad_pro").exists():
@@ -205,7 +210,7 @@ def main() -> None:
         collision_project = root / "settings-exists.kicad_pro"
         collision_project.write_text("preserve these settings", encoding="utf-8")
         collision_board_for_project = root / "settings-exists.kicad_pcb"
-        with self.assertRaisesRegex(FileExistsError, "Output project settings already exist"):
+        try:
             merge_block_layout(
                 target,
                 block,
@@ -216,6 +221,11 @@ def main() -> None:
                 pin_to_board_net={"VIN": "VIN_BOARD", "GND": "GND_BOARD"},
                 rotation_deg=90.0,
             )
+        except FileExistsError as exc:
+            if "Output project settings already exist" not in str(exc):
+                raise AssertionError(f"Unexpected project-file collision error: {exc}") from exc
+        else:
+            raise AssertionError("Existing output project settings were not rejected.")
         if collision_project.read_text(encoding="utf-8") != "preserve these settings":
             raise AssertionError("Existing output project settings were overwritten.")
         if collision_board_for_project.exists():
