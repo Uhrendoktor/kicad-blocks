@@ -275,7 +275,7 @@ def main() -> None:
             text=True,
         )
         installed_plugin = (
-            documents_home / version / "plugins" / "kicad-blocks"
+            documents_home / "kicad" / version / "plugins" / "kicad-blocks"
         )
         plugin_manifest_path = installed_plugin / "plugin.json"
         manifest = json.loads(plugin_manifest_path.read_text(encoding="utf-8"))

@@ -9,7 +9,6 @@ import sys
 import tempfile
 import unittest
 
-
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 INSTALLER = ROOT / "scripts" / "install_plugin.py"
 SOURCE = ROOT / "plugin" / "kicad-blocks"
