@@ -1,9 +1,9 @@
 """Safe file-level merge of a stored KiCad PCB block into a project board.
 
-KiCad's public IPC Board API currently imports nets and exposes board objects,
-but has no general add-existing-track/zone-from-another-board operation. This
-module therefore creates a new validated board copy. It never overwrites the
-project board currently open in PCB Editor.
+KiCad's public IPC Board API imports nets and exposes board objects, but has
+no general add-existing-track/zone-from-another-board operation. This module
+therefore creates a new validated board copy. It never overwrites the project
+board currently open in PCB Editor.
 """
 from __future__ import annotations
 
@@ -38,7 +38,6 @@ def _lex(source: str):
             continue
         if ch == '"':
             i += 1
-            start = i
             escaped = False
             out = []
             while i < len(source):
@@ -55,9 +54,8 @@ def _lex(source: str):
                 i += 1
             if i >= len(source):
                 raise ValueError("Unterminated quoted string in KiCad S-expression.")
-            raw = "".join(out)
             try:
-                value = json.loads('"' + raw + '"')
+                value = json.loads('"' + "".join(out) + '"')
             except json.JSONDecodeError as exc:
                 raise ValueError(f"Invalid quoted string in KiCad S-expression: {exc}") from exc
             yield _Quoted(value)
@@ -85,193 +83,317 @@ def parse_sexpr(source: str) -> list:
         else:
             stack[-1].append(token)
     if len(stack) != 1 or len(root) != 1 or not isinstance(root[0], list):
-        raise ValueErroX[ÜYYÚPØYËY^\ÜÚ[ÛØÝ[Y[B]\ÛÝÌBYÙ[\
-[YN[JHOÝY\Ú[Ý[ÙJ[YK\Ý
-N]\
-ÈÚ[Ù[\
-][JHÜ][H[[YJH
-ÈHY\Ú[Ý[ÙJ[YKÔ][ÝY
-N]\ÛÛ[\ÊÝ[YJK[Ý\WØ\ØÚZOQ[ÙJB]\Ý[YJBYÚXY
-ÙN[JHOÝÛN]\ÝÙVÌJHY\Ú[Ý[ÙJÙK\Ý
-H[ÙH[\Ú[Ý[ÙJÙVÌKÝH[ÙHÛBYÙ\XÝ
-ÙN\ÝYÎÝHO\ÝÛN]\^
+        raise ValueError("Malformed KiCad S-expression document.")
+    return root[0]
 
-ÈÜÈ[ÙVÌNHYÚXY
-ÊHOHYÊKÛJBYØ[
-ÙN\ÝYÎÝHO\ÝÛ\ÝN]\ØÈÜÈ[ÙVÌNHYÚXY
-ÊHOHY×BYÜÊ[YN[JHOÝ]\Ý[YJHY[YH\ÈÝÛH[ÙHYÛ[J[YN[JHOØ]NHØ]
-Ý[YJJB^Ù\
-\Q\Ü[YQ\ÜH\È^ÎZ\ÙH[YQ\Ü[[YÛÛÜ[]KÛ]ÛÙHÚÙ[Ý[YH\KHÛH^ÂYÝX]\Ù[]JNZ\ÙH[YQ\ÜÛY[]HÛÛÜ[]H[ÚPØYÐ[KB]\YÙ]
-[YNØ]
-HOÝHÝ[
-[YKBYXÊHNH]\ÝHÝ\
-KÝ\
-HÜYÞJÙN\ÝØ]NØ]
-HOÛNY[ÙJHÎZ\ÙH[YQ\ÜX[ÜYYÛÛÜ[]HÙH×Ù[\
-ÙJ_HBÙVÌWHHÙ]
-Û[JÙVÌWJH
-È
-BÙVÌHHÙ]
-Û[JÙVÌJH
-ÈJBYÙÙ]Û]ÊØ\\Ý
-HOXÝÚ[ÝN\Ý[HÌBÜÙH[Ø[
-Ø\]NY[ÙJHHÎN\Ý[Ú[
-ÝÙVÌWJJWHHÜÊÙVÌJB^Ù\[YQ\ÜZ\ÙH[YQ\Ü[[YØ\]XÛ\][Û×Ù[\
-ÙJ_HB]\\Ý[YÙÙ]Û^Y\ÊØ\\Ý
-HOÙ]ÜÝN^Y\ÈHÙ\XÝ
-Ø\^Y\ÈBY^Y\È\ÈÛNZ\ÙH[YQ\ÜÐ[HÙ\ÈÝY[HH	Ê^Y\ÈIÈ\ÝB]\×ÜÊÝÖÌWJHÜÝÈ[^Y\ÖÌNHY\Ú[Ý[ÙJÝË\Ý
-H[[ÝÊHHBYÜYÛÝ[\Ý
-HOÝÛNÜÜ[Ø[
-ÛÝ[Ü\HNY[Ü
-HHÈ[ÜÊÜÌWJKØ\ÙYÛ
 
-HOHY\[ÙH]\ÜÊÜÌJB]\ÛBYÜY\ÚÚYÊÙN[JHOÛNYÝ\Ú[Ý[ÙJÙK\Ý
-N]\YÚXY
-ÙJH[
-]ZYÝ[\H[[ÙJHHÙVÌWHHÔ][ÝY
-Ý]ZY]ZY
+def _dump(value: Any) -> str:
+    if isinstance(value, list):
+        return "(" + " ".join(_dump(item) for item in value) + ")"
+    if isinstance(value, _Quoted):
+        return json.dumps(str(value), ensure_ascii=False)
+    return str(value)
 
-JJBÜÚ[[ÙVÌNNÜY\ÚÚYÊÚ[
-BYÜ]Ü]WÛ]ÊÙN[KX\[ÎXÝÚ[\VÚ[ÝWJHOÛNYÝ\Ú[Ý[ÙJÙK\Ý
-N]\YÚXY
-ÙJHOH][[ÙJHHÎNÛH[
-ÝÙVÌWJJB^Ù\[YQ\Ü\È^ÎZ\ÙH[YQ\Ü[[Y]Y\[ÙN×Ù[\
-ÙJ_HHÛH^ÂYÛÝ[X\[ÎZ\ÙH[YQ\ÜØ\][HY\[Ù\È[Y[YÛÝ\ÙH]ÛÙHÛÛKBÛÙK[YHHX\[ÖÛÛBÙVÌWHHÝÛÙJBÙVÌHHÔ][ÝY
-[YJB]\ÜÚ[[ÙVÌNNÜ]Ü]WÛ]ÊÚ[X\[ÊBYÝ[Û]WÚ][JÙN\ÝØ]NØ]
-HOÛN[Û]HØ\XXÛÛ]HÙ[ÛY]K\Ù\[ÈÛÝ[[ØØ[Ù[ÛY]KYÈHÚXY
-ÙJBYYÈOHÛÝ[]HÙ\XÝ
-ÙK]BY]\ÈÛNZ\ÙH[YQ\ÜÝÜYÐÛÝ[\ÈÈXÙ[Y[ÛÛÜ[]KBÞJ]JBÈÚPØYÛÝ[Ü\HY[È]HØ\XXÛÛ]HÜÚ][ÛÎÂÈYÈ[Ý^ÛÛÜ[]\È\HØØ[ÈHÛÝ[ÜYÚ[ÜÜ[Ø[
-ÙKÜ\HNÜØ]HÙ\XÝ
-Ü]BYÜØ]\ÈÝÛNÞJÜØ]JB]\XÛÛ]WÝYÜÈHÈ]Ý\ZY[Ù[\HÈBYØ[Ê][N[JHOÛNYÝ\Ú[Ý[ÙJ][K\Ý
-N]\YÚXY
-][JH[XÛÛ]WÝYÜÎYÚXY
-][JHOHÈÜÚ[[][VÌNNYÚXY
-Ú[
-HOHHÞJÚ[JB]\ÞJ][KJB]\ÜÚ[[][VÌNNØ[ÊÚ[
-BØ[ÊÙJBYÜ]Ü]WÙÛÝ[
-ÛÝ[\ÝYÝØ]NØ]
-HOÛNÝ[Û]WÚ][JÛÝ[JBÜÜ[Ø[
-ÛÝ[Ü\HNY[Ü
-HHÈ[ÜÊÜÌWJKØ\ÙYÛ
 
-HOHY\[ÙHÜÌHHÔ][ÝY
-YBÜÝ^[Ø[
-ÛÝ[Ý^NY[Ý^
-HHÈ[ÜÊÝ^ÌWJKØ\ÙYÛ
+def _head(node: Any) -> str | None:
+    return str(node[0]) if isinstance(node, list) and node and isinstance(node[0], str) else None
 
-HOHY\[ÙHÝ^ÌHHÔ][ÝY
-YBÜY\ÚÚYÊÛÝ[
-B]ÛÙHHÙ\XÝ
-ÛÝ[]BY]ÛÙH\ÈÛNÛÝ[\[
-È]Ô][ÝY
-È
-ÈÝ]ZY]ZY
 
-JJJWJB[ÙN]ÛÙVÌNHH×Ô][ÝY
-È
-ÈÝ]ZY]ZY
+def _direct(node: list, tag: str) -> list | None:
+    return next((child for child in node[1:] if _head(child) == tag), None)
 
-JJWBYÝ[\]YWÜY\ÙNÝ^\Ý[ÎÙ]ÜÝJHOÝØ[Y]HH\ÙBÝY^HÚ[HØ[Y]KØ\ÙYÛ
 
-H[^\Ý[ÎØ[Y]HHØ\Ù_WÞÜÝY^HÝY^
-ÏHB^\Ý[ËY
-Ø[Y]KØ\ÙYÛ
+def _all(node: list, tag: str) -> list[list]:
+    return [child for child in node[1:] if _head(child) == tag]
 
-JB]\Ø[Y]BYØ]ÛZX×ÝÜ]J]]ÛÛ[ÝHOÛN]\[ZÙ\\[ÏUYK^\ÝÛÚÏUYJB\H[\[KZÜÝ[\
-Y^YÜ][Y_K\\]\[
-BNÚ]ÜËÜ[È[ÛÙ[ÏH]N]Û[OHH\ÈÝX[NÝX[KÜ]JÛÛ[
-BÝX[K\Ú
 
-BÜËÞ[ÊÝX[K[[Ê
-JBÜË\XÙJ\]
-B^Ù\^Ù\[ÛNÜË[[Ê\
-B^Ù\ÔÑ\Ü\ÜÂZ\ÙBYY\ÙWØØÚ×Û^[Ý]
-\Ù]ØØ\]ØÚËÝ]]ØØ\]
-[Ý[ÙWÜY\[ÙNÝÜÚ][ÛÛ[N\VÙØ]Ø]K[Ý×ØØ\Û]XÝÜÝÝK^[Ý]Ø[ÚÜÛ[N\VÙØ]Ø]HH
-
-KHOXÝÜÝ[WNY\ÙHHØÚÉÜÈÝÜYÝ]Y^[Ý][ÈH
-]ÊÚXÝXØ\[KHX[Y\Ý	ÜÈÜ[Û[^[Ý]ÜÜØX\[]\ÈXØYH[[Y\ÈÂ][Y\È\ÙY[ÚYHHÝÜYÐ^[Ý]Ú]Ý]][Y\È\H\ÜÝ[YYÈX]Ú[\[ÛÝ\ÙH]È\H[Y\ÜXÙYÚ]HØÚÈ[Ý[ÙHY[XØYH[È]\ÝHX\YÈ\Ù]XØ\][Y\Ë\Ù]ØØ\H]
-\Ù]ØØ\
-K^[\Ù\
-K\ÛÛJ
-BÝ]]ØØ\H]
-Ý]]ØØ\
-K^[\Ù\
-K\ÛÛJ
-B^[Ý]Û[YHHØÚËX[Y\ÝÙ]
-^[Ý]Ù[HBYÝ^[Ý]Û[YNZ\ÙH[YQ\ÜØÚÈØØÚË[YH\H\ÈÈÝÜYÐ^[Ý]BÛÝ\ÙWØØ\H
-]
-ØÚË]
-HÈÝ^[Ý]Û[YJJK\ÛÛJ
-BYÝ\Ù]ØØ\\×Ù[J
-HÜÝÛÝ\ÙWØØ\\×Ù[J
-NZ\ÙH[SÝÝ[\ÜÚXÝØ\ÜÝÜYØÚÈÐ^[Ý]Ù\ÈÝ^\ÝBYÝ]]ØØ\OH\Ù]ØØ\Z\ÙH[YQ\ÜÝ]]]\ÝHH]È[NÈHÛÝ\ÙHÚXÝØ\\È]\Ý\Ü][BYÝK[X]Ú
-ÐKVK^VÐKVK^NW×J[Ý[ÙWÜY\[ÙJNZ\ÙH[YQ\ÜØÚÈ[Ý[ÙHY\[ÙH]\ÝÝ\Ú]H]\[ÛÛZ[ÛH]\ËYÚ]È[[\ØÛÜ\ËBY[ÜÚ][ÛÛ[JHOHÜ[^[Ý]Ø[ÚÜÛ[JHOHZ\ÙH[YQ\ÜXÙ[Y[ÜÚ][Û[^[Ý][ÚÜ]\ÝXXÚ]HÛÈÛÛÜ[]\ËBHHX\
-Ø]ÜÚ][ÛÛ[JB^^HHX\
-Ø]^[Ý]Ø[ÚÜÛ[JBYÝ[
-X]\Ù[]JHÜ[
-K^^JJNZ\ÙH[YQ\ÜXÙ[Y[ÜÚ][Û[^[Ý][ÚÜ]\ÝH[]KB[ÈHÜÝ[È[YHJHÜ[[ØÚËX[Y\ÝÙ]
-[È×J_BYÙ]
-[Ý×ØØ\Û]
-HOH[ÎZ\ÙH[YQ\ÜX\]\HXØYH[^XÝHÛÙK^XÝYÜÛÜY
-[Ê_KBY[JÝÝ[YJKÝ\
+def _num(value: Any) -> float:
+    try:
+        result = float(str(value))
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"Invalid coordinate/net code token {value!r}.") from exc
+    if not math.isfinite(result):
+        raise ValueError("Non-finite coordinate in KiCad PCB file.")
+    return result
 
-HÜ[YH[[Ý×ØØ\Û][Y\Ê
-JNZ\ÙH[YQ\Ü\Ù]Ø\][Y\ÈØ[ÝH[\KB\Ù]H\ÙWÜÙ^\Ù]ØØ\XYÝ^
-[ÛÙ[ÏH]NJBÛÝ\ÙHH\ÙWÜÙ^ÛÝ\ÙWØØ\XYÝ^
-[ÛÙ[ÏH]NJBYÚXY
-\Ù]
-HOHÚXØYÜØÜÚXY
-ÛÝ\ÙJHOHÚXØYÜØZ\ÙH[YQ\ÜÝ[\È]\ÝHÚPØYÐËY^\ÜÚ[ÛØÝ[Y[ËBZ\ÜÚ[×Û^Y\ÈHÛÜY
-ÙÙ]Û^Y\ÊÛÝ\ÙJHHÙÙ]Û^Y\Ê\Ù]
-JBYZ\ÜÚ[×Û^Y\ÎZ\ÙH[YQ\ÜÚXÝØ\XÚÜÈ^Y\È\]Z\YHHØÚÎ
-ÈÚ[Z\ÜÚ[×Û^Y\ÊJBÛÝ\ÙWÛ]ÈHÙÙ]Û]ÊÛÝ\ÙJB\Ù]Û]ÈHÙÙ]Û]Ê\Ù]
-B\Ù]ØÛÙ\ÈHÛ[YNÛÙHÜÛÙK[YH[\Ù]Û]Ë][\Ê
-_B^ØÛÙHHX^
-\Ù]Û]ËY][L
-H
-ÈBÜÈHØÚËX[Y\ÝÙ]
-^[Ý]ÜÜÈHÜÜ[[Ü[[[ßBYÙ]
-ÜÊHOH[ÎZ\ÙH[YQ\ÜØÚÈX[Y\Ý^[Ý]ÜÜÈ]\ÝX\]\HXØYH[^XÝHÛÙKBÜÛX\XÝÜÝÝHHßBÜ[^[Ý]Û][ÜË][\Ê
-N^[Ý]Û]HÝ^[Ý]Û]
-B\Ý[][ÛHÝ[Ý×ØØ\Û]Ü[JKÝ\
 
-BY^[Ý]Û][ÜÛX\[ÜÛX\Û^[Ý]Û]HOH\Ý[][ÛZ\ÙH[YQ\Ü^[Ý]]Û^[Ý]Û]\H\ÈX\YÈÛÈ\Ù]]ËBÜÛX\Û^[Ý]Û]HH\Ý[][Û]ÛX\XÝÚ[\VÚ[ÝWHHÌ
-_B]×Û]ÛÙ\ÈH×BÜÛØÛÙKÛÝ\ÙWÛ[YH[ÛÝ\ÙWÛ]Ë][\Ê
-NYÛØÛÙHOHÛÛ[YBYÛÝ\ÙWÛ[YH[ÜÛX\\ÝÛ[YHHÜÛX\ÜÛÝ\ÙWÛ[YWB[ÙNØYWÛ[YHHKÝX×KVK^NWËÊËWJÈÈÛÝ\ÙWÛ[YJKÝ\
-ÈHÜUÛÛØÛÙ_H\ÝÛ[YHHÚ[Ý[ÙWÜY\[Ù_WÞÜØYWÛ[Y_H\ÝØÛÙHH\Ù]ØÛÙ\ËÙ]
-\ÝÛ[YJBY\ÝØÛÙH\ÈÛN\ÝØÛÙHH^ØÛÙB^ØÛÙH
-ÏHB\Ù]ØÛÙ\ÖÙ\ÝÛ[YWHH\ÝØÛÙB]×Û]ÛÙ\Ë\[
-È]Ý\ÝØÛÙJKÔ][ÝY
-\ÝÛ[YJWJB]ÛX\ÛÛØÛÙWHH
-\ÝØÛÙK\ÝÛ[YJB^\Ý[×ÜYÈHÂÝYKØ\ÙYÛ
+def _fmt(value: float) -> str:
+    value = round(value, 6)
+    if abs(value) < 0.0000005:
+        value = 0.0
+    return f"{value:.6f}".rstrip("0").rstrip(".") or "0"
 
-BÜ][H[\Ù]ÌNBYÚXY
-][JHOHÛÝ[Y
-YHÜY][JJBBÝ\ÜYHÂÛÝ[ÙYÛY[\ÈXHÛHÜÛ[HÜØ\ÈÜØÚ\ÛHÜÜXÝÜÜÛHÜØÝ\HÜÝ^ÜÝ^ØÞ[Y[Ú[Û\Ù]B[\ÜY\ÝÛ\ÝHH×BY\[Ù\Î\ÝÜÝHH×BÚÚ\YÙ]ÜÝHHÙ]
 
-BHHH^HH^BÜ]È[ÛÝ\ÙVÌNNÚ[HÚXY
-]ÊBYÚ[[È\Ú[ÛÙ[\]ÜÙ[\[\\^Y\ÈÙ]\]]ØÛ\ÜÈ[XYYÙÛÈ]ZYNÛÛ[YBYÚ[Ý[Ý\ÜYYÚ[ÚÚ\YY
-Ú[
-BÛÛ[YBÈÛÛHH\ÝYÞ[^YHÛÈHÛÝ\ÙH^\KÛ[Ù[\È[[]]XK][HH\ÙWÜÙ^Ù[\
-]ÊJBYÚ[OHÛÝ[ÛÜYHÜY][JBYÝÛÜYZ\ÙH[YQ\Ü]\HÝÜY^[Ý]ÛÝ[]\Ý]HHY\[ÙHÜ\KB]×ÜYHÝ[\]YWÜYÚ[Ý[ÙWÜY\[Ù_WÞÛÛÜYH^\Ý[×ÜYÊBÜ]Ü]WÙÛÝ[
-][K]×ÜYJBY\[Ù\Ë\[
-]×ÜYB[ÙNÝ[Û]WÚ][J][KJBÜY\ÚÚYÊ][JBÜ]Ü]WÛ]Ê][K]ÛX\
-B[\ÜY\[
-][JBYÝ[\ÜYZ\ÙH[YQ\ÜØÚÈØØÚË[YH\H\ÈÈ[\ÜXHÐØXÝËBÈÙY\]XÛ\][ÛÈYXÙ[ÈHÚXÝ	ÜÈ^\Ý[È]XÛ\][ÛË\ÝÛ]HX^
+def _xy(node: list, dx: float, dy: float) -> None:
+    if len(node) < 3:
+        raise ValueError(f"Malformed coordinate node {_dump(node)}")
+    node[1] = _fmt(_num(node[1]) + dx)
+    node[2] = _fmt(_num(node[2]) + dy)
 
-HÜK][H[[[Y\]J\Ù]
-HYÚXY
-][JHOH]KY][L
-BÜ[^]ÛÙH[[[Y\]J]×Û]ÛÙ\ËÝ\LJN\Ù][Ù\
-\ÝÛ]
-È[^]ÛÙJB\Ù]^[
-[\ÜY
-BØ]ÛZX×ÝÜ]JÝ]]ØØ\Ù[\
-\Ù]
-H
-ÈB]\ÂÝ]]ÝÝ]]ØØ\
-KØÚÈØÚË[YK[Ý[ÙWÜY\[ÙH[Ý[ÙWÜY\[ÙKÛÝ[ÈY\[Ù\ËÛÝ[ØÛÝ[[Y\[Ù\ÊKØXÝØÛÝ[[[\ÜY
-K]×Û]ØÛÝ[[]×Û]ÛÙ\ÊK]×Û]ÈÜÝÙVÌJHÜÙH[]×Û]ÛÙ\×KÚÚ\YÝÜÛ][Ú][\ÈÛÜY
-ÚÚ\Y
-KB
+
+def _get_nets(board: list) -> dict[int, str]:
+    result = {0: ""}
+    for node in _all(board, "net"):
+        if len(node) >= 3:
+            try:
+                result[int(str(node[1]))] = str(node[2])
+            except ValueError as exc:
+                raise ValueError(f"Invalid board net declaration: {_dump(node)}") from exc
+    return result
+
+
+def _get_layers(board: list) -> set[str]:
+    layers = _direct(board, "layers")
+    if layers is None:
+        raise ValueError("PCB file does not define a layers list.")
+    return {str(row[1]) for row in layers[1:] if isinstance(row, list) and len(row) >= 2}
+
+
+def _reference(footprint: list) -> str | None:
+    for prop in _all(footprint, "property"):
+        if len(prop) >= 3 and str(prop[1]).casefold() == "reference":
+            return str(prop[2])
+    return None
+
+
+def _refresh_ids(node: Any) -> None:
+    if not isinstance(node, list):
+        return
+    if _head(node) in ("uuid", "tstamp") and len(node) >= 2:
+        node[1] = _Quoted(str(uuid.uuid4()))
+    for child in node[1:]:
+        _refresh_ids(child)
+
+
+def _rewrite_nets(node: Any, mapping: dict[int, tuple[int, str]]) -> None:
+    if not isinstance(node, list):
+        return
+    if _head(node) == "net" and len(node) >= 3:
+        try:
+            old_code = int(str(node[1]))
+        except ValueError as exc:
+            raise ValueError(f"Invalid net reference: {_dump(node)}") from exc
+        if old_code not in mapping:
+            raise ValueError(f"Board item references undefined source net code {old_code}.")
+        code, name = mapping[old_code]
+        node[1] = str(code)
+        node[2] = _Quoted(name)
+        return
+    for child in node[1:]:
+        _rewrite_nets(child, mapping)
+
+
+def _translate_item(node: list, dx: float, dy: float) -> None:
+    """Translate board-absolute geometry, preserving footprint-local geometry."""
+    if _head(node) == "footprint":
+        at = _direct(node, "at")
+        if at is None:
+            raise ValueError("Stored PCB footprint has no placement coordinate.")
+        _xy(at, dx, dy)
+        for prop in _all(node, "property"):
+            prop_at = _direct(prop, "at")
+            if prop_at is not None:
+                _xy(prop_at, dx, dy)
+        return
+
+    absolute_tags = {"at", "start", "mid", "end", "center", "xy", "pts"}
+
+    def walk(item: Any) -> None:
+        if not isinstance(item, list):
+            return
+        tag = _head(item)
+        if tag in absolute_tags:
+            if tag == "pts":
+                for point in item[1:]:
+                    if _head(point) == "xy":
+                        _xy(point, dx, dy)
+            else:
+                _xy(item, dx, dy)
+            return
+        for child in item[1:]:
+            walk(child)
+
+    walk(node)
+
+
+def _rewrite_footprint(footprint: list, reference: str, dx: float, dy: float) -> None:
+    _translate_item(footprint, dx, dy)
+    for prop in _all(footprint, "property"):
+        if len(prop) >= 3 and str(prop[1]).casefold() == "reference":
+            prop[2] = _Quoted(reference)
+    for fp_text in _all(footprint, "fp_text"):
+        if len(fp_text) >= 3 and str(fp_text[1]).casefold() == "reference":
+            fp_text[2] = _Quoted(reference)
+    _refresh_ids(footprint)
+    path_node = _direct(footprint, "path")
+    if path_node is None:
+        footprint.append(["path", _Quoted("/" + str(uuid.uuid4()))])
+    else:
+        path_node[1:] = [_Quoted("/" + str(uuid.uuid4()))]
+
+
+def _unique_reference(base: str, existing: set[str]) -> str:
+    candidate = base
+    suffix = 2
+    while candidate.casefold() in existing:
+        candidate = f"{base}_{suffix}"
+        suffix += 1
+    existing.add(candidate.casefold())
+    return candidate
+
+
+def _atomic_write(path: Path, content: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, temp_name = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as stream:
+            stream.write(content)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temp_name, path)
+    except Exception:
+        try:
+            os.unlink(temp_name)
+        except OSError:
+            pass
+        raise
+
+
+def merge_block_layout(
+    target_board: Path,
+    block,
+    output_board: Path,
+    *,
+    instance_reference: str,
+    position_mm: tuple[float, float],
+    pin_to_board_net: dict[str, str],
+    layout_anchor_mm: tuple[float, float] = (0.0, 0.0),
+) -> dict[str, Any]:
+    """Merge a stored block layout into a new copy of a project board.
+
+    The manifest's optional layout_ports map relates facade pin names to
+    the net names used in the stored PCB. Without it, names are assumed equal.
+    Internal source nets are namespaced with the block instance reference.
+    The input project board is never modified.
+    """
+    target_board = Path(target_board).expanduser().resolve()
+    output_board = Path(output_board).expanduser().resolve()
+    layout_name = block.manifest.get("layout_file")
+    if not layout_name:
+        raise ValueError(f"Block {block.name!r} has no stored PCB layout.")
+    source_board = (Path(block.path) / str(layout_name)).resolve()
+    if not target_board.is_file() or not source_board.is_file():
+        raise FileNotFoundError("Project board or stored block PCB layout does not exist.")
+    if output_board == target_board:
+        raise ValueError("Output must be a new file; the project board is never overwritten.")
+    if not re.fullmatch(r"[A-Za-z][A-Za-z0-9_]*", instance_reference):
+        raise ValueError("Block instance reference must start with a letter and use only letters, digits and underscores.")
+    if len(position_mm) != 2 or len(layout_anchor_mm) != 2:
+        raise ValueError("Placement position and layout anchor must each contain two coordinates.")
+    x, y = map(float, position_mm)
+    anchor_x, anchor_y = map(float, layout_anchor_mm)
+    if not all(math.isfinite(value) for value in (x, y, anchor_x, anchor_y)):
+        raise ValueError("Placement position and layout anchor must be finite.")
+
+    pins = {str(pin["name"]) for pin in block.manifest.get("pins", [])}
+    if set(pin_to_board_net) != pins:
+        raise ValueError(f"Map every facade pin exactly once. Expected {sorted(pins)}.")
+    if any(not str(name).strip() for name in pin_to_board_net.values()):
+        raise ValueError("Target board net names cannot be empty.")
+
+    target = parse_sexpr(target_board.read_text(encoding="utf-8"))
+    source = parse_sexpr(source_board.read_text(encoding="utf-8"))
+    if _head(target) != "kicad_pcb" or _head(source) != "kicad_pcb":
+        raise ValueError("Both files must be KiCad PCB S-expression documents.")
+    missing_layers = sorted(_get_layers(source) - _get_layers(target))
+    if missing_layers:
+        raise ValueError("Project board lacks layers required by the block: " + ", ".join(missing_layers))
+
+    source_nets = _get_nets(source)
+    target_nets = _get_nets(target)
+    target_codes = {name: code for code, name in target_nets.items()}
+    next_code = max(target_nets, default=0) + 1
+    ports = block.manifest.get("layout_ports") or {pin: pin for pin in pins}
+    if set(ports) != pins:
+        raise ValueError("Block layout_ports must map every facade pin exactly once.")
+    port_map: dict[str, str] = {}
+    for pin, layout_net in ports.items():
+        layout_net = str(layout_net)
+        destination = str(pin_to_board_net[pin]).strip()
+        if layout_net in port_map and port_map[layout_net] != destination:
+            raise ValueError(f"Layout net {layout_net!r} maps to two project nets.")
+        port_map[layout_net] = destination
+
+    net_map: dict[int, tuple[int, str]] = {0: (0, "")}
+    new_net_nodes: list[list] = []
+    for old_code, source_name in source_nets.items():
+        if old_code == 0:
+            continue
+        if source_name in port_map:
+            destination_name = port_map[source_name]
+        else:
+            safe_name = re.sub(r"[^A-Za-z0-9_./+-]+", "_", source_name).strip("_") or f"NET{old_code}"
+            destination_name = f"{instance_reference}_{safe_name}"
+        destination_code = target_codes.get(destination_name)
+        if destination_code is None:
+            destination_code = next_code
+            next_code += 1
+            target_codes[destination_name] = destination_code
+            new_net_nodes.append(["net", str(destination_code), _Quoted(destination_name)])
+        net_map[old_code] = (destination_code, destination_name)
+
+    existing_references = {
+        reference.casefold()
+        for item in target[1:]
+        if _head(item) == "footprint"
+        if (reference := _reference(item))
+    }
+    supported = {
+        "footprint", "segment", "arc", "via", "zone", "gr_line", "gr_arc",
+        "gr_circle", "gr_rect", "gr_poly", "gr_curve", "gr_text",
+        "gr_text_box", "dimension", "target",
+    }
+    imported: list[list] = []
+    imported_references: list[str] = []
+    skipped: set[str] = set()
+    dx, dy = x - anchor_x, y - anchor_y
+    for raw_item in source[1:]:
+        kind = _head(raw_item)
+        if kind in {"version", "generator", "general", "paper", "layers", "setup", "net", "net_class", "embedded_fonts", "uuid"}:
+            continue
+        if kind not in supported:
+            if kind:
+                skipped.add(kind)
+            continue
+        item = parse_sexpr(_dump(raw_item))
+        if kind == "footprint":
+            old_reference = _reference(item)
+            if not old_reference:
+                raise ValueError("Every stored layout footprint must have a Reference property.")
+            new_reference = _unique_reference(f"{instance_reference}_{old_reference}", existing_references)
+            _rewrite_footprint(item, new_reference, dx, dy)
+            imported_references.append(new_reference)
+        else:
+            _translate_item(item, dx, dy)
+            _refresh_ids(item)
+        _rewrite_nets(item, net_map)
+        imported.append(item)
+
+    if not imported:
+        raise ValueError(f"Block {block.name!r} has no importable PCB objects.")
+    last_net = max((i for i, item in enumerate(target) if _head(item) == "net"), default=0)
+    for offset, net_node in enumerate(new_net_nodes, start=1):
+        target.insert(last_net + offset, net_node)
+    target.extend(imported)
+    _atomic_write(output_board, _dump(target) + "\n")
+    return {
+        "output": str(output_board),
+        "block": block.name,
+        "instance_reference": instance_reference,
+        "footprints": imported_references,
+        "footprint_count": len(imported_references),
+        "object_count": len(imported),
+        "new_net_count": len(new_net_nodes),
+        "new_nets": [str(node[2]) for node in new_net_nodes],
+        "skipped_top_level_items": sorted(skipped),
+    }
