@@ -156,13 +156,18 @@ def _reference(footprint: list) -> str | None:
     return None
 
 
-def _refresh_ids(node: Any) -> None:
+def _refresh_ids(node: Any, id_remap: dict[str, str] | None = None) -> None:
+    """Regenerate item IDs, optionally retaining old-to-new UUID correspondence."""
     if not isinstance(node, list):
         return
     if _head(node) in ("uuid", "tstamp") and len(node) >= 2:
-        node[1] = _Quoted(str(uuid.uuid4()))
+        old_id = str(node[1])
+        new_id = str(uuid.uuid4())
+        if id_remap is not None:
+            id_remap[old_id] = new_id
+        node[1] = _Quoted(new_id)
     for child in node[1:]:
-        _refresh_ids(child)
+        _refresh_ids(child, id_remap)
 
 
 def _rewrite_nets(
@@ -291,7 +296,14 @@ def _transform_item(
 
 
 
-def _rewrite_footprint(footprint: list, reference: str, dx: float, dy: float) -> None:
+def _rewrite_footprint(
+    footprint: list,
+    reference: str,
+    dx: float,
+    dy: float,
+    *,
+    uuid_remap: dict[str, str] | None = None,
+) -> None:
     _transform_item(
         footprint,
         anchor_mm=(0.0, 0.0),
@@ -304,7 +316,7 @@ def _rewrite_footprint(footprint: list, reference: str, dx: float, dy: float) ->
     for fp_text in _all(footprint, "fp_text"):
         if len(fp_text) >= 3 and str(fp_text[1]).casefold() == "reference":
             fp_text[2] = _Quoted(reference)
-    _refresh_ids(footprint)
+    _refresh_ids(footprint, uuid_remap)
     path_node = _direct(footprint, "path")
     if path_node is None:
         footprint.append(["path", _Quoted("/" + str(uuid.uuid4()))])
@@ -320,6 +332,92 @@ def _unique_reference(base: str, existing: set[str]) -> str:
         suffix += 1
     existing.add(candidate.casefold())
     return candidate
+
+
+def _merge_net_chain_sections(
+    source_board: list,
+    target_board: list,
+    *,
+    source_nets: dict[int, str],
+    source_net_to_board_net: dict[str, str],
+    pad_uuid_remap: dict[str, str],
+    instance_reference: str,
+    existing_chain_names: set[str],
+) -> dict[str, str]:
+    """Copy board net-chain topology with mapped nets, unique names and pad UUIDs."""
+    source_section = _direct(source_board, "net_chains")
+    if source_section is None:
+        return {}
+
+    target_section = _direct(target_board, "net_chains")
+    if target_section is None:
+        target_section = ["net_chains"]
+        target_board.append(target_section)
+
+    # Include names already present in the destination PCB section.
+    for chain in target_section[1:]:
+        if _head(chain) != "net_chain":
+            continue
+        name_node = _direct(chain, "name")
+        if name_node is not None and len(name_node) >= 2:
+            existing_chain_names.add(str(name_node[1]).casefold())
+
+    chain_name_map: dict[str, str] = {}
+    for raw_chain in source_section[1:]:
+        if _head(raw_chain) != "net_chain":
+            continue
+        chain = parse_sexpr(_dump(raw_chain))
+        name_node = _direct(chain, "name")
+        if name_node is None or len(name_node) < 2:
+            raise ValueError("Stored PCB net-chain record has no name.")
+        source_name = str(name_node[1])
+        safe_name = re.sub(r"[^A-Za-z0-9_]+", "_", source_name).strip("_") or "CHAIN"
+        destination_name = _unique_reference(
+            f"{instance_reference}_{safe_name}",
+            existing_chain_names,
+        )
+        name_node[1] = _Quoted(destination_name)
+        chain_name_map[source_name] = destination_name
+
+        members = _direct(chain, "members")
+        if members is not None:
+            def rewrite_member(node: Any) -> None:
+                if not isinstance(node, list):
+                    return
+                if _head(node) == "net" and len(node) >= 2:
+                    raw_net = str(node[1])
+                    try:
+                        source_net_name = source_nets.get(int(raw_net), "")
+                    except ValueError:
+                        source_net_name = raw_net
+                    destination_net = source_net_to_board_net.get(source_net_name)
+                    if destination_net is None:
+                        raise ValueError(
+                            f"Net chain {source_name!r} references source net "
+                            f"{source_net_name or raw_net!r}, which is not part of the imported block nets."
+                        )
+                    node[1] = _Quoted(destination_net)
+                    return
+                for child in node[1:]:
+                    rewrite_member(child)
+
+            rewrite_member(members)
+
+        for terminal_pad in _all(chain, "terminal_pad"):
+            if len(terminal_pad) < 2:
+                raise ValueError(f"Net chain {source_name!r} has a malformed terminal-pad UUID.")
+            source_uuid = str(terminal_pad[1])
+            destination_uuid = pad_uuid_remap.get(source_uuid)
+            if destination_uuid is None:
+                raise ValueError(
+                    f"Net chain {source_name!r} refers to terminal pad {source_uuid}, "
+                    "but that pad was not included in the imported block footprints."
+                )
+            terminal_pad[1] = _Quoted(destination_uuid)
+
+        target_section.append(chain)
+
+    return chain_name_map
 
 
 def _atomic_write(path: Path, content: str) -> None:
@@ -438,6 +536,7 @@ def _merge_project_net_settings(
     layout_ports: dict[str, str],
     pin_to_board_net: dict[str, str],
     source_net_to_board_net: dict[str, str] | None = None,
+    source_chain_name_map: dict[str, str] | None = None,
 ) -> dict[str, Any] | None:
     """Build a copied project file with block netclasses/assignments merged.
 
@@ -633,9 +732,48 @@ def _merge_project_net_settings(
     metadata.setdefault("version", 3)
 
     ignored_patterns = bool(unmatched_patterns)
-    ignored_chain_classes = bool(
-        source_settings.get("net_chain_classes") or source_settings.get("net_chain_netclasses")
-    )
+    chain_name_map = source_chain_name_map or {}
+    source_chain_classes = source_settings.get("net_chain_classes") or {}
+    source_chain_netclasses = source_settings.get("net_chain_netclasses") or {}
+    target_chain_classes = target_settings.setdefault("net_chain_classes", {})
+    target_chain_netclasses = target_settings.setdefault("net_chain_netclasses", {})
+    if not all(
+        isinstance(value, dict)
+        for value in (
+            source_chain_classes,
+            source_chain_netclasses,
+            target_chain_classes,
+            target_chain_netclasses,
+        )
+    ):
+        raise TypeError("KiCad net-chain settings must be objects.")
+
+    unmatched_chains: list[str] = []
+    merged_chain_names: list[str] = []
+    for source_name, source_class in source_chain_classes.items():
+        destination_name = chain_name_map.get(str(source_name))
+        if destination_name is None:
+            unmatched_chains.append(f"net_chain_classes:{source_name}")
+            continue
+        target_chain_classes[destination_name] = str(source_class)
+        if destination_name not in merged_chain_names:
+            merged_chain_names.append(destination_name)
+
+    for source_name, source_netclass in source_chain_netclasses.items():
+        destination_name = chain_name_map.get(str(source_name))
+        if destination_name is None:
+            unmatched_chains.append(f"net_chain_netclasses:{source_name}")
+            continue
+        source_netclass = str(source_netclass)
+        if source_netclass not in class_map:
+            raise ValueError(
+                f"Net chain {source_name!r} references undefined netclass {source_netclass!r}."
+            )
+        target_chain_netclasses[destination_name] = class_map[source_netclass]
+        if destination_name not in merged_chain_names:
+            merged_chain_names.append(destination_name)
+
+    ignored_chain_classes = bool(unmatched_chains)
     return {
         "data": target_data,
         "output": str(output_project),
@@ -645,6 +783,8 @@ def _merge_project_net_settings(
         "applied_patterns": applied_patterns,
         "unmatched_patterns": unmatched_patterns,
         "ignored_chain_classes": ignored_chain_classes,
+        "merged_chain_names": merged_chain_names,
+        "unmatched_chains": unmatched_chains,
     }
 
 
@@ -760,6 +900,7 @@ def merge_block_layout(
     imported: list[list] = []
     imported_references: list[str] = []
     skipped: set[str] = set()
+    pad_uuid_remap: dict[str, str] = {}
     anchor = (anchor_x, anchor_y)
     position = (x, y)
     for raw_item in source[1:]:
@@ -776,7 +917,7 @@ def merge_block_layout(
             if not old_reference:
                 raise ValueError("Every stored layout footprint must have a Reference property.")
             new_reference = _unique_reference(f"{instance_reference}_{old_reference}", existing_references)
-            _rewrite_footprint(item, new_reference, 0.0, 0.0)
+            _rewrite_footprint(item, new_reference, 0.0, 0.0, uuid_remap=pad_uuid_remap)
             _transform_item(
                 item,
                 anchor_mm=anchor,
@@ -802,6 +943,37 @@ def merge_block_layout(
         target.insert(last_net + offset, net_node)
     target.extend(imported)
 
+    source_net_to_board_net = {
+        source_name: net_map[code][1]
+        for code, source_name in source_nets.items()
+        if code in net_map and code != 0
+    }
+    existing_chain_names = set()
+    target_chain_section = _direct(target, "net_chains")
+    if target_chain_section is not None:
+        for chain in target_chain_section[1:]:
+            if _head(chain) == "net_chain":
+                name_node = _direct(chain, "name")
+                if name_node is not None and len(name_node) >= 2:
+                    existing_chain_names.add(str(name_node[1]).casefold())
+    if target_project.is_file():
+        existing_project = json.loads(target_project.read_text(encoding="utf-8"))
+        existing_settings = existing_project.get("net_settings", {})
+        for key in ("net_chain_classes", "net_chain_netclasses"):
+            values = existing_settings.get(key, {}) if isinstance(existing_settings, dict) else {}
+            if isinstance(values, dict):
+                existing_chain_names.update(str(name).casefold() for name in values)
+
+    chain_name_map = _merge_net_chain_sections(
+        source,
+        target,
+        source_nets=source_nets,
+        source_net_to_board_net=source_net_to_board_net,
+        pad_uuid_remap=pad_uuid_remap,
+        instance_reference=instance_reference,
+        existing_chain_names=existing_chain_names,
+    )
+
     project_merge = _merge_project_net_settings(
         target_project,
         source_project,
@@ -809,11 +981,8 @@ def merge_block_layout(
         instance_reference=instance_reference,
         layout_ports={str(key): str(value) for key, value in ports.items()},
         pin_to_board_net=pin_to_board_net,
-        source_net_to_board_net={
-            source_name: net_map[code][1]
-            for code, source_name in source_nets.items()
-            if code in net_map and code != 0
-        },
+        source_net_to_board_net=source_net_to_board_net,
+        source_chain_name_map=chain_name_map,
     )
     _atomic_write(output_board, _dump(target) + "\n")
     try:
@@ -838,6 +1007,9 @@ def merge_block_layout(
         "applied_project_patterns": project_merge["applied_patterns"] if project_merge is not None else [],
         "unmatched_project_patterns": project_merge["unmatched_patterns"] if project_merge is not None else [],
         "ignored_project_chain_classes": project_merge["ignored_chain_classes"] if project_merge is not None else False,
+        "merged_project_chain_names": project_merge["merged_chain_names"] if project_merge is not None else [],
+        "unmatched_project_chains": project_merge["unmatched_chains"] if project_merge is not None else [],
+        "merged_board_chains": sorted(chain_name_map.values()),
         "footprints": imported_references,
         "footprint_count": len(imported_references),
         "object_count": len(imported),
