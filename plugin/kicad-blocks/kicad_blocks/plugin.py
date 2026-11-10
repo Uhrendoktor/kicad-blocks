@@ -221,6 +221,13 @@ def _create_and_place(root, schematic, kicad, project_dir, parent) -> None:
         filetypes=[("KiCad PCB", "*.kicad_pcb"), ("All files", "*.*")],
         parent=parent,
     )
+    layout_project = None
+    if layout:
+        layout_project = filedialog.askopenfilename(
+            title="Optional: select the matching .kicad_pro netclass/settings file",
+            filetypes=[("KiCad Project", "*.kicad_pro"), ("All files", "*.*")],
+            parent=parent,
+        )
     x_mm = simpledialog.askfloat(
         "Placement", "X position in mm:", initialvalue=100.0, parent=parent
     )
@@ -238,6 +245,7 @@ def _create_and_place(root, schematic, kicad, project_dir, parent) -> None:
         pins,
         description=description,
         layout_file=Path(layout) if layout else None,
+        layout_project_file=Path(layout_project) if layout_project else None,
     )
     record = _register_block(project_dir, record, kicad)
     instance = place_block(schematic, record, x_mm, y_mm)
@@ -245,7 +253,9 @@ def _create_and_place(root, schematic, kicad, project_dir, parent) -> None:
         "Block Created",
         f"Created and placed {name} ({instance.reference}).\n\n"
         f"Library asset: {record.path}\n"
-        f"Implementation schematic: {record.implementation}\n\n"
+        f"Implementation schematic: {record.implementation}\n"
+        f"PCB layout: {record.path / record.manifest['layout_file'] if record.manifest.get('layout_file') else 'none'}\n"
+        f"PCB project settings: {record.path / record.manifest['layout_project_file'] if record.manifest.get('layout_project_file') else 'none'}\n\n"
         "Open the implementation file separately in Eeschema to edit the internal circuit.",
         parent=parent,
     )

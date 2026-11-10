@@ -6,7 +6,7 @@ KiCad Blocks is an IPC schematic plugin for **black-box, library-backed schemati
 
 ## MVP behavior
 
-- Create a block from an external pin interface (`NAME:type`). The plugin generates a normal `.kicad_sym` facade and a separate editable `implementation.kicad_sch` document.
+- Create a block from an external pin interface (`NAME:type`). The plugin generates a normal `.kicad_sym` facade and a separate editable `implementation.kicad_sch` document. The create dialog can optionally attach a pre-routed `.kicad_pcb` and its matching `.kicad_pro` netclass/settings sidecar.
 - All block facades in one shared library are aggregated into a single `KBlocks.kicad_sym` catalog using unique symbol names. A project registers one stable `KBlocks` row in `sym-lib-table`; block additions update that catalog and reload the same nickname through KiCad's IPC API.
 - Place existing blocks from the configured library.
 - Convert a selected library-linked instance into an independent project-local implementation copy. The facade symbol ID, KIID, coordinates and wiring remain unchanged. A project sidecar at `.kicad_blocks/instances.json` binds that schematic instance KIID to its local implementation assets, allowing two instances of the same facade to use different local copies without adding symbol-library rows.

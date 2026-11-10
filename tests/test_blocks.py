@@ -148,6 +148,55 @@ class BlockRepositoryTests(unittest.TestCase):
         self.assertNotIn("hierarchical_label", implementation)
         self.assertEqual(len(list_blocks(self.root)), 1)
 
+    def test_create_block_copies_optional_pcb_and_project_settings_assets(self):
+        source_layout = self.project / "board.kicad_pcb"
+        source_layout.write_text("(kicad_pcb)\\n", encoding="utf-8")
+        source_project = self.project / "board.kicad_pro"
+        source_project.write_text(
+            json.dumps(
+                {
+                    "meta": {"filename": "board.kicad_pro", "version": 3},
+                    "net_settings": {"classes": [], "netclass_assignments": {}},
+                }
+            ),
+            encoding="utf-8",
+        )
+        record = create_block(
+            self.root,
+            "With Layout Settings",
+            self.pins,
+            layout_file=source_layout,
+            layout_project_file=source_project,
+        )
+
+        self.assertEqual(record.manifest["layout_file"], "layout.kicad_pcb")
+        self.assertEqual(record.manifest["layout_project_file"], "layout.kicad_pro")
+        self.assertEqual(
+            (record.path / "layout.kicad_pcb").read_text(encoding="utf-8"),
+            "(kicad_pcb)\\n",
+        )
+        self.assertEqual(
+            json.loads((record.path / "layout.kicad_pro").read_text(encoding="utf-8"))["meta"]["filename"],
+            "board.kicad_pro",
+        )
+        self.assertIn("layout.kicad_pro", record.manifest["files"])
+        self.assertIn("layout.kicad_pro", record.manifest["hashes"])
+        self.assertNotEqual(
+            source_project.read_bytes(),
+            b"",
+        )
+
+    def test_create_block_rejects_settings_without_layout(self):
+        source_project = self.project / "board.kicad_pro"
+        source_project.write_text("{}", encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "requires a PCB layout"):
+            create_block(
+                self.root,
+                "Settings Without Layout",
+                self.pins,
+                layout_project_file=source_project,
+            )
+
     def test_create_block_copies_optional_pcb_asset(self):
         source_layout = self.project / "board.kicad_pcb"
         source_layout.write_text("(kicad_pcb)\n", encoding="utf-8")

@@ -215,6 +215,7 @@ def create_block(
     description: str = "",
     reference_prefix: str = "X",
     layout_file: Path | None = None,
+    layout_project_file: Path | None = None,
 ) -> BlockRecord:
     """Create a versioned library block with a normal KiCad symbol facade."""
     root = Path(root).expanduser().resolve()
@@ -246,6 +247,21 @@ def create_block(
             shutil.copy2(layout_file, staging / LAYOUT_NAME)
             files.append(LAYOUT_NAME)
 
+        if layout_project_file is not None:
+            if layout_file is None:
+                raise ValueError("A KiCad project-settings sidecar requires a PCB layout.")
+            layout_project_file = Path(layout_project_file).expanduser().resolve()
+            if not layout_project_file.is_file() or layout_project_file.suffix.lower() != ".kicad_pro":
+                raise ValueError("PCB project settings must be an existing .kicad_pro file.")
+            try:
+                project_data = json.loads(layout_project_file.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError) as exc:
+                raise ValueError(f"Could not read KiCad project settings JSON: {exc}") from exc
+            if not isinstance(project_data, dict):
+                raise ValueError("KiCad project settings must contain a JSON object.")
+            shutil.copy2(layout_project_file, staging / LAYOUT_PROJECT_NAME)
+            files.append(LAYOUT_PROJECT_NAME)
+
         hashes = {file_name: sha256_file(staging / file_name) for file_name in files}
         manifest = {
             "schema_version": 1,
@@ -262,6 +278,7 @@ def create_block(
             "symbol_file": SYMBOL_NAME,
             "implementation_file": IMPLEMENTATION_NAME,
             "layout_file": LAYOUT_NAME if LAYOUT_NAME in files else None,
+            "layout_project_file": LAYOUT_PROJECT_NAME if LAYOUT_PROJECT_NAME in files else None,
             "reference_prefix": reference_prefix,
             "pins": [pin.as_manifest(index + 1) for index, pin in enumerate(pins)],
             "dependencies": [],
