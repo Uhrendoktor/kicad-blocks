@@ -16,6 +16,7 @@ simpledialog = None
 from .composition import compose_block_implementation
 from .model import parse_pins
 from .operations import export_block_bom, find_kicad_cli, validate_block_tree
+from .pcb_layout import merge_block_layout
 from .repository import (
     LOCAL_NICKNAME_PREFIX,
     add_dependency,
@@ -385,7 +386,293 @@ def _publish_block(root, kicad, project_dir, parent) -> None:
     )
 
 
+def _block_record_for_instance(library_root: Path, project_dir: Path, instance):
+    """Resolve either a configured library block or the selected local copy."""
+    library_nickname, symbol_name = _symbol_identifier(instance)
+    for record in list_blocks(library_root):
+        if (
+            record.manifest.get("library_nickname") == library_nickname
+            and record.manifest.get("symbol_name") == symbol_name
+        ):
+            return record
+
+    local_root = project_dir / ".kicad_blocks" / "local"
+    for manifest_path in local_root.glob("*.kicad_block/manifest.json"):
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        if (
+            manifest.get("library_nickname") == library_nickname
+            and manifest.get("symbol_name") == symbol_name
+        ):
+            return type(
+                "LocalBlockRecord",
+                (),
+                {
+                    "path": manifest_path.parent,
+                    "manifest": manifest,
+                    "name": str(manifest.get("name", symbol_name)),
+                },
+            )()
+    raise FileNotFoundError(
+        f"No KiCad block asset was found for selected symbol {library_nickname}:{symbol_name}."
+    )
+
+
+def _parse_pin_net_map(value: str, pins: list[str]) -> dict[str, str]:
+    mapping: dict[str, str] = {}
+    for entry in value.split(","):
+        token = entry.strip()
+        if not token:
+            continue
+        if ":" not in token:
+            raise ValueError(f"Invalid mapping {token!r}; use FACADE_PIN:BOARD_NET.")
+        pin, net = (part.strip() for part in token.split(":", 1))
+        if pin in mapping:
+            raise ValueError(f"Facade pin {pin!r} is mapped more than once.")
+        mapping[pin] = net
+    if set(mapping) != set(pins):
+        missing = sorted(set(pins) - set(mapping))
+        extra = sorted(set(mapping) - set(pins))
+        raise ValueError(
+            "Map each facade pin exactly once. "
+            f"Missing: {missing}; unknown: {extra}."
+        )
+    return mapping
+
+
+def _apply_block_pcb_layout(schematic, project_dir: Path, library_root: Path, parent) -> None:
+    """Create a new project-board copy with the selected block's stored PCB layout."""
+    instance = _selected_symbol(schematic)
+    block = _block_record_for_instance(library_root, project_dir, instance)
+    if not block.manifest.get("layout_file"):
+        raise ValueError(f"Block {block.name!r} has no stored PCB layout.")
+
+    pins = [str(pin["name"]) for pin in block.manifest.get("pins", [])]
+    board_path = filedialog.askopenfilename(
+        title="Select the existing project PCB board",
+        filetypes=[("KiCad PCB", "*.kicad_pcb"), ("All files", "*.*")],
+        parent=parent,
+    )
+    if not board_path:
+        return
+
+    default_map = ", ".join(f"{pin}:{pin}" for pin in pins)
+    map_text = simpledialog.askstring(
+        "Map block facade pins to board nets",
+        "Enter one mapping for every facade pin.\n"
+        "Format: FACADE_PIN:BOARD_NET, comma-separated.",
+        initialvalue=default_map,
+        parent=parent,
+    )
+    if map_text is None:
+        return
+    pin_map = _parse_pin_net_map(map_text, pins)
+
+    position_text = simpledialog.askstring(
+        "PCB block placement",
+        "Enter the X,Y position in millimetres for the stored layout anchor.",
+        initialvalue="100,100",
+        parent=parent,
+    )
+    if position_text is None:
+        return
+    position_values = [part.strip() for part in position_text.split(",")]
+    if len(position_values) != 2:
+        raise ValueError("Placement must be two comma-separated millimetre coordinates.")
+    try:
+        position = (float(position_values[0]), float(position_values[1]))
+    except ValueError as exc:
+        raise ValueError("Placement coordinates must be numeric millimetres.") from exc
+
+    anchor_text = simpledialog.askstring(
+        "Stored PCB layout origin",
+        "Enter the X,Y coordinate in the stored block layout that should be placed at the selected position.",
+        initialvalue="0,0",
+        parent=parent,
+    )
+    if anchor_text is None:
+        return
+    anchor_values = [part.strip() for part in anchor_text.split(",")]
+    if len(anchor_values) != 2:
+        raise ValueError("Layout anchor must be two comma-separated millimetre coordinates.")
+    try:
+        anchor = (float(anchor_values[0]), float(anchor_values[1]))
+    except ValueError as exc:
+        raise ValueError("Layout anchor coordinates must be numeric millimetres.") from exc
+
+    source_board = Path(board_path)
+    default_output = (
+        source_board.with_name(f"{source_board.stem}_{instance.reference}_blocks.kicad_pcb")
+    )
+    output_path = filedialog.asksaveasfilename(
+        title="Save merged PCB board copy",
+        initialdir=str(source_board.parent),
+        initialfile=default_output.name,
+        defaultextension=".kicad_pcb",
+        filetypes=[("KiCad PCB", "*.kicad_pcb")],
+        parent=parent,
+    )
+    if not output_path:
+        return
+
+    result = merge_block_layout(
+        source_board,
+        block,
+        Path(output_path),
+        instance_reference=str(instance.reference),
+        position_mm=position,
+        pin_to_board_net=pin_map,
+        layout_anchor_mm=anchor,
+    )
+    warning = result["skipped_top_level_items"]
+    message = (
+        f"Created a new board copy:\n{result['output']}\n\n"
+        f"Footprints added: {result['footprint_count']}\n"
+        f"Board objects added: {result['object_count']}\n"
+        f"New internal nets: {', '.join(result['new_nets']) or 'none'}\n\n"
+        "The original project board was not modified. Review the generated board, "
+        "then open it in PCB Editor."
+    )
+    if warning:
+        message += "\n\nSkipped board-level item types: " + ", ".join(warning)
+    messagebox.showinfo("PCB Block Layout Applied", message, parent=parent)
+
+
 def _add_nested_dependency(root, parent, parent_window) -> None:
+    records = list_blocks(root)
+    parent_record = _pick_record(records, parent_window, "Select Parent Block")
+    if parent_record is None:
+        return
+    child_records = [record for record in records if record.path != parent_record.path]
+    child_record = _pick_record(child_records, parent_window, "Select Nested Block")
+    if child_record is None:
+        return
+
+    default_map = ", ".join(
+        f"{pin['name']}:{pin['name']}" for pin in child_record.manifest.get("pins", [])
+    )
+    mapping_text = simpledialog.askstring(
+        "Nested Block Pin Map",
+        "Map each child pin to a net in the parent implementation.\n"
+        "Format: CHILD_PIN:PARENT_NET, comma-separated.",
+        initialvalue=default_map,
+        parent=parent_window,
+    )
+    if mapping_text is None:
+        return
+    pin_map = {}
+    for entry in mapping_text.split(","):
+        token = entry.strip()
+        if not token:
+            continue
+        if ":" not in token:
+            raise ValueError(f"Invalid pin-map entry {token!r}; use CHILD_PIN:PARENT_NET.")
+        child_pin, parent_net = (part.strip() for part in token.split(":", 1))
+        if child_pin in pin_map:
+            raise ValueError(f"Pin {child_pin!r} appears more than once in the pin map.")
+        pin_map[child_pin] = parent_net
+
+    manifest_path = parent_record.path / "manifest.json"
+    original_manifest = manifest_path.read_bytes()
+    try:
+        updated = add_dependency(parent_record, child_record, pin_map=pin_map)
+        result = compose_block_implementation(updated, root, find_kicad_cli())
+    except Exception:
+        manifest_path.write_bytes(original_manifest)
+        raise
+    outcome = next(
+        (item for item in result["composed"] if item["block"] == parent_record.name),
+        {"placed": [], "labels": 0},
+    )
+    messagebox.showinfo(
+        "Nested Block Composed",
+        f"Added {child_record.name} to {parent_record.name} as "
+        f"{updated.manifest['dependencies'][-1]['reference']}.\n"
+        f"New facade symbols: {len(outcome['placed'])}; new net labels: {outcome['labels']}.\n"
+        "The implementation is composed inline with no hierarchical sheet.",
+        parent=parent_window,
+    )
+
+
+def run() -> None:
+    """Main plugin action. All blocks are placed as normal schematic symbols."""
+    _load_tkinter()
+    root = tk.Tk()
+    root.withdraw()
+    try:
+        from kipy import KiCad
+
+        kicad = KiCad()
+        schematic = kicad.get_schematic()
+        if schematic is None:
+            raise RuntimeError("No active schematic was found. Open and save a project first.")
+        project_dir = project_directory(schematic)
+        library_root = default_library_root()
+        library_root.mkdir(parents=True, exist_ok=True)
+
+        action = simpledialog.askstring(
+            "KiCad Blocks",
+            "Enter an action:\n\n"
+            "create  — create a library block and place it\n"
+            "place   — place an existing library block\n"
+            "local   — make the selected block an independent local copy\n"
+            "sync    — synchronize the selected local copy\n"
+            "edit    — open the selected block implementation\n"
+            "publish — publish edited library files as a new revision\n"
+            "bom     — export merged BOM for a block and its dependencies\n"
+            "erc     — run ERC on a block and all dependencies\n"
+            "pcb     — apply a stored PCB block layout to a new board copy\n"
+            "nest    — add a nested block dependency",
+            initialvalue="create",
+            parent=root,
+        )
+        if not action:
+            return
+        action = action.strip().casefold()
+        if action == "create":
+            library_root = _choose_library_root(root)
+            _create_and_place(library_root, schematic, kicad, project_dir, root)
+        elif action == "place":
+            _place_existing(library_root, schematic, kicad, project_dir, root)
+        elif action == "local":
+            path = make_selected_local(schematic, kicad, project_dir, library_root)
+            messagebox.showinfo(
+                "Local Copy Created",
+                f"The selected instance now uses an independent project-local block:\n{path}",
+                parent=root,
+            )
+        elif action == "sync":
+            result = sync_selected_local(schematic, kicad, project_dir)
+            messagebox.showinfo(
+                "Local Block Synchronized",
+                "Published local edits: " + (", ".join(result["published"]) or "none") +
+                "\nPulled library edits: " + (", ".join(result["pulled"]) or "none") +
+                "\nConverged edits: " + (", ".join(result["converged"]) or "none"),
+                parent=root,
+            )
+        elif action == "edit":
+            _edit_block_implementation(library_root, schematic, kicad, project_dir, root)
+        elif action == "publish":
+            _publish_block(library_root, kicad, project_dir, root)
+        elif action == "bom":
+            library_root = _choose_library_root(root)
+            _export_recursive_bom(library_root, root)
+        elif action == "erc":
+            library_root = _choose_library_root(root)
+            _validate_recursive_erc(library_root, root)
+        elif action == "pcb":
+            library_root = _choose_library_root(root)
+            _apply_block_pcb_layout(schematic, project_dir, library_root, root)
+        elif action == "nest":
+            library_root = _choose_library_root(root)
+            _add_nested_dependency(library_root, root, root)
+        else:
+            raise ValueError("Choose one of: create, place, local, sync, edit, publish, bom, erc, pcb, nest.")
+    except Exception as exc:
+        LOG.exception("KiCad Blocks action failed")
+        messagebox.showerror("KiCad Blocks", str(exc), parent=root)
+    finally:
+        root.destroy()
+
     records = list_blocks(root)
     parent_record = _pick_record(records, parent_window, "Select Parent Block")
     if parent_record is None:
