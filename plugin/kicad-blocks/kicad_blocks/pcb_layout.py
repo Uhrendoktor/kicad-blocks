@@ -551,6 +551,14 @@ def merge_block_layout(
         raise FileNotFoundError("Project board or stored block PCB layout does not exist.")
     if output_board == target_board:
         raise ValueError("Output must be a new file; the project board is never overwritten.")
+    if output_board.exists():
+        raise FileExistsError(
+            f"Output PCB already exists and will not be overwritten: {output_board}"
+        )
+    if output_project.exists():
+        raise FileExistsError(
+            f"Output project settings already exist and will not be overwritten: {output_project}"
+        )
     if not re.fullmatch(r"[A-Za-z][A-Za-z0-9_]*", instance_reference):
         raise ValueError("Block instance reference must start with a letter and use only letters, digits and underscores.")
     if len(position_mm) != 2 or len(layout_anchor_mm) != 2:

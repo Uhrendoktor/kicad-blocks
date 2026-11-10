@@ -181,6 +181,46 @@ def main() -> None:
                 "layout_project_file": "layout.kicad_pro",
             },
         )
+        # Refuse collisions for either output member before writing or
+        # replacing any files. This protects unrelated board/project files
+        # selected through the save dialogs.
+        collision_board = root / "already-exists.kicad_pcb"
+        collision_board.write_text("preserve this PCB", encoding="utf-8")
+        with self.assertRaisesRegex(FileExistsError, "Output PCB already exists"):
+            merge_block_layout(
+                target,
+                block,
+                collision_board,
+                instance_reference="X1",
+                position_mm=(120.0, 130.0),
+                layout_anchor_mm=(100.0, 100.0),
+                pin_to_board_net={"VIN": "VIN_BOARD", "GND": "GND_BOARD"},
+                rotation_deg=90.0,
+            )
+        if collision_board.read_text(encoding="utf-8") != "preserve this PCB":
+            raise AssertionError("Existing output PCB was overwritten.")
+        if collision_board.with_suffix(".kicad_pro").exists():
+            raise AssertionError("PCB collision check unexpectedly created a project file.")
+
+        collision_project = root / "settings-exists.kicad_pro"
+        collision_project.write_text("preserve these settings", encoding="utf-8")
+        collision_board_for_project = root / "settings-exists.kicad_pcb"
+        with self.assertRaisesRegex(FileExistsError, "Output project settings already exist"):
+            merge_block_layout(
+                target,
+                block,
+                collision_board_for_project,
+                instance_reference="X1",
+                position_mm=(120.0, 130.0),
+                layout_anchor_mm=(100.0, 100.0),
+                pin_to_board_net={"VIN": "VIN_BOARD", "GND": "GND_BOARD"},
+                rotation_deg=90.0,
+            )
+        if collision_project.read_text(encoding="utf-8") != "preserve these settings":
+            raise AssertionError("Existing output project settings were overwritten.")
+        if collision_board_for_project.exists():
+            raise AssertionError("PCB output was written despite a project-file collision.")
+
         result = merge_block_layout(
             target,
             block,
