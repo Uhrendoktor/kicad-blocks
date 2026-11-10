@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import shutil
 import tempfile
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -198,42 +199,11 @@ def _compose_direct_children(
                 labels_by_position[key] = label
 
         if new_labels:
-            # Temporary IPC diagnostics: capture the concrete wrapper/proto
-            # shape and label properties if KiCad rejects an item on creation.
-            import inspect
-
+            # create_items expects a complete KiCad schematic-item proto.
+            # It does not generate an item's KIID as place_symbol_from_library does.
             for label in new_labels:
-                print(
-                    "KICAD_BLOCKS_LABEL_DIAG",
-                    {
-                        "wrapper_type": type(label).__module__ + "." + type(label).__qualname__,
-                        "wrapper_source": inspect.getsource(type(label)),
-                        "attributes": [
-                            name for name in dir(label)
-                            if not name.startswith("__")
-                        ],
-                        "proto_type": str(type(getattr(label, "proto", None))),
-                        "proto_repr": repr(getattr(label, "proto", None)),
-                        "proto_fields": [
-                            (field.full_name, repr(value))
-                            for field, value in getattr(label, "proto", None).ListFields()
-                        ] if hasattr(getattr(label, "proto", None), "ListFields") else [],
-                        "position": repr(label.position),
-                        "text": repr(label.text),
-                        "spin_style": repr(label.spin_style),
-                        "item_id": repr(label.id),
-                        "item_id_type": str(type(label.id)),
-                        "item_id_source": inspect.getsource(type(label.id)),
-                        "shape": repr(label.shape),
-                        "shape_type": str(type(label.shape)),
-                        "shape_proto_enum": repr(
-                            getattr(label.proto, "shape", None)
-                        ),
-                        "intersheet_refs_field": repr(
-                            getattr(label, "intersheet_refs_field", None)
-                        ),
-                    },
-                )
+                label.id.value = str(uuid.uuid4())
+                label.shape = 5  # SLSH_PASSIVE
             schematic.create_items(new_labels)
         schematic.save()
         if schematic.get_sheet_symbols():
