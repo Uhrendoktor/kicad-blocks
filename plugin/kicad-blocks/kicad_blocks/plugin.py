@@ -4,9 +4,14 @@ from __future__ import annotations
 
 import json
 import logging
-import tkinter as tk
 from pathlib import Path
-from tkinter import filedialog, messagebox, simpledialog
+
+# The core block model and IPC helpers must remain importable in headless
+# environments. Load Tkinter only when the interactive manager is invoked.
+tk = None
+filedialog = None
+messagebox = None
+simpledialog = None
 
 from .model import parse_pins
 from .repository import (
@@ -23,6 +28,23 @@ from .repository import (
 )
 
 LOG = logging.getLogger("kicad_blocks")
+
+
+def _load_tkinter() -> None:
+    """Load the optional desktop UI toolkit when the manager is run."""
+    global tk, filedialog, messagebox, simpledialog
+    if tk is not None:
+        return
+
+    import tkinter as tkinter_module
+    from tkinter import filedialog as filedialog_module
+    from tkinter import messagebox as messagebox_module
+    from tkinter import simpledialog as simpledialog_module
+
+    tk = tkinter_module
+    filedialog = filedialog_module
+    messagebox = messagebox_module
+    simpledialog = simpledialog_module
 
 
 def project_directory(schematic) -> Path:
@@ -335,6 +357,7 @@ def _add_nested_dependency(root, parent, parent_window) -> None:
 
 def run() -> None:
     """Main plugin action. All blocks are placed as normal schematic symbols."""
+    _load_tkinter()
     root = tk.Tk()
     root.withdraw()
     try:
