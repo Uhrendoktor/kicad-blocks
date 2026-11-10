@@ -26,6 +26,7 @@ MANIFEST_NAME = "manifest.json"
 SYMBOL_NAME = "block.kicad_sym"
 IMPLEMENTATION_NAME = "implementation.kicad_sch"
 LAYOUT_NAME = "layout.kicad_pcb"
+LAYOUT_PROJECT_NAME = "layout.kicad_pro"
 LIBRARY_NICKNAME = "KBlocks"
 LIBRARY_CATALOG_NAME = "KBlocks.kicad_sym"
 LOCAL_NICKNAME_PREFIX = "KBLocal_"  # Reserved for migration of pre-catalog projects.
