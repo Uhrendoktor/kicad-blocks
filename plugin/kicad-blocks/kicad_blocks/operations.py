@@ -67,6 +67,10 @@ def export_block_bom(
                 "bom",
                 "--output",
                 str(block_csv),
+                "--fields",
+                "Reference,Value,Footprint,QUANTITY,DNP",
+                "--labels",
+                "Reference,Value,Footprint,Qty,DNP",
                 str(record.implementation),
             ]
             result = subprocess.run(command, capture_output=True, text=True, check=False)
