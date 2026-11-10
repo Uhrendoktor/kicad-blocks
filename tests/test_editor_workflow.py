@@ -1,10 +1,10 @@
 """Exercise the plugin's library editor launch and publish workflow."""
 
-from pathlib import Path
 import sys
 import tempfile
-from types import SimpleNamespace
 import unittest
+from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 PLUGIN = Path(__file__).resolve().parents[1] / "plugin" / "kicad-blocks"
@@ -26,7 +26,7 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
             "Editable Library Block",
             parse_pins("VIN:input, GND:passive, VOUT:output"),
         )
-        self.schematic = SimpleNamespace(get_selection=lambda: [])
+        self.schematic = SimpleNamespace(get_selection=list)
         self.parent = object()
         self.kicad = SimpleNamespace(
             get_kicad_binary_path=Mock(return_value="/usr/bin/eeschema"),
