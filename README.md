@@ -74,7 +74,6 @@ KiCad/Blocks/
     implementation.kicad_sch
     layout.kicad_pcb            # optional
     layout.kicad_pro            # optional netclass/settings source
-    layout.kicad_pro            # optional netclass/settings source
 ```
 
 All facade symbols are named uniquely using the block slug and ID suffix, and merged into `KBlocks.kicad_sym`. The project does not need a new symbol-library table row when another block is added.
@@ -90,6 +89,7 @@ A local copy is stored under the project directory:
       block.kicad_sym
       implementation.kicad_sch
       layout.kicad_pcb            # optional
+      layout.kicad_pro            # optional netclass/settings source
 ```
 
 Local copies reuse the shared `KBlocks:<symbol>` facade; only the implementation asset is local. The sidecar binds a specific schematic symbol KIID to its independent block folder. Its manifest records the source block, source revision and per-file sync baseline. Local copies are not silently overwritten when both the library and local version have changed the same file.
@@ -102,7 +102,7 @@ The runner is expected to have Python 3 and package/network access. When KiCad C
 
 The CI pipeline builds the official KiCad Python development IPC bindings from GitLab `main` (cached by upstream commit SHA on the self-hosted runner), publishes the tested CPython 3.12/Linux x86_64 wheel to the `kicad-python-dev` GitHub Release asset for the plugin manager, validates generated symbol/schematic assets and recursive BOM/ERC with KiCad CLI, launches the real Eeschema GUI under Xvfb, verifies KiCad's plugin discovery and managed environment using the unmodified production requirements, and runs schematic/PCB IPC integration tests. The GUI test makes a real graphical global-label edit in the opened implementation, saves it, invokes the plugin Publish action, synchronizes a local copy that existed before the edit, and verifies both saved schematics with KiCad CLI. The IPC tests cover facade-only placement, per-instance local copies, bidirectional synchronization and conflicts, nested composition, and pre-routed PCB layout merge to a separate board copy.
 
-The latest green run is [#152](https://github.com/Uhrendoktor/kicad-blocks/actions/runs/42905875666) on commit `cb5e48c6becd1f99f6e99274300f37c1be38fd30`: 43 Python tests and 5 subtests passed; Ruff, KiCad CLI, Eeschema GUI editing/Publish/Sync, plugin discovery from the unmodified production wheel requirements, schematic IPC, nested composition, PCB IPC and PCB layout merge all passed. The plugin discovery test removes inherited pip mirror/find-links settings, forces GTK onto X11 under Xvfb, and verifies `kipy` imports from KiCad's managed plugin environment. Broad pattern/chain netclass rules, unrelated board setup merging and live in-place editing of an already-open board remain unsupported.
+The latest green run is [#158](https://github.com/Uhrendoktor/kicad-blocks/actions/runs/42911585898) on commit `101e5573119c7d0e2bfc74fb283fc688d9aebe8a`: 46 Python tests and 5 subtests passed; Ruff, KiCad CLI asset/BOM/ERC validation, Eeschema GUI edit/Publish/Sync, plugin discovery/managed environment, schematic IPC, nested composition, PCB IPC and rotated PCB-layout merge/reload all passed. The PCB integration also verified the companion project-settings merge, including conflict-safe netclass naming and exact net assignments. The plugin discovery test removes inherited pip mirror/find-links settings, forces GTK onto X11 under Xvfb, and verifies `kipy` imports from KiCad's managed plugin environment. Broad pattern/chain netclass rules, unrelated board setup merging and live in-place editing of an already-open board remain unsupported.
 
 ## Local development checks
 
