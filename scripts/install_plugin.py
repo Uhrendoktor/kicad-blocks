@@ -42,7 +42,7 @@ def validate_plugin_package(source: Path) -> dict:
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     identifier = manifest.get("identifier")
     if not isinstance(identifier, str) or not re.fullmatch(
-        r"[\\w\\d]{2,}\\.[\\w\\d]+\\.[\\w\\d]+",
+        r"[\w\d]{2,}\.[\w\d]+\.[\w\d]+",
         identifier,
         flags=re.ASCII,
     ):
