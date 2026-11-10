@@ -14,9 +14,11 @@ PLUGIN = ROOT / "plugin" / "kicad-blocks"
 sys.path.insert(0, str(PLUGIN))
 
 from kicad_blocks.model import parse_pins, render_implementation_schematic
-from kicad_blocks.plugin import _register_block, _switch_instance_to_local
+from kicad_blocks.plugin import _register_block
 from kicad_blocks.repository import (
     create_block,
+    link_instance_to_local_copy,
+    local_copy_for_instance,
     make_local_copy,
     register_project_symbol_library,
 )
@@ -59,20 +61,14 @@ def main() -> None:
         local_nickname = local.manifest["library_nickname"]
         local_symbol_name = local.manifest["symbol_name"]
 
-        # Both symbol table entries must exist before KiCad opens the project.
-        # This makes the IPC test exercise a real library-to-local instance
-        # switch without relying on unsupported live table reconfiguration.
+        # One stable facade library row is registered before startup. All
+        # blocks share this catalog, including project-local implementation
+        # copies; local ownership is tracked separately by symbol-instance KIID.
         register_project_symbol_library(
             project_dir,
             nickname,
             block.symbol_library,
-            description="Headless IPC test facade",
-        )
-        register_project_symbol_library(
-            project_dir,
-            local_nickname,
-            local.symbol_library,
-            description="Headless IPC local-copy facade",
+            description="KiCad Blocks shared facade catalog",
         )
         kicad = KiCad(
             headless=True,
@@ -114,17 +110,22 @@ def main() -> None:
                 raise AssertionError("Placed facade has the wrong KiCad library identifier.")
 
             original_instance_id = str(instance.id)
-            local_instance = _switch_instance_to_local(instance, schematic, local)
-            if (
-                local_instance.definition.id.library != local_nickname
-                or local_instance.definition.id.name != local_symbol_name
-            ):
-                raise AssertionError("The symbol did not switch to its local-copy library ID.")
+            link_instance_to_local_copy(project_dir, original_instance_id, local)
+            linked_local = local_copy_for_instance(project_dir, original_instance_id)
+            if linked_local is None or linked_local.path != local.path:
+                raise AssertionError("The selected KIID was not bound to its local block copy.")
             symbols_after_local = list(schematic.get_symbols())
-            if len(symbols_after_local) != 1 or symbols_after_local[0].reference != "X1":
-                raise AssertionError("Local-copy conversion replaced or duplicated the symbol instance.")
-            if str(symbols_after_local[0].id) != original_instance_id:
-                raise AssertionError("Local-copy conversion did not preserve the placed symbol KIID.")
+            if (
+                len(symbols_after_local) != 1
+                or symbols_after_local[0].reference != "X1"
+                or str(symbols_after_local[0].id) != original_instance_id
+            ):
+                raise AssertionError("Local-copy binding changed or duplicated the facade instance.")
+            if (
+                symbols_after_local[0].definition.id.library != nickname
+                or symbols_after_local[0].definition.id.name != symbol_name
+            ):
+                raise AssertionError("Local-copy binding unexpectedly changed the facade library ID.")
 
             # Test the plugin's actual dynamic registration path: this library
             # did not exist in sym-lib-table when KiCad was started.
@@ -133,19 +134,15 @@ def main() -> None:
                 "Runtime-Registered Block",
                 parse_pins("A:input, B:output"),
             )
-            _register_block(project_dir, late_block, kicad)
+            late_block = _register_block(project_dir, late_block, kicad)
             late_instance = schematic.place_symbol_from_library(
                 f"{late_block.manifest['library_nickname']}:{late_block.manifest['symbol_name']}",
                 Vector2.from_xy_mm(140.0, 100.0),
                 reference="X2",
             )
             schematic.save()
-            if late_instance.definition.id.library != late_block.manifest["library_nickname"]:
-                raise AssertionError("The newly registered library symbol did not place.")
-            print("Runtime registration API methods:", sorted(
-                name for name in dir(kicad)
-                if "lib" in name.casefold() or "table" in name.casefold()
-            ))
+            if late_instance.definition.id.library != nickname:
+                raise AssertionError("A newly added facade did not reload through the stable KBlocks nickname.")
         finally:
             kicad.close()
 
@@ -156,17 +153,17 @@ def main() -> None:
                 + repr(project_schematics)
             )
         saved_text = schematic_path.read_text(encoding="utf-8")
-        expected_lib_id = f'(lib_id "{local_nickname}:{local_symbol_name}")'
+        expected_lib_id = f'(lib_id "{nickname}:{symbol_name}")'
         if expected_lib_id not in saved_text:
             raise AssertionError("Saved project schematic does not contain the facade library ID.")
         if "(sheet " in saved_text:
             raise AssertionError("Saved parent schematic unexpectedly contains a child sheet.")
-        if f'(lib_id "{late_block.manifest["library_nickname"]}:{late_block.manifest["symbol_name"]}")' not in saved_text:
+        if f'(lib_id "{nickname}:{late_block.manifest["symbol_name"]}")' not in saved_text:
             raise AssertionError("The runtime-registered facade was not saved into the parent schematic.")
 
         print(
-            "KiCad IPC facade/local-copy passed: same symbol instance, local library ID, "
-            "runtime library registration, zero sheet symbols, and no project-local child schematic."
+            "KiCad IPC passed: one stable catalog, local-instance metadata, runtime block addition, "
+            "zero sheet symbols, and no project-local child schematic."
         )
         # Compose a library child into a parent implementation as a facade symbol
         # plus external global labels. No hierarchical sheet is created.

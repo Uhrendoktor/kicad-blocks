@@ -18,6 +18,8 @@ from kicad_blocks.repository import (
     add_dependency,
     create_block,
     list_blocks,
+    link_instance_to_local_copy,
+    local_copy_for_instance,
     make_local_copy,
     publish_local_copy,
     read_manifest,
@@ -121,24 +123,17 @@ class BlockRepositoryTests(unittest.TestCase):
     def tearDown(self):
         self.temp.cleanup()
 
-    def test_api_library_identifier_uses_kipy_field_names(self):
+    def test_facade_identifier_uses_one_stable_library_nickname(self):
         from types import SimpleNamespace
 
-        from kicad_blocks.plugin import _set_symbol_identifier, _symbol_identifier
+        from kicad_blocks.plugin import _symbol_identifier
 
         instance = SimpleNamespace(
             definition=SimpleNamespace(
-                id=SimpleNamespace(library="KBlocks_A1B2C3D4", name="buck")
+                id=SimpleNamespace(library="KBlocks", name="buck_1234abcd")
             )
         )
-        self.assertEqual(
-            _symbol_identifier(instance), ("KBlocks_A1B2C3D4", "buck")
-        )
-
-        _set_symbol_identifier(instance, "KBLocal_1234ABCD", "buck_local")
-        self.assertEqual(
-            _symbol_identifier(instance), ("KBLocal_1234ABCD", "buck_local")
-        )
+        self.assertEqual(_symbol_identifier(instance), ("KBlocks", "buck_1234abcd"))
 
     def test_create_block_writes_facade_and_separate_implementation(self):
         record = create_block(self.root, "Buck Converter", self.pins, description="Step-down")
@@ -173,18 +168,27 @@ class BlockRepositoryTests(unittest.TestCase):
         self.assertIn(record.manifest["library_nickname"], first)
         self.assertTrue(_balanced_sexpr(first))
 
-    def test_project_local_symbol_library_uses_portable_kipRJMOD_uri(self):
+    def test_local_copy_reuses_facade_catalog_and_is_bound_by_instance_kiid(self):
         source = create_block(self.root, "Portable Local", self.pins)
         local = make_local_copy(source, self.project)
+
+        self.assertEqual(local.manifest["library_nickname"], source.manifest["library_nickname"])
+        self.assertEqual(local.manifest["symbol_name"], source.manifest["symbol_name"])
+        self.assertEqual(local.symbol_library, source.symbol_library)
+
         table = register_project_symbol_library(
-            self.project, local.manifest["library_nickname"], local.symbol_library
+            self.project, source.manifest["library_nickname"], source.symbol_library
         )
-        content = table.read_text(encoding="utf-8")
-        self.assertIn('${KIPRJMOD}/.kicad_blocks/local/', content)
-        register_project_symbol_library(
-            self.project, local.manifest["library_nickname"], local.symbol_library
-        )
-        self.assertEqual(table.read_text(encoding="utf-8"), content)
+        first = table.read_text(encoding="utf-8")
+        self.assertIn("KBlocks", first)
+        self.assertNotIn("KBLocal_", first)
+
+        link_instance_to_local_copy(self.project, "instance-kiid-001", local)
+        linked = local_copy_for_instance(self.project, "instance-kiid-001")
+        self.assertIsNotNone(linked)
+        self.assertEqual(linked.path, local.path)
+        self.assertIsNone(local_copy_for_instance(self.project, "other-instance"))
+        self.assertTrue((self.project / ".kicad_blocks" / "instances.json").is_file())
 
     def test_publish_bumps_version_when_library_assets_change(self):
         record = create_block(self.root, "Published Block", self.pins)
@@ -200,13 +204,30 @@ class BlockRepositoryTests(unittest.TestCase):
         self.assertEqual(current["hashes"]["implementation.kicad_sch"], sha256_file(record.implementation))
         self.assertEqual(refresh_library_block(record)["changed"], [])
 
-    def test_project_library_table_refuses_nickname_collision(self):
+    def test_project_library_table_has_one_stable_catalog_row_for_all_blocks(self):
         a = create_block(self.root, "Block A", self.pins)
         b = create_block(self.root, "Block B", self.pins)
-        nickname = a.manifest["library_nickname"]
-        register_project_symbol_library(self.project, nickname, a.symbol_library)
+        self.assertEqual(a.manifest["library_nickname"], "KBlocks")
+        self.assertEqual(b.manifest["library_nickname"], "KBlocks")
+        self.assertEqual(a.symbol_library, b.symbol_library)
+
+        table = register_project_symbol_library(self.project, "KBlocks", a.symbol_library)
+        register_project_symbol_library(self.project, "KBlocks", b.symbol_library)
+        content = table.read_text(encoding="utf-8")
+        self.assertEqual(content.count('(name "KBlocks")'), 1)
+
+        foreign_catalog = self.project / "foreign.kicad_sym"
+        foreign_catalog.write_text(a.symbol_library.read_text(encoding="utf-8"), encoding="utf-8")
         with self.assertRaises(ValueError):
-            register_project_symbol_library(self.project, nickname, b.symbol_library)
+            register_project_symbol_library(self.project, "KBlocks", foreign_catalog)
+
+    def test_shared_catalog_contains_facades_for_all_blocks(self):
+        first = create_block(self.root, "Dual Buck", self.pins)
+        second = create_block(self.root, "Dual Boost", self.pins)
+        catalog = first.symbol_library.read_text(encoding="utf-8")
+        self.assertIn(f'(symbol "{first.manifest["symbol_name"]}"', catalog)
+        self.assertIn(f'(symbol "{second.manifest["symbol_name"]}"', catalog)
+        self.assertNotEqual(first.manifest["symbol_name"], second.manifest["symbol_name"])
 
     def test_local_copy_is_independent_and_syncs_unmodified_assets(self):
         source = create_block(self.root, "Power Stage", self.pins)
