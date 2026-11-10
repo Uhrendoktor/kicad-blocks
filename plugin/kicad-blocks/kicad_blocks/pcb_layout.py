@@ -165,10 +165,20 @@ def _refresh_ids(node: Any) -> None:
         _refresh_ids(child)
 
 
-def _rewrite_nets(node: Any, mapping: dict[int, tuple[int, str]]) -> None:
+def _rewrite_nets(
+    node: Any,
+    mapping: dict[int, tuple[int, str]],
+    *,
+    include_net_name: bool,
+) -> None:
+    """Rewrite PCB net references using KiCad's per-object file schema.
+
+    Footprint pads store both (net CODE NAME); routed board objects
+    (segments, arcs, vias and zones) store only (net CODE).
+    """
     if not isinstance(node, list):
         return
-    if _head(node) == "net" and len(node) >= 3:
+    if _head(node) == "net" and len(node) >= 2:
         try:
             old_code = int(str(node[1]))
         except ValueError as exc:
@@ -176,70 +186,13 @@ def _rewrite_nets(node: Any, mapping: dict[int, tuple[int, str]]) -> None:
         if old_code not in mapping:
             raise ValueError(f"Board item references undefined source net code {old_code}.")
         code, name = mapping[old_code]
-        node[1] = str(code)
-        node[2] = _Quoted(name)
+        if include_net_name:
+            node[1:] = [str(code), _Quoted(name)]
+        else:
+            node[1:] = [str(code)]
         return
     for child in node[1:]:
-        _rewrite_nets(child, mapping)
-
-
-def _translate_item(node: list, dx: float, dy: float) -> None:
-    """Translate board-absolute geometry, preserving footprint-local geometry."""
-    if _head(node) == "footprint":
-        at = _direct(node, "at")
-        if at is None:
-            raise ValueError("Stored PCB footprint has no placement coordinate.")
-        _xy(at, dx, dy)
-        for prop in _all(node, "property"):
-            prop_at = _direct(prop, "at")
-            if prop_at is not None:
-                _xy(prop_at, dx, dy)
-        return
-
-    absolute_tags = {"at", "start", "mid", "end", "center", "xy", "pts"}
-
-    def walk(item: Any) -> None:
-        if not isinstance(item, list):
-            return
-        tag = _head(item)
-        if tag in absolute_tags:
-            if tag == "pts":
-                for point in item[1:]:
-                    if _head(point) == "xy":
-                        _xy(point, dx, dy)
-            else:
-                _xy(item, dx, dy)
-            return
-        for child in item[1:]:
-            walk(child)
-
-    walk(node)
-
-
-def _rewrite_footprint(footprint: list, reference: str, dx: float, dy: float) -> None:
-    _translate_item(footprint, dx, dy)
-    for prop in _all(footprint, "property"):
-        if len(prop) >= 3 and str(prop[1]).casefold() == "reference":
-            prop[2] = _Quoted(reference)
-    for fp_text in _all(footprint, "fp_text"):
-        if len(fp_text) >= 3 and str(fp_text[1]).casefold() == "reference":
-            fp_text[2] = _Quoted(reference)
-    _refresh_ids(footprint)
-    path_node = _direct(footprint, "path")
-    if path_node is None:
-        footprint.append(["path", _Quoted("/" + str(uuid.uuid4()))])
-    else:
-        path_node[1:] = [_Quoted("/" + str(uuid.uuid4()))]
-
-
-def _unique_reference(base: str, existing: set[str]) -> str:
-    candidate = base
-    suffix = 2
-    while candidate.casefold() in existing:
-        candidate = f"{base}_{suffix}"
-        suffix += 1
-    existing.add(candidate.casefold())
-    return candidate
+        _rewrite_nets(child, mapping, include_net_name=include_net_name)
 
 
 def _atomic_write(path: Path, content: str) -> None:
@@ -376,7 +329,7 @@ def merge_block_layout(
         else:
             _translate_item(item, dx, dy)
             _refresh_ids(item)
-        _rewrite_nets(item, net_map)
+        _rewrite_nets(item, net_map, include_net_name=(kind == "footprint"))
         imported.append(item)
 
     if not imported:

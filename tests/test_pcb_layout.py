@@ -104,7 +104,7 @@ def main() -> None:
         )
         source_text = source_text.rsplit(")", 1)[0] + (
             '  (segment (start 100 100) (end 105 100) (width 0.25) '
-            '(layer "F.Cu") (net 3 "SW") (uuid "00000000-0000-0000-0000-000000000002"))\n)\n'
+            '(layer "F.Cu") (net 3) (uuid "00000000-0000-0000-0000-000000000002"))\n)\n'
         )
         source.write_text(source_text, encoding="utf-8")
         (block_dir / "layout.kicad_pcb").write_text(source_text, encoding="utf-8")
@@ -134,7 +134,16 @@ def main() -> None:
 
         # Parse result independently and assert net codes, reference and translated geometry.
         parsed = parse_sexpr(output.read_text(encoding="utf-8"))
-        nets = {int(str(item[1])): str(item[2]) for item in parsed[1:] if isinstance(item, list) and item and item[0] == "net"}
+        nets = {int(str(item[1])): str(item[2]) for item in parsed[1:] if isinstance(item, list) and item and item[0] == "net"}        merged_segment = next(
+            item for item in parsed[1:]
+            if isinstance(item, list) and item and item[0] == "segment"
+        )
+        segment_net = next(
+            item for item in merged_segment[1:]
+            if isinstance(item, list) and item and item[0] == "net"
+        )
+        if len(segment_net) != 2:
+            raise AssertionError(f"KiCad track net must contain only its code: {segment_net!r}")
         if "X1_SW" not in nets.values() or "VIN_BOARD" not in nets.values():
             raise AssertionError(f"Project board nets were not merged: {nets!r}")
         imported_footprints = []
