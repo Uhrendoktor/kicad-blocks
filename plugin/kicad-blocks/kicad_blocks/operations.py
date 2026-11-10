@@ -4,14 +4,18 @@ from __future__ import annotations
 
 import csv
 import os
-from pathlib import Path
 import shutil
 import subprocess
 import tempfile
+from pathlib import Path
 from typing import Any
 
 from .model import slugify
-from .repository import BlockOccurrence, BlockRecord, resolve_dependency_occurrences
+from .repository import (
+    BlockOccurrence,
+    BlockRecord,
+    resolve_dependency_occurrences,
+)
 
 
 def find_kicad_cli() -> str:
