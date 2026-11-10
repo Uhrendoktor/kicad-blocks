@@ -168,10 +168,24 @@ def main() -> None:
             offset_match = re.search(r"offset (\d+)", export_result.stderr)
             offset = int(offset_match.group(1)) if offset_match else -1
             snippet = serialized[max(0, offset - 180):offset + 180] if offset >= 0 else serialized[:500]
+            try:
+                parsed_output = parse_sexpr(serialized)
+                top_level = [
+                    str(item[0])
+                    for item in parsed_output[1:]
+                    if isinstance(item, list) and item
+                ]
+                parser_status = f"custom parser accepted; top-level items={top_level!r}"
+            except Exception as parse_error:
+                parser_status = f"custom parser rejected: {parse_error!r}"
             raise RuntimeError(
                 "KiCad rejected the merged PCB board: "
                 + (export_result.stderr or export_result.stdout)
                 + f"\nSerialized text near parser location {offset}: {snippet!r}"
+                + f"\nSerialized board length={len(serialized)}; "
+                + f"parentheses balance={serialized.count('(') - serialized.count(')')}; "
+                + parser_status
+                + f"\nFULL MERGED BOARD S-EXPRESSION:\n{serialized}"
             )
         if not list(svg_dir.glob("*.svg")):
             raise AssertionError("KiCad did not export the merged board to SVG.")
