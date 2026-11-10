@@ -277,6 +277,14 @@ def main() -> None:
             orientation=90,
             pin_map={"IN": "VIN_CHILD", "GND": "GND_CHILD", "OUT": "VOUT_CHILD"},
         )
+        parent = add_dependency(
+            parent,
+            child,
+            reference="B2",
+            position_mm=(240.0, 100.0),
+            orientation=0,
+            pin_map={"IN": "VIN_CHILD2", "GND": "GND_CHILD2", "OUT": "VOUT_CHILD2"},
+        )
         composition = compose_block_implementation(parent, nested_library, cli)
         composed_names = {item["block"] for item in composition["composed"]}
         if composed_names != {"Nested Child", "Nested Parent"}:
@@ -299,45 +307,86 @@ def main() -> None:
             parent_kicad.wait_for_libraries(types=[1], timeout_s=120.0)
             nested_symbols = list(parent_schematic.get_symbols())
             nested_sheets = list(parent_schematic.get_sheet_symbols())
-            if len(nested_symbols) != 1:
+            symbols_by_reference = {symbol.reference: symbol for symbol in nested_symbols}
+            if set(symbols_by_reference) != {"B1", "B2"}:
                 raise AssertionError(
-                    f"Expected one child facade in parent implementation; found {len(nested_symbols)}."
+                    f"Expected two independent instances of the same child block; "
+                    f"found {sorted(symbols_by_reference)}."
                 )
             if nested_sheets:
                 raise AssertionError(
                     f"Nested composition created {len(nested_sheets)} hierarchical sheets."
                 )
-            if int(nested_symbols[0].transform.orientation) != schematic_symbol_orientation(90):
-                raise AssertionError("Nested facade was not placed at its stored 90-degree orientation.")
+            expected_instances = {
+                "B1": {
+                    "orientation": 90,
+                    "origin": (100.0, 100.0),
+                    "pin_map": {
+                        "IN": "VIN_CHILD",
+                        "GND": "GND_CHILD",
+                        "OUT": "VOUT_CHILD",
+                    },
+                },
+                "B2": {
+                    "orientation": 0,
+                    "origin": (240.0, 100.0),
+                    "pin_map": {
+                        "IN": "VIN_CHILD2",
+                        "GND": "GND_CHILD2",
+                        "OUT": "VOUT_CHILD2",
+                    },
+                },
+            }
+            for reference, expected in expected_instances.items():
+                symbol = symbols_by_reference[reference]
+                rotation = expected["orientation"]
+                if int(symbol.transform.orientation) != schematic_symbol_orientation(rotation):
+                    raise AssertionError(
+                        f"Nested facade {reference} was not placed at {rotation} degrees."
+                    )
 
             labels_by_name = {
                 label.text.value: label
                 for label in parent_schematic.get_labels()
             }
-            expected_names = {"VIN_CHILD", "GND_CHILD", "VOUT_CHILD"}
+            expected_names = {
+                net_name
+                for item in expected_instances.values()
+                for net_name in item["pin_map"].values()
+            }
             if not expected_names.issubset(labels_by_name):
                 raise AssertionError(
-                    f"Mapped nested labels missing: {sorted(set(labels_by_name) ^ expected_names)}"
+                    f"Mapped nested labels missing: {sorted(expected_names - set(labels_by_name))}"
                 )
 
-            pin_points = facade_pin_connection_points(parse_pins("IN:input, GND:passive, OUT:output"))
-            pin_map = {"IN": "VIN_CHILD", "GND": "GND_CHILD", "OUT": "VOUT_CHILD"}
-            for pin_name, (local_x, local_y, spin) in pin_points.items():
-                offset_x, offset_y = transform_symbol_point_to_schematic(local_x, local_y, 90)
-                expected_point = Vector2.from_xy_mm(100.0 + offset_x, 100.0 + offset_y)
-                actual_label = labels_by_name[pin_map[pin_name]]
-                if (
-                    int(actual_label.position.x) != int(expected_point.x)
-                    or int(actual_label.position.y) != int(expected_point.y)
-                ):
-                    raise AssertionError(
-                        f"Label {pin_map[pin_name]} is not on the rotated pin endpoint: "
-                        f"got {actual_label.position}, expected {expected_point}."
+            pin_points = facade_pin_connection_points(
+                parse_pins("IN:input, GND:passive, OUT:output")
+            )
+            for expected in expected_instances.values():
+                rotation = expected["orientation"]
+                origin_x, origin_y = expected["origin"]
+                pin_map = expected["pin_map"]
+                for pin_name, (local_x, local_y, spin) in pin_points.items():
+                    offset_x, offset_y = transform_symbol_point_to_schematic(
+                        local_x, local_y, rotation
                     )
-                if int(actual_label.spin_style) != rotate_label_spin_style(spin, 90):
-                    raise AssertionError(
-                        f"Label {pin_map[pin_name]} has the wrong orientation for the rotated pin."
+                    expected_point = Vector2.from_xy_mm(
+                        origin_x + offset_x, origin_y + offset_y
                     )
+                    actual_label = labels_by_name[pin_map[pin_name]]
+                    if (
+                        int(actual_label.position.x) != int(expected_point.x)
+                        or int(actual_label.position.y) != int(expected_point.y)
+                    ):
+                        raise AssertionError(
+                            f"Label {pin_map[pin_name]} is not on the transformed pin endpoint: "
+                            f"got {actual_label.position}, expected {expected_point}."
+                        )
+                    if int(actual_label.spin_style) != rotate_label_spin_style(spin, rotation):
+                        raise AssertionError(
+                            f"Label {pin_map[pin_name]} has the wrong orientation "
+                            f"for {rotation}-degree rotation."
+                        )
         finally:
             parent_kicad.close()
 
