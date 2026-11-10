@@ -25,7 +25,7 @@ The internal schematic is editable: open the `implementation.kicad_sch` file fro
 
 - KiCad 11 nightly/development build with its Schematic Editor IPC API enabled (Preferences → Plugins).
 - Python runtime managed by KiCad for the plugin, with Tkinter available.
-- The KiCad `kicad-python` bindings, installed from the official GitLab `main` branch via `requirements.txt` so the current headless KiCad 11 API is available.
+- The official KiCad `kicad-python` IPC bindings, installed as the released 0.8.0 package via `requirements.txt`.
 
 Schematic placement, selection and library reload APIs used here are part of KiCad's newer schematic IPC interface. This plugin does not support the old SWIG-only plugin interface.
 
