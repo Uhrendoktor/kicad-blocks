@@ -207,6 +207,106 @@ def main() -> None:
                     capture_output=True,
                     text=True,
                 )
+                # Make a real graphical edit: place a global label through
+                # Eeschema's interactive drawing tool, rather than editing the
+                # S-expression from Python or IPC.
+                edit_label = "GUI_EDIT_PROBE"
+                subprocess.run(
+                    [xdotool, "key", "--clearmodifiers", "ctrl+l"],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                )
+                time.sleep(0.5)
+                dialog_search = subprocess.run(
+                    [xdotool, "search", "--onlyvisible", "--name", ".*"],
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                dialog_id = None
+                visible_windows = []
+                for candidate in dialog_search.stdout.splitlines():
+                    if not candidate.strip().isdigit():
+                        continue
+                    title = subprocess.run(
+                        [xdotool, "getwindowname", candidate],
+                        capture_output=True,
+                        text=True,
+                        check=False,
+                    ).stdout.strip()
+                    visible_windows.append((candidate, title))
+                    if "global label" in title.casefold():
+                        dialog_id = candidate
+                if dialog_id is None:
+                    raise RuntimeError(
+                        "Ctrl+L did not open the Global Label Properties dialog. "
+                        f"Visible windows: {visible_windows!r}"
+                    )
+                subprocess.run(
+                    [xdotool, "windowfocus", "--sync", dialog_id],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                )
+                subprocess.run(
+                    [xdotool, "key", "--clearmodifiers", "ctrl+a"],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                )
+                subprocess.run(
+                    [xdotool, "type", "--clearmodifiers", "--delay", "25", edit_label],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                )
+                subprocess.run(
+                    [xdotool, "key", "--clearmodifiers", "Return"],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                )
+                time.sleep(0.5)
+
+                geometry = subprocess.run(
+                    [xdotool, "getwindowgeometry", "--shell", window_id],
+                    capture_output=True,
+                    text=True,
+                    check=True,
+                ).stdout
+                dimensions = {
+                    key: int(value)
+                    for line in geometry.splitlines()
+                    if "=" in line
+                    for key, value in [line.split("=", 1)]
+                    if key in {"WIDTH", "HEIGHT"}
+                }
+                if not {"WIDTH", "HEIGHT"}.issubset(dimensions):
+                    raise RuntimeError(f"Could not read Eeschema window dimensions: {geometry!r}")
+                target_x = int(dimensions["WIDTH"] * 0.62)
+                target_y = int(dimensions["HEIGHT"] * 0.58)
+                subprocess.run(
+                    [
+                        xdotool,
+                        "mousemove",
+                        "--window",
+                        window_id,
+                        str(target_x),
+                        str(target_y),
+                        "click",
+                        "1",
+                    ],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                )
+                subprocess.run(
+                    [xdotool, "key", "--clearmodifiers", "Escape"],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                )
                 subprocess.run(
                     [xdotool, "key", "--clearmodifiers", "ctrl+s"],
                     check=True,
@@ -217,6 +317,11 @@ def main() -> None:
 
                 if not implementation.is_file() or not implementation.stat().st_size:
                     raise AssertionError("Eeschema removed or emptied the implementation schematic.")
+                if edit_label not in implementation.read_text(encoding="utf-8"):
+                    raise AssertionError(
+                        "The global label placed through the Eeschema GUI was not saved "
+                        f"to the implementation ({edit_label!r} missing)."
+                    )
 
                 subprocess.run(
                     [xdotool, "windowclose", window_id],
