@@ -292,7 +292,12 @@ def _transform_item(
 
 
 def _rewrite_footprint(footprint: list, reference: str, dx: float, dy: float) -> None:
-    _translate_item(footprint, dx, dy)
+    _transform_item(
+        footprint,
+        anchor_mm=(0.0, 0.0),
+        position_mm=(dx, dy),
+        rotation_deg=0.0,
+    )
     for prop in _all(footprint, "property"):
         if len(prop) >= 3 and str(prop[1]).casefold() == "reference":
             prop[2] = _Quoted(reference)
