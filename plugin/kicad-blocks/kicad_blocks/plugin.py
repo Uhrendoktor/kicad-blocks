@@ -18,11 +18,14 @@ from .model import parse_pins
 from .operations import export_block_bom, find_kicad_cli, validate_block_tree
 from .pcb_layout import merge_block_layout
 from .repository import (
-    LOCAL_NICKNAME_PREFIX,
+    LIBRARY_NICKNAME,
     add_dependency,
     create_block,
     default_library_root,
+    ensure_stable_block_identity,
+    link_instance_to_local_copy,
     list_blocks,
+    local_copy_for_instance,
     make_local_copy,
     publish_local_copy,
     refresh_library_block,
@@ -88,16 +91,17 @@ def _reload_symbol_library(kicad, nickname: str) -> None:
     kicad.wait_for_libraries(types=[1], scope=2, timeout_s=60.0)
 
 
-def _register_block(project_dir: Path, record, kicad) -> None:
-    manifest = record.manifest
+def _register_block(project_dir: Path, record, kicad):
+    """Ensure a block is present in the stable, already-registered catalog."""
+    record = ensure_stable_block_identity(record)
     register_project_symbol_library(
         project_dir,
-        manifest["library_nickname"],
+        LIBRARY_NICKNAME,
         record.symbol_library,
-        description=f"KiCad block: {manifest['name']}",
+        description="KiCad Blocks — shared facade catalog",
     )
-    _reload_symbol_library(kicad, manifest["library_nickname"])
-
+    _reload_symbol_library(kicad, LIBRARY_NICKNAME)
+    return record
 
 def place_block(schematic, record, x_mm: float, y_mm: float):
     from kipy.geometry import Vector2
@@ -140,113 +144,26 @@ def _library_record_for_instance(library_root: Path, instance):
     )
 
 
-def _set_symbol_identifier(instance, library_nickname: str, symbol_name: str) -> None:
-    """Set a schematic symbol's KiCad LibraryIdentifier using IPC field names."""
-    identifier = instance.definition.id
-    identifier.library = library_nickname
-    identifier.name = symbol_name
-
-
-def _switch_instance_to_local(instance, schematic, local):
-    """Retarget a placed facade in-place, preserving its KIID and wiring.
-
-    The matching KiCad nightly/kipy combination can apply UpdateItems on the
-    server but currently returns an incorrectly decoded empty Any payload.
-    Treat that client-side decode error as non-fatal only if a fresh IPC read
-    proves the selected item now carries the local library ID.
-    """
-    original_id = str(instance.id)
-    proto = instance.proto
-    proto.definition.id.library_nickname = local.manifest["library_nickname"]
-    proto.definition.id.entry_name = local.manifest["symbol_name"]
-
-    commit = schematic.begin_commit()
-    try:
-        decode_error = None
-        try:
-            schematic.update_items([instance])
-        except AttributeError as exc:
-            if "type_url" not in str(exc):
-                raise
-            decode_error = exc
-
-        symbols = list(schematic.get_symbols())
-        matches = [item for item in symbols if str(item.id) == original_id]
-        if len(matches) != 1:
-            raise RuntimeError(
-                "KiCad did not preserve exactly one symbol with the original KIID "
-                "during local-copy conversion."
-            ) from decode_error
-        updated = matches[0]
-        identifier = updated.definition.id
-        if (
-            identifier.library != local.manifest["library_nickname"]
-            or identifier.name != local.manifest["symbol_name"]
-        ):
-            raise RuntimeError(
-                "KiCad did not apply the local block library identifier during "
-                "the in-place symbol update."
-            ) from decode_error
-        schematic.push_commit(commit, "Make block instance a local copy")
-    except Exception:
-        schematic.drop_commit(commit)
-        raise
-    schematic.save()
-    return updated
-
-
 def make_selected_local(schematic, kicad, project_dir: Path, library_root: Path) -> Path:
-    """Turn one selected library-linked symbol into an independent project copy."""
+    """Create an independent implementation copy bound to this symbol KIID."""
     instance = _selected_symbol(schematic)
     source = _library_record_for_instance(library_root, instance)
     local = make_local_copy(source, project_dir)
-    _register_block(project_dir, local, kicad)
-
-    # The current instance UUID and coordinates are preserved, so existing
-    # wires remain attached. Only the full KiCad library identifier changes.
-    _switch_instance_to_local(instance, schematic, local)
+    link_instance_to_local_copy(project_dir, str(instance.id), local)
     return local.path
 
-
 def sync_selected_local(schematic, kicad, project_dir: Path) -> dict:
-    """Synchronize the selected project-local block without clobbering edits."""
+    """Synchronize the local implementation linked to the selected symbol KIID."""
     instance = _selected_symbol(schematic)
-    library_nickname, symbol_name = _symbol_identifier(instance)
-    if not library_nickname.startswith(LOCAL_NICKNAME_PREFIX):
-        raise ValueError("Select a project-local block copy to synchronize.")
-
-    local_root = project_dir / ".kicad_blocks" / "local"
-    local_record = None
-    for manifest_path in local_root.glob("*.kicad_block/manifest.json"):
-        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-        if (
-            manifest.get("library_nickname") == library_nickname
-            and manifest.get("symbol_name") == symbol_name
-        ):
-            local_record = type("Record", (), {"path": manifest_path.parent, "manifest": manifest})()
-            break
+    local_record = local_copy_for_instance(project_dir, str(instance.id))
     if local_record is None:
-        raise FileNotFoundError("The selected local block asset directory could not be found.")
-
+        raise ValueError(
+            "The selected block instance does not have a project-local copy. "
+            "Use the Local action first."
+        )
     result = publish_local_copy(local_record)
-    _reload_symbol_library(kicad, library_nickname)
-
-    # Refresh only this selected instance from the updated local library. The
-    # synchronizer has already rejected changes to the external pin contract.
-    library_symbol = kicad.get_library_symbol(
-        f"{library_nickname}:{symbol_name}", document=schematic.document
-    )
-    instance.definition.proto.CopyFrom(library_symbol.proto)
-    commit = schematic.begin_commit()
-    try:
-        schematic.update_items([instance])
-        schematic.push_commit(commit, "Update local block symbol from library")
-    except Exception:
-        schematic.drop_commit(commit)
-        raise
-    schematic.save()
+    _reload_symbol_library(kicad, LIBRARY_NICKNAME)
     return result
-
 
 def _pick_record(records, parent, title: str):
     if not records:
