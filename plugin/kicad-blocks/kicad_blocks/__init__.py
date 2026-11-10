@@ -1,6 +1,11 @@
 """Opaque, library-backed schematic blocks for KiCad."""
 
-from .model import BlockPin, facade_pin_connection_points, parse_pins, render_symbol_library
+from .model import (
+    BlockPin,
+    facade_pin_connection_points,
+    parse_pins,
+    render_symbol_library,
+)
 from .repository import (
     add_dependency,
     create_block,
@@ -15,9 +20,9 @@ from .repository import (
 
 __all__ = [
     "BlockPin",
-    "facade_pin_connection_points",
     "add_dependency",
     "create_block",
+    "facade_pin_connection_points",
     "list_blocks",
     "make_local_copy",
     "parse_pins",
