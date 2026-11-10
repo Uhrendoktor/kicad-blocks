@@ -110,8 +110,20 @@ def main() -> None:
             original_instance_id = str(instance.id)
             link_instance_to_local_copy(project_dir, original_instance_id, local)
             linked_local = local_copy_for_instance(project_dir, original_instance_id)
-            if linked_local is None or linked_local.path != local.path:
-                raise AssertionError("The selected KIID was not bound to its local block copy.")
+            link_file = project_dir / ".kicad_blocks" / "instances.json"
+            link_data = json.loads(link_file.read_text(encoding="utf-8"))
+            link_entry = link_data.get("instances", {}).get(original_instance_id)
+            if linked_local is None:
+                raise AssertionError(
+                    f"KIID {original_instance_id!r} has no local-copy mapping; "
+                    f"stored entries={list(link_data.get('instances', {}))!r}; "
+                    f"sidecar={link_file.read_text(encoding='utf-8')}"
+                )
+            if linked_local.path.resolve() != local.path.resolve():
+                raise AssertionError(
+                    f"Local-copy KIID mapping resolved to {linked_local.path.resolve()}, "
+                    f"expected {local.path.resolve()}; entry={link_entry!r}"
+                )
             symbols_after_local = list(schematic.get_symbols())
             if (
                 len(symbols_after_local) != 1

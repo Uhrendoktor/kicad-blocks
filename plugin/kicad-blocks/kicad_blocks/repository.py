@@ -432,7 +432,7 @@ def local_copy_for_instance(project_dir: Path, instance_id: str) -> BlockRecord 
         return None
     except json.JSONDecodeError as exc:
         raise ValueError(f"Invalid project block-link metadata: {path}") from exc
-    entry = data.get("instances", {}).get(str(instance_id))
+    entry = data.get("instances", {}).get(str(instance_id).strip())
     if entry is None:
         return None
     local_path = (Path(project_dir).expanduser().resolve() / entry["local_path"]).resolve()
