@@ -204,8 +204,36 @@ def _compose_direct_children(
             for label in new_labels:
                 label.id.value = str(uuid.uuid4())
                 label.shape = 5  # SLSH_PASSIVE
-            schematic.create_items(new_labels)
-        schematic.save()
+            try:
+                schematic.create_items(new_labels)
+            except AttributeError as exc:
+                # Some KiCad development builds have returned a CreateItem
+                # result with no packed Any payload even though the object
+                # was applied to the document. Verify document state before
+                # deciding whether this was a harmless response issue.
+                if "type_url" not in str(exc):
+                    raise
+                actual_labels = [
+                    (
+                        str(getattr(item.text, "value", "")),
+                        _point_key(item.position),
+                    )
+                    for item in schematic.get_labels()
+                ]
+                missing_labels = [
+                    (str(label.text.value), _point_key(label.position))
+                    for label in new_labels
+                    if (
+                        str(label.text.value),
+                        _point_key(label.position),
+                    ) not in actual_labels
+                ]
+                if missing_labels:
+                    raise RuntimeError(
+                        "KiCad did not persist the nested block pin labels: "
+                        + ", ".join(name for name, _ in missing_labels)
+                    ) from exc
+            schematic.save()
         if schematic.get_sheet_symbols():
             raise AssertionError(
                 f"Composition of {parent.name!r} created a hierarchical sheet symbol."
