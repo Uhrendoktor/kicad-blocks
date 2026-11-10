@@ -114,13 +114,19 @@ def main() -> None:
                         # Accept its default choices to let the requested
                         # implementation schematic finish opening.
                         subprocess.run(
-                            [xdotool, "windowactivate", "--sync", setup[0]],
+                            [xdotool, "windowfocus", "--sync", setup[0]],
                             check=False,
                             capture_output=True,
                             text=True,
                         )
                         subprocess.run(
-                            [xdotool, "key", "--window", setup[0], "Return"],
+                            [xdotool, "key", "--clearmodifiers", "Tab"],
+                            check=False,
+                            capture_output=True,
+                            text=True,
+                        )
+                        subprocess.run(
+                            [xdotool, "key", "--clearmodifiers", "Return"],
                             check=False,
                             capture_output=True,
                             text=True,
@@ -196,13 +202,13 @@ def main() -> None:
                     )
 
                 subprocess.run(
-                    [xdotool, "windowactivate", "--sync", window_id],
+                    [xdotool, "windowfocus", "--sync", window_id],
                     check=True,
                     capture_output=True,
                     text=True,
                 )
                 subprocess.run(
-                    [xdotool, "key", "--window", window_id, "ctrl+s"],
+                    [xdotool, "key", "--clearmodifiers", "ctrl+s"],
                     check=True,
                     capture_output=True,
                     text=True,
