@@ -23,10 +23,10 @@ The internal schematic is editable: open the `implementation.kicad_sch` file fro
 
 ## Requirements
 
-- An IPC-capable KiCad nightly/development build with the Schematic Editor IPC API enabled (Preferences → Plugins). CI currently verifies KiCad nightly **10.99.0** on Linux.
+- KiCad **10.99 development nightly** (the pre-release development build for KiCad 11) or KiCad 11.0+. Enable the Schematic Editor IPC API in Preferences → Plugins. Stable KiCad 10.0.8 and all 10.0.x releases are unsupported: KiCad 9/10 IPC add-ons are limited to PCB Editor; the Schematic Editor add-on scope is introduced in KiCad 11. CI verifies nightly **10.99.0** on Linux.
 - Python runtime managed by KiCad for the plugin, with Tkinter available.
 - The official KiCad `kicad-python` development bindings. The self-hosted CI builds the current upstream `main` wheel, stores it as the `kicad-python-dev` GitHub Release asset, and the plugin's `requirements.txt` downloads that prebuilt wheel. KiCad's plugin manager installs requirements in binary-wheel-only mode, so the published binary is required; a Git/VCS source requirement will not install through that manager.
-- The currently published wheel targets CPython 3.12 on Linux x86_64, matching the verified KiCad nightly 10.99.0 runner. Stable-release, other Python ABI, Windows and macOS compatibility have not yet been verified.
+- The currently published `kicad-python` development wheel is tagged `cp312-cp312-linux_x86_64`. The supported install target is therefore Linux x86_64 with KiCad's CPython 3.12 plugin runtime. The installer explicitly rejects Windows, macOS, other CPU architectures, and KiCad 10 stable rather than leaving an installation whose required IPC API/wheel cannot load. KiCad 11 stable, other Python ABIs and other platforms need matching tested wheels before they can be advertised as supported.
 
 Schematic placement, selection and library reload APIs used here are part of KiCad's newer schematic IPC interface. This plugin does not support the old SWIG-only plugin interface.
 
@@ -36,12 +36,12 @@ Schematic placement, selection and library reload APIs used here are part of KiC
 2. From its root, run the installer with the KiCad version directory used on your machine:
 
    ```bash
-   python3 scripts/install_plugin.py --version 11.0
+   python3 scripts/install_plugin.py --version 10.99
    ```
 
-   The installer uses KiCad's per-version user plugin directory below the user-data root: `<user-data-root>/kicad/<version>/plugins/org.uhrendoktor.kicadblocks`. Default roots are `~/.local/share/KiCad` on Linux, `~/Documents/KiCad` on macOS, and `%USERPROFILE%\\Documents\\KiCad` on Windows. Use `--documents-home PATH` to override the root. For a nightly build reporting version `10.99`, use `--version 10.99`.
+   The installer uses KiCad's per-version user plugin directory below the Linux user-data root: `<user-data-root>/kicad/<version>/plugins/org.uhrendoktor.kicadblocks`. The supported nightly build reports version `10.99`, so use `--version 10.99`. The installer also accepts KiCad 11.0+ directories for future builds, but an appropriate matching wheel must be published before those targets are considered verified. Use `--documents-home PATH` to override the root.
 
-3. In KiCad, open Preferences → Plugins and enable **Enable KiCad API**. On Linux, verify that the selected Python interpreter is Python 3.10 or newer. Restart KiCad.
+3. In KiCad, open Preferences → Plugins and enable **Enable KiCad API**. On the currently supported Linux build, verify that KiCad's selected Python interpreter is CPython 3.12. Restart KiCad.
 4. The plugin uses the reverse-DNS KiCad IPC identifier `org.uhrendoktor.kicadblocks`. The first time KiCad discovers the plugin, it creates an isolated environment and installs the package dependencies declared in `plugin/kicad-blocks/requirements.txt`. The **KiCad Blocks Manager** action appears after environment setup completes. This may take a little while on the first launch. Do not manually pip-install the same requirements into the KiCad environment.
 5. Use the action with one of `create`, `place`, `local`, `sync`, `edit`, `publish`, `bom`, `erc`, `pcb`, or `nest`. The `sync` action on a selected local copy performs bidirectional three-way synchronization.
 

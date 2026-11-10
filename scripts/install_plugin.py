@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import platform
 from pathlib import Path
 import re
 import shutil
@@ -17,6 +18,53 @@ import uuid
 PLUGIN_IDENTIFIER = "org.uhrendoktor.kicadblocks"
 PLUGIN_DIRECTORY_NAME = "kicad-blocks"
 DEFAULT_SOURCE = Path(__file__).resolve().parents[1] / "plugin" / PLUGIN_DIRECTORY_NAME
+
+SUPPORTED_NIGHTLY_DIRECTORY = (10, 99)
+FIRST_STABLE_SCHEMATIC_IPC_MAJOR = 11
+
+
+def validate_install_target(
+    version: str,
+    *,
+    platform_name: str | None = None,
+    machine: str | None = None,
+) -> None:
+    """Reject KiCad/platform targets that cannot load this plugin and its wheel.
+
+    KiCad 9 and 10 expose IPC add-ons only in PCB Editor. Schematic Editor
+    plugins are introduced in KiCad 11; the 10.99 development nightly is the
+    current pre-release target. The published kicad-python wheel is currently
+    CPython 3.12 / Linux x86_64 only.
+    """
+    if not re.fullmatch(r"\d+\.\d+", version):
+        raise ValueError("KiCad version must use MAJOR.MINOR format, for example 10.99.")
+    major, minor = (int(part) for part in version.split("."))
+    if not (
+        (major, minor) == SUPPORTED_NIGHTLY_DIRECTORY
+        or major >= FIRST_STABLE_SCHEMATIC_IPC_MAJOR
+    ):
+        raise ValueError(
+            "KiCad Blocks requires the KiCad 11 Schematic Editor IPC API. "
+            "KiCad 9/10 (including stable 10.0.x) only support IPC add-ons in "
+            "PCB Editor. Use the 10.99 development nightly directory, or a "
+            "KiCad 11.0+ build."
+        )
+
+    selected_platform = platform_name or sys.platform
+    selected_machine = (machine or platform.machine()).casefold()
+    normalized_machine = {
+        "amd64": "x86_64",
+        "x64": "x86_64",
+    }.get(selected_machine, selected_machine)
+    if selected_platform != "linux" or normalized_machine != "x86_64":
+        raise ValueError(
+            "The currently published KiCad Python IPC wheel supports Linux "
+            "x86_64 with CPython 3.12 only. This installer cannot install a "
+            f"working plugin on {selected_platform}/{normalized_machine}. "
+            "Use the supported Linux x86_64 target or provide a matching "
+            "kicad-python development wheel for this platform."
+        )
+
 
 
 def default_documents_home() -> Path:
@@ -84,8 +132,7 @@ def install_plugin(
     dry_run: bool = False,
 ) -> Path:
     """Atomically replace the installed plugin package for one KiCad version."""
-    if not re.fullmatch(r"\d+\.\d+", version):
-        raise ValueError("KiCad version must use MAJOR.MINOR format, for example 11.0.")
+    validate_install_target(version)
     source = Path(source).expanduser().resolve()
     documents_home = Path(documents_home).expanduser().resolve()
     manifest = validate_plugin_package(source)

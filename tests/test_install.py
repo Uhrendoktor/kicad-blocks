@@ -110,6 +110,43 @@ class PluginInstallerTests(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("reverse-DNS", result.stderr)
 
+    def test_installer_rejects_kicad_10_stable_because_it_has_no_schematic_ipc_addons(self):
+        from importlib.util import module_from_spec, spec_from_file_location
+
+        spec = spec_from_file_location("kicad_blocks_installer", INSTALLER)
+        installer = module_from_spec(spec)
+        assert spec and spec.loader
+        spec.loader.exec_module(installer)
+        with self.assertRaisesRegex(ValueError, "PCB Editor"):
+            installer.validate_install_target("10.0", platform_name="linux", machine="x86_64")
+        with self.assertRaisesRegex(ValueError, "PCB Editor"):
+            installer.validate_install_target("10.8", platform_name="linux", machine="x86_64")
+
+    def test_installer_allows_kiCad_10_99_nightly_and_11_or_newer(self):
+        from importlib.util import module_from_spec, spec_from_file_location
+
+        spec = spec_from_file_location("kicad_blocks_installer", INSTALLER)
+        installer = module_from_spec(spec)
+        assert spec and spec.loader
+        spec.loader.exec_module(installer)
+        for version in ("10.99", "11.0", "11.1", "12.0"):
+            with self.subTest(version=version):
+                installer.validate_install_target(version, platform_name="linux", machine="x86_64")
+
+    def test_installer_rejects_unsupported_platform_and_architecture(self):
+        from importlib.util import module_from_spec, spec_from_file_location
+
+        spec = spec_from_file_location("kicad_blocks_installer", INSTALLER)
+        installer = module_from_spec(spec)
+        assert spec and spec.loader
+        spec.loader.exec_module(installer)
+        with self.assertRaisesRegex(ValueError, "Linux x86_64"):
+            installer.validate_install_target("10.99", platform_name="win32", machine="AMD64")
+        with self.assertRaisesRegex(ValueError, "Linux x86_64"):
+            installer.validate_install_target("10.99", platform_name="linux", machine="aarch64")
+        with self.assertRaisesRegex(ValueError, "Linux x86_64"):
+            installer.validate_install_target("11.0", platform_name="darwin", machine="arm64")
+
     def test_installer_rejects_invalid_kicad_version_format(self):
         with tempfile.TemporaryDirectory(prefix="kicad-blocks-install-version-") as temp:
             result = subprocess.run(
