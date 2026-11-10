@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import shutil
@@ -124,6 +125,7 @@ def main() -> None:
                         "classes": [
                             {"name": "Default", "priority": 2147483647, "clearance": 0.2},
                             {"name": "LowNoise", "priority": 0, "clearance": 0.3, "track_width": 0.3},
+                            {"name": "HighSpeed", "priority": 1, "clearance": 0.25, "track_width": 0.25},
                         ],
                         "netclass_assignments": {"VIN_BOARD": ["LowNoise"]},
                         "netclass_patterns": [],
@@ -341,8 +343,8 @@ def main() -> None:
             kicad.close()
 
         print(
-            "PCB block merge passed: copied board, namespaced footprint and internal net, "
-            "mapped external nets, translated routed segment, KiCad CLI export and IPC reload."
+            "PCB block merge passed: copied board and project settings, namespaced netclass, "
+            "mapped external nets, rotated/routed geometry, KiCad CLI export and IPC reload."
         )
 
 
