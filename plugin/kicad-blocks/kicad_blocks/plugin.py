@@ -147,26 +147,37 @@ def _set_symbol_identifier(instance, library_nickname: str, symbol_name: str) ->
     identifier.name = symbol_name
 
 
-def _commit_symbol_update(schematic, instance, description: str) -> None:
-    """Persist a mutation to one existing symbol without replacing its UUID."""
+def _switch_instance_to_local(instance, schematic, local):
+    """Retarget a placed symbol by replacing it with a copied instance proto.
+
+    The current KiCad nightly's Schematic UpdateItems response is not decoded
+    correctly by the matching development kipy wheel for symbols. Create and
+    remove operations use the supported Any response path. Copying the full
+    instance proto preserves its KIID, placement, transform, unit, fields,
+    variants, and embedded pin geometry; only the library identifier changes.
+    """
+    from kipy.schematic_types import SchematicSymbolInstance
+
+    proto = type(instance.proto)()
+    proto.CopyFrom(instance.proto)
+    proto.definition.id.library = local.manifest["library_nickname"]
+    proto.definition.id.name = local.manifest["symbol_name"]
+    replacement = SchematicSymbolInstance(proto=proto)
+
     commit = schematic.begin_commit()
     try:
-        schematic.update_items([instance])
-        schematic.push_commit(commit, description)
+        schematic.remove_items([instance])
+        created = schematic.create_items([replacement])
+        if len(created) != 1:
+            raise RuntimeError(
+                f"KiCad created {len(created)} replacement symbol instances; expected one."
+            )
+        schematic.push_commit(commit, "Make block instance a local copy")
     except Exception:
         schematic.drop_commit(commit)
         raise
     schematic.save()
-
-
-def _switch_instance_to_local(instance, schematic, local) -> None:
-    """Switch one placed symbol to a prepared local library definition."""
-    _set_symbol_identifier(
-        instance,
-        local.manifest["library_nickname"],
-        local.manifest["symbol_name"],
-    )
-    _commit_symbol_update(schematic, instance, "Make block instance a local copy")
+    return created[0]
 
 
 def make_selected_local(schematic, kicad, project_dir: Path, library_root: Path) -> Path:

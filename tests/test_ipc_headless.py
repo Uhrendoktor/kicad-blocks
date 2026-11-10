@@ -113,15 +113,18 @@ def main() -> None:
             ):
                 raise AssertionError("Placed facade has the wrong KiCad library identifier.")
 
-            _switch_instance_to_local(instance, schematic, local)
+            original_instance_id = str(instance.id)
+            local_instance = _switch_instance_to_local(instance, schematic, local)
             if (
-                instance.definition.id.library != local_nickname
-                or instance.definition.id.name != local_symbol_name
+                local_instance.definition.id.library != local_nickname
+                or local_instance.definition.id.name != local_symbol_name
             ):
                 raise AssertionError("The symbol did not switch to its local-copy library ID.")
             symbols_after_local = list(schematic.get_symbols())
             if len(symbols_after_local) != 1 or symbols_after_local[0].reference != "X1":
                 raise AssertionError("Local-copy conversion replaced or duplicated the symbol instance.")
+            if str(symbols_after_local[0].id) != original_instance_id:
+                raise AssertionError("Local-copy conversion did not preserve the placed symbol KIID.")
 
             # Test the plugin's actual dynamic registration path: this library
             # did not exist in sym-lib-table when KiCad was started.
