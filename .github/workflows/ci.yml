@@ -5,28 +5,55 @@ on:
     branches: [main]
   pull_request:
 
-# Use the registered local runner. This avoids billable GitHub-hosted runners.
-# The machine must have KiCad CLI installed and available on PATH.
+# The runner is owned by the repository maintainer. Do not execute fork PR code
+# on it: only pull requests whose head branch is in this repository are eligible.
 jobs:
   python-and-kicad:
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
     runs-on: [self-hosted, linux, x64]
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
 
-      - name: Inspect local runner and required tools
+      - name: Install KiCad development CLI if missing
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Prefer the development build because the plugin targets the newer
+          # KiCad schematic IPC API. It is installed inside the self-hosted
+          # runner container, not on a GitHub-hosted VM.
+          CLI="$(command -v kicad-cli-nightly || command -v kicad-cli || true)"
+          if [[ -z "$CLI" ]]; then
+            if [[ "$(id -u)" -eq 0 ]]; then
+              SUDO=()
+            elif command -v sudo >/dev/null 2>&1 && sudo -n true; then
+              SUDO=(sudo)
+            else
+              echo "::error::KiCad CLI is missing and this self-hosted runner has no non-interactive package-install privilege. Install kicad-nightly on the runner image or grant the runner container package-install access."
+              exit 1
+            fi
+            "${SUDO[@]}" apt-get update
+            "${SUDO[@]}" apt-get install -y --no-install-recommends software-properties-common
+            "${SUDO[@]}" add-apt-repository --yes ppa:kicad/kicad-dev-nightly
+            "${SUDO[@]}" apt-get update
+            "${SUDO[@]}" apt-get install -y --no-install-recommends kicad-nightly
+            CLI="$(command -v kicad-cli-nightly || command -v kicad-cli || true)"
+          fi
+          if [[ -z "$CLI" ]]; then
+            echo "::error::KiCad CLI package installed but no kicad-cli executable was found."
+            exit 1
+          fi
+          echo "KICAD_CLI=$CLI" >> "$GITHUB_ENV"
+          "$CLI" version
+
+      - name: Inspect local runner
         shell: bash
         run: |
           set -euo pipefail
           echo "Runner: ${RUNNER_NAME:-unknown}"
           echo "OS: $(uname -a)"
-          echo "Python: $(command -v python3)"
           python3 --version
-          if ! command -v kicad-cli >/dev/null 2>&1; then
-            echo "::error::kicad-cli is not installed or is not on PATH on the self-hosted runner."
-            exit 1
-          fi
-          kicad-cli version
+          echo "KiCad CLI: $KICAD_CLI"
 
       - name: Create isolated Python environment
         shell: bash
