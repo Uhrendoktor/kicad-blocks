@@ -274,8 +274,10 @@ def main() -> None:
             raise AssertionError("Merged project metadata filename was not updated.")
         if result["merged_netclasses"] != ["X1_HighSpeed"]:
             raise AssertionError(f"Unexpected netclass merge summary: {result!r}")
-        if not result["ignored_project_patterns"]:
-            raise AssertionError("Broad project netclass patterns should be reported as skipped.")
+        if result["unmatched_project_patterns"]:
+            raise AssertionError(
+                f"All fixture patterns should match stored block nets: {result['unmatched_project_patterns']!r}"
+            )
         if (
             result["footprints"] != ["X1_R1"]
             or result["new_nets"] != ["VIN_BOARD", "GND_BOARD", "X1_SW"]
