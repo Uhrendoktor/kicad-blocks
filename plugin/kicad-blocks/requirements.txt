@@ -1,1 +1,1 @@
-git+https://gitlab.com/kicad/code/kicad-python.git@master
+git+https://gitlab.com/kicad/code/kicad-python.git@main
