@@ -345,11 +345,11 @@ def main() -> None:
                     str(env_python),
                     "-c",
                     (
-                        "import importlib.metadata, pathlib, sys, kipy\\n"
-                        "from kipy import KiCad\\n"
-                        "package_path = pathlib.Path(kipy.__file__).resolve()\\n"
-                        "environment = pathlib.Path(sys.prefix).resolve()\\n"
-                        "assert environment in package_path.parents, (package_path, environment)\\n"
+                        "import importlib.metadata, pathlib, sys, kipy; "
+                        "from kipy import KiCad; "
+                        "package_path = pathlib.Path(kipy.__file__).resolve(); "
+                        "environment = pathlib.Path(sys.prefix).resolve(); "
+                        "assert environment in package_path.parents, (package_path, environment); "
                         "print('kicad-python plugin environment ready', "
                         "importlib.metadata.version('kicad-python'), package_path)"
                     ),
