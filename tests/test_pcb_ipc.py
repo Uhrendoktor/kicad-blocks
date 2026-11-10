@@ -5,7 +5,6 @@ from __future__ import annotations
 import os
 import shutil
 import tempfile
-import xml.etree.ElementTree as ET
 from pathlib import Path
 
 from kipy import KiCad
@@ -75,62 +74,49 @@ def main() -> None:
             if target_pad is None:
                 raise AssertionError("The test footprint has no pad number 1.")
 
-            # Net is board-level state, not a regular BoardItem. Use KiCad's
-            # native netlist-import operation to add a named internal net and
-            # attach the already-placed footprint pad to it.
-            # KiCad selects its NETLIST_READER by the .net file extension.
-            # The contents are the full intermediate XML format (components,
-            # libparts, libraries and nets) exported by Eeschema.
+            # KiCad PCB import expects the KiCad S-expression netlist format,
+            # not the XML intermediate netlist. The importer chooses its parser
+            # from the first line: (export (version ...)).
             netlist_path = Path(temp) / "block-internal.net"
             netlist_path.write_text(
-                """<?xml version="1.0" encoding="utf-8"?>
-<export version="D">
-  <design>
-    <source>kicad-blocks PCB IPC fixture</source>
-    <date>2026-11-10</date>
-    <tool>kicad-blocks</tool>
-  </design>
-  <components>
-    <comp ref="R1">
-      <value>10k</value>
-      <libsource lib="Test" part="BlockResistor"/>
-      <sheetpath names="/" tstamps="/"/>
-      <tstamp>00000000-0000-0000-0000-000000000001</tstamp>
-      <footprint>Test:BlockResistor</footprint>
-    </comp>
-  </components>
-  <libparts>
-    <libpart lib="Test" part="BlockResistor">
-      <description>Embedded PCB IPC fixture resistor</description>
-      <footprints><fp>Test:BlockResistor</fp></footprints>
-      <fields>
-        <field name="Reference">R</field>
-        <field name="Value">10k</field>
-      </fields>
-      <pins>
-        <pin num="1" name="1" type="passive"/>
-        <pin num="2" name="2" type="passive"/>
-      </pins>
-    </libpart>
-  </libparts>
-  <libraries>
-    <library logical="Test"><uri>embedded://Test</uri></library>
-  </libraries>
-  <nets>
-    <net code="1" name="BLOCK_INTERNAL">
-      <node ref="R1" pin="1"/>
-    </net>
-  </nets>
-</export>
+                """(export (version "E")
+  (design
+    (source "kicad-blocks PCB IPC fixture")
+    (date "2026-11-10")
+    (tool "kicad-blocks"))
+  (components
+    (comp (ref "R1")
+      (value "10k")
+      (footprint "Test:BlockResistor")
+      (libsource (lib "Test") (part "BlockResistor") (description ""))
+      (property (name "Sheetname") (value ""))
+      (property (name "Sheetfile") (value "pcb-ipc-fixture.kicad_sch"))
+      (sheetpath (names "/") (tstamps "/"))
+      (tstamps "00000000-0000-0000-0000-000000000001")))
+  (libparts
+    (libpart (lib "Test") (part "BlockResistor")
+      (footprints (fp "Test:BlockResistor"))
+      (fields
+        (field (name "Reference") "R")
+        (field (name "Value") "10k"))
+      (pins
+        (pin (num "1") (name "1") (type "passive"))
+        (pin (num "2") (name "2") (type "passive")))))
+  (libraries
+    (library (logical "Test") (uri "embedded://Test")))
+  (nets
+    (net (code "1") (name "BLOCK_INTERNAL")
+      (node (ref "R1") (pin "1") (pintype "passive")))))
 """,
                 encoding="utf-8",
             )
             if not netlist_path.is_file() or netlist_path.stat().st_size == 0:
                 raise AssertionError("The test netlist was not written to disk.")
-            parsed_netlist = ET.parse(netlist_path).getroot()
-            for section in ("components", "libparts", "libraries", "nets"):
-                if parsed_netlist.find(section) is None:
-                    raise AssertionError(f"KiCad netlist XML is missing <{section}>.")
+            netlist_text = netlist_path.read_text(encoding="utf-8")
+            if not netlist_text.lstrip().startswith('(export (version "E")'):
+                raise AssertionError("The file is not in KiCad PCB-import netlist format.")
+            if "BLOCK_INTERNAL" not in netlist_text or '(ref "R1")' not in netlist_text:
+                raise AssertionError("The PCB-import netlist fixture is missing the expected net/component.")
 
             result = board.import_netlist(
                 str(netlist_path.resolve()),
