@@ -158,7 +158,7 @@ def main() -> None:
         svg_dir = root / "svg"
         svg_dir.mkdir()
         export_result = subprocess.run(
-            [cli, "pcb", "export", "svg", "--layers", "F.Cu,B.Cu", "--output", str(svg_dir), str(output)],
+            [cli, "pcb", "export", "svg", "--mode-multi", "--layers", "F.Cu,B.Cu", "--output", str(svg_dir), str(output)],
             capture_output=True,
             text=True,
             check=False,
