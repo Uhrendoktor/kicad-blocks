@@ -95,19 +95,37 @@ def main() -> None:
             1,
         )
         source_text = source_text.replace(
-            '(pad "1" smd rect (at -0.75 0 0) (size 0.8 1.2) (layers "F.Cu" "F.Paste" "F.Mask") (net 0 ""))',
-            '(pad "1" smd rect (at -0.75 0 0) (size 0.8 1.2) (layers "F.Cu" "F.Paste" "F.Mask") (net 1 "VIN"))',
+            '(uuid "00000000-0000-0000-0000-000000000011") (net 0 "")',
+            '(uuid "00000000-0000-0000-0000-000000000011") (net 1 "VIN")',
+            1,
         )
         source_text = source_text.replace(
-            '(pad "2" smd rect (at 0.75 0 0) (size 0.8 1.2) (layers "F.Cu" "F.Paste" "F.Mask") (net 0 ""))',
-            '(pad "2" smd rect (at 0.75 0 0) (size 0.8 1.2) (layers "F.Cu" "F.Paste" "F.Mask") (net 2 "GND"))',
+            '(uuid "00000000-0000-0000-0000-000000000012") (net 0 "")',
+            '(uuid "00000000-0000-0000-0000-000000000012") (net 2 "GND")',
+            1,
         )
         source_text = source_text.rsplit(")", 1)[0] + (
             '  (segment (start 100 100) (end 105 100) (width 0.25) '
             '(layer "F.Cu") (net 3) (uuid "00000000-0000-0000-0000-000000000002"))\n)\n'
         )
+        if '(uuid "00000000-0000-0000-0000-000000000011") (net 1 "VIN")' not in source_text:
+            raise AssertionError("Test fixture did not assign VIN to source pad 1.")
+        if '(uuid "00000000-0000-0000-0000-000000000012") (net 2 "GND")' not in source_text:
+            raise AssertionError("Test fixture did not assign GND to source pad 2.")
         source.write_text(source_text, encoding="utf-8")
         (block_dir / "layout.kicad_pcb").write_text(source_text, encoding="utf-8")
+
+        source_svg_dir = root / "source-layout-svg"
+        source_svg_dir.mkdir()
+        subprocess.run(
+            [
+                cli, "pcb", "export", "svg", "--mode-multi", "--layers", "F.Cu,B.Cu",
+                "--output", str(source_svg_dir), str(source),
+            ],
+            check=True,
+        )
+        if not list(source_svg_dir.glob("*.svg")):
+            raise AssertionError("KiCad did not accept/export the stored block layout.")
 
         block = SimpleNamespace(
             path=block_dir,
@@ -135,6 +153,7 @@ def main() -> None:
         # Parse result independently and assert net codes, reference and translated geometry.
         parsed = parse_sexpr(output.read_text(encoding="utf-8"))
         nets = {int(str(item[1])): str(item[2]) for item in parsed[1:] if isinstance(item, list) and item and item[0] == "net"}
+        internal_net_code = next(code for code, name in nets.items() if name == "X1_SW")
         merged_segment = next(
             item for item in parsed[1:]
             if isinstance(item, list) and item and item[0] == "segment"
@@ -143,8 +162,8 @@ def main() -> None:
             item for item in merged_segment[1:]
             if isinstance(item, list) and item and item[0] == "net"
         )
-        if len(segment_net) != 2:
-            raise AssertionError(f"KiCad track net must contain only its code: {segment_net!r}")
+        if len(segment_net) != 2 or int(str(segment_net[1])) != internal_net_code:
+            raise AssertionError(f"KiCad track net must contain only its mapped code: {segment_net!r}")
         if "X1_SW" not in nets.values() or "VIN_BOARD" not in nets.values():
             raise AssertionError(f"Project board nets were not merged: {nets!r}")
         imported_footprints = []
@@ -156,10 +175,26 @@ def main() -> None:
                 ref_prop = next((x for x in item[1:] if isinstance(x, list) and x and x[0] == "property" and str(x[1]).casefold() == "reference"), None)
                 if ref_prop and str(ref_prop[2]) == "X1_R1":
                     imported_footprints.append(item)
-            if item[0] == "segment" and any(isinstance(x, list) and x and x[0] == "net" and str(x[2]) == "X1_SW" for x in item[1:]):
+            if item[0] == "segment" and any(
+                isinstance(x, list) and x and x[0] == "net"
+                and len(x) == 2 and int(str(x[1])) == internal_net_code
+                for x in item[1:]
+            ):
                 imported_segments.append(item)
         if len(imported_footprints) != 1 or len(imported_segments) != 1:
             raise AssertionError("Imported footprint or routed segment was not found.")
+        copied_pad_nets = {}
+        for pad in imported_footprints[0][1:]:
+            if isinstance(pad, list) and pad and pad[0] == "pad":
+                net_node = next(
+                    (x for x in pad[1:] if isinstance(x, list) and x and x[0] == "net"),
+                    None,
+                )
+                if net_node is None or len(net_node) != 3:
+                    raise AssertionError(f"Imported pad does not have a named net: {pad!r}")
+                copied_pad_nets[str(pad[1])] = (int(str(net_node[1])), str(net_node[2]))
+        if copied_pad_nets != {"1": (1, "VIN_BOARD"), "2": (2, "GND_BOARD")}:
+            raise AssertionError(f"Imported pad nets were not mapped: {copied_pad_nets!r}")
         fp_at = next(x for x in imported_footprints[0][1:] if isinstance(x, list) and x and x[0] == "at")
         if (float(fp_at[1]), float(fp_at[2])) != (120.0, 130.0):
             raise AssertionError(f"Footprint was not translated: {fp_at!r}")

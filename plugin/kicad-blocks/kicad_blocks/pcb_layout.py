@@ -195,6 +195,65 @@ def _rewrite_nets(
         _rewrite_nets(child, mapping, include_net_name=include_net_name)
 
 
+def _translate_item(node: list, dx: float, dy: float) -> None:
+    """Translate board-absolute geometry, preserving footprint-local geometry."""
+    if _head(node) == "footprint":
+        at = _direct(node, "at")
+        if at is None:
+            raise ValueError("Stored PCB footprint has no placement coordinate.")
+        _xy(at, dx, dy)
+        for prop in _all(node, "property"):
+            prop_at = _direct(prop, "at")
+            if prop_at is not None:
+                _xy(prop_at, dx, dy)
+        return
+
+    absolute_tags = {"at", "start", "mid", "end", "center", "xy", "pts"}
+
+    def walk(item: Any) -> None:
+        if not isinstance(item, list):
+            return
+        tag = _head(item)
+        if tag in absolute_tags:
+            if tag == "pts":
+                for point in item[1:]:
+                    if _head(point) == "xy":
+                        _xy(point, dx, dy)
+            else:
+                _xy(item, dx, dy)
+            return
+        for child in item[1:]:
+            walk(child)
+
+    walk(node)
+
+
+def _rewrite_footprint(footprint: list, reference: str, dx: float, dy: float) -> None:
+    _translate_item(footprint, dx, dy)
+    for prop in _all(footprint, "property"):
+        if len(prop) >= 3 and str(prop[1]).casefold() == "reference":
+            prop[2] = _Quoted(reference)
+    for fp_text in _all(footprint, "fp_text"):
+        if len(fp_text) >= 3 and str(fp_text[1]).casefold() == "reference":
+            fp_text[2] = _Quoted(reference)
+    _refresh_ids(footprint)
+    path_node = _direct(footprint, "path")
+    if path_node is None:
+        footprint.append(["path", _Quoted("/" + str(uuid.uuid4()))])
+    else:
+        path_node[1:] = [_Quoted("/" + str(uuid.uuid4()))]
+
+
+def _unique_reference(base: str, existing: set[str]) -> str:
+    candidate = base
+    suffix = 2
+    while candidate.casefold() in existing:
+        candidate = f"{base}_{suffix}"
+        suffix += 1
+    existing.add(candidate.casefold())
+    return candidate
+
+
 def _atomic_write(path: Path, content: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, temp_name = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
