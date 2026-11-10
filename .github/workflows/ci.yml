@@ -1,5 +1,8 @@
 name: CI
 
+permissions:
+  contents: write
+
 on:
   push:
     branches: [main]
@@ -121,6 +124,15 @@ jobs:
           path: ${{ runner.temp }}/kicad-blocks-wheelhouse
           key: kicad-python-${{ runner.os }}-${{ runner.arch }}-py312-${{ steps.kipy.outputs.sha }}
 
+      - name: Publish KiCad Python IPC wheel for user installs
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          python3 scripts/publish_ipc_wheel.py "${RUNNER_TEMP}/kicad-blocks-wheelhouse"
+
       - name: Install KiCad Python IPC bindings
         shell: bash
         run: |
@@ -176,8 +188,6 @@ jobs:
 
       - name: Verify KiCad plugin discovery and managed environment
         shell: bash
-        env:
-          KICAD_BLOCKS_WHEELHOUSE: ${{ runner.temp }}/kicad-blocks-wheelhouse
         run: |
           xvfb-run -a -s "-screen 0 1280x800x24" \
             "${RUNNER_TEMP}/kicad-blocks-venv/bin/python" tests/test_plugin_registration.py

@@ -74,6 +74,16 @@ class PluginInstallerTests(unittest.TestCase):
             self.assertIn(str(user_data / "kicad" / "11.0" / "plugins" / PLUGIN_IDENTIFIER), result.stdout)
             self.assertFalse(user_data.exists())
 
+    def test_plugin_requirements_use_a_published_binary_wheel(self):
+        requirements = (SOURCE / "requirements.txt").read_text(encoding="utf-8")
+        self.assertIn(
+            "https://github.com/Uhrendoktor/kicad-blocks/releases/download/"
+            "kicad-python-dev/kicad_python-0.9.0.dev0-cp312-cp312-linux_x86_64.whl",
+            requirements,
+        )
+        self.assertNotIn("git+", requirements)
+        self.assertNotIn("@main", requirements)
+
     def test_installer_rejects_non_reverse_dns_plugin_identifier(self):
         with tempfile.TemporaryDirectory(prefix="kicad-blocks-invalid-id-") as temp:
             source = pathlib.Path(temp) / "plugin"

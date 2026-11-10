@@ -191,13 +191,6 @@ def main() -> None:
         raise RuntimeError(f"Could not determine KiCad MAJOR.MINOR version: {version_output!r}")
     version = version_match.group(1)
 
-    wheelhouse_value = os.environ.get("KICAD_BLOCKS_WHEELHOUSE")
-    if not wheelhouse_value:
-        raise RuntimeError("KICAD_BLOCKS_WHEELHOUSE must point to the CI wheelhouse.")
-    wheelhouse = Path(wheelhouse_value).expanduser().resolve()
-    if not list(wheelhouse.glob("kicad_python-*.whl")):
-        raise FileNotFoundError(f"The KiCad Python development wheel is missing in {wheelhouse}.")
-
     python_interpreter = shutil.which("python3")
     if not python_interpreter:
         raise FileNotFoundError("System python3 was not found for the KiCad plugin manager.")
@@ -289,13 +282,16 @@ def main() -> None:
             raise AssertionError(
                 f"Installed action is not enabled for the Schematic Editor: {action!r}"
             )
-        (installed_plugin / "requirements.txt").write_text(
-            "--no-index\n"
-            f"--find-links {wheelhouse}\n"
-            "kicad-python==0.9.0.dev0\n",
-            encoding="utf-8",
+        installed_requirements = (installed_plugin / "requirements.txt").read_text(encoding="utf-8")
+        expected_wheel_url = (
+            "https://github.com/Uhrendoktor/kicad-blocks/releases/download/"
+            "kicad-python-dev/kicad_python-0.9.0.dev0-cp312-cp312-linux_x86_64.whl"
         )
-
+        if expected_wheel_url not in installed_requirements or "git+" in installed_requirements:
+            raise AssertionError(
+                "Installed plugin requirements must use the published prebuilt wheel, "
+                "not a source checkout."
+            )
         plugin_json = plugin_manifest_path.resolve()
         log_path = root / "eeschema-plugin-discovery.log"
         process, window_id = _launch(eeschema, schematic, env, xdotool, log_path)
