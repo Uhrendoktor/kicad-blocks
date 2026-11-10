@@ -18,7 +18,12 @@ sys.path.insert(0, str(PLUGIN))
 
 from kicad_blocks import plugin as plugin_actions
 from kicad_blocks.model import parse_pins
-from kicad_blocks.repository import create_block
+from kicad_blocks.repository import (
+    create_block,
+    link_instance_to_local_copy,
+    make_local_copy,
+    read_manifest,
+)
 
 
 def _find_executable(*names: str) -> str:
@@ -53,6 +58,16 @@ def main() -> None:
         )
         implementation = block.implementation
         before = implementation.read_bytes()
+        project_dir = root / "project"
+        project_dir.mkdir()
+
+        # Bind a separate, already-existing local instance before editing the
+        # shared block. The later Publish -> Sync test must update this copy,
+        # not create a new one after the library edit.
+        local_instance_id = "00000000-0000-0000-0000-000000000def"
+        local_copy = make_local_copy(block, project_dir)
+        link_instance_to_local_copy(project_dir, local_instance_id, local_copy)
+        local_before = local_copy.implementation.read_bytes()
 
         log_path = root / "eeschema.log"
         selected_instance = SimpleNamespace(
@@ -372,14 +387,84 @@ def main() -> None:
                         process.wait(timeout=5.0)
 
         if implementation.read_bytes() == before:
-            # A save with no content changes is valid. The important observable
-            # is that Eeschema loaded the exact block implementation and stayed
-            # alive until the test closed its window.
-            print("Eeschema GUI opened and saved the block implementation (no-op save).")
-        else:
-            print("Eeschema GUI opened and rewrote the block implementation successfully.")
+            raise AssertionError("The Eeschema GUI session did not persist a content edit.")
+        edited_source = implementation.read_text(encoding="utf-8")
+        if edit_label not in edited_source:
+            raise AssertionError("The GUI-edited label was lost before Publish.")
 
-        # Re-parse the file after the GUI save to ensure it remains a valid KiCad
+        # Invoke the same Publish helper used by the plugin's manager action.
+        # The existing local instance deliberately remains on its old baseline
+        # until the following Sync action.
+        reload_calls = []
+
+        def reload_library(*, type, scope, nicknames):
+            reload_calls.append((type, scope, tuple(nicknames)))
+
+        def wait_for_libraries(*, types, scope=None, timeout_s=None):
+            return None
+
+        kicad_runtime = SimpleNamespace(
+            get_kicad_binary_path=lambda name: eeschema,
+            reload_library=reload_library,
+            wait_for_libraries=wait_for_libraries,
+        )
+        publish_messagebox = SimpleNamespace(showinfo=lambda *args, **kwargs: None)
+        version_before_publish = read_manifest(block.path)["version"]
+        with (
+            patch.object(plugin_actions, "_pick_record", return_value=block),
+            patch.object(plugin_actions, "messagebox", publish_messagebox),
+        ):
+            plugin_actions._publish_block(
+                library,
+                kicad_runtime,
+                project_dir,
+                parent_window,
+            )
+        published_manifest = read_manifest(block.path)
+        if published_manifest["version"] <= version_before_publish:
+            raise AssertionError("Plugin Publish did not advance the library block revision.")
+        if "implementation.kicad_sch" not in published_manifest["hashes"]:
+            raise AssertionError("Published library manifest does not hash the edited implementation.")
+        if edit_label not in block.implementation.read_text(encoding="utf-8"):
+            raise AssertionError("Plugin Publish lost the Eeschema GUI edit.")
+        if local_copy.implementation.read_bytes() != local_before:
+            raise AssertionError("Publishing the library unexpectedly modified the existing local copy.")
+        if not reload_calls:
+            raise AssertionError("Plugin Publish did not refresh the stable KiCad symbol catalog.")
+
+        # Invoke the same selected-instance Sync helper used by the plugin.
+        # This KIID was bound to the project-local copy before the GUI edit.
+        local_instance = SimpleNamespace(
+            id=local_instance_id,
+            definition=SimpleNamespace(
+                id=SimpleNamespace(
+                    library=block.manifest["library_nickname"],
+                    name=block.manifest["symbol_name"],
+                )
+            ),
+        )
+        local_schematic = SimpleNamespace(get_selection=lambda: [local_instance])
+        sync_messagebox = SimpleNamespace(showinfo=lambda *args, **kwargs: None)
+        with patch.object(plugin_actions, "messagebox", sync_messagebox):
+            sync_result = plugin_actions.sync_selected_local(
+                local_schematic,
+                kicad_runtime,
+                project_dir,
+            )
+        if "implementation.kicad_sch" not in sync_result["pulled"]:
+            raise AssertionError(
+                f"Plugin Sync did not pull the published GUI edit: {sync_result!r}"
+            )
+        if edit_label not in local_copy.implementation.read_text(encoding="utf-8"):
+            raise AssertionError("The pre-existing local copy did not receive the published GUI edit.")
+        if read_manifest(local_copy.path)["source_revision"] != published_manifest["revision"]:
+            raise AssertionError("The local sync baseline was not advanced to the published revision.")
+        print(
+            "Eeschema GUI edit -> plugin Publish -> existing KIID-bound local copy Sync passed."
+        )
+
+        # Re-parse the shared and synchronized local implementation after their
+        # GUI edit and synchronization to ensure both remain valid KiCad files.
         # schematic document.
         cli = os.environ.get("KICAD_CLI") or _find_executable(
             "kicad-cli-nightly", "kicad-cli"
@@ -402,7 +487,25 @@ def main() -> None:
         )
         if not list(output_dir.glob("*.svg")):
             raise AssertionError("KiCad CLI could not export the implementation after GUI save.")
-        print("KiCad CLI re-parsed the implementation after the real Eeschema GUI session.")
+        local_output = root / "local-svg"
+        local_output.mkdir()
+        subprocess.run(
+            [
+                cli,
+                "sch",
+                "export",
+                "svg",
+                "--output",
+                str(local_output),
+                str(local_copy.implementation),
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        if not list(local_output.glob("*.svg")):
+            raise AssertionError("KiCad CLI could not export the synchronized local implementation.")
+        print("KiCad CLI re-parsed both published and synchronized implementations.")
 
 
 if __name__ == "__main__":
