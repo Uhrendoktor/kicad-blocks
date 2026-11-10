@@ -79,7 +79,7 @@ def install_plugin(
     source = Path(source).expanduser().resolve()
     documents_home = Path(documents_home).expanduser().resolve()
     manifest = validate_plugin_package(source)
-    destination = documents_home / version / "plugins" / manifest["identifier"]
+    destination = documents_home / "kicad" / version / "plugins" / manifest["identifier"]
 
     if dry_run:
         return destination

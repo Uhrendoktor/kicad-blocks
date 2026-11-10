@@ -38,7 +38,7 @@ Schematic placement, selection and library reload APIs used here are part of KiC
    python3 scripts/install_plugin.py --version 11.0
    ```
 
-   The default user-data roots are `~/.local/share/KiCad` on Linux, `~/Documents/KiCad` on macOS, and `%USERPROFILE%\\Documents\\KiCad` on Windows. Use `--documents-home PATH` to override the root. For a nightly build reporting version `10.99`, use `--version 10.99`.
+   The installer uses KiCad's per-version user plugin directory below the user-data root: `<user-data-root>/kicad/<version>/plugins/kicad-blocks`. Default roots are `~/.local/share/KiCad` on Linux, `~/Documents/KiCad` on macOS, and `%USERPROFILE%\\Documents\\KiCad` on Windows. Use `--documents-home PATH` to override the root. For a nightly build reporting version `10.99`, use `--version 10.99`.
 
 3. In KiCad, open Preferences → Plugins and enable **Enable KiCad API**. On Linux, verify that the selected Python interpreter is Python 3.10 or newer. Restart KiCad.
 4. The first time KiCad discovers the plugin, it creates an isolated environment and installs the package dependencies declared in `plugin/kicad-blocks/requirements.txt`. The **KiCad Blocks Manager** action appears after environment setup completes. This may take a little while on the first launch. Do not manually pip-install the same requirements into the KiCad environment.

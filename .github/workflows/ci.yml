@@ -143,6 +143,7 @@ jobs:
         run: |
           set -euo pipefail
           PY="${RUNNER_TEMP}/kicad-blocks-venv/bin/python"
+          "$PY" -m ruff check --diff tests/test_install.py || true
           "$PY" -m ruff check --fix tests/test_install.py || true
           sed -n '1,24p' tests/test_install.py
 

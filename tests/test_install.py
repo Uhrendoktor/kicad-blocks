@@ -28,7 +28,7 @@ class PluginInstallerTests(unittest.TestCase):
                 str(user_data),
             ]
             subprocess.run(command, check=True, capture_output=True, text=True)
-            destination = user_data / "11.0" / "plugins" / "kicad-blocks"
+            destination = user_data / "kicad" / "11.0" / "plugins" / "kicad-blocks"
             self.assertTrue((destination / "plugin.json").is_file())
             self.assertTrue((destination / "main.py").is_file())
             self.assertTrue((destination / "requirements.txt").is_file())
@@ -62,7 +62,7 @@ class PluginInstallerTests(unittest.TestCase):
                 capture_output=True,
                 text=True,
             )
-            self.assertIn(str(user_data / "11.0" / "plugins" / "kicad-blocks"), result.stdout)
+            self.assertIn(str(user_data / "kicad" / "11.0" / "plugins" / "kicad-blocks"), result.stdout)
             self.assertFalse(user_data.exists())
 
     def test_installer_rejects_invalid_kicad_version_format(self):
