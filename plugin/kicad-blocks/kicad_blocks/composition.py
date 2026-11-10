@@ -128,11 +128,6 @@ def _compose_direct_children(
             raise RuntimeError(f"KiCad could not load block implementation {schematic_path}.")
         kicad.load_all_libraries(types=[1])
         kicad.wait_for_libraries(types=[1], timeout_s=120.0)
-        for nickname in sorted(
-            {child.manifest["library_nickname"] for _, child in dependencies}
-        ):
-            kicad.reload_library(type=1, scope=2, nicknames=[nickname])
-        kicad.wait_for_libraries(types=[1], scope=2, timeout_s=60.0)
 
         symbols_by_reference = {
             item.reference: item for item in schematic.get_symbols()

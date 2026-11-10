@@ -54,6 +54,15 @@ def main() -> None:
         nickname = block.manifest["library_nickname"]
         symbol_name = block.manifest["symbol_name"]
 
+        # The project symbol-library table must exist before KiCad opens
+        # the schematic. IPC library reload operates on registered nicknames;
+        # editing sym-lib-table after startup does not register a new entry.
+        register_project_symbol_library(
+            project_dir,
+            nickname,
+            block.symbol_library,
+            description="Headless IPC test facade",
+        )
         kicad = KiCad(
             headless=True,
             kicad_cli_path=cli,
@@ -69,14 +78,6 @@ def main() -> None:
             # symbol libraries, then register and reload the test library.
             kicad.load_all_libraries(types=[1])
             kicad.wait_for_libraries(types=[1], timeout_s=120.0)
-            register_project_symbol_library(
-                project_dir,
-                nickname,
-                block.symbol_library,
-                description="Headless IPC test facade",
-            )
-            kicad.reload_library(type=1, scope=2, nicknames=[nickname])
-            kicad.wait_for_libraries(types=[1], scope=2, timeout_s=60.0)
 
             instance = schematic.place_symbol_from_library(
                 f"{nickname}:{symbol_name}",
