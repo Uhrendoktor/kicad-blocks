@@ -381,7 +381,7 @@ def _merge_net_chain_sections(
 
         members = _direct(chain, "members")
         if members is not None:
-            def rewrite_member(node: Any) -> None:
+            def rewrite_member(node: Any, chain_name: str = source_name) -> None:
                 if not isinstance(node, list):
                     return
                 if _head(node) == "net" and len(node) >= 2:
@@ -393,7 +393,7 @@ def _merge_net_chain_sections(
                     destination_net = source_net_to_board_net.get(source_net_name)
                     if destination_net is None:
                         raise ValueError(
-                            f"Net chain {source_name!r} references source net "
+                            f"Net chain {chain_name!r} references source net "
                             f"{source_net_name or raw_net!r}, which is not part of the imported block nets."
                         )
                     node[1] = _Quoted(destination_net)
