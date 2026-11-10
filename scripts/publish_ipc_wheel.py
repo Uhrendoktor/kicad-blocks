@@ -7,12 +7,28 @@ import argparse
 import json
 import os
 from pathlib import Path
-from urllib.error import HTTPError
+import socket
+import ssl
+import time
+from urllib.error import HTTPError, URLError
 from urllib.parse import quote
 from urllib.request import Request, urlopen
 
 RELEASE_TAG = "kicad-python-dev"
 ASSET_PREFIX = "kicad_python-0.9.0.dev0-"
+TRANSIENT_HTTP_STATUS = {408, 425, 429, 500, 502, 503, 504}
+
+
+def _retry_delay(attempt: int, error: BaseException) -> float:
+    """Return a bounded backoff, respecting a numeric Retry-After header."""
+    headers = getattr(error, "headers", None)
+    retry_after = headers.get("Retry-After") if headers is not None else None
+    if retry_after:
+        try:
+            return min(30.0, max(1.0, float(retry_after)))
+        except ValueError:
+            pass
+    return min(20.0, 2.0 ** (attempt + 1))
 
 
 def _api_request(
@@ -24,7 +40,10 @@ def _api_request(
     body: bytes | None = None,
     content_type: str = "application/vnd.github+json",
     allow_not_found: bool = False,
+    timeout: float = 45.0,
+    max_retries: int = 3,
 ) -> dict | None:
+    """Call GitHub's API with bounded retries for transient network/API failures."""
     headers = {
         "Accept": "application/vnd.github+json",
         "Authorization": f"Bearer {token}",
@@ -37,34 +56,58 @@ def _api_request(
     elif body is not None:
         headers["Content-Type"] = content_type
 
-    request = Request(url, data=data, headers=headers, method=method)
-    try:
-        with urlopen(request, timeout=90) as response:
-            raw = response.read()
-    except HTTPError as exc:
-        details = exc.read().decode("utf-8", errors="replace")
-        if allow_not_found and exc.code == 404:
-            return None
-        raise RuntimeError(
-            f"GitHub API {method} {url} failed with HTTP {exc.code}: {details}"
-        ) from exc
-    if not raw:
-        return {}
-    try:
-        return json.loads(raw.decode("utf-8"))
-    except json.JSONDecodeError as exc:
-        raise RuntimeError(f"GitHub API returned non-JSON data for {url}.") from exc
+    for attempt in range(max_retries + 1):
+        request = Request(url, data=data, headers=headers, method=method)
+        try:
+            with urlopen(request, timeout=timeout) as response:
+                raw = response.read()
+            if not raw:
+                return {}
+            try:
+                return json.loads(raw.decode("utf-8"))
+            except json.JSONDecodeError as exc:
+                raise RuntimeError(f"GitHub API returned non-JSON data for {url}.") from exc
+        except HTTPError as exc:
+            details = exc.read().decode("utf-8", errors="replace")
+            if allow_not_found and exc.code == 404:
+                return None
+            if exc.code in TRANSIENT_HTTP_STATUS and attempt < max_retries:
+                delay = _retry_delay(attempt, exc)
+                print(
+                    f"GitHub API {method} returned HTTP {exc.code}; "
+                    f"retrying in {delay:g}s ({attempt + 1}/{max_retries})."
+                )
+                time.sleep(delay)
+                continue
+            raise RuntimeError(
+                f"GitHub API {method} {url} failed with HTTP {exc.code}: {details}"
+            ) from exc
+        except (TimeoutError, socket.timeout, ssl.SSLError, URLError, ConnectionError) as exc:
+            if attempt >= max_retries:
+                raise RuntimeError(
+                    f"GitHub API {method} {url} failed after {attempt + 1} attempts: {exc}"
+                ) from exc
+            delay = _retry_delay(attempt, exc)
+            print(
+                f"GitHub API {method} network error: {exc}; "
+                f"retrying in {delay:g}s ({attempt + 1}/{max_retries})."
+            )
+            time.sleep(delay)
+    raise AssertionError("Unreachable GitHub API retry state.")
+
+
+def _release_url(repo: str) -> str:
+    api = os.environ.get("GITHUB_API_URL", "https://api.github.com").rstrip("/")
+    return f"{api}/repos/{repo}/releases/tags/{quote(RELEASE_TAG, safe='')}"
 
 
 def _get_or_create_release(repo: str, token: str) -> dict:
-    api = os.environ.get("GITHUB_API_URL", "https://api.github.com").rstrip("/")
-    release_url = (
-        f"{api}/repos/{repo}/releases/tags/{quote(RELEASE_TAG, safe='')}"
-    )
+    release_url = _release_url(repo)
     release = _api_request("GET", release_url, token, allow_not_found=True)
     if release is not None:
         return release
 
+    api = os.environ.get("GITHUB_API_URL", "https://api.github.com").rstrip("/")
     payload = {
         "tag_name": RELEASE_TAG,
         "target_commitish": "main",
@@ -77,12 +120,32 @@ def _get_or_create_release(repo: str, token: str) -> dict:
         "draft": False,
         "prerelease": True,
     }
-    return _api_request(
-        "POST",
-        f"{api}/repos/{repo}/releases",
-        token,
-        payload=payload,
-    )
+    try:
+        return _api_request(
+            "POST",
+            f"{api}/repos/{repo}/releases",
+            token,
+            payload=payload,
+        )
+    except RuntimeError:
+        # POST may have succeeded even if the TLS response was lost. Re-read
+        # the tag before deciding that release creation actually failed.
+        release = _api_request("GET", release_url, token, allow_not_found=True)
+        if release is not None:
+            return release
+        raise
+
+
+def _matching_asset(release: dict, name: str, size: int) -> dict | None:
+    for asset in release.get("assets", []):
+        if (
+            asset.get("name") == name
+            and asset.get("size") == size
+            and asset.get("state", "uploaded") == "uploaded"
+            and asset.get("browser_download_url")
+        ):
+            return asset
+    return None
 
 
 def publish_wheel(wheelhouse: Path, repo: str, token: str) -> str:
@@ -114,25 +177,42 @@ def publish_wheel(wheelhouse: Path, repo: str, token: str) -> str:
                 "DELETE",
                 f"{api}/repos/{repo}/releases/assets/{asset['id']}",
                 token,
+                allow_not_found=True,
             )
 
     upload_url = release.get("upload_url", "").split("{", 1)[0]
     if not upload_url:
         raise RuntimeError("GitHub release response is missing upload_url.")
     url = f"{upload_url}?name={quote(wheel.name, safe='')}"
-    uploaded = _api_request(
-        "POST",
-        url,
-        token,
-        body=wheel.read_bytes(),
-        content_type="application/octet-stream",
-    )
-    if uploaded.get("name") != wheel.name or uploaded.get("size") != wheel.stat().st_size:
+    wheel_size = wheel.stat().st_size
+    try:
+        uploaded = _api_request(
+            "POST",
+            url,
+            token,
+            body=wheel.read_bytes(),
+            content_type="application/octet-stream",
+        )
+    except RuntimeError:
+        # A timed-out upload may nevertheless have reached GitHub. Verify the
+        # release state before retrying the whole publication or failing CI.
+        refreshed_release = _api_request(
+            "GET", _release_url(repo), token, allow_not_found=True
+        )
+        uploaded = (
+            _matching_asset(refreshed_release, wheel.name, wheel_size)
+            if refreshed_release is not None
+            else None
+        )
+        if uploaded is None:
+            raise
+
+    if uploaded.get("name") != wheel.name or uploaded.get("size") != wheel_size:
         raise RuntimeError(f"GitHub release asset verification failed: {uploaded!r}.")
     download_url = uploaded.get("browser_download_url")
     if not download_url:
         raise RuntimeError("GitHub did not return a release asset download URL.")
-    print(f"Published {wheel.name} ({wheel.stat().st_size} bytes) to {download_url}")
+    print(f"Published {wheel.name} ({wheel_size} bytes) to {download_url}")
     return download_url
 
 
