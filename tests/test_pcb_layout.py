@@ -33,7 +33,6 @@ def _minimal_board(path: Path) -> None:
         "(kicad_pcb\n"
         "  (version 20250114)\n"
         "  (generator \"pcbnew\")\n"
-        "  (uuid \"00000000-0000-0000-0000-000000000010\")\n"
         "  (general (thickness 1.6))\n"
         "  (paper \"A4\")\n"
         "  (layers\n"
