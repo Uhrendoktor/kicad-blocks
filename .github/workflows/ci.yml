@@ -138,6 +138,14 @@ jobs:
           "$PY" -m pytest -q
           "$PY" -m compileall -q plugin tests
 
+      - name: Ruff import-fix diagnostic
+        shell: bash
+        run: |
+          set -euo pipefail
+          PY="${RUNNER_TEMP}/kicad-blocks-venv/bin/python"
+          "$PY" -m ruff check --fix tests/test_install.py || true
+          sed -n '1,24p' tests/test_install.py
+
       - name: Ruff lint
         shell: bash
         run: "${RUNNER_TEMP}/kicad-blocks-venv/bin/python -m ruff check plugin tests"
