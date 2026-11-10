@@ -105,7 +105,7 @@ def facade_pin_connection_points(
     left_count = (len(pins) + 1) // 2
     right_count = len(pins) - left_count
     rows = max(left_count, right_count)
-    connection_x = 5.08 + 2.54 + 2.54
+    connection_x = 5.08 + 2.54
     points: dict[str, tuple[float, float, int]] = {}
     for index, pin in enumerate(pins):
         if index < left_count:
