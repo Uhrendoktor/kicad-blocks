@@ -166,7 +166,7 @@ jobs:
           fi
           echo "KICAD_EESCHEMA=$EESCHEMA" >> "$GITHUB_ENV"
           xvfb-run --help >/dev/null
-          xdotool version
+          command -v xdotool
 
       - name: Verify Eeschema GUI editor launch and save
         shell: bash
