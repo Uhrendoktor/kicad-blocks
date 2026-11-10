@@ -97,8 +97,8 @@ def main() -> None:
             if instance.reference != "X1":
                 raise AssertionError(f"Unexpected reference designator: {instance.reference!r}.")
             if (
-                instance.definition.id.library_nickname != nickname
-                or instance.definition.id.entry_name != symbol_name
+                instance.definition.id.library != nickname
+                or instance.definition.id.name != symbol_name
             ):
                 raise AssertionError("Placed facade has the wrong KiCad library identifier.")
         finally:

@@ -128,7 +128,7 @@ class BlockRepositoryTests(unittest.TestCase):
 
         instance = SimpleNamespace(
             definition=SimpleNamespace(
-                id=SimpleNamespace(library_nickname="KBlocks_A1B2C3D4", entry_name="buck")
+                id=SimpleNamespace(library="KBlocks_A1B2C3D4", name="buck")
             )
         )
         self.assertEqual(

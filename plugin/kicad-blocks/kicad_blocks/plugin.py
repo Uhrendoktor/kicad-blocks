@@ -104,7 +104,7 @@ def _selected_symbol(schematic):
 
 def _symbol_identifier(instance) -> tuple[str, str]:
     identifier = instance.definition.id
-    return identifier.library_nickname, identifier.entry_name
+    return identifier.library, identifier.name
 
 
 def _library_record_for_instance(library_root: Path, instance):

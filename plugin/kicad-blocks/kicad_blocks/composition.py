@@ -147,8 +147,8 @@ def _compose_direct_children(
             if existing is not None:
                 lib_id = existing.definition.id
                 if (
-                    lib_id.library_nickname != nickname
-                    or lib_id.entry_name != symbol_name
+                    lib_id.library != nickname
+                    or lib_id.name != symbol_name
                 ):
                     raise ValueError(
                         f"Reference {reference!r} already belongs to another symbol in "
