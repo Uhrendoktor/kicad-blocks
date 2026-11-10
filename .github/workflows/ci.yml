@@ -149,3 +149,7 @@ jobs:
       - name: Verify real KiCad IPC placement (headless)
         shell: bash
         run: "${RUNNER_TEMP}/kicad-blocks-venv/bin/python tests/test_ipc_headless.py"
+
+      - name: Verify PCB IPC primitives (headless)
+        shell: bash
+        run: "${RUNNER_TEMP}/kicad-blocks-venv/bin/python tests/test_pcb_ipc.py"
