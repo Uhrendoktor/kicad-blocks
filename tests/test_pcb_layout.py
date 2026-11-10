@@ -1,0 +1,179 @@
+"""End-to-end validation for stored PCB block layout application."""
+
+from __future__ import annotations
+
+import os
+from pathlib import Path
+import shutil
+import subprocess
+import tempfile
+from types import SimpleNamespace
+
+from kipy import KiCad
+
+ROOT = Path(__file__).resolve().parents[1]
+PLUGIN = ROOT / "plugin" / "kicad-blocks"
+import sys
+sys.path.insert(0, str(PLUGIN))
+
+from kicad_blocks.pcb_layout import merge_block_layout, parse_sexpr
+
+
+def _find_cli() -> str:
+    configured = os.environ.get("KICAD_CLI")
+    for candidate in (configured, "kicad-cli-nightly", "kicad-cli"):
+        if candidate and (Path(candidate).is_file() or shutil.which(candidate)):
+            return candidate
+    raise FileNotFoundError("KiCad CLI was not found.")
+
+
+def _minimal_board(path: Path) -> None:
+    path.write_text(
+        "(kicad_pcb\n"
+        "  (version 20250114)\n"
+        "  (generator \"pcbnew\")\n"
+        "  (general (thickness 1.6))\n"
+        "  (paper \"A4\")\n"
+        "  (layers\n"
+        "    (0 \"F.Cu\" signal) (31 \"B.Cu\" signal)\n"
+        "    (32 \"B.Adhes\" user \"B.Adhesive\") (33 \"F.Adhes\" user \"F.Adhesive\")\n"
+        "    (34 \"B.Paste\" user) (35 \"F.Paste\" user)\n"
+        "    (36 \"B.SilkS\" user) (37 \"F.SilkS\" user)\n"
+        "    (38 \"B.Mask\" user) (39 \"F.Mask\" user)\n"
+        "    (40 \"Dwgs.User\" user) (41 \"Cmts.User\" user)\n"
+        "    (42 \"Eco1.User\" user) (43 \"Eco2.User\" user)\n"
+        "    (44 \"Edge.Cuts\" user) (45 \"Margin\" user)\n"
+        "    (46 \"B.CrtYd\" user) (47 \"F.CrtYd\" user)\n"
+        "    (48 \"B.Fab\" user) (49 \"F.Fab\" user)\n"
+        "  )\n"
+        "  (setup)\n"
+        "  (net 0 \"\")\n"
+        "  (footprint \"Test:BlockResistor\"\n"
+        "    (layer \"F.Cu\") (at 100 100 0)\n"
+        "    (path \"/00000000-0000-0000-0000-000000000001\")\n"
+        "    (property \"Reference\" \"R1\" (at 100 98 0) (layer \"F.SilkS\") (effects (font (size 1 1))))\n"
+        "    (property \"Value\" \"10k\" (at 100 102 0) (layer \"F.Fab\") (effects (font (size 1 1))))\n"
+        "    (fp_text reference \"R1\" (at 0 -1.5 0) (layer \"F.SilkS\") (effects (font (size 1 1))))\n"
+        "    (fp_text value \"10k\" (at 0 1.5 0) (layer \"F.Fab\") (effects (font (size 1 1))))\n"
+        "    (pad \"1\" smd rect (at -0.75 0 0) (size 0.8 1.2) (layers \"F.Cu\" \"F.Paste\" \"F.Mask\") (net 0 \"\"))\n"
+        "    (pad \"2\" smd rect (at 0.75 0 0) (size 0.8 1.2) (layers \"F.Cu\" \"F.Paste\" \"F.Mask\") (net 0 \"\"))\n"
+        "  )\n"
+        ")\n",
+        encoding="utf-8",
+    )
+
+
+def main() -> None:
+    cli = _find_cli()
+    with tempfile.TemporaryDirectory(prefix="kicad-block-layout-") as temp:
+        root = Path(temp)
+        target = root / "project.kicad_pcb"
+        source = root / "layout.kicad_pcb"
+        output = root / "project-with-block.kicad_pcb"
+        block_dir = root / "TestBlock.kicad_block"
+        block_dir.mkdir()
+        _minimal_board(target)
+        _minimal_board(source)
+
+        source_text = source.read_text(encoding="utf-8")
+        source_text = source_text.replace(
+            '  (net 0 "")',
+            '  (net 0 "")\n  (net 1 "VIN")\n  (net 2 "GND")\n  (net 3 "SW")',
+            1,
+        )
+        source_text = source_text.replace(
+            '(pad "1" smd rect (at -0.75 0 0) (size 0.8 1.2) (layers "F.Cu" "F.Paste" "F.Mask") (net 0 ""))',
+            '(pad "1" smd rect (at -0.75 0 0) (size 0.8 1.2) (layers "F.Cu" "F.Paste" "F.Mask") (net 1 "VIN"))',
+        )
+        source_text = source_text.replace(
+            '(pad "2" smd rect (at 0.75 0 0) (size 0.8 1.2) (layers "F.Cu" "F.Paste" "F.Mask") (net 0 ""))',
+            '(pad "2" smd rect (at 0.75 0 0) (size 0.8 1.2) (layers "F.Cu" "F.Paste" "F.Mask") (net 2 "GND"))',
+        )
+        source_text = source_text.rsplit(")", 1)[0] + (
+            '  (segment (start 100 100) (end 105 100) (width 0.25) '
+            '(layer "F.Cu") (net 3 "SW") (uuid "00000000-0000-0000-0000-000000000002"))\n)\n'
+        )
+        source.write_text(source_text, encoding="utf-8")
+        (block_dir / "layout.kicad_pcb").write_text(source_text, encoding="utf-8")
+
+        block = SimpleNamespace(
+            path=block_dir,
+            name="Test Block",
+            manifest={
+                "layout_file": "layout.kicad_pcb",
+                "pins": [{"name": "VIN"}, {"name": "GND"}],
+                "layout_ports": {"VIN": "VIN", "GND": "GND"},
+            },
+        )
+        result = merge_block_layout(
+            target,
+            block,
+            output,
+            instance_reference="X1",
+            position_mm=(120.0, 130.0),
+            layout_anchor_mm=(100.0, 100.0),
+            pin_to_board_net={"VIN": "VIN_BOARD", "GND": "GND_BOARD"},
+        )
+        if not output.is_file() or target.read_bytes() == output.read_bytes():
+            raise AssertionError("Merged board output was not written separately from the source board.")
+        if result["footprints"] != ["X1_R1"] or result["new_nets"] != ["VIN_BOARD", "GND_BOARD", "X1_SW"]:
+            raise AssertionError(f"Unexpected merge report: {result!r}")
+
+        # Parse result independently and assert net codes, reference and translated geometry.
+        parsed = parse_sexpr(output.read_text(encoding="utf-8"))
+        nets = {int(str(item[1])): str(item[2]) for item in parsed[1:] if isinstance(item, list) and item and item[0] == "net"}
+        if "X1_SW" not in nets.values() or "VIN_BOARD" not in nets.values():
+            raise AssertionError(f"Project board nets were not merged: {nets!r}")
+        imported_footprints = []
+        imported_segments = []
+        for item in parsed[1:]:
+            if not isinstance(item, list) or not item:
+                continue
+            if item[0] == "footprint":
+                ref_prop = next((x for x in item[1:] if isinstance(x, list) and x and x[0] == "property" and str(x[1]).casefold() == "reference"), None)
+                if ref_prop and str(ref_prop[2]) == "X1_R1":
+                    imported_footprints.append(item)
+            if item[0] == "segment" and any(isinstance(x, list) and x and x[0] == "net" and str(x[2]) == "X1_SW" for x in item[1:]):
+                imported_segments.append(item)
+        if len(imported_footprints) != 1 or len(imported_segments) != 1:
+            raise AssertionError("Imported footprint or routed segment was not found.")
+        fp_at = next(x for x in imported_footprints[0][1:] if isinstance(x, list) and x and x[0] == "at")
+        if (float(fp_at[1]), float(fp_at[2])) != (120.0, 130.0):
+            raise AssertionError(f"Footprint was not translated: {fp_at!r}")
+
+        # KiCad CLI parser/export validates the complete generated board.
+        svg_dir = root / "svg"
+        svg_dir.mkdir()
+        subprocess.run(
+            [cli, "pcb", "export", "svg", "--output", str(svg_dir), str(output)],
+            check=True,
+        )
+        if not list(svg_dir.glob("*.svg")):
+            raise AssertionError("KiCad did not export the merged board to SVG.")
+
+        # Load the result through the real PCB IPC API and inspect footprint/nets.
+        kicad = KiCad(headless=True, kicad_cli_path=cli, file_path=str(output), timeout_ms=30000)
+        try:
+            board = kicad.get_board()
+            if board is None:
+                raise RuntimeError("KiCad IPC did not load the merged PCB board.")
+            names = {item.name for item in board.get_nets()}
+            if not {"VIN_BOARD", "GND_BOARD", "X1_SW"}.issubset(names):
+                raise AssertionError(f"Missing merged PCB nets: {sorted(names)}")
+            refs = {item.reference_field.text.value for item in board.get_footprints()}
+            if not {"R1", "X1_R1"}.issubset(refs):
+                raise AssertionError(f"Imported footprint refs missing: {sorted(refs)}")
+            tracks = list(board.get_tracks())
+            if not tracks:
+                raise AssertionError("The stored block track was not present in the merged board.")
+        finally:
+            kicad.close()
+
+        print(
+            "PCB block merge passed: copied board, namespaced footprint and internal net, "
+            "mapped external nets, translated routed segment, KiCad CLI export and IPC reload."
+        )
+
+
+if __name__ == "__main__":
+    main()
