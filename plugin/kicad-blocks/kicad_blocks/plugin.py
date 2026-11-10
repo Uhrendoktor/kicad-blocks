@@ -14,6 +14,7 @@ messagebox = None
 simpledialog = None
 
 from .model import parse_pins
+from .operations import export_block_bom, find_kicad_cli, validate_block_tree
 from .repository import (
     LOCAL_NICKNAME_PREFIX,
     add_dependency,
@@ -21,6 +22,7 @@ from .repository import (
     default_library_root,
     list_blocks,
     make_local_copy,
+    publish_local_copy,
     refresh_library_block,
     register_project_symbol_library,
     set_library_root,
@@ -320,6 +322,52 @@ def _edit_block_implementation(root, schematic, kicad, project_dir, parent) -> N
     )
 
 
+def _export_recursive_bom(root: Path, parent) -> None:
+    record = _pick_record(list_blocks(root), parent, "Export Recursive Block BOM")
+    if record is None:
+        return
+    output = filedialog.asksaveasfilename(
+        title="Save recursive block BOM",
+        defaultextension=".csv",
+        initialfile=f"{record.manifest['slug']}_bom.csv",
+        filetypes=[("CSV", "*.csv"), ("All files", "*.*")],
+        parent=parent,
+    )
+    if not output:
+        return
+    result = export_block_bom(record, Path(output), find_kicad_cli(), root)
+    messagebox.showinfo(
+        "Block BOM Exported",
+        f"Exported {result['row_count']} rows from {result['block_count']} block(s):\n"
+        f"{result['output']}",
+        parent=parent,
+    )
+
+
+def _validate_recursive_erc(root: Path, parent) -> None:
+    record = _pick_record(list_blocks(root), parent, "Validate Block Tree (ERC)")
+    if record is None:
+        return
+    output = filedialog.askdirectory(
+        title="Select a folder for recursive ERC reports",
+        parent=parent,
+    )
+    if not output:
+        return
+    reports = validate_block_tree(record, Path(output), find_kicad_cli(), root)
+    failed = [item for item in reports if item["violations"]]
+    details = "\n".join(
+        f"{item['block']}: {'violations found' if item['violations'] else 'no violations'}"
+        for item in reports
+    )
+    messagebox.showinfo(
+        "Recursive Block ERC",
+        f"Checked {len(reports)} block implementation(s); "
+        f"{len(failed)} reported violations.\n\n{details}\n\nReports: {output}",
+        parent=parent,
+    )
+
+
 def _publish_block(root, kicad, project_dir, parent) -> None:
     record = _pick_record(list_blocks(root), parent, "Publish Library Block")
     if record is None:
@@ -379,6 +427,8 @@ def run() -> None:
             "sync    — synchronize the selected local copy\n"
             "edit    — open the selected block implementation\n"
             "publish — publish edited library files as a new revision\n"
+            "bom     — export merged BOM for a block and its dependencies\n"
+            "erc     — run ERC on a block and all dependencies\n"
             "nest    — add a nested block dependency",
             initialvalue="create",
             parent=root,
@@ -411,11 +461,17 @@ def run() -> None:
             _edit_block_implementation(library_root, schematic, kicad, project_dir, root)
         elif action == "publish":
             _publish_block(library_root, kicad, project_dir, root)
+        elif action == "bom":
+            library_root = _choose_library_root(root)
+            _export_recursive_bom(library_root, root)
+        elif action == "erc":
+            library_root = _choose_library_root(root)
+            _validate_recursive_erc(library_root, root)
         elif action == "nest":
             library_root = _choose_library_root(root)
             _add_nested_dependency(library_root, root, root)
         else:
-            raise ValueError("Choose one of: create, place, local, sync, edit, publish, nest.")
+            raise ValueError("Choose one of: create, place, local, sync, edit, publish, bom, erc, nest.")
     except Exception as exc:
         LOG.exception("KiCad Blocks action failed")
         messagebox.showerror("KiCad Blocks", str(exc), parent=root)

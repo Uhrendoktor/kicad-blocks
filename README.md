@@ -12,12 +12,12 @@ KiCad Blocks is an IPC schematic plugin for **black-box, library-backed schemati
 - Convert a selected library-linked instance into an independent project-local copy. The plugin changes the selected instance's library identifier without replacing its schematic UUID or coordinates, so existing wire connections are intended to remain attached.
 - Synchronize a selected local copy with its library source in both directions. Local-only edits are published, library-only edits are pulled, identical concurrent edits converge, and divergent edits are rejected before either side is changed. External pin/interface changes require an explicit migration.
 - Edit a block's separate implementation in another Eeschema window; publish its changed files to advance the library revision.
-- Add nested block dependencies to the library manifest. Dependencies are stored as a graph and cycles are rejected; no hierarchical sheets are created.
+- Add nested block dependencies to the library manifest. Dependencies use library-relative paths, are resolved recursively by block ID and pinned revision, and cycles are rejected; no hierarchical sheets are created.
 - Optionally store a pre-routed `.kicad_pcb` file with the block asset.
 
 ## Important functional boundary
 
-The facade symbol is what KiCad sees in the parent schematic's native ERC, netlist and BOM. The internal components in `implementation.kicad_sch` are a separate document and are **not** automatically included in those project-level outputs. The candidate does not yet provide a merged block BOM, recursive internal ERC, or a PCB-layout application/import operation. Nested dependencies are recorded and cycle-checked, but inserting a child implementation into a parent implementation is not yet automated. An optional PCB layout is stored and versioned with the block, but is not yet merged into the active board. These are not hidden behind a fake native hierarchy.
+The facade symbol is what KiCad sees in the parent schematic's native ERC, netlist and BOM. The internal components in `implementation.kicad_sch` are a separate document and are **not** automatically included in those project-level outputs. The plugin provides recursive BOM export and recursive internal ERC: each dependency's standalone implementation schematic is processed by KiCad CLI and the reports/BOM rows are aggregated. Nested dependencies are resolved and checked as a version-pinned graph; a child implementation is not yet visually inserted or flattened into the parent implementation schematic. An optional PCB layout is stored and versioned with the block, but is not yet applied to the active board. These are not hidden behind a fake native hierarchy.
 
 The internal schematic is editable: open the `implementation.kicad_sch` file from the block's library directory in Eeschema. It starts with global interface labels matching the facade pin names. Internal circuitry can be built with ordinary KiCad symbols and wires.
 
@@ -37,7 +37,7 @@ Schematic placement, selection and library reload APIs used here are part of KiC
    - macOS: `~/Documents/KiCad/11.0/plugins/kicad-blocks`
 2. Enable the IPC API in KiCad Preferences → Plugins.
 3. Restart KiCad and enable the **KiCad Blocks Manager** schematic action.
-4. Use the action and enter one of `create`, `place`, `local`, `sync`, `edit`, `publish`, or `nest`. The `sync` action on a selected local copy performs bidirectional three-way synchronization.
+4. Use the action and enter one of `create`, `place`, `local`, `sync`, `edit`, `publish`, `bom`, `erc`, or `nest`. The `sync` action on a selected local copy performs bidirectional three-way synchronization.
 
 The default shared library location is `~/Documents/KiCad/Blocks`. The create/nest action lets you select another directory; the selection is remembered in `~/.config/kicad-blocks/settings.json`. Set `KICAD_BLOCKS_LIBRARY` to override it. Local symbol-library entries use `${KIPRJMOD}` paths so project-local block copies remain portable when the project folder moves.
 
