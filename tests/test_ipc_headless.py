@@ -246,10 +246,23 @@ def main() -> None:
         from kicad_blocks.repository import add_dependency
 
         nested_library = root / "nested-library"
+        leaf = create_block(
+            nested_library,
+            "Nested Leaf",
+            parse_pins("A:input, GND:passive, B:output"),
+        )
         child = create_block(
             nested_library,
             "Nested Child",
             parse_pins("IN:input, GND:passive, OUT:output"),
+        )
+        child = add_dependency(
+            child,
+            leaf,
+            reference="B9",
+            position_mm=(160.0, 100.0),
+            orientation=270,
+            pin_map={"A": "IN", "GND": "GND", "B": "OUT"},
         )
         parent = create_block(
             nested_library,
@@ -265,8 +278,12 @@ def main() -> None:
             pin_map={"IN": "VIN_CHILD", "GND": "GND_CHILD", "OUT": "VOUT_CHILD"},
         )
         composition = compose_block_implementation(parent, nested_library, cli)
-        if not composition["composed"]:
-            raise AssertionError("Nested block composition did not compose any implementation.")
+        composed_names = {item["block"] for item in composition["composed"]}
+        if composed_names != {"Nested Child", "Nested Parent"}:
+            raise AssertionError(
+                "Recursive nested composition did not process child before parent: "
+                + repr(composed_names)
+            )
 
         parent_kicad = KiCad(
             headless=True,
@@ -346,8 +363,90 @@ def main() -> None:
         )
         if not list(nested_svg_dir.glob("*.svg")):
             raise AssertionError("KiCad CLI could not export the composed parent implementation.")
+        # Verify the second level independently: the child implementation
+        # must contain its rotated leaf facade, while the parent still contains
+        # only the child facade. Both remain ordinary symbols on their own
+        # library implementation documents, not hierarchical sheet instances.
+        child_kicad = KiCad(
+            headless=True,
+            kicad_cli_path=cli,
+            file_path=str(child.implementation),
+            timeout_ms=30000,
+        )
+        try:
+            child_schematic = child_kicad.get_schematic()
+            if child_schematic is None:
+                raise RuntimeError("Could not reopen the recursively composed child implementation.")
+            child_kicad.load_all_libraries(types=[1])
+            child_kicad.wait_for_libraries(types=[1], timeout_s=120.0)
+            leaf_symbols = list(child_schematic.get_symbols())
+            if len(leaf_symbols) != 1:
+                raise AssertionError(
+                    f"Expected one leaf facade in child implementation; found {len(leaf_symbols)}."
+                )
+            if leaf_symbols[0].reference != "B9":
+                raise AssertionError(
+                    f"Expected nested leaf reference B9; found {leaf_symbols[0].reference!r}."
+                )
+            if int(leaf_symbols[0].transform.orientation) != schematic_symbol_orientation(270):
+                raise AssertionError("Nested leaf facade was not placed at 270 degrees.")
+            if child_schematic.get_sheet_symbols():
+                raise AssertionError("Second-level composition created a hierarchical sheet.")
+
+            child_labels = list(child_schematic.get_labels())
+            leaf_pin_points = facade_pin_connection_points(
+                parse_pins("A:input, GND:passive, B:output")
+            )
+            leaf_pin_map = {"A": "IN", "GND": "GND", "B": "OUT"}
+            for pin_name, (local_x, local_y, spin) in leaf_pin_points.items():
+                delta_x, delta_y = transform_symbol_point_to_schematic(
+                    local_x, local_y, 270
+                )
+                expected_point = Vector2.from_xy_mm(160.0 + delta_x, 100.0 + delta_y)
+                expected_spin = rotate_label_spin_style(spin, 270)
+                matching = [
+                    label
+                    for label in child_labels
+                    if label.text.value == leaf_pin_map[pin_name]
+                    and int(label.position.x) == int(expected_point.x)
+                    and int(label.position.y) == int(expected_point.y)
+                ]
+                if not matching:
+                    raise AssertionError(
+                        f"Second-level label {leaf_pin_map[pin_name]} is not at the rotated "
+                        f"leaf pin endpoint {expected_point}."
+                    )
+                if int(matching[0].spin_style) != expected_spin:
+                    raise AssertionError(
+                        f"Second-level label {leaf_pin_map[pin_name]} has the wrong spin style."
+                    )
+        finally:
+            child_kicad.close()
+
+        child_schematics = sorted(path.name for path in child.path.glob("*.kicad_sch"))
+        if child_schematics != ["implementation.kicad_sch"]:
+            raise AssertionError(
+                "Second-level composition generated a child schematic file: "
+                + repr(child_schematics)
+            )
+        child_svg_dir = Path(temp) / "nested-child-svg"
+        child_svg_dir.mkdir()
+        subprocess.run(
+            [
+                cli,
+                "sch",
+                "export",
+                "svg",
+                "--output",
+                str(child_svg_dir),
+                str(child.implementation),
+            ],
+            check=True,
+        )
+        if not list(child_svg_dir.glob("*.svg")):
+            raise AssertionError("KiCad CLI could not export the second-level implementation.")
         print(
-            "Nested block composition passed: one child facade, three mapped global labels, "
+            "Nested block composition passed: two recursive levels (90° child and 270° leaf facades), "
             "zero hierarchical sheets and no copied child schematic."
         )
 
