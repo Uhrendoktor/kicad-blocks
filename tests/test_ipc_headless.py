@@ -3,23 +3,23 @@
 from __future__ import annotations
 
 import os
-from pathlib import Path
 import shutil
 import sys
 import tempfile
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 PLUGIN = ROOT / "plugin" / "kicad-blocks"
 sys.path.insert(0, str(PLUGIN))
-
-from kipy import KiCad
-from kipy.geometry import Vector2
 
 from kicad_blocks.model import parse_pins, render_implementation_schematic
 from kicad_blocks.repository import (
     create_block,
     register_project_symbol_library,
 )
+
+from kipy import KiCad
+from kipy.geometry import Vector2
 
 
 def _find_cli() -> str:
