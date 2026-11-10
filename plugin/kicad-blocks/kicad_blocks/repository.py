@@ -138,7 +138,7 @@ def rename_block_symbol_asset(block_path: Path, new_symbol_name: str) -> None:
     atomic_write(symbol_path, _dump(root) + "\n")
 
 
-def ensure_stable_block_identity(block: "BlockRecord") -> "BlockRecord":
+def ensure_stable_block_identity(block: BlockRecord) -> BlockRecord:
     """Migrate an old per-block nickname into the shared KBlocks catalog."""
     manifest = read_manifest(block.path)
     if (

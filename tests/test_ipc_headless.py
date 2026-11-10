@@ -58,8 +58,6 @@ def main() -> None:
         nickname = block.manifest["library_nickname"]
         symbol_name = block.manifest["symbol_name"]
         local = make_local_copy(block, project_dir)
-        local_nickname = local.manifest["library_nickname"]
-        local_symbol_name = local.manifest["symbol_name"]
 
         # One stable facade library row is registered before startup. All
         # blocks share this catalog, including project-local implementation

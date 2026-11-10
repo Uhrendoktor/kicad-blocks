@@ -17,8 +17,8 @@ from kicad_blocks.model import (
 from kicad_blocks.repository import (
     add_dependency,
     create_block,
-    list_blocks,
     link_instance_to_local_copy,
+    list_blocks,
     local_copy_for_instance,
     make_local_copy,
     publish_local_copy,
