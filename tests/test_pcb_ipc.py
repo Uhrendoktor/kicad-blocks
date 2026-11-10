@@ -78,10 +78,10 @@ def main() -> None:
             # Net is board-level state, not a regular BoardItem. Use KiCad's
             # native netlist-import operation to add a named internal net and
             # attach the already-placed footprint pad to it.
-            # KiCad imports its intermediate XML netlist format. Keep the full
-            # mandatory sections (components, libparts, libraries and nets), and
-            # use the singular <tstamp> component element from KiCad's schema.
-            netlist_path = Path(temp) / "block-internal.xml"
+            # KiCad selects its NETLIST_READER by the .net file extension.
+            # The contents are the full intermediate XML format (components,
+            # libparts, libraries and nets) exported by Eeschema.
+            netlist_path = Path(temp) / "block-internal.net"
             netlist_path.write_text(
                 """<?xml version="1.0" encoding="utf-8"?>
 <export version="D">
