@@ -6,6 +6,7 @@ import os
 import shutil
 import tempfile
 from pathlib import Path
+import xml.etree.ElementTree as ET
 
 from kipy import KiCad
 
@@ -77,7 +78,10 @@ def main() -> None:
             # Net is board-level state, not a regular BoardItem. Use KiCad's
             # native netlist-import operation to add a named internal net and
             # attach the already-placed footprint pad to it.
-            netlist_path = Path(temp) / "block-internal.net"
+            # KiCad imports its intermediate XML netlist format. Keep the full
+            # mandatory sections (components, libparts, libraries and nets), and
+            # use the singular <tstamp> component element from KiCad's schema.
+            netlist_path = Path(temp) / "block-internal.xml"
             netlist_path.write_text(
                 """<?xml version="1.0" encoding="utf-8"?>
 <export version="D">
@@ -89,11 +93,29 @@ def main() -> None:
   <components>
     <comp ref="R1">
       <value>10k</value>
-      <libsource lib="Device" part="R"/>
+      <libsource lib="Test" part="BlockResistor"/>
       <sheetpath names="/" tstamps="/"/>
-      <tstamps>00000000-0000-0000-0000-000000000001</tstamps>
+      <tstamp>00000000-0000-0000-0000-000000000001</tstamp>
+      <footprint>Test:BlockResistor</footprint>
     </comp>
   </components>
+  <libparts>
+    <libpart lib="Test" part="BlockResistor">
+      <description>Embedded PCB IPC fixture resistor</description>
+      <footprints><fp>Test:BlockResistor</fp></footprints>
+      <fields>
+        <field name="Reference">R</field>
+        <field name="Value">10k</field>
+      </fields>
+      <pins>
+        <pin num="1" name="1" type="passive"/>
+        <pin num="2" name="2" type="passive"/>
+      </pins>
+    </libpart>
+  </libparts>
+  <libraries>
+    <library logical="Test"><uri>embedded://Test</uri></library>
+  </libraries>
   <nets>
     <net code="1" name="BLOCK_INTERNAL">
       <node ref="R1" pin="1"/>
@@ -103,11 +125,22 @@ def main() -> None:
 """,
                 encoding="utf-8",
             )
-            board.import_netlist(
-                str(netlist_path),
+            if not netlist_path.is_file() or netlist_path.stat().st_size == 0:
+                raise AssertionError("The test netlist was not written to disk.")
+            parsed_netlist = ET.parse(netlist_path).getroot()
+            for section in ("components", "libparts", "libraries", "nets"):
+                if parsed_netlist.find(section) is None:
+                    raise AssertionError(f"KiCad netlist XML is missing <{section}>.")
+
+            result = board.import_netlist(
+                str(netlist_path.resolve()),
                 delete_extra_footprints=False,
                 update_footprints=False,
             )
+            if result.error_count:
+                raise AssertionError(
+                    f"KiCad netlist import reported {result.error_count} errors: {result.report}"
+                )
             board.save()
 
             created_nets = {item.name for item in board.get_nets()}
