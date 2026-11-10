@@ -134,7 +134,8 @@ def main() -> None:
 
         # Parse result independently and assert net codes, reference and translated geometry.
         parsed = parse_sexpr(output.read_text(encoding="utf-8"))
-        nets = {int(str(item[1])): str(item[2]) for item in parsed[1:] if isinstance(item, list) and item and item[0] == "net"}        merged_segment = next(
+        nets = {int(str(item[1])): str(item[2]) for item in parsed[1:] if isinstance(item, list) and item and item[0] == "net"}
+        merged_segment = next(
             item for item in parsed[1:]
             if isinstance(item, list) and item and item[0] == "segment"
         )
