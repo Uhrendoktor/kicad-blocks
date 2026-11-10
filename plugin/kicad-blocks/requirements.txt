@@ -1,1 +1,1 @@
-kicad-python==0.8.0
+git+https://gitlab.com/kicad/code/kicad-python.git@main
