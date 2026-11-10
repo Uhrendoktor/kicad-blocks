@@ -1,18 +1,18 @@
-"Generate a block fixture and validate it with KiCad's own command-line parser."""
+"""Generate a block fixture and validate it with KiCad's own command-line parser."""
 
 import os
-from pathlib import Path
 import shutil
 import subprocess
 import sys
 import tempfile
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 PLUGIN = ROOT / "plugin" / "kicad-blocks"
 sys.path.insert(0, str(PLUGIN))
 
-from kicad_blocks.model import parse_pins  # noqa: E402
-from kicad_blocks.repository import create_block  # noqa: E402
+from kicad_blocks.model import parse_pins
+from kicad_blocks.repository import create_block
 
 
 def _find_kicad_cli() -> str:

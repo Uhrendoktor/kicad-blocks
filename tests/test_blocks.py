@@ -1,16 +1,16 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 import sys
 import tempfile
 import unittest
+from pathlib import Path
 
 PLUGIN = Path(__file__).resolve().parents[1] / "plugin" / "kicad-blocks"
 sys.path.insert(0, str(PLUGIN))
 
-from kicad_blocks.model import parse_pins, render_symbol_library  # noqa: E402
-from kicad_blocks.repository import (  # noqa: E402
+from kicad_blocks.model import parse_pins, render_symbol_library
+from kicad_blocks.repository import (
     add_dependency,
     create_block,
     list_blocks,
@@ -74,9 +74,8 @@ class BlockModelTests(unittest.TestCase):
 
     def test_parse_pins_rejects_invalid_definitions(self):
         for bad in ("", "A:unknown", "VIN:input,vin:output", "bad name:input", "A:input,B:output,C:passive" + "," + ",".join(f"P{i}" for i in range(4, 66))):
-            with self.subTest(bad=bad):
-                with self.assertRaises(ValueError):
-                    parse_pins(bad)
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                parse_pins(bad)
 
     def test_symbol_library_is_balanced_and_maps_pin_types(self):
         pins = parse_pins("VIN:input, GND:passive, VOUT:output, SDA:bidir")
@@ -105,6 +104,7 @@ class BlockRepositoryTests(unittest.TestCase):
 
     def test_api_library_identifier_uses_kipy_field_names(self):
         from types import SimpleNamespace
+
         from kicad_blocks.plugin import _symbol_identifier
 
         instance = SimpleNamespace(

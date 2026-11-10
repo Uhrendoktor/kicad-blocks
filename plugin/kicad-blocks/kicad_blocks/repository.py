@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import json
 import os
-from pathlib import Path
 import re
 import shutil
 import tempfile
 import uuid
+from dataclasses import dataclass
+from pathlib import Path
 
 from .model import (
     BlockPin,
@@ -193,7 +193,7 @@ def register_project_symbol_library(
             raise ValueError(f"Invalid KiCad symbol library table: {table_path}")
     else:
         text = "(sym_lib_table\n)\n"
-    pattern = re.compile(r"\(lib\s+\(name\s+\"" + re.escape(nickname) + r"\"\)(.*?)\)\s*\)", re.S)
+    pattern = re.compile(r"\(lib\s+\(name\s+\"" + re.escape(nickname) + r"\"\)(.*?)\)\s*\)", re.DOTALL)
     existing = pattern.search(text)
     try:
         relative_path = library_path.relative_to(project_dir)

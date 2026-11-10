@@ -12,12 +12,12 @@ from .repository import (
 
 __all__ = [
     "BlockPin",
-    "parse_pins",
-    "render_symbol_library",
     "add_dependency",
     "create_block",
     "list_blocks",
     "make_local_copy",
+    "parse_pins",
     "refresh_library_block",
+    "render_symbol_library",
     "synchronize_local_copy",
 ]

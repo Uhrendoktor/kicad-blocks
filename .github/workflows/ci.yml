@@ -63,14 +63,17 @@ jobs:
           "${RUNNER_TEMP}/kicad-blocks-venv/bin/python" -m pip install --upgrade pip
           "${RUNNER_TEMP}/kicad-blocks-venv/bin/python" -m pip install pytest ruff
 
-      - name: Lint, test and compile
+      - name: Run unit tests and compile
         shell: bash
         run: |
           set -euo pipefail
           PY="${RUNNER_TEMP}/kicad-blocks-venv/bin/python"
-          "$PY" -m ruff check plugin tests
           "$PY" -m pytest -q
           "$PY" -m compileall -q plugin tests
+
+      - name: Ruff lint
+        shell: bash
+        run: "${RUNNER_TEMP}/kicad-blocks-venv/bin/python -m ruff check plugin tests"
 
       - name: Validate generated files with KiCad
         shell: bash

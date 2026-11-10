@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import hashlib
 import json
 import re
 import unicodedata
 import uuid
-from typing import Iterable
+from collections.abc import Iterable
+from dataclasses import dataclass
 
 PIN_TYPES = ("input", "output", "bidirectional", "tristate", "passive")
 _KICAD_PIN_TYPES = {
