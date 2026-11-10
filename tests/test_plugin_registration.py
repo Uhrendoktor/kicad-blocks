@@ -14,6 +14,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 PLUGIN_SOURCE = ROOT / "plugin" / "kicad-blocks"
+PLUGIN_IDENTIFIER = "org.uhrendoktor.kicadblocks"
 INSTALLER = ROOT / "scripts" / "install_plugin.py"
 sys.path.insert(0, str(PLUGIN_SOURCE))
 
@@ -275,14 +276,14 @@ def main() -> None:
             text=True,
         )
         installed_plugin = (
-            documents_home / "kicad" / version / "plugins" / "kicad-blocks"
+            documents_home / "kicad" / version / "plugins" / PLUGIN_IDENTIFIER
         )
         plugin_manifest_path = installed_plugin / "plugin.json"
         manifest = json.loads(plugin_manifest_path.read_text(encoding="utf-8"))
         action = next(
             item
             for item in manifest["actions"]
-            if item["identifier"] == "kicad-blocks-manager"
+            if item["identifier"] == "manager"
         )
         if action.get("scopes") != ["schematic"] or not action.get("show-button"):
             raise AssertionError(
@@ -299,7 +300,7 @@ def main() -> None:
         log_path = root / "eeschema-plugin-discovery.log"
         process, window_id = _launch(eeschema, schematic, env, xdotool, log_path)
         try:
-            environment = cache_home / "python-environments" / "kicad-blocks"
+            environment = cache_home / "python-environments" / PLUGIN_IDENTIFIER
             env_python = environment / "bin" / "python"
             deadline = time.monotonic() + 180.0
             ready_log = False
@@ -317,7 +318,7 @@ def main() -> None:
                     "manager: loading plugin from" in folded
                     and str(plugin_json).casefold() in folded
                 )
-                ready_log = "manager: marking kicad-blocks as ready" in folded
+                ready_log = f"manager: marking {PLUGIN_IDENTIFIER} as ready" in folded
                 if ready_log and env_python.is_file():
                     break
                 time.sleep(0.5)

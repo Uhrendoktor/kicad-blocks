@@ -14,8 +14,9 @@ import tempfile
 import uuid
 
 
-PLUGIN_IDENTIFIER = "kicad-blocks"
-DEFAULT_SOURCE = Path(__file__).resolve().parents[1] / "plugin" / PLUGIN_IDENTIFIER
+PLUGIN_IDENTIFIER = "org.uhrendoktor.kicadblocks"
+PLUGIN_DIRECTORY_NAME = "kicad-blocks"
+DEFAULT_SOURCE = Path(__file__).resolve().parents[1] / "plugin" / PLUGIN_DIRECTORY_NAME
 
 
 def default_documents_home() -> Path:
@@ -40,6 +41,15 @@ def validate_plugin_package(source: Path) -> dict:
 
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     identifier = manifest.get("identifier")
+    if not isinstance(identifier, str) or not re.fullmatch(
+        r"[\\w\\d]{2,}\\.[\\w\\d]+\\.[\\w\\d]+",
+        identifier,
+        flags=re.ASCII,
+    ):
+        raise ValueError(
+            "KiCad IPC plugin identifiers must use reverse-DNS form with at least "
+            "three components, for example 'org.example.myplugin'."
+        )
     if identifier != PLUGIN_IDENTIFIER:
         raise ValueError(
             f"Expected plugin identifier {PLUGIN_IDENTIFIER!r}, got {identifier!r}."
@@ -118,6 +128,17 @@ def install_plugin(
         shutil.rmtree(staging_root, ignore_errors=True)
         if moved_existing and backup.exists() and not destination.exists():
             backup.rename(destination)
+    legacy_destination = destination.parent / PLUGIN_DIRECTORY_NAME
+    if legacy_destination != destination and legacy_destination.is_dir():
+        legacy_manifest_path = legacy_destination / "plugin.json"
+        try:
+            legacy_manifest = json.loads(
+                legacy_manifest_path.read_text(encoding="utf-8")
+            )
+        except (OSError, json.JSONDecodeError):
+            legacy_manifest = {}
+        if legacy_manifest.get("identifier") == "kicad-blocks":
+            shutil.rmtree(legacy_destination)
     return destination
 
 

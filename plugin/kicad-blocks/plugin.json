@@ -1,5 +1,5 @@
 {
-  "identifier": "kicad-blocks",
+  "identifier": "org.uhrendoktor.kicadblocks",
   "name": "KiCad Blocks",
   "description": "Place opaque library-backed schematic symbols with external implementations.",
   "runtime": {
@@ -8,7 +8,7 @@
   },
   "actions": [
     {
-      "identifier": "kicad-blocks-manager",
+      "identifier": "manager",
       "name": "KiCad Blocks Manager",
       "description": "Create, place, localize, synchronize and compose library-backed blocks.",
       "show-button": true,

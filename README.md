@@ -38,13 +38,13 @@ Schematic placement, selection and library reload APIs used here are part of KiC
    python3 scripts/install_plugin.py --version 11.0
    ```
 
-   The installer uses KiCad's per-version user plugin directory below the user-data root: `<user-data-root>/kicad/<version>/plugins/kicad-blocks`. Default roots are `~/.local/share/KiCad` on Linux, `~/Documents/KiCad` on macOS, and `%USERPROFILE%\\Documents\\KiCad` on Windows. Use `--documents-home PATH` to override the root. For a nightly build reporting version `10.99`, use `--version 10.99`.
+   The installer uses KiCad's per-version user plugin directory below the user-data root: `<user-data-root>/kicad/<version>/plugins/org.uhrendoktor.kicadblocks`. Default roots are `~/.local/share/KiCad` on Linux, `~/Documents/KiCad` on macOS, and `%USERPROFILE%\\Documents\\KiCad` on Windows. Use `--documents-home PATH` to override the root. For a nightly build reporting version `10.99`, use `--version 10.99`.
 
 3. In KiCad, open Preferences → Plugins and enable **Enable KiCad API**. On Linux, verify that the selected Python interpreter is Python 3.10 or newer. Restart KiCad.
-4. The first time KiCad discovers the plugin, it creates an isolated environment and installs the package dependencies declared in `plugin/kicad-blocks/requirements.txt`. The **KiCad Blocks Manager** action appears after environment setup completes. This may take a little while on the first launch. Do not manually pip-install the same requirements into the KiCad environment.
+4. The plugin uses the reverse-DNS KiCad IPC identifier `org.uhrendoktor.kicadblocks`. The first time KiCad discovers the plugin, it creates an isolated environment and installs the package dependencies declared in `plugin/kicad-blocks/requirements.txt`. The **KiCad Blocks Manager** action appears after environment setup completes. This may take a little while on the first launch. Do not manually pip-install the same requirements into the KiCad environment.
 5. Use the action with one of `create`, `place`, `local`, `sync`, `edit`, `publish`, `bom`, `erc`, `pcb`, or `nest`. The `sync` action on a selected local copy performs bidirectional three-way synchronization.
 
-To reinstall after changing the plugin's requirements or if its environment is damaged, right-click one of its actions in Preferences → Plugins and choose **Recreate Plugin Environment**, or remove the existing plugin folder and run the installer again. The plugin environment is stored by KiCad under `KICAD_CACHE_HOME/python-environments/kicad-blocks`.
+To reinstall after changing the plugin's requirements or if its environment is damaged, right-click one of its actions in Preferences → Plugins and choose **Recreate Plugin Environment**, or remove the existing plugin folder and run the installer again. The plugin environment is stored by KiCad under `KICAD_CACHE_HOME/python-environments/org.uhrendoktor.kicadblocks`.
 
 See the official [KiCad add-on developer documentation](https://dev-docs.kicad.org/en/apis-and-binding/ipc-api/for-addon-developers/) for plugin discovery, action registration, and isolated Python environments.
 
