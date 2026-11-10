@@ -75,32 +75,58 @@ jobs:
           echo "Using kicad-python commit $KIPY_SHA"
 
       - name: Restore cached KiCad Python IPC wheels
-        uses: actions/cache@v4
+        id: kipy-cache
+        uses: actions/cache/restore@v4
         with:
           path: ${{ runner.temp }}/kicad-blocks-wheelhouse
           key: kicad-python-${{ runner.os }}-${{ runner.arch }}-py312-${{ steps.kipy.outputs.sha }}
 
       - name: Create isolated Python environment
         shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m venv "${RUNNER_TEMP}/kicad-blocks-venv"
+          PY="${RUNNER_TEMP}/kicad-blocks-venv/bin/python"
+          "$PY" -m pip install --upgrade pip
+          "$PY" -m pip install pytest ruff
+          "$PY" --version
+          "$PY" -m pip --version
+
+      - name: Build KiCad Python IPC wheels
+        id: kipy-wheel
+        shell: bash
         env:
           KIPY_SHA: ${{ steps.kipy.outputs.sha }}
         run: |
           set -euo pipefail
-          python3 -m venv "${RUNNER_TEMP}/kicad-blocks-venv"
-          "${RUNNER_TEMP}/kicad-blocks-venv/bin/python" -m pip install --upgrade pip
           PY="${RUNNER_TEMP}/kicad-blocks-venv/bin/python"
-          "$PY" -m pip install pytest ruff
-
-          # The released PyPI package is PCB-focused. Schematic IPC support is
-          # on the official development branch. Cache wheels by immutable
-          # upstream SHA because this self-hosted runner uses ephemeral Docker
-          # job containers and its filesystem does not persist between runs.
           WHEELHOUSE="${RUNNER_TEMP}/kicad-blocks-wheelhouse"
           mkdir -p "$WHEELHOUSE"
-          if ! compgen -G "$WHEELHOUSE/kicad_python-*.whl" >/dev/null; then
+          if compgen -G "$WHEELHOUSE/kicad_python-*.whl" >/dev/null; then
+            echo "Using cached KiCad Python wheel:"
+            ls -lh "$WHEELHOUSE"/kicad_python-*.whl
+          else
+            echo "Building official kicad-python commit $KIPY_SHA"
             "$PY" -m pip wheel --wheel-dir "$WHEELHOUSE" \
               "git+https://gitlab.com/kicad/code/kicad-python.git@$KIPY_SHA"
           fi
+          test -n "$(find "$WHEELHOUSE" -maxdepth 1 -name 'kicad_python-*.whl' -print -quit)"
+          echo "wheelhouse_ready=true" >> "$GITHUB_OUTPUT"
+          du -sh "$WHEELHOUSE"
+
+      - name: Save KiCad Python IPC wheel cache
+        if: always() && steps.kipy-wheel.outcome == 'success' && steps.kipy-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.temp }}/kicad-blocks-wheelhouse
+          key: kicad-python-${{ runner.os }}-${{ runner.arch }}-py312-${{ steps.kipy.outputs.sha }}
+
+      - name: Install KiCad Python IPC bindings
+        shell: bash
+        run: |
+          set -euo pipefail
+          PY="${RUNNER_TEMP}/kicad-blocks-venv/bin/python"
+          WHEELHOUSE="${RUNNER_TEMP}/kicad-blocks-wheelhouse"
           "$PY" -m pip install --no-index --find-links "$WHEELHOUSE" "kicad-python==0.9.0.dev0"
           "$PY" -c "from kipy import KiCad; from kipy.schematic import Schematic; print('Schematic IPC bindings available')"
 
