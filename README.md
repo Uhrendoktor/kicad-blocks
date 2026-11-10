@@ -17,7 +17,7 @@ KiCad Blocks is an IPC schematic plugin for **black-box, library-backed schemati
 
 ## Important functional boundary
 
-The facade symbol is what KiCad sees in the parent schematic's native ERC, netlist and BOM. The internal components in `implementation.kicad_sch` are a separate document and are **not** automatically included in those project-level outputs. The MVP does not yet provide a merged block BOM, recursive internal ERC, or a PCB-layout application/import operation. Nested dependencies are recorded and cycle-checked, but inserting a child implementation into a parent implementation is not yet automated. An optional PCB layout is stored and versioned with the block, but is not yet merged into the active board. These are not hidden behind a fake native hierarchy.
+The facade symbol is what KiCad sees in the parent schematic's native ERC, netlist and BOM. The internal components in `implementation.kicad_sch` are a separate document and are **not** automatically included in those project-level outputs. The candidate does not yet provide a merged block BOM, recursive internal ERC, or a PCB-layout application/import operation. Nested dependencies are recorded and cycle-checked, but inserting a child implementation into a parent implementation is not yet automated. An optional PCB layout is stored and versioned with the block, but is not yet merged into the active board. These are not hidden behind a fake native hierarchy.
 
 The internal schematic is editable: open the `implementation.kicad_sch` file from the block's library directory in Eeschema. It starts with global interface labels matching the facade pin names. Internal circuitry can be built with ordinary KiCad symbols and wires.
 
@@ -71,13 +71,18 @@ A local copy is stored under the project directory:
 
 Its manifest records the source block, source revision and per-file sync baseline. Local copies are not silently overwritten when both the library and local version have changed the same file.
 
-## Development and verification
+## Continuous integration on the self-hosted runner
 
-Run unit tests and syntax checks:
+The workflow uses the repository's local runner with labels `self-hosted`, `linux`, and `x64`; it does not allocate a GitHub-hosted VM or consume the hosted-runner allowance.
+
+The runner is expected to have Python 3 and package/network access. When KiCad CLI is missing, the workflow installs the official KiCad development-nightly package (`kicad-nightly`) from the KiCad PPA. That install requires root or non-interactive `sudo` inside the runner container. Python test tools are installed into an isolated virtual environment under `RUNNER_TEMP`. Set up/register the self-hosted runner in the repository's **Settings → Actions → Runners** and keep it online. The job runs only for pushes to `main` and pull requests whose head branch is in this same repository; fork pull requests are deliberately excluded from the local runner.
+
+The KiCad CLI check validates parsing/export of generated symbol and implementation files. It does not substitute for a live KiCad GUI/IPC session test of placement, local-copy conversion, synchronization, nested composition, and PCB layout application.
+
+## Local development checks
 
 ```bash
 python -m unittest discover -s tests -v
 python -m compileall -q plugin tests
+python tests/validate_kicad_cli.py
 ```
-
-The GitHub Actions workflow installs KiCad CLI, exports the generated facade symbol and implementation schematic to SVG, and runs `pytest`/`ruff`. That checks KiCad's native parsers for generated files; it does not substitute for a live KiCad 11 GUI/IPC session test of the instance-localization and synchronization actions.
