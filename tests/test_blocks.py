@@ -9,7 +9,11 @@ from pathlib import Path
 PLUGIN = Path(__file__).resolve().parents[1] / "plugin" / "kicad-blocks"
 sys.path.insert(0, str(PLUGIN))
 
-from kicad_blocks.model import facade_pin_connection_points, parse_pins, render_symbol_library
+from kicad_blocks.model import (
+    facade_pin_connection_points,
+    parse_pins,
+    render_symbol_library,
+)
 from kicad_blocks.repository import (
     add_dependency,
     create_block,
@@ -19,8 +23,8 @@ from kicad_blocks.repository import (
     read_manifest,
     refresh_library_block,
     register_project_symbol_library,
-    resolve_dependency_occurrences,
     resolve_dependency_graph,
+    resolve_dependency_occurrences,
     revision_for_hashes,
     sha256_file,
     synchronize_local_copy,
