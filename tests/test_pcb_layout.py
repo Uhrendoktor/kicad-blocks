@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -152,13 +153,13 @@ def main() -> None:
         )
         if export_result.returncode != 0:
             serialized = output.read_text(encoding="utf-8")
-            offset_match = re.search(r"offset (\\d+)", export_result.stderr)
+            offset_match = re.search(r"offset (\d+)", export_result.stderr)
             offset = int(offset_match.group(1)) if offset_match else -1
             snippet = serialized[max(0, offset - 180):offset + 180] if offset >= 0 else serialized[:500]
             raise RuntimeError(
                 "KiCad rejected the merged PCB board: "
                 + (export_result.stderr or export_result.stdout)
-                + f"\\nSerialized text near parser location {offset}: {snippet!r}"
+                + f"\nSerialized text near parser location {offset}: {snippet!r}"
             )
         if not list(svg_dir.glob("*.svg")):
             raise AssertionError("KiCad did not export the merged board to SVG.")
