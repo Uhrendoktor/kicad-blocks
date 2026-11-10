@@ -332,6 +332,31 @@ class BlockRepositoryTests(unittest.TestCase):
         self.assertEqual(local_manifest["base_hashes"], source_manifest["hashes"])
         self.assertEqual(publish_local_copy(local)["published"], [])
 
+    def test_local_facade_publish_updates_shared_catalog(self):
+        source = create_block(self.root, "Local Facade Edit", self.pins)
+        local = make_local_copy(source, self.project)
+        local_symbol_asset = local.path / local.manifest["symbol_file"]
+        local_text = local_symbol_asset.read_text(encoding="utf-8")
+        self.assertIn('(property "Datasheet" ""', local_text)
+        local_text = local_text.replace(
+            '(property "Datasheet" ""',
+            '(property "Datasheet" "local-catalog-marker"',
+            1,
+        )
+        local_symbol_asset.write_text(local_text, encoding="utf-8")
+
+        result = publish_local_copy(local)
+
+        self.assertEqual(result["published"], ["block.kicad_sym"])
+        catalog_text = source.symbol_library.read_text(encoding="utf-8")
+        self.assertIn("local-catalog-marker", catalog_text)
+        source_text = (source.path / source.manifest["symbol_file"]).read_text(encoding="utf-8")
+        self.assertIn("local-catalog-marker", source_text)
+        self.assertEqual(
+            read_manifest(local.path)["base_hashes"],
+            read_manifest(source.path)["hashes"],
+        )
+
     def test_local_sync_merges_independent_local_and_upstream_edits(self):
         source = create_block(self.root, "Bidirectional Merge", self.pins)
         local = make_local_copy(source, self.project)
