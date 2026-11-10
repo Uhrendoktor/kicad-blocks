@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import os
-from pathlib import Path
 import shutil
 import tempfile
+from pathlib import Path
 
 from kipy import KiCad
 from kipy.board import Net
