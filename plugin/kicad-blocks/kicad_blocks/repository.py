@@ -708,6 +708,9 @@ def publish_local_copy(local_block: BlockRecord) -> dict:
             backup_file(source.path, source_backup, file_name, source_originals)
         for file_name in pull_files:
             backup_file(local_block.path, local_backup, file_name, local_originals)
+        if SYMBOL_NAME in push_files:
+            catalog_name = str(source.manifest.get("catalog_file", LIBRARY_CATALOG_NAME))
+            backup_file(source.path.parent, source_backup, catalog_name, source_originals)
 
         for file_name in push_files:
             source_file = source.path / file_name
@@ -717,6 +720,8 @@ def publish_local_copy(local_block: BlockRecord) -> dict:
                 shutil.copy2(local_file, source_file)
             else:
                 source_file.unlink(missing_ok=True)
+        if SYMBOL_NAME in push_files:
+            merge_symbol_catalog(source.path.parent, source.path / SYMBOL_NAME)
 
         for file_name in pull_files:
             source_file = source.path / file_name

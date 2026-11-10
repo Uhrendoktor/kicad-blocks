@@ -339,8 +339,9 @@ class BlockRepositoryTests(unittest.TestCase):
             local.implementation.read_text(encoding="utf-8") + "\n; local side\n",
             encoding="utf-8",
         )
-        source.symbol_library.write_text(
-            source.symbol_library.read_text(encoding="utf-8") + "\n; upstream side\n",
+        source_symbol_asset = source.path / source.manifest["symbol_file"]
+        source_symbol_asset.write_text(
+            source_symbol_asset.read_text(encoding="utf-8") + "\n; upstream side\n",
             encoding="utf-8",
         )
 
@@ -350,8 +351,10 @@ class BlockRepositoryTests(unittest.TestCase):
         self.assertEqual(result["pulled"], ["block.kicad_sym"])
         self.assertIn("; local side", source.implementation.read_text(encoding="utf-8"))
         self.assertIn("; local side", local.implementation.read_text(encoding="utf-8"))
-        self.assertIn("; upstream side", source.symbol_library.read_text(encoding="utf-8"))
-        self.assertIn("; upstream side", local.symbol_library.read_text(encoding="utf-8"))
+        source_symbol_asset = source.path / source.manifest["symbol_file"]
+        local_symbol_asset = local.path / local.manifest["symbol_file"]
+        self.assertIn("; upstream side", source_symbol_asset.read_text(encoding="utf-8"))
+        self.assertIn("; upstream side", local_symbol_asset.read_text(encoding="utf-8"))
         local_manifest = read_manifest(local.path)
         source_manifest = read_manifest(source.path)
         self.assertEqual(local_manifest["base_hashes"], source_manifest["hashes"])
