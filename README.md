@@ -25,7 +25,7 @@ The internal schematic is editable: open the `implementation.kicad_sch` file fro
 
 - KiCad 11 nightly/development build with its Schematic Editor IPC API enabled (Preferences → Plugins).
 - Python runtime managed by KiCad for the plugin, with Tkinter available.
-- The KiCad `kicad-python` development bindings, installed from the official GitLab `master` branch via `requirements.txt`. The new schematic API is still under development and is not included in the released PyPI package version used here.
+- The KiCad `kicad-python` bindings, installed from the official GitLab `main` branch via `requirements.txt` so the current headless KiCad 11 API is available.
 
 Schematic placement, selection and library reload APIs used here are part of KiCad's newer schematic IPC interface. This plugin does not support the old SWIG-only plugin interface.
 
@@ -77,7 +77,7 @@ The workflow uses the repository's local runner with labels `self-hosted`, `linu
 
 The runner is expected to have Python 3 and package/network access. When KiCad CLI is missing, the workflow installs the official KiCad development-nightly package (`kicad-nightly`) from the KiCad PPA. That install requires root or non-interactive `sudo` inside the runner container. Python test tools are installed into an isolated virtual environment under `RUNNER_TEMP`. Set up/register the self-hosted runner in the repository's **Settings → Actions → Runners** and keep it online. The job runs only for pushes to `main` and pull requests whose head branch is in this same repository; fork pull requests are deliberately excluded from the local runner.
 
-The KiCad CLI check validates parsing/export of generated symbol and implementation files. It does not substitute for a live KiCad GUI/IPC session test of placement, local-copy conversion, synchronization, nested composition, and PCB layout application.
+The CI pipeline installs the official KiCad Python IPC bindings, runs a headless `kicad-cli api-server` integration smoke test that places a facade symbol and asserts that the parent schematic has no hierarchical sheet or copied child schematic, and validates generated assets by CLI export. This headless test is an actual KiCad IPC check, but does not yet test local-copy conversion, synchronization, nested composition, or PCB layout application.
 
 ## Local development checks
 
