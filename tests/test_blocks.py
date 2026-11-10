@@ -428,6 +428,31 @@ class BlockRepositoryTests(unittest.TestCase):
             [child.manifest["block_id"]],
         )
 
+    def test_nested_symbol_library_table_uses_relative_path_and_can_retarget(self):
+        parent = create_block(self.root, "Relative Table Parent", self.pins)
+        child = create_block(self.root, "Relative Table Child", self.pins)
+        first = register_project_symbol_library(
+            parent.path,
+            child.manifest["library_nickname"],
+            child.symbol_library,
+            prefer_relative=True,
+        )
+        content = first.read_text(encoding="utf-8")
+        self.assertIn("${KIPRJMOD}/../", content)
+        relocated_child = self.project / "different" / "relocated.kicad_sym"
+        relocated_child.parent.mkdir(parents=True)
+        relocated_child.write_text(child.symbol_library.read_text(encoding="utf-8"), encoding="utf-8")
+        register_project_symbol_library(
+            parent.path,
+            child.manifest["library_nickname"],
+            relocated_child,
+            prefer_relative=True,
+            replace_existing=True,
+        )
+        updated = first.read_text(encoding="utf-8")
+        self.assertIn("../different/relocated.kicad_sym", updated)
+        self.assertNotIn(child.path.name + "/block.kicad_sym", updated)
+
     def test_nested_dependencies_are_recorded_and_cycles_rejected(self):
         parent = create_block(self.root, "Controller", self.pins)
         child = create_block(self.root, "Power Stage", self.pins)

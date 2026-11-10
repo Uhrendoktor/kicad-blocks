@@ -216,11 +216,11 @@ def register_project_symbol_library(
     )
     existing = pattern.search(text)
     if prefer_relative:
-        uri = "\${KIPRJMOD}/" + Path(os.path.relpath(library_path, project_dir)).as_posix()
+        uri = "${KIPRJMOD}/" + Path(os.path.relpath(library_path, project_dir)).as_posix()
     else:
         try:
             relative_path = library_path.relative_to(project_dir)
-            uri = "\${KIPRJMOD}/" + relative_path.as_posix()
+            uri = "${KIPRJMOD}/" + relative_path.as_posix()
         except ValueError:
             uri = library_path.as_posix()
     entry = (
@@ -231,9 +231,9 @@ def register_project_symbol_library(
         current_uri = re.search(r'\(uri\s+"([^"]+)"\)', existing.group(0))
         if current_uri:
             current_value = current_uri.group(1)
-            if current_value.startswith("\${KIPRJMOD}/"):
+            if current_value.startswith("${KIPRJMOD}/"):
                 current_path = (
-                    project_dir / current_value[len("\${KIPRJMOD}/"):]
+                    project_dir / current_value[len("${KIPRJMOD}/"):]
                 ).resolve()
             else:
                 current_path = Path(current_value).expanduser().resolve()
