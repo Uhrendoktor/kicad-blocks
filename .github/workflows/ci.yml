@@ -5,25 +5,46 @@ on:
     branches: [main]
   pull_request:
 
+# Use the registered local runner. This avoids billable GitHub-hosted runners.
+# The machine must have KiCad CLI installed and available on PATH.
 jobs:
   python-and-kicad:
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, linux, x64]
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - name: Install KiCad CLI
+
+      - name: Inspect local runner and required tools
+        shell: bash
         run: |
-          sudo add-apt-repository --yes ppa:kicad/kicad-10.0-releases
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends kicad
-      - name: Install Python checks
-        run: python -m pip install --upgrade pip pytest ruff
+          set -euo pipefail
+          echo "Runner: ${RUNNER_NAME:-unknown}"
+          echo "OS: $(uname -a)"
+          echo "Python: $(command -v python3)"
+          python3 --version
+          if ! command -v kicad-cli >/dev/null 2>&1; then
+            echo "::error::kicad-cli is not installed or is not on PATH on the self-hosted runner."
+            exit 1
+          fi
+          kicad-cli version
+
+      - name: Create isolated Python environment
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m venv "${RUNNER_TEMP}/kicad-blocks-venv"
+          "${RUNNER_TEMP}/kicad-blocks-venv/bin/python" -m pip install --upgrade pip
+          "${RUNNER_TEMP}/kicad-blocks-venv/bin/python" -m pip install pytest ruff
+
       - name: Lint, test and compile
+        shell: bash
         run: |
-          ruff check plugin tests
-          pytest -q
-          python -m compileall -q plugin tests
+          set -euo pipefail
+          PY="${RUNNER_TEMP}/kicad-blocks-venv/bin/python"
+          "$PY" -m ruff check plugin tests
+          "$PY" -m pytest -q
+          "$PY" -m compileall -q plugin tests
+
       - name: Validate generated files with KiCad
-        run: python tests/validate_kicad_cli.py
+        shell: bash
+        run: "${RUNNER_TEMP}/kicad-blocks-venv/bin/python tests/validate_kicad_cli.py"
