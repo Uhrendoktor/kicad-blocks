@@ -31,8 +31,12 @@ def main() -> None:
     eeschema = os.environ.get("KICAD_EESCHEMA") or _find_executable(
         "eeschema-nightly", "eeschema"
     )
-    xvfb_run = _find_executable("xvfb-run")
     xdotool = _find_executable("xdotool")
+    if not os.environ.get("DISPLAY"):
+        raise RuntimeError(
+            "The Eeschema GUI smoke test must run inside xvfb-run so xdotool and "
+            "Eeschema share the same DISPLAY."
+        )
 
     with tempfile.TemporaryDirectory(prefix="kicad-blocks-gui-") as temp:
         root = Path(temp)
@@ -52,14 +56,7 @@ def main() -> None:
         env["XDG_CONFIG_HOME"] = str(home / ".config")
         env["KICAD_BLOCKS_GUI_TEST"] = "1"
 
-        command = [
-            xvfb_run,
-            "-a",
-            "-s",
-            "-screen 0 1280x800x24",
-            eeschema,
-            str(implementation),
-        ]
+        command = [eeschema, str(implementation)]
         log_path = root / "eeschema.log"
         window_id = None
         deadline = time.monotonic() + 35.0

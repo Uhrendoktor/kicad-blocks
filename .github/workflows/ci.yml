@@ -170,7 +170,9 @@ jobs:
 
       - name: Verify Eeschema GUI editor launch and save
         shell: bash
-        run: "${RUNNER_TEMP}/kicad-blocks-venv/bin/python tests/test_eeschema_gui.py"
+        run: |
+          xvfb-run -a -s "-screen 0 1280x800x24" \
+            "${RUNNER_TEMP}/kicad-blocks-venv/bin/python" tests/test_eeschema_gui.py
 
       - name: Verify real KiCad IPC placement (headless)
         shell: bash
