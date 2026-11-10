@@ -5,7 +5,12 @@ from __future__ import annotations
 import os
 from pathlib import Path
 import shutil
+import sys
 import tempfile
+
+ROOT = Path(__file__).resolve().parents[1]
+PLUGIN = ROOT / "plugin" / "kicad-blocks"
+sys.path.insert(0, str(PLUGIN))
 
 from kipy import KiCad
 from kipy.geometry import Vector2

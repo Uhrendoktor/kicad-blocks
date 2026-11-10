@@ -62,6 +62,7 @@ jobs:
           python3 -m venv "${RUNNER_TEMP}/kicad-blocks-venv"
           "${RUNNER_TEMP}/kicad-blocks-venv/bin/python" -m pip install --upgrade pip
           "${RUNNER_TEMP}/kicad-blocks-venv/bin/python" -m pip install pytest ruff
+          "${RUNNER_TEMP}/kicad-blocks-venv/bin/python" -m pip install -r plugin/kicad-blocks/requirements.txt
 
       - name: Run unit tests and compile
         shell: bash
@@ -78,3 +79,7 @@ jobs:
       - name: Validate generated files with KiCad
         shell: bash
         run: "${RUNNER_TEMP}/kicad-blocks-venv/bin/python tests/validate_kicad_cli.py"
+
+      - name: Verify real KiCad IPC placement (headless)
+        shell: bash
+        run: "${RUNNER_TEMP}/kicad-blocks-venv/bin/python tests/test_ipc_headless.py"
