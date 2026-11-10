@@ -20,13 +20,16 @@ from .model import (
     sha256_file,
     slugify,
 )
+from .pcb_layout import _dump, _head, parse_sexpr
 
 MANIFEST_NAME = "manifest.json"
 SYMBOL_NAME = "block.kicad_sym"
 IMPLEMENTATION_NAME = "implementation.kicad_sch"
 LAYOUT_NAME = "layout.kicad_pcb"
-LIBRARY_NICKNAME_PREFIX = "KBlocks_"
-LOCAL_NICKNAME_PREFIX = "KBLocal_"
+LIBRARY_NICKNAME = "KBlocks"
+LIBRARY_CATALOG_NAME = "KBlocks.kicad_sym"
+LOCAL_NICKNAME_PREFIX = "KBLocal_"  # Reserved for migration of pre-catalog projects.
+INSTANCE_LINKS_NAME = "instances.json"
 
 
 @dataclass(frozen=True, slots=True)
@@ -49,7 +52,12 @@ class BlockRecord:
 
     @property
     def symbol_library(self) -> Path:
-        return self.path / str(self.manifest["symbol_file"])
+        """Stable facade catalog shared by every block in this library."""
+        if self.manifest.get("local_copy") and self.manifest.get("source_path"):
+            library_root = Path(self.manifest["source_path"]).expanduser().resolve().parent
+        else:
+            library_root = self.path.parent
+        return library_root / str(self.manifest.get("catalog_file", LIBRARY_CATALOG_NAME))
 
     @property
     def implementation(self) -> Path:
@@ -71,6 +79,91 @@ def atomic_write(path: Path, content: str) -> None:
         except OSError:
             pass
         raise
+
+
+def merge_symbol_catalog(library_root: Path, symbol_file: Path) -> Path:
+    """Insert/replace one facade symbol in the library's stable KiCad catalog."""
+    library_root = Path(library_root).expanduser().resolve()
+    symbol_file = Path(symbol_file).expanduser().resolve()
+    if not symbol_file.is_file():
+        raise FileNotFoundError(symbol_file)
+    catalog = library_root / LIBRARY_CATALOG_NAME
+    incoming = parse_sexpr(symbol_file.read_text(encoding="utf-8"))
+    incoming_symbols = [item for item in incoming[1:] if _head(item) == "symbol"]
+    if _head(incoming) != "kicad_symbol_lib" or len(incoming_symbols) != 1:
+        raise ValueError(f"Expected one KiCad facade symbol in {symbol_file}.")
+    symbol = incoming_symbols[0]
+    symbol_name = str(symbol[1])
+    if catalog.is_file():
+        existing = parse_sexpr(catalog.read_text(encoding="utf-8"))
+        if _head(existing) != "kicad_symbol_lib":
+            raise ValueError(f"Invalid KiCad symbol catalog: {catalog}")
+    else:
+        existing = [incoming[0], *incoming[1:-1]]
+    existing_symbols = [
+        (index, item)
+        for index, item in enumerate(existing[1:], start=1)
+        if _head(item) == "symbol"
+    ]
+    match = next(
+        (index for index, item in existing_symbols if len(item) > 1 and str(item[1]) == symbol_name),
+        None,
+    )
+    if match is None:
+        existing.append(symbol)
+    else:
+        existing[match] = symbol
+    atomic_write(catalog, _dump(existing) + "\n")
+    return catalog
+
+
+def rename_block_symbol_asset(block_path: Path, new_symbol_name: str) -> None:
+    """Rename a legacy single-symbol asset and its unit sub-symbol identifiers."""
+    block_path = Path(block_path).expanduser().resolve()
+    manifest = read_manifest(block_path)
+    symbol_path = block_path / manifest["symbol_file"]
+    root = parse_sexpr(symbol_path.read_text(encoding="utf-8"))
+    symbols = [item for item in root[1:] if _head(item) == "symbol"]
+    if _head(root) != "kicad_symbol_lib" or len(symbols) != 1:
+        raise ValueError(f"Expected one facade symbol in {symbol_path}.")
+    symbol = symbols[0]
+    old_name = str(symbol[1])
+    symbol[1] = type(symbol[1])(new_symbol_name) if isinstance(symbol[1], str) else new_symbol_name
+    for child in symbol[1:]:
+        if _head(child) == "symbol" and len(child) > 1:
+            child_name = str(child[1])
+            if child_name.startswith(old_name + "_"):
+                suffix = child_name[len(old_name):]
+                child[1] = type(child[1])(new_symbol_name + suffix) if isinstance(child[1], str) else new_symbol_name + suffix
+    atomic_write(symbol_path, _dump(root) + "\n")
+
+
+def ensure_stable_block_identity(block: "BlockRecord") -> "BlockRecord":
+    """Migrate an old per-block nickname into the shared KBlocks catalog."""
+    manifest = read_manifest(block.path)
+    if (
+        manifest.get("library_nickname") != LIBRARY_NICKNAME
+        or manifest.get("catalog_file") != LIBRARY_CATALOG_NAME
+    ):
+        suffix = str(manifest["block_id"]).replace("-", "")[:8].lower()
+        desired_name = f"{manifest['slug']}_{suffix}"
+        if manifest.get("symbol_name") != desired_name:
+            rename_block_symbol_asset(block.path, desired_name)
+            manifest = read_manifest(block.path)
+            manifest["symbol_name"] = desired_name
+        manifest["library_nickname"] = LIBRARY_NICKNAME
+        manifest["catalog_file"] = LIBRARY_CATALOG_NAME
+        hashes = _asset_hashes(block.path, manifest)
+        manifest["files"] = sorted(hashes)
+        manifest["hashes"] = hashes
+        manifest["revision"] = revision_for_hashes(hashes)
+        manifest["version"] = int(manifest.get("version", 1)) + 1
+        atomic_write(
+            block.path / MANIFEST_NAME,
+            json.dumps(manifest, indent=2, ensure_ascii=False) + "\n",
+        )
+    merge_symbol_catalog(block.path.parent, block.path / manifest["symbol_file"])
+    return _record(block.path)
 
 
 def read_manifest(block_path: Path) -> dict:
@@ -132,12 +225,14 @@ def create_block(
         raise ValueError("At least one pin is required.")
     slug = slugify(name)
     block_id = str(uuid.uuid4())
+    suffix = block_id.replace("-", "")[:8].lower()
+    symbol_name = f"{slug}_{suffix}"
     folder = root / f"{slug}_{block_id[:8]}.kicad_block"
-    nickname = LIBRARY_NICKNAME_PREFIX + block_id.replace("-", "")[:8].upper()
     staging = Path(tempfile.mkdtemp(prefix=f".{slug}.", dir=root))
+    folder_created = False
     try:
         symbol_content = render_symbol_library(
-            slug, name, block_id, pins, reference_prefix=reference_prefix
+            symbol_name, name, block_id, pins, reference_prefix=reference_prefix
         )
         (staging / SYMBOL_NAME).write_text(symbol_content, encoding="utf-8")
         (staging / IMPLEMENTATION_NAME).write_text(
@@ -161,8 +256,9 @@ def create_block(
             "version": 1,
             "revision": revision_for_hashes(hashes),
             "created_by": "kicad-blocks",
-            "library_nickname": nickname,
-            "symbol_name": slug,
+            "library_nickname": LIBRARY_NICKNAME,
+            "symbol_name": symbol_name,
+            "catalog_file": LIBRARY_CATALOG_NAME,
             "symbol_file": SYMBOL_NAME,
             "implementation_file": IMPLEMENTATION_NAME,
             "layout_file": LAYOUT_NAME if LAYOUT_NAME in files else None,
@@ -178,9 +274,13 @@ def create_block(
         if folder.exists():
             raise FileExistsError(folder)
         os.replace(staging, folder)
+        folder_created = True
+        merge_symbol_catalog(root, folder / SYMBOL_NAME)
         return _record(folder)
     except Exception:
         shutil.rmtree(staging, ignore_errors=True)
+        if folder_created:
+            shutil.rmtree(folder, ignore_errors=True)
         raise
 
 
@@ -281,23 +381,644 @@ def make_local_copy(source: BlockRecord, project_dir: Path) -> BlockRecord:
             "source_revision": source.manifest.get("revision"),
             "base_hashes": base_hashes,
             "base_dependencies": source.manifest.get("dependencies", []),
-            "library_nickname": LOCAL_NICKNAME_PREFIX + suffix,
+            "library_nickname": source.manifest.get("library_nickname", LIBRARY_NICKNAME),
+            "symbol_name": source.manifest.get("symbol_name"),
+            "catalog_file": source.manifest.get("catalog_file", LIBRARY_CATALOG_NAME),
         }
     )
-    atomic_write(folder / MANIFEST_NAME, json.dumps(manifest, indent=2) + "\n")
-    for dependency in manifest.get("dependencies", []):
-        child_path = _dependency_path(source.path, source.manifest, dependency)
-        if child_path is None or not child_path.is_dir():
-            continue
-        child = _record(child_path)
-        register_project_symbol_library(
-            folder,
-            child.manifest["library_nickname"],
-            child.symbol_library,
-            description=f"Nested KiCad block: {child.name}",
-            replace_existing=True,
-        )
+    atomic_write(
+        folder / MANIFEST_NAME,
+        json.dumps(manifest, indent=2, ensure_ascii=False) + "\n",
+    )
     return _record(folder)
+
+
+def _instance_links_path(project_dir: Path) -> Path:
+    return Path(project_dir).expanduser().resolve() / ".kicad_blocks" / INSTANCE_LINKS_NAME
+
+
+def link_instance_to_local_copy(
+    project_dir: Path, instance_id: str, local_block: BlockRecord
+) -> Path:
+    """Bind one schematic symbol KIID to its independent project-local block asset."""
+    if not local_block.manifest.get("local_copy"):
+        raise ValueError("The target block asset is not a project-local copy.")
+    instance_id = str(instance_id).strip()
+    if not instance_id:
+        raise ValueError("A schematic instance KIID is required.")
+    path = _instance_links_path(project_dir)
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        data = {"schema_version": 1, "instances": {}}
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Invalid project block-link metadata: {path}") from exc
+    entries = data.setdefault("instances", {})
+    entries[instance_id] = {
+        "local_path": Path(os.path.relpath(local_block.path, Path(project_dir).resolve())).as_posix(),
+        "source_block_id": local_block.manifest.get("source_block_id"),
+        "updated_at": __import__("datetime").datetime.now().astimezone().isoformat(),
+    }
+    atomic_write(path, json.dumps(data, indent=2, ensure_ascii=False) + "\n")
+    return path
+
+
+def local_copy_for_instance(project_dir: Path, instance_id: str) -> BlockRecord | None:
+    """Return the local block bound to a symbol KIID, if any."""
+    path = _instance_links_path(project_dir)
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return None
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Invalid project block-link metadata: {path}") from exc
+    entry = data.get("instances", {}).get(str(instance_id))
+    if entry is None:
+        return None
+    local_path = (Path(project_dir).expanduser().resolve() / entry["local_path"]).resolve()
+    if not local_path.is_dir():
+        raise FileNotFoundError(
+            f"Project-local block bound to instance {instance_id} is missing: {local_path}"
+        )
+    record = _record(local_path)
+    if not record.manifest.get("local_copy"):
+        raise ValueError(f"Instance {instance_id} points at a non-local block asset.")
+    if entry.get("source_block_id") != record.manifest.get("source_block_id"):
+        raise ValueError(f"Stale local block-link metadata for instance {instance_id}.")
+    return record
+
+
+def unlink_instance_local_copy(project_dir: Path, instance_id: str) -> None:
+    path = _instance_links_path(project_dir)
+    if not path.is_file():
+        return
+    data = json.loads(path.read_text(encoding="utf-8"))
+    data.get("instances", {}).pop(str(instance_id), None)
+    atomic_write(path, json.dumps(data, indent=2, ensure_ascii=False) + "\n")
+
+
+def synchronize_local_copy(local_block: BlockRecord) -> dict:
+    """Pull upstream changes unless the same file has conflicting local edits.
+
+    A locally modified file is preserved when upstream has not changed it. If
+    both copies changed a file since the last sync, the operation is rejected.
+    """
+    manifest = local_block.manifest
+    if not manifest.get("local_copy"):
+        raise ValueError("Selected block is not a local project copy.")
+    source_path = Path(manifest["source_path"]).resolve()
+    source = _record(source_path)
+    if source.manifest["block_id"] != manifest.get("source_block_id"):
+        raise ValueError("The recorded source path now points to a different block.")
+    if source.manifest.get("pins") != manifest.get("pins"):
+        raise RuntimeError(
+            "The library block's external pin interface changed. Automatic sync is stopped "
+            "because changing pin numbers or names could invalidate connected nets. "
+            "Create a reviewed replacement instance instead."
+        )
+
+    base_hashes = manifest.get("base_hashes", {})
+    local_hashes = _asset_hashes(local_block.path, manifest)
+    source_hashes = _asset_hashes(source.path, source.manifest)
+    base_dependencies = manifest.get("base_dependencies", manifest.get("dependencies", []))
+    local_dependencies = manifest.get("dependencies", [])
+    source_dependencies = source.manifest.get("dependencies", [])
+    local_dependencies_changed = local_dependencies != base_dependencies
+    source_dependencies_changed = source_dependencies != base_dependencies
+    dependency_conflict = (
+        local_dependencies_changed
+        and source_dependencies_changed
+        and local_dependencies != source_dependencies
+    )
+    conflicts = ["manifest.dependencies"] if dependency_conflict else []
+    copy_files = []
+    for file_name in sorted(set(base_hashes) | set(local_hashes) | set(source_hashes)):
+        base = base_hashes.get(file_name)
+        local = local_hashes.get(file_name)
+        upstream = source_hashes.get(file_name)
+        local_changed = local != base
+        upstream_changed = upstream != base
+        if local_changed and upstream_changed and local != upstream:
+            conflicts.append(file_name)
+        elif upstream_changed and not local_changed:
+            copy_files.append(file_name)
+
+    if conflicts:
+        raise RuntimeError(
+            "Sync conflict: both the local copy and library changed "
+            + ", ".join(conflicts)
+            + ". Resolve those files manually; no files were overwritten."
+        )
+
+    for file_name in copy_files:
+        source_file = source.path / file_name
+        target_file = local_block.path / file_name
+        if source_file.exists():
+            target_file.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source_file, target_file)
+        else:
+            target_file.unlink(missing_ok=True)
+
+    # Re-read the source state and advance the baseline only after all copies succeed.
+    refreshed_source = _record(source.path)
+    new_hashes = _asset_hashes(local_block.path, refreshed_source.manifest)
+    refreshed_manifest = read_manifest(local_block.path)
+    refreshed_manifest["base_hashes"] = _asset_hashes(source.path, refreshed_source.manifest)
+    refreshed_manifest["source_version"] = refreshed_source.manifest.get("version", 1)
+    refreshed_manifest["source_revision"] = refreshed_source.manifest.get("revision")
+    refreshed_manifest["files"] = refreshed_source.manifest.get("files", [])
+    # Keep the local manifest's local identity and nickname, but refresh its pin contract.
+    refreshed_manifest["pins"] = refreshed_source.manifest["pins"]
+    if source_dependencies_changed and not local_dependencies_changed:
+        refreshed_manifest["dependencies"] = source_dependencies
+    refreshed_manifest["base_dependencies"] = source_dependencies
+    refreshed_manifest["hashes"] = new_hashes
+    refreshed_manifest["revision"] = revision_for_hashes(new_hashes)
+    atomic_write(
+        local_block.path / MANIFEST_NAME,
+        json.dumps(refreshed_manifest, indent=2, ensure_ascii=False) + "\n",
+    )
+    return {
+        "copied": copy_files,
+        "preserved": sorted(set(local_hashes) - set(copy_files)),
+        "dependencies_updated": source_dependencies_changed and not local_dependencies_changed,
+        "conflicts": [],
+    }
+
+
+def refresh_library_block(block: BlockRecord) -> dict:
+    """Recompute asset hashes and publish a new library revision when files changed."""
+    manifest = read_manifest(block.path)
+    if manifest.get("local_copy"):
+        raise ValueError("Publish the source library block, not a project-local copy.")
+    current_hashes = _asset_hashes(block.path, manifest)
+    previous_hashes = manifest.get("hashes", {})
+    changed = sorted(
+        name for name in set(current_hashes) | set(previous_hashes)
+        if current_hashes.get(name) != previous_hashes.get(name)
+    )
+    if not changed:
+        return {"changed": [], "version": int(manifest.get("version", 1)), "revision": manifest.get("revision")}
+    manifest["files"] = sorted(current_hashes)
+    manifest["hashes"] = current_hashes
+    manifest["revision"] = revision_for_hashes(current_hashes)
+"""Filesystem-backed block library, local copies, synchronization and nesting."""
+
+from __future__ import annotations
+
+import json
+import math
+import os
+import re
+import shutil
+import tempfile
+import uuid
+from dataclasses import dataclass
+from pathlib import Path
+
+from .model import (
+    BlockPin,
+    render_implementation_schematic,
+    render_symbol_library,
+    revision_for_hashes,
+    sha256_file,
+    slugify,
+)
+from .pcb_layout import _dump, _head, parse_sexpr
+
+MANIFEST_NAME = "manifest.json"
+SYMBOL_NAME = "block.kicad_sym"
+IMPLEMENTATION_NAME = "implementation.kicad_sch"
+LAYOUT_NAME = "layout.kicad_pcb"
+LIBRARY_NICKNAME = "KBlocks"
+LIBRARY_CATALOG_NAME = "KBlocks.kicad_sym"
+LOCAL_NICKNAME_PREFIX = "KBLocal_"  # Reserved for migration of pre-catalog projects.
+INSTANCE_LINKS_NAME = "instances.json"
+
+
+@dataclass(frozen=True, slots=True)
+class BlockOccurrence:
+    """One specific occurrence of a block in a nested implementation tree."""
+
+    record: BlockRecord
+    instance_path: tuple[str, ...] = ()
+    instance_ids: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class BlockRecord:
+    path: Path
+    manifest: dict
+
+    @property
+    def name(self) -> str:
+        return str(self.manifest["name"])
+
+    @property
+    def symbol_library(self) -> Path:
+        """Stable facade catalog shared by every block in this library."""
+        if self.manifest.get("local_copy") and self.manifest.get("source_path"):
+            library_root = Path(self.manifest["source_path"]).expanduser().resolve().parent
+        else:
+            library_root = self.path.parent
+        return library_root / str(self.manifest.get("catalog_file", LIBRARY_CATALOG_NAME))
+
+    @property
+    def implementation(self) -> Path:
+        return self.path / str(self.manifest["implementation_file"])
+
+
+def atomic_write(path: Path, content: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, temp_name = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as stream:
+            stream.write(content)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temp_name, path)
+    except Exception:
+        try:
+            os.unlink(temp_name)
+        except OSError:
+            pass
+        raise
+
+
+def merge_symbol_catalog(library_root: Path, symbol_file: Path) -> Path:
+    """Insert/replace one facade symbol in the library's stable KiCad catalog."""
+    library_root = Path(library_root).expanduser().resolve()
+    symbol_file = Path(symbol_file).expanduser().resolve()
+    if not symbol_file.is_file():
+        raise FileNotFoundError(symbol_file)
+    catalog = library_root / LIBRARY_CATALOG_NAME
+    incoming = parse_sexpr(symbol_file.read_text(encoding="utf-8"))
+    incoming_symbols = [item for item in incoming[1:] if _head(item) == "symbol"]
+    if _head(incoming) != "kicad_symbol_lib" or len(incoming_symbols) != 1:
+        raise ValueError(f"Expected one KiCad facade symbol in {symbol_file}.")
+    symbol = incoming_symbols[0]
+    symbol_name = str(symbol[1])
+    if catalog.is_file():
+        existing = parse_sexpr(catalog.read_text(encoding="utf-8"))
+        if _head(existing) != "kicad_symbol_lib":
+            raise ValueError(f"Invalid KiCad symbol catalog: {catalog}")
+    else:
+        existing = [incoming[0], *incoming[1:-1]]
+    existing_symbols = [
+        (index, item)
+        for index, item in enumerate(existing[1:], start=1)
+        if _head(item) == "symbol"
+    ]
+    match = next(
+        (index for index, item in existing_symbols if len(item) > 1 and str(item[1]) == symbol_name),
+        None,
+    )
+    if match is None:
+        existing.append(symbol)
+    else:
+        existing[match] = symbol
+    atomic_write(catalog, _dump(existing) + "\n")
+    return catalog
+
+
+def rename_block_symbol_asset(block_path: Path, new_symbol_name: str) -> None:
+    """Rename a legacy single-symbol asset and its unit sub-symbol identifiers."""
+    block_path = Path(block_path).expanduser().resolve()
+    manifest = read_manifest(block_path)
+    symbol_path = block_path / manifest["symbol_file"]
+    root = parse_sexpr(symbol_path.read_text(encoding="utf-8"))
+    symbols = [item for item in root[1:] if _head(item) == "symbol"]
+    if _head(root) != "kicad_symbol_lib" or len(symbols) != 1:
+        raise ValueError(f"Expected one facade symbol in {symbol_path}.")
+    symbol = symbols[0]
+    old_name = str(symbol[1])
+    symbol[1] = type(symbol[1])(new_symbol_name) if isinstance(symbol[1], str) else new_symbol_name
+    for child in symbol[1:]:
+        if _head(child) == "symbol" and len(child) > 1:
+            child_name = str(child[1])
+            if child_name.startswith(old_name + "_"):
+                suffix = child_name[len(old_name):]
+                child[1] = type(child[1])(new_symbol_name + suffix) if isinstance(child[1], str) else new_symbol_name + suffix
+    atomic_write(symbol_path, _dump(root) + "\n")
+
+
+def ensure_stable_block_identity(block: "BlockRecord") -> "BlockRecord":
+    """Migrate an old per-block nickname into the shared KBlocks catalog."""
+    manifest = read_manifest(block.path)
+    if (
+        manifest.get("library_nickname") != LIBRARY_NICKNAME
+        or manifest.get("catalog_file") != LIBRARY_CATALOG_NAME
+    ):
+        suffix = str(manifest["block_id"]).replace("-", "")[:8].lower()
+        desired_name = f"{manifest['slug']}_{suffix}"
+        if manifest.get("symbol_name") != desired_name:
+            rename_block_symbol_asset(block.path, desired_name)
+            manifest = read_manifest(block.path)
+            manifest["symbol_name"] = desired_name
+        manifest["library_nickname"] = LIBRARY_NICKNAME
+        manifest["catalog_file"] = LIBRARY_CATALOG_NAME
+        hashes = _asset_hashes(block.path, manifest)
+        manifest["files"] = sorted(hashes)
+        manifest["hashes"] = hashes
+        manifest["revision"] = revision_for_hashes(hashes)
+        manifest["version"] = int(manifest.get("version", 1)) + 1
+        atomic_write(
+            block.path / MANIFEST_NAME,
+            json.dumps(manifest, indent=2, ensure_ascii=False) + "\n",
+        )
+    merge_symbol_catalog(block.path.parent, block.path / manifest["symbol_file"])
+    return _record(block.path)
+
+
+def read_manifest(block_path: Path) -> dict:
+    manifest_path = block_path / MANIFEST_NAME
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except FileNotFoundError as exc:
+        raise ValueError(f"Block manifest not found: {manifest_path}") from exc
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Invalid block manifest: {manifest_path}: {exc}") from exc
+    required = ("block_id", "name", "symbol_file", "implementation_file", "pins")
+    missing = [key for key in required if key not in manifest]
+    if missing:
+        raise ValueError(f"Block manifest is missing fields: {', '.join(missing)}")
+    return manifest
+
+
+def _record(path: Path) -> BlockRecord:
+    return BlockRecord(path=path, manifest=read_manifest(path))
+
+
+def list_blocks(root: Path) -> list[BlockRecord]:
+    root = Path(root).expanduser().resolve()
+    if not root.exists():
+        return []
+    records = []
+    for manifest_path in root.glob("*.kicad_block/manifest.json"):
+        try:
+            record = _record(manifest_path.parent)
+            if not record.manifest.get("local_copy"):
+                records.append(record)
+        except (OSError, ValueError):
+            continue
+    return sorted(records, key=lambda item: item.name.casefold())
+
+
+def find_block_by_id(root: Path, block_id: str) -> BlockRecord:
+    for record in list_blocks(root):
+        if record.manifest["block_id"] == block_id:
+            return record
+    raise FileNotFoundError(f"Block {block_id!r} was not found in {root}")
+
+
+def create_block(
+    root: Path,
+    name: str,
+    pins: list[BlockPin],
+    *,
+    description: str = "",
+    reference_prefix: str = "X",
+    layout_file: Path | None = None,
+) -> BlockRecord:
+    """Create a versioned library block with a normal KiCad symbol facade."""
+    root = Path(root).expanduser().resolve()
+    root.mkdir(parents=True, exist_ok=True)
+    if not name.strip():
+        raise ValueError("Block name cannot be empty.")
+    if not pins:
+        raise ValueError("At least one pin is required.")
+    slug = slugify(name)
+    block_id = str(uuid.uuid4())
+    suffix = block_id.replace("-", "")[:8].lower()
+    symbol_name = f"{slug}_{suffix}"
+    folder = root / f"{slug}_{block_id[:8]}.kicad_block"
+    staging = Path(tempfile.mkdtemp(prefix=f".{slug}.", dir=root))
+    folder_created = False
+    try:
+        symbol_content = render_symbol_library(
+            symbol_name, name, block_id, pins, reference_prefix=reference_prefix
+        )
+        (staging / SYMBOL_NAME).write_text(symbol_content, encoding="utf-8")
+        (staging / IMPLEMENTATION_NAME).write_text(
+            render_implementation_schematic(name, block_id, pins), encoding="utf-8"
+        )
+        files = [SYMBOL_NAME, IMPLEMENTATION_NAME]
+        if layout_file is not None:
+            layout_file = Path(layout_file).expanduser().resolve()
+            if not layout_file.is_file() or layout_file.suffix.lower() != ".kicad_pcb":
+                raise ValueError("PCB layout must be an existing .kicad_pcb file.")
+            shutil.copy2(layout_file, staging / LAYOUT_NAME)
+            files.append(LAYOUT_NAME)
+
+        hashes = {file_name: sha256_file(staging / file_name) for file_name in files}
+        manifest = {
+            "schema_version": 1,
+            "block_id": block_id,
+            "name": name.strip(),
+            "slug": slug,
+            "description": description.strip(),
+            "version": 1,
+            "revision": revision_for_hashes(hashes),
+            "created_by": "kicad-blocks",
+            "library_nickname": LIBRARY_NICKNAME,
+            "symbol_name": symbol_name,
+            "catalog_file": LIBRARY_CATALOG_NAME,
+            "symbol_file": SYMBOL_NAME,
+            "implementation_file": IMPLEMENTATION_NAME,
+            "layout_file": LAYOUT_NAME if LAYOUT_NAME in files else None,
+            "reference_prefix": reference_prefix,
+            "pins": [pin.as_manifest(index + 1) for index, pin in enumerate(pins)],
+            "dependencies": [],
+            "files": files,
+            "hashes": hashes,
+        }
+        (staging / MANIFEST_NAME).write_text(
+            json.dumps(manifest, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+        )
+        if folder.exists():
+            raise FileExistsError(folder)
+        os.replace(staging, folder)
+        folder_created = True
+        merge_symbol_catalog(root, folder / SYMBOL_NAME)
+        return _record(folder)
+    except Exception:
+        shutil.rmtree(staging, ignore_errors=True)
+        if folder_created:
+            shutil.rmtree(folder, ignore_errors=True)
+        raise
+
+
+def _sexpr_string(value: str) -> str:
+    return json.dumps(value.replace("\\", "/"), ensure_ascii=False)
+
+
+def register_project_symbol_library(
+    project_dir: Path,
+    nickname: str,
+    library_path: Path,
+    description: str = "KiCad Blocks",
+    *,
+    prefer_relative: bool = False,
+    replace_existing: bool = False,
+) -> Path:
+    """Add or update one project-scoped symbol library table row."""
+    project_dir = Path(project_dir).expanduser().resolve()
+    library_path = Path(library_path).expanduser().resolve()
+    if not library_path.is_file():
+        raise FileNotFoundError(f"Symbol library file does not exist: {library_path}")
+    table_path = project_dir / "sym-lib-table"
+    if table_path.exists():
+        text = table_path.read_text(encoding="utf-8")
+        if not text.lstrip().startswith("(sym_lib_table") or not text.rstrip().endswith(")"):
+            raise ValueError(f"Invalid KiCad symbol library table: {table_path}")
+    else:
+        text = "(sym_lib_table\n)\n"
+    pattern = re.compile(
+        r"\(lib\s+\(name\s+\"" + re.escape(nickname)
+        + r"\"\)(.*?)\)\s*\)",
+        re.DOTALL,
+    )
+    existing = pattern.search(text)
+    if prefer_relative:
+        uri = "${KIPRJMOD}/" + Path(os.path.relpath(library_path, project_dir)).as_posix()
+    else:
+        try:
+            relative_path = library_path.relative_to(project_dir)
+            uri = "${KIPRJMOD}/" + relative_path.as_posix()
+        except ValueError:
+            uri = library_path.as_posix()
+    entry = (
+        f"  (lib (name {_sexpr_string(nickname)}) (type \"KiCad\") "
+        f"(uri {_sexpr_string(uri)}) (options \"\") (descr {_sexpr_string(description)}))"
+    )
+    if existing:
+        current_uri = re.search(r'\(uri\s+"([^"]+)"\)', existing.group(0))
+        if current_uri:
+            current_value = current_uri.group(1)
+            if current_value.startswith("${KIPRJMOD}/"):
+                current_path = (
+                    project_dir / current_value[len("${KIPRJMOD}/"):]
+                ).resolve()
+            else:
+                current_path = Path(current_value).expanduser().resolve()
+            if current_path == library_path:
+                return table_path
+        if not replace_existing:
+            raise ValueError(
+                f"Symbol library nickname {nickname!r} is already used by another path."
+            )
+        updated = text[:existing.start()] + entry + text[existing.end():]
+    else:
+        close = text.rfind(")")
+        updated = text[:close].rstrip() + "\n" + entry + "\n)\n"
+    atomic_write(table_path, updated)
+    return table_path
+
+
+def _asset_hashes(block_path: Path, manifest: dict) -> dict[str, str]:
+    result = {}
+    for file_name in manifest.get("files", []):
+        path = block_path / file_name
+        if path.is_file():
+            result[file_name] = sha256_file(path)
+    return result
+
+
+def make_local_copy(source: BlockRecord, project_dir: Path) -> BlockRecord:
+    """Copy a library block to a project-owned independent editable block asset."""
+    project_dir = Path(project_dir).expanduser().resolve()
+    local_root = project_dir / ".kicad_blocks" / "local"
+    local_root.mkdir(parents=True, exist_ok=True)
+    local_id = str(uuid.uuid4())
+    suffix = local_id.replace("-", "")[:8].upper()
+    folder = local_root / f"{source.manifest['slug']}_{suffix}.kicad_block"
+    shutil.copytree(source.path, folder)
+    manifest = read_manifest(folder)
+    base_hashes = _asset_hashes(folder, manifest)
+    manifest.update(
+        {
+            "local_copy": True,
+            "local_id": local_id,
+            "source_block_id": source.manifest["block_id"],
+            "source_path": str(source.path.resolve()),
+            "source_version": source.manifest.get("version", 1),
+            "source_revision": source.manifest.get("revision"),
+            "base_hashes": base_hashes,
+            "base_dependencies": source.manifest.get("dependencies", []),
+            "library_nickname": source.manifest.get("library_nickname", LIBRARY_NICKNAME),
+            "symbol_name": source.manifest.get("symbol_name"),
+            "catalog_file": source.manifest.get("catalog_file", LIBRARY_CATALOG_NAME),
+        }
+    )
+    atomic_write(
+        folder / MANIFEST_NAME,
+        json.dumps(manifest, indent=2, ensure_ascii=False) + "\n",
+    )
+    return _record(folder)
+
+
+def _instance_links_path(project_dir: Path) -> Path:
+    return Path(project_dir).expanduser().resolve() / ".kicad_blocks" / INSTANCE_LINKS_NAME
+
+
+def link_instance_to_local_copy(
+    project_dir: Path, instance_id: str, local_block: BlockRecord
+) -> Path:
+    """Bind one schematic symbol KIID to its independent project-local block asset."""
+    if not local_block.manifest.get("local_copy"):
+        raise ValueError("The target block asset is not a project-local copy.")
+    instance_id = str(instance_id).strip()
+    if not instance_id:
+        raise ValueError("A schematic instance KIID is required.")
+    path = _instance_links_path(project_dir)
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        data = {"schema_version": 1, "instances": {}}
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Invalid project block-link metadata: {path}") from exc
+    entries = data.setdefault("instances", {})
+    entries[instance_id] = {
+        "local_path": Path(os.path.relpath(local_block.path, Path(project_dir).resolve())).as_posix(),
+        "source_block_id": local_block.manifest.get("source_block_id"),
+        "updated_at": __import__("datetime").datetime.now().astimezone().isoformat(),
+    }
+    atomic_write(path, json.dumps(data, indent=2, ensure_ascii=False) + "\n")
+    return path
+
+
+def local_copy_for_instance(project_dir: Path, instance_id: str) -> BlockRecord | None:
+    """Return the local block bound to a symbol KIID, if any."""
+    path = _instance_links_path(project_dir)
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return None
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Invalid project block-link metadata: {path}") from exc
+    entry = data.get("instances", {}).get(str(instance_id))
+    if entry is None:
+        return None
+    local_path = (Path(project_dir).expanduser().resolve() / entry["local_path"]).resolve()
+    if not local_path.is_dir():
+        raise FileNotFoundError(
+            f"Project-local block bound to instance {instance_id} is missing: {local_path}"
+        )
+    record = _record(local_path)
+    if not record.manifest.get("local_copy"):
+        raise ValueError(f"Instance {instance_id} points at a non-local block asset.")
+    if entry.get("source_block_id") != record.manifest.get("source_block_id"):
+        raise ValueError(f"Stale local block-link metadata for instance {instance_id}.")
+    return record
+
+
+def unlink_instance_local_copy(project_dir: Path, instance_id: str) -> None:
+    path = _instance_links_path(project_dir)
+    if not path.is_file():
+        return
+    data = json.loads(path.read_text(encoding="utf-8"))
+    data.get("instances", {}).pop(str(instance_id), None)
+    atomic_write(path, json.dumps(data, indent=2, ensure_ascii=False) + "\n")
 
 
 def synchronize_local_copy(local_block: BlockRecord) -> dict:
@@ -410,6 +1131,8 @@ def refresh_library_block(block: BlockRecord) -> dict:
         block.path / MANIFEST_NAME,
         json.dumps(manifest, indent=2, ensure_ascii=False) + "\n",
     )
+    if SYMBOL_NAME in changed:
+        merge_symbol_catalog(block.path.parent, block.path / SYMBOL_NAME)
     return {"changed": changed, "version": manifest["version"], "revision": manifest["revision"]}
 
 
