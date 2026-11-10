@@ -189,9 +189,15 @@ def _sexpr_string(value: str) -> str:
 
 
 def register_project_symbol_library(
-    project_dir: Path, nickname: str, library_path: Path, description: str = "KiCad Blocks"
+    project_dir: Path,
+    nickname: str,
+    library_path: Path,
+    description: str = "KiCad Blocks",
+    *,
+    prefer_relative: bool = False,
+    replace_existing: bool = False,
 ) -> Path:
-    """Add or verify one project-scoped symbol library table row."""
+    """Add or update one project-scoped symbol library table row."""
     project_dir = Path(project_dir).expanduser().resolve()
     library_path = Path(library_path).expanduser().resolve()
     if not library_path.is_file():
@@ -203,30 +209,44 @@ def register_project_symbol_library(
             raise ValueError(f"Invalid KiCad symbol library table: {table_path}")
     else:
         text = "(sym_lib_table\n)\n"
-    pattern = re.compile(r"\(lib\s+\(name\s+\"" + re.escape(nickname) + r"\"\)(.*?)\)\s*\)", re.DOTALL)
+    pattern = re.compile(
+        r"\(lib\s+\(name\s+\"" + re.escape(nickname)
+        + r"\"\)(.*?)\)\s*\)",
+        re.DOTALL,
+    )
     existing = pattern.search(text)
-    try:
-        relative_path = library_path.relative_to(project_dir)
-        uri = "${KIPRJMOD}/" + relative_path.as_posix()
-    except ValueError:
-        uri = library_path.as_posix()
-    if existing:
-        current_uri = re.search(r'\(uri\s+"([^"]+)"\)', existing.group(0))
-        if current_uri:
-            current_value = current_uri.group(1)
-            if current_value.startswith("${KIPRJMOD}/"):
-                current_path = (project_dir / current_value[len("${KIPRJMOD}/"):]).resolve()
-            else:
-                current_path = Path(current_value).expanduser().resolve()
-            if current_path == library_path:
-                return table_path
-        raise ValueError(f"Symbol library nickname {nickname!r} is already used by another path.")
+    if prefer_relative:
+        uri = "\${KIPRJMOD}/" + Path(os.path.relpath(library_path, project_dir)).as_posix()
+    else:
+        try:
+            relative_path = library_path.relative_to(project_dir)
+            uri = "\${KIPRJMOD}/" + relative_path.as_posix()
+        except ValueError:
+            uri = library_path.as_posix()
     entry = (
         f"  (lib (name {_sexpr_string(nickname)}) (type \"KiCad\") "
         f"(uri {_sexpr_string(uri)}) (options \"\") (descr {_sexpr_string(description)}))"
     )
-    close = text.rfind(")")
-    updated = text[:close].rstrip() + "\n" + entry + "\n)\n"
+    if existing:
+        current_uri = re.search(r'\(uri\s+"([^"]+)"\)', existing.group(0))
+        if current_uri:
+            current_value = current_uri.group(1)
+            if current_value.startswith("\${KIPRJMOD}/"):
+                current_path = (
+                    project_dir / current_value[len("\${KIPRJMOD}/"):]
+                ).resolve()
+            else:
+                current_path = Path(current_value).expanduser().resolve()
+            if current_path == library_path:
+                return table_path
+        if not replace_existing:
+            raise ValueError(
+                f"Symbol library nickname {nickname!r} is already used by another path."
+            )
+        updated = text[:existing.start()] + entry + text[existing.end():]
+    else:
+        close = text.rfind(")")
+        updated = text[:close].rstrip() + "\n" + entry + "\n)\n"
     atomic_write(table_path, updated)
     return table_path
 
@@ -265,6 +285,18 @@ def make_local_copy(source: BlockRecord, project_dir: Path) -> BlockRecord:
         }
     )
     atomic_write(folder / MANIFEST_NAME, json.dumps(manifest, indent=2) + "\n")
+    for dependency in manifest.get("dependencies", []):
+        child_path = _dependency_path(source.path, source.manifest, dependency)
+        if child_path is None or not child_path.is_dir():
+            continue
+        child = _record(child_path)
+        register_project_symbol_library(
+            folder,
+            child.manifest["library_nickname"],
+            child.symbol_library,
+            description=f"Nested KiCad block: {child.name}",
+            replace_existing=True,
+        )
     return _record(folder)
 
 

@@ -92,6 +92,30 @@ def _pin_y(row: int, row_count: int, pitch: float = 2.54) -> float:
     return round(((row_count - 1) / 2.0 - row) * pitch, 4)
 
 
+def facade_pin_connection_points(
+    pins: Iterable[BlockPin],
+) -> dict[str, tuple[float, float, int]]:
+    """Return pin-name to (connection-x, connection-y, label-spin-style).
+
+    The point is the outer endpoint of the rendered symbol pin line.
+    """
+    pins = list(pins)
+    if not pins:
+        raise ValueError("A block symbol must have at least one pin.")
+    left_count = (len(pins) + 1) // 2
+    right_count = len(pins) - left_count
+    rows = max(left_count, right_count)
+    connection_x = 5.08 + 2.54 + 2.54
+    points: dict[str, tuple[float, float, int]] = {}
+    for index, pin in enumerate(pins):
+        if index < left_count:
+            row, x, spin_style = index, -connection_x, 1
+        else:
+            row, x, spin_style = index - left_count, connection_x, 3
+        points[pin.name] = (x, _pin_y(row, rows), spin_style)
+    return points
+
+
 def render_symbol_library(
     symbol_name: str,
     display_name: str,
