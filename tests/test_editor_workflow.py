@@ -1,0 +1,120 @@
+"""Exercise the plugin's library editor launch and publish workflow."""
+
+from pathlib import Path
+import sys
+import tempfile
+from types import SimpleNamespace
+import unittest
+from unittest.mock import Mock, patch
+
+PLUGIN = Path(__file__).resolve().parents[1] / "plugin" / "kicad-blocks"
+sys.path.insert(0, str(PLUGIN))
+
+from kicad_blocks import plugin as plugin_actions
+from kicad_blocks.model import parse_pins
+from kicad_blocks.repository import create_block, read_manifest
+
+
+class LibraryEditorWorkflowTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.library = Path(self.temp.name) / "shared-library"
+        self.project = Path(self.temp.name) / "project"
+        self.project.mkdir()
+        self.block = create_block(
+            self.library,
+            "Editable Library Block",
+            parse_pins("VIN:input, GND:passive, VOUT:output"),
+        )
+        self.schematic = SimpleNamespace(get_selection=lambda: [])
+        self.parent = object()
+        self.kicad = SimpleNamespace(
+            get_kicad_binary_path=Mock(return_value="/usr/bin/eeschema"),
+            reload_library=Mock(),
+            wait_for_libraries=Mock(),
+        )
+        self.messagebox = SimpleNamespace(showinfo=Mock())
+
+    def tearDown(self):
+        self.temp.cleanup()
+
+    def test_edit_opens_library_implementation_and_publish_advances_revision(self):
+        initial_manifest = read_manifest(self.block.path)
+        process = object()
+
+        with (
+            patch.object(plugin_actions, "messagebox", self.messagebox),
+            patch("subprocess.Popen", return_value=process) as popen,
+        ):
+            opened = plugin_actions._edit_block_implementation(
+                self.library,
+                self.schematic,
+                self.kicad,
+                self.project,
+                self.parent,
+            )
+
+        self.assertIs(opened, process)
+        popen.assert_called_once_with(
+            ["/usr/bin/eeschema", str(self.block.implementation)],
+            close_fds=True,
+        )
+
+        # Model the file saved by Eeschema after the user edits the library.
+        original = self.block.implementation.read_text(encoding="utf-8")
+        self.block.implementation.write_text(
+            original + "\n; saved from Eeschema editor workflow\n",
+            encoding="utf-8",
+        )
+
+        with patch.object(plugin_actions, "messagebox", self.messagebox):
+            plugin_actions._publish_block(
+                self.library,
+                self.kicad,
+                self.project,
+                self.parent,
+            )
+
+        published_manifest = read_manifest(self.block.path)
+        self.assertGreater(published_manifest["version"], initial_manifest["version"])
+        self.assertNotEqual(published_manifest["revision"], initial_manifest["revision"])
+        self.assertIn("implementation.kicad_sch", published_manifest["hashes"])
+        self.kicad.reload_library.assert_called_once()
+        self.kicad.wait_for_libraries.assert_called_once()
+        self.messagebox.showinfo.assert_called()
+
+    def test_local_implementation_edit_opens_project_copy_not_library_source(self):
+        from kicad_blocks.repository import link_instance_to_local_copy, make_local_copy
+
+        local = make_local_copy(self.block, self.project)
+        instance_id = "00000000-0000-0000-0000-000000000123"
+        link_instance_to_local_copy(self.project, instance_id, local)
+        selected = SimpleNamespace(
+            id=instance_id,
+            definition=SimpleNamespace(id=object()),
+        )
+        schematic = SimpleNamespace(get_selection=lambda: [selected])
+        process = object()
+
+        with (
+            patch.object(plugin_actions, "messagebox", self.messagebox),
+            patch("subprocess.Popen", return_value=process) as popen,
+        ):
+            opened = plugin_actions._edit_block_implementation(
+                self.library,
+                schematic,
+                self.kicad,
+                self.project,
+                self.parent,
+            )
+
+        self.assertIs(opened, process)
+        popen.assert_called_once_with(
+            ["/usr/bin/eeschema", str(local.implementation)],
+            close_fds=True,
+        )
+        self.assertNotEqual(local.implementation, self.block.implementation)
+
+
+if __name__ == "__main__":
+    unittest.main()

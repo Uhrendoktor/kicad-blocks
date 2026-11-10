@@ -282,7 +282,10 @@ def _edit_block_implementation(root, schematic, kicad, project_dir, parent) -> N
     executable = kicad.get_kicad_binary_path("eeschema")
     import subprocess
 
-    subprocess.Popen([executable, str(record.implementation)], close_fds=True)
+    process = subprocess.Popen(
+        [executable, str(record.implementation)],
+        close_fds=True,
+    )
     messagebox.showinfo(
         "Block Implementation",
         f"Opened {record.name} implementation in Eeschema.\n\n"
@@ -290,6 +293,7 @@ def _edit_block_implementation(root, schematic, kicad, project_dir, parent) -> N
         "A project-local implementation remains independent until explicitly synchronized.",
         parent=parent,
     )
+    return process
 
 def _export_recursive_bom(root: Path, parent) -> None:
     record = _pick_record(list_blocks(root), parent, "Export Recursive Block BOM")
