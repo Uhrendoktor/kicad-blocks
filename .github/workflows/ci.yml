@@ -146,6 +146,32 @@ jobs:
         shell: bash
         run: "${RUNNER_TEMP}/kicad-blocks-venv/bin/python tests/validate_kicad_cli.py"
 
+      - name: Install virtual-display GUI test dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v xvfb-run >/dev/null 2>&1 || ! command -v xdotool >/dev/null 2>&1; then
+            if [[ "$(id -u)" -eq 0 ]]; then
+              apt-get update
+              apt-get install -y --no-install-recommends xvfb xdotool
+            else
+              sudo -n apt-get update
+              sudo -n apt-get install -y --no-install-recommends xvfb xdotool
+            fi
+          fi
+          EESCHEMA="$(command -v eeschema-nightly || command -v eeschema || true)"
+          if [[ -z "$EESCHEMA" ]]; then
+            echo "::error::KiCad Eeschema executable was not installed with the nightly package."
+            exit 1
+          fi
+          echo "KICAD_EESCHEMA=$EESCHEMA" >> "$GITHUB_ENV"
+          xvfb-run --help >/dev/null
+          xdotool version
+
+      - name: Verify Eeschema GUI editor launch and save
+        shell: bash
+        run: "${RUNNER_TEMP}/kicad-blocks-venv/bin/python tests/test_eeschema_gui.py"
+
       - name: Verify real KiCad IPC placement (headless)
         shell: bash
         run: "${RUNNER_TEMP}/kicad-blocks-venv/bin/python tests/test_ipc_headless.py"
