@@ -16,8 +16,10 @@ sys.path.insert(0, str(PLUGIN))
 from kicad_blocks.model import parse_pins, render_implementation_schematic
 from kicad_blocks.repository import (
     create_block,
+    make_local_copy,
     register_project_symbol_library,
 )
+from kicad_blocks.plugin import _switch_instance_to_local
 from kipy import KiCad
 from kipy.geometry import Vector2
 
@@ -53,15 +55,24 @@ def main() -> None:
         )
         nickname = block.manifest["library_nickname"]
         symbol_name = block.manifest["symbol_name"]
+        local = make_local_copy(block, project_dir)
+        local_nickname = local.manifest["library_nickname"]
+        local_symbol_name = local.manifest["symbol_name"]
 
-        # The project symbol-library table must exist before KiCad opens
-        # the schematic. IPC library reload operates on registered nicknames;
-        # editing sym-lib-table after startup does not register a new entry.
+        # Both symbol table entries must exist before KiCad opens the project.
+        # This makes the IPC test exercise a real library-to-local instance
+        # switch without relying on unsupported live table reconfiguration.
         register_project_symbol_library(
             project_dir,
             nickname,
             block.symbol_library,
             description="Headless IPC test facade",
+        )
+        register_project_symbol_library(
+            project_dir,
+            local_nickname,
+            local.symbol_library,
+            description="Headless IPC local-copy facade",
         )
         kicad = KiCad(
             headless=True,
@@ -101,6 +112,16 @@ def main() -> None:
                 or instance.definition.id.name != symbol_name
             ):
                 raise AssertionError("Placed facade has the wrong KiCad library identifier.")
+
+            _switch_instance_to_local(instance, schematic, local)
+            if (
+                instance.definition.id.library != local_nickname
+                or instance.definition.id.name != local_symbol_name
+            ):
+                raise AssertionError("The symbol did not switch to its local-copy library ID.")
+            symbols_after_local = list(schematic.get_symbols())
+            if len(symbols_after_local) != 1 or symbols_after_local[0].reference != "X1":
+                raise AssertionError("Local-copy conversion replaced or duplicated the symbol instance.")
         finally:
             kicad.close()
 
@@ -111,15 +132,15 @@ def main() -> None:
                 + repr(project_schematics)
             )
         saved_text = schematic_path.read_text(encoding="utf-8")
-        expected_lib_id = f'(lib_id "{nickname}:{symbol_name}")'
+        expected_lib_id = f'(lib_id "{local_nickname}:{local_symbol_name}")'
         if expected_lib_id not in saved_text:
             raise AssertionError("Saved project schematic does not contain the facade library ID.")
         if "(sheet " in saved_text:
             raise AssertionError("Saved parent schematic unexpectedly contains a child sheet.")
 
         print(
-            "KiCad IPC headless placement passed: one facade symbol, zero sheet symbols, "
-            "and no project-local child schematic."
+            "KiCad IPC facade/local-copy passed: same symbol instance, local library ID, "
+            "zero sheet symbols, and no project-local child schematic."
         )
         # Compose a library child into a parent implementation as a facade symbol
         # plus external global labels. No hierarchical sheet is created.

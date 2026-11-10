@@ -122,31 +122,45 @@ def _library_record_for_instance(library_root: Path, instance):
     )
 
 
+def _set_symbol_identifier(instance, library_nickname: str, symbol_name: str) -> None:
+    """Set a schematic symbol's KiCad LibraryIdentifier using IPC field names."""
+    identifier = instance.definition.id
+    identifier.library = library_nickname
+    identifier.name = symbol_name
+
+
+def _commit_symbol_update(schematic, instance, description: str) -> None:
+    """Persist a mutation to one existing symbol without replacing its UUID."""
+    commit = schematic.begin_commit()
+    try:
+        schematic.update_items([instance])
+        schematic.push_commit(commit, description)
+    except Exception:
+        schematic.drop_commit(commit)
+        raise
+    schematic.save()
+
+
+def _switch_instance_to_local(instance, schematic, local) -> None:
+    """Switch one placed symbol to a prepared local library definition."""
+    _set_symbol_identifier(
+        instance,
+        local.manifest["library_nickname"],
+        local.manifest["symbol_name"],
+    )
+    _commit_symbol_update(schematic, instance, "Make block instance a local copy")
+
+
 def make_selected_local(schematic, kicad, project_dir: Path, library_root: Path) -> Path:
     """Turn one selected library-linked symbol into an independent project copy."""
-    from kipy.common_types import LibraryIdentifier
-
     instance = _selected_symbol(schematic)
     source = _library_record_for_instance(library_root, instance)
     local = make_local_copy(source, project_dir)
     _register_block(project_dir, local, kicad)
 
-    # Keep the existing symbol instance UUID and coordinates, so wires stay
-    # connected. Only change the symbol's library identifier to the local copy.
-    new_id = LibraryIdentifier()
-    new_id.library_nickname = local.manifest["library_nickname"]
-    new_id.entry_name = local.manifest["symbol_name"]
-    instance.definition.id.library_nickname = new_id.library_nickname
-    instance.definition.id.entry_name = new_id.entry_name
-
-    commit = schematic.begin_commit()
-    try:
-        schematic.update_items([instance])
-        schematic.push_commit(commit, "Make block instance a local copy")
-    except Exception:
-        schematic.drop_commit(commit)
-        raise
-    schematic.save()
+    # The current instance UUID and coordinates are preserved, so existing
+    # wires remain attached. Only the full KiCad library identifier changes.
+    _switch_instance_to_local(instance, schematic, local)
     return local.path
 
 

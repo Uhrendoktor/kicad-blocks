@@ -124,7 +124,7 @@ class BlockRepositoryTests(unittest.TestCase):
     def test_api_library_identifier_uses_kipy_field_names(self):
         from types import SimpleNamespace
 
-        from kicad_blocks.plugin import _symbol_identifier
+        from kicad_blocks.plugin import _set_symbol_identifier, _symbol_identifier
 
         instance = SimpleNamespace(
             definition=SimpleNamespace(
@@ -133,6 +133,11 @@ class BlockRepositoryTests(unittest.TestCase):
         )
         self.assertEqual(
             _symbol_identifier(instance), ("KBlocks_A1B2C3D4", "buck")
+        )
+
+        _set_symbol_identifier(instance, "KBLocal_1234ABCD", "buck_local")
+        self.assertEqual(
+            _symbol_identifier(instance), ("KBLocal_1234ABCD", "buck_local")
         )
 
     def test_create_block_writes_facade_and_separate_implementation(self):
