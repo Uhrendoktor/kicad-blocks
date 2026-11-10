@@ -7,10 +7,10 @@ import subprocess
 import sys
 import tempfile
 import unittest
-from pathlib import Path
+import pathlib
 
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = pathlib.Path(__file__).resolve().parents[1]
 INSTALLER = ROOT / "scripts" / "install_plugin.py"
 SOURCE = ROOT / "plugin" / "kicad-blocks"
 
@@ -18,7 +18,7 @@ SOURCE = ROOT / "plugin" / "kicad-blocks"
 class PluginInstallerTests(unittest.TestCase):
     def test_install_and_reinstall_replace_the_complete_plugin_folder(self):
         with tempfile.TemporaryDirectory(prefix="kicad-blocks-install-test-") as temp:
-            user_data = Path(temp) / "KiCad"
+            user_data = pathlib.Path(temp) / "KiCad"
             command = [
                 sys.executable,
                 str(INSTALLER),
@@ -47,7 +47,7 @@ class PluginInstallerTests(unittest.TestCase):
 
     def test_dry_run_does_not_create_installation_directory(self):
         with tempfile.TemporaryDirectory(prefix="kicad-blocks-install-dry-run-") as temp:
-            user_data = Path(temp) / "KiCad"
+            user_data = pathlib.Path(temp) / "KiCad"
             result = subprocess.run(
                 [
                     sys.executable,
