@@ -82,6 +82,8 @@ class PCBNetRewriteTests(unittest.TestCase):
                                 {"name": "Fast", "priority": 0, "clearance": 0.2, "track_width": 0.2},
                             ],
                             "netclass_assignments": {"VIN_BOARD": ["Fast"]},
+                            "net_chain_classes": {"PROJECT_CHAIN": "PROJECT_GROUP"},
+                            "net_chain_netclasses": {},
                         },
                     }
                 ),
@@ -100,6 +102,8 @@ class PCBNetRewriteTests(unittest.TestCase):
                                 "VIN": ["Fast"],
                                 "SW": ["Fast"],
                             },
+                            "net_chain_classes": {"SIG_CHAIN": "SERIAL_GROUP"},
+                            "net_chain_netclasses": {"SIG_CHAIN": "Fast"},
                             "netclass_patterns": [
                                 {"pattern": "G*", "netclass": "Fast"},
                                 {"pattern": "S*", "netclass": "Fast"},
@@ -125,6 +129,7 @@ class PCBNetRewriteTests(unittest.TestCase):
                     "GND": "GND_BOARD",
                     "SW": "X1_SW",
                 },
+                source_chain_name_map={"SIG_CHAIN": "X1_SIG_CHAIN"},
             )
 
             self.assertEqual(result["merged_classes"], ["X1_Fast"])
@@ -138,6 +143,19 @@ class PCBNetRewriteTests(unittest.TestCase):
                 ],
             )
             self.assertEqual(result["unmatched_patterns"], ["NO_MATCH*"])
+            self.assertEqual(
+                result["data"]["net_settings"]["net_chain_classes"],
+                {
+                    "PROJECT_CHAIN": "PROJECT_GROUP",
+                    "X1_SIG_CHAIN": "SERIAL_GROUP",
+                },
+            )
+            self.assertEqual(
+                result["data"]["net_settings"]["net_chain_netclasses"],
+                {"X1_SIG_CHAIN": "X1_Fast"},
+            )
+            self.assertEqual(result["merged_chain_names"], ["X1_SIG_CHAIN"])
+            self.assertFalse(result["ignored_chain_classes"])
             self.assertEqual(target.read_bytes(), original_target)
             self.assertEqual(source.read_bytes(), original_source)
             merged = result["data"]
@@ -202,6 +220,44 @@ class PCBNetRewriteTests(unittest.TestCase):
             self.assertEqual(assignments["U1_CLK_N"], ["BusClass"])
             self.assertNotIn("U1_CLK_P", assignments)
             self.assertEqual(result["unmatched_patterns"], [])
+
+    def test_unmatched_project_chain_overrides_are_reported(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            target = root / "target.kicad_pro"
+            source = root / "layout.kicad_pro"
+            output = root / "merged.kicad_pro"
+            target.write_text(
+                json.dumps({"net_settings": {"classes": [{"name": "Default", "priority": 2147483647}]}}),
+                encoding="utf-8",
+            )
+            source.write_text(
+                json.dumps(
+                    {
+                        "net_settings": {
+                            "classes": [{"name": "Default", "priority": 2147483647}],
+                            "net_chain_classes": {"STALE_CHAIN": "GROUP"},
+                            "net_chain_netclasses": {},
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+            result = _merge_project_net_settings(
+                target,
+                source,
+                output,
+                instance_reference="U1",
+                layout_ports={},
+                pin_to_board_net={},
+                source_chain_name_map={},
+            )
+            self.assertTrue(result["ignored_chain_classes"])
+            self.assertEqual(
+                result["unmatched_chains"],
+                ["net_chain_classes:STALE_CHAIN"],
+            )
+            self.assertEqual(result["data"]["net_settings"]["net_chain_classes"], {})
 
     def test_unknown_net_code_is_rejected(self):
         segment = parse_sexpr('(segment (net 99))')

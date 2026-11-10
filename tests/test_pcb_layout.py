@@ -107,7 +107,11 @@ def main() -> None:
         )
         source_text = source_text.rsplit(")", 1)[0] + (
             '  (segment (start 100 100) (end 105 100) (width 0.25) '
-            '(layer "F.Cu") (net 3) (uuid "00000000-0000-0000-0000-000000000002"))\n)\n'
+            '(layer "F.Cu") (net 3) (uuid "00000000-0000-0000-0000-000000000002"))\n'
+            '  (net_chains (net_chain (name "PWR_CHAIN") '
+            '(members (net "VIN") (net "GND")) '
+            '(terminal_pad "00000000-0000-0000-0000-000000000011") '
+            '(terminal_pad "00000000-0000-0000-0000-000000000012")))\n)\n'
         )
         if '(uuid "00000000-0000-0000-0000-000000000011") (net 1 "VIN")' not in source_text:
             raise AssertionError("Test fixture did not assign VIN to source pad 1.")
@@ -128,6 +132,8 @@ def main() -> None:
                             {"name": "HighSpeed", "priority": 1, "clearance": 0.25, "track_width": 0.25},
                         ],
                         "netclass_assignments": {"VIN_BOARD": ["LowNoise"]},
+                        "net_chain_classes": {"EXISTING_CHAIN": "EXISTING_GROUP"},
+                        "net_chain_netclasses": {},
                         "netclass_patterns": [],
                     },
                 },
@@ -149,6 +155,8 @@ def main() -> None:
                             "VIN": ["HighSpeed"],
                             "SW": ["HighSpeed"],
                         },
+                        "net_chain_classes": {"PWR_CHAIN": "POWER_GROUP"},
+                        "net_chain_netclasses": {"PWR_CHAIN": "HighSpeed"},
                         "netclass_patterns": [
                             {"pattern": "G*", "netclass": "HighSpeed"},
                             {"pattern": "S*", "netclass": "HighSpeed"},
@@ -274,6 +282,19 @@ def main() -> None:
             raise AssertionError("Merged project metadata filename was not updated.")
         if result["merged_netclasses"] != ["X1_HighSpeed"]:
             raise AssertionError(f"Unexpected netclass merge summary: {result!r}")
+        if result["merged_board_chains"] != ["X1_PWR_CHAIN"]:
+            raise AssertionError(f"Board net-chain topology was not imported: {result!r}")
+        if result["merged_project_chain_names"] != ["X1_PWR_CHAIN"]:
+            raise AssertionError(f"Project chain settings were not mapped: {result!r}")
+        if result["ignored_project_chain_classes"] or result["unmatched_project_chains"]:
+            raise AssertionError(f"All source chain settings should have mapped: {result!r}")
+        if net_settings["net_chain_classes"] != {
+            "EXISTING_CHAIN": "EXISTING_GROUP",
+            "X1_PWR_CHAIN": "POWER_GROUP",
+        }:
+            raise AssertionError(f"Net-chain class labels were not merged: {net_settings['net_chain_classes']!r}")
+        if net_settings["net_chain_netclasses"] != {"X1_PWR_CHAIN": "X1_HighSpeed"}:
+            raise AssertionError(f"Net-chain netclass override was not mapped: {net_settings['net_chain_netclasses']!r}")
         if result["unmatched_project_patterns"]:
             raise AssertionError(
                 f"All fixture patterns should match stored block nets: {result['unmatched_project_patterns']!r}"
@@ -285,8 +306,66 @@ def main() -> None:
         ):
             raise AssertionError(f"Unexpected merge report: {result!r}")
 
-        # Parse result independently and assert net codes, reference and translated geometry.
+        # The imported chain must use mapped project net names and regenerated
+        # terminal-pad UUIDs, not references back to the stored library board.
         parsed = parse_sexpr(output.read_text(encoding="utf-8"))
+        chain_section = next(
+            item for item in parsed[1:]
+            if isinstance(item, list) and item and item[0] == "net_chains"
+        )
+        chains = [
+            item for item in chain_section[1:]
+            if isinstance(item, list) and item and item[0] == "net_chain"
+        ]
+        if len(chains) != 1:
+            raise AssertionError(f"Expected one imported PCB net chain; found {len(chains)}.")
+        imported_chain = chains[0]
+        chain_name_node = next(
+            item for item in imported_chain[1:]
+            if isinstance(item, list) and item and item[0] == "name"
+        )
+        if str(chain_name_node[1]) != "X1_PWR_CHAIN":
+            raise AssertionError(f"Net chain name was not namespaced: {chain_name_node!r}")
+        member_node = next(
+            item for item in imported_chain[1:]
+            if isinstance(item, list) and item and item[0] == "members"
+        )
+        chain_members = {
+            str(item[1])
+            for item in member_node[1:]
+            if isinstance(item, list) and item and item[0] == "net"
+        }
+        if chain_members != {"VIN_BOARD", "GND_BOARD"}:
+            raise AssertionError(f"Net-chain members were not remapped: {chain_members!r}")
+        chain_terminal_ids = {
+            str(item[1])
+            for item in imported_chain[1:]
+            if isinstance(item, list) and item and item[0] == "terminal_pad"
+        }
+
+        def _walk(node):
+            if isinstance(node, list):
+                yield node
+                for child in node[1:]:
+                    yield from _walk(child)
+
+        pad_ids = {
+            str(uuid_node[1])
+            for pad in _walk(parsed)
+            if pad and pad[0] == "pad"
+            for uuid_node in pad[1:]
+            if isinstance(uuid_node, list) and uuid_node and uuid_node[0] == "uuid"
+        }
+        original_pad_ids = {
+            "00000000-0000-0000-0000-000000000011",
+            "00000000-0000-0000-0000-000000000012",
+        }
+        if len(chain_terminal_ids) != 2 or not chain_terminal_ids.issubset(pad_ids):
+            raise AssertionError(
+                f"Net-chain terminal pads do not resolve to imported pad UUIDs: {chain_terminal_ids!r}"
+            )
+        if chain_terminal_ids & original_pad_ids:
+            raise AssertionError("Net-chain terminal-pad UUIDs were not regenerated.")
         nets = {int(str(item[1])): str(item[2]) for item in parsed[1:] if isinstance(item, list) and item and item[0] == "net"}
         internal_net_code = next(code for code, name in nets.items() if name == "X1_SW")
         merged_segment = next(

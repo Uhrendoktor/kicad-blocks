@@ -504,7 +504,8 @@ def _apply_block_pcb_layout(schematic, project_dir: Path, library_root: Path, pa
         f"Project settings copy: {result['project_file'] or 'not available'}\n"
         f"Merged netclasses: {', '.join(result['merged_netclasses']) or 'none'}\n"
         f"Updated net assignments: {', '.join(result['assigned_project_nets']) or 'none'}\n"
-        f"Resolved netclass patterns: {len(result['applied_project_patterns'])}\n\n"
+        f"Resolved netclass patterns: {len(result['applied_project_patterns'])}\n"
+        f"PCB net chains added: {', '.join(result['merged_board_chains']) or 'none'}\n\n"
         "The original project board and project settings were not modified. Review the generated board, "
         "then open it in PCB Editor."
     )
@@ -518,8 +519,9 @@ def _apply_block_pcb_layout(schematic, project_dir: Path, library_root: Path, pa
         )
     if result["ignored_project_chain_classes"]:
         message += (
-            "\n\nNet-chain class and chain-to-netclass rules were not imported because "
-            "their chain membership is stored separately from the PCB net list."
+            "\n\nSome project net-chain settings could not be mapped to an actual chain "
+            "in the stored PCB: "
+            + (", ".join(result["unmatched_project_chains"]) or "unknown")
         )
     messagebox.showinfo("PCB Block Layout Applied", message, parent=parent)
 
