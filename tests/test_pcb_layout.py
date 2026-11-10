@@ -144,10 +144,22 @@ def main() -> None:
         # KiCad CLI parser/export validates the complete generated board.
         svg_dir = root / "svg"
         svg_dir.mkdir()
-        subprocess.run(
+        export_result = subprocess.run(
             [cli, "pcb", "export", "svg", "--output", str(svg_dir), str(output)],
-            check=True,
+            capture_output=True,
+            text=True,
+            check=False,
         )
+        if export_result.returncode != 0:
+            serialized = output.read_text(encoding="utf-8")
+            offset_match = re.search(r"offset (\\d+)", export_result.stderr)
+            offset = int(offset_match.group(1)) if offset_match else -1
+            snippet = serialized[max(0, offset - 180):offset + 180] if offset >= 0 else serialized[:500]
+            raise RuntimeError(
+                "KiCad rejected the merged PCB board: "
+                + (export_result.stderr or export_result.stdout)
+                + f"\\nSerialized text near parser location {offset}: {snippet!r}"
+            )
         if not list(svg_dir.glob("*.svg")):
             raise AssertionError("KiCad did not export the merged board to SVG.")
 
