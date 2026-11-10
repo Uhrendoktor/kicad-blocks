@@ -36,8 +36,13 @@ class RecursiveBlockOperationTests(unittest.TestCase):
         def fake_run(command, capture_output, text, check):
             output_path = Path(command[command.index("--output") + 1])
             implementation_path = Path(command[-1])
-            reference = "R1" if implementation_path == self.child.implementation else "U1"
-            value = "10k" if reference == "R1" else "Controller IC"
+            if implementation_path == self.child.implementation:
+                reference, value = "R1", "10k"
+            else:
+                # The parent schematic contains the B1 child facade as a
+                # composition placeholder. It must not duplicate the child's
+                # expanded contents in the merged block BOM.
+                reference, value = "B1", "Power Stage facade"
             output_path.write_text(
                 f"Reference,Qty,Value\n{reference},1,{value}\n",
                 encoding="utf-8",
@@ -48,14 +53,14 @@ class RecursiveBlockOperationTests(unittest.TestCase):
             result = export_block_bom(self.parent, output, "kicad-cli", self.root)
 
         self.assertEqual(result["block_count"], 2)
-        self.assertEqual(result["row_count"], 2)
+        self.assertEqual(result["row_count"], 1)
         with output.open("r", encoding="utf-8", newline="") as stream:
             rows = list(csv.DictReader(stream))
         self.assertEqual(
             {row["Reference"] for row in rows},
-            {"B1/Power Stage::R1", "Controller::U1"},
+            {"B1/Power Stage::R1"},
         )
-        self.assertEqual({row["Block"] for row in rows}, {"B1/Power Stage", "Controller"})
+        self.assertEqual({row["Block"] for row in rows}, {"B1/Power Stage"})
 
     def test_repeated_child_instances_produce_separate_recursive_bom_rows(self):
         self.parent = add_dependency(self.parent, self.child, reference="B2")
