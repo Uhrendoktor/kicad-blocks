@@ -10,7 +10,7 @@ KiCad Blocks is an IPC schematic plugin for **black-box, library-backed schemati
 - Register the block's symbol library in the current project's `sym-lib-table`, reload it through KiCad's IPC API, and place the facade symbol in the active schematic.
 - Place existing blocks from the configured library.
 - Convert a selected library-linked instance into an independent project-local copy. The plugin changes the selected instance's library identifier without replacing its schematic UUID or coordinates, so existing wire connections are intended to remain attached.
-- Synchronize a selected local copy from its source. Unchanged files are updated; local-only edits are preserved; conflicting edits are rejected without overwriting either side. An upstream external-pin interface change is rejected for manual migration.
+- Synchronize a selected local copy with its library source in both directions. Local-only edits are published, library-only edits are pulled, identical concurrent edits converge, and divergent edits are rejected before either side is changed. External pin/interface changes require an explicit migration.
 - Edit a block's separate implementation in another Eeschema window; publish its changed files to advance the library revision.
 - Add nested block dependencies to the library manifest. Dependencies are stored as a graph and cycles are rejected; no hierarchical sheets are created.
 - Optionally store a pre-routed `.kicad_pcb` file with the block asset.
@@ -37,7 +37,7 @@ Schematic placement, selection and library reload APIs used here are part of KiC
    - macOS: `~/Documents/KiCad/11.0/plugins/kicad-blocks`
 2. Enable the IPC API in KiCad Preferences → Plugins.
 3. Restart KiCad and enable the **KiCad Blocks Manager** schematic action.
-4. Use the action and enter one of `create`, `place`, `local`, `sync`, `edit`, `publish`, or `nest`.
+4. Use the action and enter one of `create`, `place`, `local`, `sync`, `edit`, `publish`, or `nest`. The `sync` action on a selected local copy performs bidirectional three-way synchronization.
 
 The default shared library location is `~/Documents/KiCad/Blocks`. The create/nest action lets you select another directory; the selection is remembered in `~/.config/kicad-blocks/settings.json`. Set `KICAD_BLOCKS_LIBRARY` to override it. Local symbol-library entries use `${KIPRJMOD}` paths so project-local block copies remain portable when the project folder moves.
 
