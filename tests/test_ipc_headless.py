@@ -14,12 +14,12 @@ PLUGIN = ROOT / "plugin" / "kicad-blocks"
 sys.path.insert(0, str(PLUGIN))
 
 from kicad_blocks.model import parse_pins, render_implementation_schematic
+from kicad_blocks.plugin import _register_block, _switch_instance_to_local
 from kicad_blocks.repository import (
     create_block,
     make_local_copy,
     register_project_symbol_library,
 )
-from kicad_blocks.plugin import _register_block, _switch_instance_to_local
 from kipy import KiCad
 from kipy.geometry import Vector2
 

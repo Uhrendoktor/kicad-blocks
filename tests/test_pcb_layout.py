@@ -3,17 +3,17 @@
 from __future__ import annotations
 
 import os
-from pathlib import Path
 import shutil
 import subprocess
+import sys
 import tempfile
+from pathlib import Path
 from types import SimpleNamespace
 
 from kipy import KiCad
 
 ROOT = Path(__file__).resolve().parents[1]
 PLUGIN = ROOT / "plugin" / "kicad-blocks"
-import sys
 sys.path.insert(0, str(PLUGIN))
 
 from kicad_blocks.pcb_layout import merge_block_layout, parse_sexpr
