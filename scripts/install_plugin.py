@@ -74,7 +74,7 @@ def install_plugin(
     dry_run: bool = False,
 ) -> Path:
     """Atomically replace the installed plugin package for one KiCad version."""
-    if not re.fullmatch(r"\\d+\\.\\d+", version):
+    if not re.fullmatch(r"\d+\.\d+", version):
         raise ValueError("KiCad version must use MAJOR.MINOR format, for example 11.0.")
     source = Path(source).expanduser().resolve()
     documents_home = Path(documents_home).expanduser().resolve()
