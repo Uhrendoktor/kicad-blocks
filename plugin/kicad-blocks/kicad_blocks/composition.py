@@ -198,6 +198,34 @@ def _compose_direct_children(
                 labels_by_position[key] = label
 
         if new_labels:
+            # Temporary IPC diagnostics: capture the concrete wrapper/proto
+            # shape and label properties if KiCad rejects an item on creation.
+            import inspect
+
+            for label in new_labels:
+                print(
+                    "KICAD_BLOCKS_LABEL_DIAG",
+                    {
+                        "wrapper_type": type(label).__module__ + "." + type(label).__qualname__,
+                        "wrapper_source": inspect.getsource(type(label)),
+                        "attributes": [
+                            name for name in dir(label)
+                            if not name.startswith("__")
+                        ],
+                        "proto_type": str(type(getattr(label, "proto", None))),
+                        "proto_repr": repr(getattr(label, "proto", None)),
+                        "proto_fields": [
+                            (field.full_name, repr(value))
+                            for field, value in getattr(label, "proto", None).ListFields()
+                        ] if hasattr(getattr(label, "proto", None), "ListFields") else [],
+                        "position": repr(label.position),
+                        "text": repr(label.text),
+                        "spin_style": repr(label.spin_style),
+                        "intersheet_refs_field": repr(
+                            getattr(label, "intersheet_refs_field", None)
+                        ),
+                    },
+                )
             schematic.create_items(new_labels)
         schematic.save()
         if schematic.get_sheet_symbols():
