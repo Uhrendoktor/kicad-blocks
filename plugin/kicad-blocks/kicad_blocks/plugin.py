@@ -563,6 +563,7 @@ def run() -> None:
             "publish — publish edited library files as a new revision\n"
             "bom     — export merged BOM for a block and its dependencies\n"
             "erc     — run ERC on a block and all dependencies\n"
+            "pcb     — apply the selected block PCB layout to a new board copy\n"
             "nest    — add a nested block dependency",
             initialvalue="create",
             parent=root,
@@ -601,11 +602,13 @@ def run() -> None:
         elif action == "erc":
             library_root = _choose_library_root(root)
             _validate_recursive_erc(library_root, root)
+        elif action == "pcb":
+            _apply_block_pcb_layout(schematic, project_dir, library_root, root)
         elif action == "nest":
             library_root = _choose_library_root(root)
             _add_nested_dependency(library_root, root, root)
         else:
-            raise ValueError("Choose one of: create, place, local, sync, edit, publish, bom, erc, nest.")
+            raise ValueError("Choose one of: create, place, local, sync, edit, publish, bom, erc, pcb, nest.")
     except Exception as exc:
         LOG.exception("KiCad Blocks action failed")
         messagebox.showerror("KiCad Blocks", str(exc), parent=root)

@@ -9,18 +9,17 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
+from types import SimpleNamespace
 
 ROOT = Path(__file__).resolve().parents[1]
 PLUGIN = ROOT / "plugin" / "kicad-blocks"
 sys.path.insert(0, str(PLUGIN))
 
 from kicad_blocks.model import parse_pins, render_implementation_schematic
-from kicad_blocks.plugin import _register_block
+from kicad_blocks.plugin import _register_block, make_selected_local, sync_selected_local
 from kicad_blocks.repository import (
     create_block,
-    link_instance_to_local_copy,
     local_copy_for_instance,
-    make_local_copy,
     register_project_symbol_library,
 )
 from kipy import KiCad
@@ -58,8 +57,6 @@ def main() -> None:
         )
         nickname = block.manifest["library_nickname"]
         symbol_name = block.manifest["symbol_name"]
-        local = make_local_copy(block, project_dir)
-
         # One stable facade library row is registered before startup. All
         # blocks share this catalog, including project-local implementation
         # copies; local ownership is tracked separately by symbol-instance KIID.
@@ -109,7 +106,10 @@ def main() -> None:
                 raise AssertionError("Placed facade has the wrong KiCad library identifier.")
 
             original_instance_id = str(instance.id)
-            link_instance_to_local_copy(project_dir, original_instance_id, local)
+            selection = SimpleNamespace(get_selection=lambda: [instance])
+            local_path = make_selected_local(
+                selection, kicad, project_dir, library_root
+            )
             linked_local = local_copy_for_instance(project_dir, original_instance_id)
             link_file = project_dir / ".kicad_blocks" / "instances.json"
             link_data = json.loads(link_file.read_text(encoding="utf-8"))
@@ -120,10 +120,11 @@ def main() -> None:
                     f"stored entries={list(link_data.get('instances', {}))!r}; "
                     f"sidecar={link_file.read_text(encoding='utf-8')}"
                 )
-            if linked_local.path.resolve() != local.path.resolve():
+            local = linked_local
+            if linked_local.path.resolve() != Path(local_path).resolve():
                 raise AssertionError(
-                    f"Local-copy KIID mapping resolved to {linked_local.path.resolve()}, "
-                    f"expected {local.path.resolve()}; entry={link_entry!r}"
+                    f"Local-copy action returned {local_path!r}, but KIID mapping resolved "
+                    f"to {linked_local.path.resolve()}; entry={link_entry!r}"
                 )
             symbols_after_local = list(schematic.get_symbols())
             if (
@@ -137,6 +138,58 @@ def main() -> None:
                 or symbols_after_local[0].definition.id.name != symbol_name
             ):
                 raise AssertionError("Local-copy binding unexpectedly changed the facade library ID.")
+
+            local_text = local.implementation.read_text(encoding="utf-8")
+            local.implementation.write_text(
+                local_text + "\\n; local IPC publish test\\n",
+                encoding="utf-8",
+            )
+            published = sync_selected_local(selection, kicad, project_dir)
+            if "implementation.kicad_sch" not in published["published"]:
+                raise AssertionError(f"Local implementation edit was not published: {published!r}")
+            if "; local IPC publish test" not in block.implementation.read_text(encoding="utf-8"):
+                raise AssertionError("Publishing a local implementation did not update its library source.")
+
+            source_text = block.implementation.read_text(encoding="utf-8")
+            block.implementation.write_text(
+                source_text + "\\n; upstream IPC pull test\\n",
+                encoding="utf-8",
+            )
+            pulled = sync_selected_local(selection, kicad, project_dir)
+            if "implementation.kicad_sch" not in pulled["pulled"]:
+                raise AssertionError(f"Upstream implementation edit was not pulled: {pulled!r}")
+            if "; upstream IPC pull test" not in local.implementation.read_text(encoding="utf-8"):
+                raise AssertionError("Synchronizing did not pull the library implementation edit.")
+
+            local_before_conflict = local.implementation.read_text(encoding="utf-8")
+            source_before_conflict = block.implementation.read_text(encoding="utf-8")
+            local.implementation.write_text(
+                local_before_conflict + "\\n; local concurrent edit\\n",
+                encoding="utf-8",
+            )
+            block.implementation.write_text(
+                source_before_conflict + "\\n; library concurrent edit\\n",
+                encoding="utf-8",
+            )
+            try:
+                sync_selected_local(selection, kicad, project_dir)
+            except RuntimeError as conflict_error:
+                if "Synchronization conflict" not in str(conflict_error):
+                    raise
+            else:
+                raise AssertionError("Divergent local/library edits were not rejected.")
+            if "; local concurrent edit" not in local.implementation.read_text(encoding="utf-8"):
+                raise AssertionError("Conflict detection overwrote the local version.")
+            if "; library concurrent edit" not in block.implementation.read_text(encoding="utf-8"):
+                raise AssertionError("Conflict detection overwrote the library version.")
+
+            symbols_after_sync = list(schematic.get_symbols())
+            if (
+                len(symbols_after_sync) != 1
+                or str(symbols_after_sync[0].id) != original_instance_id
+                or symbols_after_sync[0].reference != "X1"
+            ):
+                raise AssertionError("Local synchronization changed the facade KIID/reference.")
 
             # Test the plugin's actual dynamic registration path: this library
             # did not exist in sym-lib-table when KiCad was started.
