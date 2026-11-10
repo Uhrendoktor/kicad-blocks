@@ -410,6 +410,7 @@ def publish_local_copy(local_block: BlockRecord) -> dict:
     conflicts = ["manifest.dependencies"] if dependency_conflict else []
     push_files: list[str] = []
     pull_files: list[str] = []
+    converged_files: list[str] = []
     for file_name in sorted(set(base_hashes) | set(local_hashes) | set(source_hashes)):
         base_hash = base_hashes.get(file_name)
         local_hash = local_hashes.get(file_name)
@@ -418,6 +419,8 @@ def publish_local_copy(local_block: BlockRecord) -> dict:
         upstream_changed = upstream_hash != base_hash
         if local_changed and upstream_changed and local_hash != upstream_hash:
             conflicts.append(file_name)
+        elif local_changed and upstream_changed and local_hash == upstream_hash:
+            converged_files.append(file_name)
         elif local_changed and not upstream_changed:
             push_files.append(file_name)
         elif upstream_changed and not local_changed:
@@ -432,7 +435,19 @@ def publish_local_copy(local_block: BlockRecord) -> dict:
 
     push_dependencies = local_dependencies_changed and not source_dependencies_changed
     pull_dependencies = source_dependencies_changed and not local_dependencies_changed
-    if not push_files and not pull_files and not push_dependencies and not pull_dependencies:
+    converged_dependencies = (
+        local_dependencies_changed
+        and source_dependencies_changed
+        and local_dependencies == source_dependencies
+    )
+    if (
+        not push_files
+        and not pull_files
+        and not converged_files
+        and not push_dependencies
+        and not pull_dependencies
+        and not converged_dependencies
+    ):
         return {
             "published": [],
             "pulled": [],
@@ -577,7 +592,9 @@ def publish_local_copy(local_block: BlockRecord) -> dict:
         "pulled": pulled,
         "version": int(source_manifest.get("version", 1)),
         "revision": source_manifest.get("revision"),
-        "dependencies_updated": push_dependencies or pull_dependencies,
+        "dependencies_updated": push_dependencies or pull_dependencies or converged_dependencies,
+        "converged": converged_files
+        + (["manifest.dependencies"] if converged_dependencies else []),
     }
 
 
