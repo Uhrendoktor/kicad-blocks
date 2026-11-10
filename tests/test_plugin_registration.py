@@ -4,21 +4,21 @@ from __future__ import annotations
 
 import json
 import os
-from pathlib import Path
 import re
 import shutil
 import subprocess
 import sys
 import tempfile
 import time
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 PLUGIN_SOURCE = ROOT / "plugin" / "kicad-blocks"
 INSTALLER = ROOT / "scripts" / "install_plugin.py"
 sys.path.insert(0, str(PLUGIN_SOURCE))
 
-from kicad_blocks.repository import create_block
 from kicad_blocks.model import parse_pins
+from kicad_blocks.repository import create_block
 
 
 def _find_executable(*names: str) -> str:
@@ -207,7 +207,6 @@ def main() -> None:
         home.mkdir()
         documents_home = home / ".local" / "share" / "KiCad"
         cache_home = home / ".cache" / "KiCad" / version
-        config_dir = home / ".config" / "kicad" / version
         project = root / "project"
         project.mkdir()
         block = create_block(
