@@ -337,7 +337,7 @@ class BlockRepositoryTests(unittest.TestCase):
         local.implementation.write_text("; local implementation\n", encoding="utf-8")
         source.implementation.write_text("; library implementation\n", encoding="utf-8")
 
-        with self.assertRaisesRegex(RuntimeError, "Publish conflict"):
+        with self.assertRaisesRegex(RuntimeError, "Synchronization conflict"):
             publish_local_copy(local)
 
         self.assertEqual(

@@ -53,9 +53,9 @@ class RecursiveBlockOperationTests(unittest.TestCase):
             rows = list(csv.DictReader(stream))
         self.assertEqual(
             {row["Reference"] for row in rows},
-            {"Power Stage::R1", "Controller::U1"},
+            {"B1/Power Stage::R1", "Controller::U1"},
         )
-        self.assertEqual({row["Block"] for row in rows}, {"Power Stage", "Controller"})
+        self.assertEqual({row["Block"] for row in rows}, {"B1/Power Stage", "Controller"})
 
     def test_repeated_child_instances_produce_separate_recursive_bom_rows(self):
         self.parent = add_dependency(self.parent, self.child, reference="B2")
@@ -66,7 +66,7 @@ class RecursiveBlockOperationTests(unittest.TestCase):
             implementation_path = Path(command[-1])
             reference = "R1" if implementation_path == self.child.implementation else "U1"
             output_path.write_text(
-                f"Reference,Qty,Value\\n{reference},1,10k\\n",
+                f"Reference,Qty,Value\n{reference},1,10k\n",
                 encoding="utf-8",
             )
             return SimpleNamespace(returncode=0, stdout="", stderr="")
