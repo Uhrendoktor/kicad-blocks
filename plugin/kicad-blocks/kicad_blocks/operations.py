@@ -94,9 +94,19 @@ def export_block_bom(
                 for header in headers:
                     if header not in fieldnames:
                         fieldnames.append(header)
+                nested_facade_references = {
+                    str(dependency.get("reference", "")).strip()
+                    for dependency in record.manifest.get("dependencies", [])
+                    if dependency.get("reference")
+                }
                 for row in reader:
                     item = {name: value or "" for name, value in row.items() if name}
                     reference = item.get(reference_column, "").strip()
+                    # A child facade in the parent implementation is a
+                    # composition placeholder, not a separate BOM line. Its
+                    # real components are expanded from the child block below.
+                    if reference in nested_facade_references:
+                        continue
                     if reference:
                         instance_prefix = "/".join(occurrence.instance_path)
                         owner = f"{instance_prefix}/{record.name}" if instance_prefix else record.name
