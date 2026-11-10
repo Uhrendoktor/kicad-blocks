@@ -311,6 +311,14 @@ def main() -> None:
                     text=True,
                 )
                 time.sleep(0.5)
+                # The global-label dialog may have stolen the active window.
+                # Restore focus to the editor before moving/clicking in its canvas.
+                subprocess.run(
+                    [xdotool, "windowfocus", "--sync", window_id],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                )
 
                 geometry = subprocess.run(
                     [xdotool, "getwindowgeometry", "--shell", window_id],
@@ -323,27 +331,34 @@ def main() -> None:
                     for line in geometry.splitlines()
                     if "=" in line
                     for key, value in [line.split("=", 1)]
-                    if key in {"WIDTH", "HEIGHT"}
+                    if key in {"X", "Y", "WIDTH", "HEIGHT"}
                 }
-                if not {"WIDTH", "HEIGHT"}.issubset(dimensions):
-                    raise RuntimeError(f"Could not read Eeschema window dimensions: {geometry!r}")
-                target_x = int(dimensions["WIDTH"] * 0.62)
-                target_y = int(dimensions["HEIGHT"] * 0.58)
+                if not {"X", "Y", "WIDTH", "HEIGHT"}.issubset(dimensions):
+                    raise RuntimeError(f"Could not read Eeschema window geometry: {geometry!r}")
+                # Use absolute desktop coordinates derived from the actual window
+                # origin, rather than mixing window-relative canvas coordinates
+                # with the outer-frame dimensions.
+                target_x = dimensions["X"] + int(dimensions["WIDTH"] * 0.55)
+                target_y = dimensions["Y"] + int(dimensions["HEIGHT"] * 0.55)
                 subprocess.run(
                     [
                         xdotool,
                         "mousemove",
-                        "--window",
-                        window_id,
+                        "--sync",
                         str(target_x),
                         str(target_y),
-                        "click",
-                        "1",
                     ],
                     check=True,
                     capture_output=True,
                     text=True,
                 )
+                subprocess.run(
+                    [xdotool, "click", "1"],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                )
+                time.sleep(0.35)
                 subprocess.run(
                     [xdotool, "key", "--clearmodifiers", "Escape"],
                     check=True,
