@@ -14,6 +14,7 @@ messagebox = None
 simpledialog = None
 
 from .model import parse_pins
+from .composition import compose_block_implementation
 from .operations import export_block_bom, find_kicad_cli, validate_block_tree
 from .repository import (
     LOCAL_NICKNAME_PREFIX,
@@ -389,15 +390,53 @@ def _add_nested_dependency(root, parent, parent_window) -> None:
     parent_record = _pick_record(records, parent_window, "Select Parent Block")
     if parent_record is None:
         return
-    child_records = [r for r in records if r.path != parent_record.path]
+    child_records = [record for record in records if record.path != parent_record.path]
     child_record = _pick_record(child_records, parent_window, "Select Nested Block")
     if child_record is None:
         return
-    updated = add_dependency(parent_record, child_record)
+
+    default_map = ", ".join(
+        f"{pin['name']}:{pin['name']}" for pin in child_record.manifest.get("pins", [])
+    )
+    mapping_text = simpledialog.askstring(
+        "Nested Block Pin Map",
+        "Map each child pin to a net in the parent implementation.\n"
+        "Format: CHILD_PIN:PARENT_NET, comma-separated.",
+        initialvalue=default_map,
+        parent=parent_window,
+    )
+    if mapping_text is None:
+        return
+    pin_map = {}
+    for entry in mapping_text.split(","):
+        token = entry.strip()
+        if not token:
+            continue
+        if ":" not in token:
+            raise ValueError(f"Invalid pin-map entry {token!r}; use CHILD_PIN:PARENT_NET.")
+        child_pin, parent_net = (part.strip() for part in token.split(":", 1))
+        if child_pin in pin_map:
+            raise ValueError(f"Pin {child_pin!r} appears more than once in the pin map.")
+        pin_map[child_pin] = parent_net
+
+    manifest_path = parent_record.path / "manifest.json"
+    original_manifest = manifest_path.read_bytes()
+    try:
+        updated = add_dependency(parent_record, child_record, pin_map=pin_map)
+        result = compose_block_implementation(updated, root, find_kicad_cli())
+    except Exception:
+        manifest_path.write_bytes(original_manifest)
+        raise
+    outcome = next(
+        (item for item in result["composed"] if item["block"] == parent_record.name),
+        {"placed": [], "labels": 0},
+    )
     messagebox.showinfo(
-        "Nested Block Added",
-        f"{child_record.name} is now a dependency of {updated.name}.\n"
-        "This is a library dependency reference; it does not create a hierarchical sheet.",
+        "Nested Block Composed",
+        f"Added {child_record.name} to {parent_record.name} as "
+        f"{updated.manifest['dependencies'][-1]['reference']}.\n"
+        f"New facade symbols: {len(outcome['placed'])}; new net labels: {outcome['labels']}.\n"
+        "The implementation is composed inline with no hierarchical sheet.",
         parent=parent_window,
     )
 

@@ -120,6 +120,88 @@ def main() -> None:
             "KiCad IPC headless placement passed: one facade symbol, zero sheet symbols, "
             "and no project-local child schematic."
         )
+        # Compose a library child into a parent implementation as a facade symbol
+        # plus external global labels. No hierarchical sheet is created.
+        from kicad_blocks.composition import compose_block_implementation
+        from kicad_blocks.repository import add_dependency
+
+        nested_library = root / "nested-library"
+        child = create_block(
+            nested_library,
+            "Nested Child",
+            parse_pins("IN:input, GND:passive, OUT:output"),
+        )
+        parent = create_block(
+            nested_library,
+            "Nested Parent",
+            parse_pins("VIN:input, GND:passive, VOUT:output"),
+        )
+        parent = add_dependency(
+            parent,
+            child,
+            reference="B1",
+            position_mm=(100.0, 100.0),
+            pin_map={"IN": "VIN_CHILD", "GND": "GND_CHILD", "OUT": "VOUT_CHILD"},
+        )
+        composition = compose_block_implementation(parent, nested_library, cli)
+        if not composition["composed"]:
+            raise AssertionError("Nested block composition did not compose any implementation.")
+
+        parent_kicad = KiCad(
+            headless=True,
+            kicad_cli_path=cli,
+            file_path=str(parent.implementation),
+            timeout_ms=30000,
+        )
+        try:
+            parent_schematic = parent_kicad.get_schematic()
+            if parent_schematic is None:
+                raise RuntimeError("Could not reopen the composed parent implementation.")
+            parent_kicad.load_all_libraries(types=[1])
+            parent_kicad.wait_for_libraries(types=[1], timeout_s=120.0)
+            nested_symbols = list(parent_schematic.get_symbols())
+            nested_sheets = list(parent_schematic.get_sheet_symbols())
+            if len(nested_symbols) != 1:
+                raise AssertionError(
+                    f"Expected one child facade in parent implementation; found {len(nested_symbols)}."
+                )
+            if nested_sheets:
+                raise AssertionError(
+                    f"Nested composition created {len(nested_sheets)} hierarchical sheets."
+                )
+            mapped_labels = {label.text.value for label in parent_schematic.get_labels()}
+            if not {"VIN_CHILD", "GND_CHILD", "VOUT_CHILD"}.issubset(mapped_labels):
+                raise AssertionError(f"Mapped nested labels missing: {sorted(mapped_labels)}")
+        finally:
+            parent_kicad.close()
+
+        parent_schematics = sorted(path.name for path in parent.path.glob("*.kicad_sch"))
+        if parent_schematics != ["implementation.kicad_sch"]:
+            raise AssertionError(
+                "Nested composition generated an unexpected schematic file: "
+                + repr(parent_schematics)
+            )
+        nested_svg_dir = Path(temp) / "nested-parent-svg"
+        nested_svg_dir.mkdir()
+        subprocess.run(
+            [
+                cli,
+                "sch",
+                "export",
+                "svg",
+                "--output",
+                str(nested_svg_dir),
+                str(parent.implementation),
+            ],
+            check=True,
+        )
+        if not list(nested_svg_dir.glob("*.svg")):
+            raise AssertionError("KiCad CLI could not export the composed parent implementation.")
+        print(
+            "Nested block composition passed: one child facade, three mapped global labels, "
+            "zero hierarchical sheets and no copied child schematic."
+        )
+
 
 
 if __name__ == "__main__":
