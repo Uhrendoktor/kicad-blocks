@@ -83,6 +83,29 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
         self.kicad.wait_for_libraries.assert_called_once()
         self.messagebox.showinfo.assert_called()
 
+    def test_open_generated_pcb_copy_launches_only_selected_output_file(self):
+        board_copy = self.project / "project_with_block.kicad_pcb"
+        board_copy.write_text("(kicad_pcb)", encoding="utf-8")
+        executable = "/usr/bin/pcbnew-nightly"
+        kicad = SimpleNamespace(get_kicad_binary_path=Mock(return_value=executable))
+        process = object()
+
+        with patch("subprocess.Popen", return_value=process) as popen:
+            opened = plugin_actions._open_generated_pcb_copy(kicad, board_copy)
+
+        self.assertIs(opened, process)
+        popen.assert_called_once_with(
+            [executable, str(board_copy.resolve())],
+            close_fds=True,
+        )
+        kicad.get_kicad_binary_path.assert_called_once_with("pcbnew")
+
+    def test_open_generated_pcb_copy_rejects_missing_output(self):
+        kicad = SimpleNamespace(get_kicad_binary_path=Mock(return_value="/usr/bin/pcbnew"))
+        missing = self.project / "missing.kicad_pcb"
+        with self.assertRaisesRegex(FileNotFoundError, "Generated PCB board does not exist"):
+            plugin_actions._open_generated_pcb_copy(kicad, missing)
+
     def test_local_implementation_edit_opens_project_copy_not_library_source(self):
         from kicad_blocks.repository import link_instance_to_local_copy, make_local_copy
 

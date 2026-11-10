@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+import subprocess
 
 # The core block model and IPC helpers must remain importable in headless
 # environments. Load Tkinter only when the interactive manager is invoked.
@@ -396,7 +397,20 @@ def _parse_pin_net_map(value: str, pins: list[str]) -> dict[str, str]:
     return mapping
 
 
-def _apply_block_pcb_layout(schematic, project_dir: Path, library_root: Path, parent) -> None:
+def _open_generated_pcb_copy(kicad, board_path: Path):
+    """Open only the newly generated board copy in a separate PCB Editor process."""
+    board_path = Path(board_path).expanduser().resolve()
+    if not board_path.is_file():
+        raise FileNotFoundError(f"Generated PCB board does not exist: {board_path}")
+    executable = kicad.get_kicad_binary_path("pcbnew")
+    if not executable:
+        raise RuntimeError("KiCad did not provide a PCB Editor executable path.")
+    return subprocess.Popen([executable, str(board_path)], close_fds=True)
+
+
+def _apply_block_pcb_layout(
+    schematic, kicad, project_dir: Path, library_root: Path, parent
+) -> None:
     """Create a new project-board copy with the selected block's stored PCB layout."""
     instance = _selected_symbol(schematic)
     block = _block_record_for_instance(library_root, project_dir, instance)
@@ -494,6 +508,16 @@ def _apply_block_pcb_layout(schematic, project_dir: Path, library_root: Path, pa
         layout_anchor_mm=anchor,
         rotation_deg=rotation,
     )
+    opened_in_editor = False
+    if messagebox.askyesno(
+        "Open merged PCB board",
+        "The merged board copy has been created without modifying the original. "
+        "Open the generated copy in PCB Editor now?",
+        parent=parent,
+    ):
+        _open_generated_pcb_copy(kicad, Path(result["output"]))
+        opened_in_editor = True
+
     warning = result["skipped_top_level_items"]
     message = (
         f"Created a new board copy:\n{result['output']}\n\n"
@@ -506,8 +530,9 @@ def _apply_block_pcb_layout(schematic, project_dir: Path, library_root: Path, pa
         f"Updated net assignments: {', '.join(result['assigned_project_nets']) or 'none'}\n"
         f"Resolved netclass patterns: {len(result['applied_project_patterns'])}\n"
         f"PCB net chains added: {', '.join(result['merged_board_chains']) or 'none'}\n\n"
-        "The original project board and project settings were not modified. Review the generated board, "
-        "then open it in PCB Editor."
+        "The original project board and project settings were not modified. "
+        + ("The generated copy was opened in PCB Editor." if opened_in_editor else
+           "Open the generated copy in PCB Editor to review it.")
     )
     if warning:
         message += "\n\nSkipped board-level item types: " + ", ".join(warning)
@@ -663,7 +688,7 @@ def run() -> None:
             library_root = _choose_library_root(root)
             _validate_recursive_erc(library_root, root)
         elif action == "pcb":
-            _apply_block_pcb_layout(schematic, project_dir, library_root, root)
+            _apply_block_pcb_layout(schematic, kicad, project_dir, library_root, root)
         elif action == "nest":
             library_root = _choose_library_root(root)
             _add_nested_dependency(library_root, root, root)
