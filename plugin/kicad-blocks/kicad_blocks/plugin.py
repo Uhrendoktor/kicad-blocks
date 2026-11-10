@@ -21,10 +21,10 @@ from .repository import (
     default_library_root,
     list_blocks,
     make_local_copy,
-    register_project_symbol_library,
     refresh_library_block,
-    synchronize_local_copy,
+    register_project_symbol_library,
     set_library_root,
+    synchronize_local_copy,
 )
 
 LOG = logging.getLogger("kicad_blocks")
