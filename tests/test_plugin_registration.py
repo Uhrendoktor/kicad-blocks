@@ -368,6 +368,59 @@ def main() -> None:
             )
             if "plugin environment ready" not in package_probe.stdout:
                 raise AssertionError(package_probe.stdout)
+
+            # The library browser's Place at cursor action hands off to the
+            # native Eeschema Add Symbol tool. Verify the standard hotkey
+            # actually opens the modal symbol chooser in the supported build.
+            subprocess.run(
+                [xdotool, "windowactivate", "--sync", window_id],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            subprocess.run(
+                [xdotool, "key", "--clearmodifiers", "a"],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            chooser_id = None
+            chooser_title = ""
+            chooser_deadline = time.monotonic() + 6.0
+            while time.monotonic() < chooser_deadline:
+                focus = subprocess.run(
+                    [xdotool, "getwindowfocus"],
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                ).stdout.strip()
+                if focus and focus != window_id:
+                    chooser_title = subprocess.run(
+                        [xdotool, "getwindowname", focus],
+                        capture_output=True,
+                        text=True,
+                        check=False,
+                    ).stdout.strip()
+                    if "symbol" in chooser_title.casefold():
+                        chooser_id = focus
+                        break
+                time.sleep(0.1)
+            if chooser_id is None:
+                raise AssertionError(
+                    "Eeschema's Add Symbol hotkey did not open the native symbol chooser; "
+                    f"focused_window={focus!r}; title={chooser_title!r}; "
+                    f"visible_windows={_windows(xdotool)!r}"
+                )
+            subprocess.run(
+                [xdotool, "key", "--clearmodifiers", "Escape"],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            print(
+                "Native Add Symbol chooser opened from the default A hotkey and closed cleanly."
+            )
+
             print(
                 "KiCad plugin registration passed: plugin.json discovered, "
                 "managed Python environment created, and schematic action marked ready."

@@ -8,6 +8,16 @@
   },
   "actions": [
     {
+      "identifier": "browse-library",
+      "name": "Browse Block Library",
+      "description": "Search blocks, preview facade pins and place the selected block at the cursor.",
+      "show-button": true,
+      "scopes": [
+        "schematic"
+      ],
+      "entrypoint": "browse_library.py"
+    },
+    {
       "identifier": "open-implementation",
       "name": "Open Block Implementation",
       "description": "Open the selected block facade implementation for its KB_VARIANT value.",
