@@ -545,6 +545,90 @@ class BlockRepositoryTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "manifest.dependencies"):
             synchronize_local_copy(type("Record", (), {"path": local.path, "manifest": local_manifest})())
 
+    def test_layout_configuration_is_pulled_into_local_copy(self):
+        first_board = self.project / "sync_standard.kicad_pcb"
+        second_board = self.project / "sync_low_profile.kicad_pcb"
+        first_board.write_text("(kicad_pcb)\n", encoding="utf-8")
+        second_board.write_text("(kicad_pcb)\n", encoding="utf-8")
+        source = create_block(
+            self.root,
+            "Layout Sync",
+            self.pins,
+            layout_files=[
+                {"name": "Standard", "path": first_board},
+                {"name": "Low profile", "path": second_board},
+            ],
+        )
+        local = make_local_copy(source, self.project)
+        source_manifest = read_manifest(source.path)
+        source_manifest["default_layout"] = "low_profile"
+        source_manifest["layouts"][1]["name"] = "Low profile Rev B"
+        (source.path / "manifest.json").write_text(
+            json.dumps(source_manifest, indent=2) + "\n", encoding="utf-8"
+        )
+
+        result = synchronize_local_copy(local)
+
+        self.assertTrue(result["layouts_updated"])
+        local_manifest = read_manifest(local.path)
+        self.assertEqual(local_manifest["default_layout"], "low_profile")
+        self.assertEqual(local_manifest["layouts"][1]["name"], "Low profile Rev B")
+        self.assertEqual(local_manifest["base_layouts"]["default_layout"], "low_profile")
+        self.assertEqual(
+            local_manifest["base_layouts"]["layouts"][1]["name"], "Low profile Rev B"
+        )
+
+    def test_layout_configuration_local_edits_publish_and_divergent_edits_conflict(self):
+        first_board = self.project / "publish_standard.kicad_pcb"
+        second_board = self.project / "publish_compact.kicad_pcb"
+        first_board.write_text("(kicad_pcb)\n", encoding="utf-8")
+        second_board.write_text("(kicad_pcb)\n", encoding="utf-8")
+        source = create_block(
+            self.root,
+            "Layout Publish",
+            self.pins,
+            layout_files=[
+                {"name": "Standard", "path": first_board},
+                {"name": "Compact", "path": second_board},
+            ],
+        )
+        local = make_local_copy(source, self.project)
+        local_manifest = read_manifest(local.path)
+        local_manifest["default_layout"] = "compact"
+        local_manifest["layouts"][1]["name"] = "Compact Local"
+        (local.path / "manifest.json").write_text(
+            json.dumps(local_manifest, indent=2) + "\n", encoding="utf-8"
+        )
+
+        result = publish_local_copy(local)
+
+        self.assertEqual(result["published"], ["manifest.layouts"])
+        source_manifest = read_manifest(source.path)
+        self.assertEqual(source_manifest["default_layout"], "compact")
+        self.assertEqual(source_manifest["layouts"][1]["name"], "Compact Local")
+        self.assertTrue(result["layouts_updated"])
+        self.assertEqual(
+            read_manifest(local.path)["base_layouts"]["layouts"][1]["name"],
+            "Compact Local",
+        )
+
+        local_manifest = read_manifest(local.path)
+        source_manifest = read_manifest(source.path)
+        local_manifest["layouts"][1]["name"] = "Local Divergence"
+        source_manifest["layouts"][1]["name"] = "Library Divergence"
+        (local.path / "manifest.json").write_text(
+            json.dumps(local_manifest, indent=2) + "\n", encoding="utf-8"
+        )
+        (source.path / "manifest.json").write_text(
+            json.dumps(source_manifest, indent=2) + "\n", encoding="utf-8"
+        )
+        with self.assertRaisesRegex(RuntimeError, "manifest.layouts"):
+            publish_local_copy(local)
+        self.assertEqual(
+            read_manifest(source.path)["layouts"][1]["name"], "Library Divergence"
+        )
+
+
     def test_parameter_schema_is_pulled_into_local_copy(self):
         source = create_block(
             self.root,

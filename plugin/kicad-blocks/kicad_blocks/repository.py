@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import json
 import math
 import os
@@ -529,6 +530,48 @@ def _asset_hashes(block_path: Path, manifest: dict) -> dict[str, str]:
     return result
 
 
+_LAYOUT_MANIFEST_KEYS = (
+    "layouts",
+    "default_layout",
+    "layout_file",
+    "layout_project_file",
+    "layout_ports",
+)
+
+
+def _layout_configuration(manifest: dict) -> dict:
+    """Return the manifest fields that define a block's PCB implementations."""
+    return {
+        key: copy.deepcopy(manifest.get(key))
+        for key in _LAYOUT_MANIFEST_KEYS
+    }
+
+
+def _set_layout_configuration(manifest: dict, configuration: dict) -> None:
+    """Apply a previously validated PCB layout configuration to a manifest."""
+    for key in _LAYOUT_MANIFEST_KEYS:
+        value = copy.deepcopy(configuration.get(key))
+        if value is None:
+            manifest.pop(key, None)
+        else:
+            manifest[key] = value
+
+
+def _base_layout_configuration(manifest: dict, source_manifest: dict) -> dict:
+    """Load the layout three-way baseline, handling local copies created by older versions."""
+    if "base_layouts" in manifest:
+        return copy.deepcopy(manifest["base_layouts"])
+    if manifest.get("source_version", source_manifest.get("version", 1)) != source_manifest.get(
+        "version", 1
+    ):
+        raise RuntimeError(
+            "This local copy predates layout-metadata synchronization and its library source "
+            "has since changed. Recreate the local copy from the current library block before "
+            "publishing or pulling layout changes."
+        )
+    return _layout_configuration(manifest)
+
+
 def make_local_copy(source: BlockRecord, project_dir: Path) -> BlockRecord:
     """Copy a library block to a project-owned independent editable block asset."""
     project_dir = Path(project_dir).expanduser().resolve()
@@ -551,6 +594,7 @@ def make_local_copy(source: BlockRecord, project_dir: Path) -> BlockRecord:
             "base_hashes": base_hashes,
             "base_dependencies": source.manifest.get("dependencies", []),
             "base_parameters": source.manifest.get("parameters", []),
+            "base_layouts": _layout_configuration(source.manifest),
             "library_nickname": source.manifest.get("library_nickname", LIBRARY_NICKNAME),
             "symbol_name": source.manifest.get("symbol_name"),
             "catalog_file": source.manifest.get("catalog_file", LIBRARY_CATALOG_NAME),
@@ -652,6 +696,16 @@ def synchronize_local_copy(local_block: BlockRecord) -> dict:
     source_hashes = _asset_hashes(source.path, source.manifest)
     base_dependencies = manifest.get("base_dependencies", manifest.get("dependencies", []))
     base_parameters = manifest.get("base_parameters", source.manifest.get("parameters", []))
+    base_layouts = _base_layout_configuration(manifest, source.manifest)
+    local_layouts = _layout_configuration(manifest)
+    source_layouts = _layout_configuration(source.manifest)
+    local_layouts_changed = local_layouts != base_layouts
+    source_layouts_changed = source_layouts != base_layouts
+    layout_conflict = (
+        local_layouts_changed
+        and source_layouts_changed
+        and local_layouts != source_layouts
+    )
     local_parameters = manifest.get("parameters", [])
     source_parameters = source.manifest.get("parameters", [])
     local_parameters_changed = local_parameters != base_parameters
@@ -673,6 +727,8 @@ def synchronize_local_copy(local_block: BlockRecord) -> dict:
     conflicts = ["manifest.dependencies"] if dependency_conflict else []
     if parameter_conflict:
         conflicts.append("manifest.parameters")
+    if layout_conflict:
+        conflicts.append("manifest.layouts")
     copy_files = []
     for file_name in sorted(set(base_hashes) | set(local_hashes) | set(source_hashes)):
         base = base_hashes.get(file_name)
@@ -690,6 +746,18 @@ def synchronize_local_copy(local_block: BlockRecord) -> dict:
             "Sync conflict: both the local copy and library changed "
             + ", ".join(conflicts)
             + ". Resolve those files manually; no files were overwritten."
+        )
+
+    latest_source = _record(source.path)
+    if (
+        _asset_hashes(latest_source.path, latest_source.manifest) != source_hashes
+        or latest_source.manifest.get("dependencies", []) != source_dependencies
+        or latest_source.manifest.get("parameters", []) != source_parameters
+        or _layout_configuration(latest_source.manifest) != source_layouts
+    ):
+        raise RuntimeError(
+            "The library changed during synchronization. Refresh and retry; "
+            "the local copy was not modified by this operation."
         )
 
     for file_name in copy_files:
@@ -715,9 +783,11 @@ def synchronize_local_copy(local_block: BlockRecord) -> dict:
         refreshed_manifest["dependencies"] = source_dependencies
     if source_parameters_changed and not local_parameters_changed:
         refreshed_manifest["parameters"] = source_parameters
+    if source_layouts_changed and not local_layouts_changed:
+        _set_layout_configuration(refreshed_manifest, source_layouts)
     refreshed_manifest["base_dependencies"] = source_dependencies
-    if source_parameters_changed and not local_parameters_changed:
-        refreshed_manifest["base_parameters"] = source_parameters
+    refreshed_manifest["base_parameters"] = source_parameters
+    refreshed_manifest["base_layouts"] = source_layouts
     refreshed_manifest["hashes"] = new_hashes
     refreshed_manifest["revision"] = revision_for_hashes(new_hashes)
     atomic_write(
@@ -728,6 +798,8 @@ def synchronize_local_copy(local_block: BlockRecord) -> dict:
         "copied": copy_files,
         "preserved": sorted(set(local_hashes) - set(copy_files)),
         "dependencies_updated": source_dependencies_changed and not local_dependencies_changed,
+        "parameters_updated": source_parameters_changed and not local_parameters_changed,
+        "layouts_updated": source_layouts_changed and not local_layouts_changed,
         "conflicts": [],
     }
 
@@ -785,6 +857,16 @@ def publish_local_copy(local_block: BlockRecord) -> dict:
         "base_dependencies", source.manifest.get("dependencies", [])
     )
     base_parameters = manifest.get("base_parameters", source.manifest.get("parameters", []))
+    base_layouts = _base_layout_configuration(manifest, source.manifest)
+    local_layouts = _layout_configuration(manifest)
+    source_layouts = _layout_configuration(source.manifest)
+    local_layouts_changed = local_layouts != base_layouts
+    source_layouts_changed = source_layouts != base_layouts
+    layout_conflict = (
+        local_layouts_changed
+        and source_layouts_changed
+        and local_layouts != source_layouts
+    )
     local_parameters = manifest.get("parameters", [])
     source_parameters = source.manifest.get("parameters", [])
     local_parameters_changed = local_parameters != base_parameters
@@ -807,6 +889,8 @@ def publish_local_copy(local_block: BlockRecord) -> dict:
     conflicts = ["manifest.dependencies"] if dependency_conflict else []
     if parameter_conflict:
         conflicts.append("manifest.parameters")
+    if layout_conflict:
+        conflicts.append("manifest.layouts")
     push_files: list[str] = []
     pull_files: list[str] = []
     converged_files: list[str] = []
@@ -846,6 +930,13 @@ def publish_local_copy(local_block: BlockRecord) -> dict:
         and source_parameters_changed
         and local_parameters == source_parameters
     )
+    push_layouts = local_layouts_changed and not source_layouts_changed
+    pull_layouts = source_layouts_changed and not local_layouts_changed
+    converged_layouts = (
+        local_layouts_changed
+        and source_layouts_changed
+        and local_layouts == source_layouts
+    )
     if (
         not push_files
         and not pull_files
@@ -856,6 +947,9 @@ def publish_local_copy(local_block: BlockRecord) -> dict:
         and not push_parameters
         and not pull_parameters
         and not converged_parameters
+        and not push_layouts
+        and not pull_layouts
+        and not converged_layouts
     ):
         return {
             "published": [],
@@ -872,6 +966,7 @@ def publish_local_copy(local_block: BlockRecord) -> dict:
         _asset_hashes(latest_source.path, latest_source.manifest) != source_hashes
         or latest_source.manifest.get("dependencies", []) != source_dependencies
         or latest_source.manifest.get("parameters", []) != source_parameters
+        or _layout_configuration(latest_source.manifest) != source_layouts
     ):
         raise RuntimeError(
             "The library changed during synchronization. Refresh and retry; "
@@ -952,6 +1047,10 @@ def publish_local_copy(local_block: BlockRecord) -> dict:
             source_manifest["parameters"] = local_parameters
         elif pull_parameters:
             local_manifest["parameters"] = source_parameters
+        if push_layouts:
+            _set_layout_configuration(source_manifest, local_layouts)
+        elif pull_layouts:
+            _set_layout_configuration(local_manifest, source_layouts)
 
         candidate_files = set(source_manifest.get("files", []))
         candidate_files.update(local_manifest.get("files", []))
@@ -969,7 +1068,9 @@ def publish_local_copy(local_block: BlockRecord) -> dict:
                 "Synchronization did not produce matching source and local assets."
             )
 
-        source_changed = bool(push_files or push_dependencies or push_parameters)
+        source_changed = bool(
+            push_files or push_dependencies or push_parameters or push_layouts
+        )
         if source_changed:
             source_manifest["hashes"] = source_hashes_after
             source_manifest["revision"] = revision_for_hashes(source_hashes_after)
@@ -988,6 +1089,7 @@ def publish_local_copy(local_block: BlockRecord) -> dict:
         local_manifest["base_hashes"] = dict(source_manifest.get("hashes", {}))
         local_manifest["base_dependencies"] = source_manifest.get("dependencies", [])
         local_manifest["base_parameters"] = source_manifest.get("parameters", [])
+        local_manifest["base_layouts"] = _layout_configuration(source_manifest)
         atomic_write(
             local_manifest_path,
             json.dumps(local_manifest, indent=2, ensure_ascii=False) + "\n",
@@ -1013,15 +1115,22 @@ def publish_local_copy(local_block: BlockRecord) -> dict:
         published.append("manifest.parameters")
     if pull_parameters:
         pulled.append("manifest.parameters")
+    if push_layouts:
+        published.append("manifest.layouts")
+    if pull_layouts:
+        pulled.append("manifest.layouts")
     return {
         "published": published,
         "pulled": pulled,
         "version": int(source_manifest.get("version", 1)),
         "revision": source_manifest.get("revision"),
         "dependencies_updated": push_dependencies or pull_dependencies or converged_dependencies,
+        "parameters_updated": push_parameters or pull_parameters or converged_parameters,
+        "layouts_updated": push_layouts or pull_layouts or converged_layouts,
         "converged": converged_files
         + (["manifest.dependencies"] if converged_dependencies else [])
-        + (["manifest.parameters"] if converged_parameters else []),
+        + (["manifest.parameters"] if converged_parameters else [])
+        + (["manifest.layouts"] if converged_layouts else []),
     }
 
 
