@@ -38,7 +38,7 @@ def main() -> None:
         parent = plugin_actions.tk.Tk()
         parent.title("KiCad Blocks Picker Test Parent")
         parent.geometry("360x120+20+20")
-        parent.update_idletasks()
+        parent.update()
         picker_title = "KiCad Blocks Picker Smoke Test"
         interaction_errors: list[str] = []
         deadline = time.monotonic() + 8.0
