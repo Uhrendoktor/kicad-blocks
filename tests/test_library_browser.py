@@ -17,7 +17,11 @@ from kicad_blocks.model import parse_parameters, parse_pins
 from kicad_blocks.plugin import (
     _block_overview_text,
     _filter_library_records,
+    _library_record_for_tree_row,
+    _minimize_placement_windows,
+    _pick_record,
     _preferred_library_selection,
+    _restore_placement_windows,
     _start_native_symbol_placement,
 )
 from kicad_blocks.repository import create_block
@@ -73,6 +77,13 @@ class LibraryBrowserTests(unittest.TestCase):
         self.assertIn("3V3", overview)
         self.assertIn("Compact", overview)
 
+    def test_record_picker_returns_single_choice_without_opening_a_dialog(self):
+        self.assertIs(_pick_record([self.block], object(), "Pick Block"), self.block)
+
+    def test_record_picker_reports_an_empty_library(self):
+        with self.assertRaisesRegex(ValueError, "No blocks were found"):
+            _pick_record([], object(), "Pick Block")
+
     def test_search_keeps_selected_block_when_it_still_matches(self):
         records = [self.block, self.filter_block]
         preferred = _preferred_library_selection(
@@ -85,6 +96,71 @@ class LibraryBrowserTests(unittest.TestCase):
         preferred = _preferred_library_selection(visible, self.block)
         self.assertIs(preferred, self.filter_block)
         self.assertIsNone(_preferred_library_selection([], self.block))
+    def test_double_click_row_lookup_never_reuses_a_previous_selection(self):
+        records = {
+            str(self.block.manifest["block_id"]): self.block,
+            str(self.filter_block.manifest["block_id"]): self.filter_block,
+        }
+        self.assertIs(
+            _library_record_for_tree_row(records, str(self.filter_block.manifest["block_id"])),
+            self.filter_block,
+        )
+        self.assertIsNone(_library_record_for_tree_row(records, ""))
+        self.assertIsNone(_library_record_for_tree_row(records, None))
+        self.assertIsNone(_library_record_for_tree_row(records, "not-a-row"))
+
+    def test_placement_minimizes_browser_and_manager_and_restores_on_failure(self):
+        class FakeWindow:
+            def __init__(self, master=None, initial_state="normal"):
+                self.master = master
+                self.current_state = initial_state
+                self.events = []
+
+            def state(self):
+                return self.current_state
+
+            def iconify(self):
+                self.events.append("iconify")
+                self.current_state = "iconic"
+
+            def deiconify(self):
+                self.events.append("deiconify")
+                self.current_state = "normal"
+
+        manager = FakeWindow()
+        browser = FakeWindow(master=manager)
+        minimized = _minimize_placement_windows(browser)
+        self.assertEqual(minimized, [browser, manager])
+        self.assertEqual(browser.current_state, "iconic")
+        self.assertEqual(manager.current_state, "iconic")
+
+        _restore_placement_windows(minimized)
+        self.assertEqual(manager.events, ["iconify", "deiconify"])
+        self.assertEqual(browser.events, ["iconify", "deiconify"])
+        self.assertEqual(browser.current_state, "normal")
+        self.assertEqual(manager.current_state, "normal")
+
+    def test_minimizer_leaves_already_hidden_windows_unchanged(self):
+        class FakeWindow:
+            def __init__(self, master=None, initial_state="normal"):
+                self.master = master
+                self.current_state = initial_state
+                self.events = []
+
+            def state(self):
+                return self.current_state
+
+            def iconify(self):
+                self.events.append("iconify")
+                self.current_state = "iconic"
+
+        manager = FakeWindow()
+        browser = FakeWindow(master=manager, initial_state="iconic")
+        minimized = _minimize_placement_windows(browser)
+        self.assertEqual(minimized, [manager])
+        self.assertEqual(browser.events, [])
+        self.assertEqual(manager.events, ["iconify"])
+
     def test_native_placement_handoff_uses_add_symbol_hotkey_and_exact_library_name(self):
         calls = []
         focus_values = iter(("0x222", "0x111"))

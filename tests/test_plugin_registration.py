@@ -381,6 +381,25 @@ def main() -> None:
             if "plugin environment ready" not in package_probe.stdout:
                 raise AssertionError(package_probe.stdout)
 
+            # Exercise the searchable modal in the same system Python
+            # interpreter KiCad uses to create the managed plugin environment.
+            # The isolated test venv may not include tkinter, but the product
+            # runtime must have it because the manager UI is Tk-based.
+            picker_probe = subprocess.run(
+                [python_interpreter, str(ROOT / "tests" / "test_library_picker_gui.py")],
+                env=env,
+                capture_output=True,
+                text=True,
+                check=True,
+                timeout=20.0,
+            )
+            if "searchable manager block picker passed" not in picker_probe.stdout.casefold():
+                raise AssertionError(
+                    "The Tk picker GUI smoke test did not report success. "
+                    f"stdout: {picker_probe.stdout}; stderr: {picker_probe.stderr}"
+                )
+            print(picker_probe.stdout.strip())
+
             # Verify the browser's native placement handoff. The supported
             # Eeschema interface uses the default Add Symbol hotkey (A);
             # the generic RunAction IPC request is not registered by this build.

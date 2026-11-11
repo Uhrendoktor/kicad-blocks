@@ -271,23 +271,162 @@ def sync_selected_local(schematic, kicad, project_dir: Path) -> dict:
     return result
 
 def _pick_record(records, parent, title: str):
+    """Show a searchable modal picker for manager actions that need a library block."""
     if not records:
         raise ValueError("No blocks were found in the configured library.")
-    names = [record.name for record in records]
     if len(records) == 1:
         return records[0]
-    choice = simpledialog.askstring(
-        title,
-        "Choose a block by name:\n\n" + "\n".join(names),
-        initialvalue=names[0],
-        parent=parent,
+
+    dialog = tk.Toplevel(parent)
+    dialog.title(title)
+    dialog.geometry("760x500")
+    dialog.minsize(600, 360)
+    dialog.transient(parent)
+    dialog.grab_set()
+
+    outer = ttk.Frame(dialog, padding=12)
+    outer.pack(fill="both", expand=True)
+    ttk.Label(outer, text="Search the block library").pack(anchor="w")
+    search = tk.StringVar()
+    search_entry = ttk.Entry(outer, textvariable=search)
+    search_entry.pack(fill="x", pady=(4, 3))
+    ttk.Label(
+        outer,
+        text="Type to filter · ↓ browse results · Enter select · Esc cancel",
+        foreground="#667785",
+    ).pack(anchor="w", pady=(0, 6))
+
+    results_frame = ttk.Frame(outer)
+    results_frame.pack(fill="both", expand=True)
+    results_frame.columnconfigure(0, weight=1)
+    results_frame.rowconfigure(0, weight=1)
+    tree = ttk.Treeview(
+        results_frame,
+        columns=("pins", "variants", "layouts"),
+        show="tree headings",
+        selectmode="browse",
     )
-    if choice is None:
-        return None
-    for record in records:
-        if record.name.casefold() == choice.strip().casefold():
-            return record
-    raise ValueError(f"No block named {choice!r} was found.")
+    tree.heading("#0", text="Block")
+    tree.heading("pins", text="Pins")
+    tree.heading("variants", text="Variants")
+    tree.heading("layouts", text="Layouts")
+    tree.column("#0", width=340, minwidth=180, stretch=True)
+    tree.column("pins", width=55, minwidth=45, stretch=False, anchor="center")
+    tree.column("variants", width=75, minwidth=60, stretch=False, anchor="center")
+    tree.column("layouts", width=65, minwidth=55, stretch=False, anchor="center")
+    scrollbar = ttk.Scrollbar(results_frame, orient="vertical", command=tree.yview)
+    tree.configure(yscrollcommand=scrollbar.set)
+    tree.grid(row=0, column=0, sticky="nsew")
+    scrollbar.grid(row=0, column=1, sticky="ns")
+
+    description = ttk.Label(
+        outer,
+        text="Select a block to see its description.",
+        wraplength=700,
+        justify="left",
+        foreground="#53616b",
+    )
+    description.pack(fill="x", anchor="w", pady=(8, 0))
+    count_label = ttk.Label(outer, foreground="#667785")
+    count_label.pack(anchor="w", pady=(4, 0))
+
+    records_by_id = {
+        str(record.manifest["block_id"]): record
+        for record in records
+    }
+    selected_record = [None]
+    chosen_record = [None]
+    select_button = ttk.Button(outer, text="Select block", state="disabled")
+    select_button.pack(side="right", pady=(10, 0))
+    ttk.Button(
+        outer,
+        text="Cancel",
+        command=dialog.destroy,
+    ).pack(side="right", padx=(0, 8), pady=(10, 0))
+
+    def render_results(*_args):
+        visible = _filter_library_records(records, search.get())
+        preferred = _preferred_library_selection(visible, selected_record[0])
+        children = tree.get_children()
+        if children:
+            tree.delete(*children)
+        for record in visible:
+            block_id = str(record.manifest["block_id"])
+            tree.insert(
+                "", "end", iid=block_id, text=record.name,
+                values=(
+                    len(record.manifest.get("pins", [])),
+                    len(record.manifest.get("variants", [])),
+                    len(_layout_choices(record)),
+                ),
+            )
+        count_label.configure(text=f"{len(visible)} of {len(records)} blocks")
+        if preferred is None:
+            selected_record[0] = None
+            description.configure(text="No matching blocks.")
+            select_button.configure(state="disabled")
+            return
+        preferred_id = str(preferred.manifest["block_id"])
+        tree.selection_set(preferred_id)
+        tree.focus(preferred_id)
+        selected_record[0] = preferred
+        description.configure(
+            text=str(preferred.manifest.get("description", "") or "No description provided.")
+        )
+        select_button.configure(state="normal")
+
+    def selection_changed(_event=None):
+        selection = tree.selection()
+        record = records_by_id.get(selection[0]) if selection else None
+        selected_record[0] = record
+        if record is None:
+            description.configure(text="Select a block to see its description.")
+            select_button.configure(state="disabled")
+        else:
+            description.configure(
+                text=str(record.manifest.get("description", "") or "No description provided.")
+            )
+            select_button.configure(state="normal")
+
+    def choose_selected(_event=None):
+        record = selected_record[0]
+        if record is not None:
+            chosen_record[0] = record
+            dialog.destroy()
+        return "break"
+
+    def focus_results(_event=None):
+        children = tree.get_children()
+        if children:
+            selection = tree.selection()
+            target = selection[0] if selection else children[0]
+            tree.selection_set(target)
+            tree.focus(target)
+            tree.focus_set()
+        return "break"
+
+    def choose_double_clicked(event):
+        row_id = tree.identify_row(event.y)
+        record = records_by_id.get(row_id) if row_id else None
+        if record is None:
+            return "break"
+        tree.selection_set(row_id)
+        tree.focus(row_id)
+        selected_record[0] = record
+        return choose_selected()
+
+    tree.bind("<<TreeviewSelect>>", selection_changed)
+    tree.bind("<Return>", choose_selected)
+    tree.bind("<Double-1>", choose_double_clicked)
+    search_entry.bind("<Down>", focus_results)
+    dialog.bind("<Escape>", lambda _event: dialog.destroy())
+    select_button.configure(command=choose_selected)
+    dialog.protocol("WM_DELETE_WINDOW", dialog.destroy)
+    search.trace_add("write", render_results)
+    render_results()
+    search_entry.focus_set()
+    dialog.wait_window()
+    return chosen_record[0]
 
 
 def _layout_choices(block) -> list[dict]:
@@ -475,15 +614,18 @@ def _create_and_place(
         f"Block parameters: {parameter_names}\n\n"
         "Click OK to open KiCad's symbol chooser. After selecting the block, "
         "move the mouse to the desired location and click to place it. Press Esc to cancel. "
+        "The manager minimizes during placement; restore it to create or browse another block. "
         "Open the implementation file separately in Eeschema to edit the internal circuit; "
         "use Symbol Properties → Fields to override values per instance.",
         parent=parent,
     )
+    minimized_windows = _minimize_placement_windows(parent)
     try:
         _start_native_symbol_placement(
             kicad, editor_window_id, str(record.manifest["symbol_name"])
         )
     except Exception as exc:
+        _restore_placement_windows(minimized_windows)
         LOG.exception("Block was created but interactive placement did not start")
         messagebox.showwarning(
             "Block Created — placement not started",
@@ -684,6 +826,39 @@ def _preferred_library_selection(visible_records: list, selected_record):
             if str(record.manifest.get("block_id", "")) == selected_id:
                 return record
     return visible_records[0]
+
+
+def _library_record_for_tree_row(records_by_id: dict, row_id: str | None):
+    """Return the block represented by a clicked result row, never a stale selection."""
+    if not row_id:
+        return None
+    return records_by_id.get(str(row_id))
+
+
+def _minimize_placement_windows(window) -> list:
+    """Minimize the browser and its manager parent so Eeschema's canvas is visible."""
+    minimized = []
+    current = window
+    while current is not None:
+        state = None
+        with contextlib.suppress(Exception):
+            state = current.state()
+        if state not in {"iconic", "withdrawn"}:
+            try:
+                current.iconify()
+            except Exception:
+                LOG.debug("Could not minimize a placement UI window", exc_info=True)
+            else:
+                minimized.append(current)
+        current = getattr(current, "master", None)
+    return minimized
+
+
+def _restore_placement_windows(windows: list) -> None:
+    """Restore windows minimized before a placement handoff failed."""
+    for window in reversed(windows):
+        with contextlib.suppress(Exception):
+            window.deiconify()
 
 
 def _draw_facade_preview(canvas, record) -> None:
@@ -1001,9 +1176,14 @@ def _show_library_browser(
                     "it again using the KiCad Blocks toolbar action inside Schematic Editor."
                 )
             _register_block(project_dir, record, kicad)
-            _start_native_symbol_placement(
-                kicad, editor_window_id, str(record.manifest["symbol_name"])
-            )
+            minimized_windows = _minimize_placement_windows(window)
+            try:
+                _start_native_symbol_placement(
+                    kicad, editor_window_id, str(record.manifest["symbol_name"])
+                )
+            except Exception:
+                _restore_placement_windows(minimized_windows)
+                raise
         except Exception as exc:
             LOG.exception("Native block placement handoff failed")
             messagebox.showerror("Place Block", str(exc), parent=window)
@@ -1123,8 +1303,19 @@ def _show_library_browser(
         search_entry.icursor("end")
         return "break"
 
+    def place_double_clicked(event):
+        row_id = tree.identify_row(event.y)
+        record = _library_record_for_tree_row(records_by_id, row_id)
+        if record is None:
+            return "break"
+        tree.selection_set(row_id)
+        tree.focus(row_id)
+        set_details(record)
+        place_selected()
+        return "break"
+
     tree.bind("<<TreeviewSelect>>", selection_changed)
-    tree.bind("<Double-1>", place_selected)
+    tree.bind("<Double-1>", place_double_clicked)
     tree.bind("<Return>", place_selected)
     tree.bind("<Escape>", focus_search)
     search_entry.bind("<Down>", focus_results)
@@ -1143,6 +1334,12 @@ def _show_library_browser(
         side="left", padx=(8, 0)
     )
     ttk.Button(actions, text="Refresh", command=refresh_records).pack(side="right")
+    ttk.Label(
+        right,
+        text="Eeschema takes over during placement. Restore this window after Esc to browse again.",
+        foreground="#667785",
+        wraplength=680,
+    ).pack(anchor="w", pady=(5, 0))
     refresh_records()
     search_entry.focus_set()
 
