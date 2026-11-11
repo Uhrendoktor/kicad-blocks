@@ -398,6 +398,23 @@ def main() -> None:
                     "The Tk picker GUI smoke test did not report success. "
                     f"stdout: {picker_probe.stdout}; stderr: {picker_probe.stderr}"
                 )
+
+            configuration_probe = subprocess.run(
+                [
+                    python_interpreter,
+                    str(ROOT / "tests" / "test_instance_configuration_gui.py"),
+                ],
+                env=env,
+                capture_output=True,
+                text=True,
+                check=True,
+                timeout=20.0,
+            )
+            if "instance configuration gui passed" not in configuration_probe.stdout.casefold():
+                raise AssertionError(
+                    "The instance configuration GUI smoke test did not report success. "
+                    f"stdout: {configuration_probe.stdout}; stderr: {configuration_probe.stderr}"
+                )
             print(picker_probe.stdout.strip())
 
             # Verify the browser's native placement handoff. The supported
