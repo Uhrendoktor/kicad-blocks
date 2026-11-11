@@ -958,6 +958,16 @@ def publish_local_copy(local_block: BlockRecord) -> dict:
     local_variants = manifest.get("variants", [])
     source_variants = source.manifest.get("variants", [])
     local_variants_changed = local_variants != base_variants
+    base_profiles = manifest.get("base_profiles", source.manifest.get("profiles", []))
+    local_profiles = manifest.get("profiles", [])
+    source_profiles = source.manifest.get("profiles", [])
+    local_profiles_changed = local_profiles != base_profiles
+    source_profiles_changed = source_profiles != base_profiles
+    profile_conflict = (
+        local_profiles_changed
+        and source_profiles_changed
+        and local_profiles != source_profiles
+    )
     source_variants_changed = source_variants != base_variants
     variant_conflict = local_variants_changed and source_variants_changed and local_variants != source_variants
     base_layouts = _base_layout_configuration(manifest, source.manifest)
@@ -994,6 +1004,8 @@ def publish_local_copy(local_block: BlockRecord) -> dict:
         conflicts.append("manifest.parameters")
     if variant_conflict:
         conflicts.append("manifest.variants")
+    if profile_conflict:
+        conflicts.append("manifest.profiles")
     if layout_conflict:
         conflicts.append("manifest.layouts")
     push_files: list[str] = []
@@ -1091,6 +1103,7 @@ def publish_local_copy(local_block: BlockRecord) -> dict:
         or latest_source.manifest.get("dependencies", []) != source_dependencies
         or latest_source.manifest.get("parameters", []) != source_parameters
         or latest_source.manifest.get("variants", []) != source_variants
+        or latest_source.manifest.get("profiles", []) != source_profiles
         or _layout_configuration(latest_source.manifest) != source_layouts
     ):
         raise RuntimeError(
