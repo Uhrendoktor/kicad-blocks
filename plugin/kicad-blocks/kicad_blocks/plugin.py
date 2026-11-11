@@ -21,11 +21,13 @@ from .composition import compose_block_implementation
 from .model import (
     LAYOUT_FIELD_NAME,
     PARAMETER_FIELD_PREFIX,
+    PROFILE_FIELD_NAME,
     VARIANT_FIELD_NAME,
     parameter_field_name,
     parse_parameters,
     parse_pins,
     resolve_parameter_values,
+    resolve_profile_configuration,
     resolve_variant_implementation,
 )
 from .operations import export_block_bom, find_kicad_cli, validate_block_tree
@@ -265,13 +267,14 @@ def _write_instance_configuration(schematic, instance, values: dict[str, str]) -
 def _show_selected_block_configuration(
     schematic, project_dir: Path, library_root: Path, parent
 ) -> None:
-    """Edit instance-local variant, parameters and PCB layout in one form."""
+    """Edit instance-local profile, variant, parameters and PCB layout."""
     _load_tkinter()
     instance = _selected_symbol(schematic)
     block = _block_record_for_instance(library_root, project_dir, instance)
     parameters = block.manifest.get("parameters", [])
     layouts = _layout_choices(block)
     variants = block.manifest.get("variants", [])
+    profiles = block.manifest.get("profiles", [])
     current_values = _parameter_values_for_instance(instance, block)
     fields = {
         str(getattr(field, "name", "")): field
@@ -283,6 +286,8 @@ def _show_selected_block_configuration(
         required.append(VARIANT_FIELD_NAME)
     if layouts:
         required.append(LAYOUT_FIELD_NAME)
+    if profiles:
+        required.append(PROFILE_FIELD_NAME)
     missing = sorted(set(required) - set(fields))
     if missing:
         raise RuntimeError(
@@ -293,8 +298,8 @@ def _show_selected_block_configuration(
 
     dialog = tk.Toplevel(parent)
     dialog.title(f"Configure {instance.reference} — {block.name}")
-    dialog.geometry("660x640")
-    dialog.minsize(560, 420)
+    dialog.geometry("700x720")
+    dialog.minsize(580, 500)
     dialog.transient(parent)
     dialog.grab_set()
 
@@ -307,13 +312,47 @@ def _show_selected_block_configuration(
     ).pack(anchor="w")
     ttk.Label(
         outer,
-        text="These settings belong to this placed instance. The shared block library is not changed.",
-        wraplength=600,
+        text="Choose a profile to load a matching circuit variant, parameter set and PCB layout. "
+        "You can then customize individual values for this instance.",
+        wraplength=640,
         justify="left",
     ).pack(anchor="w", pady=(4, 14))
 
     content = ttk.Frame(outer)
     content.pack(fill="both", expand=True)
+
+    profile_var = None
+    profile_labels: dict[str, dict] = {}
+    if profiles:
+        section = ttk.LabelFrame(content, text="Configuration profile", padding=10)
+        section.pack(fill="x", pady=(0, 10))
+        profile_labels = {
+            f"{item['name']}  [{item['id']}]": item
+            for item in profiles
+        }
+        profile_labels["Custom (manual settings)"] = None
+        current_profile_id = _field_value(instance, PROFILE_FIELD_NAME)
+        current_profile_label = next(
+            (
+                label for label, item in profile_labels.items()
+                if item is not None and str(item["id"]).casefold() == current_profile_id.casefold()
+            ),
+            "Custom (manual settings)",
+        )
+        profile_var = tk.StringVar(value=current_profile_label)
+        ttk.Label(
+            section,
+            text="A profile is a reusable preset. Selecting one fills all linked fields below.",
+            wraplength=620,
+            justify="left",
+        ).pack(anchor="w", pady=(0, 6))
+        profile_combo = ttk.Combobox(
+            section,
+            textvariable=profile_var,
+            values=list(profile_labels),
+            state="readonly",
+        )
+        profile_combo.pack(fill="x")
 
     variant_var = None
     if variants:
@@ -322,8 +361,8 @@ def _show_selected_block_configuration(
         variant_var = tk.StringVar(value=_field_value(instance, VARIANT_FIELD_NAME))
         ttk.Label(
             section,
-            text="Select a declared implementation, or keep a KiCad text-variable reference.",
-            wraplength=570,
+            text="Select a declared implementation, or enter a KiCad text-variable reference.",
+            wraplength=620,
             justify="left",
         ).pack(anchor="w", pady=(0, 6))
         ttk.Combobox(
@@ -361,7 +400,7 @@ def _show_selected_block_configuration(
                 section,
                 text=description,
                 foreground="#667785",
-                wraplength=550,
+                wraplength=600,
                 justify="left",
             ).grid(row=row * 2 + 1, column=0, columnspan=2, sticky="w", pady=(0, 4))
 
@@ -376,7 +415,10 @@ def _show_selected_block_configuration(
         }
         current_layout = _field_value(instance, LAYOUT_FIELD_NAME)
         current_label = next(
-            (label for label, layout_id in layout_ids.items() if layout_id.casefold() == current_layout.casefold()),
+            (
+                label for label, layout_id in layout_ids.items()
+                if layout_id.casefold() == current_layout.casefold()
+            ),
             None,
         )
         if current_layout and current_label is None:
@@ -385,9 +427,10 @@ def _show_selected_block_configuration(
                 f"layout {current_layout!r}. Refresh the block or select a valid layout."
             )
         layout_var = tk.StringVar(value=current_label or next(iter(layout_ids)))
-        ttk.Label(section, text="The selected layout is used by the PCB apply actions.").pack(
-            anchor="w", pady=(0, 6)
-        )
+        ttk.Label(
+            section,
+            text="The selected layout is used by the PCB apply actions.",
+        ).pack(anchor="w", pady=(0, 6))
         ttk.Combobox(
             section,
             textvariable=layout_var,
@@ -395,12 +438,42 @@ def _show_selected_block_configuration(
             state="readonly",
         ).pack(fill="x")
 
+    def apply_profile(_event=None) -> None:
+        if profile_var is None:
+            return
+        profile = profile_labels.get(profile_var.get())
+        if profile is None:
+            return
+        resolved = resolve_profile_configuration(block.manifest, profile["id"])
+        if variant_var is not None:
+            variant_var.set(resolved["variant"])
+        for name, value in resolved["parameters"].items():
+            if name in parameter_vars:
+                parameter_vars[name].set(value)
+        if layout_var is not None:
+            matching_label = next(
+                (
+                    label for label, layout_id in layout_ids.items()
+                    if layout_id.casefold() == resolved["layout"].casefold()
+                ),
+                None,
+            )
+            if matching_label is None:
+                raise ValueError(
+                    f"Profile {profile['name']!r} references a PCB layout that is not available."
+                )
+            layout_var.set(matching_label)
+
+    if profile_var is not None:
+        profile_combo.bind("<<ComboboxSelected>>", apply_profile)
+
     footer = ttk.Frame(outer)
     footer.pack(fill="x", pady=(14, 0))
 
     def save_configuration() -> None:
         try:
             updates: dict[str, str] = {}
+            resolved_variant = ""
             if variant_var is not None:
                 raw_variant = variant_var.get().strip()
                 resolved_variant = _resolve_variant_text(
@@ -411,21 +484,40 @@ def _show_selected_block_configuration(
                 resolve_variant_implementation(block.manifest, resolved_variant)
                 updates[VARIANT_FIELD_NAME] = raw_variant
 
+            normalized_parameters = current_values
             if parameter_vars:
-                normalized = resolve_parameter_values(
+                normalized_parameters = resolve_parameter_values(
                     parameters,
                     {name: variable.get() for name, variable in parameter_vars.items()},
                 )
                 updates.update({
                     parameter_field_name(name): value
-                    for name, value in normalized.items()
+                    for name, value in normalized_parameters.items()
                 })
 
+            selected_layout_id = ""
             if layout_var is not None:
                 selected_layout = layout_var.get()
                 if selected_layout not in layout_ids:
                     raise ValueError("Select one of the declared PCB layout alternatives.")
-                updates[LAYOUT_FIELD_NAME] = layout_ids[selected_layout]
+                selected_layout_id = layout_ids[selected_layout]
+                updates[LAYOUT_FIELD_NAME] = selected_layout_id
+
+            if profile_var is not None:
+                selected_profile = profile_labels.get(profile_var.get())
+                selected_profile_id = ""
+                if selected_profile is not None:
+                    expected = resolve_profile_configuration(
+                        block.manifest, selected_profile["id"]
+                    )
+                    current_matches = (
+                        (variant_var is None or resolved_variant.casefold() == expected["variant"].casefold())
+                        and normalized_parameters == expected["parameters"]
+                        and (layout_var is None or selected_layout_id.casefold() == expected["layout"].casefold())
+                    )
+                    if current_matches:
+                        selected_profile_id = str(selected_profile["id"])
+                updates[PROFILE_FIELD_NAME] = selected_profile_id
 
             _write_instance_configuration(schematic, instance, updates)
         except Exception as exc:
