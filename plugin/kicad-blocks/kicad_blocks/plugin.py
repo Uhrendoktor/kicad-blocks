@@ -119,7 +119,6 @@ def _selected_symbols(schematic) -> list:
     symbols = [
         item for item in selection
         if hasattr(item, "definition") and hasattr(item.definition, "id")
-        and hasattr(item, "reference")
     ]
     if not symbols:
         raise ValueError("Select one or more block symbol instances in the schematic.")

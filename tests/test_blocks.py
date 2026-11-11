@@ -112,12 +112,10 @@ class BlockModelTests(unittest.TestCase):
         from kicad_blocks.plugin import _selected_symbols
 
         first = SimpleNamespace(
-            reference="X1",
-            definition=SimpleNamespace(id=SimpleNamespace(library="KBlocks", name="Buck")),
+            definition=SimpleNamespace(id=SimpleNamespace(library="KBlocks", name="Buck"))
         )
         second = SimpleNamespace(
-            reference="X2",
-            definition=SimpleNamespace(id=SimpleNamespace(library="KBlocks", name="Buck")),
+            definition=SimpleNamespace(id=SimpleNamespace(library="KBlocks", name="Buck"))
         )
         schematic = SimpleNamespace(get_selection=lambda: [first, object(), second])
 
