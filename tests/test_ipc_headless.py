@@ -98,12 +98,16 @@ def main() -> None:
             kicad.load_all_libraries(types=[1])
             kicad.wait_for_libraries(types=[1], timeout_s=120.0)
 
-            instance = schematic.place_symbol_from_library(
+            placed_instance = schematic.place_symbol_from_library(
                 f"{nickname}:{symbol_name}",
                 Vector2.from_xy_mm(100.0, 100.0),
                 reference="X1",
             )
             schematic.save()
+            instance = next(
+                item for item in schematic.get_symbols()
+                if str(item.id) == str(placed_instance.id)
+            )
 
             # Parameter defaults are normal KiCad symbol custom fields, so
             # instance values can be edited without replacing the facade ID.

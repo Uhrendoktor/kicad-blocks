@@ -143,6 +143,21 @@ def _selected_symbol(schematic):
     return symbols[0]
 
 
+def _refresh_selected_symbol(schematic):
+    """Resolve the selected instance again so updates use a current IPC snapshot."""
+    selected = _selected_symbol(schematic)
+    get_symbols = getattr(schematic, "get_symbols", None)
+    if not callable(get_symbols):
+        return selected
+    selected_id = str(selected.id)
+    for current in get_symbols():
+        if str(current.id) == selected_id:
+            return current
+    raise RuntimeError(
+        f"Selected block symbol {selected.reference} is no longer present in the schematic."
+    )
+
+
 def _symbol_identifier(instance) -> tuple[str, str]:
     identifier = instance.definition.id
     return identifier.library, identifier.name
@@ -195,7 +210,7 @@ def _set_instance_user_field_value(instance, field_name: str, value: str) -> Non
 
 def _configure_selected_parameters(schematic, project_dir: Path, library_root: Path, parent) -> None:
     """Edit a selected instance's parameter fields using KiCad's symbol instance API."""
-    instance = _selected_symbol(schematic)
+    instance = _refresh_selected_symbol(schematic)
     block = _block_record_for_instance(library_root, project_dir, instance)
     parameters = block.manifest.get("parameters", [])
     if not parameters:
@@ -589,7 +604,7 @@ def _configure_selected_layout(
     schematic, project_dir: Path, library_root: Path, parent
 ) -> None:
     """Persist a block's PCB implementation selection on the schematic instance."""
-    instance = _selected_symbol(schematic)
+    instance = _refresh_selected_symbol(schematic)
     block = _block_record_for_instance(library_root, project_dir, instance)
     layouts = _layout_choices(block)
     if not layouts:
