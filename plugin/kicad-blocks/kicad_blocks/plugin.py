@@ -1378,6 +1378,14 @@ def _block_overview_text(record) -> str:
         f"  {item.get('name', item.get('id'))}  [{item.get('id', 'legacy')}]"
         for item in _layout_choices(record)
     ] or ["  (none)"]
+    profile_lines = [
+        "  "
+        + str(item.get("name", item.get("id")))
+        + f"  [{item.get('id')}]"
+        + f"  | variant={item.get('variant') or 'single'}"
+        + f"  | layout={item.get('layout') or 'none'}"
+        for item in manifest.get("profiles", [])
+    ] or ["  (none)"]
     return (
         f"Reference prefix: {manifest.get('reference_prefix', 'X')}\n"
         f"Block version: {manifest.get('version', 1)}\n"
@@ -1390,6 +1398,8 @@ def _block_overview_text(record) -> str:
         + "\n".join(variant_lines)
         + "\n\nPCB layouts:\n"
         + "\n".join(layout_lines)
+        + "\n\nConfiguration profiles:\n"
+        + "\n".join(profile_lines)
         + f"\n\nLibrary asset: {record.path}"
     )
 
