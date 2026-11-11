@@ -836,7 +836,12 @@ def _show_library_browser(
     ttk.Label(left, text="Search blocks").pack(anchor="w")
     search = tk.StringVar()
     search_entry = ttk.Entry(left, textvariable=search)
-    search_entry.pack(fill="x", pady=(4, 8))
+    search_entry.pack(fill="x", pady=(4, 3))
+    ttk.Label(
+        left,
+        text="Type to filter · ↓ browse results · Enter place",
+        foreground="#667785",
+    ).pack(anchor="w", pady=(0, 6))
     tree_frame = ttk.Frame(left)
     tree_frame.pack(fill="both", expand=True)
     tree_frame.columnconfigure(0, weight=1)
@@ -1101,9 +1106,26 @@ def _show_library_browser(
 
     ttk.Button(library_footer, text="Change library...", command=change_library).pack(side="left")
     search.trace_add("write", render_records)
+    def focus_results(_event=None):
+        children = tree.get_children()
+        if children:
+            selection = tree.selection()
+            target = selection[0] if selection else children[0]
+            tree.selection_set(target)
+            tree.focus(target)
+            tree.focus_set()
+        return "break"
+
+    def focus_search(_event=None):
+        search_entry.focus_set()
+        search_entry.icursor("end")
+        return "break"
+
     tree.bind("<<TreeviewSelect>>", selection_changed)
     tree.bind("<Double-1>", place_selected)
     tree.bind("<Return>", place_selected)
+    tree.bind("<Escape>", focus_search)
+    search_entry.bind("<Down>", focus_results)
     preview.bind("<Configure>", lambda _event: (
         _draw_facade_preview(preview, selected_record[0])
         if selected_record[0] is not None else None
