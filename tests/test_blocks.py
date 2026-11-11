@@ -180,6 +180,11 @@ class BlockModelTests(unittest.TestCase):
             {"PART": 'part "A"\\rev'},
         )
         self.assertIn(r'part \"A\"\\rev', escaped)
+        escaped_quote_source = r'(property "Value" "quoted \"label\" {{LABEL}}" (at 0 0 0))'
+        self.assertEqual(
+            substitute_parameter_templates(escaped_quote_source, parameters),
+            r'(property "Value" "quoted \"label\" 3V3" (at 0 0 0))',
+        )
         for source in (
             '(property "Value" {{PART}})',
             '; {{PART}}\n',
