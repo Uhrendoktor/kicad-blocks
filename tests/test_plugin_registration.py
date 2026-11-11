@@ -19,7 +19,6 @@ PLUGIN_IDENTIFIER = "org.uhrendoktor.kicadblocks"
 INSTALLER = ROOT / "scripts" / "install_plugin.py"
 sys.path.insert(0, str(PLUGIN_SOURCE))
 
-from kicad_blocks import plugin as plugin_actions
 from kicad_blocks.model import parse_pins
 from kicad_blocks.repository import create_block, register_project_symbol_library
 
@@ -173,61 +172,6 @@ def _launch(
                 process.wait(timeout=5.0)
         raise
 
-
-def _exercise_searchable_block_picker(xdotool: str, records) -> object:
-    """Drive the modal block picker with real X11 keyboard events under Xvfb."""
-    plugin_actions._load_tkinter()
-    parent = plugin_actions.tk.Tk()
-    parent.title("KiCad Blocks Picker Test Parent")
-    parent.geometry("360x120+20+20")
-    parent.update_idletasks()
-    picker_title = "KiCad Blocks Picker Smoke Test"
-    interaction_errors: list[str] = []
-    deadline = time.monotonic() + 8.0
-
-    def drive_picker() -> None:
-        try:
-            matching = next(
-                (item for item in _windows(xdotool) if item[1] == picker_title),
-                None,
-            )
-            if matching is None:
-                if time.monotonic() < deadline:
-                    parent.after(100, drive_picker)
-                    return
-                raise TimeoutError(f"Picker window {picker_title!r} did not appear.")
-            subprocess.run(
-                [xdotool, "windowfocus", "--sync", matching[0]],
-                check=True, capture_output=True, text=True,
-            )
-            subprocess.run(
-                [xdotool, "type", "--clearmodifiers", "--delay", "20", "usb"],
-                check=True, capture_output=True, text=True,
-            )
-            subprocess.run(
-                [xdotool, "key", "--clearmodifiers", "Down"],
-                check=True, capture_output=True, text=True,
-            )
-            subprocess.run(
-                [xdotool, "key", "--clearmodifiers", "Return"],
-                check=True, capture_output=True, text=True,
-            )
-        except (OSError, RuntimeError, subprocess.SubprocessError, TimeoutError) as exc:
-            interaction_errors.append(str(exc))
-            for child in parent.winfo_children():
-                with contextlib.suppress(Exception):
-                    child.destroy()
-
-    parent.after(250, drive_picker)
-    try:
-        selected = plugin_actions._pick_record(records, parent, picker_title)
-    finally:
-        parent.destroy()
-    if interaction_errors:
-        raise RuntimeError("Searchable block picker keyboard flow failed: " + interaction_errors[0])
-    if selected is None:
-        raise AssertionError("Searchable block picker was cancelled instead of selecting a row.")
-    return selected
 
 def main() -> None:
     eeschema = os.environ.get("KICAD_EESCHEMA") or _find_executable(
@@ -438,23 +382,24 @@ def main() -> None:
             if "plugin environment ready" not in package_probe.stdout:
                 raise AssertionError(package_probe.stdout)
 
-            # Exercise the same modal searchable block picker used by Publish,
-            # recursive BOM/ERC and nested composition. Type-to-filter, Down,
-            # and Enter must select the matching block by its visible row.
-            picker_target = create_block(
-                root / "picker-library",
-                "USB Interface Picker Target",
-                parse_pins("VBUS:input, GND:passive, USB_P:bidirectional"),
+            # Exercise the searchable modal in the same system Python
+            # interpreter KiCad uses to create the managed plugin environment.
+            # The isolated test venv may not include tkinter, but the product
+            # runtime must have it because the manager UI is Tk-based.
+            picker_probe = subprocess.run(
+                [python_interpreter, str(ROOT / "tests" / "test_library_picker_gui.py")],
+                env=env,
+                capture_output=True,
+                text=True,
+                check=True,
+                timeout=20.0,
             )
-            picker_selected = _exercise_searchable_block_picker(
-                xdotool, [block, picker_target]
-            )
-            if picker_selected.manifest["block_id"] != picker_target.manifest["block_id"]:
+            if "searchable manager block picker passed" not in picker_probe.stdout.casefold():
                 raise AssertionError(
-                    "Searchable block picker returned the wrong record after USB search: "
-                    f"{picker_selected.name!r}"
+                    "The Tk picker GUI smoke test did not report success. "
+                    f"stdout: {picker_probe.stdout}; stderr: {picker_probe.stderr}"
                 )
-            print("Searchable manager block picker passed: type-to-filter → Down → Enter.")
+            print(picker_probe.stdout.strip())
 
             # Verify the browser's native placement handoff. The supported
             # Eeschema interface uses the default Add Symbol hotkey (A);
