@@ -70,7 +70,13 @@ def main() -> None:
             "Headless IPC Smoke Block",
             parse_pins("VIN:input, GND:passive, VOUT:output"),
             parameters=parse_parameters("OUTPUT_VOLTAGE:number=3.3, ENABLE:boolean=true"),
-            layout_files=[{"name": "Default", "path": default_layout}],
+            layout_files=[{"id": "default", "name": "Default", "path": default_layout}],
+            profiles=[{
+                "id": "default_profile",
+                "name": "Default configuration",
+                "parameters": {"OUTPUT_VOLTAGE": "3.3", "ENABLE": "true"},
+                "layout": "default",
+            }],
         )
         nickname = block.manifest["library_nickname"]
         symbol_name = block.manifest["symbol_name"]
@@ -119,6 +125,8 @@ def main() -> None:
                 )
             if "KB_LAYOUT" not in instance_fields or instance_fields["KB_LAYOUT"].text.value != "default":
                 raise AssertionError("The generated facade did not expose its default PCB layout field.")
+            if "KB_PROFILE" not in instance_fields or instance_fields["KB_PROFILE"].text.value != "":
+                raise AssertionError("The generated facade did not expose its blank profile selector.")
             schematic.save()
 
             symbols = list(schematic.get_symbols())
@@ -154,6 +162,7 @@ def main() -> None:
                     "KB_PARAM_OUTPUT_VOLTAGE": "1.8",
                     "KB_PARAM_ENABLE": "false",
                     "KB_LAYOUT": "default",
+                    "KB_PROFILE": "default_profile",
                 },
             )
             configured_symbols = list(schematic.get_symbols())
@@ -170,12 +179,14 @@ def main() -> None:
                     "KB_PARAM_OUTPUT_VOLTAGE",
                     "KB_PARAM_ENABLE",
                     "KB_LAYOUT",
+                    "KB_PROFILE",
                 )
             }
             if configured_values != {
                 "KB_PARAM_OUTPUT_VOLTAGE": "1.8",
                 "KB_PARAM_ENABLE": "false",
                 "KB_LAYOUT": "default",
+                "KB_PROFILE": "default_profile",
             }:
                 raise AssertionError(
                     f"KiCad IPC did not persist the edited instance fields: {configured_values!r}"
