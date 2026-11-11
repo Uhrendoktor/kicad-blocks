@@ -232,5 +232,7 @@ jobs:
             exit 0
           fi
           git fetch --no-tags origin "$TAG_TARGET_SHA"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git tag -a v1 "$TAG_TARGET_SHA" -m "KiCad Blocks v1"
           git push origin refs/tags/v1
