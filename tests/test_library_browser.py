@@ -17,6 +17,7 @@ from kicad_blocks.model import parse_parameters, parse_pins
 from kicad_blocks.plugin import (
     _block_overview_text,
     _filter_library_records,
+    _preferred_library_selection,
     _start_native_symbol_placement,
 )
 from kicad_blocks.repository import create_block
@@ -72,6 +73,18 @@ class LibraryBrowserTests(unittest.TestCase):
         self.assertIn("3V3", overview)
         self.assertIn("Compact", overview)
 
+    def test_search_keeps_selected_block_when_it_still_matches(self):
+        records = [self.block, self.filter_block]
+        preferred = _preferred_library_selection(
+            _filter_library_records(records, "converter"), self.block
+        )
+        self.assertIs(preferred, self.block)
+
+    def test_search_falls_back_to_first_visible_block_when_selection_disappears(self):
+        visible = _filter_library_records([self.block, self.filter_block], "USB")
+        preferred = _preferred_library_selection(visible, self.block)
+        self.assertIs(preferred, self.filter_block)
+        self.assertIsNone(_preferred_library_selection([], self.block))
     def test_native_placement_handoff_uses_add_symbol_hotkey_and_exact_library_name(self):
         calls = []
         focus_values = iter(("0x222", "0x111"))
@@ -125,7 +138,7 @@ class LibraryBrowserTests(unittest.TestCase):
                 pause=lambda _seconds: None,
             )
         self.assertFalse(any(command[1] == "type" for command in calls))
-        self.assertIn(["key", "--clearmodifiers", "Escape"], calls)
+        self.assertIn(["key", "--clearmodifiers", "Escape"], [command[1:] for command in calls])
 
     def test_native_placement_requires_xdotool_and_editor_window(self):
         with (
