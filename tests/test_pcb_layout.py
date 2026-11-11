@@ -571,6 +571,10 @@ def main() -> None:
                 raise AssertionError("Batch PCB did not preserve routed tracks from both instances.")
         finally:
             batch_kicad.close()
+        print(
+            "PCB batch merge passed: two instances of one reusable block, "
+            "separate mapped nets/references, KiCad CLI export and IPC reload."
+        )
 
 
 
