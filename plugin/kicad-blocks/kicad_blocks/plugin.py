@@ -786,6 +786,147 @@ def _choose_library_root(parent) -> Path:
     return set_library_root(Path(selected))
 
 
+def _parse_profile_parameter_overrides(text: str, parameters: list[dict]) -> dict[str, str]:
+    """Parse typed NAME=VALUE overrides entered for one configuration profile."""
+    declarations = {item["name"]: item for item in parameters}
+    raw_values = {}
+    for entry in str(text or "").split(","):
+        token = entry.strip()
+        if not token:
+            continue
+        if "=" not in token:
+            raise ValueError(f"Invalid profile parameter {token!r}; use NAME=VALUE.")
+        name, value = (part.strip() for part in token.split("=", 1))
+        if name not in declarations:
+            raise ValueError(f"Unknown profile parameter {name!r}.")
+        if name in raw_values:
+            raise ValueError(f"Profile parameter {name!r} was entered more than once.")
+        raw_values[name] = value
+    normalized = resolve_parameter_values(parameters, raw_values)
+    return {name: normalized[name] for name in raw_values}
+
+
+def _collect_block_profiles(parent, parameters, variants, layouts) -> list[dict] | None:
+    """Collect optional linked variant/parameter/layout presets during block creation."""
+    if not (parameters or variants or layouts):
+        return []
+    if not messagebox.askyesno(
+        "Configuration Profiles",
+        "Add named presets that combine an implementation variant, parameter values "
+        "and PCB layout? You can also configure each instance manually later.",
+        parent=parent,
+    ):
+        return []
+
+    profiles = []
+    while True:
+        name = simpledialog.askstring(
+            "New Configuration Profile",
+            "Profile name:",
+            parent=parent,
+        )
+        if name is None:
+            return None
+        if not name.strip():
+            messagebox.showwarning(
+                "Configuration Profile",
+                "Enter a profile name or choose No when asked to add profiles.",
+                parent=parent,
+            )
+            return None
+
+        description = simpledialog.askstring(
+            "Profile Description",
+            "Description (optional):",
+            initialvalue="",
+            parent=parent,
+        )
+        if description is None:
+            return None
+
+        variant = None
+        if variants:
+            choices = [str(item["value"]) for item in variants]
+            variant = simpledialog.askstring(
+                "Profile Implementation Variant",
+                "Choose the exact implementation value:\n\n" + "\n".join(choices),
+                initialvalue=choices[0],
+                parent=parent,
+            )
+            if variant is None:
+                return None
+            matched_variant = next(
+                (value for value in choices if value.casefold() == variant.strip().casefold()),
+                None,
+            )
+            if matched_variant is None:
+                raise ValueError(
+                    f"Unknown profile variant {variant!r}. Choose one of: {', '.join(choices)}."
+                )
+            variant = matched_variant
+
+        parameter_values = {}
+        if parameters:
+            parameter_text = simpledialog.askstring(
+                "Profile Parameter Overrides",
+                "Optional typed overrides, comma-separated as NAME=VALUE. "
+                "Leave a parameter out to inherit the block default.\n\n"
+                + ", ".join(f"{item['name']}={item['default']}" for item in parameters),
+                initialvalue="",
+                parent=parent,
+            )
+            if parameter_text is None:
+                return None
+            parameter_values = _parse_profile_parameter_overrides(
+                parameter_text, parameters
+            )
+
+        layout_id = None
+        if layouts:
+            labels = {
+                f"{item['name']}  [{item['id']}]": str(item["id"])
+                for item in layouts
+            }
+            selected_layout = simpledialog.askstring(
+                "Profile PCB Layout",
+                "Choose a PCB layout:\n\n" + "\n".join(labels),
+                initialvalue=next(iter(labels)),
+                parent=parent,
+            )
+            if selected_layout is None:
+                return None
+            layout_id = next(
+                (
+                    value for label, value in labels.items()
+                    if selected_layout.strip().casefold()
+                    in {label.casefold(), value.casefold(), next(
+                        item["name"].casefold() for item in layouts if item["id"] == value
+                    )}
+                ),
+                None,
+            )
+            if layout_id is None:
+                raise ValueError(
+                    f"Unknown profile layout {selected_layout!r}. Choose one of: "
+                    + ", ".join(labels)
+                )
+
+        profiles.append({
+            "name": name.strip(),
+            "description": description.strip(),
+            "variant": variant,
+            "parameters": parameter_values,
+            "layout": layout_id,
+        })
+        if not messagebox.askyesno(
+            "Configuration Profiles",
+            f"Added profile {name.strip()!r}. Add another profile?",
+            parent=parent,
+        ):
+            break
+    return profiles
+
+
 def _create_and_place(
     root, schematic, kicad, project_dir, parent,
     editor_window_id: str | None = None,
@@ -870,12 +1011,18 @@ def _create_and_place(
         if ports_text is None:
             return
         ports = _parse_pin_net_map(ports_text, [pin.name for pin in pins])
+        normalized_layout_name = layout_name.strip() or layout_path.stem
         layouts.append({
-            "name": layout_name.strip() or layout_path.stem,
+            "id": slugify(normalized_layout_name),
+            "name": normalized_layout_name,
             "path": layout_path,
             "project_path": Path(layout_project) if layout_project else None,
             "ports": ports,
         })
+
+    profiles = _collect_block_profiles(parent, parameters, variant_files, layouts)
+    if profiles is None:
+        return
 
     record = create_block(
         root,
@@ -885,6 +1032,7 @@ def _create_and_place(
         layout_files=layouts if layouts else None,
         parameters=parameters,
         variant_files=variant_files,
+        profiles=profiles,
     )
     record = _register_block(project_dir, record, kicad)
     layout_names = ", ".join(item["name"] for item in record.manifest.get("layouts", [])) or "none"
