@@ -93,6 +93,8 @@ class LibraryBrowserTests(unittest.TestCase):
             calls.append((arguments, kwargs))
             if arguments[1] == "getwindowfocus":
                 return SimpleNamespace(stdout=next(focus_values))
+            if arguments[1] == "getwindowpid":
+                return SimpleNamespace(stdout="4242")
             if arguments[1] == "getwindowname":
                 return SimpleNamespace(stdout="Choose Symbol")
             return SimpleNamespace(stdout="")
@@ -107,7 +109,8 @@ class LibraryBrowserTests(unittest.TestCase):
             pause=pauses.append,
         )
         commands = [item[0][1:] for item in calls]
-        self.assertEqual(commands[0], ["windowactivate", "--sync", "0x111"])
+        self.assertEqual(commands[0], ["getwindowpid", "0x111"])
+        self.assertIn(["windowfocus", "--sync", "0x111"], commands)
         self.assertIn(["key", "--clearmodifiers", "a"], commands)
         self.assertIn(
             ["type", "--clearmodifiers", "--delay", "12", "buck_converter_ab12cd34"],
@@ -124,6 +127,8 @@ class LibraryBrowserTests(unittest.TestCase):
             calls.append(arguments)
             if arguments[1] == "getwindowfocus":
                 return SimpleNamespace(stdout="0x111")
+            if arguments[1] == "getwindowpid":
+                return SimpleNamespace(stdout="4242")
             if arguments[1] == "getwindowname":
                 return SimpleNamespace(stdout="Schematic Editor")
             return SimpleNamespace(stdout="")
