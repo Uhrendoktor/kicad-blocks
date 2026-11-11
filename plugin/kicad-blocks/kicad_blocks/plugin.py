@@ -439,6 +439,8 @@ def _show_selected_block_configuration(
             state="readonly",
         ).pack(fill="x")
 
+    profile_application_active = [False]
+
     def apply_profile(_event=None) -> None:
         if profile_var is None:
             return
@@ -446,27 +448,43 @@ def _show_selected_block_configuration(
         if profile is None:
             return
         resolved = resolve_profile_configuration(block.manifest, profile["id"])
-        if variant_var is not None:
-            variant_var.set(resolved["variant"])
-        for name, value in resolved["parameters"].items():
-            if name in parameter_vars:
-                parameter_vars[name].set(value)
-        if layout_var is not None:
-            matching_label = next(
-                (
-                    label for label, layout_id in layout_ids.items()
-                    if layout_id.casefold() == resolved["layout"].casefold()
-                ),
-                None,
-            )
-            if matching_label is None:
-                raise ValueError(
-                    f"Profile {profile['name']!r} references a PCB layout that is not available."
+        profile_application_active[0] = True
+        try:
+            if variant_var is not None:
+                variant_var.set(resolved["variant"])
+            for name, value in resolved["parameters"].items():
+                if name in parameter_vars:
+                    parameter_vars[name].set(value)
+            if layout_var is not None:
+                matching_label = next(
+                    (
+                        label for label, layout_id in layout_ids.items()
+                        if layout_id.casefold() == resolved["layout"].casefold()
+                    ),
+                    None,
                 )
-            layout_var.set(matching_label)
+                if matching_label is None:
+                    raise ValueError(
+                        f"Profile {profile['name']!r} references a PCB layout that is not available."
+                    )
+                layout_var.set(matching_label)
+        finally:
+            profile_application_active[0] = False
+
+    def mark_profile_custom(*_args) -> None:
+        if profile_var is None or profile_application_active[0]:
+            return
+        if profile_var.get() != "Custom (manual settings)":
+            profile_var.set("Custom (manual settings)")
 
     if profile_var is not None:
         profile_combo.bind("<<ComboboxSelected>>", apply_profile)
+        for linked_variable in (
+            ([variant_var] if variant_var is not None else [])
+            + list(parameter_vars.values())
+            + ([layout_var] if layout_var is not None else [])
+        ):
+            linked_variable.trace_add("write", mark_profile_custom)
 
     footer = ttk.Frame(outer)
     footer.pack(fill="x", pady=(14, 0))
