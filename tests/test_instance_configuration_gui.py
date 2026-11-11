@@ -34,20 +34,46 @@ def main() -> None:
         project.mkdir()
         standard = root_dir / "standard.kicad_pcb"
         compact = root_dir / "compact.kicad_pcb"
-        standard.write_text("(kicad_pcb)\n", encoding="utf-8")
-        compact.write_text("(kicad_pcb)\n", encoding="utf-8")
+        variant_18 = root_dir / "implementation_1v8.kicad_sch"
+        variant_33 = root_dir / "implementation_3v3.kicad_sch"
+        standard.write_text("(kicad_pcb)\\n", encoding="utf-8")
+        compact.write_text("(kicad_pcb)\\n", encoding="utf-8")
+        variant_18.write_text('(kicad_sch (version 20250114) (generator "test"))\\n', encoding="utf-8")
+        variant_33.write_text('(kicad_sch (version 20250114) (generator "test"))\\n', encoding="utf-8")
         block = create_block(
             library,
             "Configuration GUI Block",
             parse_pins("VIN:input, GND:passive"),
             parameters=parse_parameters("OUTPUT_VOLTAGE:number=3.3"),
+            variant_files=[
+                {"value": "3V3", "path": variant_33},
+                {"value": "1V8", "path": variant_18},
+            ],
             layout_files=[
-                {"name": "Standard", "path": standard},
-                {"name": "Compact", "path": compact},
+                {"id": "standard", "name": "Standard", "path": standard},
+                {"id": "compact", "name": "Compact", "path": compact},
+            ],
+            profiles=[
+                {
+                    "id": "standard_3v3",
+                    "name": "Standard 3.3 V",
+                    "variant": "3V3",
+                    "parameters": {"OUTPUT_VOLTAGE": "3.3"},
+                    "layout": "standard",
+                },
+                {
+                    "id": "low_voltage_compact",
+                    "name": "Low voltage compact",
+                    "variant": "1V8",
+                    "parameters": {"OUTPUT_VOLTAGE": "1.8"},
+                    "layout": "compact",
+                },
             ],
         )
 
         fields = [
+            SimpleNamespace(name="KB_PROFILE", text=SimpleNamespace(value="")),
+            SimpleNamespace(name="KB_VARIANT", text=SimpleNamespace(value="")),
             SimpleNamespace(
                 name="KB_PARAM_OUTPUT_VOLTAGE",
                 text=SimpleNamespace(value="3.3"),
@@ -69,7 +95,6 @@ def main() -> None:
         schematic = SimpleNamespace(
             get_selection=lambda: [instance],
             begin_commit=Mock(return_value=commit),
-            update_items=Mock(return_value=[instance]),
             push_commit=Mock(),
             drop_commit=Mock(),
             save=Mock(),
@@ -118,14 +143,20 @@ def main() -> None:
                     (button for button in buttons if button.cget("text") == "Save instance"),
                     None,
                 )
-                if len(entries) != 1 or len(combos) != 1 or save_button is None:
+                if len(entries) != 1 or len(combos) != 3 or save_button is None:
                     raise AssertionError(
                         f"Unexpected configuration form controls: "
                         f"entries={len(entries)}, combos={len(combos)}, save={save_button is not None}"
                     )
-                entries[0].delete(0, "end")
-                entries[0].insert(0, "1.8")
-                combos[0].set("Compact  [compact]")
+                combos[0].current(1)
+                combos[0].event_generate("<<ComboboxSelected>>")
+                dialog.update()
+                if entries[0].get() != "1.8":
+                    raise AssertionError("Selecting the profile did not apply its typed parameter preset.")
+                if combos[1].get() != "1V8":
+                    raise AssertionError("Selecting the profile did not choose its schematic variant.")
+                if combos[2].get() != "Compact  [compact]":
+                    raise AssertionError("Selecting the profile did not choose its PCB layout.")
                 save_button.invoke()
             except (
                 AssertionError,
@@ -167,6 +198,8 @@ def main() -> None:
             )
         values = {field.name: field.text.value for field in instance.user_fields}
         if values != {
+            "KB_PROFILE": "low_voltage_compact",
+            "KB_VARIANT": "1V8",
             "KB_PARAM_OUTPUT_VOLTAGE": "1.8",
             "KB_LAYOUT": "compact",
         }:
@@ -178,7 +211,7 @@ def main() -> None:
         schematic.save.assert_called_once_with()
         print(
             "Editable block instance configuration GUI passed: "
-            "parameter and PCB layout saved through one IPC transaction."
+            "profile variant, parameter and PCB layout saved through one IPC transaction."
         )
 
 
