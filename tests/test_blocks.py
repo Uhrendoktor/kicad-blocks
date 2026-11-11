@@ -15,9 +15,9 @@ from kicad_blocks.model import (
     parse_pins,
     render_symbol_library,
     resolve_parameter_values,
-    substitute_parameter_templates,
     rotate_label_spin_style,
     schematic_symbol_orientation,
+    substitute_parameter_templates,
     transform_symbol_point_to_schematic,
 )
 from kicad_blocks.repository import (
