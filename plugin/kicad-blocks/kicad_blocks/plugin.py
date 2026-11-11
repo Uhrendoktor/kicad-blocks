@@ -29,6 +29,7 @@ from .model import (
     resolve_parameter_values,
     resolve_profile_configuration,
     resolve_variant_implementation,
+    slugify,
 )
 from .operations import export_block_bom, find_kicad_cli, validate_block_tree
 from .pcb_layout import BlockLayoutPlacement, merge_block_layout, merge_block_layouts
@@ -895,16 +896,13 @@ def _collect_block_profiles(parent, parameters, variants, layouts) -> list[dict]
             )
             if selected_layout is None:
                 return None
-            layout_id = next(
-                (
-                    value for label, value in labels.items()
-                    if selected_layout.strip().casefold()
-                    in {label.casefold(), value.casefold(), next(
-                        item["name"].casefold() for item in layouts if item["id"] == value
-                    )}
-                ),
-                None,
-            )
+            layout_aliases = {}
+            for item in layouts:
+                layout_aliases[item["name"].casefold()] = str(item["id"])
+                layout_aliases[str(item["id"]).casefold()] = str(item["id"])
+            for label, value in labels.items():
+                layout_aliases[label.casefold()] = value
+            layout_id = layout_aliases.get(selected_layout.strip().casefold())
             if layout_id is None:
                 raise ValueError(
                     f"Unknown profile layout {selected_layout!r}. Choose one of: "
