@@ -94,6 +94,9 @@ def main() -> None:
         commit = object()
         schematic = SimpleNamespace(
             get_selection=lambda: [instance],
+            get_project=lambda: SimpleNamespace(
+                expand_text_variables=lambda value: value
+            ),
             begin_commit=Mock(return_value=commit),
             push_commit=Mock(),
             drop_commit=Mock(),
