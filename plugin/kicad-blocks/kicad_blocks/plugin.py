@@ -606,12 +606,10 @@ def _start_native_symbol_placement(
     send("key", "--clearmodifiers", "a")
 
     chooser_id = ""
-    chooser_title = ""
     for _ in range(50):
         focused_id = send("getwindowfocus")
         if focused_id and focused_id != str(editor_window_id):
             focused_pid = send("getwindowpid", focused_id)
-            chooser_title = send("getwindowname", focused_id)
             if focused_pid == editor_pid:
                 chooser_id = focused_id
                 break
