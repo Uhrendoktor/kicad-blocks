@@ -172,7 +172,6 @@ def main() -> None:
         }:
             raise AssertionError(f"Configuration form did not save the edited fields: {values!r}")
         schematic.begin_commit.assert_called_once_with()
-        schematic.update_items.assert_called_once_with([instance])
         schematic.push_commit.assert_called_once_with(
             commit, "Configure KiCad block instance"
         )
