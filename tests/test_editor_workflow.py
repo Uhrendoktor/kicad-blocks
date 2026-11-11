@@ -11,7 +11,7 @@ PLUGIN = Path(__file__).resolve().parents[1] / "plugin" / "kicad-blocks"
 sys.path.insert(0, str(PLUGIN))
 
 from kicad_blocks import plugin as plugin_actions
-from kicad_blocks.model import parse_pins
+from kicad_blocks.model import parse_parameters, parse_pins
 from kicad_blocks.repository import create_block, read_manifest
 
 
@@ -82,6 +82,130 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
         self.kicad.reload_library.assert_called_once()
         self.kicad.wait_for_libraries.assert_called_once()
         self.messagebox.showinfo.assert_called()
+
+    def test_configuration_guide_uses_native_kicad_symbol_properties(self):
+        block = create_block(
+            self.library,
+            "Parameterized Editor Block",
+            parse_pins("VIN:input"),
+            parameters=parse_parameters("OUTPUT_VOLTAGE:number=3.3"),
+        )
+        field = SimpleNamespace(
+            name="KB_PARAM_OUTPUT_VOLTAGE",
+            text=SimpleNamespace(value="1.8"),
+        )
+        instance = SimpleNamespace(
+            id="00000000-0000-0000-0000-000000000456",
+            reference="X1",
+            definition=SimpleNamespace(
+                id=SimpleNamespace(
+                    library=block.manifest["library_nickname"],
+                    name=block.manifest["symbol_name"],
+                )
+            ),
+            user_fields=[field],
+        )
+        schematic = SimpleNamespace(get_selection=lambda: [instance])
+
+        with patch.object(plugin_actions, "messagebox", self.messagebox):
+            plugin_actions._show_selected_block_configuration(
+                schematic, self.project, self.library, self.parent
+            )
+
+        self.messagebox.showinfo.assert_called_once()
+        message = self.messagebox.showinfo.call_args.args[1]
+        self.assertIn("Press E (Symbol Properties)", message)
+        self.assertIn("Fields tab", message)
+        self.assertIn("OUTPUT_VOLTAGE (number) = 1.8", message)
+        self.assertNotIn("update_items", message)
+
+    def test_parameter_values_validate_custom_instance_fields(self):
+        block = create_block(
+            self.library,
+            "Typed Field Block",
+            parse_pins("VIN:input"),
+            parameters=parse_parameters("OUTPUT_VOLTAGE:number=3.3, ENABLE:boolean=true"),
+        )
+        instance = SimpleNamespace(
+            user_fields=[
+                SimpleNamespace(name="KB_PARAM_OUTPUT_VOLTAGE", text=SimpleNamespace(value="1.8")),
+                SimpleNamespace(name="KB_PARAM_ENABLE", text=SimpleNamespace(value="no")),
+            ]
+        )
+        self.assertEqual(
+            plugin_actions._parameter_values_for_instance(instance, block),
+            {"OUTPUT_VOLTAGE": "1.8", "ENABLE": "false"},
+        )
+        instance.user_fields[0].text.value = "not-a-number"
+        with self.assertRaisesRegex(ValueError, "must be a number"):
+            plugin_actions._parameter_values_for_instance(instance, block)
+
+
+    def test_configuration_guide_reports_layout_choices_and_reads_instance_selection(self):
+        standard = self.project / "standard.kicad_pcb"
+        low_profile = self.project / "low_profile.kicad_pcb"
+        standard.write_text("(kicad_pcb)", encoding="utf-8")
+        low_profile.write_text("(kicad_pcb)", encoding="utf-8")
+        block = create_block(
+            self.library,
+            "Layout Alternatives",
+            parse_pins("VIN:input"),
+            layout_files=[
+                {"name": "Standard", "path": standard},
+                {"name": "Low profile", "path": low_profile},
+            ],
+        )
+        field = SimpleNamespace(name="KB_LAYOUT", text=SimpleNamespace(value="low_profile"))
+        instance = SimpleNamespace(
+            id="00000000-0000-0000-0000-000000000789",
+            reference="X7",
+            definition=SimpleNamespace(
+                id=SimpleNamespace(
+                    library=block.manifest["library_nickname"],
+                    name=block.manifest["symbol_name"],
+                )
+            ),
+            user_fields=[field],
+        )
+        schematic = SimpleNamespace(get_selection=lambda: [instance])
+
+        with patch.object(plugin_actions, "messagebox", self.messagebox):
+            plugin_actions._show_selected_block_configuration(
+                schematic, self.project, self.library, self.parent
+            )
+
+        self.messagebox.showinfo.assert_called_once()
+        message = self.messagebox.showinfo.call_args.args[1]
+        self.assertIn("standard: Standard", message)
+        self.assertIn("low_profile: Low profile", message)
+        self.assertIn("Current KB_LAYOUT: low_profile", message)
+        selected = plugin_actions._choose_block_layout(
+            block, self.parent, instance=instance
+        )
+        self.assertEqual(selected["id"], "low_profile")
+        self.assertEqual(selected["file"], "layout_low_profile.kicad_pcb")
+
+    def test_layout_selection_rejects_stale_instance_field(self):
+        first = self.project / "first.kicad_pcb"
+        second = self.project / "second.kicad_pcb"
+        first.write_text("(kicad_pcb)", encoding="utf-8")
+        second.write_text("(kicad_pcb)", encoding="utf-8")
+        block = create_block(
+            self.library,
+            "Stale Layout Choice",
+            parse_pins("VIN:input"),
+            layout_files=[
+                {"name": "First", "path": first},
+                {"name": "Second", "path": second},
+            ],
+        )
+        instance = SimpleNamespace(
+            reference="X1",
+            user_fields=[SimpleNamespace(name="KB_LAYOUT", text=SimpleNamespace(value="removed"))],
+        )
+        with self.assertRaisesRegex(ValueError, "selects unknown layout"):
+            plugin_actions._choose_block_layout(block, self.parent, instance=instance)
+
 
     def test_open_generated_pcb_copy_launches_only_selected_output_file(self):
         board_copy = self.project / "project_with_block.kicad_pcb"

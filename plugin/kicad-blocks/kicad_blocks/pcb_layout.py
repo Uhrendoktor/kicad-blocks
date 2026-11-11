@@ -791,6 +791,63 @@ def _merge_project_net_settings(
     }
 
 
+def resolve_block_layout(block, layout_id: str | None = None) -> dict[str, Any]:
+    """Resolve a named layout asset, retaining support for legacy single-layout blocks."""
+    layouts = block.manifest.get("layouts") or []
+    if layouts:
+        if layout_id is None:
+            default_layout = block.manifest.get("default_layout")
+            selected = next(
+                (
+                    item for item in layouts
+                    if default_layout is not None
+                    and str(item.get("id", "")).casefold() == str(default_layout).casefold()
+                ),
+                None,
+            )
+            if selected is None and len(layouts) > 1:
+                raise ValueError(
+                    f"Block {block.name!r} has multiple PCB layouts and no valid default; "
+                    "choose one explicitly."
+                )
+            if selected is None:
+                selected = layouts[0]
+        else:
+            selected = next(
+                (
+                    item for item in layouts
+                    if str(item.get("id", "")).casefold() == str(layout_id).casefold()
+                    or str(item.get("name", "")).casefold() == str(layout_id).casefold()
+                ),
+                None,
+            )
+            if selected is None:
+                available = ", ".join(str(item.get("name", item.get("id", ""))) for item in layouts)
+                raise ValueError(
+                    f"Unknown PCB layout {layout_id!r} for {block.name!r}. Available: {available}."
+                )
+        return {
+            "id": str(selected["id"]),
+            "name": str(selected.get("name", selected["id"])),
+            "file": str(selected["file"]),
+            "project_file": selected.get("project_file"),
+            "ports": selected.get("ports"),
+        }
+
+    legacy_file = block.manifest.get("layout_file")
+    if not legacy_file:
+        raise ValueError(f"Block {block.name!r} has no stored PCB layout.")
+    if layout_id not in (None, "", "default"):
+        raise ValueError(f"Block {block.name!r} has only its legacy PCB layout.")
+    return {
+        "id": None,
+        "name": Path(str(legacy_file)).stem,
+        "file": str(legacy_file),
+        "project_file": block.manifest.get("layout_project_file", "layout.kicad_pro"),
+        "ports": block.manifest.get("layout_ports"),
+    }
+
+
 @dataclass(frozen=True, slots=True)
 class BlockLayoutPlacement:
     """One schematic block occurrence and its desired PCB placement."""
@@ -801,6 +858,7 @@ class BlockLayoutPlacement:
     pin_to_board_net: dict[str, str]
     layout_anchor_mm: tuple[float, float] = (0.0, 0.0)
     rotation_deg: float = 0.0
+    layout_id: str | None = None
 
 
 def merge_block_layouts(
@@ -856,6 +914,7 @@ def merge_block_layouts(
                 pin_to_board_net=item.pin_to_board_net,
                 layout_anchor_mm=item.layout_anchor_mm,
                 rotation_deg=item.rotation_deg,
+                layout_id=item.layout_id,
             )
             results.append(result)
             current_board = stage_output
@@ -907,6 +966,7 @@ def merge_block_layout(
     pin_to_board_net: dict[str, str],
     layout_anchor_mm: tuple[float, float] = (0.0, 0.0),
     rotation_deg: float = 0.0,
+    layout_id: str | None = None,
 ) -> dict[str, Any]:
     """Merge a stored block layout into a new copy of a project board.
 
@@ -917,11 +977,10 @@ def merge_block_layout(
     """
     target_board = Path(target_board).expanduser().resolve()
     output_board = Path(output_board).expanduser().resolve()
-    layout_name = block.manifest.get("layout_file")
-    if not layout_name:
-        raise ValueError(f"Block {block.name!r} has no stored PCB layout.")
-    source_board = (Path(block.path) / str(layout_name)).resolve()
-    layout_project_file = block.manifest.get("layout_project_file", "layout.kicad_pro")
+    selected_layout = resolve_block_layout(block, layout_id)
+    layout_name = selected_layout["file"]
+    source_board = (Path(block.path) / layout_name).resolve()
+    layout_project_file = selected_layout.get("project_file")
     source_project = (Path(block.path) / str(layout_project_file)).resolve() if layout_project_file else None
     target_project = target_board.with_suffix(".kicad_pro")
     output_project = output_board.with_suffix(".kicad_pro")
@@ -966,7 +1025,7 @@ def merge_block_layout(
     target_nets = _get_nets(target)
     target_codes = {name: code for code, name in target_nets.items()}
     next_code = max(target_nets, default=0) + 1
-    ports = block.manifest.get("layout_ports") or {pin: pin for pin in pins}
+    ports = selected_layout.get("ports") or block.manifest.get("layout_ports") or {pin: pin for pin in pins}
     if set(ports) != pins:
         raise ValueError("Block layout_ports must map every facade pin exactly once.")
     port_map: dict[str, str] = {}
@@ -1107,6 +1166,8 @@ def merge_block_layout(
     return {
         "output": str(output_board),
         "block": block.name,
+        "layout_id": selected_layout.get("id"),
+        "layout_name": selected_layout.get("name"),
         "instance_reference": instance_reference,
         "rotation_deg": rotation_deg,
         "project_file": project_merge["output"] if project_merge is not None else None,

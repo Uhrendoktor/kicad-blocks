@@ -5,6 +5,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 
 PLUGIN = Path(__file__).resolve().parents[1] / "plugin" / "kicad-blocks"
 sys.path.insert(0, str(PLUGIN))
@@ -16,10 +17,65 @@ from kicad_blocks.pcb_layout import (
     _rewrite_nets,
     _transform_item,
     parse_sexpr,
+    resolve_block_layout,
 )
 
 
 class PCBNetRewriteTests(unittest.TestCase):
+    def test_resolve_named_layout_and_legacy_single_layout(self):
+        block = SimpleNamespace(
+            name="Power Block",
+            path=Path("/tmp/power.kicad_block"),
+            manifest={
+                "layouts": [
+                    {"id": "native", "name": "Native", "file": "layout_native.kicad_pcb"},
+                    {
+                        "id": "low_voltage",
+                        "name": "Low voltage",
+                        "file": "layout_low_voltage.kicad_pcb",
+                        "project_file": "layout_low_voltage.kicad_pro",
+                        "ports": {"VIN": "VDD18"},
+                    },
+                ],
+            },
+        )
+        selected = resolve_block_layout(block, "low_voltage")
+        self.assertEqual(selected["name"], "Low voltage")
+        self.assertEqual(selected["file"], "layout_low_voltage.kicad_pcb")
+        self.assertEqual(selected["project_file"], "layout_low_voltage.kicad_pro")
+        self.assertEqual(selected["ports"], {"VIN": "VDD18"})
+        with self.assertRaisesRegex(ValueError, "multiple PCB layouts"):
+            resolve_block_layout(block)
+        defaulted = SimpleNamespace(
+            name=block.name,
+            path=block.path,
+            manifest={**block.manifest, "default_layout": "native"},
+        )
+        self.assertEqual(resolve_block_layout(defaulted)["id"], "native")
+        with self.assertRaisesRegex(ValueError, "Unknown PCB layout"):
+            resolve_block_layout(block, "missing")
+
+        legacy = SimpleNamespace(
+            name="Old Block",
+            path=Path("/tmp/old.kicad_block"),
+            manifest={
+                "layout_file": "layout.kicad_pcb",
+                "layout_project_file": "layout.kicad_pro",
+            },
+        )
+        self.assertEqual(
+            resolve_block_layout(legacy),
+            {
+                "id": None,
+                "name": "layout",
+                "file": "layout.kicad_pcb",
+                "project_file": "layout.kicad_pro",
+                "ports": None,
+            },
+        )
+
+
+
     def test_named_pad_net_keeps_mapped_code_and_net_name(self):
         pad = parse_sexpr('(pad "1" smd rect (net 7 "SW"))')
         _rewrite_nets(pad, {7: (2, "VIN_BOARD")}, include_net_name=True)

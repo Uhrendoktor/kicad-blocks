@@ -11,10 +11,13 @@ sys.path.insert(0, str(PLUGIN))
 
 from kicad_blocks.model import (
     facade_pin_connection_points,
+    parse_parameters,
     parse_pins,
     render_symbol_library,
+    resolve_parameter_values,
     rotate_label_spin_style,
     schematic_symbol_orientation,
+    substitute_parameter_templates,
     transform_symbol_point_to_schematic,
 )
 from kicad_blocks.repository import (
@@ -164,6 +167,83 @@ class BlockModelTests(unittest.TestCase):
         self.assertNotIn("hierarchical", text.casefold())
 
 
+    def test_parameter_templates_only_expand_inside_quoted_fields_and_escape_values(self):
+        parameters = parse_parameters("PART=STM32, LABEL=3V3")
+        source = '(property "Value" "{{PART}}" (at 0 0 0))\n'
+        self.assertEqual(
+            substitute_parameter_templates(source, parameters),
+            '(property "Value" "STM32" (at 0 0 0))\n',
+        )
+        escaped = substitute_parameter_templates(
+            '(property "Value" "{{PART}}" (at 0 0 0))',
+            parameters,
+            {"PART": 'part "A"\\rev'},
+        )
+        self.assertIn(r'part \"A\"\\rev', escaped)
+        escaped_quote_source = r'(property "Value" "quoted \"label\" {{LABEL}}" (at 0 0 0))'
+        self.assertEqual(
+            substitute_parameter_templates(escaped_quote_source, parameters),
+            r'(property "Value" "quoted \"label\" 3V3" (at 0 0 0))',
+        )
+        for source in (
+            '(property "Value" {{PART}})',
+            '; {{PART}}\n',
+            '; "commented string {{PART}}\n',
+            '{{PART}}',
+        ):
+            with self.subTest(source=source), self.assertRaisesRegex(
+                ValueError, "inside quoted KiCad text fields"
+            ):
+                substitute_parameter_templates(source, parameters)
+
+
+    def test_parse_typed_parameters_and_rejects_invalid_values(self):
+        parameters = parse_parameters(
+            "OUTPUT_VOLTAGE:number=3.3, CHANNELS:integer=4, "
+            "ENABLE:boolean=yes, PART=STM32"
+        )
+        self.assertEqual(
+            [(item["name"], item["type"], item["default"]) for item in parameters],
+            [
+                ("OUTPUT_VOLTAGE", "number", "3.3"),
+                ("CHANNELS", "integer", "4"),
+                ("ENABLE", "boolean", "true"),
+                ("PART", "string", "STM32"),
+            ],
+        )
+        self.assertEqual(
+            resolve_parameter_values(parameters, {"OUTPUT_VOLTAGE": "1.8", "ENABLE": "no"}),
+            {
+                "OUTPUT_VOLTAGE": "1.8",
+                "CHANNELS": "4",
+                "ENABLE": "false",
+                "PART": "STM32",
+            },
+        )
+        for invalid in (
+            "A:number=nan",
+            "A:integer=1.2",
+            "A:boolean=maybe",
+            "bad-name:string=x",
+            "A=1,a=2",
+            "A=one\nline",
+        ):
+            with self.subTest(invalid=invalid), self.assertRaises(ValueError):
+                parse_parameters(invalid)
+
+    def test_parameterized_symbol_library_creates_hidden_instance_fields(self):
+        parameters = parse_parameters("OUTPUT_VOLTAGE:number=3.3, ENABLE:boolean=true")
+        content = render_symbol_library(
+            "power_block", "Power Block", "block-id", parse_pins("VIN:input, GND"),
+            parameters=parameters,
+        )
+        self.assertTrue(_balanced_sexpr(content))
+        self.assertIn('(property "KB_PARAM_OUTPUT_VOLTAGE" "3.3"', content)
+        self.assertIn('(property "KB_PARAM_ENABLE" "true"', content)
+        self.assertEqual(content.count('(property "KB_PARAM_'), 2)
+        self.assertIn('(effects (font (size 1.0 1.0)) hide)', content)
+
+
 class BlockRepositoryTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
@@ -200,9 +280,69 @@ class BlockRepositoryTests(unittest.TestCase):
         self.assertNotIn("hierarchical_label", implementation)
         self.assertEqual(len(list_blocks(self.root)), 1)
 
+    def test_create_block_stores_multiple_named_layouts_and_parameters(self):
+        first_board = self.project / "standard.kicad_pcb"
+        second_board = self.project / "low_profile.kicad_pcb"
+        project_settings = self.project / "low_profile.kicad_pro"
+        first_board.write_text("(kicad_pcb)\n", encoding="utf-8")
+        second_board.write_text("(kicad_pcb (version 20250114))\n", encoding="utf-8")
+        project_settings.write_text(json.dumps({"meta": {"version": 3}}), encoding="utf-8")
+        parameters = parse_parameters("OUTPUT_VOLTAGE:number=3.3, ENABLE:boolean=true")
+
+        record = create_block(
+            self.root,
+            "Parameterized Power",
+            self.pins,
+            parameters=parameters,
+            layout_files=[
+                {
+                    "name": "Standard",
+                    "path": first_board,
+                    "ports": {"VIN": "VIN", "GND": "GND", "VOUT": "VOUT"},
+                },
+                {
+                    "name": "Low profile",
+                    "path": second_board,
+                    "project_path": project_settings,
+                },
+            ],
+        )
+
+        manifest = read_manifest(record.path)
+        self.assertEqual(
+            [(item["id"], item["name"]) for item in manifest["layouts"]],
+            [("standard", "Standard"), ("low_profile", "Low profile")],
+        )
+        self.assertEqual(manifest["parameters"], parameters)
+        self.assertEqual(manifest["default_layout"], "standard")
+        self.assertIn('(property "KB_LAYOUT" "standard"', record.symbol_library.read_text(encoding="utf-8"))
+        self.assertEqual(manifest["layout_file"], "layout_standard.kicad_pcb")
+        self.assertEqual(
+            (record.path / "layout_low_profile.kicad_pcb").read_text(encoding="utf-8"),
+            "(kicad_pcb (version 20250114))\n",
+        )
+        self.assertTrue((record.path / "layout_low_profile.kicad_pro").is_file())
+        self.assertIn("layout_standard.kicad_pcb", manifest["hashes"])
+        self.assertIn("layout_low_profile.kicad_pro", manifest["hashes"])
+
+    def test_create_block_rejects_incomplete_layout_port_mapping(self):
+        source_board = self.project / "incomplete.kicad_pcb"
+        source_board.write_text("(kicad_pcb)\n", encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "map every block facade pin"):
+            create_block(
+                self.root,
+                "Incomplete Layout Ports",
+                self.pins,
+                layout_files=[{
+                    "name": "broken",
+                    "path": source_board,
+                    "ports": {"VIN": "VIN"},
+                }],
+            )
+
     def test_create_block_copies_optional_pcb_and_project_settings_assets(self):
         source_layout = self.project / "board.kicad_pcb"
-        source_layout.write_text("(kicad_pcb)\\n", encoding="utf-8")
+        source_layout.write_text("(kicad_pcb)\n", encoding="utf-8")
         source_project = self.project / "board.kicad_pro"
         source_project.write_text(
             json.dumps(
@@ -225,7 +365,7 @@ class BlockRepositoryTests(unittest.TestCase):
         self.assertEqual(record.manifest["layout_project_file"], "layout.kicad_pro")
         self.assertEqual(
             (record.path / "layout.kicad_pcb").read_text(encoding="utf-8"),
-            "(kicad_pcb)\\n",
+            "(kicad_pcb)\n",
         )
         self.assertEqual(
             json.loads((record.path / "layout.kicad_pro").read_text(encoding="utf-8"))["meta"]["filename"],
@@ -409,6 +549,150 @@ class BlockRepositoryTests(unittest.TestCase):
         )
         with self.assertRaisesRegex(RuntimeError, "manifest.dependencies"):
             synchronize_local_copy(type("Record", (), {"path": local.path, "manifest": local_manifest})())
+
+    def test_layout_configuration_is_pulled_into_local_copy(self):
+        first_board = self.project / "sync_standard.kicad_pcb"
+        second_board = self.project / "sync_low_profile.kicad_pcb"
+        first_board.write_text("(kicad_pcb)\n", encoding="utf-8")
+        second_board.write_text("(kicad_pcb)\n", encoding="utf-8")
+        source = create_block(
+            self.root,
+            "Layout Sync",
+            self.pins,
+            layout_files=[
+                {"name": "Standard", "path": first_board},
+                {"name": "Low profile", "path": second_board},
+            ],
+        )
+        local = make_local_copy(source, self.project)
+        source_manifest = read_manifest(source.path)
+        source_manifest["default_layout"] = "low_profile"
+        source_manifest["layouts"][1]["name"] = "Low profile Rev B"
+        (source.path / "manifest.json").write_text(
+            json.dumps(source_manifest, indent=2) + "\n", encoding="utf-8"
+        )
+
+        result = synchronize_local_copy(local)
+
+        self.assertTrue(result["layouts_updated"])
+        local_manifest = read_manifest(local.path)
+        self.assertEqual(local_manifest["default_layout"], "low_profile")
+        self.assertEqual(local_manifest["layouts"][1]["name"], "Low profile Rev B")
+        self.assertEqual(local_manifest["base_layouts"]["default_layout"], "low_profile")
+        self.assertEqual(
+            local_manifest["base_layouts"]["layouts"][1]["name"], "Low profile Rev B"
+        )
+
+    def test_layout_configuration_local_edits_publish_and_divergent_edits_conflict(self):
+        first_board = self.project / "publish_standard.kicad_pcb"
+        second_board = self.project / "publish_compact.kicad_pcb"
+        first_board.write_text("(kicad_pcb)\n", encoding="utf-8")
+        second_board.write_text("(kicad_pcb)\n", encoding="utf-8")
+        source = create_block(
+            self.root,
+            "Layout Publish",
+            self.pins,
+            layout_files=[
+                {"name": "Standard", "path": first_board},
+                {"name": "Compact", "path": second_board},
+            ],
+        )
+        local = make_local_copy(source, self.project)
+        local_manifest = read_manifest(local.path)
+        local_manifest["default_layout"] = "compact"
+        local_manifest["layouts"][1]["name"] = "Compact Local"
+        (local.path / "manifest.json").write_text(
+            json.dumps(local_manifest, indent=2) + "\n", encoding="utf-8"
+        )
+
+        result = publish_local_copy(local)
+
+        self.assertEqual(result["published"], ["manifest.layouts"])
+        source_manifest = read_manifest(source.path)
+        self.assertEqual(source_manifest["default_layout"], "compact")
+        self.assertEqual(source_manifest["layouts"][1]["name"], "Compact Local")
+        self.assertTrue(result["layouts_updated"])
+        self.assertEqual(
+            read_manifest(local.path)["base_layouts"]["layouts"][1]["name"],
+            "Compact Local",
+        )
+
+        local_manifest = read_manifest(local.path)
+        source_manifest = read_manifest(source.path)
+        local_manifest["layouts"][1]["name"] = "Local Divergence"
+        source_manifest["layouts"][1]["name"] = "Library Divergence"
+        (local.path / "manifest.json").write_text(
+            json.dumps(local_manifest, indent=2) + "\n", encoding="utf-8"
+        )
+        (source.path / "manifest.json").write_text(
+            json.dumps(source_manifest, indent=2) + "\n", encoding="utf-8"
+        )
+        with self.assertRaisesRegex(RuntimeError, "manifest.layouts"):
+            publish_local_copy(local)
+        self.assertEqual(
+            read_manifest(source.path)["layouts"][1]["name"], "Library Divergence"
+        )
+
+
+    def test_parameter_schema_is_pulled_into_local_copy(self):
+        source = create_block(
+            self.root,
+            "Parameterized Sync",
+            self.pins,
+            parameters=parse_parameters("OUTPUT_VOLTAGE:number=3.3"),
+        )
+        local = make_local_copy(source, self.project)
+        source_manifest = read_manifest(source.path)
+        source_manifest["parameters"][0]["default"] = "1.8"
+        (source.path / "manifest.json").write_text(
+            json.dumps(source_manifest, indent=2) + "\n", encoding="utf-8"
+        )
+
+        result = synchronize_local_copy(local)
+
+        self.assertEqual(result["conflicts"], [])
+        local_manifest = read_manifest(local.path)
+        self.assertEqual(local_manifest["parameters"][0]["default"], "1.8")
+        self.assertEqual(local_manifest["base_parameters"], local_manifest["parameters"])
+
+    def test_parameter_schema_local_edits_publish_and_divergent_edits_conflict(self):
+        source = create_block(
+            self.root,
+            "Parameterized Publish",
+            self.pins,
+            parameters=parse_parameters("OUTPUT_VOLTAGE:number=3.3"),
+        )
+        local = make_local_copy(source, self.project)
+        local_manifest = read_manifest(local.path)
+        local_manifest["parameters"][0]["default"] = "1.8"
+        (local.path / "manifest.json").write_text(
+            json.dumps(local_manifest, indent=2) + "\n", encoding="utf-8"
+        )
+
+        result = publish_local_copy(local)
+
+        self.assertEqual(result["published"], ["manifest.parameters"])
+        self.assertEqual(read_manifest(source.path)["parameters"][0]["default"], "1.8")
+        self.assertEqual(
+            read_manifest(local.path)["base_parameters"],
+            read_manifest(source.path)["parameters"],
+        )
+
+        # Both sides now have a common baseline; divergent edits are rejected.
+        local_manifest = read_manifest(local.path)
+        source_manifest = read_manifest(source.path)
+        local_manifest["parameters"][0]["default"] = "2.5"
+        source_manifest["parameters"][0]["default"] = "5.0"
+        (local.path / "manifest.json").write_text(
+            json.dumps(local_manifest, indent=2) + "\n", encoding="utf-8"
+        )
+        (source.path / "manifest.json").write_text(
+            json.dumps(source_manifest, indent=2) + "\n", encoding="utf-8"
+        )
+        with self.assertRaisesRegex(RuntimeError, "manifest.parameters"):
+            publish_local_copy(local)
+        self.assertEqual(read_manifest(source.path)["parameters"][0]["default"], "5.0")
+
 
     def test_local_copy_can_publish_local_edit_to_library(self):
         source = create_block(self.root, "Publish Local Edit", self.pins)

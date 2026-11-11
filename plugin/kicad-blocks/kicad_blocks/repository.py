@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import json
 import math
 import os
@@ -14,6 +15,7 @@ from pathlib import Path
 
 from .model import (
     BlockPin,
+    normalize_parameters,
     render_implementation_schematic,
     render_symbol_library,
     revision_for_hashes,
@@ -179,6 +181,64 @@ def read_manifest(block_path: Path) -> dict:
     missing = [key for key in required if key not in manifest]
     if missing:
         raise ValueError(f"Block manifest is missing fields: {', '.join(missing)}")
+    manifest["parameters"] = normalize_parameters(manifest.get("parameters", []))
+    layouts = manifest.get("layouts", [])
+    if not isinstance(layouts, list):
+        raise TypeError("Block manifest layouts must be a list.")
+    pin_items = manifest.get("pins", [])
+    if not isinstance(pin_items, list) or not pin_items or any(
+        not isinstance(pin, dict) or not str(pin.get("name", "")).strip()
+        for pin in pin_items
+    ):
+        raise ValueError("Block manifest pins must be a non-empty list of named pin objects.")
+    pin_names = {str(pin["name"]) for pin in pin_items}
+    seen_layout_ids: set[str] = set()
+    seen_layout_names: set[str] = set()
+    seen_layout_files: set[str] = set()
+    for layout in layouts:
+        if not isinstance(layout, dict):
+            raise TypeError("Each block layout must be an object.")
+        layout_id = str(layout.get("id", ""))
+        layout_name = str(layout.get("name", "")).strip()
+        layout_file = str(layout.get("file", ""))
+        if (
+            not re.fullmatch(r"[a-z0-9_]+", layout_id)
+            or not layout_name
+            or len(layout_name) > 80
+            or not layout_file
+            or Path(layout_file).name != layout_file
+            or Path(layout_file).suffix.casefold() != ".kicad_pcb"
+        ):
+            raise ValueError("Each block layout needs a safe id, display name and .kicad_pcb file.")
+        if layout_id.casefold() in seen_layout_ids:
+            raise ValueError(f"Duplicate block layout id: {layout_id}")
+        if layout_name.casefold() in seen_layout_names:
+            raise ValueError(f"Duplicate block layout name: {layout_name}")
+        if layout_file.casefold() in seen_layout_files:
+            raise ValueError(f"Duplicate block layout file: {layout_file}")
+        seen_layout_ids.add(layout_id.casefold())
+        seen_layout_names.add(layout_name.casefold())
+        seen_layout_files.add(layout_file.casefold())
+        project_file = layout.get("project_file")
+        if project_file:
+            project_file = str(project_file)
+            if (
+                Path(project_file).name != project_file
+                or Path(project_file).suffix.casefold() != ".kicad_pro"
+            ):
+                raise ValueError(f"Invalid project-settings file name for layout {layout_id!r}.")
+        ports = layout.get("ports")
+        if ports is not None and (
+            not isinstance(ports, dict)
+            or set(ports) != pin_names
+            or any(not isinstance(value, str) or not value.strip() for value in ports.values())
+        ):
+            raise ValueError(
+                f"Layout {layout_id!r} ports must map every facade pin to a non-empty net name."
+            )
+    default_layout = manifest.get("default_layout")
+    if default_layout and str(default_layout).casefold() not in seen_layout_ids:
+        raise ValueError(f"Block default layout {default_layout!r} is not defined in layouts.")
     return manifest
 
 
@@ -217,14 +277,55 @@ def create_block(
     reference_prefix: str = "X",
     layout_file: Path | None = None,
     layout_project_file: Path | None = None,
+    layout_files: list[dict] | None = None,
+    parameters: list[dict] | None = None,
 ) -> BlockRecord:
-    """Create a versioned library block with a normal KiCad symbol facade."""
+    """Create a versioned block with typed parameters and named PCB layouts.
+
+    The legacy layout_file/layout_project_file arguments remain supported.
+    New callers can provide layout_files entries with name, path, optional
+    project_path, and optional facade-pin-to-layout-net ports.
+    """
     root = Path(root).expanduser().resolve()
     root.mkdir(parents=True, exist_ok=True)
     if not name.strip():
         raise ValueError("Block name cannot be empty.")
     if not pins:
         raise ValueError("At least one pin is required.")
+    if layout_files is not None and (layout_file is not None or layout_project_file is not None):
+        raise ValueError("Use layout_files or the legacy single-layout arguments, not both.")
+    if layout_files is None:
+        if layout_project_file is not None and layout_file is None:
+            raise ValueError("A KiCad project-settings sidecar requires a PCB layout.")
+        raw_layouts = (
+            [{
+                "name": Path(layout_file).stem,
+                "path": layout_file,
+                "project_path": layout_project_file,
+                "legacy": True,
+            }]
+            if layout_file is not None
+            else []
+        )
+    else:
+        if not isinstance(layout_files, list):
+            raise ValueError("layout_files must be a list of layout definitions.")
+        raw_layouts = layout_files
+
+    parameters = normalize_parameters(parameters)
+    expected_pins = {pin.name for pin in pins}
+    default_layout_id = None
+    if raw_layouts:
+        first_layout = raw_layouts[0]
+        if not isinstance(first_layout, dict):
+            raise TypeError("Each PCB layout definition must be an object.")
+        first_source = first_layout.get("path", first_layout.get("file"))
+        if not first_source:
+            raise ValueError("First PCB layout is missing its source PCB path.")
+        first_name = str(first_layout.get("name") or Path(first_source).stem).strip()
+        default_layout_id = str(first_layout.get("id") or slugify(first_name)).casefold()
+        if not re.fullmatch(r"[a-z0-9_]+", default_layout_id):
+            raise ValueError(f"Invalid default PCB layout id {default_layout_id!r}.")
     slug = slugify(name)
     block_id = str(uuid.uuid4())
     suffix = block_id.replace("-", "")[:8].lower()
@@ -234,36 +335,84 @@ def create_block(
     folder_created = False
     try:
         symbol_content = render_symbol_library(
-            symbol_name, name, block_id, pins, reference_prefix=reference_prefix
+            symbol_name,
+            name,
+            block_id,
+            pins,
+            reference_prefix=reference_prefix,
+            parameters=parameters,
+            default_layout_id=default_layout_id,
         )
         (staging / SYMBOL_NAME).write_text(symbol_content, encoding="utf-8")
         (staging / IMPLEMENTATION_NAME).write_text(
             render_implementation_schematic(name, block_id, pins), encoding="utf-8"
         )
         files = [SYMBOL_NAME, IMPLEMENTATION_NAME]
-        if layout_file is not None:
-            layout_file = Path(layout_file).expanduser().resolve()
-            if not layout_file.is_file() or layout_file.suffix.lower() != ".kicad_pcb":
-                raise ValueError("PCB layout must be an existing .kicad_pcb file.")
-            shutil.copy2(layout_file, staging / LAYOUT_NAME)
-            files.append(LAYOUT_NAME)
+        layouts: list[dict] = []
+        seen_layout_ids: set[str] = set()
+        seen_layout_names: set[str] = set()
+        for index, raw_layout in enumerate(raw_layouts, start=1):
+            if not isinstance(raw_layout, dict):
+                raise TypeError("Each PCB layout definition must be an object.")
+            source_value = raw_layout.get("path", raw_layout.get("file"))
+            if not source_value:
+                raise ValueError(f"Layout {index} is missing its source PCB path.")
+            source_path = Path(source_value).expanduser().resolve()
+            if not source_path.is_file() or source_path.suffix.casefold() != ".kicad_pcb":
+                raise ValueError(f"PCB layout must be an existing .kicad_pcb file: {source_path}")
+            layout_name = str(raw_layout.get("name") or source_path.stem).strip()
+            if not layout_name or len(layout_name) > 80:
+                raise ValueError("PCB layout names must contain 1 to 80 characters.")
+            layout_id = str(raw_layout.get("id") or slugify(layout_name)).casefold()
+            if not re.fullmatch(r"[a-z0-9_]+", layout_id):
+                raise ValueError(f"Invalid layout id {layout_id!r}; use letters, numbers and underscores.")
+            if layout_id in seen_layout_ids or layout_name.casefold() in seen_layout_names:
+                raise ValueError(f"Duplicate PCB layout name or id: {layout_name!r}.")
+            seen_layout_ids.add(layout_id)
+            seen_layout_names.add(layout_name.casefold())
 
-        if layout_project_file is not None:
-            if layout_file is None:
-                raise ValueError("A KiCad project-settings sidecar requires a PCB layout.")
-            layout_project_file = Path(layout_project_file).expanduser().resolve()
-            if not layout_project_file.is_file() or layout_project_file.suffix.lower() != ".kicad_pro":
-                raise ValueError("PCB project settings must be an existing .kicad_pro file.")
-            try:
-                project_data = json.loads(layout_project_file.read_text(encoding="utf-8"))
-            except (OSError, json.JSONDecodeError) as exc:
-                raise ValueError(f"Could not read KiCad project settings JSON: {exc}") from exc
-            if not isinstance(project_data, dict):
-                raise ValueError("KiCad project settings must contain a JSON object.")
-            shutil.copy2(layout_project_file, staging / LAYOUT_PROJECT_NAME)
-            files.append(LAYOUT_PROJECT_NAME)
+            is_legacy = bool(raw_layout.get("legacy"))
+            board_name = LAYOUT_NAME if is_legacy else f"layout_{layout_id}.kicad_pcb"
+            shutil.copy2(source_path, staging / board_name)
+            files.append(board_name)
+
+            project_value = raw_layout.get("project_path", raw_layout.get("project_file"))
+            project_name = None
+            if project_value:
+                project_path = Path(project_value).expanduser().resolve()
+                if not project_path.is_file() or project_path.suffix.casefold() != ".kicad_pro":
+                    raise ValueError(f"PCB project settings must be an existing .kicad_pro file: {project_path}")
+                try:
+                    project_data = json.loads(project_path.read_text(encoding="utf-8"))
+                except (OSError, json.JSONDecodeError) as exc:
+                    raise ValueError(f"Could not read KiCad project settings JSON: {exc}") from exc
+                if not isinstance(project_data, dict):
+                    raise ValueError("KiCad project settings must contain a JSON object.")
+                project_name = LAYOUT_PROJECT_NAME if is_legacy else f"layout_{layout_id}.kicad_pro"
+                shutil.copy2(project_path, staging / project_name)
+                files.append(project_name)
+
+            ports = raw_layout.get("ports")
+            if ports is not None:
+                if not isinstance(ports, dict) or set(ports) != expected_pins:
+                    raise ValueError(
+                        f"Layout {layout_name!r} ports must map every block facade pin exactly once."
+                    )
+                if any(not isinstance(value, str) or not value.strip() for value in ports.values()):
+                    raise ValueError(f"Layout {layout_name!r} port mappings cannot contain empty net names.")
+
+            descriptor = {
+                "id": layout_id,
+                "name": layout_name,
+                "file": board_name,
+                "project_file": project_name,
+            }
+            if ports is not None:
+                descriptor["ports"] = {str(key): str(value) for key, value in ports.items()}
+            layouts.append(descriptor)
 
         hashes = {file_name: sha256_file(staging / file_name) for file_name in files}
+        first_layout = layouts[0] if layouts else {}
         manifest = {
             "schema_version": 1,
             "block_id": block_id,
@@ -278,10 +427,13 @@ def create_block(
             "catalog_file": LIBRARY_CATALOG_NAME,
             "symbol_file": SYMBOL_NAME,
             "implementation_file": IMPLEMENTATION_NAME,
-            "layout_file": LAYOUT_NAME if LAYOUT_NAME in files else None,
-            "layout_project_file": LAYOUT_PROJECT_NAME if LAYOUT_PROJECT_NAME in files else None,
+            "layout_file": first_layout.get("file"),
+            "layout_project_file": first_layout.get("project_file"),
+            "layouts": layouts,
+            "default_layout": first_layout.get("id") if layouts else None,
             "reference_prefix": reference_prefix,
             "pins": [pin.as_manifest(index + 1) for index, pin in enumerate(pins)],
+            "parameters": parameters,
             "dependencies": [],
             "files": files,
             "hashes": hashes,
@@ -378,6 +530,48 @@ def _asset_hashes(block_path: Path, manifest: dict) -> dict[str, str]:
     return result
 
 
+_LAYOUT_MANIFEST_KEYS = (
+    "layouts",
+    "default_layout",
+    "layout_file",
+    "layout_project_file",
+    "layout_ports",
+)
+
+
+def _layout_configuration(manifest: dict) -> dict:
+    """Return the manifest fields that define a block's PCB implementations."""
+    return {
+        key: copy.deepcopy(manifest.get(key))
+        for key in _LAYOUT_MANIFEST_KEYS
+    }
+
+
+def _set_layout_configuration(manifest: dict, configuration: dict) -> None:
+    """Apply a previously validated PCB layout configuration to a manifest."""
+    for key in _LAYOUT_MANIFEST_KEYS:
+        value = copy.deepcopy(configuration.get(key))
+        if value is None:
+            manifest.pop(key, None)
+        else:
+            manifest[key] = value
+
+
+def _base_layout_configuration(manifest: dict, source_manifest: dict) -> dict:
+    """Load the layout three-way baseline, handling local copies created by older versions."""
+    if "base_layouts" in manifest:
+        return copy.deepcopy(manifest["base_layouts"])
+    if manifest.get("source_version", source_manifest.get("version", 1)) != source_manifest.get(
+        "version", 1
+    ):
+        raise RuntimeError(
+            "This local copy predates layout-metadata synchronization and its library source "
+            "has since changed. Recreate the local copy from the current library block before "
+            "publishing or pulling layout changes."
+        )
+    return _layout_configuration(manifest)
+
+
 def make_local_copy(source: BlockRecord, project_dir: Path) -> BlockRecord:
     """Copy a library block to a project-owned independent editable block asset."""
     project_dir = Path(project_dir).expanduser().resolve()
@@ -399,6 +593,8 @@ def make_local_copy(source: BlockRecord, project_dir: Path) -> BlockRecord:
             "source_revision": source.manifest.get("revision"),
             "base_hashes": base_hashes,
             "base_dependencies": source.manifest.get("dependencies", []),
+            "base_parameters": source.manifest.get("parameters", []),
+            "base_layouts": _layout_configuration(source.manifest),
             "library_nickname": source.manifest.get("library_nickname", LIBRARY_NICKNAME),
             "symbol_name": source.manifest.get("symbol_name"),
             "catalog_file": source.manifest.get("catalog_file", LIBRARY_CATALOG_NAME),
@@ -499,6 +695,26 @@ def synchronize_local_copy(local_block: BlockRecord) -> dict:
     local_hashes = _asset_hashes(local_block.path, manifest)
     source_hashes = _asset_hashes(source.path, source.manifest)
     base_dependencies = manifest.get("base_dependencies", manifest.get("dependencies", []))
+    base_parameters = manifest.get("base_parameters", source.manifest.get("parameters", []))
+    base_layouts = _base_layout_configuration(manifest, source.manifest)
+    local_layouts = _layout_configuration(manifest)
+    source_layouts = _layout_configuration(source.manifest)
+    local_layouts_changed = local_layouts != base_layouts
+    source_layouts_changed = source_layouts != base_layouts
+    layout_conflict = (
+        local_layouts_changed
+        and source_layouts_changed
+        and local_layouts != source_layouts
+    )
+    local_parameters = manifest.get("parameters", [])
+    source_parameters = source.manifest.get("parameters", [])
+    local_parameters_changed = local_parameters != base_parameters
+    source_parameters_changed = source_parameters != base_parameters
+    parameter_conflict = (
+        local_parameters_changed
+        and source_parameters_changed
+        and local_parameters != source_parameters
+    )
     local_dependencies = manifest.get("dependencies", [])
     source_dependencies = source.manifest.get("dependencies", [])
     local_dependencies_changed = local_dependencies != base_dependencies
@@ -509,6 +725,10 @@ def synchronize_local_copy(local_block: BlockRecord) -> dict:
         and local_dependencies != source_dependencies
     )
     conflicts = ["manifest.dependencies"] if dependency_conflict else []
+    if parameter_conflict:
+        conflicts.append("manifest.parameters")
+    if layout_conflict:
+        conflicts.append("manifest.layouts")
     copy_files = []
     for file_name in sorted(set(base_hashes) | set(local_hashes) | set(source_hashes)):
         base = base_hashes.get(file_name)
@@ -526,6 +746,18 @@ def synchronize_local_copy(local_block: BlockRecord) -> dict:
             "Sync conflict: both the local copy and library changed "
             + ", ".join(conflicts)
             + ". Resolve those files manually; no files were overwritten."
+        )
+
+    latest_source = _record(source.path)
+    if (
+        _asset_hashes(latest_source.path, latest_source.manifest) != source_hashes
+        or latest_source.manifest.get("dependencies", []) != source_dependencies
+        or latest_source.manifest.get("parameters", []) != source_parameters
+        or _layout_configuration(latest_source.manifest) != source_layouts
+    ):
+        raise RuntimeError(
+            "The library changed during synchronization. Refresh and retry; "
+            "the local copy was not modified by this operation."
         )
 
     for file_name in copy_files:
@@ -549,7 +781,13 @@ def synchronize_local_copy(local_block: BlockRecord) -> dict:
     refreshed_manifest["pins"] = refreshed_source.manifest["pins"]
     if source_dependencies_changed and not local_dependencies_changed:
         refreshed_manifest["dependencies"] = source_dependencies
+    if source_parameters_changed and not local_parameters_changed:
+        refreshed_manifest["parameters"] = source_parameters
+    if source_layouts_changed and not local_layouts_changed:
+        _set_layout_configuration(refreshed_manifest, source_layouts)
     refreshed_manifest["base_dependencies"] = source_dependencies
+    refreshed_manifest["base_parameters"] = source_parameters
+    refreshed_manifest["base_layouts"] = source_layouts
     refreshed_manifest["hashes"] = new_hashes
     refreshed_manifest["revision"] = revision_for_hashes(new_hashes)
     atomic_write(
@@ -560,6 +798,8 @@ def synchronize_local_copy(local_block: BlockRecord) -> dict:
         "copied": copy_files,
         "preserved": sorted(set(local_hashes) - set(copy_files)),
         "dependencies_updated": source_dependencies_changed and not local_dependencies_changed,
+        "parameters_updated": source_parameters_changed and not local_parameters_changed,
+        "layouts_updated": source_layouts_changed and not local_layouts_changed,
         "conflicts": [],
     }
 
@@ -616,6 +856,26 @@ def publish_local_copy(local_block: BlockRecord) -> dict:
     base_dependencies = manifest.get(
         "base_dependencies", source.manifest.get("dependencies", [])
     )
+    base_parameters = manifest.get("base_parameters", source.manifest.get("parameters", []))
+    base_layouts = _base_layout_configuration(manifest, source.manifest)
+    local_layouts = _layout_configuration(manifest)
+    source_layouts = _layout_configuration(source.manifest)
+    local_layouts_changed = local_layouts != base_layouts
+    source_layouts_changed = source_layouts != base_layouts
+    layout_conflict = (
+        local_layouts_changed
+        and source_layouts_changed
+        and local_layouts != source_layouts
+    )
+    local_parameters = manifest.get("parameters", [])
+    source_parameters = source.manifest.get("parameters", [])
+    local_parameters_changed = local_parameters != base_parameters
+    source_parameters_changed = source_parameters != base_parameters
+    parameter_conflict = (
+        local_parameters_changed
+        and source_parameters_changed
+        and local_parameters != source_parameters
+    )
     local_dependencies = manifest.get("dependencies", [])
     source_dependencies = source.manifest.get("dependencies", [])
     local_dependencies_changed = local_dependencies != base_dependencies
@@ -627,6 +887,10 @@ def publish_local_copy(local_block: BlockRecord) -> dict:
     )
 
     conflicts = ["manifest.dependencies"] if dependency_conflict else []
+    if parameter_conflict:
+        conflicts.append("manifest.parameters")
+    if layout_conflict:
+        conflicts.append("manifest.layouts")
     push_files: list[str] = []
     pull_files: list[str] = []
     converged_files: list[str] = []
@@ -659,6 +923,20 @@ def publish_local_copy(local_block: BlockRecord) -> dict:
         and source_dependencies_changed
         and local_dependencies == source_dependencies
     )
+    push_parameters = local_parameters_changed and not source_parameters_changed
+    pull_parameters = source_parameters_changed and not local_parameters_changed
+    converged_parameters = (
+        local_parameters_changed
+        and source_parameters_changed
+        and local_parameters == source_parameters
+    )
+    push_layouts = local_layouts_changed and not source_layouts_changed
+    pull_layouts = source_layouts_changed and not local_layouts_changed
+    converged_layouts = (
+        local_layouts_changed
+        and source_layouts_changed
+        and local_layouts == source_layouts
+    )
     if (
         not push_files
         and not pull_files
@@ -666,6 +944,12 @@ def publish_local_copy(local_block: BlockRecord) -> dict:
         and not push_dependencies
         and not pull_dependencies
         and not converged_dependencies
+        and not push_parameters
+        and not pull_parameters
+        and not converged_parameters
+        and not push_layouts
+        and not pull_layouts
+        and not converged_layouts
     ):
         return {
             "published": [],
@@ -681,6 +965,8 @@ def publish_local_copy(local_block: BlockRecord) -> dict:
     if (
         _asset_hashes(latest_source.path, latest_source.manifest) != source_hashes
         or latest_source.manifest.get("dependencies", []) != source_dependencies
+        or latest_source.manifest.get("parameters", []) != source_parameters
+        or _layout_configuration(latest_source.manifest) != source_layouts
     ):
         raise RuntimeError(
             "The library changed during synchronization. Refresh and retry; "
@@ -757,6 +1043,14 @@ def publish_local_copy(local_block: BlockRecord) -> dict:
             source_manifest["dependencies"] = local_dependencies
         elif pull_dependencies:
             local_manifest["dependencies"] = source_dependencies
+        if push_parameters:
+            source_manifest["parameters"] = local_parameters
+        elif pull_parameters:
+            local_manifest["parameters"] = source_parameters
+        if push_layouts:
+            _set_layout_configuration(source_manifest, local_layouts)
+        elif pull_layouts:
+            _set_layout_configuration(local_manifest, source_layouts)
 
         candidate_files = set(source_manifest.get("files", []))
         candidate_files.update(local_manifest.get("files", []))
@@ -774,7 +1068,9 @@ def publish_local_copy(local_block: BlockRecord) -> dict:
                 "Synchronization did not produce matching source and local assets."
             )
 
-        source_changed = bool(push_files or push_dependencies)
+        source_changed = bool(
+            push_files or push_dependencies or push_parameters or push_layouts
+        )
         if source_changed:
             source_manifest["hashes"] = source_hashes_after
             source_manifest["revision"] = revision_for_hashes(source_hashes_after)
@@ -792,6 +1088,8 @@ def publish_local_copy(local_block: BlockRecord) -> dict:
         local_manifest["source_revision"] = source_manifest.get("revision")
         local_manifest["base_hashes"] = dict(source_manifest.get("hashes", {}))
         local_manifest["base_dependencies"] = source_manifest.get("dependencies", [])
+        local_manifest["base_parameters"] = source_manifest.get("parameters", [])
+        local_manifest["base_layouts"] = _layout_configuration(source_manifest)
         atomic_write(
             local_manifest_path,
             json.dumps(local_manifest, indent=2, ensure_ascii=False) + "\n",
@@ -813,14 +1111,26 @@ def publish_local_copy(local_block: BlockRecord) -> dict:
         published.append("manifest.dependencies")
     if pull_dependencies:
         pulled.append("manifest.dependencies")
+    if push_parameters:
+        published.append("manifest.parameters")
+    if pull_parameters:
+        pulled.append("manifest.parameters")
+    if push_layouts:
+        published.append("manifest.layouts")
+    if pull_layouts:
+        pulled.append("manifest.layouts")
     return {
         "published": published,
         "pulled": pulled,
         "version": int(source_manifest.get("version", 1)),
         "revision": source_manifest.get("revision"),
         "dependencies_updated": push_dependencies or pull_dependencies or converged_dependencies,
+        "parameters_updated": push_parameters or pull_parameters or converged_parameters,
+        "layouts_updated": push_layouts or pull_layouts or converged_layouts,
         "converged": converged_files
-        + (["manifest.dependencies"] if converged_dependencies else []),
+        + (["manifest.dependencies"] if converged_dependencies else [])
+        + (["manifest.parameters"] if converged_parameters else [])
+        + (["manifest.layouts"] if converged_layouts else []),
     }
 
 

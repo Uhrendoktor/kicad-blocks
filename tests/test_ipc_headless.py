@@ -17,6 +17,7 @@ sys.path.insert(0, str(PLUGIN))
 
 from kicad_blocks.model import (
     facade_pin_connection_points,
+    parse_parameters,
     parse_pins,
     render_implementation_schematic,
     rotate_label_spin_style,
@@ -61,10 +62,14 @@ def main() -> None:
             render_implementation_schematic("Facade-only IPC Test", "ipc-root", []),
             encoding="utf-8",
         )
+        default_layout = root / "default.kicad_pcb"
+        default_layout.write_text("(kicad_pcb)\\n", encoding="utf-8")
         block = create_block(
             library_root,
             "Headless IPC Smoke Block",
             parse_pins("VIN:input, GND:passive, VOUT:output"),
+            parameters=parse_parameters("OUTPUT_VOLTAGE:number=3.3, ENABLE:boolean=true"),
+            layout_files=[{"name": "Default", "path": default_layout}],
         )
         nickname = block.manifest["library_nickname"]
         symbol_name = block.manifest["symbol_name"]
@@ -100,8 +105,38 @@ def main() -> None:
             )
             schematic.save()
 
+            # Parameter defaults are normal KiCad symbol custom fields, so
+            # instance values can be edited without replacing the facade ID.
+            instance_fields = {field.name: field for field in instance.user_fields}
+            parameter_fields = {
+                name: field for name, field in instance_fields.items()
+                if name.startswith("KB_PARAM_")
+            }
+            if set(parameter_fields) != {"KB_PARAM_OUTPUT_VOLTAGE", "KB_PARAM_ENABLE"}:
+                raise AssertionError(
+                    f"Expected typed block parameter fields, got {sorted(parameter_fields)}."
+                )
+            if "KB_LAYOUT" not in instance_fields or instance_fields["KB_LAYOUT"].text.value != "default":
+                raise AssertionError("The generated facade did not expose its default PCB layout field.")
+            schematic.save()
+
             symbols = list(schematic.get_symbols())
             sheet_symbols = list(schematic.get_sheet_symbols())
+            saved_fields = {field.name: field for field in symbols[0].user_fields}
+            saved_parameter_values = {
+                name: saved_fields[name].text.value
+                for name in ("KB_PARAM_OUTPUT_VOLTAGE", "KB_PARAM_ENABLE", "KB_LAYOUT")
+            }
+            expected_parameter_values = {
+                "KB_PARAM_OUTPUT_VOLTAGE": "3.3",
+                "KB_PARAM_ENABLE": "true",
+                "KB_LAYOUT": "default",
+            }
+            if saved_parameter_values != expected_parameter_values:
+                raise AssertionError(
+                    f"Expected per-instance custom field defaults to persist after save: "
+                    f"{saved_parameter_values!r}"
+                )
             if len(symbols) != 1:
                 raise AssertionError(f"Expected one facade symbol; found {len(symbols)}.")
             if len(sheet_symbols) != 0:
