@@ -104,6 +104,7 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
                 )
             ),
             user_fields=[field],
+            proto=SimpleNamespace(user_fields=[field]),
         )
         schematic = SimpleNamespace(
             get_selection=lambda: [instance],
@@ -176,6 +177,7 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
                 )
             ),
             user_fields=[field],
+            proto=SimpleNamespace(user_fields=[field]),
         )
         schematic = SimpleNamespace(
             get_selection=lambda: [instance],

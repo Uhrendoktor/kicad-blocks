@@ -184,6 +184,15 @@ def _parameter_values_for_instance(instance, block) -> dict[str, str]:
     return resolve_parameter_values(parameters, overrides)
 
 
+def _set_instance_user_field_value(instance, field_name: str, value: str) -> None:
+    """Update a custom field in the protobuf sent back to KiCad over IPC."""
+    for field in instance.proto.user_fields:
+        if str(field.name) == field_name:
+            field.text.value = value
+            return
+    raise RuntimeError(f"Block instance {instance.reference} is missing field {field_name!r}.")
+
+
 def _configure_selected_parameters(schematic, project_dir: Path, library_root: Path, parent) -> None:
     """Edit a selected instance's parameter fields using KiCad's symbol instance API."""
     instance = _selected_symbol(schematic)
@@ -216,7 +225,7 @@ def _configure_selected_parameters(schematic, project_dir: Path, library_root: P
         current_values = resolve_parameter_values(
             parameters, {**current_values, parameter["name"]: value}
         )
-        field.text.value = current_values[parameter["name"]]
+        _set_instance_user_field_value(instance, field_name, current_values[parameter["name"]])
         updated = True
     if updated:
         schematic.update_items(instance)
@@ -627,7 +636,7 @@ def _configure_selected_layout(
     )
     if selected_layout is None:
         raise ValueError(f"No PCB layout {selected!r} is defined for block {block.name!r}.")
-    field.text.value = str(selected_layout["id"])
+    _set_instance_user_field_value(instance, LAYOUT_FIELD_NAME, str(selected_layout["id"]))
     schematic.update_items(instance)
     schematic.save()
     messagebox.showinfo(
