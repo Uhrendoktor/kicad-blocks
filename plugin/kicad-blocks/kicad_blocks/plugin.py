@@ -475,15 +475,18 @@ def _create_and_place(
         f"Block parameters: {parameter_names}\n\n"
         "Click OK to open KiCad's symbol chooser. After selecting the block, "
         "move the mouse to the desired location and click to place it. Press Esc to cancel. "
+        "The manager minimizes during placement; restore it to create or browse another block. "
         "Open the implementation file separately in Eeschema to edit the internal circuit; "
         "use Symbol Properties → Fields to override values per instance.",
         parent=parent,
     )
+    minimized_windows = _minimize_placement_windows(parent)
     try:
         _start_native_symbol_placement(
             kicad, editor_window_id, str(record.manifest["symbol_name"])
         )
     except Exception as exc:
+        _restore_placement_windows(minimized_windows)
         LOG.exception("Block was created but interactive placement did not start")
         messagebox.showwarning(
             "Block Created — placement not started",
@@ -684,6 +687,39 @@ def _preferred_library_selection(visible_records: list, selected_record):
             if str(record.manifest.get("block_id", "")) == selected_id:
                 return record
     return visible_records[0]
+
+
+def _library_record_for_tree_row(records_by_id: dict, row_id: str | None):
+    """Return the block represented by a clicked result row, never a stale selection."""
+    if not row_id:
+        return None
+    return records_by_id.get(str(row_id))
+
+
+def _minimize_placement_windows(window) -> list:
+    """Minimize the browser and its manager parent so Eeschema's canvas is visible."""
+    minimized = []
+    current = window
+    while current is not None:
+        state = None
+        with contextlib.suppress(Exception):
+            state = current.state()
+        if state not in {"iconic", "withdrawn"}:
+            try:
+                current.iconify()
+            except Exception:
+                LOG.debug("Could not minimize a placement UI window", exc_info=True)
+            else:
+                minimized.append(current)
+        current = getattr(current, "master", None)
+    return minimized
+
+
+def _restore_placement_windows(windows: list) -> None:
+    """Restore windows minimized before a placement handoff failed."""
+    for window in reversed(windows):
+        with contextlib.suppress(Exception):
+            window.deiconify()
 
 
 def _draw_facade_preview(canvas, record) -> None:
@@ -1001,9 +1037,14 @@ def _show_library_browser(
                     "it again using the KiCad Blocks toolbar action inside Schematic Editor."
                 )
             _register_block(project_dir, record, kicad)
-            _start_native_symbol_placement(
-                kicad, editor_window_id, str(record.manifest["symbol_name"])
-            )
+            minimized_windows = _minimize_placement_windows(window)
+            try:
+                _start_native_symbol_placement(
+                    kicad, editor_window_id, str(record.manifest["symbol_name"])
+                )
+            except Exception:
+                _restore_placement_windows(minimized_windows)
+                raise
         except Exception as exc:
             LOG.exception("Native block placement handoff failed")
             messagebox.showerror("Place Block", str(exc), parent=window)
@@ -1123,8 +1164,19 @@ def _show_library_browser(
         search_entry.icursor("end")
         return "break"
 
+    def place_double_clicked(event):
+        row_id = tree.identify_row(event.y)
+        record = _library_record_for_tree_row(records_by_id, row_id)
+        if record is None:
+            return "break"
+        tree.selection_set(row_id)
+        tree.focus(row_id)
+        set_details(record)
+        place_selected()
+        return "break"
+
     tree.bind("<<TreeviewSelect>>", selection_changed)
-    tree.bind("<Double-1>", place_selected)
+    tree.bind("<Double-1>", place_double_clicked)
     tree.bind("<Return>", place_selected)
     tree.bind("<Escape>", focus_search)
     search_entry.bind("<Down>", focus_results)
@@ -1143,6 +1195,12 @@ def _show_library_browser(
         side="left", padx=(8, 0)
     )
     ttk.Button(actions, text="Refresh", command=refresh_records).pack(side="right")
+    ttk.Label(
+        right,
+        text="Eeschema takes over during placement. Restore this window after Esc to browse again.",
+        foreground="#667785",
+        wraplength=680,
+    ).pack(anchor="w", pady=(5, 0))
     refresh_records()
     search_entry.focus_set()
 
