@@ -414,6 +414,34 @@ def main() -> None:
                     f"focused_window={focus!r}; title={chooser_title!r}; "
                     f"visible_windows={_windows(xdotool)!r}"
                 )
+            # Exercise the chooser's type-to-filter flow with a standard
+            # library symbol, then verify Eeschema returns to the editor with
+            # the symbol attached to the cursor for interactive placement.
+            subprocess.run(
+                [xdotool, "type", "--clearmodifiers", "--delay", "15", "Device:R"],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            subprocess.run(
+                [xdotool, "key", "--clearmodifiers", "Return"],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            time.sleep(0.6)
+            placement_focus = subprocess.run(
+                [xdotool, "getwindowfocus"],
+                capture_output=True,
+                text=True,
+                check=False,
+            ).stdout.strip()
+            if placement_focus != window_id:
+                raise AssertionError(
+                    "Selecting Device:R did not return focus to Eeschema's "
+                    f"interactive placement tool; focused={placement_focus!r}; "
+                    f"visible_windows={_windows(xdotool)!r}"
+                )
             subprocess.run(
                 [xdotool, "key", "--clearmodifiers", "Escape"],
                 check=True,
@@ -421,7 +449,8 @@ def main() -> None:
                 text=True,
             )
             print(
-                "Native Add Symbol chooser opened through schematic IPC and closed cleanly."
+                "Native symbol chooser opened through schematic IPC; selecting Device:R "
+                "returned to cursor-placement mode and Escape cancelled cleanly."
             )
 
             print(
