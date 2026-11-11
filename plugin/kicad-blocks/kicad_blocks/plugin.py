@@ -289,7 +289,12 @@ def _pick_record(records, parent, title: str):
     ttk.Label(outer, text="Search the block library").pack(anchor="w")
     search = tk.StringVar()
     search_entry = ttk.Entry(outer, textvariable=search)
-    search_entry.pack(fill="x", pady=(4, 8))
+    search_entry.pack(fill="x", pady=(4, 3))
+    ttk.Label(
+        outer,
+        text="Type to filter · ↓ browse results · Enter select · Esc cancel",
+        foreground="#667785",
+    ).pack(anchor="w", pady=(0, 6))
 
     results_frame = ttk.Frame(outer)
     results_frame.pack(fill="both", expand=True)
