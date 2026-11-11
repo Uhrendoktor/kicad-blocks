@@ -587,7 +587,7 @@ def _start_native_symbol_placement(
 
     action_runner = getattr(kicad, "run_action", None)
     if not callable(action_runner):
-        raise RuntimeError(
+        raise TypeError(
             "This KiCad Python IPC build does not expose run_action(); "
             "update the KiCad nightly IPC bindings to use cursor placement."
         )
