@@ -352,7 +352,7 @@ def create_block(
         seen_layout_names: set[str] = set()
         for index, raw_layout in enumerate(raw_layouts, start=1):
             if not isinstance(raw_layout, dict):
-                raise ValueError("Each PCB layout definition must be an object.")
+                raise TypeError("Each PCB layout definition must be an object.")
             source_value = raw_layout.get("path", raw_layout.get("file"))
             if not source_value:
                 raise ValueError(f"Layout {index} is missing its source PCB path.")
