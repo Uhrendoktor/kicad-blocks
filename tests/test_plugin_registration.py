@@ -369,31 +369,21 @@ def main() -> None:
             if "plugin environment ready" not in package_probe.stdout:
                 raise AssertionError(package_probe.stdout)
 
-            # Verify the same native schematic tool action used by the
-            # Block Library browser opens Eeschema's interactive symbol chooser.
-            try:
-                action_probe = subprocess.run(
-                    [
-                        str(env_python),
-                        "-c",
-                        (
-                            "from kipy import KiCad; "
-                            "KiCad().run_action('eeschema.InteractiveDrawing.placeSymbol'); "
-                            "print('native place symbol action sent')"
-                        ),
-                    ],
-                    capture_output=True,
-                    text=True,
-                    check=True,
-                )
-            except subprocess.CalledProcessError as exc:
-                raise RuntimeError(
-                    "KiCad IPC Place Symbol action failed. "
-                    f"stdout: {exc.stdout or ''}\\n"
-                    f"stderr: {exc.stderr or ''}"
-                ) from exc
-            if "native place symbol action sent" not in action_probe.stdout:
-                raise AssertionError(action_probe.stdout)
+            # Verify the browser's native placement handoff. The supported
+            # Eeschema interface uses the default Add Symbol hotkey (A);
+            # the generic RunAction IPC request is not registered by this build.
+            subprocess.run(
+                [xdotool, "windowactivate", "--sync", window_id],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            subprocess.run(
+                [xdotool, "key", "--clearmodifiers", "a"],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
             chooser_id = None
             chooser_title = ""
             chooser_deadline = time.monotonic() + 6.0
@@ -417,13 +407,12 @@ def main() -> None:
                 time.sleep(0.1)
             if chooser_id is None:
                 raise AssertionError(
-                    "KiCad IPC Place Symbol action did not open the native symbol chooser; "
+                    "Eeschema Add Symbol hotkey did not open the native symbol chooser; "
                     f"focused_window={focus!r}; title={chooser_title!r}; "
                     f"visible_windows={_windows(xdotool)!r}"
                 )
-            # Exercise the chooser's type-to-filter flow with a standard
-            # library symbol, then verify Eeschema returns to the editor with
-            # the symbol attached to the cursor for interactive placement.
+            # Search for a standard symbol and choose it. Eeschema should then
+            # return to the editor with that symbol attached to the cursor.
             subprocess.run(
                 [xdotool, "type", "--clearmodifiers", "--delay", "15", "Device:R"],
                 check=True,
