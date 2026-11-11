@@ -188,6 +188,46 @@ def _parameter_values_for_instance(instance, block) -> dict[str, str]:
     return resolve_parameter_values(parameters, overrides)
 
 
+def _update_schematic_item_checked(schematic, instance) -> None:
+    """Update one schematic item and inspect KiCad's per-item IPC status.
+
+    The current kipy update_items() wrapper unconditionally unwraps the
+    optional response Any. KiCad can return an ItemUpdateResult without that
+    Any, so inspect the documented status fields directly instead.
+    """
+    from kipy.proto.common.commands import editor_commands_pb2
+    from kipy.util import pack_any
+
+    command = editor_commands_pb2.UpdateItems()
+    command.header.document.CopyFrom(schematic.document)
+    command.items.append(pack_any(instance.proto))
+    response = schematic.client.send(
+        command, editor_commands_pb2.UpdateItemsResponse
+    )
+
+    if int(response.status) != 1:
+        raise RuntimeError(
+            "KiCad rejected the block instance update request "
+            f"(request status {int(response.status)})."
+        )
+    if len(response.updated_items) != 1:
+        raise RuntimeError(
+            "KiCad returned an unexpected number of item update results: "
+            f"{len(response.updated_items)}."
+        )
+
+    item_result = response.updated_items[0]
+    status = item_result.status
+    if int(status.code) != 1:
+        detail = str(getattr(status, "error_message", "") or "").strip()
+        message = (
+            f"KiCad rejected the block instance update (item status {int(status.code)})."
+        )
+        if detail:
+            message += f" {detail}"
+        raise RuntimeError(message)
+
+
 def _write_instance_configuration(schematic, instance, values: dict[str, str]) -> None:
     """Write validated facade fields through KiCad IPC as one undoable edit."""
     fields = {
@@ -210,7 +250,7 @@ def _write_instance_configuration(schematic, instance, values: dict[str, str]) -
     try:
         for name, value in values.items():
             fields[name].text.value = str(value)
-        schematic.update_items([instance])
+        _update_schematic_item_checked(schematic, instance)
         schematic.push_commit(commit, "Configure KiCad block instance")
         schematic.save()
     except Exception:
