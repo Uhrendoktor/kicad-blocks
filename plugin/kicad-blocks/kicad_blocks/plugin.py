@@ -363,7 +363,10 @@ def _choose_library_root(parent) -> Path:
     return set_library_root(Path(selected))
 
 
-def _create_and_place(root, schematic, kicad, project_dir, parent) -> None:
+def _create_and_place(
+    root, schematic, kicad, project_dir, parent,
+    editor_window_id: str | None = None,
+) -> None:
     name = simpledialog.askstring(
         "Create Block", "Block name:", initialvalue="Buck Converter", parent=parent
     )
@@ -451,17 +454,6 @@ def _create_and_place(root, schematic, kicad, project_dir, parent) -> None:
             "ports": ports,
         })
 
-    x_mm = simpledialog.askfloat(
-        "Placement", "X position in mm:", initialvalue=100.0, parent=parent
-    )
-    if x_mm is None:
-        return
-    y_mm = simpledialog.askfloat(
-        "Placement", "Y position in mm:", initialvalue=100.0, parent=parent
-    )
-    if y_mm is None:
-        return
-
     record = create_block(
         root,
         name,
@@ -472,12 +464,14 @@ def _create_and_place(root, schematic, kicad, project_dir, parent) -> None:
         variant_files=variant_files,
     )
     record = _register_block(project_dir, record, kicad)
-    instance = place_block(schematic, record, x_mm, y_mm)
+    _start_native_symbol_placement(
+        kicad, editor_window_id, str(record.manifest["symbol_name"])
+    )
     layout_names = ", ".join(item["name"] for item in record.manifest.get("layouts", [])) or "none"
     parameter_names = ", ".join(item["name"] for item in record.manifest.get("parameters", [])) or "none"
     messagebox.showinfo(
         "Block Created",
-        f"Created and placed {name} ({instance.reference}).\n\n"
+        f"Created {name} and started interactive placement in Eeschema.\n\n"
         f"Library asset: {record.path}\n"
         f"Implementation schematic: {record.implementation}\n"
         f"PCB layout alternatives: {layout_names}\n"
@@ -554,6 +548,7 @@ def _capture_eeschema_window_id() -> str | None:
 
 
 def _start_native_symbol_placement(
+    kicad,
     editor_window_id: str | None,
     symbol_name: str,
     *,
@@ -561,10 +556,10 @@ def _start_native_symbol_placement(
     command_runner=subprocess.run,
     pause=time.sleep,
 ) -> None:
-    """Use KiCad's native Add Symbol tool so the chosen facade follows the mouse.
+    """Use KiCad's native Place Symbol action so the facade follows the mouse.
 
     The current supported schematic IPC method inserts at a numeric coordinate.
-    The V1 browser therefore hands off to Eeschema's native hotkey and chooser.
+    V1 starts Eeschema's own interactive tool, then filters its symbol chooser.
     """
     executable = xdotool or shutil.which("xdotool")
     if not executable:
@@ -590,9 +585,15 @@ def _start_native_symbol_placement(
         )
         return str(getattr(result, "stdout", "") or "").strip()
 
+    action_runner = getattr(kicad, "run_action", None)
+    if not callable(action_runner):
+        raise RuntimeError(
+            "This KiCad Python IPC build does not expose run_action(); "
+            "update the KiCad nightly IPC bindings to use cursor placement."
+        )
     send("windowactivate", "--sync", str(editor_window_id))
     pause(0.2)
-    send("key", "--clearmodifiers", "a")
+    action_runner("eeschema.InteractiveDrawing.placeSymbol")
     pause(0.65)
     chooser_id = send("getwindowfocus")
     chooser_title = send("getwindowname", chooser_id)
@@ -907,7 +908,7 @@ def _show_library_browser(
                 )
             _register_block(project_dir, record, kicad)
             _start_native_symbol_placement(
-                editor_window_id, str(record.manifest["symbol_name"])
+                kicad, editor_window_id, str(record.manifest["symbol_name"])
             )
         except Exception as exc:
             LOG.exception("Native block placement handoff failed")
@@ -921,7 +922,7 @@ def _show_library_browser(
         if not variants:
             try:
                 _launch_block_asset(kicad, record.implementation, "implementation schematic")
-            except Exception as exc:
+            except (OSError, RuntimeError, ValueError) as exc:
                 messagebox.showerror("Open implementation", str(exc), parent=window)
             return
         chooser = tk.Toplevel(window)
@@ -950,7 +951,7 @@ def _show_library_browser(
                 _launch_block_asset(
                     kicad, record.path / selected["file"], "implementation schematic"
                 )
-            except Exception as exc:
+            except (OSError, RuntimeError, ValueError) as exc:
                 messagebox.showerror("Open implementation", str(exc), parent=window)
         buttons = ttk.Frame(frame)
         buttons.pack(fill="x")
@@ -992,7 +993,7 @@ def _show_library_browser(
             chooser.destroy()
             try:
                 _launch_block_asset(kicad, target, "PCB layout")
-            except Exception as exc:
+            except (OSError, RuntimeError, ValueError) as exc:
                 messagebox.showerror("Open PCB layout", str(exc), parent=window)
         buttons = ttk.Frame(frame)
         buttons.pack(fill="x")
@@ -1733,7 +1734,9 @@ def run() -> None:
             try:
                 if action == "create":
                     library = _choose_library_root(root)
-                    _create_and_place(library, schematic, kicad, project_dir, root)
+                    _create_and_place(
+                        library, schematic, kicad, project_dir, root, editor_window_id
+                    )
                 elif action == "place":
                     _show_library_browser(
                         tk.Toplevel(root), schematic, kicad, project_dir,

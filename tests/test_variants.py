@@ -14,7 +14,12 @@ sys.path.insert(0, str(PLUGIN))
 
 from kicad_blocks.model import parse_pins, resolve_variant_implementation
 from kicad_blocks.plugin import _resolve_variant_text
-from kicad_blocks.repository import create_block, make_local_copy, publish_local_copy, synchronize_local_copy
+from kicad_blocks.repository import (
+    create_block,
+    make_local_copy,
+    publish_local_copy,
+    synchronize_local_copy,
+)
 
 
 class _Project:

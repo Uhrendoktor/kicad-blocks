@@ -7,14 +7,13 @@ import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import patch
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 ROOT = Path(__file__).resolve().parents[1]
 PLUGIN = ROOT / "plugin" / "kicad-blocks"
 sys.path.insert(0, str(PLUGIN))
 
-from kicad_blocks.model import parse_pins, parse_parameters
+from kicad_blocks.model import parse_parameters, parse_pins
 from kicad_blocks.plugin import (
     _block_overview_text,
     _filter_library_records,
@@ -84,16 +83,18 @@ class LibraryBrowserTests(unittest.TestCase):
             return SimpleNamespace(stdout="")
 
         pauses = []
+        kicad = SimpleNamespace(run_action=Mock())
         _start_native_symbol_placement(
+            kicad,
             "0x111",
             "buck_converter_ab12cd34",
             xdotool="/usr/bin/xdotool",
             command_runner=command_runner,
             pause=pauses.append,
         )
+        kicad.run_action.assert_called_once_with("eeschema.InteractiveDrawing.placeSymbol")
         commands = [item[0][1:] for item in calls]
         self.assertEqual(commands[0], ["windowactivate", "--sync", "0x111"])
-        self.assertEqual(commands[1], ["key", "--clearmodifiers", "a"])
         self.assertIn(
             ["type", "--clearmodifiers", "--delay", "12", "buck_converter_ab12cd34"],
             commands,
@@ -114,6 +115,7 @@ class LibraryBrowserTests(unittest.TestCase):
 
         with self.assertRaisesRegex(RuntimeError, "Choose Symbol dialog did not open"):
             _start_native_symbol_placement(
+                SimpleNamespace(run_action=Mock()),
                 "0x111",
                 "buck_converter_ab12cd34",
                 xdotool="/usr/bin/xdotool",
@@ -123,14 +125,18 @@ class LibraryBrowserTests(unittest.TestCase):
         self.assertFalse(any(command[1] == "type" for command in calls))
 
     def test_native_placement_requires_xdotool_and_editor_window(self):
-        with patch("kicad_blocks.plugin.shutil.which", return_value=None):
-            with self.assertRaisesRegex(RuntimeError, "needs xdotool"):
-                _start_native_symbol_placement(
-                    "0x111", "buck_converter_ab12cd34",
-                    xdotool=None, command_runner=Mock(), pause=lambda _seconds: None,
-                )
+        with (
+            patch("kicad_blocks.plugin.shutil.which", return_value=None),
+            self.assertRaisesRegex(RuntimeError, "needs xdotool"),
+        ):
+            _start_native_symbol_placement(
+                SimpleNamespace(run_action=Mock()),
+                "0x111", "buck_converter_ab12cd34",
+                xdotool=None, command_runner=Mock(), pause=lambda _seconds: None,
+            )
         with self.assertRaisesRegex(RuntimeError, "identify the active Eeschema window"):
             _start_native_symbol_placement(
+                SimpleNamespace(run_action=Mock()),
                 None, "buck_converter_ab12cd34",
                 xdotool="/usr/bin/xdotool", command_runner=Mock(), pause=lambda _seconds: None,
             )

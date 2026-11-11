@@ -369,21 +369,24 @@ def main() -> None:
             if "plugin environment ready" not in package_probe.stdout:
                 raise AssertionError(package_probe.stdout)
 
-            # The library browser's Place at cursor action hands off to the
-            # native Eeschema Add Symbol tool. Verify the standard hotkey
-            # actually opens the modal symbol chooser in the supported build.
-            subprocess.run(
-                [xdotool, "windowactivate", "--sync", window_id],
-                check=True,
+            # Verify the same native schematic tool action used by the
+            # Block Library browser opens Eeschema's interactive symbol chooser.
+            action_probe = subprocess.run(
+                [
+                    str(env_python),
+                    "-c",
+                    (
+                        "from kipy import KiCad; "
+                        "KiCad().run_action('eeschema.InteractiveDrawing.placeSymbol'); "
+                        "print('native place symbol action sent')"
+                    ),
+                ],
                 capture_output=True,
                 text=True,
-            )
-            subprocess.run(
-                [xdotool, "key", "--clearmodifiers", "a"],
                 check=True,
-                capture_output=True,
-                text=True,
             )
+            if "native place symbol action sent" not in action_probe.stdout:
+                raise AssertionError(action_probe.stdout)
             chooser_id = None
             chooser_title = ""
             chooser_deadline = time.monotonic() + 6.0
@@ -407,7 +410,7 @@ def main() -> None:
                 time.sleep(0.1)
             if chooser_id is None:
                 raise AssertionError(
-                    "Eeschema's Add Symbol hotkey did not open the native symbol chooser; "
+                    "KiCad IPC Place Symbol action did not open the native symbol chooser; "
                     f"focused_window={focus!r}; title={chooser_title!r}; "
                     f"visible_windows={_windows(xdotool)!r}"
                 )
@@ -418,7 +421,7 @@ def main() -> None:
                 text=True,
             )
             print(
-                "Native Add Symbol chooser opened from the default A hotkey and closed cleanly."
+                "Native Add Symbol chooser opened through schematic IPC and closed cleanly."
             )
 
             print(
