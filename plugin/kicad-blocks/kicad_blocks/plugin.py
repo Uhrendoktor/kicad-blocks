@@ -400,13 +400,19 @@ def _pick_record(records, parent, title: str):
             tree.focus_set()
         return "break"
 
+    def choose_double_clicked(event):
+        row_id = tree.identify_row(event.y)
+        record = records_by_id.get(row_id) if row_id else None
+        if record is None:
+            return "break"
+        tree.selection_set(row_id)
+        tree.focus(row_id)
+        selected_record[0] = record
+        return choose_selected()
+
     tree.bind("<<TreeviewSelect>>", selection_changed)
     tree.bind("<Return>", choose_selected)
-    tree.bind("<Double-1>", lambda event: (
-        choose_selected()
-        if tree.identify_row(event.y) in tree.selection()
-        else "break"
-    ))
+    tree.bind("<Double-1>", choose_double_clicked)
     search_entry.bind("<Down>", focus_results)
     dialog.bind("<Escape>", lambda _event: dialog.destroy())
     select_button.configure(command=choose_selected)
