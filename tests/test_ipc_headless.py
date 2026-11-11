@@ -126,7 +126,7 @@ def main() -> None:
                 field.name: field for field in instance.proto.user_fields
                 if field.name.startswith("KB_PARAM_")
             }
-            parameter_proto["KB_PARAM_OUTPUT_VOLTAGE"].text.value = "1.8"
+            parameter_proto["KB_PARAM_OUTPUT_VOLTAGE"].text.text = "1.8"
             updated_items = schematic.update_items(instance)
             if len(updated_items) != 1:
                 raise AssertionError(

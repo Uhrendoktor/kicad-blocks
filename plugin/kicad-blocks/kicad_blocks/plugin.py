@@ -203,7 +203,7 @@ def _set_instance_user_field_value(instance, field_name: str, value: str) -> Non
     """Update a custom field in the protobuf sent back to KiCad over IPC."""
     for field in instance.proto.user_fields:
         if str(field.name) == field_name:
-            field.text.value = value
+            field.text.text = value
             return
     raise RuntimeError(f"Block instance {instance.reference} is missing field {field_name!r}.")
 
