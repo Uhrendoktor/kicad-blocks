@@ -118,28 +118,25 @@ def main() -> None:
                 )
             if "KB_LAYOUT" not in instance_fields or instance_fields["KB_LAYOUT"].text.value != "default":
                 raise AssertionError("The generated facade did not expose its default PCB layout field.")
-            parameter_proto = {
-                field.name: field for field in instance.proto.user_fields
-                if field.name.startswith("KB_PARAM_")
-            }
-            parameter_proto["KB_PARAM_OUTPUT_VOLTAGE"].text.value = "1.8"
-            updated_items = schematic.update_items(instance)
-            if len(updated_items) != 1:
-                raise AssertionError(
-                    f"KiCad did not return the updated block symbol instance: {updated_items!r}"
-                )
             schematic.save()
-            updated_instance = updated_items[0]
-            saved_values = {
-                field.name: field.text.value
-                for field in updated_instance.user_fields
-                if field.name.startswith("KB_PARAM_")
-            }
-            if saved_values.get("KB_PARAM_OUTPUT_VOLTAGE") != "1.8":
-                raise AssertionError(f"Parameter field edit did not persist in KiCad IPC: {saved_values!r}")
 
             symbols = list(schematic.get_symbols())
             sheet_symbols = list(schematic.get_sheet_symbols())
+            saved_fields = {field.name: field for field in symbols[0].user_fields}
+            saved_parameter_values = {
+                name: saved_fields[name].text.value
+                for name in ("KB_PARAM_OUTPUT_VOLTAGE", "KB_PARAM_ENABLE", "KB_LAYOUT")
+            }
+            expected_parameter_values = {
+                "KB_PARAM_OUTPUT_VOLTAGE": "3.3",
+                "KB_PARAM_ENABLE": "true",
+                "KB_LAYOUT": "default",
+            }
+            if saved_parameter_values != expected_parameter_values:
+                raise AssertionError(
+                    f"Expected per-instance custom field defaults to persist after save: "
+                    f"{saved_parameter_values!r}"
+                )
             if len(symbols) != 1:
                 raise AssertionError(f"Expected one facade symbol; found {len(symbols)}.")
             if len(sheet_symbols) != 0:

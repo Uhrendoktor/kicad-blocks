@@ -184,58 +184,73 @@ def _parameter_values_for_instance(instance, block) -> dict[str, str]:
     return resolve_parameter_values(parameters, overrides)
 
 
-def _set_instance_user_field_value(instance, field_name: str, value: str) -> None:
-    """Update a custom field in the protobuf sent back to KiCad over IPC."""
-    for field in instance.proto.user_fields:
-        if str(field.name) == field_name:
-            field.text.value = value
-            return
-    raise RuntimeError(f"Block instance {instance.reference} is missing field {field_name!r}.")
-
-
-def _configure_selected_parameters(schematic, project_dir: Path, library_root: Path, parent) -> None:
-    """Edit a selected instance's parameter fields using KiCad's symbol instance API."""
+def _show_selected_block_configuration(
+    schematic, project_dir: Path, library_root: Path, parent
+) -> None:
+    """Show how to edit the instance-local values with KiCad's native UI."""
     instance = _selected_symbol(schematic)
     block = _block_record_for_instance(library_root, project_dir, instance)
     parameters = block.manifest.get("parameters", [])
-    if not parameters:
-        raise ValueError(f"Block {block.name!r} does not define any parameters.")
-    fields = {
-        str(getattr(field, "name", "")): field
+    layouts = _layout_choices(block)
+    current_values = _parameter_values_for_instance(instance, block)
+    field_names = {
+        str(getattr(field, "name", ""))
         for field in getattr(instance, "user_fields", ())
     }
-    current_values = _parameter_values_for_instance(instance, block)
-    updated = False
-    for parameter in parameters:
-        field_name = parameter_field_name(parameter["name"])
-        field = fields.get(field_name)
-        if field is None:
-            raise RuntimeError(
-                f"KiCad instance {instance.reference} is missing parameter field {field_name!r}. "
-                "Reload the block symbol from its library and replace the instance."
-            )
-        value = simpledialog.askstring(
-            f"{block.name} — {parameter['name']}",
-            f"{parameter['name']} ({parameter['type']})\n{parameter.get('description', '')}",
-            initialvalue=current_values[parameter["name"]],
-            parent=parent,
+    missing = [
+        parameter_field_name(item["name"])
+        for item in parameters
+        if parameter_field_name(item["name"]) not in field_names
+    ]
+    if layouts and LAYOUT_FIELD_NAME not in field_names:
+        missing.append(LAYOUT_FIELD_NAME)
+    if missing:
+        raise RuntimeError(
+            f"Block instance {instance.reference} is missing field(s): "
+            + ", ".join(missing)
+            + ". Reload the facade from the block library and replace the instance."
         )
-        if value is None:
-            return
-        current_values = resolve_parameter_values(
-            parameters, {**current_values, parameter["name"]: value}
+
+    parameter_lines = (
+        "\n".join(
+            f"  {parameter['name']} ({parameter['type']}) = "
+            f"{current_values[parameter['name']]}"
+            for parameter in parameters
         )
-        _set_instance_user_field_value(instance, field_name, current_values[parameter["name"]])
-        updated = True
-    if updated:
-        schematic.update_items(instance)
-        schematic.save()
-        messagebox.showinfo(
-            "Block Parameters Updated",
-            f"Saved parameters for {instance.reference}.\n"
-            + "\n".join(f"{name} = {value}" for name, value in current_values.items()),
-            parent=parent,
+        if parameters
+        else "  (none)"
+    )
+    layout_ids = (
+        "\n".join(
+            f"  {item.get('id')}: {item.get('name', item.get('id'))}"
+            for item in layouts
         )
+        if layouts
+        else "  (none)"
+    )
+    selected_layout = next(
+        (
+            getattr(getattr(field, "text", None), "value", "")
+            for field in getattr(instance, "user_fields", ())
+            if str(getattr(field, "name", "")) == LAYOUT_FIELD_NAME
+        ),
+        "",
+    )
+    messagebox.showinfo(
+        "Configure Block Instance",
+        f"Selected block: {instance.reference} — {block.name}\n\n"
+        "Edit these instance-local fields in KiCad itself:\n"
+        "1. Close this dialog and select the block symbol.\n"
+        "2. Press E (Symbol Properties).\n"
+        "3. Open the Fields tab and edit the values below.\n"
+        "4. Confirm the dialog and save the schematic.\n\n"
+        f"Parameters:\n{parameter_lines}\n\n"
+        f"PCB layout alternatives:\n{layout_ids}\n"
+        f"Current KB_LAYOUT: {selected_layout or '(unset)'}\n\n"
+        "The values are stored on this symbol instance, not in the shared block library. "
+        "The recursive BOM/ERC and PCB layout actions read the saved values.",
+        parent=parent,
+    )
 
 
 def sync_selected_local(schematic, kicad, project_dir: Path) -> dict:
@@ -584,67 +599,6 @@ def _block_record_for_instance(library_root: Path, project_dir: Path, instance):
     if local_record is not None:
         return local_record
     return _library_record_for_instance(library_root, instance)
-
-def _configure_selected_layout(
-    schematic, project_dir: Path, library_root: Path, parent
-) -> None:
-    """Persist a block's PCB implementation selection on the schematic instance."""
-    instance = _selected_symbol(schematic)
-    block = _block_record_for_instance(library_root, project_dir, instance)
-    layouts = _layout_choices(block)
-    if not layouts:
-        raise ValueError(f"Block {block.name!r} has no stored PCB layout.")
-    fields = {
-        str(getattr(field, "name", "")): field
-        for field in getattr(instance, "user_fields", ())
-    }
-    field = fields.get(LAYOUT_FIELD_NAME)
-    if field is None:
-        raise RuntimeError(
-            f"Block instance {instance.reference} has no {LAYOUT_FIELD_NAME} field. "
-            "Reload the facade from the library and replace the instance."
-        )
-    labels = [f"{item.get('name', item.get('id'))} [{item.get('id')}]" for item in layouts]
-    current_id = str(getattr(getattr(field, "text", None), "value", "") or "")
-    current = next(
-        (item for item in layouts if str(item.get("id", "")).casefold() == current_id.casefold()),
-        layouts[0],
-    )
-    initial = next(
-        (label for item, label in zip(layouts, labels) if item is current),
-        labels[0],
-    )
-    selected = simpledialog.askstring(
-        "Configure PCB Layout",
-        "Select the PCB layout implementation for this block instance:\n\n"
-        + "\n".join(labels),
-        initialvalue=initial,
-        parent=parent,
-    )
-    if selected is None:
-        return
-    selected_layout = next(
-        (
-            item for item, label in zip(layouts, labels)
-            if selected.strip().casefold() in {
-                label.casefold(),
-                str(item.get("id", "")).casefold(),
-                str(item.get("name", "")).casefold(),
-            }
-        ),
-        None,
-    )
-    if selected_layout is None:
-        raise ValueError(f"No PCB layout {selected!r} is defined for block {block.name!r}.")
-    _set_instance_user_field_value(instance, LAYOUT_FIELD_NAME, str(selected_layout["id"]))
-    schematic.update_items(instance)
-    schematic.save()
-    messagebox.showinfo(
-        "PCB Layout Selected",
-        f"{instance.reference} now uses {selected_layout.get('name', selected_layout['id'])}.",
-        parent=parent,
-    )
-
 
 def _parse_pin_net_map(value: str, pins: list[str]) -> dict[str, str]:
     mapping: dict[str, str] = {}
@@ -1042,8 +996,7 @@ def run() -> None:
         actions = [
             ("create", "Create block", "Generate a facade, typed parameters and PCB layout alternatives."),
             ("place", "Place block", "Place an existing reusable block from the library."),
-            ("params", "Configure parameters", "Edit the selected block instance's function-like arguments."),
-            ("layout-config", "Configure PCB layout", "Choose and save the PCB implementation for the selected instance."),
+            ("configure", "Configure block instance", "Open guidance for editing per-instance parameters and PCB layout in KiCad Symbol Properties."),
             ("local", "Make local copy", "Give the selected instance an independent implementation."),
             ("sync", "Synchronize local copy", "Publish and pull non-conflicting local/library edits."),
             ("edit", "Edit implementation", "Open the selected block implementation in Eeschema."),
@@ -1112,10 +1065,10 @@ def run() -> None:
                 elif action == "place":
                     library = _choose_library_root(root)
                     _place_existing(library, schematic, kicad, project_dir, root)
-                elif action == "params":
-                    _configure_selected_parameters(schematic, project_dir, library_root, root)
-                elif action == "layout-config":
-                    _configure_selected_layout(schematic, project_dir, library_root, root)
+                elif action == "configure":
+                    _show_selected_block_configuration(
+                        schematic, project_dir, library_root, root
+                    )
                 elif action == "local":
                     path = make_selected_local(schematic, kicad, project_dir, library_root)
                     messagebox.showinfo(

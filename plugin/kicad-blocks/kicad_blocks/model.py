@@ -157,10 +157,38 @@ def substitute_parameter_templates(
     string. Templates are deliberately limited to single-line values.
     """
     values = resolve_parameter_values(parameters, overrides)
-    tokens = set(_PARAMETER_TOKEN.findall(content))
+    matches = list(_PARAMETER_TOKEN.finditer(content))
+    tokens = {match.group(1) for match in matches}
     unknown = sorted(tokens - set(values))
     if unknown:
         raise ValueError("Implementation uses undeclared block parameter(s): " + ", ".join(unknown))
+
+    # A parameter is text, not an S-expression fragment. Only expand tokens
+    # inside an existing quoted KiCad string, never in structure or comments.
+    in_string = False
+    in_comment = False
+    escaped = False
+    token_positions = {match.start() for match in matches}
+    for position, character in enumerate(content):
+        if position in token_positions and (in_comment or not in_string):
+            raise ValueError(
+                "Block parameter templates must appear inside quoted KiCad text fields."
+            )
+        if in_comment:
+            if character == "\n":
+                in_comment = False
+            continue
+        if in_string:
+            if escaped:
+                escaped = False
+            elif character == "\\\\":
+                escaped = True
+            elif character == '"':
+                in_string = False
+        elif character == ";":
+            in_comment = True
+        elif character == '"':
+            in_string = True
 
     def escape(match: re.Match) -> str:
         value = values[match.group(1)]

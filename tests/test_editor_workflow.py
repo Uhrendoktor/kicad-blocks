@@ -83,7 +83,7 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
         self.kicad.wait_for_libraries.assert_called_once()
         self.messagebox.showinfo.assert_called()
 
-    def test_parameter_editor_updates_selected_instance_and_saves_document(self):
+    def test_configuration_guide_uses_native_kicad_symbol_properties(self):
         block = create_block(
             self.library,
             "Parameterized Editor Block",
@@ -92,7 +92,7 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
         )
         field = SimpleNamespace(
             name="KB_PARAM_OUTPUT_VOLTAGE",
-            text=SimpleNamespace(value="3.3"),
+            text=SimpleNamespace(value="1.8"),
         )
         instance = SimpleNamespace(
             id="00000000-0000-0000-0000-000000000456",
@@ -104,31 +104,20 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
                 )
             ),
             user_fields=[field],
-            proto=SimpleNamespace(user_fields=[field]),
         )
-        schematic = SimpleNamespace(
-            get_selection=lambda: [instance],
-            update_items=Mock(),
-            save=Mock(),
-        )
-        simpledialog = SimpleNamespace(askstring=Mock(return_value="1.8"))
+        schematic = SimpleNamespace(get_selection=lambda: [instance])
 
-        with (
-            patch.object(plugin_actions, "simpledialog", simpledialog),
-            patch.object(plugin_actions, "messagebox", self.messagebox),
-        ):
-            plugin_actions._configure_selected_parameters(
+        with patch.object(plugin_actions, "messagebox", self.messagebox):
+            plugin_actions._show_selected_block_configuration(
                 schematic, self.project, self.library, self.parent
             )
 
-        self.assertEqual(field.text.value, "1.8")
-        schematic.update_items.assert_called_once_with(instance)
-        schematic.save.assert_called_once()
         self.messagebox.showinfo.assert_called_once()
-        self.assertEqual(
-            plugin_actions._parameter_values_for_instance(instance, block),
-            {"OUTPUT_VOLTAGE": "1.8"},
-        )
+        message = self.messagebox.showinfo.call_args.args[1]
+        self.assertIn("Press E (Symbol Properties)", message)
+        self.assertIn("Fields tab", message)
+        self.assertIn("OUTPUT_VOLTAGE (number) = 1.8", message)
+        self.assertNotIn("update_items", message)
 
     def test_parameter_values_validate_custom_instance_fields(self):
         block = create_block(
@@ -152,7 +141,7 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
             plugin_actions._parameter_values_for_instance(instance, block)
 
 
-    def test_layout_selector_persists_instance_choice_and_pcb_uses_it(self):
+    def test_configuration_guide_reports_layout_choices_and_reads_instance_selection(self):
         standard = self.project / "standard.kicad_pcb"
         low_profile = self.project / "low_profile.kicad_pcb"
         standard.write_text("(kicad_pcb)", encoding="utf-8")
@@ -166,7 +155,7 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
                 {"name": "Low profile", "path": low_profile},
             ],
         )
-        field = SimpleNamespace(name="KB_LAYOUT", text=SimpleNamespace(value="standard"))
+        field = SimpleNamespace(name="KB_LAYOUT", text=SimpleNamespace(value="low_profile"))
         instance = SimpleNamespace(
             id="00000000-0000-0000-0000-000000000789",
             reference="X7",
@@ -177,32 +166,24 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
                 )
             ),
             user_fields=[field],
-            proto=SimpleNamespace(user_fields=[field]),
         )
-        schematic = SimpleNamespace(
-            get_selection=lambda: [instance],
-            update_items=Mock(),
-            save=Mock(),
-        )
-        simpledialog = SimpleNamespace(askstring=Mock(return_value="low_profile"))
+        schematic = SimpleNamespace(get_selection=lambda: [instance])
 
-        with (
-            patch.object(plugin_actions, "simpledialog", simpledialog),
-            patch.object(plugin_actions, "messagebox", self.messagebox),
-        ):
-            plugin_actions._configure_selected_layout(
+        with patch.object(plugin_actions, "messagebox", self.messagebox):
+            plugin_actions._show_selected_block_configuration(
                 schematic, self.project, self.library, self.parent
             )
 
-        self.assertEqual(field.text.value, "low_profile")
-        schematic.update_items.assert_called_once_with(instance)
-        schematic.save.assert_called_once()
+        self.messagebox.showinfo.assert_called_once()
+        message = self.messagebox.showinfo.call_args.args[1]
+        self.assertIn("standard: Standard", message)
+        self.assertIn("low_profile: Low profile", message)
+        self.assertIn("Current KB_LAYOUT: low_profile", message)
         selected = plugin_actions._choose_block_layout(
             block, self.parent, instance=instance
         )
         self.assertEqual(selected["id"], "low_profile")
         self.assertEqual(selected["file"], "layout_low_profile.kicad_pcb")
-        simpledialog.askstring.assert_called_once()
 
     def test_layout_selection_rejects_stale_instance_field(self):
         first = self.project / "first.kicad_pcb"

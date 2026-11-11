@@ -15,6 +15,7 @@ from kicad_blocks.model import (
     parse_pins,
     render_symbol_library,
     resolve_parameter_values,
+    substitute_parameter_templates,
     rotate_label_spin_style,
     schematic_symbol_orientation,
     transform_symbol_point_to_schematic,
@@ -164,6 +165,31 @@ class BlockModelTests(unittest.TestCase):
         self.assertIn('(pin bidirectional line', text)
         self.assertEqual(text.count("(pin "), len(pins))
         self.assertNotIn("hierarchical", text.casefold())
+
+
+    def test_parameter_templates_only_expand_inside_quoted_fields_and_escape_values(self):
+        parameters = parse_parameters("PART=STM32, LABEL=3V3")
+        source = '(property "Value" "{{PART}}" (at 0 0 0))\n'
+        self.assertEqual(
+            substitute_parameter_templates(source, parameters),
+            '(property "Value" "STM32" (at 0 0 0))\n',
+        )
+        escaped = substitute_parameter_templates(
+            '(property "Value" "{{PART}}" (at 0 0 0))',
+            parameters,
+            {"PART": 'part "A"\\rev'},
+        )
+        self.assertIn(r'part \"A\"\\rev', escaped)
+        for source in (
+            '(property "Value" {{PART}})',
+            '; {{PART}}\n',
+            '; "commented string {{PART}}\n',
+            '{{PART}}',
+        ):
+            with self.subTest(source=source), self.assertRaisesRegex(
+                ValueError, "inside quoted KiCad text fields"
+            ):
+                substitute_parameter_templates(source, parameters)
 
 
     def test_parse_typed_parameters_and_rejects_invalid_values(self):
