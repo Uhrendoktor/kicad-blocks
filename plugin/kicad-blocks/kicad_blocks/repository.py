@@ -770,6 +770,16 @@ def synchronize_local_copy(local_block: BlockRecord) -> dict:
     base_variants = manifest.get("base_variants", source.manifest.get("variants", []))
     local_variants = manifest.get("variants", [])
     source_variants = source.manifest.get("variants", [])
+    base_profiles = manifest.get("base_profiles", source.manifest.get("profiles", []))
+    local_profiles = manifest.get("profiles", [])
+    source_profiles = source.manifest.get("profiles", [])
+    local_profiles_changed = local_profiles != base_profiles
+    source_profiles_changed = source_profiles != base_profiles
+    profile_conflict = (
+        local_profiles_changed
+        and source_profiles_changed
+        and local_profiles != source_profiles
+    )
     local_variants_changed = local_variants != base_variants
     source_variants_changed = source_variants != base_variants
     variant_conflict = local_variants_changed and source_variants_changed and local_variants != source_variants
@@ -806,6 +816,8 @@ def synchronize_local_copy(local_block: BlockRecord) -> dict:
         conflicts.append("manifest.parameters")
     if variant_conflict:
         conflicts.append("manifest.variants")
+    if profile_conflict:
+        conflicts.append("manifest.profiles")
     if layout_conflict:
         conflicts.append("manifest.layouts")
     copy_files = []
@@ -833,6 +845,7 @@ def synchronize_local_copy(local_block: BlockRecord) -> dict:
         or latest_source.manifest.get("dependencies", []) != source_dependencies
         or latest_source.manifest.get("parameters", []) != source_parameters
         or latest_source.manifest.get("variants", []) != source_variants
+        or latest_source.manifest.get("profiles", []) != source_profiles
         or _layout_configuration(latest_source.manifest) != source_layouts
     ):
         raise RuntimeError(
@@ -1028,6 +1041,13 @@ def publish_local_copy(local_block: BlockRecord) -> dict:
         local_variants_changed and source_variants_changed
         and local_variants == source_variants
     )
+    push_profiles = local_profiles_changed and not source_profiles_changed
+    pull_profiles = source_profiles_changed and not local_profiles_changed
+    converged_profiles = (
+        local_profiles_changed
+        and source_profiles_changed
+        and local_profiles == source_profiles
+    )
     push_layouts = local_layouts_changed and not source_layouts_changed
     pull_layouts = source_layouts_changed and not local_layouts_changed
     converged_layouts = (
@@ -1048,6 +1068,9 @@ def publish_local_copy(local_block: BlockRecord) -> dict:
         and not push_variants
         and not pull_variants
         and not converged_variants
+        and not push_profiles
+        and not pull_profiles
+        and not converged_profiles
         and not push_layouts
         and not pull_layouts
         and not converged_layouts
@@ -1153,6 +1176,10 @@ def publish_local_copy(local_block: BlockRecord) -> dict:
             source_manifest["variants"] = local_variants
         elif pull_variants:
             local_manifest["variants"] = source_variants
+        if push_profiles:
+            source_manifest["profiles"] = local_profiles
+        elif pull_profiles:
+            local_manifest["profiles"] = source_profiles
         if push_layouts:
             _set_layout_configuration(source_manifest, local_layouts)
         elif pull_layouts:
@@ -1175,7 +1202,7 @@ def publish_local_copy(local_block: BlockRecord) -> dict:
             )
 
         source_changed = bool(
-            push_files or push_dependencies or push_parameters or push_variants or push_layouts
+            push_files or push_dependencies or push_parameters or push_variants or push_profiles or push_layouts
         )
         if source_changed:
             source_manifest["hashes"] = source_hashes_after
@@ -1196,6 +1223,7 @@ def publish_local_copy(local_block: BlockRecord) -> dict:
         local_manifest["base_dependencies"] = source_manifest.get("dependencies", [])
         local_manifest["base_parameters"] = source_manifest.get("parameters", [])
         local_manifest["base_variants"] = source_manifest.get("variants", [])
+        local_manifest["base_profiles"] = source_manifest.get("profiles", [])
         local_manifest["base_layouts"] = _layout_configuration(source_manifest)
         atomic_write(
             local_manifest_path,
@@ -1226,6 +1254,10 @@ def publish_local_copy(local_block: BlockRecord) -> dict:
         published.append("manifest.variants")
     if pull_variants:
         pulled.append("manifest.variants")
+    if push_profiles:
+        published.append("manifest.profiles")
+    if pull_profiles:
+        pulled.append("manifest.profiles")
     if push_layouts:
         published.append("manifest.layouts")
     if pull_layouts:
@@ -1238,11 +1270,13 @@ def publish_local_copy(local_block: BlockRecord) -> dict:
         "dependencies_updated": push_dependencies or pull_dependencies or converged_dependencies,
         "parameters_updated": push_parameters or pull_parameters or converged_parameters,
         "variants_updated": push_variants or pull_variants or converged_variants,
+        "profiles_updated": push_profiles or pull_profiles or converged_profiles,
         "layouts_updated": push_layouts or pull_layouts or converged_layouts,
         "converged": converged_files
         + (["manifest.dependencies"] if converged_dependencies else [])
         + (["manifest.parameters"] if converged_parameters else [])
         + (["manifest.variants"] if converged_variants else [])
+        + (["manifest.profiles"] if converged_profiles else [])
         + (["manifest.layouts"] if converged_layouts else []),
     }
 
