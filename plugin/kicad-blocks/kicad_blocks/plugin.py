@@ -271,23 +271,151 @@ def sync_selected_local(schematic, kicad, project_dir: Path) -> dict:
     return result
 
 def _pick_record(records, parent, title: str):
+    """Show a searchable modal picker for manager actions that need a library block."""
     if not records:
         raise ValueError("No blocks were found in the configured library.")
-    names = [record.name for record in records]
     if len(records) == 1:
         return records[0]
-    choice = simpledialog.askstring(
-        title,
-        "Choose a block by name:\n\n" + "\n".join(names),
-        initialvalue=names[0],
-        parent=parent,
+
+    dialog = tk.Toplevel(parent)
+    dialog.title(title)
+    dialog.geometry("760x500")
+    dialog.minsize(600, 360)
+    dialog.transient(parent)
+    dialog.grab_set()
+
+    outer = ttk.Frame(dialog, padding=12)
+    outer.pack(fill="both", expand=True)
+    ttk.Label(outer, text="Search the block library").pack(anchor="w")
+    search = tk.StringVar()
+    search_entry = ttk.Entry(outer, textvariable=search)
+    search_entry.pack(fill="x", pady=(4, 8))
+
+    results_frame = ttk.Frame(outer)
+    results_frame.pack(fill="both", expand=True)
+    results_frame.columnconfigure(0, weight=1)
+    results_frame.rowconfigure(0, weight=1)
+    tree = ttk.Treeview(
+        results_frame,
+        columns=("pins", "variants", "layouts"),
+        show="tree headings",
+        selectmode="browse",
     )
-    if choice is None:
-        return None
-    for record in records:
-        if record.name.casefold() == choice.strip().casefold():
-            return record
-    raise ValueError(f"No block named {choice!r} was found.")
+    tree.heading("#0", text="Block")
+    tree.heading("pins", text="Pins")
+    tree.heading("variants", text="Variants")
+    tree.heading("layouts", text="Layouts")
+    tree.column("#0", width=340, minwidth=180, stretch=True)
+    tree.column("pins", width=55, minwidth=45, stretch=False, anchor="center")
+    tree.column("variants", width=75, minwidth=60, stretch=False, anchor="center")
+    tree.column("layouts", width=65, minwidth=55, stretch=False, anchor="center")
+    scrollbar = ttk.Scrollbar(results_frame, orient="vertical", command=tree.yview)
+    tree.configure(yscrollcommand=scrollbar.set)
+    tree.grid(row=0, column=0, sticky="nsew")
+    scrollbar.grid(row=0, column=1, sticky="ns")
+
+    description = ttk.Label(
+        outer,
+        text="Select a block to see its description.",
+        wraplength=700,
+        justify="left",
+        foreground="#53616b",
+    )
+    description.pack(fill="x", anchor="w", pady=(8, 0))
+    count_label = ttk.Label(outer, foreground="#667785")
+    count_label.pack(anchor="w", pady=(4, 0))
+
+    records_by_id = {
+        str(record.manifest["block_id"]): record
+        for record in records
+    }
+    selected_record = [None]
+    chosen_record = [None]
+    select_button = ttk.Button(outer, text="Select block", state="disabled")
+    select_button.pack(side="right", pady=(10, 0))
+    ttk.Button(
+        outer,
+        text="Cancel",
+        command=dialog.destroy,
+    ).pack(side="right", padx=(0, 8), pady=(10, 0))
+
+    def render_results(*_args):
+        visible = _filter_library_records(records, search.get())
+        preferred = _preferred_library_selection(visible, selected_record[0])
+        children = tree.get_children()
+        if children:
+            tree.delete(*children)
+        for record in visible:
+            block_id = str(record.manifest["block_id"])
+            tree.insert(
+                "", "end", iid=block_id, text=record.name,
+                values=(
+                    len(record.manifest.get("pins", [])),
+                    len(record.manifest.get("variants", [])),
+                    len(_layout_choices(record)),
+                ),
+            )
+        count_label.configure(text=f"{len(visible)} of {len(records)} blocks")
+        if preferred is None:
+            selected_record[0] = None
+            description.configure(text="No matching blocks.")
+            select_button.configure(state="disabled")
+            return
+        preferred_id = str(preferred.manifest["block_id"])
+        tree.selection_set(preferred_id)
+        tree.focus(preferred_id)
+        selected_record[0] = preferred
+        description.configure(
+            text=str(preferred.manifest.get("description", "") or "No description provided.")
+        )
+        select_button.configure(state="normal")
+
+    def selection_changed(_event=None):
+        selection = tree.selection()
+        record = records_by_id.get(selection[0]) if selection else None
+        selected_record[0] = record
+        if record is None:
+            description.configure(text="Select a block to see its description.")
+            select_button.configure(state="disabled")
+        else:
+            description.configure(
+                text=str(record.manifest.get("description", "") or "No description provided.")
+            )
+            select_button.configure(state="normal")
+
+    def choose_selected(_event=None):
+        record = selected_record[0]
+        if record is not None:
+            chosen_record[0] = record
+            dialog.destroy()
+        return "break"
+
+    def focus_results(_event=None):
+        children = tree.get_children()
+        if children:
+            selection = tree.selection()
+            target = selection[0] if selection else children[0]
+            tree.selection_set(target)
+            tree.focus(target)
+            tree.focus_set()
+        return "break"
+
+    tree.bind("<<TreeviewSelect>>", selection_changed)
+    tree.bind("<Return>", choose_selected)
+    tree.bind("<Double-1>", lambda event: (
+        choose_selected()
+        if tree.identify_row(event.y) in tree.selection()
+        else "break"
+    ))
+    search_entry.bind("<Down>", focus_results)
+    dialog.bind("<Escape>", lambda _event: dialog.destroy())
+    select_button.configure(command=choose_selected)
+    dialog.protocol("WM_DELETE_WINDOW", dialog.destroy)
+    search.trace_add("write", render_results)
+    render_results()
+    search_entry.focus_set()
+    dialog.wait_window()
+    return chosen_record[0]
 
 
 def _layout_choices(block) -> list[dict]:
