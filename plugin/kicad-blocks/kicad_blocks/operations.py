@@ -10,7 +10,7 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from .model import slugify
+from .model import slugify, substitute_parameter_templates
 from .repository import (
     BlockOccurrence,
     BlockRecord,
@@ -37,11 +37,35 @@ def _ordered_block_tree(
     return resolve_dependency_occurrences(block, library_root)
 
 
+def _implementation_for_export(
+    occurrence: BlockOccurrence,
+    temporary_directory: Path,
+    index: int,
+    root_parameter_values: dict[str, str] | None = None,
+) -> Path:
+    """Materialize a parameter-expanded schematic without touching library assets."""
+    record = occurrence.record
+    source = Path(record.implementation)
+    content = source.read_text(encoding="utf-8")
+    overrides = root_parameter_values if not occurrence.instance_path else None
+    rendered = substitute_parameter_templates(
+        content, record.manifest.get("parameters", []), overrides
+    )
+    if rendered == content:
+        return source
+    output = temporary_directory / (
+        f"{index:03d}_{slugify(record.name)}_{record.manifest['block_id'][:8]}.kicad_sch"
+    )
+    output.write_text(rendered, encoding="utf-8")
+    return output
+
+
 def export_block_bom(
     block: BlockRecord,
     output_file: Path,
     kicad_cli: str | Path | None = None,
     library_root: Path | None = None,
+    parameter_values: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """Export one BOM containing the root block and its recursive dependencies.
 
@@ -60,6 +84,9 @@ def export_block_bom(
         for index, occurrence in enumerate(blocks):
             record = occurrence.record
             block_csv = Path(temp) / f"{index:03d}_{record.manifest['block_id'][:8]}.csv"
+            implementation = _implementation_for_export(
+                occurrence, Path(temp), index, parameter_values
+            )
             command = [
                 cli,
                 "sch",
@@ -71,7 +98,7 @@ def export_block_bom(
                 "Reference,Value,Footprint,QUANTITY,DNP",
                 "--labels",
                 "Reference,Value,Footprint,Qty,DNP",
-                str(record.implementation),
+                str(implementation),
             ]
             result = subprocess.run(command, capture_output=True, text=True, check=False)
             if result.returncode != 0:
@@ -151,6 +178,7 @@ def validate_block_tree(
     report_directory: Path,
     kicad_cli: str | Path | None = None,
     library_root: Path | None = None,
+    parameter_values: dict[str, str] | None = None,
 ) -> list[dict[str, Any]]:
     """Run KiCad ERC against the root implementation and every nested block.
 
@@ -163,40 +191,45 @@ def validate_block_tree(
     report_directory.mkdir(parents=True, exist_ok=True)
 
     reports: list[dict[str, Any]] = []
-    for index, occurrence in enumerate(blocks):
-        record = occurrence.record
-        owner = "_".join(occurrence.instance_path + (record.name,))
-        report_path = report_directory / (
-            f"{index:03d}_{slugify(owner)}_{record.manifest['block_id'][:8]}.erc.json"
-        )
-        command = [
-            cli,
-            "sch",
-            "erc",
-            "--format",
-            "json",
-            "--output",
-            str(report_path),
-            "--exit-code-violations",
-            str(record.implementation),
-        ]
-        result = subprocess.run(command, capture_output=True, text=True, check=False)
-        if result.returncode not in (0, 5):
-            raise RuntimeError(
-                f"KiCad ERC could not check block {record.name!r} "
-                f"(exit {result.returncode}): {result.stderr or result.stdout}"
+    with tempfile.TemporaryDirectory(prefix="kicad-blocks-erc-") as temp:
+        temporary_directory = Path(temp)
+        for index, occurrence in enumerate(blocks):
+            record = occurrence.record
+            owner = "_".join(occurrence.instance_path + (record.name,))
+            report_path = report_directory / (
+                f"{index:03d}_{slugify(owner)}_{record.manifest['block_id'][:8]}.erc.json"
             )
-        if not report_path.is_file():
-            raise RuntimeError(
-                f"KiCad did not create an ERC report for block {record.name!r}."
+            implementation = _implementation_for_export(
+                occurrence, temporary_directory, index, parameter_values
             )
-        reports.append(
-            {
-                "block": record.name,
-                "block_id": record.manifest["block_id"],
-                "exit_code": result.returncode,
-                "violations": result.returncode == 5,
-                "report": str(report_path),
-            }
-        )
+            command = [
+                cli,
+                "sch",
+                "erc",
+                "--format",
+                "json",
+                "--output",
+                str(report_path),
+                "--exit-code-violations",
+                str(implementation),
+            ]
+            result = subprocess.run(command, capture_output=True, text=True, check=False)
+            if result.returncode not in (0, 5):
+                raise RuntimeError(
+                    f"KiCad ERC could not check block {record.name!r} "
+                    f"(exit {result.returncode}): {result.stderr or result.stdout}"
+                )
+            if not report_path.is_file():
+                raise RuntimeError(
+                    f"KiCad did not create an ERC report for block {record.name!r}."
+                )
+            reports.append(
+                {
+                    "block": record.name,
+                    "block_id": record.manifest["block_id"],
+                    "exit_code": result.returncode,
+                    "violations": result.returncode == 5,
+                    "report": str(report_path),
+                }
+            )
     return reports

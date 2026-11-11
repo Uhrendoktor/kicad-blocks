@@ -13,7 +13,7 @@ from unittest.mock import patch
 PLUGIN = Path(__file__).resolve().parents[1] / "plugin" / "kicad-blocks"
 sys.path.insert(0, str(PLUGIN))
 
-from kicad_blocks.model import parse_pins
+from kicad_blocks.model import parse_parameters, parse_pins
 from kicad_blocks.operations import export_block_bom, validate_block_tree
 from kicad_blocks.repository import add_dependency, create_block
 
@@ -29,6 +29,62 @@ class RecursiveBlockOperationTests(unittest.TestCase):
 
     def tearDown(self):
         self.temp.cleanup()
+
+    def test_bom_expands_root_instance_parameters_without_modifying_library_schematic(self):
+        block = create_block(
+            self.root,
+            "Parameterized Controller",
+            parse_pins("VIN:input, GND:passive, VOUT:output"),
+            parameters=parse_parameters("OUTPUT_VOLTAGE:number=3.3"),
+        )
+        original = block.implementation.read_text(encoding="utf-8")
+        block.implementation.write_text(
+            original + '\n  (property "Value" "{{OUTPUT_VOLTAGE}}" '
+            '(at 50 50 0) (effects (font (size 1 1))))\n',
+            encoding="utf-8",
+        )
+        output = Path(self.temp.name) / "parameterized.csv"
+        observed = {}
+
+        def fake_run(command, capture_output, text, check):
+            implementation = Path(command[-1])
+            observed["path"] = implementation
+            observed["content"] = implementation.read_text(encoding="utf-8")
+            output_path = Path(command[command.index("--output") + 1])
+            output_path.write_text("Reference,Qty,Value\nR1,1,1.8V\n", encoding="utf-8")
+            return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+        with patch("kicad_blocks.operations.subprocess.run", side_effect=fake_run):
+            result = export_block_bom(
+                block,
+                output,
+                "kicad-cli",
+                self.root,
+                parameter_values={"OUTPUT_VOLTAGE": "1.8"},
+            )
+
+        self.assertEqual(result["row_count"], 1)
+        self.assertNotEqual(observed["path"], block.implementation)
+        self.assertIn('(property "Value" "1.8"', observed["content"])
+        self.assertNotIn("{{OUTPUT_VOLTAGE}}", observed["content"])
+        self.assertIn("{{OUTPUT_VOLTAGE}}", block.implementation.read_text(encoding="utf-8"))
+
+    def test_bom_rejects_undeclared_parameter_templates(self):
+        block = create_block(
+            self.root,
+            "Invalid Parameter Template",
+            parse_pins("VIN:input"),
+        )
+        block.implementation.write_text(
+            block.implementation.read_text(encoding="utf-8") + '\n; {{UNDECLARED}}\n',
+            encoding="utf-8",
+        )
+        with patch("kicad_blocks.operations.subprocess.run") as run:
+            with self.assertRaisesRegex(ValueError, "undeclared"):
+                export_block_bom(
+                    block, Path(self.temp.name) / "invalid.csv", "kicad-cli", self.root
+                )
+        run.assert_not_called()
 
     def test_export_bom_combines_nested_blocks_and_namespaces_references(self):
         output = Path(self.temp.name) / "merged.csv"
