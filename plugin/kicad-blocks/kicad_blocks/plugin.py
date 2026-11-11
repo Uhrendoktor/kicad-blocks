@@ -2260,7 +2260,7 @@ def run() -> None:
         actions = [
             ("create", "Create block", "Generate a facade, typed parameters and PCB layout alternatives."),
             ("place", "Browse & place block", "Search the library, preview a facade and place it at the mouse cursor."),
-            ("configure", "Configure block instance", "Open guidance for editing per-instance parameters and PCB layout in KiCad Symbol Properties."),
+            ("configure", "Configure block instance", "Choose a linked variant, parameter and PCB layout profile, then customize per-instance values."),
             ("local", "Make local copy", "Give the selected instance an independent implementation."),
             ("sync", "Synchronize local copy", "Publish and pull non-conflicting local/library edits."),
             ("edit", "Open implementation", "Open the selected facade's resolved KB_VARIANT in Eeschema."),
