@@ -598,7 +598,10 @@ def _start_native_symbol_placement(
         )
         return str(getattr(result, "stdout", "") or "").strip()
 
-    send("windowactivate", "--sync", str(editor_window_id))
+    editor_pid = send("getwindowpid", str(editor_window_id))
+    if not editor_pid:
+        raise RuntimeError("Could not determine the active Eeschema process for cursor placement.")
+    send("windowfocus", "--sync", str(editor_window_id))
     pause(0.1)
     send("key", "--clearmodifiers", "a")
 
@@ -607,8 +610,9 @@ def _start_native_symbol_placement(
     for _ in range(50):
         focused_id = send("getwindowfocus")
         if focused_id and focused_id != str(editor_window_id):
+            focused_pid = send("getwindowpid", focused_id)
             chooser_title = send("getwindowname", focused_id)
-            if "symbol" in chooser_title.casefold():
+            if focused_pid == editor_pid:
                 chooser_id = focused_id
                 break
         pause(0.1)
@@ -618,8 +622,8 @@ def _start_native_symbol_placement(
             with contextlib.suppress(Exception):
                 send("key", "--clearmodifiers", "Escape")
         raise RuntimeError(
-            "KiCad's native Choose Symbol dialog did not open. Check Eeschema "
-            "Preferences → Hotkeys and bind Add Symbol to A, then try again."
+            "KiCad's native symbol chooser did not open in the active Eeschema process. "
+            "Check Eeschema Preferences → Hotkeys and bind Add Symbol to A, then try again."
         )
 
     # The native chooser accepts type-to-search in its focused filter/list.
