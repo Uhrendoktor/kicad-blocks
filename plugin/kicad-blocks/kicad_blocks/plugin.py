@@ -16,7 +16,7 @@ simpledialog = None
 from .composition import compose_block_implementation
 from .model import parse_pins
 from .operations import export_block_bom, find_kicad_cli, validate_block_tree
-from .pcb_layout import merge_block_layout
+from .pcb_layout import BlockLayoutPlacement, merge_block_layout, merge_block_layouts
 from .repository import (
     LIBRARY_NICKNAME,
     add_dependency,
@@ -114,12 +114,20 @@ def place_block(schematic, record, x_mm: float, y_mm: float):
     return instance
 
 
-def _selected_symbol(schematic):
+def _selected_symbols(schematic) -> list:
     selection = list(schematic.get_selection())
     symbols = [
         item for item in selection
         if hasattr(item, "definition") and hasattr(item.definition, "id")
+        and hasattr(item, "reference")
     ]
+    if not symbols:
+        raise ValueError("Select one or more block symbol instances in the schematic.")
+    return symbols
+
+
+def _selected_symbol(schematic):
+    symbols = _selected_symbols(schematic)
     if len(symbols) != 1:
         raise ValueError("Select exactly one block symbol instance in the schematic.")
     return symbols[0]
@@ -551,6 +559,133 @@ def _apply_block_pcb_layout(
     messagebox.showinfo("PCB Block Layout Applied", message, parent=parent)
 
 
+def _apply_selected_block_pcb_layouts(
+    schematic, kicad, project_dir: Path, library_root: Path, parent
+) -> None:
+    """Batch-apply the layouts for all selected block facade instances."""
+    instances = _selected_symbols(schematic)
+    if len(instances) < 2:
+        raise ValueError("Select at least two block symbols for batch PCB layout application.")
+
+    placements: list[BlockLayoutPlacement] = []
+    for index, instance in enumerate(instances, start=1):
+        block = _block_record_for_instance(library_root, project_dir, instance)
+        if not block.manifest.get("layout_file"):
+            raise ValueError(
+                f"Selected block {instance.reference} ({block.name}) has no stored PCB layout."
+            )
+        pins = [str(pin["name"]) for pin in block.manifest.get("pins", [])]
+        mapping_text = simpledialog.askstring(
+            f"PCB nets — {instance.reference}",
+            f"Map every facade pin of {block.name} to a net in the project board.\n"
+            "Format: FACADE_PIN:BOARD_NET, comma-separated.",
+            initialvalue=", ".join(f"{pin}:{pin}" for pin in pins),
+            parent=parent,
+        )
+        if mapping_text is None:
+            return
+        pin_map = _parse_pin_net_map(mapping_text, pins)
+
+        position_text = simpledialog.askstring(
+            f"PCB position — {instance.reference}",
+            "Position X,Y for the stored layout anchor in millimetres:",
+            initialvalue=f"{100.0 + (index - 1) * 60.0:g},100",
+            parent=parent,
+        )
+        if position_text is None:
+            return
+        position_parts = [part.strip() for part in position_text.split(",")]
+        if len(position_parts) != 2:
+            raise ValueError(f"Position for {instance.reference} must be X,Y.")
+        try:
+            position = (float(position_parts[0]), float(position_parts[1]))
+        except ValueError as exc:
+            raise ValueError(f"Position for {instance.reference} must be numeric.") from exc
+
+        anchor_text = simpledialog.askstring(
+            f"PCB anchor — {instance.reference}",
+            "Coordinate X,Y of the anchor in the stored block layout:",
+            initialvalue="0,0",
+            parent=parent,
+        )
+        if anchor_text is None:
+            return
+        anchor_parts = [part.strip() for part in anchor_text.split(",")]
+        if len(anchor_parts) != 2:
+            raise ValueError(f"Anchor for {instance.reference} must be X,Y.")
+        try:
+            anchor = (float(anchor_parts[0]), float(anchor_parts[1]))
+        except ValueError as exc:
+            raise ValueError(f"Anchor for {instance.reference} must be numeric.") from exc
+
+        rotation_text = simpledialog.askstring(
+            f"PCB rotation — {instance.reference}",
+            "Counter-clockwise rotation in degrees:",
+            initialvalue="0",
+            parent=parent,
+        )
+        if rotation_text is None:
+            return
+        try:
+            rotation = float(rotation_text)
+        except ValueError as exc:
+            raise ValueError(f"Rotation for {instance.reference} must be numeric.") from exc
+
+        placements.append(
+            BlockLayoutPlacement(
+                block=block,
+                instance_reference=str(instance.reference),
+                position_mm=position,
+                pin_to_board_net=pin_map,
+                layout_anchor_mm=anchor,
+                rotation_deg=rotation,
+            )
+        )
+
+    board_path = filedialog.askopenfilename(
+        title="Select the existing project PCB board",
+        filetypes=[("KiCad PCB", "*.kicad_pcb"), ("All files", "*.*")],
+        parent=parent,
+    )
+    if not board_path:
+        return
+    source_board = Path(board_path)
+    default_output = source_board.with_name(
+        f"{source_board.stem}_{len(placements)}blocks.kicad_pcb"
+    )
+    output_path = filedialog.asksaveasfilename(
+        title="Save combined PCB block layout copy",
+        initialdir=str(source_board.parent),
+        initialfile=default_output.name,
+        defaultextension=".kicad_pcb",
+        filetypes=[("KiCad PCB", "*.kicad_pcb")],
+        parent=parent,
+    )
+    if not output_path:
+        return
+
+    result = merge_block_layouts(source_board, placements, Path(output_path))
+    if messagebox.askyesno(
+        "Open combined PCB board",
+        f"Applied {result['block_count']} block layouts to a separate board copy.\n"
+        "Open that output copy in PCB Editor now?",
+        parent=parent,
+    ):
+        _open_generated_pcb_copy(kicad, Path(result["output"]))
+
+    messagebox.showinfo(
+        "PCB Block Layouts Applied",
+        f"Created board copy: {result['output']}\n"
+        f"Block instances: {result['block_count']}\n"
+        f"Footprints added: {result['footprint_count']}\n"
+        f"Board objects added: {result['object_count']}\n"
+        f"Internal nets added: {', '.join(result['new_nets']) or 'none'}\n"
+        f"PCB net chains added: {', '.join(result['merged_board_chains']) or 'none'}\n"
+        "The original board and project settings were not modified.",
+        parent=parent,
+    )
+
+
 def _add_nested_dependency(root, parent, parent_window) -> None:
     records = list_blocks(root)
     parent_record = _pick_record(records, parent_window, "Select Parent Block")
@@ -648,8 +783,9 @@ def run() -> None:
             "publish — publish edited library files as a new revision\n"
             "bom     — export merged BOM for a block and its dependencies\n"
             "erc     — run ERC on a block and all dependencies\n"
-            "pcb     — apply the selected block PCB layout to a new board copy\n"
-            "nest    — add a nested block dependency",
+            "pcb      — apply one selected block PCB layout to a new board copy\n"
+            "pcb-many — apply layouts for all selected block symbols in one pass\n"
+            "nest     — add a nested block dependency",
             initialvalue="create",
             parent=root,
         )
@@ -689,11 +825,15 @@ def run() -> None:
             _validate_recursive_erc(library_root, root)
         elif action == "pcb":
             _apply_block_pcb_layout(schematic, kicad, project_dir, library_root, root)
+        elif action == "pcb-many":
+            _apply_selected_block_pcb_layouts(
+                schematic, kicad, project_dir, library_root, root
+            )
         elif action == "nest":
             library_root = _choose_library_root(root)
             _add_nested_dependency(library_root, root, root)
         else:
-            raise ValueError("Choose one of: create, place, local, sync, edit, publish, bom, erc, pcb, nest.")
+            raise ValueError("Choose one of: create, place, local, sync, edit, publish, bom, erc, pcb, pcb-many, nest.")
     except Exception as exc:
         LOG.exception("KiCad Blocks action failed")
         messagebox.showerror("KiCad Blocks", str(exc), parent=root)

@@ -7,6 +7,7 @@ board currently open in PCB Editor.
 """
 from __future__ import annotations
 
+from dataclasses import dataclass
 import json
 import math
 import os
@@ -787,6 +788,112 @@ def _merge_project_net_settings(
         "ignored_chain_classes": ignored_chain_classes,
         "merged_chain_names": merged_chain_names,
         "unmatched_chains": unmatched_chains,
+    }
+
+
+@dataclass(frozen=True, slots=True)
+class BlockLayoutPlacement:
+    """One schematic block occurrence and its desired PCB placement."""
+
+    block: Any
+    instance_reference: str
+    position_mm: tuple[float, float]
+    pin_to_board_net: dict[str, str]
+    layout_anchor_mm: tuple[float, float] = (0.0, 0.0)
+    rotation_deg: float = 0.0
+
+
+def merge_block_layouts(
+    target_board: Path,
+    placements: list[BlockLayoutPlacement],
+    output_board: Path,
+) -> dict[str, Any]:
+    """Apply several block layouts to one new output board, in order.
+
+    Intermediate board/project copies live in a temporary directory. The
+    original project files are never modified. Each block is merged using the
+    same validation, netclass, net-chain and geometry rules as the single-block
+    operation.
+    """
+    target_board = Path(target_board).expanduser().resolve()
+    output_board = Path(output_board).expanduser().resolve()
+    placements = list(placements)
+    if not placements:
+        raise ValueError("Select at least one block layout to merge.")
+    if output_board == target_board:
+        raise ValueError("Output must be a new file; the project board is never overwritten.")
+    if output_board.exists():
+        raise FileExistsError(
+            f"Output PCB already exists and will not be overwritten: {output_board}"
+        )
+    if output_board.with_suffix(".kicad_pro").exists():
+        raise FileExistsError(
+            "Output project settings already exist and will not be overwritten: "
+            + str(output_board.with_suffix(".kicad_pro"))
+        )
+
+    references = [item.instance_reference.casefold() for item in placements]
+    if len(references) != len(set(references)):
+        raise ValueError("Each selected block instance must have a unique reference designator.")
+
+    results: list[dict[str, Any]] = []
+    current_board = target_board
+    with tempfile.TemporaryDirectory(prefix="kicad-block-batch-") as temp:
+        stage_root = Path(temp)
+        for index, item in enumerate(placements):
+            is_last = index == len(placements) - 1
+            stage_output = (
+                output_board
+                if is_last
+                else stage_root / f"stage_{index + 1}.kicad_pcb"
+            )
+            result = merge_block_layout(
+                current_board,
+                item.block,
+                stage_output,
+                instance_reference=item.instance_reference,
+                position_mm=item.position_mm,
+                pin_to_board_net=item.pin_to_board_net,
+                layout_anchor_mm=item.layout_anchor_mm,
+                rotation_deg=item.rotation_deg,
+            )
+            results.append(result)
+            current_board = stage_output
+
+    def flatten(key: str) -> list:
+        values = []
+        for result in results:
+            for value in result.get(key, []):
+                if value not in values:
+                    values.append(value)
+        return values
+
+    return {
+        "output": str(output_board),
+        "project_file": (
+            str(output_board.with_suffix(".kicad_pro"))
+            if output_board.with_suffix(".kicad_pro").is_file()
+            else None
+        ),
+        "block_count": len(results),
+        "placements": results,
+        "footprints": flatten("footprints"),
+        "footprint_count": sum(item["footprint_count"] for item in results),
+        "object_count": sum(item["object_count"] for item in results),
+        "new_net_count": sum(item["new_net_count"] for item in results),
+        "new_nets": flatten("new_nets"),
+        "merged_netclasses": flatten("merged_netclasses"),
+        "assigned_project_nets": flatten("assigned_project_nets"),
+        "applied_project_patterns": flatten("applied_project_patterns"),
+        "unmatched_project_patterns": flatten("unmatched_project_patterns"),
+        "merged_project_chain_names": flatten("merged_project_chain_names"),
+        "unmatched_project_chains": flatten("unmatched_project_chains"),
+        "merged_board_chains": flatten("merged_board_chains"),
+        "skipped_top_level_items": flatten("skipped_top_level_items"),
+        "ignored_project_patterns": any(item["ignored_project_patterns"] for item in results),
+        "ignored_project_chain_classes": any(
+            item["ignored_project_chain_classes"] for item in results
+        ),
     }
 
 

@@ -18,7 +18,12 @@ ROOT = Path(__file__).resolve().parents[1]
 PLUGIN = ROOT / "plugin" / "kicad-blocks"
 sys.path.insert(0, str(PLUGIN))
 
-from kicad_blocks.pcb_layout import merge_block_layout, parse_sexpr
+from kicad_blocks.pcb_layout import (
+    BlockLayoutPlacement,
+    merge_block_layout,
+    merge_block_layouts,
+    parse_sexpr,
+)
 
 
 def _find_cli() -> str:
@@ -489,6 +494,84 @@ def main() -> None:
             "PCB block merge passed: copied board and project settings, namespaced netclass, "
             "mapped external nets, rotated/routed geometry, KiCad CLI export and IPC reload."
         )
+
+        # Batch-apply two occurrences of the same reusable block. This must
+        # chain the project settings/netclasses/net chains without losing the
+        # first insertion or mutating the source board/settings.
+        batch_output = root / "project-with-two-blocks.kicad_pcb"
+        batch = merge_block_layouts(
+            target,
+            [
+                BlockLayoutPlacement(
+                    block=block,
+                    instance_reference="X1",
+                    position_mm=(150.0, 150.0),
+                    pin_to_board_net={"VIN": "VIN_ONE", "GND": "GND_ONE"},
+                    rotation_deg=90.0,
+                ),
+                BlockLayoutPlacement(
+                    block=block,
+                    instance_reference="X2",
+                    position_mm=(250.0, 180.0),
+                    pin_to_board_net={"VIN": "VIN_TWO", "GND": "GND_TWO"},
+                    rotation_deg=0.0,
+                ),
+            ],
+            batch_output,
+        )
+        if batch["block_count"] != 2 or batch["footprint_count"] != 2:
+            raise AssertionError(f"Batch merge did not retain both block instances: {batch!r}")
+        batch_parsed = parse_sexpr(batch_output.read_text(encoding="utf-8"))
+        batch_footprint_refs = {
+            str(prop[2])
+            for footprint in batch_parsed[1:]
+            if isinstance(footprint, list) and footprint and footprint[0] == "footprint"
+            for prop in footprint[1:]
+            if isinstance(prop, list) and prop and prop[0] == "property"
+            and str(prop[1]).casefold() == "reference"
+        }
+        if not {"R1", "X1_R1", "X2_R1"}.issubset(batch_footprint_refs):
+            raise AssertionError(f"Batch footprint references are incomplete: {batch_footprint_refs}")
+        batch_net_names = {
+            str(item[2])
+            for item in batch_parsed[1:]
+            if isinstance(item, list) and item and item[0] == "net" and len(item) >= 3
+        }
+        expected_batch_nets = {
+            "VIN_ONE", "GND_ONE", "X1_SW", "VIN_TWO", "GND_TWO", "X2_SW"
+        }
+        if not expected_batch_nets.issubset(batch_net_names):
+            raise AssertionError(f"Batch output lost mapped/internal nets: {batch_net_names}")
+        batch_svg = root / "batch-svg"
+        batch_svg.mkdir()
+        subprocess.run(
+            [
+                cli, "pcb", "export", "svg", "--mode-multi", "--layers", "F.Cu,B.Cu",
+                "--output", str(batch_svg), str(batch_output),
+            ],
+            check=True,
+        )
+        if not list(batch_svg.glob("*.svg")):
+            raise AssertionError("KiCad CLI did not export the combined batch PCB.")
+        batch_kicad = KiCad(
+            headless=True,
+            kicad_cli_path=cli,
+            file_path=str(batch_output),
+            timeout_ms=30000,
+        )
+        try:
+            batch_board = batch_kicad.get_board()
+            if batch_board is None:
+                raise RuntimeError("KiCad IPC did not load the combined batch PCB.")
+            batch_refs = {item.reference_field.text.value for item in batch_board.get_footprints()}
+            if not {"R1", "X1_R1", "X2_R1"}.issubset(batch_refs):
+                raise AssertionError(f"Batch PCB IPC footprint refs are incomplete: {batch_refs}")
+            batch_track_count = len(list(batch_board.get_tracks()))
+            if batch_track_count < 2:
+                raise AssertionError("Batch PCB did not preserve routed tracks from both instances.")
+        finally:
+            batch_kicad.close()
+
 
 
 if __name__ == "__main__":

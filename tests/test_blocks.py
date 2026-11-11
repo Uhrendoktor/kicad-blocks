@@ -106,6 +106,23 @@ class BlockModelTests(unittest.TestCase):
         self.assertEqual(points["VIN"][2], 1)   # SLSS_LEFT, extending outward
         self.assertEqual(points["VOUT"][2], 3)  # SLSS_RIGHT, extending outward
 
+    def test_multi_selection_extracts_all_symbol_instances(self):
+        from types import SimpleNamespace
+
+        from kicad_blocks.plugin import _selected_symbols
+
+        first = SimpleNamespace(
+            reference="X1",
+            definition=SimpleNamespace(id=SimpleNamespace(library="KBlocks", name="Buck")),
+        )
+        second = SimpleNamespace(
+            reference="X2",
+            definition=SimpleNamespace(id=SimpleNamespace(library="KBlocks", name="Buck")),
+        )
+        schematic = SimpleNamespace(get_selection=lambda: [first, object(), second])
+
+        self.assertEqual(_selected_symbols(schematic), [first, second])
+
     def test_plugin_manifest_has_valid_schematic_action_contract(self):
         manifest = json.loads(
             (PLUGIN / "plugin.json").read_text(encoding="utf-8")
