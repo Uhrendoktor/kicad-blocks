@@ -439,7 +439,7 @@ def create_block(
             "hashes": hashes,
         }
         (staging / MANIFEST_NAME).write_text(
-            json.dumps(manifest, indent=2, ensure_ascii=False) + "\\n", encoding="utf-8"
+            json.dumps(manifest, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
         )
         if folder.exists():
             raise FileExistsError(folder)
