@@ -72,39 +72,41 @@ class LibraryBrowserTests(unittest.TestCase):
         self.assertIn("3V3", overview)
         self.assertIn("Compact", overview)
 
-    def test_native_placement_handoff_uses_add_symbol_and_exact_library_name(self):
+    def test_native_placement_handoff_uses_add_symbol_hotkey_and_exact_library_name(self):
         calls = []
+        focus_values = iter(("0x222", "0x111"))
+
         def command_runner(arguments, **kwargs):
             calls.append((arguments, kwargs))
             if arguments[1] == "getwindowfocus":
-                return SimpleNamespace(stdout="0x222")
+                return SimpleNamespace(stdout=next(focus_values))
             if arguments[1] == "getwindowname":
                 return SimpleNamespace(stdout="Choose Symbol")
             return SimpleNamespace(stdout="")
 
         pauses = []
-        kicad = SimpleNamespace(run_action=Mock())
         _start_native_symbol_placement(
-            kicad,
+            SimpleNamespace(),
             "0x111",
             "buck_converter_ab12cd34",
             xdotool="/usr/bin/xdotool",
             command_runner=command_runner,
             pause=pauses.append,
         )
-        kicad.run_action.assert_called_once_with("eeschema.InteractiveDrawing.placeSymbol")
         commands = [item[0][1:] for item in calls]
         self.assertEqual(commands[0], ["windowactivate", "--sync", "0x111"])
+        self.assertIn(["key", "--clearmodifiers", "a"], commands)
         self.assertIn(
             ["type", "--clearmodifiers", "--delay", "12", "buck_converter_ab12cd34"],
             commands,
         )
-        self.assertEqual(commands[-1], ["key", "--clearmodifiers", "Return"])
+        self.assertIn(["key", "--clearmodifiers", "Return"], commands)
         self.assertNotIn("position", " ".join(" ".join(command) for command in commands).casefold())
         self.assertTrue(pauses)
 
     def test_native_placement_refuses_to_type_when_choose_symbol_dialog_is_absent(self):
         calls = []
+
         def command_runner(arguments, **kwargs):
             calls.append(arguments)
             if arguments[1] == "getwindowfocus":
@@ -115,7 +117,7 @@ class LibraryBrowserTests(unittest.TestCase):
 
         with self.assertRaisesRegex(RuntimeError, "Choose Symbol dialog did not open"):
             _start_native_symbol_placement(
-                SimpleNamespace(run_action=Mock()),
+                SimpleNamespace(),
                 "0x111",
                 "buck_converter_ab12cd34",
                 xdotool="/usr/bin/xdotool",
@@ -123,6 +125,7 @@ class LibraryBrowserTests(unittest.TestCase):
                 pause=lambda _seconds: None,
             )
         self.assertFalse(any(command[1] == "type" for command in calls))
+        self.assertIn(["key", "--clearmodifiers", "Escape"], calls)
 
     def test_native_placement_requires_xdotool_and_editor_window(self):
         with (
@@ -130,17 +133,16 @@ class LibraryBrowserTests(unittest.TestCase):
             self.assertRaisesRegex(RuntimeError, "needs xdotool"),
         ):
             _start_native_symbol_placement(
-                SimpleNamespace(run_action=Mock()),
+                SimpleNamespace(),
                 "0x111", "buck_converter_ab12cd34",
                 xdotool=None, command_runner=Mock(), pause=lambda _seconds: None,
             )
         with self.assertRaisesRegex(RuntimeError, "identify the active Eeschema window"):
             _start_native_symbol_placement(
-                SimpleNamespace(run_action=Mock()),
+                SimpleNamespace(),
                 None, "buck_converter_ab12cd34",
                 xdotool="/usr/bin/xdotool", command_runner=Mock(), pause=lambda _seconds: None,
             )
-
 
 if __name__ == "__main__":
     unittest.main()
