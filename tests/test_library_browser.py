@@ -19,6 +19,7 @@ from kicad_blocks.plugin import (
     _filter_library_records,
     _library_record_for_tree_row,
     _minimize_placement_windows,
+    _pick_record,
     _preferred_library_selection,
     _restore_placement_windows,
     _start_native_symbol_placement,
@@ -75,6 +76,13 @@ class LibraryBrowserTests(unittest.TestCase):
         self.assertIn("1V8", overview)
         self.assertIn("3V3", overview)
         self.assertIn("Compact", overview)
+
+    def test_record_picker_returns_single_choice_without_opening_a_dialog(self):
+        self.assertIs(_pick_record([self.block], object(), "Pick Block"), self.block)
+
+    def test_record_picker_reports_an_empty_library(self):
+        with self.assertRaisesRegex(ValueError, "No blocks were found"):
+            _pick_record([], object(), "Pick Block")
 
     def test_search_keeps_selected_block_when_it_still_matches(self):
         records = [self.block, self.filter_block]
