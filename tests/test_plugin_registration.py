@@ -407,9 +407,15 @@ def main() -> None:
                 env=env,
                 capture_output=True,
                 text=True,
-                check=True,
+                check=False,
                 timeout=20.0,
             )
+            if configuration_probe.returncode != 0:
+                raise RuntimeError(
+                    "The instance configuration GUI smoke test failed "
+                    f"(exit {configuration_probe.returncode}). "
+                    f"stdout: {configuration_probe.stdout}; stderr: {configuration_probe.stderr}"
+                )
             if "instance configuration gui passed" not in configuration_probe.stdout.casefold():
                 raise AssertionError(
                     "The instance configuration GUI smoke test did not report success. "
