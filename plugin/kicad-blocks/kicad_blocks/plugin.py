@@ -862,12 +862,7 @@ def _show_library_browser(
         details.configure(state="disabled")
         _draw_facade_preview(preview, record)
 
-    def refresh_records(*_args):
-        records[:] = list_blocks(current_root[0])
-        records_by_id.clear()
-        records_by_id.update(
-            {str(record.manifest["block_id"]): record for record in records}
-        )
+    def render_records(*_args):
         children = tree.get_children()
         if children:
             tree.delete(*children)
@@ -882,7 +877,7 @@ def _show_library_browser(
                     len(_layout_choices(record)),
                 ),
             )
-        library_path.set(f"{current_root[0]}  -  {len(visible)} blocks")
+        library_path.set(f"{current_root[0]}  -  {len(visible)} of {len(records)} blocks")
         if visible:
             first_id = str(visible[0].manifest["block_id"])
             tree.selection_set(first_id)
@@ -890,6 +885,14 @@ def _show_library_browser(
             set_details(visible[0])
         else:
             set_details(None)
+
+    def refresh_records(*_args):
+        records[:] = list_blocks(current_root[0])
+        records_by_id.clear()
+        records_by_id.update(
+            {str(record.manifest["block_id"]): record for record in records}
+        )
+        render_records()
 
     def selection_changed(_event=None):
         selection = tree.selection()
@@ -1014,7 +1017,7 @@ def _show_library_browser(
             refresh_records()
 
     ttk.Button(library_footer, text="Change library...", command=change_library).pack(side="left")
-    search.trace_add("write", refresh_records)
+    search.trace_add("write", render_records)
     tree.bind("<<TreeviewSelect>>", selection_changed)
     tree.bind("<Double-1>", place_selected)
     tree.bind("<Return>", place_selected)
