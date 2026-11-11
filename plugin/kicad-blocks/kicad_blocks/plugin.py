@@ -188,26 +188,62 @@ def _parameter_values_for_instance(instance, block) -> dict[str, str]:
     return resolve_parameter_values(parameters, overrides)
 
 
+def _write_instance_configuration(schematic, instance, values: dict[str, str]) -> None:
+    """Write validated facade fields through KiCad IPC as one undoable edit."""
+    fields = {
+        str(getattr(field, "name", "")): field
+        for field in getattr(instance, "user_fields", ())
+    }
+    missing = sorted(set(values) - set(fields))
+    if missing:
+        raise RuntimeError(
+            f"Block instance {getattr(instance, 'reference', '<unknown>')} is missing "
+            f"configuration field(s): {', '.join(missing)}. Reload the facade from "
+            "the block library and replace the instance."
+        )
+
+    original_values = {
+        name: str(getattr(getattr(fields[name], "text", None), "value", "") or "")
+        for name in values
+    }
+    commit = schematic.begin_commit()
+    try:
+        for name, value in values.items():
+            fields[name].text.value = str(value)
+        schematic.update_items([instance])
+        schematic.push_commit(commit, "Configure KiCad block instance")
+        schematic.save()
+    except Exception:
+        with contextlib.suppress(Exception):
+            schematic.drop_commit(commit)
+        for name, value in original_values.items():
+            with contextlib.suppress(Exception):
+                fields[name].text.value = value
+        raise
+
+
 def _show_selected_block_configuration(
     schematic, project_dir: Path, library_root: Path, parent
 ) -> None:
-    """Show how to edit the instance-local values with KiCad's native UI."""
+    """Edit instance-local variant, parameters and PCB layout in one form."""
+    _load_tkinter()
     instance = _selected_symbol(schematic)
     block = _block_record_for_instance(library_root, project_dir, instance)
     parameters = block.manifest.get("parameters", [])
     layouts = _layout_choices(block)
+    variants = block.manifest.get("variants", [])
     current_values = _parameter_values_for_instance(instance, block)
-    field_names = {
-        str(getattr(field, "name", ""))
+    fields = {
+        str(getattr(field, "name", "")): field
         for field in getattr(instance, "user_fields", ())
     }
-    missing = [
-        parameter_field_name(item["name"])
-        for item in parameters
-        if parameter_field_name(item["name"]) not in field_names
-    ]
-    if layouts and LAYOUT_FIELD_NAME not in field_names:
-        missing.append(LAYOUT_FIELD_NAME)
+
+    required = [parameter_field_name(item["name"]) for item in parameters]
+    if variants:
+        required.append(VARIANT_FIELD_NAME)
+    if layouts:
+        required.append(LAYOUT_FIELD_NAME)
+    missing = sorted(set(required) - set(fields))
     if missing:
         raise RuntimeError(
             f"Block instance {instance.reference} is missing field(s): "
@@ -215,46 +251,162 @@ def _show_selected_block_configuration(
             + ". Reload the facade from the block library and replace the instance."
         )
 
-    parameter_lines = (
-        "\n".join(
-            f"  {parameter['name']} ({parameter['type']}) = "
-            f"{current_values[parameter['name']]}"
-            for parameter in parameters
-        )
-        if parameters
-        else "  (none)"
-    )
-    layout_ids = (
-        "\n".join(
-            f"  {item.get('id')}: {item.get('name', item.get('id'))}"
+    dialog = tk.Toplevel(parent)
+    dialog.title(f"Configure {instance.reference} — {block.name}")
+    dialog.geometry("660x640")
+    dialog.minsize(560, 420)
+    dialog.transient(parent)
+    dialog.grab_set()
+
+    outer = ttk.Frame(dialog, padding=18)
+    outer.pack(fill="both", expand=True)
+    ttk.Label(
+        outer,
+        text=f"{instance.reference}  ·  {block.name}",
+        font=("TkDefaultFont", 14, "bold"),
+    ).pack(anchor="w")
+    ttk.Label(
+        outer,
+        text="These settings belong to this placed instance. The shared block library is not changed.",
+        wraplength=600,
+        justify="left",
+    ).pack(anchor="w", pady=(4, 14))
+
+    content = ttk.Frame(outer)
+    content.pack(fill="both", expand=True)
+
+    variant_var = None
+    if variants:
+        section = ttk.LabelFrame(content, text="Implementation variant", padding=10)
+        section.pack(fill="x", pady=(0, 10))
+        variant_var = tk.StringVar(value=_field_value(instance, VARIANT_FIELD_NAME))
+        ttk.Label(
+            section,
+            text="Select a declared implementation, or keep a KiCad text-variable reference.",
+            wraplength=570,
+            justify="left",
+        ).pack(anchor="w", pady=(0, 6))
+        ttk.Combobox(
+            section,
+            textvariable=variant_var,
+            values=[str(item["value"]) for item in variants],
+            state="normal",
+        ).pack(fill="x")
+
+    parameter_vars = {}
+    if parameters:
+        section = ttk.LabelFrame(content, text="Parameters", padding=10)
+        section.pack(fill="both", expand=True, pady=(0, 10))
+        section.columnconfigure(1, weight=1)
+        for row, parameter in enumerate(parameters):
+            name = parameter["name"]
+            ttk.Label(
+                section,
+                text=f"{name}  ({parameter['type']})",
+            ).grid(row=row * 2, column=0, sticky="w", padx=(0, 12), pady=(5, 0))
+            variable = tk.StringVar(value=current_values[name])
+            parameter_vars[name] = variable
+            if parameter["type"] == "boolean":
+                widget = ttk.Combobox(
+                    section,
+                    textvariable=variable,
+                    values=("true", "false"),
+                    state="readonly",
+                )
+            else:
+                widget = ttk.Entry(section, textvariable=variable)
+            widget.grid(row=row * 2, column=1, sticky="ew", pady=(5, 0))
+            description = parameter.get("description") or f"Default: {parameter['default']}"
+            ttk.Label(
+                section,
+                text=description,
+                foreground="#667785",
+                wraplength=550,
+                justify="left",
+            ).grid(row=row * 2 + 1, column=0, columnspan=2, sticky="w", pady=(0, 4))
+
+    layout_var = None
+    layout_ids = {}
+    if layouts:
+        section = ttk.LabelFrame(content, text="PCB layout", padding=10)
+        section.pack(fill="x", pady=(0, 10))
+        layout_ids = {
+            f"{item.get('name', item.get('id'))}  [{item.get('id')}]": str(item.get("id") or "")
             for item in layouts
+        }
+        current_layout = _field_value(instance, LAYOUT_FIELD_NAME)
+        current_label = next(
+            (label for label, layout_id in layout_ids.items() if layout_id.casefold() == current_layout.casefold()),
+            None,
         )
-        if layouts
-        else "  (none)"
-    )
-    selected_layout = next(
-        (
-            getattr(getattr(field, "text", None), "value", "")
-            for field in getattr(instance, "user_fields", ())
-            if str(getattr(field, "name", "")) == LAYOUT_FIELD_NAME
-        ),
-        "",
-    )
-    messagebox.showinfo(
-        "Configure Block Instance",
-        f"Selected block: {instance.reference} — {block.name}\n\n"
-        "Edit these instance-local fields in KiCad itself:\n"
-        "1. Close this dialog and select the block symbol.\n"
-        "2. Press E (Symbol Properties).\n"
-        "3. Open the Fields tab and edit the values below.\n"
-        "4. Confirm the dialog and save the schematic.\n\n"
-        f"Parameters:\n{parameter_lines}\n\n"
-        f"PCB layout alternatives:\n{layout_ids}\n"
-        f"Current KB_LAYOUT: {selected_layout or '(unset)'}\n\n"
-        "The values are stored on this symbol instance, not in the shared block library. "
-        "The recursive BOM/ERC and PCB layout actions read the saved values.",
-        parent=parent,
-    )
+        if current_layout and current_label is None:
+            raise ValueError(
+                f"Block {block.name!r} instance {instance.reference} selects unknown "
+                f"layout {current_layout!r}. Refresh the block or select a valid layout."
+            )
+        layout_var = tk.StringVar(value=current_label or next(iter(layout_ids)))
+        ttk.Label(section, text="The selected layout is used by the PCB apply actions.").pack(
+            anchor="w", pady=(0, 6)
+        )
+        ttk.Combobox(
+            section,
+            textvariable=layout_var,
+            values=list(layout_ids),
+            state="readonly",
+        ).pack(fill="x")
+
+    footer = ttk.Frame(outer)
+    footer.pack(fill="x", pady=(14, 0))
+
+    def save_configuration() -> None:
+        try:
+            updates: dict[str, str] = {}
+            if variant_var is not None:
+                raw_variant = variant_var.get().strip()
+                resolved_variant = _resolve_variant_text(
+                    raw_variant,
+                    schematic.get_project(),
+                    _sheet_variables_for_symbol(schematic, instance),
+                )
+                resolve_variant_implementation(block.manifest, resolved_variant)
+                updates[VARIANT_FIELD_NAME] = raw_variant
+
+            if parameter_vars:
+                normalized = resolve_parameter_values(
+                    parameters,
+                    {name: variable.get() for name, variable in parameter_vars.items()},
+                )
+                updates.update({
+                    parameter_field_name(name): value
+                    for name, value in normalized.items()
+                })
+
+            if layout_var is not None:
+                selected_layout = layout_var.get()
+                if selected_layout not in layout_ids:
+                    raise ValueError("Select one of the declared PCB layout alternatives.")
+                updates[LAYOUT_FIELD_NAME] = layout_ids[selected_layout]
+
+            _write_instance_configuration(schematic, instance, updates)
+        except Exception as exc:
+            LOG.exception("Could not configure block instance %s", instance.reference)
+            messagebox.showerror("Invalid Block Configuration", str(exc), parent=dialog)
+            return
+
+        messagebox.showinfo(
+            "Block Instance Updated",
+            f"Saved configuration for {instance.reference}.\n\n"
+            "The schematic was updated through KiCad IPC as one undoable change. "
+            "The shared library block was not modified.",
+            parent=dialog,
+        )
+        dialog.destroy()
+
+    ttk.Button(footer, text="Cancel", command=dialog.destroy).pack(side="right", padx=(8, 0))
+    ttk.Button(footer, text="Save instance", command=save_configuration).pack(side="right")
+    dialog.bind("<Escape>", lambda _event: dialog.destroy())
+    dialog.protocol("WM_DELETE_WINDOW", dialog.destroy)
+    dialog.wait_window()
 
 
 def sync_selected_local(schematic, kicad, project_dir: Path) -> dict:
