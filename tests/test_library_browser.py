@@ -133,7 +133,7 @@ class LibraryBrowserTests(unittest.TestCase):
                 return SimpleNamespace(stdout="Schematic Editor")
             return SimpleNamespace(stdout="")
 
-        with self.assertRaisesRegex(RuntimeError, "Choose Symbol dialog did not open"):
+        with self.assertRaisesRegex(RuntimeError, "native symbol chooser did not open"):
             _start_native_symbol_placement(
                 SimpleNamespace(),
                 "0x111",
