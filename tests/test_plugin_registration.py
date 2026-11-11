@@ -212,7 +212,7 @@ def _exercise_searchable_block_picker(xdotool: str, records) -> object:
                 [xdotool, "key", "--clearmodifiers", "Return"],
                 check=True, capture_output=True, text=True,
             )
-        except Exception as exc:
+        except (OSError, RuntimeError, subprocess.SubprocessError, TimeoutError) as exc:
             interaction_errors.append(str(exc))
             for child in parent.winfo_children():
                 with contextlib.suppress(Exception):
