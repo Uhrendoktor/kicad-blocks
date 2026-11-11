@@ -445,7 +445,7 @@ def main() -> None:
                 text=True,
             )
             print(
-                "Native symbol chooser opened through schematic IPC; selecting Device:R "
+                "Native symbol chooser opened with the Add Symbol hotkey; selecting Device:R "
                 "returned to cursor-placement mode and Escape cancelled cleanly."
             )
 
