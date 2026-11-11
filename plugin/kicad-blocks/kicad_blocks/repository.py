@@ -16,6 +16,7 @@ from pathlib import Path
 from .model import (
     BlockPin,
     normalize_parameters,
+    normalize_profiles,
     render_implementation_schematic,
     render_symbol_library,
     revision_for_hashes,
@@ -262,6 +263,13 @@ def read_manifest(block_path: Path) -> dict:
     default_layout = manifest.get("default_layout")
     if default_layout and str(default_layout).casefold() not in seen_layout_ids:
         raise ValueError(f"Block default layout {default_layout!r} is not defined in layouts.")
+    manifest["profiles"] = normalize_profiles(
+        manifest.get("profiles", []),
+        manifest["parameters"],
+        variants,
+        layouts,
+        default_layout,
+    )
     return manifest
 
 
@@ -303,6 +311,7 @@ def create_block(
     layout_files: list[dict] | None = None,
     parameters: list[dict] | None = None,
     variant_files: list[dict] | None = None,
+    profiles: list[dict] | None = None,
 ) -> BlockRecord:
     """Create a versioned block with typed parameters and named PCB layouts.
 
@@ -339,6 +348,8 @@ def create_block(
     parameters = normalize_parameters(parameters)
     if variant_files is not None and not isinstance(variant_files, list):
         raise ValueError("variant_files must be a list of variant definitions.")
+    if profiles is not None and not isinstance(profiles, list):
+        raise ValueError("profiles must be a list of profile definitions.")
     expected_pins = {pin.name for pin in pins}
     default_layout_id = None
     if raw_layouts:
@@ -368,6 +379,7 @@ def create_block(
             reference_prefix=reference_prefix,
             parameters=parameters,
             default_layout_id=default_layout_id,
+            include_profile_field=bool(profiles),
         )
         (staging / SYMBOL_NAME).write_text(symbol_content, encoding="utf-8")
         (staging / IMPLEMENTATION_NAME).write_text(
@@ -487,6 +499,10 @@ def create_block(
             "pins": [pin.as_manifest(index + 1) for index, pin in enumerate(pins)],
             "parameters": parameters,
             "variants": variants,
+            "profiles": normalize_profiles(
+                profiles, parameters, variants, layouts,
+                first_layout.get("id") if layouts else None,
+            ),
             "dependencies": [],
             "files": files,
             "hashes": hashes,
@@ -648,6 +664,7 @@ def make_local_copy(source: BlockRecord, project_dir: Path) -> BlockRecord:
             "base_dependencies": source.manifest.get("dependencies", []),
             "base_parameters": source.manifest.get("parameters", []),
             "base_variants": source.manifest.get("variants", []),
+            "base_profiles": source.manifest.get("profiles", []),
             "base_layouts": _layout_configuration(source.manifest),
             "library_nickname": source.manifest.get("library_nickname", LIBRARY_NICKNAME),
             "symbol_name": source.manifest.get("symbol_name"),
