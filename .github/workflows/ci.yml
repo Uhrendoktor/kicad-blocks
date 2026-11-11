@@ -153,15 +153,18 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if ! command -v xvfb-run >/dev/null 2>&1 || ! command -v xdotool >/dev/null 2>&1; then
+          if ! command -v xvfb-run >/dev/null 2>&1 \
+            || ! command -v xdotool >/dev/null 2>&1 \
+            || ! python3 -c "import tkinter" >/dev/null 2>&1; then
             if [[ "$(id -u)" -eq 0 ]]; then
               apt-get update
-              apt-get install -y --no-install-recommends xvfb xdotool
+              apt-get install -y --no-install-recommends xvfb xdotool python3-tk
             else
               sudo -n apt-get update
-              sudo -n apt-get install -y --no-install-recommends xvfb xdotool
+              sudo -n apt-get install -y --no-install-recommends xvfb xdotool python3-tk
             fi
           fi
+          python3 -c "import tkinter; print('System Python Tkinter available')"
           EESCHEMA="$(command -v eeschema-nightly || command -v eeschema || true)"
           if [[ -z "$EESCHEMA" ]]; then
             echo "::error::KiCad Eeschema executable was not installed with the nightly package."
