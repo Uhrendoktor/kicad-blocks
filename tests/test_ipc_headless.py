@@ -139,6 +139,10 @@ def main() -> None:
                     f"{saved_parameter_values!r}"
                 )
 
+            # Use the fully re-fetched document item, as the UI action does
+            # through get_selection(), rather than the create response wrapper.
+            instance = symbols[0]
+
             # Edit fields on the selected facade through the same transactional
             # IPC helper used by the manager's configuration form. The KIID and
             # library identity must remain stable.
