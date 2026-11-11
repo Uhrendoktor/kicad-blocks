@@ -19,7 +19,7 @@ INSTALLER = ROOT / "scripts" / "install_plugin.py"
 sys.path.insert(0, str(PLUGIN_SOURCE))
 
 from kicad_blocks.model import parse_pins
-from kicad_blocks.repository import create_block
+from kicad_blocks.repository import create_block, register_project_symbol_library
 
 
 def _find_executable(*names: str) -> str:
@@ -208,7 +208,19 @@ def main() -> None:
             "Plugin Registration Smoke Block",
             parse_pins("VIN:input, GND:passive, VOUT:output"),
         )
-        schematic = block.implementation
+        # The placement test must not rely on global/default symbol libraries
+        # being installed in this isolated HOME. Mirror the production flow:
+        # register this block's shared catalog in the opened project's table.
+        (project / "placement-test.kicad_pro").write_text("{}\n", encoding="utf-8")
+        schematic = project / "placement-test.kicad_sch"
+        shutil.copy2(block.implementation, schematic)
+        register_project_symbol_library(
+            project,
+            str(block.manifest["library_nickname"]),
+            block.symbol_library,
+            description="KiCad Blocks GUI placement test",
+        )
+        placement_symbol_name = str(block.manifest["symbol_name"])
 
         env = os.environ.copy()
         # Ensure the test does not inherit a runner-local pip mirror or
@@ -427,10 +439,11 @@ def main() -> None:
                     f"focused_window={focus!r}; title={chooser_title!r}; "
                     f"visible_windows={_windows(xdotool)!r}"
                 )
-            # Search for a standard symbol and choose it. Eeschema should then
-            # return to the editor with that symbol attached to the cursor.
+            # Search for the block symbol registered in this project's
+            # KBlocks catalog and choose it. Eeschema should then return to the
+            # editor with the selected facade attached to the cursor.
             subprocess.run(
-                [xdotool, "type", "--clearmodifiers", "--delay", "15", "Device:R"],
+                [xdotool, "type", "--clearmodifiers", "--delay", "15", placement_symbol_name],
                 check=True,
                 capture_output=True,
                 text=True,
@@ -450,7 +463,7 @@ def main() -> None:
             ).stdout.strip()
             if placement_focus != window_id:
                 raise AssertionError(
-                    "Selecting Device:R did not return focus to Eeschema's "
+                    f"Selecting {placement_symbol_name} did not return focus to Eeschema's "
                     f"interactive placement tool; focused={placement_focus!r}; "
                     f"visible_windows={_windows(xdotool)!r}"
                 )
