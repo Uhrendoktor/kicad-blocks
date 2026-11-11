@@ -401,7 +401,7 @@ def _create_and_place(root, schematic, kicad, project_dir, parent) -> None:
         variant_path = Path(variant_path)
         variant_value = simpledialog.askstring(
             "Block Variant",
-            f"Which exact KB_VARIANT value opens {variant_path.name}?\\n"
+            f"Which exact KB_VARIANT value opens {variant_path.name}?\n"
             "Example: 3V3 (the facade field may contain ${SUPPLY_VOLTAGE}).",
             initialvalue=variant_path.stem,
             parent=parent,
@@ -511,12 +511,13 @@ def _field_value(instance, field_name: str) -> str:
 
 def _sheet_variables_for_symbol(schematic, instance) -> dict[str, str]:
     """Collect custom fields on hierarchical sheet symbols containing this occurrence."""
-    symbol_path = {
-        str(item) for item in getattr(getattr(instance, "path", None), "path", ())
-    }
+    sheet_path = list(getattr(getattr(instance, "path", None), "path", ()))
+    if not sheet_path:
+        return {}
+    # A hierarchical sheet's custom fields are scoped to that child sheet,
+    # not to every descendant sheet in the hierarchy.
+    containing_sheet_id = str(sheet_path[-1])
     variables: dict[str, str] = {}
-    if not symbol_path:
-        return variables
     try:
         sheet_symbols = schematic.get_sheet_symbols()
     except Exception:
@@ -527,7 +528,7 @@ def _sheet_variables_for_symbol(schematic, instance) -> dict[str, str]:
             str(getattr(sheet_symbol, "id", "")),
             str(getattr(sheet_symbol, "uuid", "")),
         }
-        if not (identifiers & symbol_path):
+        if containing_sheet_id not in identifiers:
             continue
         for field in getattr(sheet_symbol, "user_fields", ()):
             name = str(getattr(field, "name", "") or "").strip()
