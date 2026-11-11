@@ -372,8 +372,16 @@ def main() -> None:
             # Verify the browser's native placement handoff. The supported
             # Eeschema interface uses the default Add Symbol hotkey (A);
             # the generic RunAction IPC request is not registered by this build.
+            editor_pid = subprocess.run(
+                [xdotool, "getwindowpid", window_id],
+                capture_output=True,
+                text=True,
+                check=True,
+            ).stdout.strip()
+            if not editor_pid:
+                raise AssertionError("Could not determine the Eeschema window process ID.")
             subprocess.run(
-                [xdotool, "windowactivate", "--sync", window_id],
+                [xdotool, "windowfocus", "--sync", window_id],
                 check=True,
                 capture_output=True,
                 text=True,
@@ -395,19 +403,27 @@ def main() -> None:
                     check=False,
                 ).stdout.strip()
                 if focus and focus != window_id:
+                    focused_pid = subprocess.run(
+                        [xdotool, "getwindowpid", focus],
+                        capture_output=True,
+                        text=True,
+                        check=False,
+                    ).stdout.strip()
                     chooser_title = subprocess.run(
                         [xdotool, "getwindowname", focus],
                         capture_output=True,
                         text=True,
                         check=False,
                     ).stdout.strip()
-                    if "symbol" in chooser_title.casefold():
+                    # The chooser title is translated by KiCad. Same-process
+                    # window identity is stable across UI languages.
+                    if focused_pid == editor_pid:
                         chooser_id = focus
                         break
                 time.sleep(0.1)
             if chooser_id is None:
                 raise AssertionError(
-                    "Eeschema Add Symbol hotkey did not open the native symbol chooser; "
+                    "Eeschema Add Symbol hotkey did not open a modal window in its process; "
                     f"focused_window={focus!r}; title={chooser_title!r}; "
                     f"visible_windows={_windows(xdotool)!r}"
                 )
