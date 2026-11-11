@@ -79,11 +79,13 @@ class RecursiveBlockOperationTests(unittest.TestCase):
             block.implementation.read_text(encoding="utf-8") + '\n; {{UNDECLARED}}\n',
             encoding="utf-8",
         )
-        with patch("kicad_blocks.operations.subprocess.run") as run:
-            with self.assertRaisesRegex(ValueError, "undeclared"):
-                export_block_bom(
-                    block, Path(self.temp.name) / "invalid.csv", "kicad-cli", self.root
-                )
+        with (
+            patch("kicad_blocks.operations.subprocess.run") as run,
+            self.assertRaisesRegex(ValueError, "undeclared"),
+        ):
+            export_block_bom(
+                block, Path(self.temp.name) / "invalid.csv", "kicad-cli", self.root
+            )
         run.assert_not_called()
 
     def test_export_bom_combines_nested_blocks_and_namespaces_references(self):

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import subprocess
 from pathlib import Path
@@ -51,10 +52,10 @@ def _load_tkinter() -> None:
         return
 
     import tkinter as tkinter_module
-    from tkinter import ttk as ttk_module
     from tkinter import filedialog as filedialog_module
     from tkinter import messagebox as messagebox_module
     from tkinter import simpledialog as simpledialog_module
+    from tkinter import ttk as ttk_module
 
     tk = tkinter_module
     ttk = ttk_module
@@ -1150,12 +1151,7 @@ def run() -> None:
         root.mainloop()
     except Exception as exc:
         LOG.exception("KiCad Blocks manager failed")
-        try:
-            messagebox.showerror("KiCad Blocks", str(exc), parent=root)
-        except Exception:
-            raise
+        messagebox.showerror("KiCad Blocks", str(exc), parent=root)
     finally:
-        try:
+        with contextlib.suppress(tk.TclError):
             root.destroy()
-        except Exception:
-            pass

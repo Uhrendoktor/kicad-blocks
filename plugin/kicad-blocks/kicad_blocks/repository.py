@@ -183,7 +183,7 @@ def read_manifest(block_path: Path) -> dict:
     manifest["parameters"] = normalize_parameters(manifest.get("parameters", []))
     layouts = manifest.get("layouts", [])
     if not isinstance(layouts, list):
-        raise ValueError("Block manifest layouts must be a list.")
+        raise TypeError("Block manifest layouts must be a list.")
     pin_items = manifest.get("pins", [])
     if not isinstance(pin_items, list) or not pin_items or any(
         not isinstance(pin, dict) or not str(pin.get("name", "")).strip()
@@ -196,7 +196,7 @@ def read_manifest(block_path: Path) -> dict:
     seen_layout_files: set[str] = set()
     for layout in layouts:
         if not isinstance(layout, dict):
-            raise ValueError("Each block layout must be an object.")
+            raise TypeError("Each block layout must be an object.")
         layout_id = str(layout.get("id", ""))
         layout_name = str(layout.get("name", "")).strip()
         layout_file = str(layout.get("file", ""))
@@ -227,15 +227,14 @@ def read_manifest(block_path: Path) -> dict:
             ):
                 raise ValueError(f"Invalid project-settings file name for layout {layout_id!r}.")
         ports = layout.get("ports")
-        if ports is not None:
-            if (
-                not isinstance(ports, dict)
-                or set(ports) != pin_names
-                or any(not isinstance(value, str) or not value.strip() for value in ports.values())
-            ):
-                raise ValueError(
-                    f"Layout {layout_id!r} ports must map every facade pin to a non-empty net name."
-                )
+        if ports is not None and (
+            not isinstance(ports, dict)
+            or set(ports) != pin_names
+            or any(not isinstance(value, str) or not value.strip() for value in ports.values())
+        ):
+            raise ValueError(
+                f"Layout {layout_id!r} ports must map every facade pin to a non-empty net name."
+            )
     default_layout = manifest.get("default_layout")
     if default_layout and str(default_layout).casefold() not in seen_layout_ids:
         raise ValueError(f"Block default layout {default_layout!r} is not defined in layouts.")
@@ -318,7 +317,7 @@ def create_block(
     if raw_layouts:
         first_layout = raw_layouts[0]
         if not isinstance(first_layout, dict):
-            raise ValueError("Each PCB layout definition must be an object.")
+            raise TypeError("Each PCB layout definition must be an object.")
         first_source = first_layout.get("path", first_layout.get("file"))
         if not first_source:
             raise ValueError("First PCB layout is missing its source PCB path.")

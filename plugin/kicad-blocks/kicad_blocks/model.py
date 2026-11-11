@@ -87,7 +87,7 @@ def normalize_parameters(parameters: Iterable[dict] | None) -> list[dict[str, st
     seen: set[str] = set()
     for item in parameters or ():
         if not isinstance(item, dict):
-            raise ValueError("Each block parameter must be an object.")
+            raise TypeError("Each block parameter must be an object.")
         name = str(item.get("name", "")).strip()
         if not _PARAMETER_NAME.fullmatch(name):
             raise ValueError(f"Invalid block parameter name {name!r}.")
