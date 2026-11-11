@@ -140,12 +140,18 @@ def main() -> None:
                         with contextlib.suppress(Exception):
                             child.destroy()
 
+        update_calls: list[str] = []
+        original_update = plugin_actions._update_schematic_item_checked
+        plugin_actions._update_schematic_item_checked = (
+            lambda _schematic, target: update_calls.append(str(target.reference))
+        )
         parent.after(200, drive_form)
         try:
             plugin_actions._show_selected_block_configuration(
                 schematic, project, library, parent
             )
         finally:
+            plugin_actions._update_schematic_item_checked = original_update
             plugin_actions.messagebox.showinfo = original_showinfo
             plugin_actions.messagebox.showerror = original_showerror
             with contextlib.suppress(plugin_actions.tk.TclError):
@@ -154,6 +160,10 @@ def main() -> None:
         if interaction_errors:
             raise RuntimeError(
                 "Instance configuration GUI interaction failed: " + interaction_errors[0]
+            )
+        if update_calls != ["X1"]:
+            raise AssertionError(
+                f"The form did not submit exactly one update for X1: {update_calls!r}"
             )
         values = {field.name: field.text.value for field in instance.user_fields}
         if values != {
