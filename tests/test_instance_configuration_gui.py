@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import contextlib
+import sys
 import tempfile
 import time
 from pathlib import Path
@@ -11,7 +12,6 @@ from unittest.mock import Mock
 
 ROOT = Path(__file__).resolve().parents[1]
 PLUGIN_SOURCE = ROOT / "plugin" / "kicad-blocks"
-import sys
 sys.path.insert(0, str(PLUGIN_SOURCE))
 
 from kicad_blocks import plugin as plugin_actions
@@ -126,7 +126,13 @@ def main() -> None:
                 entries[0].insert(0, "1.8")
                 combos[0].set("Compact  [compact]")
                 save_button.invoke()
-            except Exception as exc:
+            except (
+                AssertionError,
+                OSError,
+                RuntimeError,
+                StopIteration,
+                plugin_actions.tk.TclError,
+            ) as exc:
                 interaction_errors.append(str(exc))
                 for child in parent.winfo_children():
                     if child is not parent:
