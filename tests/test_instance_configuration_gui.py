@@ -101,13 +101,14 @@ def main() -> None:
                     raise TimeoutError("The Configure Block Instance form did not appear.")
                 dialog = dialogs[-1]
                 widgets = list(_walk(dialog))
-                entries = [
-                    widget for widget in widgets
-                    if isinstance(widget, plugin_actions.ttk.Entry)
-                ]
                 combos = [
                     widget for widget in widgets
                     if isinstance(widget, plugin_actions.ttk.Combobox)
+                ]
+                entries = [
+                    widget for widget in widgets
+                    if isinstance(widget, plugin_actions.ttk.Entry)
+                    and not isinstance(widget, plugin_actions.ttk.Combobox)
                 ]
                 buttons = [
                     widget for widget in widgets
