@@ -19,7 +19,7 @@ INSTALLER = ROOT / "scripts" / "install_plugin.py"
 sys.path.insert(0, str(PLUGIN_SOURCE))
 
 from kicad_blocks.model import parse_pins
-from kicad_blocks.repository import create_block
+from kicad_blocks.repository import create_block, register_project_symbol_library
 
 
 def _find_executable(*names: str) -> str:
@@ -208,7 +208,19 @@ def main() -> None:
             "Plugin Registration Smoke Block",
             parse_pins("VIN:input, GND:passive, VOUT:output"),
         )
-        schematic = block.implementation
+        # The placement test must not rely on global/default symbol libraries
+        # being installed in this isolated HOME. Mirror the production flow:
+        # register this block's shared catalog in the opened project's table.
+        (project / "placement-test.kicad_pro").write_text("{}\n", encoding="utf-8")
+        schematic = project / "placement-test.kicad_sch"
+        shutil.copy2(block.implementation, schematic)
+        register_project_symbol_library(
+            project,
+            str(block.manifest["library_nickname"]),
+            block.symbol_library,
+            description="KiCad Blocks GUI placement test",
+        )
+        placement_symbol_name = str(block.manifest["symbol_name"])
 
         env = os.environ.copy()
         # Ensure the test does not inherit a runner-local pip mirror or
@@ -368,6 +380,104 @@ def main() -> None:
             )
             if "plugin environment ready" not in package_probe.stdout:
                 raise AssertionError(package_probe.stdout)
+
+            # Verify the browser's native placement handoff. The supported
+            # Eeschema interface uses the default Add Symbol hotkey (A);
+            # the generic RunAction IPC request is not registered by this build.
+            editor_pid = subprocess.run(
+                [xdotool, "getwindowpid", window_id],
+                capture_output=True,
+                text=True,
+                check=True,
+            ).stdout.strip()
+            if not editor_pid:
+                raise AssertionError("Could not determine the Eeschema window process ID.")
+            subprocess.run(
+                [xdotool, "windowfocus", "--sync", window_id],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            subprocess.run(
+                [xdotool, "key", "--clearmodifiers", "a"],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            chooser_id = None
+            chooser_title = ""
+            chooser_deadline = time.monotonic() + 6.0
+            while time.monotonic() < chooser_deadline:
+                focus = subprocess.run(
+                    [xdotool, "getwindowfocus"],
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                ).stdout.strip()
+                if focus and focus != window_id:
+                    focused_pid = subprocess.run(
+                        [xdotool, "getwindowpid", focus],
+                        capture_output=True,
+                        text=True,
+                        check=False,
+                    ).stdout.strip()
+                    chooser_title = subprocess.run(
+                        [xdotool, "getwindowname", focus],
+                        capture_output=True,
+                        text=True,
+                        check=False,
+                    ).stdout.strip()
+                    # The chooser title is translated by KiCad. Same-process
+                    # window identity is stable across UI languages.
+                    if focused_pid == editor_pid:
+                        chooser_id = focus
+                        break
+                time.sleep(0.1)
+            if chooser_id is None:
+                raise AssertionError(
+                    "Eeschema Add Symbol hotkey did not open a modal window in its process; "
+                    f"focused_window={focus!r}; title={chooser_title!r}; "
+                    f"visible_windows={_windows(xdotool)!r}"
+                )
+            # Search for the block symbol registered in this project's
+            # KBlocks catalog and choose it. Eeschema should then return to the
+            # editor with the selected facade attached to the cursor.
+            subprocess.run(
+                [xdotool, "type", "--clearmodifiers", "--delay", "15", placement_symbol_name],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            subprocess.run(
+                [xdotool, "key", "--clearmodifiers", "Return"],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            time.sleep(0.6)
+            placement_focus = subprocess.run(
+                [xdotool, "getwindowfocus"],
+                capture_output=True,
+                text=True,
+                check=False,
+            ).stdout.strip()
+            if placement_focus != window_id:
+                raise AssertionError(
+                    f"Selecting {placement_symbol_name} did not return focus to Eeschema's "
+                    f"interactive placement tool; focused={placement_focus!r}; "
+                    f"visible_windows={_windows(xdotool)!r}"
+                )
+            subprocess.run(
+                [xdotool, "key", "--clearmodifiers", "Escape"],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            print(
+                "Native symbol chooser opened with the Add Symbol hotkey; selecting Device:R "
+                "returned to cursor-placement mode and Escape cancelled cleanly."
+            )
+
             print(
                 "KiCad plugin registration passed: plugin.json discovered, "
                 "managed Python environment created, and schematic action marked ready."

@@ -40,6 +40,7 @@ class BlockPin:
 PARAMETER_TYPES = ("string", "number", "integer", "boolean")
 PARAMETER_FIELD_PREFIX = "KB_PARAM_"
 LAYOUT_FIELD_NAME = "KB_LAYOUT"
+VARIANT_FIELD_NAME = "KB_VARIANT"
 _PARAMETER_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*\Z")
 _PARAMETER_TOKEN = re.compile(r"\{\{([A-Za-z_][A-Za-z0-9_]*)\}\}")
 
@@ -49,6 +50,24 @@ def parameter_field_name(name: str) -> str:
     if not _PARAMETER_NAME.fullmatch(str(name)):
         raise ValueError(f"Invalid block parameter name: {name!r}")
     return PARAMETER_FIELD_PREFIX + str(name)
+
+
+def resolve_variant_implementation(manifest: dict, value: str) -> str:
+    """Return the implementation filename for an exact variant value."""
+    variants = manifest.get("variants") or []
+    if not variants:
+        return str(manifest["implementation_file"])
+    requested = str(value or "").strip()
+    if not requested:
+        raise ValueError("KB_VARIANT is empty. Set it to a KiCad text variable or a literal value.")
+    matches = [
+        item for item in variants
+        if str(item.get("value", "")).casefold() == requested.casefold()
+    ]
+    if len(matches) != 1:
+        choices = ", ".join(str(item.get("value", "")) for item in variants)
+        raise ValueError(f"Unknown KB_VARIANT value {requested!r}. Available values: {choices}.")
+    return str(matches[0]["file"])
 
 
 def validate_parameter_value(parameter: dict, value: object) -> str:
@@ -377,6 +396,8 @@ def render_symbol_library(
     ]
 
     parameter_fields = [
+        '    (property "KB_VARIANT" "" (at 0 0 0) (effects (font (size 1.0 1.0)) hide))'
+    ] + [
         "    (property " + sexpr_quote(parameter_field_name(item["name"])) + " "
         + sexpr_quote(item["default"]) + " (at 0 0 0) "
         + '(effects (font (size 1.0 1.0)) hide))'
