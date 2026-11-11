@@ -13,6 +13,7 @@ PLUGIN = ROOT / "plugin" / "kicad-blocks"
 sys.path.insert(0, str(PLUGIN))
 
 from kicad_blocks.model import parse_parameters, parse_pins, resolve_profile_configuration
+from kicad_blocks.plugin import _parse_profile_parameter_overrides
 from kicad_blocks.repository import (
     create_block,
     make_local_copy,
@@ -108,6 +109,21 @@ class BlockProfileTests(unittest.TestCase):
 
         facade = (block.path / manifest["symbol_file"]).read_text(encoding="utf-8")
         self.assertIn('property "KB_PROFILE" ""', facade)
+
+    def test_profile_parameter_prompt_parser_normalizes_typed_overrides(self):
+        parameters = parse_parameters(
+            "OUTPUT_VOLTAGE:number=3.3, ENABLE:boolean=true, PHASES:integer=2"
+        )
+        self.assertEqual(
+            _parse_profile_parameter_overrides(
+                "OUTPUT_VOLTAGE=1.8, ENABLE=no, PHASES=1", parameters
+            ),
+            {"OUTPUT_VOLTAGE": "1.8", "ENABLE": "false", "PHASES": "1"},
+        )
+        with self.assertRaisesRegex(ValueError, "Unknown profile parameter"):
+            _parse_profile_parameter_overrides("MISSING=1", parameters)
+        with self.assertRaisesRegex(ValueError, "entered more than once"):
+            _parse_profile_parameter_overrides("PHASES=1, PHASES=2", parameters)
 
     def test_profile_definitions_are_validated_against_block_declarations(self):
         with self.assertRaisesRegex(ValueError, "declared implementation variant"):
