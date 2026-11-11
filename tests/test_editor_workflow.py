@@ -15,21 +15,6 @@ from kicad_blocks.model import parse_parameters, parse_pins
 from kicad_blocks.repository import create_block, read_manifest
 
 
-class _DualText:
-    """Test double for a Text proto and its wrapper's value convenience property."""
-
-    def __init__(self, value: str):
-        self.text = value
-
-    @property
-    def value(self) -> str:
-        return self.text
-
-    @value.setter
-    def value(self, value: str) -> None:
-        self.text = value
-
-
 class LibraryEditorWorkflowTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
@@ -107,7 +92,7 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
         )
         field = SimpleNamespace(
             name="KB_PARAM_OUTPUT_VOLTAGE",
-            text=_DualText("3.3"),
+            text=SimpleNamespace(value="3.3"),
         )
         instance = SimpleNamespace(
             id="00000000-0000-0000-0000-000000000456",
@@ -181,7 +166,7 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
                 {"name": "Low profile", "path": low_profile},
             ],
         )
-        field = SimpleNamespace(name="KB_LAYOUT", text=_DualText("standard"))
+        field = SimpleNamespace(name="KB_LAYOUT", text=SimpleNamespace(value="standard"))
         instance = SimpleNamespace(
             id="00000000-0000-0000-0000-000000000789",
             reference="X7",

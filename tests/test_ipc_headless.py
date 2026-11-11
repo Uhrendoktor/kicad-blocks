@@ -98,16 +98,12 @@ def main() -> None:
             kicad.load_all_libraries(types=[1])
             kicad.wait_for_libraries(types=[1], timeout_s=120.0)
 
-            placed_instance = schematic.place_symbol_from_library(
+            instance = schematic.place_symbol_from_library(
                 f"{nickname}:{symbol_name}",
                 Vector2.from_xy_mm(100.0, 100.0),
                 reference="X1",
             )
             schematic.save()
-            instance = next(
-                item for item in schematic.get_symbols()
-                if str(item.id) == str(placed_instance.id)
-            )
 
             # Parameter defaults are normal KiCad symbol custom fields, so
             # instance values can be edited without replacing the facade ID.
@@ -126,7 +122,7 @@ def main() -> None:
                 field.name: field for field in instance.proto.user_fields
                 if field.name.startswith("KB_PARAM_")
             }
-            parameter_proto["KB_PARAM_OUTPUT_VOLTAGE"].text.text = "1.8"
+            parameter_proto["KB_PARAM_OUTPUT_VOLTAGE"].text.value = "1.8"
             updated_items = schematic.update_items(instance)
             if len(updated_items) != 1:
                 raise AssertionError(
