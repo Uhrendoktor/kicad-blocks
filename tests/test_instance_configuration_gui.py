@@ -80,6 +80,10 @@ def main() -> None:
         parent.update()
 
         interaction_errors: list[str] = []
+        original_showinfo = plugin_actions.messagebox.showinfo
+        original_showerror = plugin_actions.messagebox.showerror
+        plugin_actions.messagebox.showinfo = lambda *_args, **_kwargs: None
+        plugin_actions.messagebox.showerror = lambda _title, message, **_kwargs: interaction_errors.append(str(message))
         deadline = time.monotonic() + 8.0
 
         def drive_form() -> None:
@@ -135,6 +139,8 @@ def main() -> None:
                 schematic, project, library, parent
             )
         finally:
+            plugin_actions.messagebox.showinfo = original_showinfo
+            plugin_actions.messagebox.showerror = original_showerror
             with contextlib.suppress(plugin_actions.tk.TclError):
                 parent.destroy()
 
