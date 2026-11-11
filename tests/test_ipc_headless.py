@@ -26,6 +26,7 @@ from kicad_blocks.model import (
 )
 from kicad_blocks.plugin import (
     _register_block,
+    _write_instance_configuration,
     make_selected_local,
     sync_selected_local,
 )
@@ -137,6 +138,46 @@ def main() -> None:
                     f"Expected per-instance custom field defaults to persist after save: "
                     f"{saved_parameter_values!r}"
                 )
+
+            # Edit fields on the selected facade through the same transactional
+            # IPC helper used by the manager's configuration form. The KIID and
+            # library identity must remain stable.
+            original_configured_id = str(instance.id)
+            _write_instance_configuration(
+                schematic,
+                instance,
+                {
+                    "KB_PARAM_OUTPUT_VOLTAGE": "1.8",
+                    "KB_PARAM_ENABLE": "false",
+                    "KB_LAYOUT": "default",
+                },
+            )
+            configured_symbols = list(schematic.get_symbols())
+            if len(configured_symbols) != 1:
+                raise AssertionError("Instance configuration duplicated the facade.")
+            instance = configured_symbols[0]
+            configured_values = {
+                name: next(
+                    field.text.value
+                    for field in instance.user_fields
+                    if field.name == name
+                )
+                for name in (
+                    "KB_PARAM_OUTPUT_VOLTAGE",
+                    "KB_PARAM_ENABLE",
+                    "KB_LAYOUT",
+                )
+            }
+            if configured_values != {
+                "KB_PARAM_OUTPUT_VOLTAGE": "1.8",
+                "KB_PARAM_ENABLE": "false",
+                "KB_LAYOUT": "default",
+            }:
+                raise AssertionError(
+                    f"KiCad IPC did not persist the edited instance fields: {configured_values!r}"
+                )
+            if str(instance.id) != original_configured_id or instance.reference != "X1":
+                raise AssertionError("Configuration changed the facade KIID or reference.")
             if len(symbols) != 1:
                 raise AssertionError(f"Expected one facade symbol; found {len(symbols)}.")
             if len(sheet_symbols) != 0:
