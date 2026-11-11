@@ -371,20 +371,27 @@ def main() -> None:
 
             # Verify the same native schematic tool action used by the
             # Block Library browser opens Eeschema's interactive symbol chooser.
-            action_probe = subprocess.run(
-                [
-                    str(env_python),
-                    "-c",
-                    (
-                        "from kipy import KiCad; "
-                        "KiCad().run_action('eeschema.InteractiveDrawing.placeSymbol'); "
-                        "print('native place symbol action sent')"
-                    ),
-                ],
-                capture_output=True,
-                text=True,
-                check=True,
-            )
+            try:
+                action_probe = subprocess.run(
+                    [
+                        str(env_python),
+                        "-c",
+                        (
+                            "from kipy import KiCad; "
+                            "KiCad().run_action('eeschema.InteractiveDrawing.placeSymbol'); "
+                            "print('native place symbol action sent')"
+                        ),
+                    ],
+                    capture_output=True,
+                    text=True,
+                    check=True,
+                )
+            except subprocess.CalledProcessError as exc:
+                raise RuntimeError(
+                    "KiCad IPC Place Symbol action failed. "
+                    f"stdout: {exc.stdout or ''}\\n"
+                    f"stderr: {exc.stderr or ''}"
+                ) from exc
             if "native place symbol action sent" not in action_probe.stdout:
                 raise AssertionError(action_probe.stdout)
             chooser_id = None
