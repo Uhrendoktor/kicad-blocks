@@ -672,6 +672,18 @@ def _filter_library_records(records: list, query: str) -> list:
     ]
 
 
+def _preferred_library_selection(visible_records: list, selected_record):
+    """Keep the current block selected while it remains visible after filtering."""
+    if not visible_records:
+        return None
+    if selected_record is not None:
+        selected_id = str(selected_record.manifest.get("block_id", ""))
+        for record in visible_records:
+            if str(record.manifest.get("block_id", "")) == selected_id:
+                return record
+    return visible_records[0]
+
+
 def _draw_facade_preview(canvas, record) -> None:
     """Draw a lightweight vector preview of the facade pin interface."""
     canvas.delete("all")
@@ -825,8 +837,12 @@ def _show_library_browser(
     search = tk.StringVar()
     search_entry = ttk.Entry(left, textvariable=search)
     search_entry.pack(fill="x", pady=(4, 8))
+    tree_frame = ttk.Frame(left)
+    tree_frame.pack(fill="both", expand=True)
+    tree_frame.columnconfigure(0, weight=1)
+    tree_frame.rowconfigure(0, weight=1)
     tree = ttk.Treeview(
-        left,
+        tree_frame,
         columns=("pins", "variants", "layouts"),
         show="tree headings",
         selectmode="browse",
@@ -839,7 +855,15 @@ def _show_library_browser(
     tree.column("pins", width=42, minwidth=35, stretch=False, anchor="center")
     tree.column("variants", width=60, minwidth=48, stretch=False, anchor="center")
     tree.column("layouts", width=55, minwidth=45, stretch=False, anchor="center")
-    tree.pack(fill="both", expand=True)
+    tree_y_scroll = ttk.Scrollbar(tree_frame, orient="vertical", command=tree.yview)
+    tree_x_scroll = ttk.Scrollbar(tree_frame, orient="horizontal", command=tree.xview)
+    tree.configure(
+        yscrollcommand=tree_y_scroll.set,
+        xscrollcommand=tree_x_scroll.set,
+    )
+    tree.grid(row=0, column=0, sticky="nsew")
+    tree_y_scroll.grid(row=0, column=1, sticky="ns")
+    tree_x_scroll.grid(row=1, column=0, sticky="ew")
     library_footer = ttk.Frame(left)
     library_footer.pack(fill="x", pady=(8, 0))
 
@@ -853,18 +877,32 @@ def _show_library_browser(
     description_label.pack(anchor="w", pady=(4, 8))
     preview_box = ttk.LabelFrame(right, text="Facade preview", padding=6)
     preview_box.pack(fill="x")
+    preview_frame = ttk.Frame(preview_box)
+    preview_frame.pack(fill="x", expand=True)
     preview = tk.Canvas(
-        preview_box, height=250, background="#ffffff", highlightthickness=1,
+        preview_frame, height=250, background="#ffffff", highlightthickness=1,
         highlightbackground="#c8d0d6",
     )
-    preview.pack(fill="x", expand=True)
+    preview_scroll = ttk.Scrollbar(
+        preview_frame, orient="vertical", command=preview.yview
+    )
+    preview.configure(yscrollcommand=preview_scroll.set)
+    preview.pack(side="left", fill="x", expand=True)
+    preview_scroll.pack(side="right", fill="y")
     details_box = ttk.LabelFrame(right, text="Block overview", padding=6)
     details_box.pack(fill="both", expand=True, pady=(8, 0))
+    details_frame = ttk.Frame(details_box)
+    details_frame.pack(fill="both", expand=True)
     details = tk.Text(
-        details_box, height=12, wrap="word", relief="flat",
+        details_frame, height=12, wrap="word", relief="flat",
         background="#f7f9fa", font=("TkFixedFont", 9),
     )
-    details.pack(fill="both", expand=True)
+    details_scroll = ttk.Scrollbar(
+        details_frame, orient="vertical", command=details.yview
+    )
+    details.configure(yscrollcommand=details_scroll.set)
+    details.pack(side="left", fill="both", expand=True)
+    details_scroll.pack(side="right", fill="y")
     details.configure(state="disabled")
 
     selected_record = [None]
@@ -872,7 +910,9 @@ def _show_library_browser(
     def set_details(record):
         selected_record[0] = record
         if record is None:
-            name_label.configure(text="Select a block")
+            name_label.configure(
+                text="No matching blocks" if search.get().strip() else "No blocks in this library"
+            )
             description_label.configure(text="")
             details.configure(state="normal")
             details.delete("1.0", "end")
@@ -890,10 +930,11 @@ def _show_library_browser(
         _draw_facade_preview(preview, record)
 
     def render_records(*_args):
+        visible = _filter_library_records(records, search.get())
+        preferred = _preferred_library_selection(visible, selected_record[0])
         children = tree.get_children()
         if children:
             tree.delete(*children)
-        visible = _filter_library_records(records, search.get())
         for record in visible:
             block_id = str(record.manifest["block_id"])
             tree.insert(
@@ -905,21 +946,37 @@ def _show_library_browser(
                 ),
             )
         library_path.set(f"{current_root[0]}  -  {len(visible)} of {len(records)} blocks")
-        if visible:
-            first_id = str(visible[0].manifest["block_id"])
-            tree.selection_set(first_id)
-            tree.focus(first_id)
-            set_details(visible[0])
-        else:
-            set_details(None)
+        if preferred is not None:
+            preferred_id = str(preferred.manifest["block_id"])
+            tree.selection_set(preferred_id)
+            tree.focus(preferred_id)
+        set_details(preferred)
 
-    def refresh_records(*_args):
-        records[:] = list_blocks(current_root[0])
+    def refresh_records(library_root: Path | None = None):
+        candidate_root = (
+            Path(library_root).expanduser().resolve()
+            if library_root is not None else current_root[0]
+        )
+        try:
+            refreshed = list_blocks(candidate_root)
+            if candidate_root != current_root[0]:
+                candidate_root = set_library_root(candidate_root)
+        except Exception as exc:
+            LOG.exception("Could not refresh the block library at %s", candidate_root)
+            messagebox.showerror(
+                "Refresh Block Library",
+                f"Could not read the selected library:\n{candidate_root}\n\n{exc}",
+                parent=window,
+            )
+            return False
+        current_root[0] = candidate_root
+        records[:] = refreshed
         records_by_id.clear()
         records_by_id.update(
             {str(record.manifest["block_id"]): record for record in records}
         )
         render_records()
+        return True
 
     def selection_changed(_event=None):
         selection = tree.selection()
@@ -1040,8 +1097,7 @@ def _show_library_browser(
             parent=window,
         )
         if selected:
-            current_root[0] = set_library_root(Path(selected))
-            refresh_records()
+            refresh_records(Path(selected))
 
     ttk.Button(library_footer, text="Change library...", command=change_library).pack(side="left")
     search.trace_add("write", render_records)
