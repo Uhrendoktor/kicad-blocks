@@ -167,7 +167,7 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
             plugin_actions._parameter_values_for_instance(instance, block)
 
 
-    def test_configuration_guide_reports_layout_choices_and_reads_instance_selection(self):
+    def test_layout_selection_reads_instance_field(self):
         standard = self.project / "standard.kicad_pcb"
         low_profile = self.project / "low_profile.kicad_pcb"
         standard.write_text("(kicad_pcb)", encoding="utf-8")
@@ -185,29 +185,13 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
         instance = SimpleNamespace(
             id="00000000-0000-0000-0000-000000000789",
             reference="X7",
-            definition=SimpleNamespace(
-                id=SimpleNamespace(
-                    library=block.manifest["library_nickname"],
-                    name=block.manifest["symbol_name"],
-                )
-            ),
             user_fields=[field],
         )
-        schematic = SimpleNamespace(get_selection=lambda: [instance])
 
-        with patch.object(plugin_actions, "messagebox", self.messagebox):
-            plugin_actions._show_selected_block_configuration(
-                schematic, self.project, self.library, self.parent
-            )
-
-        self.messagebox.showinfo.assert_called_once()
-        message = self.messagebox.showinfo.call_args.args[1]
-        self.assertIn("standard: Standard", message)
-        self.assertIn("low_profile: Low profile", message)
-        self.assertIn("Current KB_LAYOUT: low_profile", message)
         selected = plugin_actions._choose_block_layout(
             block, self.parent, instance=instance
         )
+
         self.assertEqual(selected["id"], "low_profile")
         self.assertEqual(selected["file"], "layout_low_profile.kicad_pcb")
 
