@@ -210,3 +210,27 @@ jobs:
         run: |
           set -euo pipefail
           python3 scripts/publish_ipc_wheel.py "${RUNNER_TEMP}/kicad-blocks-wheelhouse"
+
+      # One-time V1 release tag. The workflow change itself is not part of V1:
+      # this tag deliberately points at the verified feature merge commit.
+      # Later main validations leave the immutable tag untouched.
+      - name: Create immutable V1 tag
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        shell: bash
+        env:
+          TAG_TARGET_SHA: 0ea21877d681cb1d7fe8224996e022c6f4d86e4b
+        run: |
+          set -euo pipefail
+          if git ls-remote --exit-code --refs --tags origin refs/tags/v1 >/dev/null 2>&1; then
+            git fetch --no-tags origin refs/tags/v1:refs/tags/v1
+            existing_target="$(git rev-list -n 1 v1)"
+            if [[ "$existing_target" != "$TAG_TARGET_SHA" ]]; then
+              echo "::error::The existing v1 tag points to $existing_target, not $TAG_TARGET_SHA."
+              exit 1
+            fi
+            echo "The immutable v1 tag already points to the expected commit."
+            exit 0
+          fi
+          git fetch --no-tags origin "$TAG_TARGET_SHA"
+          git tag -a v1 "$TAG_TARGET_SHA" -m "KiCad Blocks v1"
+          git push origin refs/tags/v1
