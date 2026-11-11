@@ -182,6 +182,29 @@ def read_manifest(block_path: Path) -> dict:
     if missing:
         raise ValueError(f"Block manifest is missing fields: {', '.join(missing)}")
     manifest["parameters"] = normalize_parameters(manifest.get("parameters", []))
+    variants = manifest.get("variants", [])
+    if not isinstance(variants, list):
+        raise TypeError("Block manifest variants must be a list.")
+    seen_variant_values: set[str] = set()
+    seen_variant_files: set[str] = set()
+    for variant in variants:
+        if not isinstance(variant, dict):
+            raise TypeError("Each block variant must be an object.")
+        value = str(variant.get("value", "")).strip()
+        file_name = str(variant.get("file", ""))
+        if (
+            not value or len(value) > 128 or "\n" in value or "\r" in value
+            or Path(file_name).name != file_name
+            or Path(file_name).suffix.casefold() != ".kicad_sch"
+        ):
+            raise ValueError("Each block variant needs a single-line value and a safe .kicad_sch filename.")
+        if value.casefold() in seen_variant_values:
+            raise ValueError(f"Duplicate block variant value: {value!r}")
+        if file_name.casefold() in seen_variant_files:
+            raise ValueError(f"Duplicate block variant file: {file_name!r}")
+        seen_variant_values.add(value.casefold())
+        seen_variant_files.add(file_name.casefold())
+    manifest["variants"] = variants
     layouts = manifest.get("layouts", [])
     if not isinstance(layouts, list):
         raise TypeError("Block manifest layouts must be a list.")
@@ -279,6 +302,7 @@ def create_block(
     layout_project_file: Path | None = None,
     layout_files: list[dict] | None = None,
     parameters: list[dict] | None = None,
+    variant_files: list[dict] | None = None,
 ) -> BlockRecord:
     """Create a versioned block with typed parameters and named PCB layouts.
 
@@ -313,6 +337,8 @@ def create_block(
         raw_layouts = layout_files
 
     parameters = normalize_parameters(parameters)
+    if variant_files is not None and not isinstance(variant_files, list):
+        raise ValueError("variant_files must be a list of variant definitions.")
     expected_pins = {pin.name for pin in pins}
     default_layout_id = None
     if raw_layouts:
@@ -348,6 +374,32 @@ def create_block(
             render_implementation_schematic(name, block_id, pins), encoding="utf-8"
         )
         files = [SYMBOL_NAME, IMPLEMENTATION_NAME]
+        variants: list[dict[str, str]] = []
+        seen_variant_values: set[str] = set()
+        seen_variant_files: set[str] = set()
+        for index, raw_variant in enumerate(variant_files or [], start=1):
+            if not isinstance(raw_variant, dict):
+                raise TypeError("Each schematic variant definition must be an object.")
+            value = str(raw_variant.get("value", "")).strip()
+            source_value = raw_variant.get("path", raw_variant.get("file"))
+            if not value or len(value) > 128 or "\n" in value or "\r" in value:
+                raise ValueError(f"Variant {index} needs a single-line value of 1 to 128 characters.")
+            if not source_value:
+                raise ValueError(f"Variant {value!r} is missing its source schematic path.")
+            source_path = Path(source_value).expanduser().resolve()
+            if not source_path.is_file() or source_path.suffix.casefold() != ".kicad_sch":
+                raise ValueError(f"Variant implementation must be an existing .kicad_sch file: {source_path}")
+            file_name = f"implementation_{slugify(value)}.kicad_sch"
+            if value.casefold() in seen_variant_values:
+                raise ValueError(f"Duplicate block variant value: {value!r}")
+            if file_name.casefold() in seen_variant_files or file_name == IMPLEMENTATION_NAME:
+                raise ValueError(f"Duplicate or reserved variant implementation filename: {file_name!r}")
+            seen_variant_values.add(value.casefold())
+            seen_variant_files.add(file_name.casefold())
+            shutil.copy2(source_path, staging / file_name)
+            files.append(file_name)
+            variants.append({"value": value, "file": file_name})
+
         layouts: list[dict] = []
         seen_layout_ids: set[str] = set()
         seen_layout_names: set[str] = set()
@@ -434,6 +486,7 @@ def create_block(
             "reference_prefix": reference_prefix,
             "pins": [pin.as_manifest(index + 1) for index, pin in enumerate(pins)],
             "parameters": parameters,
+            "variants": variants,
             "dependencies": [],
             "files": files,
             "hashes": hashes,
@@ -594,6 +647,7 @@ def make_local_copy(source: BlockRecord, project_dir: Path) -> BlockRecord:
             "base_hashes": base_hashes,
             "base_dependencies": source.manifest.get("dependencies", []),
             "base_parameters": source.manifest.get("parameters", []),
+            "base_variants": source.manifest.get("variants", []),
             "base_layouts": _layout_configuration(source.manifest),
             "library_nickname": source.manifest.get("library_nickname", LIBRARY_NICKNAME),
             "symbol_name": source.manifest.get("symbol_name"),
@@ -696,6 +750,12 @@ def synchronize_local_copy(local_block: BlockRecord) -> dict:
     source_hashes = _asset_hashes(source.path, source.manifest)
     base_dependencies = manifest.get("base_dependencies", manifest.get("dependencies", []))
     base_parameters = manifest.get("base_parameters", source.manifest.get("parameters", []))
+    base_variants = manifest.get("base_variants", source.manifest.get("variants", []))
+    local_variants = manifest.get("variants", [])
+    source_variants = source.manifest.get("variants", [])
+    local_variants_changed = local_variants != base_variants
+    source_variants_changed = source_variants != base_variants
+    variant_conflict = local_variants_changed and source_variants_changed and local_variants != source_variants
     base_layouts = _base_layout_configuration(manifest, source.manifest)
     local_layouts = _layout_configuration(manifest)
     source_layouts = _layout_configuration(source.manifest)
@@ -727,6 +787,8 @@ def synchronize_local_copy(local_block: BlockRecord) -> dict:
     conflicts = ["manifest.dependencies"] if dependency_conflict else []
     if parameter_conflict:
         conflicts.append("manifest.parameters")
+    if variant_conflict:
+        conflicts.append("manifest.variants")
     if layout_conflict:
         conflicts.append("manifest.layouts")
     copy_files = []
@@ -753,6 +815,7 @@ def synchronize_local_copy(local_block: BlockRecord) -> dict:
         _asset_hashes(latest_source.path, latest_source.manifest) != source_hashes
         or latest_source.manifest.get("dependencies", []) != source_dependencies
         or latest_source.manifest.get("parameters", []) != source_parameters
+        or latest_source.manifest.get("variants", []) != source_variants
         or _layout_configuration(latest_source.manifest) != source_layouts
     ):
         raise RuntimeError(
@@ -783,10 +846,13 @@ def synchronize_local_copy(local_block: BlockRecord) -> dict:
         refreshed_manifest["dependencies"] = source_dependencies
     if source_parameters_changed and not local_parameters_changed:
         refreshed_manifest["parameters"] = source_parameters
+    if source_variants_changed and not local_variants_changed:
+        refreshed_manifest["variants"] = source_variants
     if source_layouts_changed and not local_layouts_changed:
         _set_layout_configuration(refreshed_manifest, source_layouts)
     refreshed_manifest["base_dependencies"] = source_dependencies
     refreshed_manifest["base_parameters"] = source_parameters
+    refreshed_manifest["base_variants"] = source_variants
     refreshed_manifest["base_layouts"] = source_layouts
     refreshed_manifest["hashes"] = new_hashes
     refreshed_manifest["revision"] = revision_for_hashes(new_hashes)
@@ -799,6 +865,7 @@ def synchronize_local_copy(local_block: BlockRecord) -> dict:
         "preserved": sorted(set(local_hashes) - set(copy_files)),
         "dependencies_updated": source_dependencies_changed and not local_dependencies_changed,
         "parameters_updated": source_parameters_changed and not local_parameters_changed,
+        "variants_updated": source_variants_changed and not local_variants_changed,
         "layouts_updated": source_layouts_changed and not local_layouts_changed,
         "conflicts": [],
     }
@@ -857,6 +924,12 @@ def publish_local_copy(local_block: BlockRecord) -> dict:
         "base_dependencies", source.manifest.get("dependencies", [])
     )
     base_parameters = manifest.get("base_parameters", source.manifest.get("parameters", []))
+    base_variants = manifest.get("base_variants", source.manifest.get("variants", []))
+    local_variants = manifest.get("variants", [])
+    source_variants = source.manifest.get("variants", [])
+    local_variants_changed = local_variants != base_variants
+    source_variants_changed = source_variants != base_variants
+    variant_conflict = local_variants_changed and source_variants_changed and local_variants != source_variants
     base_layouts = _base_layout_configuration(manifest, source.manifest)
     local_layouts = _layout_configuration(manifest)
     source_layouts = _layout_configuration(source.manifest)
@@ -889,6 +962,8 @@ def publish_local_copy(local_block: BlockRecord) -> dict:
     conflicts = ["manifest.dependencies"] if dependency_conflict else []
     if parameter_conflict:
         conflicts.append("manifest.parameters")
+    if variant_conflict:
+        conflicts.append("manifest.variants")
     if layout_conflict:
         conflicts.append("manifest.layouts")
     push_files: list[str] = []
@@ -930,6 +1005,12 @@ def publish_local_copy(local_block: BlockRecord) -> dict:
         and source_parameters_changed
         and local_parameters == source_parameters
     )
+    push_variants = local_variants_changed and not source_variants_changed
+    pull_variants = source_variants_changed and not local_variants_changed
+    converged_variants = (
+        local_variants_changed and source_variants_changed
+        and local_variants == source_variants
+    )
     push_layouts = local_layouts_changed and not source_layouts_changed
     pull_layouts = source_layouts_changed and not local_layouts_changed
     converged_layouts = (
@@ -947,6 +1028,9 @@ def publish_local_copy(local_block: BlockRecord) -> dict:
         and not push_parameters
         and not pull_parameters
         and not converged_parameters
+        and not push_variants
+        and not pull_variants
+        and not converged_variants
         and not push_layouts
         and not pull_layouts
         and not converged_layouts
@@ -966,6 +1050,7 @@ def publish_local_copy(local_block: BlockRecord) -> dict:
         _asset_hashes(latest_source.path, latest_source.manifest) != source_hashes
         or latest_source.manifest.get("dependencies", []) != source_dependencies
         or latest_source.manifest.get("parameters", []) != source_parameters
+        or latest_source.manifest.get("variants", []) != source_variants
         or _layout_configuration(latest_source.manifest) != source_layouts
     ):
         raise RuntimeError(
@@ -1047,6 +1132,10 @@ def publish_local_copy(local_block: BlockRecord) -> dict:
             source_manifest["parameters"] = local_parameters
         elif pull_parameters:
             local_manifest["parameters"] = source_parameters
+        if push_variants:
+            source_manifest["variants"] = local_variants
+        elif pull_variants:
+            local_manifest["variants"] = source_variants
         if push_layouts:
             _set_layout_configuration(source_manifest, local_layouts)
         elif pull_layouts:
@@ -1069,7 +1158,7 @@ def publish_local_copy(local_block: BlockRecord) -> dict:
             )
 
         source_changed = bool(
-            push_files or push_dependencies or push_parameters or push_layouts
+            push_files or push_dependencies or push_parameters or push_variants or push_layouts
         )
         if source_changed:
             source_manifest["hashes"] = source_hashes_after
@@ -1089,6 +1178,7 @@ def publish_local_copy(local_block: BlockRecord) -> dict:
         local_manifest["base_hashes"] = dict(source_manifest.get("hashes", {}))
         local_manifest["base_dependencies"] = source_manifest.get("dependencies", [])
         local_manifest["base_parameters"] = source_manifest.get("parameters", [])
+        local_manifest["base_variants"] = source_manifest.get("variants", [])
         local_manifest["base_layouts"] = _layout_configuration(source_manifest)
         atomic_write(
             local_manifest_path,
@@ -1115,6 +1205,10 @@ def publish_local_copy(local_block: BlockRecord) -> dict:
         published.append("manifest.parameters")
     if pull_parameters:
         pulled.append("manifest.parameters")
+    if push_variants:
+        published.append("manifest.variants")
+    if pull_variants:
+        pulled.append("manifest.variants")
     if push_layouts:
         published.append("manifest.layouts")
     if pull_layouts:
@@ -1126,10 +1220,12 @@ def publish_local_copy(local_block: BlockRecord) -> dict:
         "revision": source_manifest.get("revision"),
         "dependencies_updated": push_dependencies or pull_dependencies or converged_dependencies,
         "parameters_updated": push_parameters or pull_parameters or converged_parameters,
+        "variants_updated": push_variants or pull_variants or converged_variants,
         "layouts_updated": push_layouts or pull_layouts or converged_layouts,
         "converged": converged_files
         + (["manifest.dependencies"] if converged_dependencies else [])
         + (["manifest.parameters"] if converged_parameters else [])
+        + (["manifest.variants"] if converged_variants else [])
         + (["manifest.layouts"] if converged_layouts else []),
     }
 

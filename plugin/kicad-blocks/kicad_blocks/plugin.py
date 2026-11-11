@@ -19,10 +19,12 @@ from .composition import compose_block_implementation
 from .model import (
     LAYOUT_FIELD_NAME,
     PARAMETER_FIELD_PREFIX,
+    VARIANT_FIELD_NAME,
     parameter_field_name,
     parse_parameters,
     parse_pins,
     resolve_parameter_values,
+    resolve_variant_implementation,
 )
 from .operations import export_block_bom, find_kicad_cli, validate_block_tree
 from .pcb_layout import BlockLayoutPlacement, merge_block_layout, merge_block_layouts
@@ -389,6 +391,25 @@ def _create_and_place(root, schematic, kicad, project_dir, parent) -> None:
         return
     parameters = parse_parameters(parameter_text)
 
+    selected_variant_schematics = filedialog.askopenfilenames(
+        title="Optional: select variant implementation schematics",
+        filetypes=[("KiCad Schematic", "*.kicad_sch"), ("All files", "*.*")],
+        parent=parent,
+    )
+    variant_files = []
+    for variant_path in selected_variant_schematics:
+        variant_path = Path(variant_path)
+        variant_value = simpledialog.askstring(
+            "Block Variant",
+            f"Which exact KB_VARIANT value opens {variant_path.name}?\\n"
+            "Example: 3V3 (the facade field may contain ${SUPPLY_VOLTAGE}).",
+            initialvalue=variant_path.stem,
+            parent=parent,
+        )
+        if variant_value is None:
+            return
+        variant_files.append({"value": variant_value, "path": variant_path})
+
     selected_layouts = filedialog.askopenfilenames(
         title="Optional: select one or more named PCB layout alternatives",
         filetypes=[("KiCad PCB", "*.kicad_pcb"), ("All files", "*.*")],
@@ -446,6 +467,7 @@ def _create_and_place(root, schematic, kicad, project_dir, parent) -> None:
         description=description,
         layout_files=layouts if layouts else None,
         parameters=parameters,
+        variant_files=variant_files,
     )
     record = _register_block(project_dir, record, kicad)
     instance = place_block(schematic, record, x_mm, y_mm)
@@ -480,32 +502,126 @@ def _place_existing(root, schematic, kicad, project_dir, parent) -> None:
     )
 
 
-def _edit_block_implementation(root, schematic, kicad, project_dir, parent) -> None:
-    """Open a selected local implementation or the shared library implementation."""
-    selected = list(schematic.get_selection())
-    if len(selected) == 1 and hasattr(selected[0], "definition"):
-        record = local_copy_for_instance(project_dir, str(selected[0].id))
-        if record is None:
-            record = _library_record_for_instance(root, selected[0])
-    else:
-        record = _pick_record(list_blocks(root), parent, "Edit Block Implementation")
-    if record is None:
-        raise FileNotFoundError("The selected block implementation could not be found.")
-    executable = kicad.get_kicad_binary_path("eeschema")
-    import subprocess
+def _field_value(instance, field_name: str) -> str:
+    for field in getattr(instance, "user_fields", ()):
+        if str(getattr(field, "name", "")) == field_name:
+            return str(getattr(getattr(field, "text", None), "value", "") or "").strip()
+    return ""
 
-    process = subprocess.Popen(
-        [executable, str(record.implementation)],
-        close_fds=True,
+
+def _sheet_variables_for_symbol(schematic, instance) -> dict[str, str]:
+    """Collect custom fields on hierarchical sheet symbols containing this occurrence."""
+    symbol_path = {
+        str(item) for item in getattr(getattr(instance, "path", None), "path", ())
+    }
+    variables: dict[str, str] = {}
+    if not symbol_path:
+        return variables
+    try:
+        sheet_symbols = schematic.get_sheet_symbols()
+    except Exception:
+        LOG.exception("Could not read hierarchical sheet-symbol properties")
+        return variables
+    for sheet_symbol in sheet_symbols:
+        identifiers = {
+            str(getattr(sheet_symbol, "id", "")),
+            str(getattr(sheet_symbol, "uuid", "")),
+        }
+        if not (identifiers & symbol_path):
+            continue
+        for field in getattr(sheet_symbol, "user_fields", ()):
+            name = str(getattr(field, "name", "") or "").strip()
+            if name and name not in {"Sheet name", "Sheet file"}:
+                variables[name] = str(getattr(getattr(field, "text", None), "value", "") or "")
+    return variables
+
+
+def _resolve_variant_text(raw_value: str, project, sheet_variables: dict[str, str]) -> str:
+    """Expand sheet custom fields and normal KiCad project text variables."""
+    import re
+
+    token = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
+    value = str(raw_value or "").strip()
+    if not value:
+        return ""
+    for _ in range(12):
+        previous = value
+
+        def replace_sheet(match):
+            return sheet_variables.get(match.group(1), match.group(0))
+
+        value = token.sub(replace_sheet, value)
+        if hasattr(project, "expand_text_variables"):
+            value = project.expand_text_variables(value)
+        if value == previous:
+            break
+    unresolved = token.search(value)
+    if unresolved:
+        raise ValueError(
+            f"Could not resolve KiCad text variable ${unresolved.group(1)} "
+            "for this block instance. Define it as a project text variable or "
+            "a custom field on the containing sheet symbol."
+        )
+    return value.strip()
+
+
+def _open_selected_block_implementation(root, schematic, kicad, project_dir, parent):
+    """Open the selected facade's exact variant implementation; never guess a fallback."""
+    instance = _selected_symbol(schematic)
+    record = _block_record_for_instance(root, project_dir, instance)
+    raw_variant = _field_value(instance, VARIANT_FIELD_NAME)
+    resolved_variant = _resolve_variant_text(
+        raw_variant, schematic.get_project(), _sheet_variables_for_symbol(schematic, instance)
     )
-    messagebox.showinfo(
-        "Block Implementation",
-        f"Opened {record.name} implementation in Eeschema.\n\n"
-        "After editing a shared library block, run Publish. "
-        "A project-local implementation remains independent until explicitly synchronized.",
-        parent=parent,
-    )
+    implementation_name = resolve_variant_implementation(record.manifest, resolved_variant)
+    implementation_path = (record.path / implementation_name).resolve()
+    if not implementation_path.is_file():
+        raise FileNotFoundError(
+            f"The implementation for KB_VARIANT={resolved_variant!r} is missing: {implementation_path}"
+        )
+    executable = kicad.get_kicad_binary_path("eeschema")
+    if not executable:
+        raise RuntimeError("KiCad did not provide an Eeschema executable path.")
+    process = subprocess.Popen([executable, str(implementation_path)], close_fds=True)
+    if parent is not None:
+        detail = (
+            f"Opened {record.name} — variant {resolved_variant}."
+            if record.manifest.get("variants")
+            else f"Opened {record.name} implementation."
+        )
+        messagebox.showinfo("Block Implementation", detail, parent=parent)
     return process
+
+
+def open_selected_implementation_action() -> None:
+    """Standalone KiCad add-on action for opening the selected block facade."""
+    _load_tkinter()
+    parent = tk.Tk()
+    parent.withdraw()
+    try:
+        from kipy import KiCad
+
+        kicad = KiCad()
+        schematic = kicad.get_schematic()
+        if schematic is None:
+            raise RuntimeError("No active schematic was found. Open a project first.")
+        project_dir = project_directory(schematic)
+        library_root = default_library_root()
+        if not library_root.is_dir():
+            raise FileNotFoundError(
+                f"KiCad Blocks library was not found: {library_root}. "
+                "Use the Manager to create or configure a block library first."
+            )
+        _open_selected_block_implementation(
+            library_root, schematic, kicad, project_dir, parent
+        )
+    except Exception as exc:
+        LOG.exception("Open Block Implementation failed")
+        messagebox.showerror("Open Block Implementation", str(exc), parent=parent)
+    finally:
+        with contextlib.suppress(tk.TclError):
+            parent.destroy()
+
 
 def _export_recursive_bom(root: Path, parent, schematic=None, project_dir: Path | None = None) -> None:
     parameter_values = None
@@ -999,7 +1115,7 @@ def run() -> None:
             ("configure", "Configure block instance", "Open guidance for editing per-instance parameters and PCB layout in KiCad Symbol Properties."),
             ("local", "Make local copy", "Give the selected instance an independent implementation."),
             ("sync", "Synchronize local copy", "Publish and pull non-conflicting local/library edits."),
-            ("edit", "Edit implementation", "Open the selected block implementation in Eeschema."),
+            ("edit", "Open implementation", "Open the selected facade's resolved KB_VARIANT in Eeschema."),
             ("publish", "Publish library block", "Publish edits to a shared library block."),
             ("bom", "Recursive BOM", "Export the selected block and all nested components."),
             ("erc", "Recursive ERC", "Run ERC on the selected block and dependencies."),
@@ -1086,7 +1202,9 @@ def run() -> None:
                         parent=root,
                     )
                 elif action == "edit":
-                    _edit_block_implementation(library_root, schematic, kicad, project_dir, root)
+                    _open_selected_block_implementation(
+                        library_root, schematic, kicad, project_dir, root
+                    )
                 elif action == "publish":
                     _publish_block(library_root, kicad, project_dir, root)
                 elif action == "bom":
