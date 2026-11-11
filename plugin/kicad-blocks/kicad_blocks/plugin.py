@@ -464,22 +464,34 @@ def _create_and_place(
         variant_files=variant_files,
     )
     record = _register_block(project_dir, record, kicad)
-    _start_native_symbol_placement(
-        kicad, editor_window_id, str(record.manifest["symbol_name"])
-    )
     layout_names = ", ".join(item["name"] for item in record.manifest.get("layouts", [])) or "none"
     parameter_names = ", ".join(item["name"] for item in record.manifest.get("parameters", [])) or "none"
     messagebox.showinfo(
         "Block Created",
-        f"Created {name} and started interactive placement in Eeschema.\n\n"
+        f"Created and registered {name}.\n\n"
         f"Library asset: {record.path}\n"
         f"Implementation schematic: {record.implementation}\n"
         f"PCB layout alternatives: {layout_names}\n"
         f"Block parameters: {parameter_names}\n\n"
-        "Open the implementation file separately in Eeschema to edit the internal circuit. "
-        "Use KiCad's symbol Properties dialog to override parameter fields per instance.",
+        "Click OK to open KiCad's symbol chooser. After selecting the block, "
+        "move the mouse to the desired location and click to place it. Press Esc to cancel. "
+        "Open the implementation file separately in Eeschema to edit the internal circuit; "
+        "use Symbol Properties → Fields to override values per instance.",
         parent=parent,
     )
+    try:
+        _start_native_symbol_placement(
+            kicad, editor_window_id, str(record.manifest["symbol_name"])
+        )
+    except Exception as exc:
+        LOG.exception("Block was created but interactive placement did not start")
+        messagebox.showwarning(
+            "Block Created — placement not started",
+            f"{name} was saved and registered in the library, but KiCad did not "
+            f"start interactive placement.\n\n{exc}\n\n"
+            "You can still place it later from Browse Block Library.",
+            parent=parent,
+        )
 
 def _place_existing(root, schematic, kicad, project_dir, parent) -> None:
     """Open the searchable browser; placement is handed to KiCad's native cursor tool."""
