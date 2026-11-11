@@ -84,13 +84,25 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
         self.messagebox.showinfo.assert_called()
 
     def test_instance_configuration_is_one_undoable_ipc_update(self):
+        from google.protobuf.empty_pb2 import Empty
+        from kipy.proto.common.commands import editor_commands_pb2
+
         first = SimpleNamespace(name="KB_PARAM_OUTPUT_VOLTAGE", text=SimpleNamespace(value="3.3"))
         second = SimpleNamespace(name="KB_LAYOUT", text=SimpleNamespace(value="standard"))
-        instance = SimpleNamespace(reference="X1", user_fields=[first, second])
+        instance = SimpleNamespace(
+            reference="X1",
+            user_fields=[first, second],
+            proto=Empty(),
+        )
+        response = editor_commands_pb2.UpdateItemsResponse(status=1)
+        response.updated_items.add().status.code = 1
         commit = object()
+        send = Mock(return_value=response)
+        document = editor_commands_pb2.UpdateItems().header.document
         schematic = SimpleNamespace(
+            document=document,
+            client=SimpleNamespace(send=send),
             begin_commit=Mock(return_value=commit),
-            update_items=Mock(return_value=[instance]),
             push_commit=Mock(),
             save=Mock(),
             drop_commit=Mock(),
@@ -105,26 +117,35 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
         self.assertEqual(first.text.value, "1.8")
         self.assertEqual(second.text.value, "compact")
         schematic.begin_commit.assert_called_once_with()
-        schematic.update_items.assert_called_once_with([instance])
+        self.assertIs(send.call_args.args[0].__class__, editor_commands_pb2.UpdateItems)
+        self.assertEqual(len(send.call_args.args[0].items), 1)
         schematic.push_commit.assert_called_once_with(
             commit, "Configure KiCad block instance"
         )
         schematic.save.assert_called_once_with()
         schematic.drop_commit.assert_not_called()
 
-    def test_instance_configuration_rolls_back_local_fields_when_ipc_update_fails(self):
+    def test_instance_configuration_reports_item_update_status_and_rolls_back(self):
+        from google.protobuf.empty_pb2 import Empty
+        from kipy.proto.common.commands import editor_commands_pb2
+
         field = SimpleNamespace(name="KB_PARAM_OUTPUT_VOLTAGE", text=SimpleNamespace(value="3.3"))
-        instance = SimpleNamespace(reference="X1", user_fields=[field])
+        instance = SimpleNamespace(reference="X1", user_fields=[field], proto=Empty())
+        response = editor_commands_pb2.UpdateItemsResponse(status=1)
+        rejected = response.updated_items.add()
+        rejected.status.code = 5
+        rejected.status.error_message = "symbol item is immutable"
         commit = object()
         schematic = SimpleNamespace(
+            document=editor_commands_pb2.UpdateItems().header.document,
+            client=SimpleNamespace(send=Mock(return_value=response)),
             begin_commit=Mock(return_value=commit),
-            update_items=Mock(side_effect=RuntimeError("IPC update failed")),
             push_commit=Mock(),
             save=Mock(),
             drop_commit=Mock(),
         )
 
-        with self.assertRaisesRegex(RuntimeError, "IPC update failed"):
+        with self.assertRaisesRegex(RuntimeError, "symbol item is immutable"):
             plugin_actions._write_instance_configuration(
                 schematic, instance, {"KB_PARAM_OUTPUT_VOLTAGE": "1.8"}
             )
