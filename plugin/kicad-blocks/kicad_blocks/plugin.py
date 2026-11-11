@@ -548,7 +548,7 @@ def _capture_eeschema_window_id() -> str | None:
 
 
 def _start_native_symbol_placement(
-    kicad,
+    _kicad,
     editor_window_id: str | None,
     symbol_name: str,
     *,
@@ -556,10 +556,11 @@ def _start_native_symbol_placement(
     command_runner=subprocess.run,
     pause=time.sleep,
 ) -> None:
-    """Use KiCad's native Place Symbol action so the facade follows the mouse.
+    """Start Eeschema's native Place Symbol tool and choose the facade.
 
-    The current supported schematic IPC method inserts at a numeric coordinate.
-    V1 starts Eeschema's own interactive tool, then filters its symbol chooser.
+    The tested Eeschema IPC server does not register the generic RunAction
+    request. V1 therefore sends KiCad's default Add Symbol hotkey (A) to the
+    captured editor window, then uses the native chooser and cursor placement.
     """
     executable = xdotool or shutil.which("xdotool")
     if not executable:
@@ -585,31 +586,45 @@ def _start_native_symbol_placement(
         )
         return str(getattr(result, "stdout", "") or "").strip()
 
-    action_runner = getattr(kicad, "run_action", None)
-    if not callable(action_runner):
-        raise TypeError(
-            "This KiCad Python IPC build does not expose run_action(); "
-            "update the KiCad nightly IPC bindings to use cursor placement."
-        )
     send("windowactivate", "--sync", str(editor_window_id))
-    pause(0.2)
-    action_runner("eeschema.InteractiveDrawing.placeSymbol")
-    pause(0.65)
-    chooser_id = send("getwindowfocus")
-    chooser_title = send("getwindowname", chooser_id)
-    if chooser_id == str(editor_window_id) or "symbol" not in chooser_title.casefold():
-        # Do not type into the schematic if the expected chooser did not open.
-        with contextlib.suppress(Exception):
-            send("key", "--clearmodifiers", "Escape")
+    pause(0.1)
+    send("key", "--clearmodifiers", "a")
+
+    chooser_id = ""
+    chooser_title = ""
+    for _ in range(50):
+        focused_id = send("getwindowfocus")
+        if focused_id and focused_id != str(editor_window_id):
+            chooser_title = send("getwindowname", focused_id)
+            if "symbol" in chooser_title.casefold():
+                chooser_id = focused_id
+                break
+        pause(0.1)
+
+    if not chooser_id:
+        if send("getwindowfocus") == str(editor_window_id):
+            with contextlib.suppress(Exception):
+                send("key", "--clearmodifiers", "Escape")
         raise RuntimeError(
-            "KiCad's native Choose Symbol dialog did not open. Check that the "
-            "standard Add Symbol hotkey is still A, then try again."
+            "KiCad's native Choose Symbol dialog did not open. Check Eeschema "
+            "Preferences → Hotkeys and bind Add Symbol to A, then try again."
         )
+
     # The native chooser accepts type-to-search in its focused filter/list.
     send("type", "--clearmodifiers", "--delay", "12", symbol_name)
-    pause(0.25)
+    pause(0.15)
     send("key", "--clearmodifiers", "Return")
 
+    # Selecting the symbol should close the chooser and return to Eeschema;
+    # the symbol is then attached to the cursor until the user clicks or Escapes.
+    for _ in range(30):
+        if send("getwindowfocus") == str(editor_window_id):
+            return
+        pause(0.1)
+    raise RuntimeError(
+        "KiCad accepted the symbol chooser selection but did not return focus "
+        "to Eeschema. Check the native chooser and try placing the block again."
+    )
 
 def _library_record_search_text(record) -> str:
     manifest = record.manifest
