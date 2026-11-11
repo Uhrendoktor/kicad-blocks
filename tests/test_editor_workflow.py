@@ -83,41 +83,67 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
         self.kicad.wait_for_libraries.assert_called_once()
         self.messagebox.showinfo.assert_called()
 
-    def test_configuration_guide_uses_native_kicad_symbol_properties(self):
-        block = create_block(
-            self.library,
-            "Parameterized Editor Block",
-            parse_pins("VIN:input"),
-            parameters=parse_parameters("OUTPUT_VOLTAGE:number=3.3"),
+    def test_instance_configuration_is_one_undoable_ipc_update(self):
+        first = SimpleNamespace(name="KB_PARAM_OUTPUT_VOLTAGE", text=SimpleNamespace(value="3.3"))
+        second = SimpleNamespace(name="KB_LAYOUT", text=SimpleNamespace(value="standard"))
+        instance = SimpleNamespace(reference="X1", user_fields=[first, second])
+        commit = object()
+        schematic = SimpleNamespace(
+            begin_commit=Mock(return_value=commit),
+            update_items=Mock(return_value=[instance]),
+            push_commit=Mock(),
+            save=Mock(),
+            drop_commit=Mock(),
         )
-        field = SimpleNamespace(
-            name="KB_PARAM_OUTPUT_VOLTAGE",
-            text=SimpleNamespace(value="1.8"),
-        )
-        instance = SimpleNamespace(
-            id="00000000-0000-0000-0000-000000000456",
-            reference="X1",
-            definition=SimpleNamespace(
-                id=SimpleNamespace(
-                    library=block.manifest["library_nickname"],
-                    name=block.manifest["symbol_name"],
-                )
-            ),
-            user_fields=[field],
-        )
-        schematic = SimpleNamespace(get_selection=lambda: [instance])
 
-        with patch.object(plugin_actions, "messagebox", self.messagebox):
-            plugin_actions._show_selected_block_configuration(
-                schematic, self.project, self.library, self.parent
+        plugin_actions._write_instance_configuration(
+            schematic,
+            instance,
+            {"KB_PARAM_OUTPUT_VOLTAGE": "1.8", "KB_LAYOUT": "compact"},
+        )
+
+        self.assertEqual(first.text.value, "1.8")
+        self.assertEqual(second.text.value, "compact")
+        schematic.begin_commit.assert_called_once_with()
+        schematic.update_items.assert_called_once_with([instance])
+        schematic.push_commit.assert_called_once_with(
+            commit, "Configure KiCad block instance"
+        )
+        schematic.save.assert_called_once_with()
+        schematic.drop_commit.assert_not_called()
+
+    def test_instance_configuration_rolls_back_local_fields_when_ipc_update_fails(self):
+        field = SimpleNamespace(name="KB_PARAM_OUTPUT_VOLTAGE", text=SimpleNamespace(value="3.3"))
+        instance = SimpleNamespace(reference="X1", user_fields=[field])
+        commit = object()
+        schematic = SimpleNamespace(
+            begin_commit=Mock(return_value=commit),
+            update_items=Mock(side_effect=RuntimeError("IPC update failed")),
+            push_commit=Mock(),
+            save=Mock(),
+            drop_commit=Mock(),
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "IPC update failed"):
+            plugin_actions._write_instance_configuration(
+                schematic, instance, {"KB_PARAM_OUTPUT_VOLTAGE": "1.8"}
             )
 
-        self.messagebox.showinfo.assert_called_once()
-        message = self.messagebox.showinfo.call_args.args[1]
-        self.assertIn("Press E (Symbol Properties)", message)
-        self.assertIn("Fields tab", message)
-        self.assertIn("OUTPUT_VOLTAGE (number) = 1.8", message)
-        self.assertNotIn("update_items", message)
+        self.assertEqual(field.text.value, "3.3")
+        schematic.drop_commit.assert_called_once_with(commit)
+        schematic.push_commit.assert_not_called()
+        schematic.save.assert_not_called()
+
+    def test_instance_configuration_rejects_fields_missing_from_facade(self):
+        instance = SimpleNamespace(reference="X1", user_fields=[])
+        schematic = SimpleNamespace(begin_commit=Mock())
+
+        with self.assertRaisesRegex(RuntimeError, "KB_VARIANT"):
+            plugin_actions._write_instance_configuration(
+                schematic, instance, {"KB_VARIANT": "3V3"}
+            )
+
+        schematic.begin_commit.assert_not_called()
 
     def test_parameter_values_validate_custom_instance_fields(self):
         block = create_block(
