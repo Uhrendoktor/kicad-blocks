@@ -41,6 +41,7 @@ PARAMETER_TYPES = ("string", "number", "integer", "boolean")
 PARAMETER_FIELD_PREFIX = "KB_PARAM_"
 LAYOUT_FIELD_NAME = "KB_LAYOUT"
 VARIANT_FIELD_NAME = "KB_VARIANT"
+PROFILE_FIELD_NAME = "KB_PROFILE"
 _PARAMETER_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*\Z")
 _PARAMETER_TOKEN = re.compile(r"\{\{([A-Za-z_][A-Za-z0-9_]*)\}\}")
 
@@ -131,6 +132,127 @@ def normalize_parameters(parameters: Iterable[dict] | None) -> list[dict[str, st
             {"name": name, "type": kind, "default": default, "description": description}
         )
     return normalized
+
+
+def normalize_profiles(
+    profiles: Iterable[dict] | None,
+    parameters: Iterable[dict] | None,
+    variants: Iterable[dict] | None,
+    layouts: Iterable[dict] | None,
+    default_layout: str | None = None,
+) -> list[dict]:
+    """Validate named configuration profiles for one block.
+
+    A profile is a reusable preset for one declared schematic variant, a
+    partial set of typed parameter overrides, and one PCB layout. Omitted
+    parameter values inherit the block parameter defaults.
+    """
+    parameter_definitions = normalize_parameters(parameters)
+    parameter_names = {item["name"] for item in parameter_definitions}
+    variant_values = {
+        str(item.get("value", "")).casefold(): str(item.get("value", ""))
+        for item in variants or ()
+    }
+    layout_ids = {
+        str(item.get("id", "")).casefold(): str(item.get("id", ""))
+        for item in layouts or ()
+    }
+    normalized: list[dict] = []
+    seen_ids: set[str] = set()
+    seen_names: set[str] = set()
+
+    for item in profiles or ():
+        if not isinstance(item, dict):
+            raise TypeError("Each block profile must be an object.")
+        name = str(item.get("name", "")).strip()
+        if not name or len(name) > 80 or "\n" in name or "\r" in name:
+            raise ValueError("Profile names must contain 1 to 80 single-line characters.")
+        profile_id = str(item.get("id") or slugify(name)).strip().casefold()
+        if not re.fullmatch(r"[a-z0-9_]+", profile_id):
+            raise ValueError(f"Invalid profile id {profile_id!r}; use lowercase letters, numbers and underscores.")
+        if profile_id in seen_ids or name.casefold() in seen_names:
+            raise ValueError(f"Duplicate block profile name or id: {name!r}.")
+        seen_ids.add(profile_id)
+        seen_names.add(name.casefold())
+
+        description = str(item.get("description", "")).strip()
+        if len(description) > 256 or "\n" in description or "\r" in description:
+            raise ValueError(f"Description for profile {name!r} must be a single line of at most 256 characters.")
+
+        raw_variant = str(item.get("variant", "") or "").strip()
+        variant = None
+        if variant_values:
+            variant = variant_values.get(raw_variant.casefold())
+            if variant is None:
+                choices = ", ".join(variant_values.values())
+                raise ValueError(
+                    f"Profile {name!r} must select a declared implementation variant. "
+                    f"Available values: {choices}."
+                )
+        elif raw_variant:
+            raise ValueError(f"Profile {name!r} defines a variant but this block has no variant implementations.")
+
+        raw_parameters = item.get("parameters", {})
+        if not isinstance(raw_parameters, dict):
+            raise TypeError(f"Profile {name!r} parameters must be an object.")
+        unknown_parameters = sorted(set(raw_parameters) - parameter_names)
+        if unknown_parameters:
+            raise ValueError(
+                f"Profile {name!r} contains unknown parameter(s): {', '.join(unknown_parameters)}."
+            )
+        parameter_values = resolve_parameter_values(parameter_definitions, raw_parameters)
+        overrides = {
+            key: parameter_values[key]
+            for key in raw_parameters
+        }
+
+        raw_layout = str(item.get("layout", "") or "").strip()
+        if layout_ids:
+            selected_layout = layout_ids.get(
+                (raw_layout or str(default_layout or "")).casefold()
+            )
+            if selected_layout is None:
+                choices = ", ".join(layout_ids.values())
+                raise ValueError(
+                    f"Profile {name!r} must select a declared PCB layout. "
+                    f"Available layouts: {choices}."
+                )
+        else:
+            if raw_layout:
+                raise ValueError(f"Profile {name!r} defines a PCB layout but this block has no layouts.")
+            selected_layout = None
+
+        normalized.append({
+            "id": profile_id,
+            "name": name,
+            "description": description,
+            "variant": variant,
+            "parameters": overrides,
+            "layout": selected_layout,
+        })
+    return normalized
+
+
+def resolve_profile_configuration(manifest: dict, profile_id: str) -> dict:
+    """Resolve one profile into its complete per-instance field values."""
+    requested = str(profile_id or "").strip().casefold()
+    profiles = manifest.get("profiles") or []
+    matches = [item for item in profiles if str(item.get("id", "")).casefold() == requested]
+    if len(matches) != 1:
+        choices = ", ".join(str(item.get("name", item.get("id", ""))) for item in profiles)
+        raise ValueError(
+            f"Unknown block profile {profile_id!r}."
+            + (f" Available profiles: {choices}." if choices else " This block defines no profiles.")
+        )
+    profile = matches[0]
+    return {
+        "id": str(profile["id"]),
+        "variant": str(profile.get("variant") or ""),
+        "parameters": resolve_parameter_values(
+            manifest.get("parameters", []), profile.get("parameters", {})
+        ),
+        "layout": str(profile.get("layout") or manifest.get("default_layout") or ""),
+    }
 
 
 def parse_parameters(spec: str) -> list[dict[str, str]]:
@@ -349,6 +471,7 @@ def render_symbol_library(
     reference_prefix: str = "X",
     parameters: Iterable[dict] = (),
     default_layout_id: str | None = None,
+    include_profile_field: bool = False,
 ) -> str:
     """Generate a one-symbol .kicad_sym library with an opaque IC-like facade."""
     pins = list(pins)
@@ -397,7 +520,10 @@ def render_symbol_library(
 
     parameter_fields = [
         '    (property "KB_VARIANT" "" (at 0 0 0) (effects (font (size 1.0 1.0)) hide))'
-    ] + [
+    ] + (
+        ['    (property "KB_PROFILE" "" (at 0 0 0) (effects (font (size 1.0 1.0)) hide))']
+        if include_profile_field else []
+    ) + [
         "    (property " + sexpr_quote(parameter_field_name(item["name"])) + " "
         + sexpr_quote(item["default"]) + " (at 0 0 0) "
         + '(effects (font (size 1.0 1.0)) hide))'
