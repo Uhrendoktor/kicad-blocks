@@ -2432,7 +2432,7 @@ def run() -> None:
         library_root.mkdir(parents=True, exist_ok=True)
 
         actions = [
-            ("create", "Create block", "Generate a facade, typed parameters and PCB layout alternatives."),
+            ("create", "Create block", "Generate a facade, optional implementation variants, typed parameters, PCB layouts and named configuration profiles."),
             ("place", "Browse & place block", "Search the library, preview a facade and place it at the mouse cursor."),
             ("configure", "Configure block instance", "Choose a linked variant, parameter and PCB layout profile, then customize per-instance values."),
             ("local", "Make local copy", "Give the selected instance an independent implementation."),
