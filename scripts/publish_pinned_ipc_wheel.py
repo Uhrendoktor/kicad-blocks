@@ -104,7 +104,7 @@ def _get_or_create_release(repo: str, tag: str, source_sha: str, token: str) -> 
         "target_commitish": "main",
         "name": f"KiCad Python IPC bindings ({source_sha[:8]})",
         "body": (
-            "Immutable dependency asset for KiCad Blocks releases.\n\n"
+            "Immutable dependency assets for KiCad Blocks releases.\n\n"
             f"Built from official kicad-python commit {source_sha}. "
             "Targets: CPython 3.12, 3.13 and 3.14, Linux x86_64."
         ),

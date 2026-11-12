@@ -32,12 +32,14 @@ class PluginInstallerTests(unittest.TestCase):
                     version_info=(3, minor, 4),
                 )
         for version in ((3, 11, 9), (3, 15, 0)):
-            with self.subTest(version=version):
-                with self.assertRaisesRegex(ValueError, "CPython 3.12, 3.13 and 3.14"):
-                    installer.validate_python_runtime(
-                        implementation="cpython",
-                        version_info=version,
-                    )
+            with (
+                self.subTest(version=version),
+                self.assertRaisesRegex(ValueError, "CPython 3.12, 3.13 and 3.14"),
+            ):
+                installer.validate_python_runtime(
+                    implementation="cpython",
+                    version_info=version,
+                )
         with self.assertRaisesRegex(ValueError, "CPython 3.12, 3.13 and 3.14"):
             installer.validate_python_runtime(
                 implementation="pypy",
