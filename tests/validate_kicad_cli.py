@@ -49,7 +49,10 @@ def _validate_stusb4500_netlist(cli: str, output_dir: Path) -> None:
     )
     tree = parse_sexpr(netlist_path.read_text(encoding="utf-8"))
     actual: dict[tuple[str, str], str] = {}
-    for net in _all(tree, "net"):
+    nets_container = _direct(tree, "nets")
+    if nets_container is None:
+        raise RuntimeError("KiCad netlist export has no nets section.")
+    for net in _all(nets_container, "net"):
         name_node = _direct(net, "name")
         if name_node is None:
             continue
