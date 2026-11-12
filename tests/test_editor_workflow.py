@@ -38,6 +38,72 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
     def tearDown(self):
         self.temp.cleanup()
 
+    def test_edit_facade_uses_native_eeschema_library_symbol_hotkey(self):
+        instance = SimpleNamespace(
+            definition=SimpleNamespace(
+                id=SimpleNamespace(
+                    library=self.block.manifest["library_nickname"],
+                    name=self.block.manifest["symbol_name"],
+                )
+            )
+        )
+        schematic = SimpleNamespace(get_selection=Mock(return_value=[instance]))
+        focus_result = SimpleNamespace(returncode=0, stdout="0x200\\n", stderr="")
+        run_results = [
+            SimpleNamespace(returncode=0, stdout="", stderr=""),
+            SimpleNamespace(returncode=0, stdout="", stderr=""),
+            focus_result,
+        ]
+
+        with (
+            patch.object(plugin_actions.shutil, "which", return_value="/usr/bin/xdotool"),
+            patch.object(
+                plugin_actions, "_block_record_for_instance", return_value=self.block
+            ) as resolve_block,
+            patch.object(
+                plugin_actions, "_minimize_placement_windows", return_value=[self.parent]
+            ) as minimize,
+            patch.object(plugin_actions, "_restore_placement_windows") as restore,
+            patch.object(
+                plugin_actions.subprocess, "run", side_effect=run_results
+            ) as run_command,
+        ):
+            opened = plugin_actions._edit_facade_symbol(
+                self.library,
+                schematic,
+                self.project,
+                "0x100",
+                self.parent,
+            )
+
+        self.assertIsNone(opened)
+        resolve_block.assert_called_once_with(self.library, self.project, instance)
+        minimize.assert_called_once_with(self.parent)
+        restore.assert_not_called()
+        self.assertEqual(
+            run_command.call_args_list[0].args[0],
+            ["/usr/bin/xdotool", "windowfocus", "--sync", "0x100"],
+        )
+        self.assertEqual(
+            run_command.call_args_list[1].args[0],
+            ["/usr/bin/xdotool", "key", "--clearmodifiers", "ctrl+shift+e"],
+        )
+        self.assertEqual(
+            run_command.call_args_list[2].args[0],
+            ["/usr/bin/xdotool", "getwindowfocus"],
+        )
+
+    def test_edit_facade_requires_one_selected_symbol(self):
+        schematic = SimpleNamespace(get_selection=Mock(return_value=[]))
+        with self.assertRaisesRegex(ValueError, "Select one or more block symbol instances"):
+            plugin_actions._edit_facade_symbol(
+                self.library,
+                schematic,
+                self.project,
+                "0x100",
+                self.parent,
+            )
+
     def test_edit_opens_library_implementation_and_publish_advances_revision(self):
         initial_manifest = read_manifest(self.block.path)
         process = object()
