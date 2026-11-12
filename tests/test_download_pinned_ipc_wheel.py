@@ -70,16 +70,16 @@ class DownloadPinnedWheelTests(unittest.TestCase):
             )
 
     def test_rejects_corrupt_or_changed_asset_bytes(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
-            with (
-                patch.object(downloader, "expected_wheel_name", return_value=self.wheel_name),
-                patch.object(downloader, "_api_get_release", return_value=self.release),
-                patch.object(downloader, "_download_asset", return_value=b"wrong bytes"),
-            ):
-                with self.assertRaisesRegex(RuntimeError, "digest mismatch"):
-                    downloader.download_pinned_wheel(
-                        Path(temporary), "Uhrendoktor/kicad-blocks", self.source_sha, "token"
-                    )
+        with (
+            tempfile.TemporaryDirectory() as temporary,
+            patch.object(downloader, "expected_wheel_name", return_value=self.wheel_name),
+            patch.object(downloader, "_api_get_release", return_value=self.release),
+            patch.object(downloader, "_download_asset", return_value=b"wrong bytes"),
+            self.assertRaisesRegex(RuntimeError, "digest mismatch"),
+        ):
+            downloader.download_pinned_wheel(
+                Path(temporary), "Uhrendoktor/kicad-blocks", self.source_sha, "token"
+            )
 
     def test_rejects_wrong_source_sha(self) -> None:
         with self.assertRaisesRegex(ValueError, "40-character SHA"):
