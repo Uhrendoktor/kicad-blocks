@@ -199,7 +199,7 @@ def main() -> None:
         root = Path(temp)
         home = root / "home"
         home.mkdir()
-        documents_home = home / ".local" / "share" / "kicad"
+        documents_home = home / ".local" / "share"
         cache_home = home / ".cache"
         project = root / "project"
         project.mkdir()
@@ -296,7 +296,7 @@ def main() -> None:
             text=True,
         )
         installed_plugin = (
-            documents_home / version / "plugins" / PLUGIN_IDENTIFIER
+            documents_home / "kicad" / version / "plugins" / PLUGIN_IDENTIFIER
         )
         plugin_manifest_path = installed_plugin / "plugin.json"
         manifest = json.loads(plugin_manifest_path.read_text(encoding="utf-8"))
