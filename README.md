@@ -1,5 +1,7 @@
 # KiCad Encapsulated Blocks
 
+**Current release:** V1.1.0. The verified installable package targets KiCad nightly 10.99.0 on Linux x86_64 with CPython 3.12. See [V1.1.0 release notes](CHANGELOG.md).
+
 **Project tracker:** [MVP tracking issue #1](https://github.com/Uhrendoktor/kicad-blocks/issues/1). Requirements, decisions, verification evidence, and remaining work are maintained there.
 
 KiCad Blocks is an IPC schematic plugin for **black-box, library-backed schematic symbols**. A placed block is one ordinary KiCad symbol with external pins. Its implementation remains in a separate `.kicad_block` library asset; the plugin does not create a child sheet or copy the internal circuit into the project schematic.
