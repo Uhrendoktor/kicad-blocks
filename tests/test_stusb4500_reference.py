@@ -37,6 +37,7 @@ class STUSB4500ReferenceTests(unittest.TestCase):
         self.assertIn('(hierarchical_label "VSNK"', content)
         self.assertIn('(hierarchical_label "SCL"', content)
         self.assertIn('(hierarchical_label "SDA"', content)
+        self.assertEqual(content.count("(embedded_fonts no)"), 1)
         self.assertIn('(hierarchical_label "ALERT#"', content)
         self.assertIn('(hierarchical_label "RESET"', content)
         self.assertIn('(hierarchical_label "VMCU"', content)
