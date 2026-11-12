@@ -228,7 +228,7 @@ def generate_reference_schematic(destination: Path) -> Path:
             "5": ("VMCU", "hier", "input"), "6": ("GND", "hier", "passive"),
         }),
         ("C50", "Device", "C", "4.7uF", (70, 205), {"1": ("VBUS", "local", ""), "2": ("GND", "local", "")}),
-        ("C1", "Device", "C", "1uF", (215, 95), {"1": ("1V2", "local", ""), "2": ("GND", "local", "")}),
+        ("C1", "Device", "C", "1uF", (215, 95), {"1": ("VREG_1V2", "local", ""), "2": ("GND", "local", "")}),
         ("C2", "Device", "C", "1uF", (240, 95), {"1": ("VREG_2V7", "local", ""), "2": ("GND", "local", "")}),
         ("C3", "Device", "C", "1uF", (265, 95), {"1": ("VREG_2V7", "local", ""), "2": ("GND", "local", "")}),
         ("C4", "Device", "C", "1uF", (125, 85), {"1": ("VBUS_FILTERED", "local", ""), "2": ("GND", "local", "")}),
@@ -288,17 +288,21 @@ def generate_reference_schematic(destination: Path) -> Path:
             elif len(prop) >= 3 and str(prop[1]) == "Datasheet" and str(prop[2]):
                 datasheet = str(prop[2])
         if reference == "U1":
-            field_x, ref_y, value_y = sx, sy - 30, sy - 27
+            # Keep text well above the four top-side supply pins and their labels.
+            field_x, ref_y, value_y = sx, sy - 44, sy - 41
         elif reference == "J1":
-            field_x, ref_y, value_y = sx + 22, sy - 43, sy - 40
-        elif reference in {"J2", "J10"}:
+            field_x, ref_y, value_y = sx + 12, sy - 44, sy - 41
+        elif reference == "J10":
+            # The connector's two pins face left; place fields above, not over ports.
+            field_x, ref_y, value_y = sx + 12, sy - 19, sy - 16
+        elif reference == "J2":
             field_x, ref_y, value_y = sx + 12, sy - 10, sy - 7
         elif reference in {"T4", "T1"}:
-            field_x, ref_y, value_y = sx + 10, sy - 1.5, sy + 1.5
+            field_x, ref_y, value_y = sx + 12, sy + 11, sy + 14
         elif reference == "D1":
-            field_x, ref_y, value_y = sx, sy - 12, sy - 9
+            field_x, ref_y, value_y = sx, sy - 15, sy - 12
         elif reference.startswith("D"):
-            field_x, ref_y, value_y = sx, sy - 11, sy - 8
+            field_x, ref_y, value_y = sx, sy - 12, sy - 9
         elif reference.startswith(("R", "C")):
             field_x, ref_y, value_y = sx - 8, sy - 1.5, sy + 1.5
         else:
@@ -409,15 +413,15 @@ def generate_reference_schematic(destination: Path) -> Path:
         ["lib_symbols", *library_symbols],
         *instances, *wires, *label_stubs, *labels, *no_connects,
         ["text", _Quoted("STUSB4500QTR — USB Type-C / USB PD sink controller"),
-            ["at", "35", "30", "0"], ["effects", ["font", ["size", "2.0", "2.0"]]],
+            ["at", "50", "30", "0"], ["effects", ["font", ["size", "2.0", "2.0"]]],
             ["uuid", _Quoted(_uid("text:title"))],
         ],
         ["text", _Quoted("USB TYPE-C INPUT / CC PROTECTION"),
-            ["at", "35", "63", "0"], ["effects", ["font", ["size", "1.4", "1.4"]]],
+            ["at", "50", "63", "0"], ["effects", ["font", ["size", "1.4", "1.4"]]],
             ["uuid", _Quoted(_uid("text:input"))],
         ],
         ["text", _Quoted("VBUS FILTER / MONITOR"),
-            ["at", "100", "63", "0"], ["effects", ["font", ["size", "1.4", "1.4"]]],
+            ["at", "115", "63", "0"], ["effects", ["font", ["size", "1.4", "1.4"]]],
             ["uuid", _Quoted(_uid("text:filtering"))],
         ],
         ["text", _Quoted("STUSB4500 / LOCAL DECOUPLING"),
@@ -437,7 +441,7 @@ def generate_reference_schematic(destination: Path) -> Path:
             ["uuid", _Quoted(_uid("text:address"))],
         ],
         ["text", _Quoted("Pin-local labels keep long nets legible; netlist validated in CI."),
-            ["at", "35", "270", "0"], ["effects", ["font", ["size", "1.0", "1.0"]]],
+            ["at", "50", "270", "0"], ["effects", ["font", ["size", "1.0", "1.0"]]],
             ["uuid", _Quoted(_uid("text:note"))],
         ],
         ["sheet_instances", ["path", _Quoted("/"), ["page", _Quoted("1")]]],
