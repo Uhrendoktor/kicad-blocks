@@ -73,7 +73,7 @@ jobs:
           /Device.kicad_symdir/C.kicad_sym
           /Device.kicad_symdir/R.kicad_sym
           /Device.kicad_symdir/D.kicad_sym
-/Device.kicad_symdir/D_TVS.kicad_sym
+          /Device.kicad_symdir/D_TVS.kicad_sym
           /Transistor_FET.kicad_symdir/Q_PMOS_GSD.kicad_sym
           EOF
           git -C "$SYMBOLS_DIR" fetch --depth 1 origin "$SYMBOLS_REF"
