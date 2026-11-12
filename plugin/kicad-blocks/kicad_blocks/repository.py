@@ -212,7 +212,7 @@ def _import_catalog_facade_edit(block: BlockRecord, manifest: dict) -> bool:
         if _head(child) != "symbol"
     ]
     standalone.append(copy.deepcopy(catalog_symbol))
-    atomic_write(asset_path, _dump(standalone) + "\\n")
+    atomic_write(asset_path, _dump(standalone) + "\n")
     return True
 
 
@@ -231,7 +231,7 @@ def _save_catalog_symbol_baseline(block: BlockRecord, manifest: dict) -> None:
     manifest["catalog_symbol_hash"] = digest
     atomic_write(
         block.path / MANIFEST_NAME,
-        json.dumps(manifest, indent=2, ensure_ascii=False) + "\\n",
+        json.dumps(manifest, indent=2, ensure_ascii=False) + "\n",
     )
 
 
@@ -1062,7 +1062,6 @@ def synchronize_facade_pins_from_implementation(block: BlockRecord) -> list[str]
     hierarchical labels, and are left unchanged.
     """
     manifest = read_manifest(block.path)
-    _import_catalog_facade_edit(block, manifest)
     implementation_path = block.path / manifest["implementation_file"]
     implementation_tree = parse_sexpr(
         implementation_path.read_text(encoding="utf-8")
@@ -1074,8 +1073,10 @@ def synchronize_facade_pins_from_implementation(block: BlockRecord) -> list[str]
                 "implementation has none. Add at least one hierarchical label or restore "
                 "the intended interface before publishing; stale facade pins were not kept."
             )
+        _import_catalog_facade_edit(block, manifest)
         return []
 
+    _import_catalog_facade_edit(block, manifest)
     extracted = extract_hierarchical_pins(implementation_tree)
     previous = manifest.get("pins", [])
     previous_by_name = {

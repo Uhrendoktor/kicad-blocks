@@ -207,7 +207,7 @@ class HierarchicalSheetExtractionTests(unittest.TestCase):
             )
             rectangle = _all(graphic_unit, "rectangle")[0]
             _direct(_direct(rectangle, "stroke"), "width")[1] = value
-            path.write_text(_dump(tree) + "\\n", encoding="utf-8")
+            path.write_text(_dump(tree) + "\n", encoding="utf-8")
 
         change_body_width(asset_path, "0.300")
         change_body_width(catalog_path, "0.500")
