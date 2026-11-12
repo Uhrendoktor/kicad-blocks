@@ -38,6 +38,122 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
     def tearDown(self):
         self.temp.cleanup()
 
+    def test_edit_facade_uses_native_eeschema_library_symbol_hotkey(self):
+        instance = SimpleNamespace(
+            definition=SimpleNamespace(
+                id=SimpleNamespace(
+                    library=self.block.manifest["library_nickname"],
+                    name=self.block.manifest["symbol_name"],
+                )
+            )
+        )
+        schematic = SimpleNamespace(get_selection=Mock(return_value=[instance]))
+        focus_result = SimpleNamespace(returncode=0, stdout="0x200\\n", stderr="")
+        run_results = [
+            SimpleNamespace(returncode=0, stdout="", stderr=""),
+            SimpleNamespace(returncode=0, stdout="", stderr=""),
+            focus_result,
+        ]
+
+        with (
+            patch.object(plugin_actions.shutil, "which", return_value="/usr/bin/xdotool"),
+            patch.object(
+                plugin_actions, "_block_record_for_instance", return_value=self.block
+            ) as resolve_block,
+            patch.object(
+                plugin_actions, "_minimize_placement_windows", return_value=[self.parent]
+            ) as minimize,
+            patch.object(plugin_actions, "_restore_placement_windows") as restore,
+            patch.object(
+                plugin_actions.subprocess, "run", side_effect=run_results
+            ) as run_command,
+        ):
+            opened = plugin_actions._edit_facade_symbol(
+                self.library,
+                schematic,
+                self.project,
+                "0x100",
+                self.parent,
+            )
+
+        self.assertIsNone(opened)
+        resolve_block.assert_called_once_with(self.library, self.project, instance)
+        minimize.assert_called_once_with(self.parent)
+        restore.assert_not_called()
+        self.assertEqual(
+            run_command.call_args_list[0].args[0],
+            ["/usr/bin/xdotool", "windowfocus", "--sync", "0x100"],
+        )
+        self.assertEqual(
+            run_command.call_args_list[1].args[0],
+            ["/usr/bin/xdotool", "key", "--clearmodifiers", "ctrl+shift+e"],
+        )
+        self.assertEqual(
+            run_command.call_args_list[2].args[0],
+            ["/usr/bin/xdotool", "getwindowfocus"],
+        )
+
+    def test_create_block_from_selected_sheet_never_prompts_for_manual_pins(self):
+        source = self.project / "power_stage.kicad_sch"
+        source.write_text("(kicad_sch)", encoding="utf-8")
+        selection = '''(sheet
+            (property "Sheetname" "Power Stage" (at 100 100 0) (effects (font (size 1 1))))
+            (property "Sheetfile" "power_stage.kicad_sch" (at 100 100 0) (effects (font (size 1 1))))
+            (uuid "dddddddd-dddd-4ddd-8ddd-dddddddddddd")
+        )'''
+        schematic = SimpleNamespace(
+            get_selection_as_string=Mock(return_value=selection)
+        )
+        dialogs = SimpleNamespace(
+            askstring=Mock(side_effect=["Power Stage", "Power stage description"])
+        )
+        messagebox = SimpleNamespace(showinfo=Mock())
+        with (
+            patch.object(plugin_actions, "simpledialog", dialogs),
+            patch.object(plugin_actions, "messagebox", messagebox),
+            patch.object(plugin_actions, "create_block", return_value=self.block) as create,
+            patch.object(plugin_actions, "_register_block", return_value=self.block) as register,
+        ):
+            plugin_actions._create_and_place(
+                self.library,
+                schematic,
+                self.kicad,
+                self.project,
+                self.parent,
+                "0x100",
+            )
+
+        self.assertEqual(dialogs.askstring.call_count, 2)
+        self.assertEqual(
+            dialogs.askstring.call_args_list[0].args[1],
+            "Block name:",
+        )
+        self.assertEqual(
+            dialogs.askstring.call_args_list[1].args[1],
+            "Description (optional):",
+        )
+        create.assert_called_once_with(
+            self.library,
+            "Power Stage",
+            source_schematic=source.resolve(),
+            source_project_name=self.project.name,
+            source_sheet_uuid="dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+            description="Power stage description",
+        )
+        register.assert_called_once_with(self.project, self.block, self.kicad)
+        messagebox.showinfo.assert_called_once()
+
+    def test_edit_facade_requires_one_selected_symbol(self):
+        schematic = SimpleNamespace(get_selection=Mock(return_value=[]))
+        with self.assertRaisesRegex(ValueError, "Select one or more block symbol instances"):
+            plugin_actions._edit_facade_symbol(
+                self.library,
+                schematic,
+                self.project,
+                "0x100",
+                self.parent,
+            )
+
     def test_edit_opens_library_implementation_and_publish_advances_revision(self):
         initial_manifest = read_manifest(self.block.path)
         process = object()
@@ -83,41 +199,88 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
         self.kicad.wait_for_libraries.assert_called_once()
         self.messagebox.showinfo.assert_called()
 
-    def test_configuration_guide_uses_native_kicad_symbol_properties(self):
-        block = create_block(
-            self.library,
-            "Parameterized Editor Block",
-            parse_pins("VIN:input"),
-            parameters=parse_parameters("OUTPUT_VOLTAGE:number=3.3"),
-        )
-        field = SimpleNamespace(
-            name="KB_PARAM_OUTPUT_VOLTAGE",
-            text=SimpleNamespace(value="1.8"),
-        )
-        instance = SimpleNamespace(
-            id="00000000-0000-0000-0000-000000000456",
-            reference="X1",
-            definition=SimpleNamespace(
-                id=SimpleNamespace(
-                    library=block.manifest["library_nickname"],
-                    name=block.manifest["symbol_name"],
-                )
-            ),
-            user_fields=[field],
-        )
-        schematic = SimpleNamespace(get_selection=lambda: [instance])
+    def test_instance_configuration_is_one_undoable_ipc_update(self):
+        from google.protobuf.empty_pb2 import Empty
+        from kipy.proto.common.commands import editor_commands_pb2
 
-        with patch.object(plugin_actions, "messagebox", self.messagebox):
-            plugin_actions._show_selected_block_configuration(
-                schematic, self.project, self.library, self.parent
+        first = SimpleNamespace(name="KB_PARAM_OUTPUT_VOLTAGE", text=SimpleNamespace(value="3.3"))
+        second = SimpleNamespace(name="KB_LAYOUT", text=SimpleNamespace(value="standard"))
+        instance = SimpleNamespace(
+            reference="X1",
+            user_fields=[first, second],
+            proto=Empty(),
+        )
+        response = editor_commands_pb2.UpdateItemsResponse(status=1)
+        response.updated_items.add().status.code = 1
+        commit = object()
+        send = Mock(return_value=response)
+        document = editor_commands_pb2.UpdateItems().header.document
+        schematic = SimpleNamespace(
+            document=document,
+            client=SimpleNamespace(send=send),
+            begin_commit=Mock(return_value=commit),
+            push_commit=Mock(),
+            save=Mock(),
+            drop_commit=Mock(),
+        )
+
+        plugin_actions._write_instance_configuration(
+            schematic,
+            instance,
+            {"KB_PARAM_OUTPUT_VOLTAGE": "1.8", "KB_LAYOUT": "compact"},
+        )
+
+        self.assertEqual(first.text.value, "1.8")
+        self.assertEqual(second.text.value, "compact")
+        schematic.begin_commit.assert_called_once_with()
+        self.assertIs(send.call_args.args[0].__class__, editor_commands_pb2.UpdateItems)
+        self.assertEqual(len(send.call_args.args[0].items), 1)
+        schematic.push_commit.assert_called_once_with(
+            commit, "Configure KiCad block instance"
+        )
+        schematic.save.assert_called_once_with()
+        schematic.drop_commit.assert_not_called()
+
+    def test_instance_configuration_reports_item_update_status_and_rolls_back(self):
+        from google.protobuf.empty_pb2 import Empty
+        from kipy.proto.common.commands import editor_commands_pb2
+
+        field = SimpleNamespace(name="KB_PARAM_OUTPUT_VOLTAGE", text=SimpleNamespace(value="3.3"))
+        instance = SimpleNamespace(reference="X1", user_fields=[field], proto=Empty())
+        response = editor_commands_pb2.UpdateItemsResponse(status=1)
+        rejected = response.updated_items.add()
+        rejected.status.code = 5
+        rejected.status.error_message = "symbol item is immutable"
+        commit = object()
+        schematic = SimpleNamespace(
+            document=editor_commands_pb2.UpdateItems().header.document,
+            client=SimpleNamespace(send=Mock(return_value=response)),
+            begin_commit=Mock(return_value=commit),
+            push_commit=Mock(),
+            save=Mock(),
+            drop_commit=Mock(),
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "symbol item is immutable"):
+            plugin_actions._write_instance_configuration(
+                schematic, instance, {"KB_PARAM_OUTPUT_VOLTAGE": "1.8"}
             )
 
-        self.messagebox.showinfo.assert_called_once()
-        message = self.messagebox.showinfo.call_args.args[1]
-        self.assertIn("Press E (Symbol Properties)", message)
-        self.assertIn("Fields tab", message)
-        self.assertIn("OUTPUT_VOLTAGE (number) = 1.8", message)
-        self.assertNotIn("update_items", message)
+        self.assertEqual(field.text.value, "3.3")
+        schematic.drop_commit.assert_called_once_with(commit)
+        schematic.push_commit.assert_not_called()
+        schematic.save.assert_not_called()
+
+    def test_instance_configuration_rejects_fields_missing_from_facade(self):
+        instance = SimpleNamespace(reference="X1", user_fields=[])
+        schematic = SimpleNamespace(begin_commit=Mock())
+
+        with self.assertRaisesRegex(RuntimeError, "KB_VARIANT"):
+            plugin_actions._write_instance_configuration(
+                schematic, instance, {"KB_VARIANT": "3V3"}
+            )
+
+        schematic.begin_commit.assert_not_called()
 
     def test_parameter_values_validate_custom_instance_fields(self):
         block = create_block(
@@ -141,7 +304,7 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
             plugin_actions._parameter_values_for_instance(instance, block)
 
 
-    def test_configuration_guide_reports_layout_choices_and_reads_instance_selection(self):
+    def test_layout_selection_reads_instance_field(self):
         standard = self.project / "standard.kicad_pcb"
         low_profile = self.project / "low_profile.kicad_pcb"
         standard.write_text("(kicad_pcb)", encoding="utf-8")
@@ -159,29 +322,13 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
         instance = SimpleNamespace(
             id="00000000-0000-0000-0000-000000000789",
             reference="X7",
-            definition=SimpleNamespace(
-                id=SimpleNamespace(
-                    library=block.manifest["library_nickname"],
-                    name=block.manifest["symbol_name"],
-                )
-            ),
             user_fields=[field],
         )
-        schematic = SimpleNamespace(get_selection=lambda: [instance])
 
-        with patch.object(plugin_actions, "messagebox", self.messagebox):
-            plugin_actions._show_selected_block_configuration(
-                schematic, self.project, self.library, self.parent
-            )
-
-        self.messagebox.showinfo.assert_called_once()
-        message = self.messagebox.showinfo.call_args.args[1]
-        self.assertIn("standard: Standard", message)
-        self.assertIn("low_profile: Low profile", message)
-        self.assertIn("Current KB_LAYOUT: low_profile", message)
         selected = plugin_actions._choose_block_layout(
             block, self.parent, instance=instance
         )
+
         self.assertEqual(selected["id"], "low_profile")
         self.assertEqual(selected["file"], "layout_low_profile.kicad_pcb")
 

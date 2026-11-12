@@ -26,6 +26,7 @@ from kicad_blocks.model import (
 )
 from kicad_blocks.plugin import (
     _register_block,
+    _write_instance_configuration,
     make_selected_local,
     sync_selected_local,
 )
@@ -69,7 +70,13 @@ def main() -> None:
             "Headless IPC Smoke Block",
             parse_pins("VIN:input, GND:passive, VOUT:output"),
             parameters=parse_parameters("OUTPUT_VOLTAGE:number=3.3, ENABLE:boolean=true"),
-            layout_files=[{"name": "Default", "path": default_layout}],
+            layout_files=[{"id": "default", "name": "Default", "path": default_layout}],
+            profiles=[{
+                "id": "default_profile",
+                "name": "Default configuration",
+                "parameters": {"OUTPUT_VOLTAGE": "3.3", "ENABLE": "true"},
+                "layout": "default",
+            }],
         )
         nickname = block.manifest["library_nickname"]
         symbol_name = block.manifest["symbol_name"]
@@ -118,6 +125,8 @@ def main() -> None:
                 )
             if "KB_LAYOUT" not in instance_fields or instance_fields["KB_LAYOUT"].text.value != "default":
                 raise AssertionError("The generated facade did not expose its default PCB layout field.")
+            if "KB_PROFILE" not in instance_fields or instance_fields["KB_PROFILE"].text.value != "":
+                raise AssertionError("The generated facade did not expose its blank profile selector.")
             schematic.save()
 
             symbols = list(schematic.get_symbols())
@@ -137,6 +146,53 @@ def main() -> None:
                     f"Expected per-instance custom field defaults to persist after save: "
                     f"{saved_parameter_values!r}"
                 )
+
+            # Use the fully re-fetched document item, as the UI action does
+            # through get_selection(), rather than the create response wrapper.
+            instance = symbols[0]
+
+            # Edit fields on the selected facade through the same transactional
+            # IPC helper used by the manager's configuration form. The KIID and
+            # library identity must remain stable.
+            original_configured_id = str(instance.id)
+            _write_instance_configuration(
+                schematic,
+                instance,
+                {
+                    "KB_PARAM_OUTPUT_VOLTAGE": "1.8",
+                    "KB_PARAM_ENABLE": "false",
+                    "KB_LAYOUT": "default",
+                    "KB_PROFILE": "default_profile",
+                },
+            )
+            configured_symbols = list(schematic.get_symbols())
+            if len(configured_symbols) != 1:
+                raise AssertionError("Instance configuration duplicated the facade.")
+            instance = configured_symbols[0]
+            configured_values = {
+                name: next(
+                    field.text.value
+                    for field in instance.user_fields
+                    if field.name == name
+                )
+                for name in (
+                    "KB_PARAM_OUTPUT_VOLTAGE",
+                    "KB_PARAM_ENABLE",
+                    "KB_LAYOUT",
+                    "KB_PROFILE",
+                )
+            }
+            if configured_values != {
+                "KB_PARAM_OUTPUT_VOLTAGE": "1.8",
+                "KB_PARAM_ENABLE": "false",
+                "KB_LAYOUT": "default",
+                "KB_PROFILE": "default_profile",
+            }:
+                raise AssertionError(
+                    f"KiCad IPC did not persist the edited instance fields: {configured_values!r}"
+                )
+            if str(instance.id) != original_configured_id or instance.reference != "X1":
+                raise AssertionError("Configuration changed the facade KIID or reference.")
             if len(symbols) != 1:
                 raise AssertionError(f"Expected one facade symbol; found {len(symbols)}.")
             if len(sheet_symbols) != 0:

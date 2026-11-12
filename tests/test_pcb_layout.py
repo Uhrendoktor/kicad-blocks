@@ -310,10 +310,27 @@ def main() -> None:
             or result["rotation_deg"] != 90.0
         ):
             raise AssertionError(f"Unexpected merge report: {result!r}")
+        if (
+            len(result["interactive_item_uuids"]) != result["object_count"]
+            or len(set(result["interactive_item_uuids"])) != result["object_count"]
+        ):
+            raise AssertionError(f"Imported board-item IDs are incomplete or duplicated: {result!r}")
+
+        parsed = parse_sexpr(output.read_text(encoding="utf-8"))
+        top_level_item_ids = {
+            str(child[1])
+            for item in parsed[1:]
+            if isinstance(item, list) and item
+            for child in item[1:]
+            if isinstance(child, list) and child and child[0] == "uuid" and len(child) > 1
+        }
+        if not set(result["interactive_item_uuids"]).issubset(top_level_item_ids):
+            raise AssertionError(
+                "The interactive placement IDs do not identify the imported top-level PCB objects."
+            )
 
         # The imported chain must use mapped project net names and regenerated
         # terminal-pad UUIDs, not references back to the stored library board.
-        parsed = parse_sexpr(output.read_text(encoding="utf-8"))
         chain_section = next(
             item for item in parsed[1:]
             if isinstance(item, list) and item and item[0] == "net_chains"

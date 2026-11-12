@@ -313,6 +313,20 @@ def main() -> None:
             raise AssertionError(
                 f"Installed action is not enabled for the Schematic Editor: {action!r}"
             )
+        pcb_action = next(
+            item
+            for item in manifest["actions"]
+            if item["identifier"] == "place-imported-layout"
+        )
+        if pcb_action.get("scopes") != ["pcb"] or not pcb_action.get("show-button"):
+            raise AssertionError(
+                f"Imported-layout action is not enabled for PCB Editor: {pcb_action!r}"
+            )
+        pcb_entrypoint = installed_plugin / pcb_action["entrypoint"]
+        if not pcb_entrypoint.is_file():
+            raise FileNotFoundError(
+                f"Installed PCB Editor action entrypoint is missing: {pcb_entrypoint}"
+            )
         installed_requirements = (installed_plugin / "requirements.txt").read_text(encoding="utf-8")
         expected_wheel_url = (
             "https://github.com/Uhrendoktor/kicad-blocks/releases/download/"
@@ -397,6 +411,29 @@ def main() -> None:
                 raise AssertionError(
                     "The Tk picker GUI smoke test did not report success. "
                     f"stdout: {picker_probe.stdout}; stderr: {picker_probe.stderr}"
+                )
+
+            configuration_probe = subprocess.run(
+                [
+                    python_interpreter,
+                    str(ROOT / "tests" / "test_instance_configuration_gui.py"),
+                ],
+                env=env,
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=20.0,
+            )
+            if configuration_probe.returncode != 0:
+                raise RuntimeError(
+                    "The instance configuration GUI smoke test failed "
+                    f"(exit {configuration_probe.returncode}). "
+                    f"stdout: {configuration_probe.stdout}; stderr: {configuration_probe.stderr}"
+                )
+            if "instance configuration gui passed" not in configuration_probe.stdout.casefold():
+                raise AssertionError(
+                    "The instance configuration GUI smoke test did not report success. "
+                    f"stdout: {configuration_probe.stdout}; stderr: {configuration_probe.stderr}"
                 )
             print(picker_probe.stdout.strip())
 

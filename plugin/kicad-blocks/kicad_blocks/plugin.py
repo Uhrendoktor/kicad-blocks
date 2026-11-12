@@ -18,18 +18,25 @@ messagebox = None
 simpledialog = None
 
 from .composition import compose_block_implementation
+from .extraction import selected_sheet_file, selected_sheet_instance_uuid
 from .model import (
     LAYOUT_FIELD_NAME,
     PARAMETER_FIELD_PREFIX,
+    PROFILE_FIELD_NAME,
     VARIANT_FIELD_NAME,
     parameter_field_name,
-    parse_parameters,
-    parse_pins,
     resolve_parameter_values,
+    resolve_profile_configuration,
     resolve_variant_implementation,
 )
-from .operations import export_block_bom, find_kicad_cli, validate_block_tree
+from .operations import (
+    export_block_bom,
+    find_kicad_cli,
+    validate_block_library,
+    validate_block_tree,
+)
 from .pcb_layout import BlockLayoutPlacement, merge_block_layout, merge_block_layouts
+from .pcb_placement import placement_manifest_path, write_pcb_placement_manifest
 from .repository import (
     LIBRARY_NICKNAME,
     add_dependency,
@@ -188,26 +195,105 @@ def _parameter_values_for_instance(instance, block) -> dict[str, str]:
     return resolve_parameter_values(parameters, overrides)
 
 
+def _update_schematic_item_checked(schematic, instance) -> None:
+    """Update one schematic item and inspect KiCad's per-item IPC status.
+
+    The current kipy update_items() wrapper unconditionally unwraps the
+    optional response Any. KiCad can return an ItemUpdateResult without that
+    Any, so inspect the documented status fields directly instead.
+    """
+    from kipy.proto.common.commands import editor_commands_pb2
+    from kipy.util import pack_any
+
+    command = editor_commands_pb2.UpdateItems()
+    command.header.document.CopyFrom(schematic.document)
+    command.items.append(pack_any(instance.proto))
+    response = schematic.client.send(
+        command, editor_commands_pb2.UpdateItemsResponse
+    )
+
+    if int(response.status) != 1:
+        raise RuntimeError(
+            "KiCad rejected the block instance update request "
+            f"(request status {int(response.status)})."
+        )
+    if len(response.updated_items) != 1:
+        raise RuntimeError(
+            "KiCad returned an unexpected number of item update results: "
+            f"{len(response.updated_items)}."
+        )
+
+    item_result = response.updated_items[0]
+    status = item_result.status
+    if int(status.code) != 1:
+        detail = str(getattr(status, "error_message", "") or "").strip()
+        message = (
+            f"KiCad rejected the block instance update (item status {int(status.code)})."
+        )
+        if detail:
+            message += f" {detail}"
+        raise RuntimeError(message)
+
+
+def _write_instance_configuration(schematic, instance, values: dict[str, str]) -> None:
+    """Write validated facade fields through KiCad IPC as one undoable edit."""
+    fields = {
+        str(getattr(field, "name", "")): field
+        for field in getattr(instance, "user_fields", ())
+    }
+    missing = sorted(set(values) - set(fields))
+    if missing:
+        raise RuntimeError(
+            f"Block instance {getattr(instance, 'reference', '<unknown>')} is missing "
+            f"configuration field(s): {', '.join(missing)}. Reload the facade from "
+            "the block library and replace the instance."
+        )
+
+    original_values = {
+        name: str(getattr(getattr(fields[name], "text", None), "value", "") or "")
+        for name in values
+    }
+    commit = schematic.begin_commit()
+    try:
+        for name, value in values.items():
+            fields[name].text.value = str(value)
+        _update_schematic_item_checked(schematic, instance)
+        schematic.push_commit(commit, "Configure KiCad block instance")
+        schematic.save()
+    except Exception:
+        with contextlib.suppress(Exception):
+            schematic.drop_commit(commit)
+        for name, value in original_values.items():
+            with contextlib.suppress(Exception):
+                fields[name].text.value = value
+        raise
+
+
 def _show_selected_block_configuration(
     schematic, project_dir: Path, library_root: Path, parent
 ) -> None:
-    """Show how to edit the instance-local values with KiCad's native UI."""
+    """Edit instance-local profile, variant, parameters and PCB layout."""
+    _load_tkinter()
     instance = _selected_symbol(schematic)
     block = _block_record_for_instance(library_root, project_dir, instance)
     parameters = block.manifest.get("parameters", [])
     layouts = _layout_choices(block)
+    variants = block.manifest.get("variants", [])
+    profiles = block.manifest.get("profiles", [])
     current_values = _parameter_values_for_instance(instance, block)
-    field_names = {
-        str(getattr(field, "name", ""))
+    fields = {
+        str(getattr(field, "name", "")): field
         for field in getattr(instance, "user_fields", ())
     }
-    missing = [
-        parameter_field_name(item["name"])
-        for item in parameters
-        if parameter_field_name(item["name"]) not in field_names
-    ]
-    if layouts and LAYOUT_FIELD_NAME not in field_names:
-        missing.append(LAYOUT_FIELD_NAME)
+
+    required = [parameter_field_name(item["name"]) for item in parameters]
+    if variants:
+        required.append(VARIANT_FIELD_NAME)
+    if layouts:
+        required.append(LAYOUT_FIELD_NAME)
+    if profiles:
+        required.append(PROFILE_FIELD_NAME)
+    missing = sorted(set(required) - set(fields))
     if missing:
         raise RuntimeError(
             f"Block instance {instance.reference} is missing field(s): "
@@ -215,46 +301,267 @@ def _show_selected_block_configuration(
             + ". Reload the facade from the block library and replace the instance."
         )
 
-    parameter_lines = (
-        "\n".join(
-            f"  {parameter['name']} ({parameter['type']}) = "
-            f"{current_values[parameter['name']]}"
-            for parameter in parameters
+    dialog = tk.Toplevel(parent)
+    dialog.title(f"Configure {instance.reference} — {block.name}")
+    dialog.geometry("700x720")
+    dialog.minsize(580, 500)
+    dialog.transient(parent)
+    dialog.grab_set()
+
+    outer = ttk.Frame(dialog, padding=18)
+    outer.pack(fill="both", expand=True)
+    ttk.Label(
+        outer,
+        text=f"{instance.reference}  ·  {block.name}",
+        font=("TkDefaultFont", 14, "bold"),
+    ).pack(anchor="w")
+    ttk.Label(
+        outer,
+        text="Choose a profile to load a matching circuit variant, parameter set and PCB layout. "
+        "You can then customize individual values for this instance.",
+        wraplength=640,
+        justify="left",
+    ).pack(anchor="w", pady=(4, 14))
+
+    content = ttk.Frame(outer)
+    content.pack(fill="both", expand=True)
+
+    profile_var = None
+    profile_labels: dict[str, dict] = {}
+    if profiles:
+        section = ttk.LabelFrame(content, text="Configuration profile", padding=10)
+        section.pack(fill="x", pady=(0, 10))
+        profile_labels = {
+            f"{item['name']}  [{item['id']}]": item
+            for item in profiles
+        }
+        profile_labels["Custom (manual settings)"] = None
+        current_profile_id = _field_value(instance, PROFILE_FIELD_NAME)
+        current_profile_label = next(
+            (
+                label for label, item in profile_labels.items()
+                if item is not None and str(item["id"]).casefold() == current_profile_id.casefold()
+            ),
+            "Custom (manual settings)",
         )
-        if parameters
-        else "  (none)"
-    )
-    layout_ids = (
-        "\n".join(
-            f"  {item.get('id')}: {item.get('name', item.get('id'))}"
+        profile_var = tk.StringVar(value=current_profile_label)
+        ttk.Label(
+            section,
+            text="A profile is a reusable preset. Selecting one fills all linked fields below.",
+            wraplength=620,
+            justify="left",
+        ).pack(anchor="w", pady=(0, 6))
+        profile_combo = ttk.Combobox(
+            section,
+            textvariable=profile_var,
+            values=list(profile_labels),
+            state="readonly",
+        )
+        profile_combo.pack(fill="x")
+
+    variant_var = None
+    if variants:
+        section = ttk.LabelFrame(content, text="Implementation variant", padding=10)
+        section.pack(fill="x", pady=(0, 10))
+        variant_var = tk.StringVar(value=_field_value(instance, VARIANT_FIELD_NAME))
+        ttk.Label(
+            section,
+            text="Select a declared implementation, or enter a KiCad text-variable reference.",
+            wraplength=620,
+            justify="left",
+        ).pack(anchor="w", pady=(0, 6))
+        ttk.Combobox(
+            section,
+            textvariable=variant_var,
+            values=[str(item["value"]) for item in variants],
+            state="normal",
+        ).pack(fill="x")
+
+    parameter_vars = {}
+    if parameters:
+        section = ttk.LabelFrame(content, text="Parameters", padding=10)
+        section.pack(fill="both", expand=True, pady=(0, 10))
+        section.columnconfigure(1, weight=1)
+        for row, parameter in enumerate(parameters):
+            name = parameter["name"]
+            ttk.Label(
+                section,
+                text=f"{name}  ({parameter['type']})",
+            ).grid(row=row * 2, column=0, sticky="w", padx=(0, 12), pady=(5, 0))
+            variable = tk.StringVar(value=current_values[name])
+            parameter_vars[name] = variable
+            if parameter["type"] == "boolean":
+                widget = ttk.Combobox(
+                    section,
+                    textvariable=variable,
+                    values=("true", "false"),
+                    state="readonly",
+                )
+            else:
+                widget = ttk.Entry(section, textvariable=variable)
+            widget.grid(row=row * 2, column=1, sticky="ew", pady=(5, 0))
+            description = parameter.get("description") or f"Default: {parameter['default']}"
+            ttk.Label(
+                section,
+                text=description,
+                foreground="#667785",
+                wraplength=600,
+                justify="left",
+            ).grid(row=row * 2 + 1, column=0, columnspan=2, sticky="w", pady=(0, 4))
+
+    layout_var = None
+    layout_ids = {}
+    if layouts:
+        section = ttk.LabelFrame(content, text="PCB layout", padding=10)
+        section.pack(fill="x", pady=(0, 10))
+        layout_ids = {
+            f"{item.get('name', item.get('id'))}  [{item.get('id')}]": str(item.get("id") or "")
             for item in layouts
+        }
+        current_layout = _field_value(instance, LAYOUT_FIELD_NAME)
+        current_label = next(
+            (
+                label for label, layout_id in layout_ids.items()
+                if layout_id.casefold() == current_layout.casefold()
+            ),
+            None,
         )
-        if layouts
-        else "  (none)"
-    )
-    selected_layout = next(
-        (
-            getattr(getattr(field, "text", None), "value", "")
-            for field in getattr(instance, "user_fields", ())
-            if str(getattr(field, "name", "")) == LAYOUT_FIELD_NAME
-        ),
-        "",
-    )
-    messagebox.showinfo(
-        "Configure Block Instance",
-        f"Selected block: {instance.reference} — {block.name}\n\n"
-        "Edit these instance-local fields in KiCad itself:\n"
-        "1. Close this dialog and select the block symbol.\n"
-        "2. Press E (Symbol Properties).\n"
-        "3. Open the Fields tab and edit the values below.\n"
-        "4. Confirm the dialog and save the schematic.\n\n"
-        f"Parameters:\n{parameter_lines}\n\n"
-        f"PCB layout alternatives:\n{layout_ids}\n"
-        f"Current KB_LAYOUT: {selected_layout or '(unset)'}\n\n"
-        "The values are stored on this symbol instance, not in the shared block library. "
-        "The recursive BOM/ERC and PCB layout actions read the saved values.",
-        parent=parent,
-    )
+        if current_layout and current_label is None:
+            raise ValueError(
+                f"Block {block.name!r} instance {instance.reference} selects unknown "
+                f"layout {current_layout!r}. Refresh the block or select a valid layout."
+            )
+        layout_var = tk.StringVar(value=current_label or next(iter(layout_ids)))
+        ttk.Label(
+            section,
+            text="The selected layout is used by the PCB apply actions.",
+        ).pack(anchor="w", pady=(0, 6))
+        ttk.Combobox(
+            section,
+            textvariable=layout_var,
+            values=list(layout_ids),
+            state="readonly",
+        ).pack(fill="x")
+
+    profile_application_active = [False]
+
+    def apply_profile(_event=None) -> None:
+        if profile_var is None:
+            return
+        profile = profile_labels.get(profile_var.get())
+        if profile is None:
+            return
+        resolved = resolve_profile_configuration(block.manifest, profile["id"])
+        profile_application_active[0] = True
+        try:
+            if variant_var is not None:
+                variant_var.set(resolved["variant"])
+            for name, value in resolved["parameters"].items():
+                if name in parameter_vars:
+                    parameter_vars[name].set(value)
+            if layout_var is not None:
+                matching_label = next(
+                    (
+                        label for label, layout_id in layout_ids.items()
+                        if layout_id.casefold() == resolved["layout"].casefold()
+                    ),
+                    None,
+                )
+                if matching_label is None:
+                    raise ValueError(
+                        f"Profile {profile['name']!r} references a PCB layout that is not available."
+                    )
+                layout_var.set(matching_label)
+        finally:
+            profile_application_active[0] = False
+
+    def mark_profile_custom(*_args) -> None:
+        if profile_var is None or profile_application_active[0]:
+            return
+        if profile_var.get() != "Custom (manual settings)":
+            profile_var.set("Custom (manual settings)")
+
+    if profile_var is not None:
+        profile_combo.bind("<<ComboboxSelected>>", apply_profile)
+        for linked_variable in (
+            ([variant_var] if variant_var is not None else [])
+            + list(parameter_vars.values())
+            + ([layout_var] if layout_var is not None else [])
+        ):
+            linked_variable.trace_add("write", mark_profile_custom)
+
+    footer = ttk.Frame(outer)
+    footer.pack(fill="x", pady=(14, 0))
+
+    def save_configuration() -> None:
+        try:
+            updates: dict[str, str] = {}
+            resolved_variant = ""
+            if variant_var is not None:
+                raw_variant = variant_var.get().strip()
+                resolved_variant = _resolve_variant_text(
+                    raw_variant,
+                    schematic.get_project(),
+                    _sheet_variables_for_symbol(schematic, instance),
+                )
+                resolve_variant_implementation(block.manifest, resolved_variant)
+                updates[VARIANT_FIELD_NAME] = raw_variant
+
+            normalized_parameters = current_values
+            if parameter_vars:
+                normalized_parameters = resolve_parameter_values(
+                    parameters,
+                    {name: variable.get() for name, variable in parameter_vars.items()},
+                )
+                updates.update({
+                    parameter_field_name(name): value
+                    for name, value in normalized_parameters.items()
+                })
+
+            selected_layout_id = ""
+            if layout_var is not None:
+                selected_layout = layout_var.get()
+                if selected_layout not in layout_ids:
+                    raise ValueError("Select one of the declared PCB layout alternatives.")
+                selected_layout_id = layout_ids[selected_layout]
+                updates[LAYOUT_FIELD_NAME] = selected_layout_id
+
+            if profile_var is not None:
+                selected_profile = profile_labels.get(profile_var.get())
+                selected_profile_id = ""
+                if selected_profile is not None:
+                    expected = resolve_profile_configuration(
+                        block.manifest, selected_profile["id"]
+                    )
+                    current_matches = (
+                        (variant_var is None or resolved_variant.casefold() == expected["variant"].casefold())
+                        and normalized_parameters == expected["parameters"]
+                        and (layout_var is None or selected_layout_id.casefold() == expected["layout"].casefold())
+                    )
+                    if current_matches:
+                        selected_profile_id = str(selected_profile["id"])
+                updates[PROFILE_FIELD_NAME] = selected_profile_id
+
+            _write_instance_configuration(schematic, instance, updates)
+        except Exception as exc:
+            LOG.exception("Could not configure block instance %s", instance.reference)
+            messagebox.showerror("Invalid Block Configuration", str(exc), parent=dialog)
+            return
+
+        messagebox.showinfo(
+            "Block Instance Updated",
+            f"Saved configuration for {instance.reference}.\n\n"
+            "The schematic was updated through KiCad IPC as one undoable change. "
+            "The shared library block was not modified.",
+            parent=dialog,
+        )
+        dialog.destroy()
+
+    ttk.Button(footer, text="Cancel", command=dialog.destroy).pack(side="right", padx=(8, 0))
+    ttk.Button(footer, text="Save instance", command=save_configuration).pack(side="right")
+    dialog.bind("<Escape>", lambda _event: dialog.destroy())
+    dialog.protocol("WM_DELETE_WINDOW", dialog.destroy)
+    dialog.wait_window()
 
 
 def sync_selected_local(schematic, kicad, project_dir: Path) -> dict:
@@ -502,138 +809,266 @@ def _choose_library_root(parent) -> Path:
     return set_library_root(Path(selected))
 
 
+def _parse_profile_parameter_overrides(text: str, parameters: list[dict]) -> dict[str, str]:
+    """Parse typed NAME=VALUE overrides entered for one configuration profile."""
+    declarations = {item["name"]: item for item in parameters}
+    raw_values = {}
+    for entry in str(text or "").split(","):
+        token = entry.strip()
+        if not token:
+            continue
+        if "=" not in token:
+            raise ValueError(f"Invalid profile parameter {token!r}; use NAME=VALUE.")
+        name, value = (part.strip() for part in token.split("=", 1))
+        if name not in declarations:
+            raise ValueError(f"Unknown profile parameter {name!r}.")
+        if name in raw_values:
+            raise ValueError(f"Profile parameter {name!r} was entered more than once.")
+        raw_values[name] = value
+    normalized = resolve_parameter_values(parameters, raw_values)
+    return {name: normalized[name] for name in raw_values}
+
+
+def _collect_block_profiles(parent, parameters, variants, layouts) -> list[dict] | None:
+    """Collect optional linked variant/parameter/layout presets during block creation."""
+    if not (parameters or variants or layouts):
+        return []
+    if not messagebox.askyesno(
+        "Configuration Profiles",
+        "Add named presets that combine an implementation variant, parameter values "
+        "and PCB layout? You can also configure each instance manually later.",
+        parent=parent,
+    ):
+        return []
+
+    profiles = []
+    while True:
+        name = simpledialog.askstring(
+            "New Configuration Profile",
+            "Profile name:",
+            parent=parent,
+        )
+        if name is None:
+            return None
+        if not name.strip():
+            messagebox.showwarning(
+                "Configuration Profile",
+                "Enter a profile name or choose No when asked to add profiles.",
+                parent=parent,
+            )
+            return None
+
+        description = simpledialog.askstring(
+            "Profile Description",
+            "Description (optional):",
+            initialvalue="",
+            parent=parent,
+        )
+        if description is None:
+            return None
+
+        variant = None
+        if variants:
+            choices = [str(item["value"]) for item in variants]
+            variant = simpledialog.askstring(
+                "Profile Implementation Variant",
+                "Choose the exact implementation value:\n\n" + "\n".join(choices),
+                initialvalue=choices[0],
+                parent=parent,
+            )
+            if variant is None:
+                return None
+            matched_variant = next(
+                (value for value in choices if value.casefold() == variant.strip().casefold()),
+                None,
+            )
+            if matched_variant is None:
+                raise ValueError(
+                    f"Unknown profile variant {variant!r}. Choose one of: {', '.join(choices)}."
+                )
+            variant = matched_variant
+
+        parameter_values = {}
+        if parameters:
+            parameter_text = simpledialog.askstring(
+                "Profile Parameter Overrides",
+                "Optional typed overrides, comma-separated as NAME=VALUE. "
+                "Leave a parameter out to inherit the block default.\n\n"
+                + ", ".join(f"{item['name']}={item['default']}" for item in parameters),
+                initialvalue="",
+                parent=parent,
+            )
+            if parameter_text is None:
+                return None
+            parameter_values = _parse_profile_parameter_overrides(
+                parameter_text, parameters
+            )
+
+        layout_id = None
+        if layouts:
+            labels = {
+                f"{item['name']}  [{item['id']}]": str(item["id"])
+                for item in layouts
+            }
+            selected_layout = simpledialog.askstring(
+                "Profile PCB Layout",
+                "Choose a PCB layout:\n\n" + "\n".join(labels),
+                initialvalue=next(iter(labels)),
+                parent=parent,
+            )
+            if selected_layout is None:
+                return None
+            layout_aliases = {}
+            for item in layouts:
+                layout_aliases[item["name"].casefold()] = str(item["id"])
+                layout_aliases[str(item["id"]).casefold()] = str(item["id"])
+            for label, value in labels.items():
+                layout_aliases[label.casefold()] = value
+            layout_id = layout_aliases.get(selected_layout.strip().casefold())
+            if layout_id is None:
+                raise ValueError(
+                    f"Unknown profile layout {selected_layout!r}. Choose one of: "
+                    + ", ".join(labels)
+                )
+
+        profiles.append({
+            "name": name.strip(),
+            "description": description.strip(),
+            "variant": variant,
+            "parameters": parameter_values,
+            "layout": layout_id,
+        })
+        if not messagebox.askyesno(
+            "Configuration Profiles",
+            f"Added profile {name.strip()!r}. Add another profile?",
+            parent=parent,
+        ):
+            break
+    return profiles
+
+
 def _create_and_place(
     root, schematic, kicad, project_dir, parent,
     editor_window_id: str | None = None,
 ) -> None:
+    """Create a facade from the selected hierarchical sheet; never ask for pins."""
+    if not hasattr(schematic, "get_selection_as_string"):
+        raise RuntimeError(
+            "This KiCad build does not expose the schematic selection serializer."
+        )
+    selection_fragment = schematic.get_selection_as_string()
+    source_sheet = selected_sheet_file(selection_fragment, project_dir)
+    source_sheet_uuid = selected_sheet_instance_uuid(selection_fragment)
+
     name = simpledialog.askstring(
-        "Create Block", "Block name:", initialvalue="Buck Converter", parent=parent
+        "Create Block from Hierarchical Sheet",
+        "Block name:",
+        initialvalue=source_sheet.stem.replace("_", " ").replace("-", " ").title(),
+        parent=parent,
     )
     if not name:
         return
-    pin_text = simpledialog.askstring(
-        "Block Interface",
-        "External pins, comma-separated as NAME:type.\n"
-        "Types: input, output, bidirectional, tristate, passive.",
-        initialvalue="VIN:input, GND:passive, VOUT:output, EN:input",
-        parent=parent,
-    )
-    if not pin_text:
-        return
-    pins = parse_pins(pin_text)
     description = simpledialog.askstring(
-        "Block Description", "Description (optional):", initialvalue="", parent=parent
-    ) or ""
-    parameter_text = simpledialog.askstring(
-        "Block Parameters",
-        "Optional typed parameters, comma-separated as NAME[:type]=DEFAULT.\n"
-        "Types: string, number, integer, boolean. Example: OUTPUT_VOLTAGE:number=3.3, ENABLE:boolean=true",
+        "Block Description",
+        "Description (optional):",
         initialvalue="",
         parent=parent,
     )
-    if parameter_text is None:
+    if description is None:
         return
-    parameters = parse_parameters(parameter_text)
-
-    selected_variant_schematics = filedialog.askopenfilenames(
-        title="Optional: select variant implementation schematics",
-        filetypes=[("KiCad Schematic", "*.kicad_sch"), ("All files", "*.*")],
-        parent=parent,
-    )
-    variant_files = []
-    for variant_path in selected_variant_schematics:
-        variant_path = Path(variant_path)
-        variant_value = simpledialog.askstring(
-            "Block Variant",
-            f"Which exact KB_VARIANT value opens {variant_path.name}?\n"
-            "Example: 3V3 (the facade field may contain ${SUPPLY_VOLTAGE}).",
-            initialvalue=variant_path.stem,
-            parent=parent,
-        )
-        if variant_value is None:
-            return
-        variant_files.append({"value": variant_value, "path": variant_path})
-
-    selected_layouts = filedialog.askopenfilenames(
-        title="Optional: select one or more named PCB layout alternatives",
-        filetypes=[("KiCad PCB", "*.kicad_pcb"), ("All files", "*.*")],
-        parent=parent,
-    )
-    layouts = []
-    for index, layout_path in enumerate(selected_layouts, start=1):
-        layout_path = Path(layout_path)
-        layout_name = simpledialog.askstring(
-            f"PCB Layout {index}",
-            "Name this layout alternative:",
-            initialvalue=layout_path.stem,
-            parent=parent,
-        )
-        if layout_name is None:
-            return
-        layout_project = filedialog.askopenfilename(
-            title=f"Optional: select project settings for {layout_name}",
-            filetypes=[("KiCad Project", "*.kicad_pro"), ("All files", "*.*")],
-            parent=parent,
-        )
-        default_ports = ", ".join(f"{pin.name}:{pin.name}" for pin in pins)
-        ports_text = simpledialog.askstring(
-            f"PCB Layout Ports — {layout_name}",
-            "Map each facade pin to the corresponding net name in this stored layout.\n"
-            "Format: FACADE_PIN:LAYOUT_NET, comma-separated.",
-            initialvalue=default_ports,
-            parent=parent,
-        )
-        if ports_text is None:
-            return
-        ports = _parse_pin_net_map(ports_text, [pin.name for pin in pins])
-        layouts.append({
-            "name": layout_name.strip() or layout_path.stem,
-            "path": layout_path,
-            "project_path": Path(layout_project) if layout_project else None,
-            "ports": ports,
-        })
 
     record = create_block(
         root,
         name,
-        pins,
+        source_schematic=source_sheet,
+        source_project_name=Path(project_dir).name,
+        source_sheet_uuid=source_sheet_uuid,
         description=description,
-        layout_files=layouts if layouts else None,
-        parameters=parameters,
-        variant_files=variant_files,
     )
     record = _register_block(project_dir, record, kicad)
-    layout_names = ", ".join(item["name"] for item in record.manifest.get("layouts", [])) or "none"
-    parameter_names = ", ".join(item["name"] for item in record.manifest.get("parameters", [])) or "none"
+    pins_summary = "\\n".join(
+        f"  • {pin['name']} — {pin['electrical_type']}"
+        for pin in record.manifest.get("pins", [])
+    )
     messagebox.showinfo(
         "Block Created",
-        f"Created and registered {name}.\n\n"
-        f"Library asset: {record.path}\n"
-        f"Implementation schematic: {record.implementation}\n"
-        f"PCB layout alternatives: {layout_names}\n"
-        f"Block parameters: {parameter_names}\n\n"
-        "Click OK to open KiCad's symbol chooser. After selecting the block, "
-        "move the mouse to the desired location and click to place it. Press Esc to cancel. "
-        "The manager minimizes during placement; restore it to create or browse another block. "
-        "Open the implementation file separately in Eeschema to edit the internal circuit; "
-        "use Symbol Properties → Fields to override values per instance.",
+        f"Created {name} from hierarchical sheet {source_sheet.name}.\\n\\n"
+        f"Facade pins were generated from hierarchical labels and their shapes:\\n"
+        f"{pins_summary}\\n\\n"
+        f"Implementation: {record.implementation}\\n"
+        f"Facade symbol: {record.symbol_library}\\n\\n"
+        "The original project sheet is unchanged. Edit the facade in KiCad's "
+        "normal Symbol Editor, then use Publish Library Block. When the "
+        "implementation's hierarchical labels change, Publish synchronizes "
+        "facade pin names and electrical types automatically.",
         parent=parent,
     )
+
+
+def _edit_facade_symbol(
+    root, schematic, project_dir, editor_window_id, parent
+) -> None:
+    """Open the selected library-backed facade through Eeschema's native Symbol Editor action."""
+    instance = _selected_symbol(schematic)
+    record = _block_record_for_instance(root, project_dir, instance)
+    xdotool = shutil.which("xdotool")
+    if not xdotool:
+        raise RuntimeError(
+            "Editing a selected facade from the manager requires xdotool on the "
+            "supported Linux/X11 setup. In Eeschema, select the block symbol and "
+            "press Ctrl+Shift+E to open its library version in Symbol Editor."
+        )
+    if not editor_window_id:
+        editor_window_id = _capture_eeschema_window_id()
+    if not editor_window_id:
+        raise RuntimeError(
+            "Could not identify the active Eeschema window. Select the block symbol "
+            "in Eeschema and retry Edit facade symbol."
+        )
+
     minimized_windows = _minimize_placement_windows(parent)
     try:
-        _start_native_symbol_placement(
-            kicad, editor_window_id, str(record.manifest["symbol_name"])
+        subprocess.run(
+            [xdotool, "windowfocus", "--sync", editor_window_id],
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=3,
         )
-    except Exception as exc:
+        subprocess.run(
+            [xdotool, "key", "--clearmodifiers", "ctrl+shift+e"],
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=3,
+        )
+        deadline = time.monotonic() + 5.0
+        focused = editor_window_id
+        while time.monotonic() < deadline:
+            result = subprocess.run(
+                [xdotool, "getwindowfocus"],
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=3,
+            )
+            focused = result.stdout.strip()
+            if result.returncode == 0 and focused and focused != editor_window_id:
+                LOG.info(
+                    "Opened library facade %s:%s in KiCad Symbol Editor",
+                    record.manifest.get("library_nickname"),
+                    record.manifest.get("symbol_name"),
+                )
+                return
+            time.sleep(0.1)
+        raise RuntimeError(
+            "Eeschema did not hand focus to Symbol Editor after Ctrl+Shift+E. "
+            "Make sure the selected facade is linked to the block library and "
+            "that the hotkey is still assigned to Edit Library Symbol."
+        )
+    except Exception:
         _restore_placement_windows(minimized_windows)
-        LOG.exception("Block was created but interactive placement did not start")
-        messagebox.showwarning(
-            "Block Created — placement not started",
-            f"{name} was saved and registered in the library, but KiCad did not "
-            f"start interactive placement.\n\n{exc}\n\n"
-            "You can still place it later from Browse Block Library.",
-            parent=parent,
-        )
+        raise
 
 def _place_existing(root, schematic, kicad, project_dir, parent) -> None:
     """Open the searchable browser; placement is handed to KiCad's native cursor tool."""
@@ -948,6 +1383,14 @@ def _block_overview_text(record) -> str:
         f"  {item.get('name', item.get('id'))}  [{item.get('id', 'legacy')}]"
         for item in _layout_choices(record)
     ] or ["  (none)"]
+    profile_lines = [
+        "  "
+        + str(item.get("name", item.get("id")))
+        + f"  [{item.get('id')}]"
+        + f"  | variant={item.get('variant') or 'single'}"
+        + f"  | layout={item.get('layout') or 'none'}"
+        for item in manifest.get("profiles", [])
+    ] or ["  (none)"]
     return (
         f"Reference prefix: {manifest.get('reference_prefix', 'X')}\n"
         f"Block version: {manifest.get('version', 1)}\n"
@@ -960,6 +1403,8 @@ def _block_overview_text(record) -> str:
         + "\n".join(variant_lines)
         + "\n\nPCB layouts:\n"
         + "\n".join(layout_lines)
+        + "\n\nConfiguration profiles:\n"
+        + "\n".join(profile_lines)
         + f"\n\nLibrary asset: {record.path}"
     )
 
@@ -1520,6 +1965,43 @@ def _export_recursive_bom(root: Path, parent, schematic=None, project_dir: Path 
     )
 
 
+def _validate_shared_library(root: Path, parent) -> None:
+    """Validate every block's manifest, assets, profiles, dependencies and ERC."""
+    output = filedialog.askdirectory(
+        title="Select a folder for the library validation report",
+        parent=parent,
+    )
+    if not output:
+        return
+    result = validate_block_library(
+        root,
+        Path(output),
+        find_kicad_cli(),
+        run_erc=True,
+    )
+    details = []
+    for item in result["blocks"]:
+        status = str(item["status"]).upper()
+        detail = f"{status}: {item['name']}"
+        problems = item.get("errors", []) + item.get("warnings", [])
+        if problems:
+            detail += "\\n  " + "\\n  ".join(problems)
+        details.append(detail)
+    message = (
+        f"Validated {result['block_count']} block(s).\\n"
+        f"Passed: {result['passed_count']}  |  Warnings: {result['warning_count']}  |  "
+        f"Failed: {result['failed_count']}\\n\\n"
+        + ("\\n\\n".join(details) if details else "The library contains no block assets.")
+        + f"\\n\\nMachine-readable report: {result['report']}"
+    )
+    if result["status"] == "failed":
+        messagebox.showwarning("Block Library Validation — problems found", message, parent=parent)
+    elif result["status"] == "warnings":
+        messagebox.showwarning("Block Library Validation — ERC warnings", message, parent=parent)
+    else:
+        messagebox.showinfo("Block Library Validation Passed", message, parent=parent)
+
+
 def _validate_recursive_erc(root: Path, parent, schematic=None, project_dir: Path | None = None) -> None:
     parameter_values = None
     selection = list(schematic.get_selection()) if schematic is not None else []
@@ -1643,21 +2125,10 @@ def _apply_block_pcb_layout(
         return
     pin_map = _parse_pin_net_map(map_text, pins)
 
-    position_text = simpledialog.askstring(
-        "PCB block placement",
-        "Enter the X,Y position in millimetres for the stored layout anchor.",
-        initialvalue="100,100",
-        parent=parent,
-    )
-    if position_text is None:
-        return
-    position_values = [part.strip() for part in position_text.split(",")]
-    if len(position_values) != 2:
-        raise ValueError("Placement must be two comma-separated millimetre coordinates.")
-    try:
-        position = (float(position_values[0]), float(position_values[1]))
-    except ValueError as exc:
-        raise ValueError("Placement coordinates must be numeric millimetres.") from exc
+    # The merged layout is staged at a predictable point. The PCB Editor's
+    # Place Imported Block Layout action moves the complete imported object set
+    # to the user's cursor/grid position using KiCad's native interactive tool.
+    position = (100.0, 100.0)
 
     anchor_text = simpledialog.askstring(
         "Stored PCB layout origin",
@@ -1703,10 +2174,16 @@ def _apply_block_pcb_layout(
     if not output_path:
         return
 
+    output_board = Path(output_path).expanduser().resolve()
+    placement_sidecar = placement_manifest_path(output_board)
+    if placement_sidecar.exists():
+        raise FileExistsError(
+            f"PCB placement sidecar already exists and will not be overwritten: {placement_sidecar}"
+        )
     result = merge_block_layout(
         source_board,
         block,
-        Path(output_path),
+        output_board,
         instance_reference=str(instance.reference),
         position_mm=position,
         pin_to_board_net=pin_map,
@@ -1714,6 +2191,7 @@ def _apply_block_pcb_layout(
         rotation_deg=rotation,
         layout_id=layout.get("id"),
     )
+    placement_sidecar = write_pcb_placement_manifest(output_board, result)
     opened_in_editor = False
     if messagebox.askyesno(
         "Open merged PCB board",
@@ -1737,8 +2215,12 @@ def _apply_block_pcb_layout(
         f"Resolved netclass patterns: {len(result['applied_project_patterns'])}\n"
         f"PCB net chains added: {', '.join(result['merged_board_chains']) or 'none'}\n\n"
         "The original project board and project settings were not modified. "
-        + ("The generated copy was opened in PCB Editor." if opened_in_editor else
-           "Open the generated copy in PCB Editor to review it.")
+        f"\nInteractive placement manifest: {placement_sidecar}\n"
+        + (
+            "In PCB Editor, choose Place Imported Block Layout and position the imported group with the cursor."
+            if opened_in_editor
+            else "Open the generated copy in PCB Editor, then choose Place Imported Block Layout to position the imported group with the cursor."
+        )
     )
     if warning:
         message += "\n\nSkipped board-level item types: " + ", ".join(warning)
@@ -1783,21 +2265,9 @@ def _apply_selected_block_pcb_layouts(
             return
         pin_map = _parse_pin_net_map(mapping_text, pins)
 
-        position_text = simpledialog.askstring(
-            f"PCB position — {instance.reference}",
-            "Position X,Y for the stored layout anchor in millimetres:",
-            initialvalue=f"{100.0 + (index - 1) * 60.0:g},100",
-            parent=parent,
-        )
-        if position_text is None:
-            return
-        position_parts = [part.strip() for part in position_text.split(",")]
-        if len(position_parts) != 2:
-            raise ValueError(f"Position for {instance.reference} must be X,Y.")
-        try:
-            position = (float(position_parts[0]), float(position_parts[1]))
-        except ValueError as exc:
-            raise ValueError(f"Position for {instance.reference} must be numeric.") from exc
+        # Stagger batch imports for visibility before each is moved at cursor
+        # from the PCB Editor action. This is only a staging coordinate.
+        position = (100.0 + (index - 1) * 80.0, 100.0)
 
         anchor_text = simpledialog.askstring(
             f"PCB anchor — {instance.reference}",
@@ -1862,7 +2332,14 @@ def _apply_selected_block_pcb_layouts(
     if not output_path:
         return
 
-    result = merge_block_layouts(source_board, placements, Path(output_path))
+    output_board = Path(output_path).expanduser().resolve()
+    placement_sidecar = placement_manifest_path(output_board)
+    if placement_sidecar.exists():
+        raise FileExistsError(
+            f"PCB placement sidecar already exists and will not be overwritten: {placement_sidecar}"
+        )
+    result = merge_block_layouts(source_board, placements, output_board)
+    placement_sidecar = write_pcb_placement_manifest(output_board, result)
     if messagebox.askyesno(
         "Open combined PCB board",
         f"Applied {result['block_count']} block layouts to a separate board copy.\n"
@@ -1879,6 +2356,8 @@ def _apply_selected_block_pcb_layouts(
         f"Board objects added: {result['object_count']}\n"
         f"Internal nets added: {', '.join(result['new_nets']) or 'none'}\n"
         f"PCB net chains added: {', '.join(result['merged_board_chains']) or 'none'}\n"
+        f"Interactive placement manifest: {placement_sidecar}\n"
+        "Open the output in PCB Editor and choose Place Imported Block Layout once for each block instance. "
         "The original board and project settings were not modified.",
         parent=parent,
     )
@@ -1974,15 +2453,17 @@ def run() -> None:
         library_root.mkdir(parents=True, exist_ok=True)
 
         actions = [
-            ("create", "Create block", "Generate a facade, typed parameters and PCB layout alternatives."),
+            ("create", "Create block from selected sheet", "Select one hierarchical sheet. Its hierarchical labels automatically define the facade pins and electrical types."),
             ("place", "Browse & place block", "Search the library, preview a facade and place it at the mouse cursor."),
-            ("configure", "Configure block instance", "Open guidance for editing per-instance parameters and PCB layout in KiCad Symbol Properties."),
+            ("configure", "Configure block instance", "Choose a linked variant, parameter and PCB layout profile, then customize per-instance values."),
             ("local", "Make local copy", "Give the selected instance an independent implementation."),
             ("sync", "Synchronize local copy", "Publish and pull non-conflicting local/library edits."),
             ("edit", "Open implementation", "Open the selected facade's resolved KB_VARIANT in Eeschema."),
+            ("edit-facade", "Edit facade symbol", "Select one block instance and open its library version in KiCad's native Symbol Editor."),
             ("publish", "Publish library block", "Publish edits to a shared library block."),
             ("bom", "Recursive BOM", "Export the selected block and all nested components."),
             ("erc", "Recursive ERC", "Run ERC on the selected block and dependencies."),
+            ("validate-library", "Validate block library", "Check every block's manifest, assets, profiles, dependencies and recursive ERC."),
             ("pcb", "Apply one PCB layout", "Merge one selected block layout into a new board copy."),
             ("pcb-many", "Apply multiple PCB layouts", "Merge layouts for multiple selected block instances."),
             ("nest", "Nest block", "Compose a reusable block into another block."),
@@ -2073,6 +2554,10 @@ def run() -> None:
                     _open_selected_block_implementation(
                         library_root, schematic, kicad, project_dir, root
                     )
+                elif action == "edit-facade":
+                    _edit_facade_symbol(
+                        library_root, schematic, project_dir, editor_window_id, root
+                    )
                 elif action == "publish":
                     _publish_block(library_root, kicad, project_dir, root)
                 elif action == "bom":
@@ -2081,6 +2566,9 @@ def run() -> None:
                 elif action == "erc":
                     library = _choose_library_root(root)
                     _validate_recursive_erc(library, root, schematic, project_dir)
+                elif action == "validate-library":
+                    library = _choose_library_root(root)
+                    _validate_shared_library(library, root)
                 elif action == "pcb":
                     _apply_block_pcb_layout(schematic, kicad, project_dir, library_root, root)
                 elif action == "pcb-many":
