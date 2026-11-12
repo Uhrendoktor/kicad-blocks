@@ -2979,13 +2979,6 @@ def run_action(action: str) -> None:
                 _start_native_symbol_placement(
                     kicad, editor_window_id, str(record.manifest["symbol_name"])
                 )
-            _show_library_browser(
-                root, schematic, kicad, project_dir, library_paths, editor_window_id
-            )
-            root.mainloop()
-            return
-
-        root.withdraw()
         if action == "create-block":
             _create_and_place(
                 library_root, schematic, kicad, project_dir, root, editor_window_id
