@@ -41,7 +41,7 @@ path across the upper-right, and the optional MCU/I²C interface on the right.
 | R53, R54 | 100 kΩ | Address configuration |
 | R55 | 10 kΩ | Reset network |
 | D1 | ESDA25W | CC-line protection array |
-| D50, D11 | ESDA25P35 | VBUS / sink-output protection |
+| D50, D11 | ESDA25P35-1U1M | VBUS / sink-output protection |
 | T1, T4 | STL6P3LLH6 | P-channel VBUS power-path switches |
 | J10 | 2-pin connector | VSNK output |
 | J2 | 6-pin connector | Optional MCU SCL/SDA/ALERT#/RESET/VMCU/GND interface |
@@ -57,6 +57,15 @@ python examples/stusb4500/generate_reference.py
 The generator function is also used by the visual-documentation CI capture.
 CI exports the generated schematic with `kicad-cli sch export svg` and stores
 the editable `.kicad_sch` alongside the SVG preview.
+
+## Symbol attribution
+
+The standard component symbols embedded in the generated schematic are sourced
+from the official [KiCad symbol library repository](https://gitlab.com/kicad/libraries/kicad-symbols),
+pinned to the 10.0.5 release in `kicad-symbols.lock`. KiCad library symbols
+are distributed under the repository's CC BY-SA 4.0 licensing terms. The
+ESDA25W three-pin symbol is a local pinout-accurate representation based on
+ST's component datasheet.
 
 ## Important design note
 
