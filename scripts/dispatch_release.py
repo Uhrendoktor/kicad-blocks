@@ -55,7 +55,7 @@ def dispatch_release(repo: str, tag: str, source_sha: str, version: str, token: 
                 and str(assets_by_name[name].get("digest", "")).startswith("sha256:")
                 for name in required_assets
             )
-            if complete and not release.get("draft", False):
+            if complete and not release.get("draft", False) and not release.get("prerelease", False):
                 print(f"Release {tag} already has its ZIP and checksum; not dispatching again.")
                 return False
 
