@@ -18,7 +18,10 @@ sys.path.insert(0, str(ROOT / "plugin" / "kicad-blocks"))
 
 from kicad_blocks import plugin as plugin_actions
 from kicad_blocks.model import parse_pins
-from kicad_blocks.repository import create_block
+from kicad_blocks.repository import create_block, revision_for_hashes
+
+sys.path.insert(0, str(ROOT / 'examples' / 'stusb4500'))
+from generate_reference import generate_reference_schematic
 
 ASSET_NAMES = (
     "block-picker-initial.png",
@@ -27,6 +30,7 @@ ASSET_NAMES = (
     "block-picker-workflow.gif",
     "functional-block-facade.svg",
     "functional-block-implementation.svg",
+    "functional-block-implementation.kicad_sch",
 )
 
 
@@ -131,7 +135,7 @@ def capture_picker(records, output_dir: Path) -> dict:
             dialog.update()
             capture_window(xdotool, identifier, frame_paths[1])
 
-            combos[1].set("USB 5V mode")
+            combos[1].set("5 V / 2.4 A (PDO1)")
             combos[1].event_generate("<<ComboboxSelected>>")
             dialog.update()
             if combos[0].get() != "5V":
@@ -179,10 +183,10 @@ def capture_picker(records, output_dir: Path) -> dict:
     if not completed[0] or selected is None:
         raise AssertionError("The placement chooser did not complete the scripted selection.")
     if (
-        selected["record"].name != "USB-C Power"
+        selected["record"].name != "STUSB4500 USB-PD Sink"
         or selected["variant"] != "5V"
-        or selected["profile"] != "usb_5v_mode"
-        or float(selected["parameters"]["CURRENT_LIMIT"]) != 3.0
+        or selected["profile"] != "pdo1_5v_2a4"
+        or float(selected["parameters"]["PDO_CURRENT_A"]) != 2.4
     ):
         raise AssertionError(f"Unexpected profile-driven placement result: {selected!r}")
 
@@ -226,18 +230,31 @@ def render_native_svgs(cli: str, record, output_dir: Path) -> None:
     schematic_dir = output_dir / "_schematic"
     symbol_dir.mkdir()
     schematic_dir.mkdir()
+    # Preserve the editable source even if KiCad's renderer rejects it; the
+    # always-uploaded CI artifact then contains the exact failing input.
+    shutil.copy2(record.implementation, output_dir / "functional-block-implementation.kicad_sch")
 
-    subprocess.run(
+    symbol_export = subprocess.run(
         [
             cli, "sym", "export", "svg", "--symbol", str(record.manifest["symbol_name"]),
             "--output", str(symbol_dir), str(record.symbol_library),
         ],
-        check=True, capture_output=True, text=True, timeout=60,
+        check=False, capture_output=True, text=True, timeout=60,
     )
-    subprocess.run(
+    if symbol_export.returncode:
+        raise RuntimeError(
+            f"KiCad symbol SVG export failed ({symbol_export.returncode}):\n"
+            f"{symbol_export.stdout}\n{symbol_export.stderr}"
+        )
+    schematic_export = subprocess.run(
         [cli, "sch", "export", "svg", "--output", str(schematic_dir), str(record.implementation)],
-        check=True, capture_output=True, text=True, timeout=60,
+        check=False, capture_output=True, text=True, timeout=60,
     )
+    if schematic_export.returncode:
+        raise RuntimeError(
+            f"KiCad schematic SVG export failed ({schematic_export.returncode}):\n"
+            f"{schematic_export.stdout}\n{schematic_export.stderr}"
+        )
     symbols = sorted(symbol_dir.glob("*.svg"))
     schematics = sorted(schematic_dir.glob("*.svg"))
     if len(symbols) != 1 or not schematics:
@@ -248,7 +265,7 @@ def render_native_svgs(cli: str, record, output_dir: Path) -> None:
         content = (output_dir / name).read_text(encoding="utf-8")
         if "<svg" not in content or len(content) < 500:
             raise RuntimeError(f"KiCad exported an empty SVG: {name}")
-    # Keep only the six curated assets in the uploaded documentation bundle.
+    # Keep only the curated assets in the uploaded documentation bundle.
     shutil.rmtree(symbol_dir)
     shutil.rmtree(schematic_dir)
 
@@ -265,32 +282,61 @@ def main() -> int:
 
     with tempfile.TemporaryDirectory(prefix="kicad-blocks-visual-docs-") as temporary:
         library = Path(temporary) / "library"
-        seed = create_block(
-            library, "Visual Fixture Seed", parse_pins("VIN:input, GND:passive"),
-            description="Seed implementation used only by the documentation fixture.",
-        )
         sensor = create_block(
             library, "Sensor Input", parse_pins("SENSOR:input, GND:passive"),
             description="A second library entry used to demonstrate searchable filtering.",
         )
+        reference_source = Path(temporary) / "stusb4500-reference.kicad_sch"
+        generate_reference_schematic(reference_source)
         target = create_block(
-            library, "USB-C Power",
-            parse_pins("VBUS:input, GND:passive, CC1:bidir, CC2:bidir, VOUT:output"),
-            description="A reusable USB-C interface with selectable power implementation.",
+            library, "STUSB4500 USB-PD Sink",
+            parse_pins(
+                "VBUS:input, GND:passive, CC1:bidir, CC2:bidir, VSNK:output, "
+                "SCL:input, SDA:bidir, ALERT#:output, RESET:input, VMCU:input"
+            ),
+            description=(
+                "STUSB4500QTR USB Type-C PD sink reference circuit based on "
+                "ST DS12499 Rev. 8 Figure 10."
+            ),
             parameters=[{
-                "name": "CURRENT_LIMIT", "type": "number", "default": "1.5",
-                "description": "Maximum source current in amperes.",
+                "name": "PDO_CURRENT_A", "type": "number", "default": "2.4",
+                "description": "Current rating of the selected sink PDO in amperes.",
             }],
             variant_files=[
-                {"value": "3V3", "path": seed.implementation},
-                {"value": "5V", "path": seed.implementation},
+                {"value": "5V", "path": reference_source},
+                {"value": "9V", "path": reference_source},
+                {"value": "12V", "path": reference_source},
             ],
-            profiles=[{
-                "id": "usb_5v_mode", "name": "USB 5V mode",
-                "description": "Select the 5 V implementation and 3 A current limit.",
-                "variant": "5V", "parameters": {"CURRENT_LIMIT": "3.0"},
-            }],
+            profiles=[
+                {
+                    "id": "pdo1_5v_2a4", "name": "5 V / 2.4 A (PDO1)",
+                    "description": "Datasheet Table 19 example: fixed 5 V sink PDO.",
+                    "variant": "5V", "parameters": {"PDO_CURRENT_A": "2.4"},
+                },
+                {
+                    "id": "pdo2_9v_1a33", "name": "9 V / 1.33 A (PDO2)",
+                    "description": "Datasheet Table 19 example: 9 V sink PDO.",
+                    "variant": "9V", "parameters": {"PDO_CURRENT_A": "1.33"},
+                },
+                {
+                    "id": "pdo3_12v_1a", "name": "12 V / 1.0 A (PDO3)",
+                    "description": "Datasheet Table 19 example: 12 V sink PDO.",
+                    "variant": "12V", "parameters": {"PDO_CURRENT_A": "1.0"},
+                },
+            ],
         )
+        shutil.copy2(reference_source, target.implementation)
+        manifest_path = target.path / "manifest.json"
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest["hashes"]["implementation.kicad_sch"] = hashlib.sha256(
+            target.implementation.read_bytes()
+        ).hexdigest()
+        manifest["revision"] = revision_for_hashes(manifest["hashes"])
+        manifest_path.write_text(
+            json.dumps(manifest, indent=2, ensure_ascii=False) + "\n",
+            encoding="utf-8",
+        )
+        target.manifest.update(manifest)
         render_native_svgs(cli, target, output_dir)
         capture_picker([target, sensor], output_dir)
         build_gif(output_dir)
@@ -306,6 +352,13 @@ def main() -> int:
         "source_sha": os.environ.get("GITHUB_SHA", "local"),
         "generator": "tests/capture_visual_docs.py",
         "renderer": "KiCad CLI and the production Place Functional Block Tk dialog",
+        "example": {
+            "component": "STUSB4500QTR",
+            "manufacturer": "STMicroelectronics",
+            "datasheet": "https://www.st.com/resource/en/datasheet/stusb4500.pdf",
+            "datasheet_revision": "DS12499 Rev. 8",
+            "reference": "Figure 10, page 26/42",
+        },
         "assets": assets,
     }
     (output_dir / "manifest.json").write_text(

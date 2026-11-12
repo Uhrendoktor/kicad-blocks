@@ -1091,27 +1091,28 @@ def synchronize_local_copy(local_block: BlockRecord) -> dict:
 
 
 def synchronize_facade_pins_from_implementation(block: BlockRecord) -> list[str]:
-    """Sync facade pin names/types from all hierarchical labels in the implementation.
+    """Sync facade pins only when the manifest declares labels as the source.
 
-    Existing pin coordinates and numbers are preserved when a name still exists.
+    Manually declared interfaces remain authoritative even though the renderer
+    now uses native hierarchical labels for their visual external ports.
+    Existing pin coordinates and numbers are preserved when a name remains.
     Newly declared pins use the normal generated layout as their initial position.
-    Blocks created by the legacy/manual-pin workflow have global labels, not
-    hierarchical labels, and are left unchanged.
     """
     manifest = read_manifest(block.path)
+    if manifest.get("interface_source") != "hierarchical_labels":
+        _import_catalog_facade_edit(block, manifest)
+        return []
+
     implementation_path = block.path / manifest["implementation_file"]
     implementation_tree = parse_sexpr(
         implementation_path.read_text(encoding="utf-8")
     )
     if not _all(implementation_tree, "hierarchical_label"):
-        if manifest.get("interface_source") == "hierarchical_labels":
-            raise ValueError(
-                "This block derives its facade pins from hierarchical labels, but its "
-                "implementation has none. Add at least one hierarchical label or restore "
-                "the intended interface before publishing; stale facade pins were not kept."
-            )
-        _import_catalog_facade_edit(block, manifest)
-        return []
+        raise ValueError(
+            "This block derives its facade pins from hierarchical labels, but its "
+            "implementation has none. Add at least one hierarchical label or restore "
+            "the intended interface before publishing; stale facade pins were not kept."
+        )
 
     _import_catalog_facade_edit(block, manifest)
     extracted = extract_hierarchical_pins(implementation_tree)

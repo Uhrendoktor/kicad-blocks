@@ -367,9 +367,9 @@ def parse_pins(spec: str) -> list[BlockPin]:
             raise ValueError(
                 f"Unknown pin type {raw_type!r}; choose {', '.join(PIN_TYPES)}."
             )
-        if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_./+\\-]*", name):
+        if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_./+#-]*", name):
             raise ValueError(
-                f"Invalid pin name {name!r}. Use letters, numbers, _, ., /, + or -; "
+                f"Invalid pin name {name!r}. Use letters, numbers, _, ., /, +, # or -; "
                 "the first character must be a letter or underscore."
             )
         key = name.casefold()
@@ -568,7 +568,7 @@ def render_symbol_library(
 def render_implementation_schematic(
     display_name: str, block_id: str, pins: Iterable[BlockPin]
 ) -> str:
-    """Generate a separate editable schematic document with interface net labels.
+    """Generate a separate editable schematic document with native hierarchical labels for its external interface.
 
     This is a standalone asset in the block library. It is not included in the
     project hierarchy and creates no child-sheet file when a facade is placed.
@@ -589,7 +589,7 @@ def render_implementation_schematic(
         y = 38.1 + row * 5.08
         lines.extend(
             [
-                f"  (global_label {sexpr_quote(pin.name)}",
+                f"  (hierarchical_label {sexpr_quote(pin.name)}",
                 f"    (shape {_KICAD_PIN_TYPES[pin.electrical_type]})",
                 f"    (at {x} {y} 0)",
                 '    (effects (font (size 1.27 1.27)) (justify left bottom))',

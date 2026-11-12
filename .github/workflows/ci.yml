@@ -55,6 +55,32 @@ jobs:
           echo "KICAD_CLI=$CLI" >> "$GITHUB_ENV"
           "$CLI" version
 
+      - name: Fetch pinned official KiCad symbol definitions
+        shell: bash
+        run: |
+          set -euo pipefail
+          SYMBOLS_DIR="${RUNNER_TEMP}/kicad-symbols"
+          SYMBOLS_REF="$(tr -d '[:space:]' < examples/stusb4500/kicad-symbols.lock)"
+          mkdir -p "$SYMBOLS_DIR"
+          git -C "$SYMBOLS_DIR" init
+          git -C "$SYMBOLS_DIR" remote add origin https://gitlab.com/kicad/libraries/kicad-symbols.git
+          git -C "$SYMBOLS_DIR" config core.sparseCheckout true
+          cat > "$SYMBOLS_DIR/.git/info/sparse-checkout" <<'EOF'
+          /Interface_USB.kicad_symdir/STUSB4500QTR.kicad_sym
+          /Connector.kicad_symdir/USB_C_Receptacle.kicad_sym
+          /Connector_Generic.kicad_symdir/Conn_01x02.kicad_sym
+          /Connector_Generic.kicad_symdir/Conn_01x06.kicad_sym
+          /Device.kicad_symdir/C.kicad_sym
+          /Device.kicad_symdir/R.kicad_sym
+          /Device.kicad_symdir/D.kicad_sym
+          /Device.kicad_symdir/D_TVS.kicad_sym
+          /Transistor_FET.kicad_symdir/Q_PMOS_GSD.kicad_sym
+          EOF
+          git -C "$SYMBOLS_DIR" fetch --depth 1 origin "$SYMBOLS_REF"
+          git -C "$SYMBOLS_DIR" checkout --detach FETCH_HEAD
+          test -f "$SYMBOLS_DIR/Interface_USB.kicad_symdir/STUSB4500QTR.kicad_sym"
+          echo "KICAD_SYMBOL_DIR=$SYMBOLS_DIR" >> "$GITHUB_ENV"
+
       - name: Inspect local runner
         shell: bash
         run: |
@@ -220,11 +246,12 @@ jobs:
             --output-dir "$OUT"
 
       - name: Upload generated visual documentation bundle
+        if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: kicad-blocks-visual-docs
           path: ${{ runner.temp }}/kicad-blocks-visual-docs
-          if-no-files-found: error
+          if-no-files-found: warn
           compression-level: 1
 
 

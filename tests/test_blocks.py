@@ -9,6 +9,7 @@ from pathlib import Path
 PLUGIN = Path(__file__).resolve().parents[1] / "plugin" / "kicad-blocks"
 sys.path.insert(0, str(PLUGIN))
 
+from kicad_blocks.extraction import extract_hierarchical_pins
 from kicad_blocks.model import (
     facade_pin_connection_points,
     parse_parameters,
@@ -41,6 +42,7 @@ from kicad_blocks.repository import (
     revision_for_hashes,
     set_library_root,
     sha256_file,
+    synchronize_facade_pins_from_implementation,
     synchronize_local_copy,
 )
 
@@ -277,6 +279,22 @@ class BlockModelTests(unittest.TestCase):
             ],
         )
 
+    def test_parse_pins_accepts_active_low_hash_suffix(self):
+        pins = parse_pins("ALERT#:output")
+        self.assertEqual(
+            [(pin.name, pin.electrical_type) for pin in pins],
+            [("ALERT#", "output")],
+        )
+
+    def test_hierarchical_pin_extraction_accepts_active_low_hash_suffix(self):
+        pins = extract_hierarchical_pins(
+            ["kicad_sch", ["hierarchical_label", "ALERT#", ["shape", "output"]]]
+        )
+        self.assertEqual(
+            [(pin.name, pin.electrical_type) for pin in pins],
+            [("ALERT#", "output")],
+        )
+
     def test_parse_pins_rejects_invalid_definitions(self):
         for bad in ("", "A:unknown", "VIN:input,vin:output", "bad name:input", "A:input,B:output,C:passive" + "," + ",".join(f"P{i}" for i in range(4, 66))):
             with self.subTest(bad=bad), self.assertRaises(ValueError):
@@ -404,10 +422,27 @@ class BlockRepositoryTests(unittest.TestCase):
         self.assertTrue(record.symbol_library.is_file())
         self.assertTrue(record.implementation.is_file())
         implementation = record.implementation.read_text(encoding="utf-8")
-        self.assertIn('(global_label "VIN"', implementation)
+        self.assertIn('(hierarchical_label "VIN"\n    (shape input)', implementation)
+        self.assertIn('(hierarchical_label "GND"\n    (shape passive)', implementation)
+        self.assertIn('(hierarchical_label "VOUT"\n    (shape output)', implementation)
+        self.assertNotIn("(global_label ", implementation)
         self.assertNotIn("(sheet ", implementation)
-        self.assertNotIn("hierarchical_label", implementation)
         self.assertEqual(len(list_blocks(self.root)), 1)
+
+    def test_manual_interface_remains_authoritative_with_rendered_hierarchical_labels(self):
+        record = create_block(self.root, "Manual Interface", self.pins)
+        manifest = read_manifest(record.path)
+        original_pins = list(manifest["pins"])
+        self.assertEqual(manifest["interface_source"], "manual")
+        self.assertIn(
+            '(hierarchical_label "VIN"',
+            record.implementation.read_text(encoding="utf-8"),
+        )
+
+        changes = synchronize_facade_pins_from_implementation(record)
+
+        self.assertEqual(changes, [])
+        self.assertEqual(read_manifest(record.path)["pins"], original_pins)
 
     def test_create_block_stores_multiple_named_layouts_and_parameters(self):
         first_board = self.project / "standard.kicad_pcb"
