@@ -163,8 +163,11 @@ class BlockModelTests(unittest.TestCase):
             self.assertEqual(action["scopes"], expected_scopes[action["identifier"]])
             self.assertTrue((PLUGIN / action["entrypoint"]).is_file())
             arguments = action.get("args", [])
-            if action["identifier"] != "place-imported-layout":
-                self.assertEqual(arguments, [action["identifier"]] if action["identifier"] != "manage-library" else ["manage-library"])
+            if action["identifier"] == "place-imported-layout":
+                self.assertEqual(arguments, [])
+                self.assertEqual(action["entrypoint"], "place_imported_layout.py")
+            else:
+                self.assertEqual(arguments, [action["identifier"]])
                 self.assertEqual(action["entrypoint"], "actions.py")
             for key in ("icons-light", "icons-dark"):
                 for icon in action.get(key, []):

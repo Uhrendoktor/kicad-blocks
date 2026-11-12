@@ -1618,10 +1618,29 @@ def _show_library_roots_dialog(parent) -> bool:
     buttons = ttk.Frame(outer)
     buttons.pack(fill="x", pady=(10, 0))
     ttk.Button(buttons, text="Add…", command=add_library).pack(side="left")
-    ttk.Button(buttons, text="Remove", command=remove_library).pack(side="left", padx=(6, 0))
-    ttk.Button(buttons, text="Set as default", command=make_default).pack(side="left", padx=(6, 0))
+    remove_button = ttk.Button(buttons, text="Remove", command=remove_library)
+    remove_button.pack(side="left", padx=(6, 0))
+    default_button = ttk.Button(buttons, text="Set as default", command=make_default)
+    default_button.pack(side="left", padx=(6, 0))
     ttk.Button(buttons, text="Close", command=dialog.destroy).pack(side="right")
+
+    def update_selection_actions(_event=None) -> None:
+        path = selected_path()
+        environment_value = os.environ.get("KICAD_BLOCKS_LIBRARY")
+        environment_root = (
+            Path(environment_value).expanduser().resolve()
+            if environment_value else None
+        )
+        remove_button.configure(
+            state="disabled" if path is None or path == environment_root else "normal"
+        )
+        default_button.configure(
+            state="disabled" if environment_root is not None or path is None else "normal"
+        )
+
+    tree.bind("<<TreeviewSelect>>", update_selection_actions)
     render()
+    update_selection_actions()
     dialog.wait_window()
     return changed[0]
 
