@@ -701,6 +701,22 @@ def _pick_block_for_placement(records, parent):
     selected_record = [None]
     chosen = [None]
     updating_config = [False]
+    preview_size = [None]
+
+    def preview_resized(event) -> None:
+        # The chooser builds its widgets before the window is mapped. The first
+        # preview render can therefore see a 1 px canvas and be permanently
+        # clipped until the user changes the search or selection. Re-render only
+        # when Tk reports a real canvas-size change, after layout has settled.
+        size = (event.width, event.height)
+        if size == preview_size[0]:
+            return
+        preview_size[0] = size
+        record = selected_record[0]
+        if record is not None:
+            _draw_facade_preview(preview, record)
+
+    preview.bind("<Configure>", preview_resized)
 
     def update_metadata(record):
         if record is None:
