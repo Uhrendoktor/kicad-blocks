@@ -435,7 +435,7 @@ def generate_reference_schematic(destination: Path) -> Path:
         ],
         ["text", _Quoted("STUSB4500 / LOCAL DECOUPLING"),
             ["at", "190", "63", "0"], ["effects", ["font", ["size", "1.4", "1.4"]]],
-            ["uuid", _Quoted(_uid("text:power-path"))],
+            ["uuid", _Quoted(_uid("text:controller"))],
         ],
         ["text", _Quoted("OPTIONAL MCU / I2C INTERFACE"),
             ["at", "305", "165", "0"], ["effects", ["font", ["size", "1.4", "1.4"]]],
