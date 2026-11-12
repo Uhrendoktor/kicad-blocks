@@ -1567,57 +1567,50 @@ def _native_symbol_preview_photo(record, width: int = 680):
         symbol_name,
         int(width),
     )
-    cached = _NATIVE_PREVIEW_CACHE.get(cache_key)
-    if cached is not None:
-        return cached
-
-    cli = find_kicad_cli()
-    with tempfile.TemporaryDirectory(prefix="kicad-block-preview-") as temporary:
-        output_dir = Path(temporary)
-        result = subprocess.run(
-            [
-                cli, "sym", "export", "svg",
-                "--symbol", symbol_name,
-                "--output", str(output_dir),
-                str(library_file),
-            ],
-            capture_output=True,
-            text=True,
-            check=False,
-            timeout=30,
-        )
-        if result.returncode != 0:
-            detail = (result.stderr or result.stdout).strip()
-            raise RuntimeError(
-                "KiCad could not render the facade symbol"
-                + (f": {detail}" if detail else ".")
+    png_data = _NATIVE_PREVIEW_CACHE.get(cache_key)
+    if png_data is None:
+        cli = find_kicad_cli()
+        with tempfile.TemporaryDirectory(prefix="kicad-block-preview-") as temporary:
+            output_dir = Path(temporary)
+            result = subprocess.run(
+                [
+                    cli, "sym", "export", "svg",
+                    "--symbol", symbol_name,
+                    "--output", str(output_dir),
+                    str(library_file),
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=30,
             )
-        svg_file = output_dir / f"{symbol_name}.svg"
-        if not svg_file.is_file():
-            candidates = list(output_dir.glob("*.svg"))
-            if len(candidates) != 1:
+            if result.returncode != 0:
+                detail = (result.stderr or result.stdout).strip()
                 raise RuntimeError(
-                    "KiCad symbol export did not produce the expected SVG preview."
+                    "KiCad could not render the facade symbol"
+                    + (f": {detail}" if detail else ".")
                 )
-            svg_file = candidates[0]
+            svg_file = output_dir / f"{symbol_name}.svg"
+            if not svg_file.is_file():
+                candidates = list(output_dir.glob("*.svg"))
+                if len(candidates) != 1:
+                    raise RuntimeError(
+                        "KiCad symbol export did not produce the expected SVG preview."
+                    )
+                svg_file = candidates[0]
 
-        # KiCad owns all symbol geometry and typography. CairoSVG only rasterizes
-        # that SVG so Tk can display it; it does not recreate or interpret pins.
-        try:
-            import cairosvg
-        except ImportError as exc:
-            raise RuntimeError(
-                "The native KiCad preview rasterizer is missing. Reinstall KiCad Blocks "
-                "so its CairoSVG dependency is installed."
-            ) from exc
-        png_data = cairosvg.svg2png(
-            url=str(svg_file),
-            output_width=int(width),
-        )
+            try:
+                import cairosvg
+            except ImportError as exc:
+                raise RuntimeError(
+                    "The native KiCad preview rasterizer is missing. Reinstall KiCad Blocks "
+                    "so its CairoSVG dependency is installed."
+                ) from exc
+            png_data = cairosvg.svg2png(url=str(svg_file), output_width=int(width))
+        _NATIVE_PREVIEW_CACHE[cache_key] = png_data
 
-    photo = tk.PhotoImage(data=base64.b64encode(png_data).decode("ascii"))
-    _NATIVE_PREVIEW_CACHE[cache_key] = photo
-    return photo
+    # Tk images belong to a particular Tcl interpreter, so cache only PNG bytes.
+    return tk.PhotoImage(data=base64.b64encode(png_data).decode("ascii"))
 
 
 _NATIVE_PREVIEW_CACHE: dict[tuple, object] = {}
@@ -2968,7 +2961,7 @@ def run_action(action: str) -> None:
                     parameter_field_name(name): value
                     for name, value in choice["parameters"].items()
                 })
-                if record.manifest.get("layouts"):
+                if _layout_choices(record):
                     defaults[LAYOUT_FIELD_NAME] = choice["layout"]
                 if defaults:
                     catalog = project_dir / ".kicad_blocks" / "KBlocks.kicad_sym"
