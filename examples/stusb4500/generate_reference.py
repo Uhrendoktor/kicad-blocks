@@ -209,12 +209,20 @@ def generate_reference_schematic(destination: Path) -> Path:
                 footprint = str(prop[2])
             elif len(prop) >= 3 and str(prop[1]) == "Datasheet" and str(prop[2]):
                 datasheet = str(prop[2])
+        if reference == "U1":
+            field_x, ref_y, value_y = sx, sy - 27, sy - 24
+        elif reference == "J1":
+            field_x, ref_y, value_y = sx + 20, sy - 40, sy - 37
+        elif reference in {"J2", "J10"}:
+            field_x, ref_y, value_y = sx + 10, sy - 8, sy - 5
+        else:
+            field_x, ref_y, value_y = sx + 5, sy - 7, sy - 4
         instance = [
             "symbol", ["lib_id", _Quoted(lib_id)], ["at", f"{sx:.3f}", f"{sy:.3f}", "0"],
             ["unit", "1"], ["in_bom", "yes"], ["on_board", "yes"], ["dnp", "no"],
             ["uuid", _Quoted(symbol_uuid)],
-            _prop("Reference", reference, 0, sx + 5, sy - 7),
-            _prop("Value", value, 1, sx + 5, sy - 4),
+            _prop("Reference", reference, 0, field_x, ref_y),
+            _prop("Value", value, 1, field_x, value_y),
             _prop("Footprint", footprint, 2, sx, sy, True),
             _prop("Datasheet", datasheet, 3, sx, sy, True),
         ]
@@ -256,18 +264,23 @@ def generate_reference_schematic(destination: Path) -> Path:
         *instances, *labels, *no_connects,
         ["text", _Quoted("STUSB4500QTR — USB Type-C / USB PD sink controller"),
             ["at", "55", "35", "0"], ["effects", ["font", ["size", "2.0", "2.0"]]],
+            ["uuid", _Quoted(_uid("text:title"))],
         ],
         ["text", _Quoted("USB-C input and CC protection"),
             ["at", "55", "55", "0"], ["effects", ["font", ["size", "1.27", "1.27"]]],
+            ["uuid", _Quoted(_uid("text:input"))],
         ],
         ["text", _Quoted("Input filtering, controller decoupling and address straps"),
             ["at", "130", "50", "0"], ["effects", ["font", ["size", "1.27", "1.27"]]],
+            ["uuid", _Quoted(_uid("text:filtering"))],
         ],
         ["text", _Quoted("Protected VBUS power path and sink output"),
             ["at", "235", "85", "0"], ["effects", ["font", ["size", "1.27", "1.27"]]],
+            ["uuid", _Quoted(_uid("text:power-path"))],
         ],
         ["text", _Quoted("Optional MCU: I2C, interrupt and reset"),
             ["at", "285", "160", "0"], ["effects", ["font", ["size", "1.27", "1.27"]]],
+            ["uuid", _Quoted(_uid("text:mcu"))],
         ],
         ["sheet_instances", ["path", _Quoted("/"), ["page", _Quoted("1")]]],
         ["embedded_fonts", "no"],
