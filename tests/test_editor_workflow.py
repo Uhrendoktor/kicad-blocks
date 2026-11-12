@@ -93,6 +93,55 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
             ["/usr/bin/xdotool", "getwindowfocus"],
         )
 
+    def test_create_block_from_selected_sheet_never_prompts_for_manual_pins(self):
+        source = self.project / "power_stage.kicad_sch"
+        source.write_text("(kicad_sch)", encoding="utf-8")
+        selection = '''(sheet
+            (property "Sheetname" "Power Stage" (at 100 100 0) (effects (font (size 1 1))))
+            (property "Sheetfile" "power_stage.kicad_sch" (at 100 100 0) (effects (font (size 1 1))))
+            (uuid "dddddddd-dddd-4ddd-8ddd-dddddddddddd")
+        )'''
+        schematic = SimpleNamespace(
+            get_selection_as_string=Mock(return_value=selection)
+        )
+        dialogs = SimpleNamespace(
+            askstring=Mock(side_effect=["Power Stage", "Power stage description"])
+        )
+        messagebox = SimpleNamespace(showinfo=Mock())
+        with (
+            patch.object(plugin_actions, "simpledialog", dialogs),
+            patch.object(plugin_actions, "messagebox", messagebox),
+            patch.object(plugin_actions, "create_block", return_value=self.block) as create,
+            patch.object(plugin_actions, "_register_block", return_value=self.block) as register,
+        ):
+            plugin_actions._create_and_place(
+                self.library,
+                schematic,
+                self.kicad,
+                self.project,
+                self.parent,
+                "0x100",
+            )
+
+        self.assertEqual(dialogs.askstring.call_count, 2)
+        self.assertEqual(
+            dialogs.askstring.call_args_list[0].args[1],
+            "Block name:",
+        )
+        self.assertEqual(
+            dialogs.askstring.call_args_list[1].args[1],
+            "Description (optional):",
+        )
+        create.assert_called_once_with(
+            self.library,
+            "Power Stage",
+            source_schematic=source.resolve(),
+            source_project_name=self.project.name,
+            description="Power stage description",
+        )
+        register.assert_called_once_with(self.project, self.block, self.kicad)
+        messagebox.showinfo.assert_called_once()
+
     def test_edit_facade_requires_one_selected_symbol(self):
         schematic = SimpleNamespace(get_selection=Mock(return_value=[]))
         with self.assertRaisesRegex(ValueError, "Select one or more block symbol instances"):

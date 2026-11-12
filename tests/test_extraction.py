@@ -9,7 +9,7 @@ PLUGIN = Path(__file__).resolve().parents[1] / "plugin" / "kicad-blocks"
 sys.path.insert(0, str(PLUGIN))
 
 from kicad_blocks.extraction import selected_sheet_file
-from kicad_blocks.pcb_layout import _all, _direct, _head, parse_sexpr
+from kicad_blocks.pcb_layout import _all, _direct, _dump, _head, parse_sexpr
 from kicad_blocks.repository import create_block, read_manifest, refresh_library_block
 
 
@@ -151,6 +151,63 @@ class HierarchicalSheetExtractionTests(unittest.TestCase):
         self.assertIn("(pin bidirectional line", facade)
         self.assertIn("block.kicad_sym", result["changed"])
         self.assertGreater(result["version"], 1)
+
+    def test_publish_preserves_symbol_editor_body_artwork_while_syncing_pins(self):
+        record = create_block(
+            self.root,
+            "Power Stage",
+            source_schematic=self.source,
+            source_project_name="TestProject",
+        )
+
+        facade = parse_sexpr(record.symbol_library.read_text(encoding="utf-8"))
+        symbol = _all(facade, "symbol")[0]
+        graphic_unit = next(
+            child for child in _all(symbol, "symbol")
+            if str(child[1]).endswith("_0_1")
+        )
+        rectangle = _all(graphic_unit, "rectangle")[0]
+        stroke = _direct(rectangle, "stroke")
+        width = _direct(stroke, "width")
+        width[1] = "0.500"
+        record.symbol_library.write_text(_dump(facade) + "\n", encoding="utf-8")
+
+        implementation = record.implementation.read_text(encoding="utf-8")
+        implementation = implementation.replace(
+            '(hierarchical_label "VIN"',
+            '(hierarchical_label "VCC"',
+        ).replace('(shape input)', '(shape bidirectional)')
+        record.implementation.write_text(implementation, encoding="utf-8")
+
+        refresh_library_block(record)
+
+        updated_facade = record.symbol_library.read_text(encoding="utf-8")
+        self.assertIn("(width 0.500)", updated_facade)
+        self.assertIn('(name "VCC"', updated_facade)
+        self.assertIn("(pin bidirectional line", updated_facade)
+
+    def test_publish_rejects_an_extracted_block_with_no_hierarchical_labels(self):
+        record = create_block(
+            self.root,
+            "Power Stage",
+            source_schematic=self.source,
+            source_project_name="TestProject",
+        )
+        previous_facade = record.symbol_library.read_bytes()
+        previous_pins = read_manifest(record.path)["pins"]
+
+        implementation = parse_sexpr(record.implementation.read_text(encoding="utf-8"))
+        implementation[:] = [
+            child for child in implementation
+            if _head(child) != "hierarchical_label"
+        ]
+        record.implementation.write_text(_dump(implementation) + "\n", encoding="utf-8")
+
+        with self.assertRaisesRegex(ValueError, "implementation has none"):
+            refresh_library_block(record)
+
+        self.assertEqual(record.symbol_library.read_bytes(), previous_facade)
+        self.assertEqual(read_manifest(record.path)["pins"], previous_pins)
 
     def test_conflicting_duplicate_hierarchical_label_shapes_are_rejected(self):
         implementation = self.source.read_text(encoding="utf-8").replace(

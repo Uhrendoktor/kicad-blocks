@@ -184,6 +184,13 @@ def read_manifest(block_path: Path) -> dict:
     if missing:
         raise ValueError(f"Block manifest is missing fields: {', '.join(missing)}")
     manifest["parameters"] = normalize_parameters(manifest.get("parameters", []))
+    interface_source = manifest.get("interface_source", "manual")
+    if interface_source not in {"manual", "hierarchical_labels"}:
+        raise ValueError(
+            f"Invalid block interface source {interface_source!r}; "
+            "expected 'manual' or 'hierarchical_labels'."
+        )
+    manifest["interface_source"] = interface_source
     variants = manifest.get("variants", [])
     if not isinstance(variants, list):
         raise TypeError("Block manifest variants must be a list.")
@@ -508,6 +515,9 @@ def create_block(
             "version": 1,
             "revision": revision_for_hashes(hashes),
             "created_by": "kicad-blocks",
+            "interface_source": (
+                "hierarchical_labels" if source_schematic is not None else "manual"
+            ),
             "library_nickname": LIBRARY_NICKNAME,
             "symbol_name": symbol_name,
             "catalog_file": LIBRARY_CATALOG_NAME,
@@ -941,6 +951,12 @@ def synchronize_facade_pins_from_implementation(block: BlockRecord) -> list[str]
         implementation_path.read_text(encoding="utf-8")
     )
     if not _all(implementation_tree, "hierarchical_label"):
+        if manifest.get("interface_source") == "hierarchical_labels":
+            raise ValueError(
+                "This block derives its facade pins from hierarchical labels, but its "
+                "implementation has none. Add at least one hierarchical label or restore "
+                "the intended interface before publishing; stale facade pins were not kept."
+            )
         return []
 
     extracted = extract_hierarchical_pins(implementation_tree)
