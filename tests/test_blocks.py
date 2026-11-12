@@ -41,8 +41,8 @@ from kicad_blocks.repository import (
     revision_for_hashes,
     set_library_root,
     sha256_file,
-    synchronize_local_copy,
     synchronize_facade_pins_from_implementation,
+    synchronize_local_copy,
 )
 
 
