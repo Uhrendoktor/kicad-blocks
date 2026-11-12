@@ -19,6 +19,7 @@ ASSET_NAMES = {
     "block-picker-workflow.gif",
     "functional-block-facade.svg",
     "functional-block-implementation.svg",
+    "functional-block-implementation.kicad_sch",
 }
 BRANCH = "docs/previews"
 
@@ -111,6 +112,7 @@ def publish(
             "workflow_run_id": str(run_id),
             "workflow_run_number": str(run_number),
             "assets": manifest["assets"],
+            "example": manifest.get("example"),
         }
         (published / "provenance.json").write_text(
             json.dumps(provenance, indent=2, sort_keys=True) + "\n",
