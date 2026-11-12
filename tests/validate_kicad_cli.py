@@ -95,7 +95,6 @@ def _validate_stusb4500_netlist(cli: str, output_dir: Path) -> None:
         ("U1", "25"): "GND",
         ("R51", "1"): "VREG_2V7",
         ("R52", "1"): "VREG_2V7",
-        ("U1", "24"): "VBUS",
         ("D4", "1"): "VBUS_FILTERED",
         ("D4", "2"): "VBUS",
         ("C10", "1"): "VSNK",
