@@ -927,11 +927,162 @@ def synchronize_local_copy(local_block: BlockRecord) -> dict:
     }
 
 
+def synchronize_facade_pins_from_implementation(block: BlockRecord) -> list[str]:
+    """Sync facade pin names/types from all hierarchical labels in the implementation.
+
+    Existing pin coordinates and numbers are preserved when a name still exists.
+    Newly declared pins use the normal generated layout as their initial position.
+    Blocks created by the legacy/manual-pin workflow have global labels, not
+    hierarchical labels, and are left unchanged.
+    """
+    manifest = read_manifest(block.path)
+    implementation_path = block.path / manifest["implementation_file"]
+    implementation_tree = parse_sexpr(
+        implementation_path.read_text(encoding="utf-8")
+    )
+    if not _all(implementation_tree, "hierarchical_label"):
+        return []
+
+    extracted = extract_hierarchical_pins(implementation_tree)
+    previous = manifest.get("pins", [])
+    previous_by_name = {
+        str(item.get("name", "")).casefold(): item
+        for item in previous
+        if isinstance(item, dict)
+    }
+
+    used_numbers = {
+        str(item.get("number"))
+        for item in previous
+        if isinstance(item, dict) and str(item.get("number", "")).strip()
+    }
+    next_number = 1
+    normalized_pins = []
+    for pin in extracted:
+        old = previous_by_name.get(pin.name.casefold())
+        if old is not None:
+            number = str(old.get("number") or pin.number)
+        else:
+            while str(next_number) in used_numbers:
+                next_number += 1
+            number = str(next_number)
+            used_numbers.add(number)
+            next_number += 1
+        normalized_pins.append(
+            BlockPin(pin.name, pin.electrical_type, number)
+        )
+
+    new_manifest_pins = [
+        pin.as_manifest(index + 1)
+        for index, pin in enumerate(normalized_pins)
+    ]
+    if new_manifest_pins == previous:
+        return []
+
+    symbol_path = block.path / manifest["symbol_file"]
+    symbol_library = parse_sexpr(symbol_path.read_text(encoding="utf-8"))
+    symbols = _all(symbol_library, "symbol")
+    if len(symbols) != 1:
+        raise ValueError(f"Expected exactly one facade symbol in {symbol_path}.")
+    symbol = symbols[0]
+    symbol_name = str(symbol[1])
+    pin_unit_name = symbol_name + "_1_1"
+    pin_unit = next(
+        (
+            item for item in symbol[1:]
+            if _head(item) == "symbol" and len(item) >= 2
+            and str(item[1]) == pin_unit_name
+        ),
+        None,
+    )
+    if pin_unit is None:
+        raise ValueError(
+            f"Facade symbol {symbol_name!r} has no pin unit {pin_unit_name!r}."
+        )
+
+    current_pin_nodes = _all(pin_unit, "pin")
+    current_by_name = {}
+    for node in current_pin_nodes:
+        name = _direct(node, "name")
+        if name is not None and len(name) >= 2:
+            current_by_name[str(name[1]).casefold()] = node
+
+    default_symbol_tree = parse_sexpr(
+        render_symbol_library(
+            symbol_name,
+            str(manifest["name"]),
+            str(manifest["block_id"]),
+            normalized_pins,
+            reference_prefix=str(manifest.get("reference_prefix", "X")),
+            parameters=manifest.get("parameters", []),
+            default_layout_id=manifest.get("default_layout"),
+            include_profile_field=bool(manifest.get("profiles")),
+        )
+    )
+    default_symbol = _all(default_symbol_tree, "symbol")[0]
+    default_pin_unit = next(
+        item for item in default_symbol[1:]
+        if _head(item) == "symbol" and len(item) >= 2
+        and str(item[1]) == pin_unit_name
+    )
+    default_pin_nodes = _all(default_pin_unit, "pin")
+    default_by_name = {}
+    for node in default_pin_nodes:
+        name = _direct(node, "name")
+        if name is not None and len(name) >= 2:
+            default_by_name[str(name[1]).casefold()] = node
+
+    updated_pin_nodes = []
+    for pin in normalized_pins:
+        key = pin.name.casefold()
+        existing = current_by_name.get(key)
+        if existing is not None:
+            node = copy.deepcopy(existing)
+            # The hierarchical-label shape is authoritative for electrical type.
+            node[1] = _Quoted(
+                "tri_state" if pin.electrical_type == "tristate" else pin.electrical_type
+            )
+            name_node = _direct(node, "name")
+            if name_node is not None and len(name_node) >= 2:
+                name_node[1] = _Quoted(pin.name)
+            number_node = _direct(node, "number")
+            if number_node is not None and len(number_node) >= 2:
+                number_node[1] = _Quoted(pin.number)
+        else:
+            node = copy.deepcopy(default_by_name[key])
+        updated_pin_nodes.append(node)
+
+    # Keep all symbol-body artwork untouched; only replace the pin unit's pins.
+    other_children = [
+        child for child in pin_unit[1:]
+        if _head(child) != "pin"
+    ]
+    pin_unit[:] = [pin_unit[0], *other_children, *updated_pin_nodes]
+    atomic_write(symbol_path, _dump(symbol_library) + "\\n")
+    manifest["pins"] = new_manifest_pins
+    atomic_write(
+        block.path / MANIFEST_NAME,
+        json.dumps(manifest, indent=2, ensure_ascii=False) + "\\n",
+    )
+    return [
+        pin.name for pin in normalized_pins
+        if pin.name.casefold() not in current_by_name
+    ] + [
+        pin.name for pin in normalized_pins
+        if pin.name.casefold() in current_by_name
+        and str(current_by_name[pin.name.casefold()][1]) != (
+            "tri_state" if pin.electrical_type == "tristate" else pin.electrical_type
+        )
+    ]
+
+
 def refresh_library_block(block: BlockRecord) -> dict:
     """Recompute asset hashes and publish a new library revision when files changed."""
     manifest = read_manifest(block.path)
     if manifest.get("local_copy"):
         raise ValueError("Publish the source library block, not a project-local copy.")
+    synchronize_facade_pins_from_implementation(block)
+    manifest = read_manifest(block.path)
     current_hashes = _asset_hashes(block.path, manifest)
     previous_hashes = manifest.get("hashes", {})
     changed = sorted(
