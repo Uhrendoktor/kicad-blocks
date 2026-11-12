@@ -76,7 +76,7 @@ def default_documents_home() -> Path:
     if sys.platform == "darwin":
         return (Path.home() / "Documents" / "KiCad").resolve()
     data_home = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share"))
-    return (data_home / "kicad").expanduser().resolve()
+    return data_home.expanduser().resolve()
 
 
 def validate_plugin_package(source: Path) -> dict:
@@ -135,7 +135,7 @@ def install_plugin(
     source = Path(source).expanduser().resolve()
     documents_home = Path(documents_home).expanduser().resolve()
     manifest = validate_plugin_package(source)
-    destination = documents_home / version / "plugins" / manifest["identifier"]
+    destination = documents_home / "kicad" / version / "plugins" / manifest["identifier"]
 
     if dry_run:
         return destination
