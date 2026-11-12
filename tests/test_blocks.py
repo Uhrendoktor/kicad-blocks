@@ -42,6 +42,7 @@ from kicad_blocks.repository import (
     set_library_root,
     sha256_file,
     synchronize_local_copy,
+    synchronize_facade_pins_from_implementation,
 )
 
 
@@ -410,6 +411,21 @@ class BlockRepositoryTests(unittest.TestCase):
         self.assertNotIn("(global_label ", implementation)
         self.assertNotIn("(sheet ", implementation)
         self.assertEqual(len(list_blocks(self.root)), 1)
+
+    def test_manual_interface_remains_authoritative_with_rendered_hierarchical_labels(self):
+        record = create_block(self.root, "Manual Interface", self.pins)
+        manifest = read_manifest(record.path)
+        original_pins = list(manifest["pins"])
+        self.assertEqual(manifest["interface_source"], "manual")
+        self.assertIn(
+            '(hierarchical_label "VIN"',
+            record.implementation.read_text(encoding="utf-8"),
+        )
+
+        changes = synchronize_facade_pins_from_implementation(record)
+
+        self.assertEqual(changes, [])
+        self.assertEqual(read_manifest(record.path)["pins"], original_pins)
 
     def test_create_block_stores_multiple_named_layouts_and_parameters(self):
         first_board = self.project / "standard.kicad_pcb"
