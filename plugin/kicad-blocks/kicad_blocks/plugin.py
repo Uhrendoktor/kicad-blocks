@@ -2917,9 +2917,169 @@ def _add_nested_dependency(root, parent, parent_window) -> None:
     )
 
 
+def _show_action_hub(root) -> None:
+    """Show a task-oriented command center instead of exposing a flat action list."""
+    root.title("KiCad Blocks — Tasks")
+    root.geometry("820x610")
+    root.minsize(720, 520)
+
+    outer = ttk.Frame(root, padding=18)
+    outer.pack(fill="both", expand=True)
+    ttk.Label(
+        outer,
+        text="KiCad Blocks",
+        font=("TkDefaultFont", 18, "bold"),
+    ).pack(anchor="w")
+    ttk.Label(
+        outer,
+        text=(
+            "Choose a task. Each action is grouped by what you are trying to do; "
+            "the short descriptions explain the selection or project context it needs."
+        ),
+        wraplength=760,
+        justify="left",
+    ).pack(anchor="w", pady=(4, 14))
+
+    tabs = ttk.Notebook(outer)
+    tabs.pack(fill="both", expand=True)
+
+    groups = [
+        (
+            "Use & build",
+            [
+                (
+                    "Browse and place blocks",
+                    "Search registered libraries, preview a facade, choose a profile, and place it.",
+                    "manage-library",
+                ),
+                (
+                    "Quick place a block",
+                    "Choose a block and place its facade at the cursor.",
+                    "place-block",
+                ),
+                (
+                    "Create from selected sheet",
+                    "Select one hierarchical sheet symbol first; its implementation becomes a reusable block.",
+                    "create-block",
+                ),
+                (
+                    "Open block implementation",
+                    "Select one placed block instance to open its implementation or matching variant.",
+                    "open-implementation",
+                ),
+            ],
+        ),
+        (
+            "Edit & maintain",
+            [
+                (
+                    "Configure selected instance",
+                    "Select one block instance to edit its profile, variant, parameters, or PCB layout.",
+                    "configure-instance",
+                ),
+                (
+                    "Edit facade symbol",
+                    "Select one block instance to edit its library symbol in Symbol Editor.",
+                    "edit-facade",
+                ),
+                (
+                    "Publish implementation",
+                    "Select a library block implementation and publish its current changes.",
+                    "publish-block",
+                ),
+                (
+                    "Make selected instance local",
+                    "Select one shared-library block instance to create an independent project copy.",
+                    "make-local-copy",
+                ),
+                (
+                    "Synchronize local copy",
+                    "Select one local block instance to reconcile it with its shared-library source.",
+                    "synchronize-local-copy",
+                ),
+                (
+                    "Nest a block",
+                    "Choose a parent and child block to compose the child into the parent implementation.",
+                    "nest-block",
+                ),
+            ],
+        ),
+        (
+            "Checks & PCB",
+            [
+                (
+                    "Validate registered libraries",
+                    "Check manifests, assets, dependencies, revisions, and recursive ERC for all libraries.",
+                    "validate-libraries",
+                ),
+                (
+                    "Export recursive BOM",
+                    "Select one block instance to export its BOM including nested dependencies.",
+                    "recursive-bom",
+                ),
+                (
+                    "Run recursive ERC",
+                    "Select one block instance to check its implementation and nested dependencies.",
+                    "recursive-erc",
+                ),
+                (
+                    "Apply selected PCB layout",
+                    "Select one block instance with a stored layout; a new board copy is created.",
+                    "apply-pcb-layout",
+                ),
+                (
+                    "Apply multiple PCB layouts",
+                    "Select two or more block instances with stored layouts; a combined board copy is created.",
+                    "apply-multiple-pcb-layouts",
+                ),
+            ],
+        ),
+    ]
+
+    def dispatch(selected_action: str) -> None:
+        root.destroy()
+        run_action(selected_action)
+
+    for tab_name, actions in groups:
+        tab = ttk.Frame(tabs, padding=14)
+        tabs.add(tab, text=tab_name)
+        for row, (title, description, action_id) in enumerate(actions):
+            cell = ttk.Frame(tab, padding=(0, 3))
+            cell.grid(row=row, column=0, sticky="ew", pady=4)
+            button = ttk.Button(
+                cell,
+                text=title,
+                command=lambda selected=action_id: dispatch(selected),
+                width=31,
+            )
+            button.grid(row=0, column=0, sticky="nw", padx=(0, 12))
+            ttk.Label(
+                cell,
+                text=description,
+                wraplength=470,
+                justify="left",
+            ).grid(row=0, column=1, sticky="w")
+            cell.columnconfigure(1, weight=1)
+        tab.columnconfigure(0, weight=1)
+
+    footer = ttk.Frame(outer)
+    footer.pack(fill="x", pady=(12, 0))
+    ttk.Label(
+        footer,
+        text=(
+            "PCB Editor: use “Place Imported Block Layout” after applying a layout "
+            "from the schematic task hub."
+        ),
+        wraplength=650,
+        justify="left",
+    ).pack(side="left", anchor="w")
+    ttk.Button(footer, text="Close", command=root.destroy).pack(side="right")
+
+
 def run_action(action: str) -> None:
-    """Run one operation directly from KiCad's native plugin action menu."""
+    """Run one operation from the task hub or KiCad's PCB Editor action."""
     valid_actions = {
+        "open-hub",
         "manage-library",
         "place-block",
         "create-block",
@@ -2940,16 +3100,21 @@ def run_action(action: str) -> None:
         raise ValueError(f"Unknown KiCad Blocks action: {action!r}")
 
     _load_tkinter()
-    editor_window_id = _capture_eeschema_window_id()
     root = tk.Tk()
-    root.title("Manage KiCad Functional Blocks")
+    root.title("KiCad Blocks — Tasks" if action == "open-hub" else "KiCad Blocks")
     try:
+        if action == "open-hub":
+            _show_action_hub(root)
+            root.mainloop()
+            return
+
+        editor_window_id = _capture_eeschema_window_id()
         from kipy import KiCad
 
         kicad = KiCad()
         schematic = kicad.get_schematic()
         if schematic is None:
-            raise RuntimeError("No active schematic was found. Open and save a project first.")
+            raise ValueError("No active schematic was found. Open and save a project first.")
         project_dir = project_directory(schematic)
         library_paths = configured_library_roots()
         library_root = default_library_root()
@@ -3040,9 +3205,20 @@ def run_action(action: str) -> None:
             )
         elif action == "nest-block":
             _add_nested_dependency(library_paths, root, root)
+    except (ValueError, LookupError, FileNotFoundError, PermissionError) as exc:
+        LOG.info("KiCad Blocks action needs user input or context (%s): %s", action, exc)
+        messagebox.showwarning(
+            "Action not completed",
+            f"{exc}\\n\\nNothing was changed.",
+            parent=root,
+        )
     except Exception as exc:
         LOG.exception("KiCad Blocks action failed: %s", action)
-        messagebox.showerror("KiCad Blocks", str(exc), parent=root)
+        messagebox.showerror(
+            "KiCad Blocks",
+            f"The action could not be completed: {exc}",
+            parent=root,
+        )
     finally:
         with contextlib.suppress(tk.TclError):
             root.destroy()
