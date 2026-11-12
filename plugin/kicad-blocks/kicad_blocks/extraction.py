@@ -244,4 +244,4 @@ def prepare_block_implementation(
     else:
         tree[tree.index(sheet_instances)] = root_instance
 
-    return pins, _dump(tree) + "\\n"
+    return pins, _dump(tree) + "\n"
