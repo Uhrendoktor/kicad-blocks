@@ -90,8 +90,9 @@ def project_directory(schematic) -> Path:
         raw = raw.parent
     resolved = raw.resolve()
     if not resolved.is_dir():
-        raise RuntimeError(
-            f"The current project directory does not exist: {resolved}. Save the project first."
+        raise ValueError(
+            f"The current project directory does not exist: {resolved}. "
+            "Save the KiCad project before using this action."
         )
     return resolved
 
@@ -3209,7 +3210,7 @@ def run_action(action: str) -> None:
         LOG.info("KiCad Blocks action needs user input or context (%s): %s", action, exc)
         messagebox.showwarning(
             "Action not completed",
-            f"{exc}\\n\\nNothing was changed.",
+            f"{exc}\n\nNothing was changed.",
             parent=root,
         )
     except Exception as exc:
