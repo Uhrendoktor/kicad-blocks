@@ -230,25 +230,37 @@ def render_native_svgs(cli: str, record, output_dir: Path) -> None:
     schematic_dir = output_dir / "_schematic"
     symbol_dir.mkdir()
     schematic_dir.mkdir()
+    # Preserve the editable source even if KiCad's renderer rejects it; the
+    # always-uploaded CI artifact then contains the exact failing input.
+    shutil.copy2(record.implementation, output_dir / "functional-block-implementation.kicad_sch")
 
-    subprocess.run(
+    symbol_export = subprocess.run(
         [
             cli, "sym", "export", "svg", "--symbol", str(record.manifest["symbol_name"]),
             "--output", str(symbol_dir), str(record.symbol_library),
         ],
-        check=True, capture_output=True, text=True, timeout=60,
+        check=False, capture_output=True, text=True, timeout=60,
     )
-    subprocess.run(
+    if symbol_export.returncode:
+        raise RuntimeError(
+            f"KiCad symbol SVG export failed ({symbol_export.returncode}):\n"
+            f"{symbol_export.stdout}\n{symbol_export.stderr}"
+        )
+    schematic_export = subprocess.run(
         [cli, "sch", "export", "svg", "--output", str(schematic_dir), str(record.implementation)],
-        check=True, capture_output=True, text=True, timeout=60,
+        check=False, capture_output=True, text=True, timeout=60,
     )
+    if schematic_export.returncode:
+        raise RuntimeError(
+            f"KiCad schematic SVG export failed ({schematic_export.returncode}):\n"
+            f"{schematic_export.stdout}\n{schematic_export.stderr}"
+        )
     symbols = sorted(symbol_dir.glob("*.svg"))
     schematics = sorted(schematic_dir.glob("*.svg"))
     if len(symbols) != 1 or not schematics:
         raise RuntimeError(f"KiCad SVG export failed: symbols={len(symbols)}, schematics={len(schematics)}")
     shutil.copy2(symbols[0], output_dir / "functional-block-facade.svg")
     shutil.copy2(schematics[0], output_dir / "functional-block-implementation.svg")
-    shutil.copy2(record.implementation, output_dir / "functional-block-implementation.kicad_sch")
     for name in ("functional-block-facade.svg", "functional-block-implementation.svg"):
         content = (output_dir / name).read_text(encoding="utf-8")
         if "<svg" not in content or len(content) < 500:
