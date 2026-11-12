@@ -346,7 +346,10 @@ def main() -> None:
                 cache_home / "kicad" / version / "python-environments" / PLUGIN_IDENTIFIER
             )
             env_python = environment / "bin" / "python"
-            deadline = time.monotonic() + 180.0
+            # A cold KiCad-managed environment may need several minutes to download
+            # ABI-specific wheels (notably the CPython 3.14 Pillow wheel). Keep the
+            # readiness assertion, but allow a realistic installation window.
+            deadline = time.monotonic() + 420.0
             ready_log = False
             loaded_log = False
             last_log = ""
