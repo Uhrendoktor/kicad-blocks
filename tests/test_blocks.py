@@ -139,21 +139,7 @@ class BlockModelTests(unittest.TestCase):
         self.assertEqual(manifest["runtime"]["type"], "python")
         self.assertTrue(manifest["actions"])
         expected_scopes = {
-            "place-block": ["schematic"],
-            "manage-library": ["schematic"],
-            "create-block": ["schematic"],
-            "open-implementation": ["schematic"],
-            "configure-instance": ["schematic"],
-            "make-local-copy": ["schematic"],
-            "synchronize-local-copy": ["schematic"],
-            "edit-facade": ["schematic"],
-            "publish-block": ["schematic"],
-            "recursive-bom": ["schematic"],
-            "recursive-erc": ["schematic"],
-            "validate-libraries": ["schematic"],
-            "apply-pcb-layout": ["schematic"],
-            "apply-multiple-pcb-layouts": ["schematic"],
-            "nest-block": ["schematic"],
+            "open-hub": ["schematic"],
             "place-imported-layout": ["pcb"],
         }
         self.assertEqual(
@@ -166,12 +152,13 @@ class BlockModelTests(unittest.TestCase):
             self.assertEqual(action["scopes"], expected_scopes[action["identifier"]])
             self.assertTrue((PLUGIN / action["entrypoint"]).is_file())
             arguments = action.get("args", [])
+            self.assertEqual(arguments, [])
             if action["identifier"] == "place-imported-layout":
-                self.assertEqual(arguments, [])
                 self.assertEqual(action["entrypoint"], "place_imported_layout.py")
             else:
-                self.assertEqual(arguments, [action["identifier"]])
-                self.assertEqual(action["entrypoint"], "actions.py")
+                self.assertEqual(action["identifier"], "open-hub")
+                self.assertEqual(action["entrypoint"], "entrypoints/action_hub.py")
+                self.assertTrue(action["show-button"])
             for key in ("icons-light", "icons-dark"):
                 for icon in action.get(key, []):
                     self.assertTrue((PLUGIN / icon).is_file(), icon)
