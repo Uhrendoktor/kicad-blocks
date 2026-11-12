@@ -250,7 +250,7 @@ jobs:
         with:
           name: kicad-blocks-visual-docs
           path: ${{ runner.temp }}/kicad-blocks-visual-docs
-          if-no-files-found: error
+          if-no-files-found: warn
           compression-level: 1
 
 
