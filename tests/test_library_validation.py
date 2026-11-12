@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import os
+import shutil
 import sys
 import tempfile
 import unittest
@@ -97,6 +99,25 @@ class LibraryValidationTests(unittest.TestCase):
         self.assertEqual(good_result["status"], "passed")
         self.assertEqual(broken_result["status"], "failed")
         self.assertTrue(any("Manifest" in error for error in broken_result["errors"]))
+
+    def test_full_validation_runs_recursive_erc_when_kicad_cli_is_available(self):
+        configured_cli = os.environ.get("KICAD_CLI")
+        cli_available = bool(
+            (configured_cli and Path(configured_cli).is_file())
+            or shutil.which("kicad-cli-nightly")
+            or shutil.which("kicad-cli")
+        )
+        if not cli_available:
+            self.skipTest("KiCad CLI is not available in this environment.")
+
+        self.create_block()
+        report = validate_block_library(self.root, self.reports, run_erc=True)
+
+        self.assertEqual(report["block_count"], 1)
+        result = report["blocks"][0]
+        self.assertIn(result["status"], ("passed", "warnings"))
+        self.assertEqual(len(result["erc"]), 1)
+        self.assertTrue(Path(result["erc"][0]["report"]).is_file())
 
     def test_empty_library_is_valid(self):
         report = validate_block_library(self.root, self.reports, run_erc=False)
