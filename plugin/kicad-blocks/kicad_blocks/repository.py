@@ -13,7 +13,7 @@ import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
-from .extraction import extract_hierarchical_pins, render_extracted_implementation_schematic
+from .extraction import extract_hierarchical_pins, prepare_block_implementation
 from .model import (
     BlockPin,
     normalize_parameters,
@@ -24,7 +24,7 @@ from .model import (
     sha256_file,
     slugify,
 )
-from .pcb_layout import _dump, _head, parse_sexpr
+from .pcb_layout import _Quoted, _all, _direct, _dump, _head, parse_sexpr
 
 MANIFEST_NAME = "manifest.json"
 SYMBOL_NAME = "block.kicad_sym"
@@ -307,7 +307,8 @@ def create_block(
     *,
     description: str = "",
     reference_prefix: str = "X",
-    implementation_selection: str | None = None,
+    source_schematic: Path | None = None,
+    source_project_name: str | None = None,
     layout_file: Path | None = None,
     layout_project_file: Path | None = None,
     layout_files: list[dict] | None = None,
@@ -325,18 +326,25 @@ def create_block(
     root.mkdir(parents=True, exist_ok=True)
     if not name.strip():
         raise ValueError("Block name cannot be empty.")
+    block_id = str(uuid.uuid4())
     implementation_content = None
-    if implementation_selection is not None:
-        derived_pins = extract_hierarchical_pins(implementation_selection)
-        if pins is not None and [
-            (pin.name, pin.electrical_type) for pin in pins
-        ] != [(pin.name, pin.electrical_type) for pin in derived_pins]:
+    if source_schematic is not None:
+        if pins is not None:
             raise ValueError(
-                "The supplied facade pins do not match the selected hierarchical labels."
+                "Do not type or pass a pin list when creating from a hierarchical sheet; "
+                "the sheet's hierarchical labels define the facade pins."
             )
-        pins = derived_pins
+        pins, implementation_content = prepare_block_implementation(
+            Path(source_schematic),
+            name,
+            block_id,
+            source_project_name or root.name,
+        )
     if not pins:
-        raise ValueError("At least one pin is required.")
+        raise ValueError(
+            "At least one facade pin is required. Create the block from a hierarchical "
+            "sheet with hierarchical labels."
+        )
 
     if layout_files is not None and (layout_file is not None or layout_project_file is not None):
         raise ValueError("Use layout_files or the legacy single-layout arguments, not both.")
@@ -377,11 +385,6 @@ def create_block(
         if not re.fullmatch(r"[a-z0-9_]+", default_layout_id):
             raise ValueError(f"Invalid default PCB layout id {default_layout_id!r}.")
     slug = slugify(name)
-    block_id = str(uuid.uuid4())
-    if implementation_selection is not None:
-        implementation_content = render_extracted_implementation_schematic(
-            name, block_id, pins, implementation_selection
-        )
     suffix = block_id.replace("-", "")[:8].lower()
     symbol_name = f"{slug}_{suffix}"
     folder = root / f"{slug}_{block_id[:8]}.kicad_block"
