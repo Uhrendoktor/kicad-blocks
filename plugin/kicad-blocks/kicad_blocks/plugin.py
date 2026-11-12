@@ -2918,7 +2918,8 @@ def _add_nested_dependency(root, parent, parent_window) -> None:
     )
 
 
-def _show_action_hub(root) -> None:
+def _show_action_hub(root):
+
     """Show a task-oriented command center instead of exposing a flat action list."""
     root.title("KiCad Blocks — Tasks")
     root.geometry("820x610")
@@ -3075,6 +3076,7 @@ def _show_action_hub(root) -> None:
         justify="left",
     ).pack(side="left", anchor="w")
     ttk.Button(footer, text="Close", command=root.destroy).pack(side="right")
+    return tabs
 
 
 def run_action(action: str) -> None:
