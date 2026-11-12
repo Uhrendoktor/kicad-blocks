@@ -2,6 +2,7 @@ name: Tag verified release
 
 permissions:
   contents: write
+  actions: write
 
 on:
   workflow_run:
@@ -30,6 +31,7 @@ jobs:
         shell: bash
         env:
           RELEASE_SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           VERSION="$(tr -d '\r\n' < VERSION)"
@@ -49,6 +51,11 @@ jobs:
               exit 1
             fi
             echo "$TAG already exists at $existing; it will not be moved."
+            python3 scripts/dispatch_release.py \
+              --repo "$GITHUB_REPOSITORY" \
+              --tag "$TAG" \
+              --source-sha "$existing" \
+              --version "$VERSION"
             exit 0
           fi
 
@@ -56,3 +63,8 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git tag -a "$TAG" "$RELEASE_SOURCE_SHA" -m "KiCad Blocks $VERSION"
           git push origin "refs/tags/$TAG"
+          python3 scripts/dispatch_release.py \
+            --repo "$GITHUB_REPOSITORY" \
+            --tag "$TAG" \
+            --source-sha "$RELEASE_SOURCE_SHA" \
+            --version "$VERSION"
