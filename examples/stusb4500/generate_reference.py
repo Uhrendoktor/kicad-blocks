@@ -176,8 +176,11 @@ def _prop(name: str, value: str, number: int, x: float, y: float, hidden: bool =
     ]
 
 
-def _label(name: str, x: float, y: float, *, hierarchical: bool = False, shape: str = "passive", key: str) -> list:
-    effects = ["effects", ["font", ["size", "1.27", "1.27"]], ["justify", "left", "bottom"]]
+def _label(
+    name: str, x: float, y: float, *, hierarchical: bool = False,
+    shape: str = "passive", justify: str = "left", key: str,
+) -> list:
+    effects = ["effects", ["font", ["size", "1.27", "1.27"]], ["justify", justify, "bottom"]]
     node = ["hierarchical_label" if hierarchical else "label", _Quoted(name)]
     if hierarchical:
         node.append(["shape", shape])
@@ -262,7 +265,10 @@ def generate_reference_schematic(destination: Path) -> Path:
     instances = []
     labels = []
     no_connects = []
-    label_points: dict[tuple[float, float], tuple[str, str, str | None]] = {}
+    label_points: dict[
+        tuple[float, float],
+        tuple[str, str, str | None, float, float, str],
+    ] = {}
     no_connect_points: set[tuple[float, float]] = set()
     net_points: dict[str, list[tuple[str, float, float]]] = {}
     for reference, library, symbol_name, value, (sx, sy), pin_map in specs:
@@ -320,10 +326,23 @@ def generate_reference_schematic(destination: Path) -> Path:
                         if existing[2] != shape_name:
                             raise ValueError(f"Conflicting hierarchical label shapes at {point}.")
                     else:
+                        # Move labels off the symbol pin text and connect them
+                        # with a short stub. This keeps native labels readable
+                        # while preserving the electrical pin connection.
+                        if abs(pin["x"]) >= abs(pin["y"]):
+                            direction = -1 if pin["x"] < 0 else 1
+                            label_x, label_y = px + direction * 5.08, py
+                            justify = "right" if direction < 0 else "left"
+                        else:
+                            direction = -1 if pin["y"] > 0 else 1
+                            label_x, label_y = px, py + direction * 5.08
+                            justify = "left"
                         # One label is sufficient for stacked connector pins.
                         # Prefer the hierarchical port when it shares a point
                         # with local labels for the same electrical net.
-                        label_points[point] = (net, kind, shape_name)
+                        label_points[point] = (
+                            net, kind, shape_name, label_x, label_y, justify,
+                        )
                 elif kind == "nc":
                     no_connect_points.add(point)
             elif reference == "J1":
@@ -340,14 +359,22 @@ def generate_reference_schematic(destination: Path) -> Path:
         ])
         instances.append(instance)
 
-    for (point, (net, kind, shape_name)) in sorted(label_points.items()):
-        x, y = point
+    label_stubs = []
+    for point, (net, kind, shape_name, x, y, justify) in sorted(label_points.items()):
+        px, py = point
         labels.append(
             _label(
                 net, x, y, hierarchical=kind == "hier", shape=shape_name,
-                key=f"label:{kind}:{net}:{x:.3f}:{y:.3f}",
+                justify=justify, key=f"label:{kind}:{net}:{px:.3f}:{py:.3f}",
             )
         )
+        if (round(x, 3), round(y, 3)) != point:
+            label_stubs.append([
+                "wire",
+                ["pts", ["xy", f"{px:.3f}", f"{py:.3f}"], ["xy", f"{x:.3f}", f"{y:.3f}"]],
+                ["stroke", ["width", "0"], ["type", "default"]],
+                ["uuid", _Quoted(_uid(f"label-stub:{kind}:{net}:{px:.3f}:{py:.3f}"))],
+            ])
     for point in sorted(no_connect_points - set(label_points)):
         x, y = point
         no_connects.append([
@@ -397,7 +424,7 @@ def generate_reference_schematic(destination: Path) -> Path:
             ["comment", "2", _Quoted("Review component ratings, layout and protection before production")],
         ],
         ["lib_symbols", *library_symbols],
-        *instances, *wires, *labels, *no_connects,
+        *instances, *wires, *label_stubs, *labels, *no_connects,
         ["text", _Quoted("STUSB4500QTR — USB Type-C / USB PD sink controller"),
             ["at", "55", "35", "0"], ["effects", ["font", ["size", "2.0", "2.0"]]],
             ["uuid", _Quoted(_uid("text:title"))],
