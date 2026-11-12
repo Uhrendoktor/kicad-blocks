@@ -8,15 +8,19 @@ KiCad Blocks treats screenshots and animations as generated evidence. The previe
 
 <p align="center"><img src="https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/functional-block-facade.svg" alt="KiCad-native rendering of the USB-C Power functional block facade" width="520"></p>
 
-<p align="center"><img src="https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/functional-block-implementation.svg" alt="KiCad-native rendering of the functional block implementation schematic" width="900"></p>
+<p align="center"><img src="https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/functional-block-implementation.svg" alt="KiCad-native rendering of the STUSB4500 reference implementation schematic" width="1000"></p>
 
-The GIF contains three captures from the actual Tk placement chooser: the full library, a filtered search result, and the selected 5 V configuration profile. The vector previews are exported by KiCad CLI from a generated block fixture.
+[Open the editable KiCad schematic](https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/functional-block-implementation.kicad_sch).
+
+The implementation is no longer a synthetic USB-C fixture. It uses the real STUSB4500QTR symbol, a USB Type-C receptacle, the datasheet-listed protection devices, power-path MOSFETs, capacitors/resistors and the optional MCU interface. Its layout follows ST DS12499 Rev. 8 Figure 10; the chooser profiles reflect the 5 V / 2.4 A, 9 V / 1.33 A and 12 V / 1.0 A PDO examples in Table 19. The external block ports are native KiCad hierarchical labels with standard electrical shapes.
+
+The GIF contains three captures from the actual Tk placement chooser: the full library, a filtered search result, and the selected 5 V / 2.4 A PDO1 profile. The vector preview and editable schematic are exported from the generated KiCad source by KiCad CLI.
 
 ## Generation and validation
 
-The visual acceptance fixture runs in CI under Xvfb. It creates a library with multiple blocks, implementation variants and a named profile; opens the production Place Functional Block dialog; captures the actual window; and verifies that the profile selects the matching implementation and typed parameter override. KiCad CLI independently exports the facade symbol and implementation schematic to SVG. Pillow builds the GIF from the captured application states.
+The visual acceptance fixture runs in CI under Xvfb. It creates a library with multiple blocks, PDO implementation variants and named profiles; opens the production Place Functional Block dialog; captures the actual window; and verifies that the PDO1 profile selects the 5 V implementation and 2.4 A typed parameter. The STUSB4500 schematic generator loads real symbols from the installed KiCad libraries and emits native hierarchical labels for its external ports. KiCad CLI exports the facade symbol and implementation schematic to SVG. Pillow builds the GIF from the captured application states.
 
-The generated bundle contains a SHA-256 manifest tied to the checked-out source commit. CI uploads the bundle on pull requests so reviewers can inspect it. On successful pushes to main, the publisher validates the manifest and publishes the images to the separate docs/previews branch. The publisher verifies the remote branch head after pushing; provenance.json records the source commit, workflow run and asset hashes.
+The generated bundle contains the editable .kicad_sch, SVG previews and a SHA-256 manifest tied to the checked-out source commit and ST datasheet reference. CI uploads the bundle on pull requests so reviewers can inspect both the source schematic and its rendered output. On successful pushes to main, the publisher validates the manifest and publishes the assets to the separate docs/previews branch. The publisher verifies the remote branch head after pushing; provenance.json records the source commit, workflow run and asset hashes.
 
 To reproduce the capture locally:
 
