@@ -44,7 +44,7 @@ path across the upper-right, and the optional MCU/I²C interface on the right.
 | D50, D11 | ESDA25P35 | VBUS / sink-output protection |
 | T1, T4 | STL6P3LLH6 | P-channel VBUS power-path switches |
 | J10 | 2-pin connector | VSNK output |
-| J2 | 4-pin connector | Optional MCU SCL/SDA/ALERT#/RESET interface |
+| J2 | 6-pin connector | Optional MCU SCL/SDA/ALERT#/RESET/VMCU/GND interface |
 
 ## Reproduce
 
