@@ -124,16 +124,22 @@ class BlockModelTests(unittest.TestCase):
 
         self.assertEqual(_selected_symbols(schematic), [first, second])
 
-    def test_plugin_manifest_has_valid_schematic_action_contract(self):
+    def test_plugin_manifest_has_valid_action_scope_contract(self):
         manifest = json.loads(
             (PLUGIN / "plugin.json").read_text(encoding="utf-8")
         )
         self.assertEqual(manifest["runtime"]["type"], "python")
         self.assertTrue(manifest["actions"])
+        expected_scopes = {
+            "browse-library": ["schematic"],
+            "open-implementation": ["schematic"],
+            "manager": ["schematic"],
+            "place-imported-layout": ["pcb"],
+        }
         for action in manifest["actions"]:
             self.assertTrue(action["identifier"])
             self.assertTrue(action["entrypoint"])
-            self.assertIn("schematic", action["scopes"])
+            self.assertEqual(action["scopes"], expected_scopes[action["identifier"]])
             self.assertTrue((PLUGIN / action["entrypoint"]).is_file())
 
     def test_parse_pins_aliases_and_default(self):

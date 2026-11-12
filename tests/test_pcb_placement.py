@@ -106,6 +106,10 @@ class PcbPlacementManifestTests(unittest.TestCase):
         write_pcb_placement_manifest(self.board_path, result)
         other = Path(self.temp.name) / "other.kicad_pcb"
         other.write_text("(kicad_pcb)\n", encoding="utf-8")
+        wrong_board_sidecar = placement_manifest_path(other)
+        wrong_board_sidecar.write_bytes(
+            placement_manifest_path(self.board_path).read_bytes()
+        )
         with self.assertRaisesRegex(ValueError, "different board path"):
             read_pcb_placement_manifest(other)
 
