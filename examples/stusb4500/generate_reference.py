@@ -336,14 +336,29 @@ def generate_reference_schematic(destination: Path) -> Path:
                         # Move labels off the symbol pin text and connect them
                         # with a short stub. This keeps native labels readable
                         # while preserving the electrical pin connection.
-                        if abs(pin["x"]) >= abs(pin["y"]):
-                            direction = -1 if pin["x"] < 0 else 1
-                            label_x, label_y = px + direction * 5.08, py
-                            justify = "right" if direction < 0 else "left"
+                        # KiCad's pin angle defines the electrical pin axis.
+                        # The label stub must extend outwards from the symbol,
+                        # opposite the direction in which the pin points into
+                        # the symbol body. Guessing from the relative x/y
+                        # coordinates made USB-C CC stubs run vertically across
+                        # the stacked VBUS pins and shorted distinct nets.
+                        angle = pin["angle"] % 360
+                        if angle == 0:
+                            dx, dy = -1, 0
+                        elif angle == 180:
+                            dx, dy = 1, 0
+                        elif angle == 90:
+                            dx, dy = 0, 1
+                        elif angle == 270:
+                            dx, dy = 0, -1
                         else:
-                            direction = -1 if pin["y"] > 0 else 1
-                            label_x, label_y = px, py + direction * 5.08
-                            justify = "left"
+                            raise ValueError(
+                                f"Unsupported pin angle {pin['angle']} for "
+                                f"{reference}.{pin['number']} ({pin['name']})."
+                            )
+                        label_x = px + dx * 5.08
+                        label_y = py + dy * 5.08
+                        justify = "right" if dx < 0 else "left"
                         # One label is sufficient for stacked connector pins.
                         # Prefer the hierarchical port when it shares a point
                         # with local labels for the same electrical net.
@@ -422,7 +437,7 @@ def generate_reference_schematic(destination: Path) -> Path:
         ],
         ["text", _Quoted("STUSB4500 / LOCAL DECOUPLING"),
             ["at", "190", "63", "0"], ["effects", ["font", ["size", "1.4", "1.4"]]],
-            ["uuid", _Quoted(_uid("text:power-path"))],
+            ["uuid", _Quoted(_uid("text:decoupling"))],
         ],
         ["text", _Quoted("OPTIONAL MCU / I2C INTERFACE"),
             ["at", "305", "165", "0"], ["effects", ["font", ["size", "1.4", "1.4"]]],
