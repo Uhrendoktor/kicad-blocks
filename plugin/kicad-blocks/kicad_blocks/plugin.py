@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import contextlib
 import logging
+import os
 import shutil
 import subprocess
 import time
@@ -1532,7 +1533,19 @@ def _show_library_roots_dialog(parent) -> bool:
         roots = configured_library_roots()
         selected_roots[0] = roots
         default = default_library_root()
+        environment_value = os.environ.get("KICAD_BLOCKS_LIBRARY")
+        environment_root = (
+            Path(environment_value).expanduser().resolve()
+            if environment_value else None
+        )
         for index, library_path in enumerate(roots):
+            role = (
+                "Environment override"
+                if library_path == environment_root
+                else "Default"
+                if library_path == default
+                else ""
+            )
             tree.insert(
                 "",
                 "end",
@@ -1540,7 +1553,7 @@ def _show_library_roots_dialog(parent) -> bool:
                 text=library_path.name or str(library_path),
                 values=(
                     len(list_blocks(library_path)),
-                    "Default" if library_path == default else "",
+                    role,
                     str(library_path),
                 ),
             )
@@ -1583,6 +1596,17 @@ def _show_library_roots_dialog(parent) -> bool:
     def make_default() -> None:
         path = selected_path()
         if path is None:
+            return
+        if os.environ.get("KICAD_BLOCKS_LIBRARY"):
+            messagebox.showinfo(
+                "Default Library",
+                "KICAD_BLOCKS_LIBRARY is set, so it overrides the default folder. "
+                "The selected folder can still be used for new blocks and remains registered.",
+                parent=dialog,
+            )
+            set_library_root(path)
+            changed[0] = True
+            render()
             return
         try:
             set_library_root(path)

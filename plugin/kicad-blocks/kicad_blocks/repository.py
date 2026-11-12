@@ -1935,17 +1935,16 @@ def remove_library_root(path: Path) -> list[Path]:
 
 
 def set_library_root(path: Path) -> Path:
-    """Set the preferred library while preserving every other registered library."""
+    """Register a folder and make it default unless an environment override is active."""
     path = Path(path).expanduser().resolve()
     path.mkdir(parents=True, exist_ok=True)
-    if os.environ.get("KICAD_BLOCKS_LIBRARY"):
-        return Path(os.environ["KICAD_BLOCKS_LIBRARY"]).expanduser().resolve()
     settings = _read_library_settings()
     roots = _normalized_library_settings_roots(settings)
     if path not in roots:
         roots.append(path)
     settings["library_roots"] = [str(item) for item in roots]
-    settings["library_root"] = str(path)
+    if not os.environ.get("KICAD_BLOCKS_LIBRARY"):
+        settings["library_root"] = str(path)
     _write_library_settings(settings)
     return path
 

@@ -28,6 +28,7 @@ from kicad_blocks.repository import (
     default_library_root,
     library_roots,
     remove_library_root,
+    set_library_root,
     link_instance_to_local_copy,
     list_blocks,
     local_copy_for_instance,
@@ -216,6 +217,24 @@ class BlockModelTests(unittest.TestCase):
                 self.assertTrue(second_library.exists())
                 self.assertEqual(default_library_root(), first_library.resolve())
 
+
+    def test_selected_library_is_registered_even_when_environment_overrides_default(self):
+        import os
+        from unittest.mock import patch
+
+        with tempfile.TemporaryDirectory(prefix="kicad-block-library-env-") as temp:
+            root = Path(temp)
+            override = root / "environment-library"
+            selected = root / "selected-library"
+            override.mkdir()
+            selected.mkdir()
+            settings = root / "settings.json"
+            with patch("kicad_blocks.repository.settings_file", return_value=settings), patch.dict(
+                os.environ, {"KICAD_BLOCKS_LIBRARY": str(override)}
+            ):
+                self.assertEqual(set_library_root(selected), selected.resolve())
+                self.assertEqual(default_library_root(), override.resolve())
+                self.assertIn(selected.resolve(), library_roots())
 
     def test_parse_pins_aliases_and_default(self):
         pins = parse_pins("VIN:input, GND, SDA:bidir, ALERT:tristate")
