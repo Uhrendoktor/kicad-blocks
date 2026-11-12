@@ -96,7 +96,7 @@ jobs:
           path: ${{ runner.temp }}/kicad-blocks-wheelhouse
           key: kicad-python-${{ runner.os }}-${{ runner.arch }}-py312-${{ steps.kipy.outputs.sha }}
 
-      - name: Build KiCad Python IPC wheels
+      - name: Reuse or build CPython 3.12 KiCad Python IPC wheel
         id: kipy-wheel
         shell: bash
         env:
@@ -105,16 +105,26 @@ jobs:
           set -euo pipefail
           PY="${RUNNER_TEMP}/kicad-blocks-venv/bin/python"
           WHEELHOUSE="${RUNNER_TEMP}/kicad-blocks-wheelhouse"
+          EXPECTED="kicad_python-0.9.0.dev0-cp312-cp312-linux_x86_64.whl"
           mkdir -p "$WHEELHOUSE"
-          if compgen -G "$WHEELHOUSE/kicad_python-*.whl" >/dev/null; then
-            echo "Using cached KiCad Python wheel:"
-            ls -lh "$WHEELHOUSE"/kicad_python-*.whl
+          if [[ ! -s "$WHEELHOUSE/$EXPECTED" ]]; then
+            set +e
+            python3 scripts/download_pinned_ipc_wheel.py "$WHEELHOUSE" \
+              --repo "$GITHUB_REPOSITORY" --source-sha "$KIPY_SHA"
+            DOWNLOAD_STATUS=$?
+            set -e
+            if [[ "$DOWNLOAD_STATUS" -eq 3 ]]; then
+              echo "No published CPython 3.12 wheel for $KIPY_SHA; building it from source."
+              rm -f "$WHEELHOUSE"/kicad_python-*.whl
+              "$PY" -m pip wheel --wheel-dir "$WHEELHOUSE" \
+                "git+https://gitlab.com/kicad/code/kicad-python.git@$KIPY_SHA"
+            elif [[ "$DOWNLOAD_STATUS" -ne 0 ]]; then
+              exit "$DOWNLOAD_STATUS"
+            fi
           else
-            echo "Building official kicad-python commit $KIPY_SHA"
-            "$PY" -m pip wheel --wheel-dir "$WHEELHOUSE" \
-              "git+https://gitlab.com/kicad/code/kicad-python.git@$KIPY_SHA"
+            echo "Reusing exact pinned CPython 3.12 wheel from the Actions cache."
           fi
-          test -n "$(find "$WHEELHOUSE" -maxdepth 1 -name 'kicad_python-*.whl' -print -quit)"
+          test -s "$WHEELHOUSE/$EXPECTED"
           du -sh "$WHEELHOUSE"
 
       - name: Publish immutable KiCad Python IPC dependency wheel
@@ -142,7 +152,7 @@ jobs:
           set -euo pipefail
           PY="${RUNNER_TEMP}/kicad-blocks-venv/bin/python"
           WHEELHOUSE="${RUNNER_TEMP}/kicad-blocks-wheelhouse"
-          "$PY" -m pip install --no-index --find-links "$WHEELHOUSE" "kicad-python==0.9.0.dev0"
+          "$PY" -m pip install "$WHEELHOUSE/kicad_python-0.9.0.dev0-cp312-cp312-linux_x86_64.whl"
           "$PY" -c "from kipy import KiCad; from kipy.schematic import Schematic; print('Schematic IPC bindings available')"
 
       - name: Run unit tests and compile
@@ -224,57 +234,39 @@ jobs:
         with:
           python-version: "3.13"
 
-      - name: Restore cached CPython 3.13 KiCad IPC wheelhouse
-        id: kipy-cp313-cache
-        uses: actions/cache/restore@v4
-        with:
-          path: ${{ runner.temp }}/kicad-blocks-wheelhouse-cp313
-          key: kicad-python-${{ runner.os }}-${{ runner.arch }}-py313-${{ steps.kipy.outputs.sha }}
-
-      - name: Build or reuse CPython 3.13 KiCad IPC wheelhouse
-        id: kipy-cp313-wheel
-        shell: bash
-        env:
-          KIPY_SHA: ${{ steps.kipy.outputs.sha }}
-        run: |
-          set -euo pipefail
-          python3 --version
-          VENV="${RUNNER_TEMP}/kicad-blocks-venv-cp313"
-          WHEELHOUSE="${RUNNER_TEMP}/kicad-blocks-wheelhouse-cp313"
-          mkdir -p "$WHEELHOUSE"
-          python3 -m venv "$VENV"
-          PY="$VENV/bin/python"
-          "$PY" -m pip install --upgrade pip
-          EXPECTED="kicad_python-0.9.0.dev0-cp313-cp313-linux_x86_64.whl"
-          if [[ ! -s "$WHEELHOUSE/$EXPECTED" ]]; then
-            echo "Building CPython 3.13 KiCad IPC wheel for pinned source $KIPY_SHA"
-            rm -f "$WHEELHOUSE"/kicad_python-*.whl
-            "$PY" -m pip wheel --wheel-dir "$WHEELHOUSE" \
-              "git+https://gitlab.com/kicad/code/kicad-python.git@$KIPY_SHA"
-          else
-            echo "Reusing cached $EXPECTED"
-          fi
-          test -s "$WHEELHOUSE/$EXPECTED"
-          "$PY" -m pip install --no-index --find-links "$WHEELHOUSE" "kicad-python==0.9.0.dev0"
-          "$PY" -c "from kipy import KiCad; from kipy.schematic import Schematic; print('CPython 3.13 KiCad IPC bindings available')"
-
-      - name: Publish immutable CPython 3.13 KiCad IPC wheel
+      - name: Reuse or build CPython 3.13 KiCad IPC wheel
         shell: bash
         env:
           KIPY_SHA: ${{ steps.kipy.outputs.sha }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          python3 scripts/publish_pinned_ipc_wheel.py \
-            "${RUNNER_TEMP}/kicad-blocks-wheelhouse-cp313" \
+          python3 --version
+          VENV="${RUNNER_TEMP}/kicad-blocks-venv-cp3.13"
+          WHEELHOUSE="${RUNNER_TEMP}/kicad-blocks-wheelhouse-cp3.13"
+          rm -rf "$VENV" "$WHEELHOUSE"
+          mkdir -p "$WHEELHOUSE"
+          python3 -m venv "$VENV"
+          PY="$VENV/bin/python"
+          "$PY" -m pip install --upgrade pip
+          EXPECTED="kicad_python-0.9.0.dev0-cp3.13-cp3.13-linux_x86_64.whl"
+          set +e
+          python3 scripts/download_pinned_ipc_wheel.py "$WHEELHOUSE" \
             --repo "$GITHUB_REPOSITORY" --source-sha "$KIPY_SHA"
-
-      - name: Save CPython 3.13 KiCad IPC wheelhouse cache
-        if: steps.kipy-cp313-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
-        with:
-          path: ${{ runner.temp }}/kicad-blocks-wheelhouse-cp313
-          key: kicad-python-${{ runner.os }}-${{ runner.arch }}-py313-${{ steps.kipy.outputs.sha }}
+          DOWNLOAD_STATUS=$?
+          set -e
+          if [[ "$DOWNLOAD_STATUS" -eq 3 ]]; then
+            echo "No published cp3.13 wheel for $KIPY_SHA; building it from source."
+            "$PY" -m pip wheel --wheel-dir "$WHEELHOUSE" \
+              "git+https://gitlab.com/kicad/code/kicad-python.git@$KIPY_SHA"
+          elif [[ "$DOWNLOAD_STATUS" -ne 0 ]]; then
+            exit "$DOWNLOAD_STATUS"
+          fi
+          test -s "$WHEELHOUSE/$EXPECTED"
+          python3 scripts/publish_pinned_ipc_wheel.py \
+            "$WHEELHOUSE" --repo "$GITHUB_REPOSITORY" --source-sha "$KIPY_SHA"
+          "$PY" -m pip install "$WHEELHOUSE/$EXPECTED"
+          "$PY" -c "from kipy import KiCad; from kipy.schematic import Schematic; print('CPython 3.13 KiCad IPC bindings available')"
 
       - name: Verify KiCad plugin discovery on CPython 3.13
         shell: bash
@@ -287,57 +279,39 @@ jobs:
         with:
           python-version: "3.14.4"
 
-      - name: Restore cached CPython 3.14 KiCad IPC wheelhouse
-        id: kipy-cp314-cache
-        uses: actions/cache/restore@v4
-        with:
-          path: ${{ runner.temp }}/kicad-blocks-wheelhouse-cp314
-          key: kicad-python-${{ runner.os }}-${{ runner.arch }}-py314-${{ steps.kipy.outputs.sha }}
-
-      - name: Build or reuse CPython 3.14 KiCad IPC wheelhouse
-        id: kipy-cp314-wheel
-        shell: bash
-        env:
-          KIPY_SHA: ${{ steps.kipy.outputs.sha }}
-        run: |
-          set -euo pipefail
-          python3 --version
-          VENV="${RUNNER_TEMP}/kicad-blocks-venv-cp314"
-          WHEELHOUSE="${RUNNER_TEMP}/kicad-blocks-wheelhouse-cp314"
-          mkdir -p "$WHEELHOUSE"
-          python3 -m venv "$VENV"
-          PY="$VENV/bin/python"
-          "$PY" -m pip install --upgrade pip
-          EXPECTED="kicad_python-0.9.0.dev0-cp314-cp314-linux_x86_64.whl"
-          if [[ ! -s "$WHEELHOUSE/$EXPECTED" ]]; then
-            echo "Building CPython 3.14 KiCad IPC wheel for pinned source $KIPY_SHA"
-            rm -f "$WHEELHOUSE"/kicad_python-*.whl
-            "$PY" -m pip wheel --wheel-dir "$WHEELHOUSE" \
-              "git+https://gitlab.com/kicad/code/kicad-python.git@$KIPY_SHA"
-          else
-            echo "Reusing cached $EXPECTED"
-          fi
-          test -s "$WHEELHOUSE/$EXPECTED"
-          "$PY" -m pip install --no-index --find-links "$WHEELHOUSE" "kicad-python==0.9.0.dev0"
-          "$PY" -c "from kipy import KiCad; from kipy.schematic import Schematic; print('CPython 3.14 KiCad IPC bindings available')"
-
-      - name: Publish immutable CPython 3.14 KiCad IPC wheel
+      - name: Reuse or build CPython 3.14 KiCad IPC wheel
         shell: bash
         env:
           KIPY_SHA: ${{ steps.kipy.outputs.sha }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          python3 scripts/publish_pinned_ipc_wheel.py \
-            "${RUNNER_TEMP}/kicad-blocks-wheelhouse-cp314" \
+          python3 --version
+          VENV="${RUNNER_TEMP}/kicad-blocks-venv-cp3.14"
+          WHEELHOUSE="${RUNNER_TEMP}/kicad-blocks-wheelhouse-cp3.14"
+          rm -rf "$VENV" "$WHEELHOUSE"
+          mkdir -p "$WHEELHOUSE"
+          python3 -m venv "$VENV"
+          PY="$VENV/bin/python"
+          "$PY" -m pip install --upgrade pip
+          EXPECTED="kicad_python-0.9.0.dev0-cp3.14-cp3.14-linux_x86_64.whl"
+          set +e
+          python3 scripts/download_pinned_ipc_wheel.py "$WHEELHOUSE" \
             --repo "$GITHUB_REPOSITORY" --source-sha "$KIPY_SHA"
-
-      - name: Save CPython 3.14 KiCad IPC wheelhouse cache
-        if: steps.kipy-cp314-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
-        with:
-          path: ${{ runner.temp }}/kicad-blocks-wheelhouse-cp314
-          key: kicad-python-${{ runner.os }}-${{ runner.arch }}-py314-${{ steps.kipy.outputs.sha }}
+          DOWNLOAD_STATUS=$?
+          set -e
+          if [[ "$DOWNLOAD_STATUS" -eq 3 ]]; then
+            echo "No published cp3.14 wheel for $KIPY_SHA; building it from source."
+            "$PY" -m pip wheel --wheel-dir "$WHEELHOUSE" \
+              "git+https://gitlab.com/kicad/code/kicad-python.git@$KIPY_SHA"
+          elif [[ "$DOWNLOAD_STATUS" -ne 0 ]]; then
+            exit "$DOWNLOAD_STATUS"
+          fi
+          test -s "$WHEELHOUSE/$EXPECTED"
+          python3 scripts/publish_pinned_ipc_wheel.py \
+            "$WHEELHOUSE" --repo "$GITHUB_REPOSITORY" --source-sha "$KIPY_SHA"
+          "$PY" -m pip install "$WHEELHOUSE/$EXPECTED"
+          "$PY" -c "from kipy import KiCad; from kipy.schematic import Schematic; print('CPython 3.14 KiCad IPC bindings available')"
 
       - name: Verify KiCad plugin discovery on CPython 3.14
         shell: bash
