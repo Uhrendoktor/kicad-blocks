@@ -1058,11 +1058,11 @@ def synchronize_facade_pins_from_implementation(block: BlockRecord) -> list[str]
         if _head(child) != "pin"
     ]
     pin_unit[:] = [pin_unit[0], *other_children, *updated_pin_nodes]
-    atomic_write(symbol_path, _dump(symbol_library) + "\\n")
+    atomic_write(symbol_path, _dump(symbol_library) + "\n")
     manifest["pins"] = new_manifest_pins
     atomic_write(
         block.path / MANIFEST_NAME,
-        json.dumps(manifest, indent=2, ensure_ascii=False) + "\\n",
+        json.dumps(manifest, indent=2, ensure_ascii=False) + "\n",
     )
     return [
         pin.name for pin in normalized_pins
