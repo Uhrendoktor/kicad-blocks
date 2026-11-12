@@ -26,7 +26,6 @@ from .model import (
     VARIANT_FIELD_NAME,
     parameter_field_name,
     parse_parameters,
-    parse_pins,
     resolve_parameter_values,
     resolve_profile_configuration,
     resolve_variant_implementation,
