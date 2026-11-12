@@ -10,9 +10,12 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 PLUGIN = ROOT / "plugin" / "kicad-blocks"
 sys.path.insert(0, str(PLUGIN))
+sys.path.insert(0, str(ROOT / "examples" / "stusb4500"))
 
+from generate_reference import generate_reference_schematic
 from kicad_blocks.model import parse_pins
 from kicad_blocks.operations import export_block_bom, validate_block_tree
+from kicad_blocks.pcb_layout import _all, _direct, parse_sexpr
 from kicad_blocks.repository import add_dependency, create_block
 
 
@@ -25,6 +28,105 @@ def _find_kicad_cli() -> str:
             return candidate
     raise RuntimeError(
         "KiCad CLI was not found. Set KICAD_CLI or add kicad-cli(-nightly) to PATH."
+    )
+
+
+
+def _validate_stusb4500_netlist(cli: str, output_dir: Path) -> None:
+    schematic = generate_reference_schematic(output_dir / "stusb4500.kicad_sch")
+    netlist_path = output_dir / "stusb4500.net"
+    subprocess.run(
+        [
+            cli,
+            "sch",
+            "export",
+            "netlist",
+            "--output",
+            str(netlist_path),
+            str(schematic),
+        ],
+        check=True,
+    )
+    tree = parse_sexpr(netlist_path.read_text(encoding="utf-8"))
+    actual: dict[tuple[str, str], str] = {}
+    nets_container = _direct(tree, "nets")
+    if nets_container is None:
+        raise RuntimeError("KiCad netlist export has no nets section.")
+    for net in _all(nets_container, "net"):
+        name_node = _direct(net, "name")
+        if name_node is None:
+            continue
+        # KiCad may qualify local labels with their sheet path. Compare the
+        # actual electrical name while retaining the pin's true net identity.
+        net_name = str(name_node[1]).rsplit("/", 1)[-1]
+        for node in _all(net, "node"):
+            ref_node = _direct(node, "ref")
+            pin_node = _direct(node, "pin")
+            if ref_node is not None and pin_node is not None:
+                actual[(str(ref_node[1]), str(pin_node[1]))] = net_name
+
+    expected = {
+        ("U1", "1"): "CC1",
+        ("U1", "2"): "CC1",
+        ("U1", "4"): "CC2",
+        ("U1", "5"): "CC2",
+        ("U1", "18"): "VBUS_VS_DISCH",
+        ("R1", "2"): "VBUS_VS_DISCH",
+        ("R4", "2"): "VBUS_VS_DISCH",
+        ("U1", "6"): "RESET",
+        ("U1", "7"): "SCL",
+        ("U1", "8"): "SDA",
+        ("U1", "9"): "DISCH",
+        ("U1", "10"): "GND",
+        ("U1", "12"): "ADDR0",
+        ("U1", "13"): "ADDR1",
+        ("U1", "16"): "VBUS_EN_SNK",
+        ("U1", "19"): "ALERT#",
+        ("U1", "21"): "VREG_1V2",
+        ("C1", "1"): "VREG_1V2",
+        ("U1", "22"): "GND",
+        ("U1", "23"): "VREG_2V7",
+        ("C2", "1"): "VREG_2V7",
+        ("C3", "1"): "VREG_2V7",
+        ("R4", "1"): "VREG_2V7",
+        ("U1", "24"): "VBUS",
+        ("C4", "1"): "VBUS_FILTERED",
+        ("R1", "1"): "VBUS_FILTERED",
+        ("U1", "25"): "GND",
+        ("R51", "1"): "VREG_2V7",
+        ("R52", "1"): "VREG_2V7",
+        ("D4", "1"): "VBUS_FILTERED",
+        ("D4", "2"): "VBUS",
+        ("C10", "1"): "VSNK",
+        ("C10", "2"): "GND",
+        ("D50", "1"): "VBUS",
+        ("D50", "2"): "GND",
+        ("D11", "1"): "VSNK",
+        ("D11", "2"): "GND",
+        ("T4", "2"): "VBUS",
+        ("T4", "3"): "FET_MID",
+        ("T1", "2"): "FET_MID",
+        ("T1", "3"): "VSNK",
+        ("R2", "1"): "DISCH",
+        ("R2", "2"): "VSNK",
+        ("R3", "1"): "VMCU",
+        ("R3", "2"): "SCL",
+        ("R5", "1"): "VMCU",
+        ("R5", "2"): "SDA",
+        ("R6", "1"): "VMCU",
+        ("R6", "2"): "ALERT#",
+    }
+    mismatches = {
+        pin: (expected_name, actual.get(pin))
+        for pin, expected_name in expected.items()
+        if actual.get(pin) != expected_name
+    }
+    if mismatches:
+        raise RuntimeError(
+            f"STUSB4500 KiCad netlist connectivity mismatch: {mismatches}"
+        )
+    print(
+        f"KiCad netlist validated {len(expected)} critical STUSB4500 pin-to-net assignments."
     )
 
 
@@ -90,9 +192,11 @@ def main() -> None:
             Path(item["report"]).is_file() for item in erc_reports
         ):
             raise RuntimeError("Recursive KiCad CLI ERC did not report both block implementations.")
+        _validate_stusb4500_netlist(cli, Path(temp))
         print(
             f"KiCad CLI validated symbol ({symbol_svgs[0].name}), "
-            f"implementation ({schematic_svgs[0].name}), recursive BOM, and ERC."
+            f"implementation ({schematic_svgs[0].name}), recursive BOM, ERC, "
+            "and the STUSB4500 reference netlist."
         )
 
 
