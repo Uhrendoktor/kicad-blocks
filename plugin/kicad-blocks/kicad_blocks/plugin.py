@@ -3208,9 +3208,9 @@ def run_action(action: str) -> None:
             _add_nested_dependency(library_paths, root, root)
     except (ValueError, LookupError, FileNotFoundError, PermissionError) as exc:
         LOG.info("KiCad Blocks action needs user input or context (%s): %s", action, exc)
-        messagebox.showinfo(
-            "Action not run",
-            f"{exc}\n\nNothing was changed. Check the task description, select the required item, and run the action again.",
+        messagebox.showwarning(
+            "Action needs attention",
+            f"{exc}\n\nReview the task description and the required selection or project context.",
             parent=root,
         )
     except Exception as exc:
