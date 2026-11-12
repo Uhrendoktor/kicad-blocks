@@ -54,7 +54,7 @@ class PublishReleaseTests(unittest.TestCase):
             def fake_request(method, url, _token, **kwargs):
                 calls.append((method, url))
                 if method == "GET" and url.endswith("/releases/tags/v1.1.0"):
-                    return {**release, "assets": list(assets)}
+                    return None
                 if method == "POST" and url.endswith("/releases"):
                     return dict(release)
                 if method == "POST" and url.startswith("https://uploads.github.com/"):
