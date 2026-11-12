@@ -113,7 +113,7 @@ def main() -> None:
                 raise AssertionError("The native KiCad preview image is empty.")
             plugin_actions._draw_facade_preview(canvas, target)
             preview_root.update_idletasks()
-            image_items = canvas.find_withtag("image")
+            image_items = [item for item in canvas.find_all() if canvas.type(item) == "image"]
             if not image_items:
                 raise AssertionError("The native KiCad symbol renderer produced no preview image.")
             image = getattr(canvas, "_native_preview_photo", None)
