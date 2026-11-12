@@ -42,7 +42,12 @@ class DispatchReleaseTests(unittest.TestCase):
     def test_does_not_dispatch_when_both_release_assets_exist(self):
         release = {
             "tag_name": TAG,
-            "assets": [{"name": ARCHIVE}, {"name": ARCHIVE + ".sha256"}],
+            "draft": False,
+            "prerelease": False,
+            "assets": [
+                {"name": ARCHIVE, "size": 123, "digest": "sha256:" + "1" * 64},
+                {"name": ARCHIVE + ".sha256", "size": 88, "digest": "sha256:" + "2" * 64},
+            ],
         }
         with patch.object(dispatcher, "_request", return_value=release) as request:
             result = dispatcher.dispatch_release("owner/repo", TAG, SHA, VERSION, "token")
