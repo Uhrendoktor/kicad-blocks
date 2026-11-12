@@ -11,7 +11,7 @@ on:
 
 # Release publication is intentionally serial and tied to an exact version tag.
 concurrency:
-  group: kicad-blocks-release-${ github.ref }
+  group: kicad-blocks-release-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -27,7 +27,7 @@ jobs:
       - name: Verify version tag and exact successful main CI
         shell: bash
         env:
-          GITHUB_TOKEN: ${ secrets.GITHUB_TOKEN }
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           VERSION="$(tr -d '\r\n' < VERSION)"
@@ -60,7 +60,7 @@ jobs:
       - name: Publish versioned release ZIP and checksum
         shell: bash
         env:
-          GITHUB_TOKEN: ${ secrets.GITHUB_TOKEN }
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           VERSION="$(tr -d '\r\n' < VERSION)"
