@@ -13,6 +13,7 @@ import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
+from .extraction import extract_hierarchical_pins, render_extracted_implementation_schematic
 from .model import (
     BlockPin,
     normalize_parameters,
@@ -302,10 +303,11 @@ def find_block_by_id(root: Path, block_id: str) -> BlockRecord:
 def create_block(
     root: Path,
     name: str,
-    pins: list[BlockPin],
+    pins: list[BlockPin] | None = None,
     *,
     description: str = "",
     reference_prefix: str = "X",
+    implementation_selection: str | None = None,
     layout_file: Path | None = None,
     layout_project_file: Path | None = None,
     layout_files: list[dict] | None = None,
@@ -323,8 +325,19 @@ def create_block(
     root.mkdir(parents=True, exist_ok=True)
     if not name.strip():
         raise ValueError("Block name cannot be empty.")
+    implementation_content = None
+    if implementation_selection is not None:
+        derived_pins = extract_hierarchical_pins(implementation_selection)
+        if pins is not None and [
+            (pin.name, pin.electrical_type) for pin in pins
+        ] != [(pin.name, pin.electrical_type) for pin in derived_pins]:
+            raise ValueError(
+                "The supplied facade pins do not match the selected hierarchical labels."
+            )
+        pins = derived_pins
     if not pins:
         raise ValueError("At least one pin is required.")
+
     if layout_files is not None and (layout_file is not None or layout_project_file is not None):
         raise ValueError("Use layout_files or the legacy single-layout arguments, not both.")
     if layout_files is None:
@@ -365,6 +378,10 @@ def create_block(
             raise ValueError(f"Invalid default PCB layout id {default_layout_id!r}.")
     slug = slugify(name)
     block_id = str(uuid.uuid4())
+    if implementation_selection is not None:
+        implementation_content = render_extracted_implementation_schematic(
+            name, block_id, pins, implementation_selection
+        )
     suffix = block_id.replace("-", "")[:8].lower()
     symbol_name = f"{slug}_{suffix}"
     folder = root / f"{slug}_{block_id[:8]}.kicad_block"
@@ -382,8 +399,10 @@ def create_block(
             include_profile_field=bool(profiles),
         )
         (staging / SYMBOL_NAME).write_text(symbol_content, encoding="utf-8")
+        if implementation_content is None:
+            implementation_content = render_implementation_schematic(name, block_id, pins)
         (staging / IMPLEMENTATION_NAME).write_text(
-            render_implementation_schematic(name, block_id, pins), encoding="utf-8"
+            implementation_content, encoding="utf-8"
         )
         files = [SYMBOL_NAME, IMPLEMENTATION_NAME]
         variants: list[dict[str, str]] = []
