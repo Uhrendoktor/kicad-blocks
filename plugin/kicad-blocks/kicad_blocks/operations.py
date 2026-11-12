@@ -12,11 +12,11 @@ from pathlib import Path
 from typing import Any
 
 from .model import (
+    resolve_profile_configuration,
     revision_for_hashes,
     sha256_file,
     slugify,
     substitute_parameter_templates,
-    resolve_profile_configuration,
 )
 from .repository import (
     BlockOccurrence,
