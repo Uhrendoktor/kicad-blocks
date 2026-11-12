@@ -131,7 +131,7 @@ def capture_picker(records, output_dir: Path) -> dict:
             dialog.update()
             capture_window(xdotool, identifier, frame_paths[1])
 
-            combos[1].set("USB 5V mode")
+            combos[1].set("5 V / 2.4 A (PDO1)")
             combos[1].event_generate("<<ComboboxSelected>>")
             dialog.update()
             if combos[0].get() != "5V":
