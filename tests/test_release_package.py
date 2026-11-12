@@ -58,7 +58,7 @@ class ReleasePackageTests(unittest.TestCase):
             digest = hashlib.sha256(first_zip.read_bytes()).hexdigest()
             self.assertEqual(
                 first_sum.read_text(encoding="ascii"),
-                f"{digest}  {first_zip.name}\\n",
+                f"{digest}  {first_zip.name}\n",
             )
             with ZipFile(first_zip) as archive:
                 names = archive.namelist()
@@ -140,7 +140,7 @@ class ReleasePackageTests(unittest.TestCase):
             )
             requirements = copied / "plugin" / "kicad-blocks" / "requirements.txt"
             requirements.write_text(
-                "kicad-python @ https://example.invalid/wheel.whl\\n",
+                "kicad-python @ https://example.invalid/wheel.whl\n",
                 encoding="utf-8",
             )
             with self.assertRaisesRegex(ValueError, "do not point at the wheel locked"):
