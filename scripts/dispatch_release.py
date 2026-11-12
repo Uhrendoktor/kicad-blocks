@@ -46,10 +46,18 @@ def dispatch_release(repo: str, tag: str, source_sha: str, version: str, token: 
     archive_name = f"kicad-blocks-{version}-linux-x86_64-cp312.zip"
     required_assets = {archive_name, archive_name + ".sha256"}
     if release is not None:
-        asset_names = {asset.get("name") for asset in release.get("assets", [])}
-        if required_assets.issubset(asset_names):
-            print(f"Release {tag} already has its ZIP and checksum; not dispatching again.")
-            return False
+        assets_by_name = {
+            asset.get("name"): asset for asset in release.get("assets", [])
+        }
+        if required_assets.issubset(assets_by_name):
+            complete = all(
+                assets_by_name[name].get("size", 0) > 0
+                and str(assets_by_name[name].get("digest", "")).startswith("sha256:")
+                for name in required_assets
+            )
+            if complete and not release.get("draft", False):
+                print(f"Release {tag} already has its ZIP and checksum; not dispatching again.")
+                return False
 
     payload = {
         "ref": "main",
