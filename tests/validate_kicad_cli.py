@@ -49,15 +49,21 @@ def _validate_stusb4500_netlist(cli: str, output_dir: Path) -> None:
     )
     tree = parse_sexpr(netlist_path.read_text(encoding="utf-8"))
     actual: dict[tuple[str, str], str] = {}
-    for net in _all(tree, "net"):
+    nets_container = _direct(tree, "nets")
+    if nets_container is None:
+        raise RuntimeError("KiCad netlist export has no nets section.")
+    for net in _all(nets_container, "net"):
         name_node = _direct(net, "name")
         if name_node is None:
             continue
+        # KiCad may qualify local labels with their sheet path. Compare the
+        # actual electrical name while retaining the pin's true net identity.
+        net_name = str(name_node[1]).rsplit("/", 1)[-1]
         for node in _all(net, "node"):
             ref_node = _direct(node, "ref")
             pin_node = _direct(node, "pin")
             if ref_node is not None and pin_node is not None:
-                actual[(str(ref_node[1]), str(pin_node[1]))] = str(name_node[1])
+                actual[(str(ref_node[1]), str(pin_node[1]))] = net_name
 
     expected = {
         ("U1", "1"): "CC1",
@@ -82,7 +88,10 @@ def _validate_stusb4500_netlist(cli: str, output_dir: Path) -> None:
         ("U1", "23"): "VREG_2V7",
         ("C2", "1"): "VREG_2V7",
         ("C3", "1"): "VREG_2V7",
+        ("R4", "1"): "VREG_2V7",
         ("U1", "24"): "VBUS",
+        ("C4", "1"): "VBUS_FILTERED",
+        ("R1", "1"): "VBUS_FILTERED",
         ("U1", "25"): "GND",
         ("R51", "1"): "VREG_2V7",
         ("R52", "1"): "VREG_2V7",
