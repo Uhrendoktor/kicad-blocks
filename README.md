@@ -8,6 +8,10 @@ The placement chooser and symbol previews below are generated from the real Tk U
 
 <p align="center"><img src="https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/functional-block-facade.svg" alt="KiCad-native functional block facade symbol preview" width="520"></p>
 
+<p align="center"><img src="https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/functional-block-implementation.svg" alt="KiCad-native STUSB4500 USB-PD sink reference schematic" width="1000"></p>
+
+**Real component example:** [STUSB4500QTR reference block](examples/stusb4500/README.md), reconstructed from ST DS12499 Rev. 8 Figure 10 with the documented USB-C connector, protection devices, power-path MOSFETs, passives and MCU interface. [Open the editable KiCad schematic](https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/functional-block-implementation.kicad_sch) or [read the official datasheet](https://www.st.com/resource/en/datasheet/stusb4500.pdf).
+
 See [Visual documentation and generated previews](docs/visual-evidence.md) for the capture fixture, publication flow and provenance checks.
 
 
