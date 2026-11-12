@@ -4,9 +4,9 @@
     "block-picker-initial.png": "c3ac3b6340ba5e1aed8b66539a1c7865193299fba6377890fa5a50f531a3595d",
     "block-picker-profile.png": "d67f423590b493a5d0336450e4b415c3c13c53aab245210dee82dc4a843070be",
     "block-picker-workflow.gif": "54978a81b62dff542d2b8e83a15e96bce90469f17b79731f7ea0bda90824dd55",
-    "functional-block-facade.svg": "bdc671bf7f50d8679ffbfac42913f2a1947cb78472ef29e172526b3a3c30cdd2",
-    "functional-block-implementation.kicad_sch": "52b99cc02e5860bbe7474e11b91b39f7e29da03f6c1cdc149be62e783a2558d4",
-    "functional-block-implementation.svg": "bf71ab7c024f3d8254606ef8f59b813880da9a827144328aeda1ad51b4ebaad1"
+    "functional-block-facade.svg": "9cf456ed281688a0d2cfec9d6dac49a981fda2d80034206d265e1464b7427138",
+    "functional-block-implementation.kicad_sch": "739d357c453e519f4dc9b4d8fb01817badf605f1b5a98dbddaa1a2871bdb53c0",
+    "functional-block-implementation.svg": "6f8f0093823f053c8489c32b62ddf2a73fe7ea6f4a411d05435d07224fe19ee6"
   },
   "example": {
     "component": "STUSB4500QTR",
@@ -18,5 +18,5 @@
   "generator": "tests/capture_visual_docs.py",
   "renderer": "KiCad CLI and the production Place Functional Block Tk dialog",
   "schema_version": 1,
-  "source_sha": "73a0e98ff5f714d83faad3684e40fa13beefdf5f"
+  "source_sha": "426af14fdbd6a66bc8a6dc66a598f9954c9dab41"
 }
