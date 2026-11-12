@@ -1003,23 +1003,70 @@ def _create_and_place(
     )
 
 
-def _edit_facade_symbol(root, kicad, parent) -> None:
-    """Open the selected block's single-symbol library asset in KiCad Symbol Editor."""
-    record = _pick_record(list_blocks(root), parent, "Edit Facade Symbol")
-    if record is None:
-        return
-    executable = kicad.get_kicad_binary_path("symbol_editor")
-    if not executable:
-        messagebox.showinfo(
-            "Edit Facade Symbol",
-            "Open this block's symbol library in KiCad Symbol Editor:\\n"
-            f"{record.symbol_library}\\n\\n"
-            "Save the library asset, then run Publish Library Block to refresh "
-            "the shared catalog and synchronize its hierarchical-label interface.",
-            parent=parent,
+def _edit_facade_symbol(
+    root, schematic, project_dir, editor_window_id, parent
+) -> None:
+    """Open the selected library-backed facade through Eeschema's native Symbol Editor action."""
+    instance = _selected_symbol(schematic)
+    record = _block_record_for_instance(root, project_dir, instance)
+    xdotool = shutil.which("xdotool")
+    if not xdotool:
+        raise RuntimeError(
+            "Editing a selected facade from the manager requires xdotool on the "
+            "supported Linux/X11 setup. In Eeschema, select the block symbol and "
+            "press Ctrl+Shift+E to open its library version in Symbol Editor."
         )
-        return
-    subprocess.Popen([executable, str(record.symbol_library)], close_fds=True)
+    if not editor_window_id:
+        editor_window_id = _capture_eeschema_window_id()
+    if not editor_window_id:
+        raise RuntimeError(
+            "Could not identify the active Eeschema window. Select the block symbol "
+            "in Eeschema and retry Edit facade symbol."
+        )
+
+    minimized_windows = _minimize_placement_windows(parent)
+    try:
+        subprocess.run(
+            [xdotool, "windowfocus", "--sync", editor_window_id],
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=3,
+        )
+        subprocess.run(
+            [xdotool, "key", "--clearmodifiers", "ctrl+shift+e"],
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=3,
+        )
+        deadline = time.monotonic() + 5.0
+        focused = editor_window_id
+        while time.monotonic() < deadline:
+            result = subprocess.run(
+                [xdotool, "getwindowfocus"],
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=3,
+            )
+            focused = result.stdout.strip()
+            if result.returncode == 0 and focused and focused != editor_window_id:
+                LOG.info(
+                    "Opened library facade %s:%s in KiCad Symbol Editor",
+                    record.manifest.get("library_nickname"),
+                    record.manifest.get("symbol_name"),
+                )
+                return
+            time.sleep(0.1)
+        raise RuntimeError(
+            "Eeschema did not hand focus to Symbol Editor after Ctrl+Shift+E. "
+            "Make sure the selected facade is linked to the block library and "
+            "that the hotkey is still assigned to Edit Library Symbol."
+        )
+    except Exception:
+        _restore_placement_windows(minimized_windows)
+        raise
 
 def _place_existing(root, schematic, kicad, project_dir, parent) -> None:
     """Open the searchable browser; placement is handed to KiCad's native cursor tool."""
@@ -2506,7 +2553,9 @@ def run() -> None:
                         library_root, schematic, kicad, project_dir, root
                     )
                 elif action == "edit-facade":
-                    _edit_facade_symbol(library_root, kicad, root)
+                    _edit_facade_symbol(
+                        library_root, schematic, project_dir, editor_window_id, root
+                    )
                 elif action == "publish":
                     _publish_block(library_root, kicad, project_dir, root)
                 elif action == "bom":
