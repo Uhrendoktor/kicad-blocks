@@ -40,11 +40,15 @@ from .pcb_placement import placement_manifest_path, write_pcb_placement_manifest
 from .repository import (
     LIBRARY_NICKNAME,
     add_dependency,
+    add_library_root,
+    build_project_symbol_catalog,
     create_block,
     default_library_root,
     ensure_stable_block_identity,
     link_instance_to_local_copy,
     list_blocks,
+    library_roots as configured_library_roots,
+    remove_library_root,
     local_copy_for_instance,
     make_local_copy,
     publish_local_copy,
@@ -113,14 +117,21 @@ def _reload_symbol_library(kicad, nickname: str) -> None:
     kicad.wait_for_libraries(types=[1], scope=2, timeout_s=60.0)
 
 
-def _register_block(project_dir: Path, record, kicad):
-    """Ensure a block is present in the stable, already-registered catalog."""
+def _register_block(
+    project_dir: Path, record, kicad, library_paths: list[Path] | None = None
+):
+    """Refresh the project's unified catalog from every registered block library."""
     record = ensure_stable_block_identity(record)
+    roots = [Path(item).expanduser().resolve() for item in (
+        library_paths if library_paths is not None else configured_library_roots()
+    )]
+    catalog = build_project_symbol_catalog(project_dir, roots)
     register_project_symbol_library(
         project_dir,
         LIBRARY_NICKNAME,
-        record.symbol_library,
-        description="KiCad Blocks — shared facade catalog",
+        catalog,
+        description="KiCad Blocks — all registered functional-block libraries",
+        replace_existing=True,
     )
     _reload_symbol_library(kicad, LIBRARY_NICKNAME)
     return record
@@ -159,18 +170,59 @@ def _symbol_identifier(instance) -> tuple[str, str]:
     return identifier.library, identifier.name
 
 
-def _library_record_for_instance(library_root: Path, instance):
-    library_nickname, symbol_name = _symbol_identifier(instance)
-    for record in list_blocks(library_root):
-        manifest = record.manifest
-        if (
-            manifest.get("library_nickname") == library_nickname
-            and manifest.get("symbol_name") == symbol_name
-        ):
-            return record
-    raise FileNotFoundError(
-        f"The selected symbol {library_nickname}:{symbol_name} is not in the configured block library."
+def _library_roots_for(value=None) -> list[Path]:
+    if value is None:
+        values = configured_library_roots()
+    elif isinstance(value, (str, Path)):
+        values = [Path(value)]
+    else:
+        values = [Path(item) for item in value]
+    roots = []
+    seen = set()
+    for item in values:
+        path = Path(item).expanduser().resolve()
+        key = str(path)
+        if key not in seen:
+            roots.append(path)
+            seen.add(key)
+    return roots
+
+
+def _list_library_records(library_paths=None) -> list:
+    records = []
+    for library_path in _library_roots_for(library_paths):
+        records.extend(list_blocks(library_path))
+    return sorted(
+        records,
+        key=lambda item: (item.name.casefold(), item.path.parent.name.casefold(), str(item.path)),
     )
+
+
+def _library_record_for_instance(library_root: Path | list[Path], instance):
+    library_nickname, symbol_name = _symbol_identifier(instance)
+    matches = [
+        record
+        for record in _list_library_records(library_root)
+        if record.manifest.get("library_nickname") == library_nickname
+        and record.manifest.get("symbol_name") == symbol_name
+    ]
+    if not matches:
+        raise FileNotFoundError(
+            f"The selected symbol {library_nickname}:{symbol_name} was not found "
+            "in any registered functional-block library."
+        )
+    identities = {
+        (record.manifest.get("block_id"), record.manifest.get("revision"))
+        for record in matches
+    }
+    if len(identities) > 1:
+        locations = "\n".join(str(record.path) for record in matches)
+        raise RuntimeError(
+            f"The selected facade {library_nickname}:{symbol_name} is ambiguous because "
+            "registered libraries contain different revisions of the same block ID:\n"
+            f"{locations}\nRemove the stale or conflicting library registration."
+        )
+    return matches[0]
 
 
 def make_selected_local(schematic, kicad, project_dir: Path, library_root: Path) -> Path:
@@ -313,7 +365,6 @@ def _show_selected_block_configuration(
     ttk.Label(
         outer,
         text=f"{instance.reference}  ·  {block.name}",
-        font=("TkDefaultFont", 14, "bold"),
     ).pack(anchor="w")
     ttk.Label(
         outer,
@@ -404,7 +455,6 @@ def _show_selected_block_configuration(
             ttk.Label(
                 section,
                 text=description,
-                foreground="#667785",
                 wraplength=600,
                 justify="left",
             ).grid(row=row * 2 + 1, column=0, columnspan=2, sticky="w", pady=(0, 4))
@@ -1494,9 +1544,7 @@ def _show_library_browser(
     library_footer = ttk.Frame(left)
     library_footer.pack(fill="x", pady=(8, 0))
 
-    name_label = ttk.Label(
-        right, text="Select a block", font=("TkDefaultFont", 14, "bold")
-    )
+    name_label = ttk.Label(right, text="Select a block")
     name_label.pack(anchor="w")
     description_label = ttk.Label(
         right, text="", wraplength=650, justify="left", foreground="#53616b"
@@ -2054,8 +2102,8 @@ def _publish_block(root, kicad, project_dir, parent) -> None:
     )
 
 
-def _block_record_for_instance(library_root: Path, project_dir: Path, instance):
-    """Resolve the selected instance to its local copy or shared library block."""
+def _block_record_for_instance(library_root: Path | list[Path], project_dir: Path, instance):
+    """Resolve the selected instance to its local copy or any registered shared library."""
     local_record = local_copy_for_instance(project_dir, str(instance.id))
     if local_record is not None:
         return local_record
