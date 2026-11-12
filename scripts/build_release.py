@@ -87,15 +87,21 @@ def build_release_package(
     installer.validate_plugin_package(plugin_root)
     expected_tag = f"kicad-python-{lock[:8]}"
     requirements = (plugin_root / "requirements.txt").read_text(encoding="utf-8")
-    expected_wheel = (
-        f"https://github.com/Uhrendoktor/kicad-blocks/releases/download/{expected_tag}/"
-        "kicad_python-0.9.0.dev0-cp312-cp312-linux_x86_64.whl"
-    )
-    if expected_wheel not in requirements:
-        raise ValueError("Plugin requirements do not point at the wheel locked by kicad-python.lock.")
+    expected_wheels = [
+        (
+            f"https://github.com/Uhrendoktor/kicad-blocks/releases/download/{expected_tag}/"
+            f"kicad_python-0.9.0.dev0-cp{minor}-cp{minor}-linux_x86_64.whl"
+        )
+        for minor in (312, 313, 314)
+    ]
+    if not all(wheel in requirements for wheel in expected_wheels):
+        raise ValueError(
+            "Plugin requirements do not point at all CPython 3.12, 3.13 and 3.14 "
+            "wheels locked by kicad-python.lock."
+        )
 
     commit = _source_commit(root, source_commit)
-    archive_root = f"kicad-blocks-{version_text}-linux-x86_64-cp312"
+    archive_root = f"kicad-blocks-{version_text}-linux-x86_64"
     metadata = {
         "version": version_text,
         "source_commit": commit,
@@ -104,7 +110,7 @@ def build_release_package(
         "supported_runtime": {
             "kicad": "10.99.0 development nightly",
             "os": "Linux x86_64",
-            "python": "CPython 3.12",
+            "python": "CPython 3.12, 3.13 and 3.14",
         },
     }
 

@@ -11,7 +11,7 @@
 - Place merged PCB block layouts with KiCad's native cursor-move tool.
 
 ### Verification and support
-- Validated on KiCad nightly 10.99.0, Linux x86_64, CPython 3.12.
+- Validated on KiCad nightly 10.99.0, Linux x86_64, with CPython 3.12, 3.13 and 3.14 dependency wheels.
 - Stable KiCad 10.x, Windows, macOS, ARM, other Python ABIs, and untested KiCad builds are not supported by this release.
 - The historical V1 v1 tag remains unchanged.
 

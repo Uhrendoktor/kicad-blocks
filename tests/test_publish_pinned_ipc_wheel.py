@@ -87,6 +87,22 @@ class PinnedWheelPublisherTests(unittest.TestCase):
         self.assertEqual(url, asset["browser_download_url"])
         self.assertEqual([method for method, _ in calls], ["GET", "POST", "GET"])
 
+    def test_publisher_selects_the_matching_tag_for_each_supported_python(self):
+        for minor in (12, 13, 14):
+            with self.subTest(minor=minor):
+                self.assertEqual(
+                    publisher.expected_wheel_abi_tag(
+                        implementation="cpython",
+                        version_info=(3, minor, 4),
+                    ),
+                    f"cp3{minor}-cp3{minor}-linux_x86_64",
+                )
+        with self.assertRaisesRegex(ValueError, "CPython 3.12, 3.13 or 3.14"):
+            publisher.expected_wheel_abi_tag(
+                implementation="cpython",
+                version_info=(3, 15, 0),
+            )
+
     def test_invalid_source_sha_is_rejected(self):
         with self.assertRaisesRegex(ValueError, "40-character"):
             publisher.publish_pinned_wheel(self.wheelhouse, "owner/repo", "latest", "token")

@@ -62,7 +62,7 @@ class ReleasePackageTests(unittest.TestCase):
             )
             with ZipFile(first_zip) as archive:
                 names = archive.namelist()
-                prefix = "kicad-blocks-1.1.0-linux-x86_64-cp312/"
+                prefix = "kicad-blocks-1.1.0-linux-x86_64/"
                 self.assertIn(prefix + "README.md", names)
                 self.assertIn(prefix + "LICENSE", names)
                 self.assertIn(prefix + "VERSION", names)
@@ -94,7 +94,7 @@ class ReleasePackageTests(unittest.TestCase):
             with ZipFile(archive_path) as archive:
                 archive.extractall(extract_root)
 
-            bundled_root = extract_root / "kicad-blocks-1.1.0-linux-x86_64-cp312"
+            bundled_root = extract_root / "kicad-blocks-1.1.0-linux-x86_64"
             documents_home = temp_root / "user-data"
             result = subprocess.run(
                 [

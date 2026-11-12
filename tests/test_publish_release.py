@@ -35,7 +35,7 @@ class _Response:
 class PublishReleaseTests(unittest.TestCase):
     def test_release_assets_are_uploaded_and_verified_by_digest(self):
         with tempfile.TemporaryDirectory() as temp:
-            archive = Path(temp) / "kicad-blocks-1.1.0-linux-x86_64-cp312.zip"
+            archive = Path(temp) / "kicad-blocks-1.1.0-linux-x86_64.zip"
             checksum = Path(temp) / (archive.name + ".sha256")
             archive.write_bytes(b"archive payload")
             checksum.write_text(

@@ -17,7 +17,7 @@ SPEC.loader.exec_module(dispatcher)
 VERSION = "1.1.0"
 TAG = "v1.1.0"
 SHA = "a" * 40
-ARCHIVE = "kicad-blocks-1.1.0-linux-x86_64-cp312.zip"
+ARCHIVE = "kicad-blocks-1.1.0-linux-x86_64.zip"
 
 
 class DispatchReleaseTests(unittest.TestCase):

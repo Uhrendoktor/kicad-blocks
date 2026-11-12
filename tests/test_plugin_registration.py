@@ -328,9 +328,10 @@ def main() -> None:
                 f"Installed PCB Editor action entrypoint is missing: {pcb_entrypoint}"
             )
         installed_requirements = (installed_plugin / "requirements.txt").read_text(encoding="utf-8")
+        abi = f"cp{sys.version_info.major}{sys.version_info.minor}"
         expected_wheel_url = (
             "https://github.com/Uhrendoktor/kicad-blocks/releases/download/"
-            "kicad-python-76b47d25/kicad_python-0.9.0.dev0-cp312-cp312-linux_x86_64.whl"
+            f"kicad-python-76b47d25/kicad_python-0.9.0.dev0-{abi}-{abi}-linux_x86_64.whl"
         )
         if expected_wheel_url not in installed_requirements or "git+" in installed_requirements:
             raise AssertionError(

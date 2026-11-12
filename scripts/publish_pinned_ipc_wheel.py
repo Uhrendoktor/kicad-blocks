@@ -9,12 +9,35 @@ import json
 import os
 from pathlib import Path
 import re
+import sys
 from urllib.error import HTTPError
 from urllib.parse import quote
 from urllib.request import Request, urlopen
 
 WHEEL_PREFIX = "kicad_python-0.9.0.dev0-"
 API_VERSION = "2022-11-28"
+SUPPORTED_PYTHON_MINOR_VERSIONS = frozenset({12, 13, 14})
+
+
+def expected_wheel_abi_tag(
+    implementation: str | None = None,
+    version_info=None,
+) -> str:
+    """Return the wheel ABI/platform suffix for the running supported CPython."""
+    selected_implementation = implementation or sys.implementation.name
+    selected_version = version_info or sys.version_info
+    major, minor = int(selected_version[0]), int(selected_version[1])
+    if (
+        selected_implementation.casefold() != "cpython"
+        or major != 3
+        or minor not in SUPPORTED_PYTHON_MINOR_VERSIONS
+    ):
+        raise ValueError(
+            "Pinned KiCad IPC wheels can only be published using CPython 3.12, "
+            "3.13 or 3.14."
+        )
+    abi = f"cp{major}{minor}"
+    return f"{abi}-{abi}-linux_x86_64"
 
 
 def _request(
@@ -61,6 +84,18 @@ def _get_or_create_release(repo: str, tag: str, source_sha: str, token: str) -> 
     if release is not None:
         if release.get("tag_name") != tag:
             raise RuntimeError(f"GitHub returned the wrong release for tag {tag!r}.")
+        target_body = (
+            "Immutable dependency assets for KiCad Blocks releases.\\n\\n"
+            f"Built from official kicad-python commit {source_sha}. "
+            "Targets: CPython 3.12, 3.13 and 3.14, Linux x86_64."
+        )
+        if release.get("body") != target_body:
+            release = _request(
+                "PATCH",
+                f"{root}/repos/{repo}/releases/{release['id']}",
+                token,
+                payload={"body": target_body},
+            )
         return release
 
     payload = {
@@ -70,7 +105,7 @@ def _get_or_create_release(repo: str, tag: str, source_sha: str, token: str) -> 
         "body": (
             "Immutable dependency asset for KiCad Blocks releases.\n\n"
             f"Built from official kicad-python commit {source_sha}. "
-            "Target: CPython 3.12, Linux x86_64."
+            "Targets: CPython 3.12, 3.13 and 3.14, Linux x86_64."
         ),
         "draft": False,
         "prerelease": False,
@@ -100,8 +135,12 @@ def publish_pinned_wheel(wheelhouse: Path, repo: str, source_sha: str, token: st
             f"Expected one {WHEEL_PREFIX}*.whl in {wheelhouse}, got {[p.name for p in wheels]!r}."
         )
     wheel = wheels[0]
-    if "cp312-cp312-linux_x86_64" not in wheel.name:
-        raise ValueError(f"Unsupported pinned wheel target: {wheel.name!r}.")
+    expected_abi = expected_wheel_abi_tag()
+    if not wheel.name.endswith(f"-{expected_abi}.whl"):
+        raise ValueError(
+            f"Unsupported pinned wheel target: {wheel.name!r}; "
+            f"the publishing interpreter requires *-{expected_abi}.whl."
+        )
     digest = hashlib.sha256(wheel.read_bytes()).hexdigest()
     expected_digest = f"sha256:{digest}"
     tag = f"kicad-python-{source_sha[:8]}"
