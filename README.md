@@ -1,5 +1,16 @@
 # KiCad Encapsulated Blocks
 
+## Visual previews
+
+The placement chooser and symbol previews below are generated from the real Tk UI and KiCad CLI during CI. The GIF shows the searchable library and a profile-driven variant selection.
+
+<p align="center"><img src="https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/block-picker-workflow.gif" alt="Search the functional-block library and select a configuration profile" width="900"></p>
+
+<p align="center"><img src="https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/functional-block-facade.svg" alt="KiCad-native functional block facade symbol preview" width="520"></p>
+
+See [Visual documentation and generated previews](docs/visual-evidence.md) for the capture fixture, publication flow and provenance checks.
+
+
 **Release version:** V1.1.0. The installable package is validated for KiCad nightly 10.99.0 on Linux x86_64 with CPython 3.12, 3.13 and 3.14. Publication status and download assets are shown on the [GitHub Releases page](https://github.com/Uhrendoktor/kicad-blocks/releases). See [V1.1.0 release notes](CHANGELOG.md).
 
 **Publication status:** V1.1.0 has not been published yet. This branch prepares the reproducible ZIP and installation checks, but merging it does not create a version tag or publish a release. Tagging and publication are separate steps and will be performed deliberately.

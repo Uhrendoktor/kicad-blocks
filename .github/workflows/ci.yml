@@ -85,7 +85,7 @@ jobs:
           python3 -m venv "${RUNNER_TEMP}/kicad-blocks-venv"
           PY="${RUNNER_TEMP}/kicad-blocks-venv/bin/python"
           "$PY" -m pip install --upgrade pip
-          "$PY" -m pip install pytest ruff cairosvg
+          "$PY" -m pip install pytest ruff cairosvg pillow
           "$PY" --version
           "$PY" -m pip --version
 
@@ -208,6 +208,25 @@ jobs:
         run: |
           xvfb-run -a -s "-screen 0 1280x800x24" \
             "${RUNNER_TEMP}/kicad-blocks-venv/bin/python" tests/test_library_picker_gui.py
+      - name: Generate real KiCad visual documentation previews
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT="${RUNNER_TEMP}/kicad-blocks-visual-docs"
+          rm -rf "$OUT"
+          mkdir -p "$OUT"
+          xvfb-run -a -s "-screen 0 1600x1000x24" \
+            "${RUNNER_TEMP}/kicad-blocks-venv/bin/python" tests/capture_visual_docs.py \
+            --output-dir "$OUT"
+
+      - name: Upload generated visual documentation bundle
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: kicad-blocks-visual-docs
+          path: ${{ runner.temp }}/kicad-blocks-visual-docs
+          if-no-files-found: error
+          compression-level: 1
+
 
       - name: Verify KiCad plugin discovery and managed environment
         shell: bash
@@ -319,6 +338,20 @@ jobs:
         run: |
           xvfb-run -a -s "-screen 0 1280x800x24" \
             "${RUNNER_TEMP}/kicad-blocks-venv-cp314/bin/python" tests/test_plugin_registration.py
+
+      - name: Publish verified visual documentation previews
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          python3 scripts/publish_visual_docs.py \
+            --source-dir "${RUNNER_TEMP}/kicad-blocks-visual-docs" \
+            --repository "$GITHUB_REPOSITORY" \
+            --source-sha "$GITHUB_SHA" \
+            --run-id "$GITHUB_RUN_ID" \
+            --run-number "$GITHUB_RUN_NUMBER"
 
       # Release publication is deliberately after validation and best-effort:
       # a transient GitHub upload outage must not mask a green KiCad test suite.
