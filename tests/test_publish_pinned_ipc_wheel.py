@@ -49,7 +49,10 @@ class PinnedWheelPublisherTests(unittest.TestCase):
         ) as request:
             url = publisher.publish_pinned_wheel(self.wheelhouse, "owner/repo", SHA, "token")
         self.assertEqual(url, asset["browser_download_url"])
-        request.assert_called_once()
+        self.assertEqual(request.call_count, 2)
+        self.assertEqual(request.call_args_list[0].args[0], "GET")
+        self.assertEqual(request.call_args_list[1].args[0], "PATCH")
+        self.assertIn("CPython 3.12, 3.13 and 3.14", request.call_args_list[1].kwargs["payload"]["body"])
 
     def test_existing_asset_with_different_digest_is_not_overwritten(self):
         asset = {
@@ -76,6 +79,8 @@ class PinnedWheelPublisherTests(unittest.TestCase):
             calls.append((method, url))
             if method == "GET" and url.endswith("/releases/tags/kicad-python-76b47d25"):
                 return dict(self.release)
+            if method == "PATCH" and url.endswith("/releases/18"):
+                return {**self.release, "body": _kwargs["payload"]["body"]}
             if method == "POST" and url.startswith("https://uploads.github.com/"):
                 return {}
             if method == "GET" and url.endswith("/releases/18"):
@@ -85,7 +90,7 @@ class PinnedWheelPublisherTests(unittest.TestCase):
         with patch.object(publisher, "_request", side_effect=fake_request):
             url = publisher.publish_pinned_wheel(self.wheelhouse, "owner/repo", SHA, "token")
         self.assertEqual(url, asset["browser_download_url"])
-        self.assertEqual([method for method, _ in calls], ["GET", "POST", "GET"])
+        self.assertEqual([method for method, _ in calls], ["GET", "PATCH", "POST", "GET"])
 
     def test_publisher_selects_the_matching_tag_for_each_supported_python(self):
         for minor in (12, 13, 14):

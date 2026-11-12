@@ -96,8 +96,8 @@ def build_release_package(
     ]
     if not all(wheel in requirements for wheel in expected_wheels):
         raise ValueError(
-            "Plugin requirements do not point at all CPython 3.12, 3.13 and 3.14 "
-            "wheels locked by kicad-python.lock."
+            "Plugin requirements do not point at the wheel locked by kicad-python.lock "
+            "for all CPython 3.12, 3.13 and 3.14 ABIs."
         )
 
     commit = _source_commit(root, source_commit)
