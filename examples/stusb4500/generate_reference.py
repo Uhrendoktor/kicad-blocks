@@ -250,6 +250,8 @@ def generate_reference_schematic(destination: Path) -> Path:
     instances = []
     labels = []
     no_connects = []
+    label_points: dict[tuple[float, float], tuple[str, str, str | None]] = {}
+    no_connect_points: set[tuple[float, float]] = set()
     net_points: dict[str, list[tuple[str, float, float]]] = {}
     for reference, library, symbol_name, value, (sx, sy), pin_map in specs:
         definition = loaded[(library, symbol_name)]
@@ -291,18 +293,31 @@ def generate_reference_schematic(destination: Path) -> Path:
                 net, kind, *shape = net_spec
                 px = sx + pin["x"]
                 py = sy - pin["y"]
+                point = (round(px, 3), round(py, 3))
                 if kind in {"hier", "local"}:
                     net_points.setdefault(net, []).append((reference, px, py))
-                if kind == "hier":
-                    labels.append(_label(net, px, py, hierarchical=True, shape=shape[0], key=f"hlabel:{reference}:{pin['number']}"))
-                elif kind == "local":
-                    labels.append(_label(net, px, py, key=f"label:{reference}:{pin['number']}"))
+                    existing = label_points.get(point)
+                    shape_name = shape[0] if shape else None
+                    if existing and existing[0] != net:
+                        raise ValueError(
+                            f"Conflicting nets {existing[0]} and {net} share pin coordinate {point}."
+                        )
+                    if existing and existing[1] == "hier" and kind == "local":
+                        pass
+                    elif existing and existing[1] == "hier" and kind == "hier":
+                        if existing[2] != shape_name:
+                            raise ValueError(f"Conflicting hierarchical label shapes at {point}.")
+                    else:
+                        # One label is sufficient for stacked connector pins.
+                        # Prefer the hierarchical port when it shares a point
+                        # with local labels for the same electrical net.
+                        label_points[point] = (net, kind, shape_name)
                 elif kind == "nc":
-                    no_connects.append(["no_connect", ["at", f"{px:.3f}", f"{py:.3f}"], ["uuid", _Quoted(_uid(f"nc:{reference}:{pin['number']}"))]])
+                    no_connect_points.add(point)
             elif reference == "J1":
                 px = sx + pin["x"]
                 py = sy - pin["y"]
-                no_connects.append(["no_connect", ["at", f"{px:.3f}", f"{py:.3f}"], ["uuid", _Quoted(_uid(f"nc:{reference}:{pin['number']}"))]])
+                no_connect_points.add((round(px, 3), round(py, 3)))
         instance.append([
             "instances",
             ["project", _Quoted(PROJECT),
@@ -312,6 +327,21 @@ def generate_reference_schematic(destination: Path) -> Path:
             ],
         ])
         instances.append(instance)
+
+    for (point, (net, kind, shape_name)) in sorted(label_points.items()):
+        x, y = point
+        labels.append(
+            _label(
+                net, x, y, hierarchical=kind == "hier", shape=shape_name,
+                key=f"label:{kind}:{net}:{x:.3f}:{y:.3f}",
+            )
+        )
+    for point in sorted(no_connect_points - set(label_points)):
+        x, y = point
+        no_connects.append([
+            "no_connect", ["at", f"{x:.3f}", f"{y:.3f}"],
+            ["uuid", _Quoted(_uid(f"nc:{x:.3f}:{y:.3f}"))],
+        ])
 
     # Draw visible orthogonal connections for the main signal and power nets.
     # Local labels remain on each pin, so the topology is both readable and
