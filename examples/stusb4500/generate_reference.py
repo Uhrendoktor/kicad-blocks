@@ -207,7 +207,7 @@ def generate_reference_schematic(destination: Path) -> Path:
             "13": ("ADDR1", "local", ""), "14": ("NC", "nc", ""),
             "15": ("NC", "nc", ""), "16": ("VBUS_EN_SNK", "local", ""),
             "17": ("NC", "nc", ""), "18": ("VBUS_SENSE", "local", ""),
-            "19": ("ALERT#", "local", ""), "20": ("POWER_OK2", "local", ""),
+            "19": ("ALERT#", "local", ""), "20": ("NC", "nc", ""),
             "21": ("1V2", "local", ""), "22": ("GND", "local", ""),
             "23": ("2V7", "local", ""), "24": ("VBUS", "local", ""),
             "25": ("GND", "local", ""),
@@ -233,14 +233,14 @@ def generate_reference_schematic(destination: Path) -> Path:
         ("C3", "Device", "C", "1uF", (195, 95), {"1": ("2V7", "local", ""), "2": ("GND", "local", "")}),
         ("C4", "Device", "C", "1uF", (115, 95), {"1": ("VBUS_FILTERED", "local", ""), "2": ("GND", "local", "")}),
         ("D4", "Device", "D", "D4 (part not specified)", (95, 95), {"1": ("VBUS", "local", ""), "2": ("VBUS_FILTERED", "local", "")}),
-        ("C10", "Device", "C", "100nF", (330, 95), {"1": ("VSNK", "local", ""), "2": ("GND", "local", "")}),
+        ("C10", "Device", "C", "100nF", (330, 95), {"1": ("VSNK", "local", ""), "2": ("VSNK_GATE", "local", "")}),
         ("R1", "Device", "R", "470", (115, 135), {"1": ("VBUS_FILTERED", "local", ""), "2": ("VBUS_SENSE", "local", "")}),
         ("R2", "Device", "R", "1k", (260, 160), {"1": ("DISCH", "local", ""), "2": ("VSNK", "local", "")}),
         ("R3", "Device", "R", "4.7k", (315, 155), {"1": ("VMCU", "local", ""), "2": ("SCL", "local", "")}),
         ("R4", "Device", "R", "1k", (135, 135), {"1": ("2V7", "local", ""), "2": ("VBUS_SENSE", "local", "")}),
         ("R5", "Device", "R", "4.7k", (335, 155), {"1": ("VMCU", "local", ""), "2": ("SDA", "local", "")}),
         ("R6", "Device", "R", "4.7k", (355, 155), {"1": ("VMCU", "local", ""), "2": ("ALERT#", "local", "")}),
-        ("R10", "Device", "R", "100k", (250, 85), {"1": ("VBUS", "local", ""), "2": ("VSNK_GATE", "local", "")}),
+        ("R10", "Device", "R", "100k", (250, 85), {"1": ("FET_MID", "local", ""), "2": ("VSNK_GATE", "local", "")}),
         ("R11", "Device", "R", "22k", (280, 85), {"1": ("VSNK_GATE", "local", ""), "2": ("GND", "local", "")}),
         ("R13", "Device", "R", "100", (315, 85), {"1": ("VSNK_GATE", "local", ""), "2": ("VBUS_EN_SNK", "local", "")}),
         ("R51", "Device", "R", "NC", (145, 225), {"1": ("2V7", "local", ""), "2": ("ADDR1", "local", "")}),
@@ -251,8 +251,8 @@ def generate_reference_schematic(destination: Path) -> Path:
         ("D1", "STUSB4500_Custom", "ESDA25W", "ESDA25W", (130, 190), {"1": ("CC1", "local", ""), "2": ("CC2", "local", ""), "3": ("GND", "local", "")}),
         ("D50", "Device", "D_TVS", "ESDA25P35-1U1M", (95, 190), {"1": ("VBUS", "local", ""), "2": ("GND", "local", "")}),
         ("D11", "Device", "D_TVS", "ESDA25P35-1U1M", (345, 110), {"1": ("VSNK", "local", ""), "2": ("GND", "local", "")}),
-        ("T4", "Transistor_FET", "Q_PMOS_GSD", "STL6P3LLH6", (260, 65), {"1": ("VBUS_EN_SNK", "local", ""), "2": ("VBUS", "local", ""), "3": ("VSNK_GATE", "local", "")}),
-        ("T1", "Transistor_FET", "Q_PMOS_GSD", "STL6P3LLH6", (300, 65), {"1": ("VSNK_GATE", "local", ""), "2": ("VBUS", "local", ""), "3": ("VSNK", "local", "")}),
+        ("T4", "Transistor_FET", "Q_PMOS_GSD", "STL6P3LLH6", (260, 65), {"1": ("VBUS_EN_SNK", "local", ""), "2": ("VBUS", "local", ""), "3": ("FET_MID", "local", "")}),
+        ("T1", "Transistor_FET", "Q_PMOS_GSD", "STL6P3LLH6", (300, 65), {"1": ("VSNK_GATE", "local", ""), "2": ("FET_MID", "local", ""), "3": ("VSNK", "local", "")}),
     ]
 
     library_symbols = []
@@ -265,7 +265,7 @@ def generate_reference_schematic(destination: Path) -> Path:
 
     wired_nets = {
         "VBUS", "CC1", "CC2", "VSNK", "SCL", "SDA", "ALERT#", "RESET",
-        "VMCU", "POWER_OK2", "VBUS_EN_SNK", "VBUS_SENSE", "DISCH",
+        "VMCU", "VBUS_EN_SNK", "VBUS_SENSE", "DISCH", "FET_MID", "VSNK_GATE",
         "1V2", "2V7", "ADDR0", "ADDR1",
     }
     instances = []
