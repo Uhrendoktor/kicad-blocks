@@ -54,8 +54,14 @@ jobs:
           test -n "$ARCHIVE"
           test -f "$CHECKSUM"
           (cd dist && sha256sum --check "$(basename "$CHECKSUM")")
-          unzip -l "$ARCHIVE" | grep -q 'plugin/kicad-blocks/plugin.json'
-          unzip -l "$ARCHIVE" | grep -q 'scripts/install_plugin.py'
+          python3 - "$ARCHIVE" <<'PY'
+          import sys
+          from zipfile import ZipFile
+          with ZipFile(sys.argv[1]) as archive:
+              names = set(archive.namelist())
+          assert any(name.endswith("/plugin/kicad-blocks/plugin.json") for name in names)
+          assert any(name.endswith("/scripts/install_plugin.py") for name in names)
+          PY
 
       - name: Publish versioned release ZIP and checksum
         shell: bash
