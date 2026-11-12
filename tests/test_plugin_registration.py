@@ -304,14 +304,32 @@ def main() -> None:
             raise AssertionError(
                 "Plugin metadata must retain the CPython 3.12 minimum; the requirements select the matching supported ABI wheel."
             )
+        if {item["identifier"] for item in manifest["actions"]} != {
+            "open-hub",
+            "place-imported-layout",
+        }:
+            raise AssertionError(
+                "KiCad Blocks should expose one schematic task hub and one PCB placement action, "
+                f"not a flat list of {len(manifest['actions'])} commands."
+            )
         action = next(
             item
             for item in manifest["actions"]
-            if item["identifier"] == "manage-library"
+            if item["identifier"] == "open-hub"
         )
         if action.get("scopes") != ["schematic"] or not action.get("show-button"):
             raise AssertionError(
-                f"Installed action is not enabled for the Schematic Editor: {action!r}"
+                f"Task hub is not enabled for the Schematic Editor: {action!r}"
+            )
+        if action.get("args") != []:
+            raise AssertionError(
+                "Python IPC action arguments precede the script entrypoint; the task hub must "
+                "pass no CLI args so KiCad executes the registered entrypoint as the script."
+            )
+        hub_entrypoint = installed_plugin / action["entrypoint"]
+        if not hub_entrypoint.is_file():
+            raise FileNotFoundError(
+                f"Installed task hub entrypoint is missing: {hub_entrypoint}"
             )
         pcb_action = next(
             item
@@ -321,6 +339,10 @@ def main() -> None:
         if pcb_action.get("scopes") != ["pcb"] or not pcb_action.get("show-button"):
             raise AssertionError(
                 f"Imported-layout action is not enabled for PCB Editor: {pcb_action!r}"
+            )
+        if pcb_action.get("args", []) != []:
+            raise AssertionError(
+                "The PCB action must not pass its action identifier as a Python script argument."
             )
         pcb_entrypoint = installed_plugin / pcb_action["entrypoint"]
         if not pcb_entrypoint.is_file():
