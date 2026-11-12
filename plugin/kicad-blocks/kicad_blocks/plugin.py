@@ -38,6 +38,7 @@ from .operations import (
     validate_block_tree,
 )
 from .pcb_layout import BlockLayoutPlacement, merge_block_layout, merge_block_layouts
+from .pcb_placement import placement_manifest_path, write_pcb_placement_manifest
 from .repository import (
     LIBRARY_NICKNAME,
     add_dependency,
@@ -2143,21 +2144,10 @@ def _apply_block_pcb_layout(
         return
     pin_map = _parse_pin_net_map(map_text, pins)
 
-    position_text = simpledialog.askstring(
-        "PCB block placement",
-        "Enter the X,Y position in millimetres for the stored layout anchor.",
-        initialvalue="100,100",
-        parent=parent,
-    )
-    if position_text is None:
-        return
-    position_values = [part.strip() for part in position_text.split(",")]
-    if len(position_values) != 2:
-        raise ValueError("Placement must be two comma-separated millimetre coordinates.")
-    try:
-        position = (float(position_values[0]), float(position_values[1]))
-    except ValueError as exc:
-        raise ValueError("Placement coordinates must be numeric millimetres.") from exc
+    # The merged layout is staged at a predictable point. The PCB Editor's
+    # Place Imported Block Layout action moves the complete imported object set
+    # to the user's cursor/grid position using KiCad's native interactive tool.
+    position = (100.0, 100.0)
 
     anchor_text = simpledialog.askstring(
         "Stored PCB layout origin",
@@ -2203,10 +2193,16 @@ def _apply_block_pcb_layout(
     if not output_path:
         return
 
+    output_board = Path(output_path).expanduser().resolve()
+    placement_sidecar = placement_manifest_path(output_board)
+    if placement_sidecar.exists():
+        raise FileExistsError(
+            f"PCB placement sidecar already exists and will not be overwritten: {placement_sidecar}"
+        )
     result = merge_block_layout(
         source_board,
         block,
-        Path(output_path),
+        output_board,
         instance_reference=str(instance.reference),
         position_mm=position,
         pin_to_board_net=pin_map,
@@ -2214,6 +2210,7 @@ def _apply_block_pcb_layout(
         rotation_deg=rotation,
         layout_id=layout.get("id"),
     )
+    placement_sidecar = write_pcb_placement_manifest(output_board, result)
     opened_in_editor = False
     if messagebox.askyesno(
         "Open merged PCB board",
@@ -2237,8 +2234,12 @@ def _apply_block_pcb_layout(
         f"Resolved netclass patterns: {len(result['applied_project_patterns'])}\n"
         f"PCB net chains added: {', '.join(result['merged_board_chains']) or 'none'}\n\n"
         "The original project board and project settings were not modified. "
-        + ("The generated copy was opened in PCB Editor." if opened_in_editor else
-           "Open the generated copy in PCB Editor to review it.")
+        f"\nInteractive placement manifest: {placement_sidecar}\n"
+        + (
+            "In PCB Editor, choose Place Imported Block Layout and position the imported group with the cursor."
+            if opened_in_editor
+            else "Open the generated copy in PCB Editor, then choose Place Imported Block Layout to position the imported group with the cursor."
+        )
     )
     if warning:
         message += "\n\nSkipped board-level item types: " + ", ".join(warning)
@@ -2283,21 +2284,9 @@ def _apply_selected_block_pcb_layouts(
             return
         pin_map = _parse_pin_net_map(mapping_text, pins)
 
-        position_text = simpledialog.askstring(
-            f"PCB position — {instance.reference}",
-            "Position X,Y for the stored layout anchor in millimetres:",
-            initialvalue=f"{100.0 + (index - 1) * 60.0:g},100",
-            parent=parent,
-        )
-        if position_text is None:
-            return
-        position_parts = [part.strip() for part in position_text.split(",")]
-        if len(position_parts) != 2:
-            raise ValueError(f"Position for {instance.reference} must be X,Y.")
-        try:
-            position = (float(position_parts[0]), float(position_parts[1]))
-        except ValueError as exc:
-            raise ValueError(f"Position for {instance.reference} must be numeric.") from exc
+        # Stagger batch imports for visibility before each is moved at cursor
+        # from the PCB Editor action. This is only a staging coordinate.
+        position = (100.0 + (index - 1) * 80.0, 100.0)
 
         anchor_text = simpledialog.askstring(
             f"PCB anchor — {instance.reference}",
@@ -2362,7 +2351,14 @@ def _apply_selected_block_pcb_layouts(
     if not output_path:
         return
 
-    result = merge_block_layouts(source_board, placements, Path(output_path))
+    output_board = Path(output_path).expanduser().resolve()
+    placement_sidecar = placement_manifest_path(output_board)
+    if placement_sidecar.exists():
+        raise FileExistsError(
+            f"PCB placement sidecar already exists and will not be overwritten: {placement_sidecar}"
+        )
+    result = merge_block_layouts(source_board, placements, output_board)
+    placement_sidecar = write_pcb_placement_manifest(output_board, result)
     if messagebox.askyesno(
         "Open combined PCB board",
         f"Applied {result['block_count']} block layouts to a separate board copy.\n"
@@ -2379,6 +2375,8 @@ def _apply_selected_block_pcb_layouts(
         f"Board objects added: {result['object_count']}\n"
         f"Internal nets added: {', '.join(result['new_nets']) or 'none'}\n"
         f"PCB net chains added: {', '.join(result['merged_board_chains']) or 'none'}\n"
+        f"Interactive placement manifest: {placement_sidecar}\n"
+        "Open the output in PCB Editor and choose Place Imported Block Layout once for each block instance. "
         "The original board and project settings were not modified.",
         parent=parent,
     )

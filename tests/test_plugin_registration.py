@@ -313,6 +313,20 @@ def main() -> None:
             raise AssertionError(
                 f"Installed action is not enabled for the Schematic Editor: {action!r}"
             )
+        pcb_action = next(
+            item
+            for item in manifest["actions"]
+            if item["identifier"] == "place-imported-layout"
+        )
+        if pcb_action.get("scopes") != ["pcb"] or not pcb_action.get("show-button"):
+            raise AssertionError(
+                f"Imported-layout action is not enabled for PCB Editor: {pcb_action!r}"
+            )
+        pcb_entrypoint = installed_plugin / pcb_action["entrypoint"]
+        if not pcb_entrypoint.is_file():
+            raise FileNotFoundError(
+                f"Installed PCB Editor action entrypoint is missing: {pcb_entrypoint}"
+            )
         installed_requirements = (installed_plugin / "requirements.txt").read_text(encoding="utf-8")
         expected_wheel_url = (
             "https://github.com/Uhrendoktor/kicad-blocks/releases/download/"

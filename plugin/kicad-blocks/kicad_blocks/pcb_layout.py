@@ -1067,6 +1067,7 @@ def merge_block_layout(
     }
     imported: list[list] = []
     imported_references: list[str] = []
+    interactive_item_uuids: list[str] = []
     skipped: set[str] = set()
     pad_uuid_remap: dict[str, str] = {}
     anchor = (anchor_x, anchor_y)
@@ -1102,6 +1103,15 @@ def merge_block_layout(
             )
             _refresh_ids(item)
         _rewrite_nets(item, net_map, include_net_name=(kind == "footprint"))
+        item_id_node = _direct(item, "uuid") or _direct(item, "tstamp")
+        if item_id_node is None or len(item_id_node) < 2:
+            raise ValueError(
+                f"Imported PCB {kind} object has no top-level UUID/TSTAMP for interactive placement."
+            )
+        item_uuid = str(item_id_node[1]).strip()
+        if not item_uuid or item_uuid in interactive_item_uuids:
+            raise ValueError(f"Imported PCB object has a missing or duplicate UUID: {item_uuid!r}.")
+        interactive_item_uuids.append(item_uuid)
         imported.append(item)
 
     if not imported:
@@ -1181,6 +1191,7 @@ def merge_block_layout(
         "unmatched_project_chains": project_merge["unmatched_chains"] if project_merge is not None else [],
         "merged_board_chains": sorted(chain_name_map.values()),
         "footprints": imported_references,
+        "interactive_item_uuids": interactive_item_uuids,
         "footprint_count": len(imported_references),
         "object_count": len(imported),
         "new_net_count": len(new_net_nodes),

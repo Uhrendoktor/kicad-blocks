@@ -36,6 +36,16 @@
         "schematic"
       ],
       "entrypoint": "main.py"
+    },
+    {
+      "identifier": "place-imported-layout",
+      "name": "Place Imported Block Layout",
+      "description": "Move a previously imported KiCad Blocks PCB layout using the native cursor placement tool.",
+      "show-button": true,
+      "scopes": [
+        "pcb"
+      ],
+      "entrypoint": "place_imported_layout.py"
     }
   ]
 }
