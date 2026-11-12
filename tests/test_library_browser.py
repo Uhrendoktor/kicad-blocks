@@ -15,9 +15,9 @@ sys.path.insert(0, str(PLUGIN))
 
 from kicad_blocks.model import parse_parameters, parse_pins
 from kicad_blocks.plugin import (
+    _bind_mousewheel,
     _block_overview_text,
     _filter_library_records,
-    _bind_mousewheel,
     _library_record_for_instance,
     _library_record_for_tree_row,
     _minimize_placement_windows,

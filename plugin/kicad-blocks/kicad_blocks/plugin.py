@@ -48,15 +48,15 @@ from .repository import (
     ensure_stable_block_identity,
     link_instance_to_local_copy,
     list_blocks,
-    library_roots as configured_library_roots,
-    remove_library_root,
     local_copy_for_instance,
     make_local_copy,
     publish_local_copy,
     refresh_library_block,
     register_project_symbol_library,
+    remove_library_root,
     set_library_root,
 )
+from .repository import library_roots as configured_library_roots
 
 LOG = logging.getLogger("kicad_blocks")
 
