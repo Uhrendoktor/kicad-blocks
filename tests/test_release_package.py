@@ -31,7 +31,7 @@ INSTALLER_SPEC.loader.exec_module(installer)
 
 
 class ReleasePackageTests(unittest.TestCase):
-    def test_default_linux_user_data_root_matches_kicad_directory(self):
+    def test_default_linux_user_data_root_matches_xdg_data_home(self):
         with patch.dict(
             os.environ,
             {"XDG_DATA_HOME": "/home/test-user/.local/share"},
@@ -39,7 +39,7 @@ class ReleasePackageTests(unittest.TestCase):
         ):
             self.assertEqual(
                 installer.default_documents_home(),
-                Path("/home/test-user/.local/share/kicad"),
+                Path("/home/test-user/.local/share"),
             )
 
     def test_archive_is_deterministic_and_contains_only_installable_release_inputs(self):
@@ -95,7 +95,7 @@ class ReleasePackageTests(unittest.TestCase):
                 archive.extractall(extract_root)
 
             bundled_root = extract_root / "kicad-blocks-1.1.0-linux-x86_64-cp312"
-            documents_home = temp_root / "user-data" / "kicad"
+            documents_home = temp_root / "user-data"
             result = subprocess.run(
                 [
                     sys.executable,
@@ -114,6 +114,7 @@ class ReleasePackageTests(unittest.TestCase):
 
             installed = (
                 documents_home
+                / "kicad"
                 / "10.99"
                 / "plugins"
                 / "org.uhrendoktor.kicadblocks"
