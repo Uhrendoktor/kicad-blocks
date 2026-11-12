@@ -219,7 +219,7 @@ def generate_reference_schematic(destination: Path) -> Path:
             "B4": ("VBUS", "local", ""), "B5": ("CC2", "hier", "bidirectional"),
             "B9": ("VBUS", "local", ""), "B12": ("GND", "local", ""),
         }),
-        ("J10", "Connector_Generic", "Conn_01x02", "VSNK output", (370, 75), {
+        ("J10", "Connector_Generic", "Conn_01x02", "MPT_0.5_2-2.54", (370, 75), {
             "1": ("VSNK", "hier", "output"), "2": ("GND", "hier", "passive"),
         }),
         ("J2", "Connector_Generic", "Conn_01x06", "MCU interface", (360, 185), {
@@ -231,10 +231,11 @@ def generate_reference_schematic(destination: Path) -> Path:
         ("C1", "Device", "C", "1uF", (145, 95), {"1": ("1V2", "local", ""), "2": ("GND", "local", "")}),
         ("C2", "Device", "C", "1uF", (170, 95), {"1": ("2V7", "local", ""), "2": ("GND", "local", "")}),
         ("C3", "Device", "C", "1uF", (195, 95), {"1": ("2V7", "local", ""), "2": ("GND", "local", "")}),
-        ("C4", "Device", "C", "1uF", (115, 95), {"1": ("2V7", "local", ""), "2": ("GND", "local", "")}),
+        ("C4", "Device", "C", "1uF", (115, 95), {"1": ("VBUS_FILTERED", "local", ""), "2": ("GND", "local", "")}),
+        ("D4", "Device", "D", "D4 (part not specified)", (95, 95), {"1": ("VBUS", "local", ""), "2": ("VBUS_FILTERED", "local", "")}),
         ("C10", "Device", "C", "100nF", (330, 95), {"1": ("VSNK", "local", ""), "2": ("GND", "local", "")}),
-        ("R1", "Device", "R", "470", (115, 135), {"1": ("VBUS", "local", ""), "2": ("VBUS_SENSE", "local", "")}),
-        ("R2", "Device", "R", "1k", (260, 160), {"1": ("DISCH", "local", ""), "2": ("GND", "local", "")}),
+        ("R1", "Device", "R", "470", (115, 135), {"1": ("VBUS_FILTERED", "local", ""), "2": ("VBUS_SENSE", "local", "")}),
+        ("R2", "Device", "R", "1k", (260, 160), {"1": ("DISCH", "local", ""), "2": ("VSNK", "local", "")}),
         ("R3", "Device", "R", "4.7k", (315, 155), {"1": ("VMCU", "local", ""), "2": ("SCL", "local", "")}),
         ("R4", "Device", "R", "1k", (135, 135), {"1": ("2V7", "local", ""), "2": ("VBUS_SENSE", "local", "")}),
         ("R5", "Device", "R", "4.7k", (335, 155), {"1": ("VMCU", "local", ""), "2": ("SDA", "local", "")}),
