@@ -207,6 +207,7 @@ def validate_block_library(
         item: dict[str, Any] = {
             "path": str(block_path),
             "name": block_path.stem,
+            "block_id": "",
             "status": "passed",
             "errors": [],
             "warnings": [],
