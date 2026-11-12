@@ -45,7 +45,10 @@ def _symbol_root() -> Path:
     ]
     candidates += list(Path("/usr/share").glob("kicad*/symbols"))
     for candidate in candidates:
-        if candidate and (candidate / "Interface_USB.kicad_sym").is_file():
+        if candidate and (
+            (candidate / "Interface_USB.kicad_sym").is_file()
+            or (candidate / "Interface_USB.kicad_symdir").is_dir()
+        ):
             return candidate
     found = subprocess.run(
         ["find", "/usr/share", "-name", "Interface_USB.kicad_sym", "-print", "-quit"],
@@ -102,9 +105,13 @@ def _custom_esda25w() -> list:
 def _load_symbol(root: Path, library: str, name: str) -> list:
     if library == "STUSB4500_Custom" and name == "ESDA25W":
         return _custom_esda25w()
-    path = root / f"{library}.kicad_sym"
+    packed = root / f"{library}.kicad_sym"
+    if packed.is_file():
+        path = packed
+    else:
+        path = root / f"{library}.kicad_symdir" / f"{name}.kicad_sym"
     if not path.is_file():
-        raise FileNotFoundError(f"KiCad symbol library is missing: {path}")
+        raise FileNotFoundError(f"KiCad symbol definition is missing: {path}")
     tree = parse_sexpr(path.read_text(encoding="utf-8"))
     for node in _all(tree, "symbol"):
         if str(node[1]) == name:
