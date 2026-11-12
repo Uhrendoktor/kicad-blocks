@@ -18,7 +18,10 @@ sys.path.insert(0, str(ROOT / "plugin" / "kicad-blocks"))
 
 from kicad_blocks import plugin as plugin_actions
 from kicad_blocks.model import parse_pins
-from kicad_blocks.repository import create_block
+from kicad_blocks.repository import create_block, revision_for_hashes
+
+sys.path.insert(0, str(ROOT / 'examples' / 'stusb4500'))
+from generate_reference import generate_reference_schematic
 
 ASSET_NAMES = (
     "block-picker-initial.png",
@@ -27,6 +30,7 @@ ASSET_NAMES = (
     "block-picker-workflow.gif",
     "functional-block-facade.svg",
     "functional-block-implementation.svg",
+    "functional-block-implementation.kicad_sch",
 )
 
 
@@ -179,10 +183,10 @@ def capture_picker(records, output_dir: Path) -> dict:
     if not completed[0] or selected is None:
         raise AssertionError("The placement chooser did not complete the scripted selection.")
     if (
-        selected["record"].name != "USB-C Power"
+        selected["record"].name != "STUSB4500 USB-PD Sink"
         or selected["variant"] != "5V"
-        or selected["profile"] != "usb_5v_mode"
-        or float(selected["parameters"]["CURRENT_LIMIT"]) != 3.0
+        or selected["profile"] != "pdo1_5v_2a4"
+        or float(selected["parameters"]["PDO_CURRENT_A"]) != 2.4
     ):
         raise AssertionError(f"Unexpected profile-driven placement result: {selected!r}")
 
@@ -244,11 +248,12 @@ def render_native_svgs(cli: str, record, output_dir: Path) -> None:
         raise RuntimeError(f"KiCad SVG export failed: symbols={len(symbols)}, schematics={len(schematics)}")
     shutil.copy2(symbols[0], output_dir / "functional-block-facade.svg")
     shutil.copy2(schematics[0], output_dir / "functional-block-implementation.svg")
+    shutil.copy2(record.implementation, output_dir / "functional-block-implementation.kicad_sch")
     for name in ("functional-block-facade.svg", "functional-block-implementation.svg"):
         content = (output_dir / name).read_text(encoding="utf-8")
         if "<svg" not in content or len(content) < 500:
             raise RuntimeError(f"KiCad exported an empty SVG: {name}")
-    # Keep only the six curated assets in the uploaded documentation bundle.
+    # Keep only the curated assets in the uploaded documentation bundle.
     shutil.rmtree(symbol_dir)
     shutil.rmtree(schematic_dir)
 
