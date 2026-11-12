@@ -175,7 +175,7 @@ def generate_reference_schematic(destination: Path) -> Path:
     root = _symbol_root()
     specs = [
         # ref, library, symbol, value, position, pin-number -> (net, kind, shape)
-        ("U1", "Interface_USB", "STUSB4500QTR", "STUSB4500QTR", (170, 125), {
+        ("U1", "Interface_USB", "STUSB4500QTR", "STUSB4500QTR", (190, 160), {
             "1": ("CC1", "local", ""), "2": ("CC1", "local", ""),
             "3": ("NC", "nc", ""), "4": ("CC2", "local", ""),
             "5": ("CC2", "local", ""), "6": ("RESET", "local", ""),
@@ -197,39 +197,39 @@ def generate_reference_schematic(destination: Path) -> Path:
             "B4": ("VBUS", "local", ""), "B5": ("CC2", "hier", "bidirectional"),
             "B9": ("VBUS", "local", ""), "B12": ("GND", "local", ""),
         }),
-        ("J10", "Connector_Generic", "Conn_01x02", "VSNK output", (300, 95), {
+        ("J10", "Connector_Generic", "Conn_01x02", "VSNK output", (370, 75), {
             "1": ("VSNK", "hier", "output"), "2": ("GND", "hier", "passive"),
         }),
-        ("J2", "Connector_Generic", "Conn_01x06", "MCU interface", (300, 180), {
+        ("J2", "Connector_Generic", "Conn_01x06", "MCU interface", (360, 185), {
             "1": ("SCL", "hier", "input"), "2": ("SDA", "hier", "bidirectional"),
             "3": ("ALERT#", "hier", "output"), "4": ("RESET", "hier", "input"),
             "5": ("VMCU", "hier", "input"), "6": ("GND", "hier", "passive"),
         }),
-        ("C50", "Device", "C", "4.7uF", (105, 65), {"1": ("VBUS", "local", ""), "2": ("GND", "local", "")}),
-        ("C1", "Device", "C", "1uF", (135, 65), {"1": ("1V2", "local", ""), "2": ("GND", "local", "")}),
-        ("C2", "Device", "C", "1uF", (165, 65), {"1": ("2V7", "local", ""), "2": ("GND", "local", "")}),
-        ("C3", "Device", "C", "1uF", (195, 65), {"1": ("2V7", "local", ""), "2": ("GND", "local", "")}),
-        ("C4", "Device", "C", "1uF", (225, 65), {"1": ("2V7", "local", ""), "2": ("GND", "local", "")}),
-        ("C10", "Device", "C", "100nF", (265, 65), {"1": ("VSNK", "local", ""), "2": ("GND", "local", "")}),
-        ("R1", "Device", "R", "470", (100, 205), {"1": ("VBUS", "local", ""), "2": ("VBUS_SENSE", "local", "")}),
-        ("R2", "Device", "R", "1k", (125, 205), {"1": ("DISCH", "local", ""), "2": ("GND", "local", "")}),
-        ("R3", "Device", "R", "4.7k", (150, 205), {"1": ("VMCU", "local", ""), "2": ("SCL", "local", "")}),
-        ("R4", "Device", "R", "1k", (175, 205), {"1": ("2V7", "local", ""), "2": ("VBUS_SENSE", "local", "")}),
-        ("R5", "Device", "R", "4.7k", (200, 205), {"1": ("VMCU", "local", ""), "2": ("SDA", "local", "")}),
-        ("R6", "Device", "R", "4.7k", (225, 205), {"1": ("VMCU", "local", ""), "2": ("ALERT#", "local", "")}),
-        ("R10", "Device", "R", "100k", (250, 205), {"1": ("VBUS", "local", ""), "2": ("VSNK_GATE", "local", "")}),
-        ("R11", "Device", "R", "22k", (275, 205), {"1": ("VSNK_GATE", "local", ""), "2": ("GND", "local", "")}),
-        ("R13", "Device", "R", "100", (325, 205), {"1": ("VSNK_GATE", "local", ""), "2": ("VBUS_EN_SNK", "local", "")}),
-        ("R51", "Device", "R", "NC", (100, 240), {"1": ("2V7", "local", ""), "2": ("ADDR1", "local", "")}),
-        ("R52", "Device", "R", "NC", (125, 240), {"1": ("2V7", "local", ""), "2": ("ADDR0", "local", "")}),
-        ("R53", "Device", "R", "100k", (150, 240), {"1": ("ADDR1", "local", ""), "2": ("GND", "local", "")}),
-        ("R54", "Device", "R", "100k", (175, 240), {"1": ("ADDR0", "local", ""), "2": ("GND", "local", "")}),
-        ("R55", "Device", "R", "10k", (200, 240), {"1": ("RESET", "local", ""), "2": ("GND", "local", "")}),
-        ("D1", "STUSB4500_Custom", "ESDA25W", "ESDA25W", (90, 165), {"1": ("CC1", "local", ""), "2": ("CC2", "local", ""), "3": ("GND", "local", "")}),
-        ("D50", "Device", "D_TVS", "ESDA25P35", (115, 165), {"1": ("VBUS", "local", ""), "2": ("GND", "local", "")}),
-        ("D11", "Device", "D_TVS", "ESDA25P35", (275, 165), {"1": ("VSNK", "local", ""), "2": ("GND", "local", "")}),
-        ("T4", "Transistor_FET", "Q_PMOS_GSD", "STL6P3LLH6", (245, 125), {"1": ("VBUS_EN_SNK", "local", ""), "2": ("VBUS", "local", ""), "3": ("VSNK_GATE", "local", "")}),
-        ("T1", "Transistor_FET", "Q_PMOS_GSD", "STL6P3LLH6", (270, 125), {"1": ("VSNK_GATE", "local", ""), "2": ("VBUS", "local", ""), "3": ("VSNK", "local", "")}),
+        ("C50", "Device", "C", "4.7uF", (75, 210), {"1": ("VBUS", "local", ""), "2": ("GND", "local", "")}),
+        ("C1", "Device", "C", "1uF", (145, 95), {"1": ("1V2", "local", ""), "2": ("GND", "local", "")}),
+        ("C2", "Device", "C", "1uF", (170, 95), {"1": ("2V7", "local", ""), "2": ("GND", "local", "")}),
+        ("C3", "Device", "C", "1uF", (195, 95), {"1": ("2V7", "local", ""), "2": ("GND", "local", "")}),
+        ("C4", "Device", "C", "1uF", (115, 95), {"1": ("2V7", "local", ""), "2": ("GND", "local", "")}),
+        ("C10", "Device", "C", "100nF", (330, 95), {"1": ("VSNK", "local", ""), "2": ("GND", "local", "")}),
+        ("R1", "Device", "R", "470", (115, 135), {"1": ("VBUS", "local", ""), "2": ("VBUS_SENSE", "local", "")}),
+        ("R2", "Device", "R", "1k", (260, 160), {"1": ("DISCH", "local", ""), "2": ("GND", "local", "")}),
+        ("R3", "Device", "R", "4.7k", (315, 155), {"1": ("VMCU", "local", ""), "2": ("SCL", "local", "")}),
+        ("R4", "Device", "R", "1k", (135, 135), {"1": ("2V7", "local", ""), "2": ("VBUS_SENSE", "local", "")}),
+        ("R5", "Device", "R", "4.7k", (335, 155), {"1": ("VMCU", "local", ""), "2": ("SDA", "local", "")}),
+        ("R6", "Device", "R", "4.7k", (355, 155), {"1": ("VMCU", "local", ""), "2": ("ALERT#", "local", "")}),
+        ("R10", "Device", "R", "100k", (250, 85), {"1": ("VBUS", "local", ""), "2": ("VSNK_GATE", "local", "")}),
+        ("R11", "Device", "R", "22k", (280, 85), {"1": ("VSNK_GATE", "local", ""), "2": ("GND", "local", "")}),
+        ("R13", "Device", "R", "100", (315, 85), {"1": ("VSNK_GATE", "local", ""), "2": ("VBUS_EN_SNK", "local", "")}),
+        ("R51", "Device", "R", "NC", (145, 225), {"1": ("2V7", "local", ""), "2": ("ADDR1", "local", "")}),
+        ("R52", "Device", "R", "NC", (170, 225), {"1": ("2V7", "local", ""), "2": ("ADDR0", "local", "")}),
+        ("R53", "Device", "R", "100k", (195, 225), {"1": ("ADDR1", "local", ""), "2": ("GND", "local", "")}),
+        ("R54", "Device", "R", "100k", (220, 225), {"1": ("ADDR0", "local", ""), "2": ("GND", "local", "")}),
+        ("R55", "Device", "R", "10k", (325, 225), {"1": ("RESET", "local", ""), "2": ("GND", "local", "")}),
+        ("D1", "STUSB4500_Custom", "ESDA25W", "ESDA25W", (130, 190), {"1": ("CC1", "local", ""), "2": ("CC2", "local", ""), "3": ("GND", "local", "")}),
+        ("D50", "Device", "D_TVS", "ESDA25P35", (95, 190), {"1": ("VBUS", "local", ""), "2": ("GND", "local", "")}),
+        ("D11", "Device", "D_TVS", "ESDA25P35", (345, 110), {"1": ("VSNK", "local", ""), "2": ("GND", "local", "")}),
+        ("T4", "Transistor_FET", "Q_PMOS_GSD", "STL6P3LLH6", (260, 65), {"1": ("VBUS_EN_SNK", "local", ""), "2": ("VBUS", "local", ""), "3": ("VSNK_GATE", "local", "")}),
+        ("T1", "Transistor_FET", "Q_PMOS_GSD", "STL6P3LLH6", (300, 65), {"1": ("VSNK_GATE", "local", ""), "2": ("VBUS", "local", ""), "3": ("VSNK", "local", "")}),
     ]
 
     library_symbols = []
@@ -243,6 +243,7 @@ def generate_reference_schematic(destination: Path) -> Path:
     instances = []
     labels = []
     no_connects = []
+    net_points: dict[str, list[tuple[str, float, float]]] = {}
     for reference, library, symbol_name, value, (sx, sy), pin_map in specs:
         definition = loaded[(library, symbol_name)]
         pins = _pin_data(definition)
@@ -283,12 +284,18 @@ def generate_reference_schematic(destination: Path) -> Path:
                 net, kind, *shape = net_spec
                 px = sx + pin["x"]
                 py = sy - pin["y"]
+                if kind in {"hier", "local"}:
+                    net_points.setdefault(net, []).append((reference, px, py))
                 if kind == "hier":
                     labels.append(_label(net, px, py, hierarchical=True, shape=shape[0], key=f"hlabel:{reference}:{pin['number']}"))
                 elif kind == "local":
                     labels.append(_label(net, px, py, key=f"label:{reference}:{pin['number']}"))
                 elif kind == "nc":
                     no_connects.append(["no_connect", ["at", f"{px:.3f}", f"{py:.3f}"], ["uuid", _Quoted(_uid(f"nc:{reference}:{pin['number']}"))]])
+            elif reference == "J1":
+                px = sx + pin["x"]
+                py = sy - pin["y"]
+                no_connects.append(["no_connect", ["at", f"{px:.3f}", f"{py:.3f}"], ["uuid", _Quoted(_uid(f"nc:{reference}:{pin['number']}"))]])
         instance.append([
             "instances",
             ["project", _Quoted(PROJECT),
@@ -298,6 +305,31 @@ def generate_reference_schematic(destination: Path) -> Path:
             ],
         ])
         instances.append(instance)
+
+    # Draw visible orthogonal connections for the main signal and power nets.
+    # Local labels remain on each pin, so the topology is both readable and
+    # unambiguous to KiCad's netlist exporter.
+    wires = []
+    for net in ("VBUS", "CC1", "CC2", "VSNK", "SCL", "SDA", "ALERT#", "RESET", "VMCU"):
+        by_reference = {}
+        for reference, x, y in net_points.get(net, []):
+            by_reference.setdefault(reference, (x, y))
+        points = sorted(
+            ((reference, *position) for reference, position in by_reference.items()),
+            key=lambda item: item[1],
+        )
+        for index, (left, right) in enumerate(zip(points, points[1:])):
+            ref_a, x_a, y_a = left
+            ref_b, x_b, y_b = right
+            route = [["xy", f"{x_a:.3f}", f"{y_a:.3f}"]]
+            if abs(x_a - x_b) > 0.001 and abs(y_a - y_b) > 0.001:
+                route.append(["xy", f"{x_b:.3f}", f"{y_a:.3f}"])
+            route.append(["xy", f"{x_b:.3f}", f"{y_b:.3f}"])
+            wires.append([
+                "wire", ["pts", *route],
+                ["stroke", ["width", "0"], ["type", "default"]],
+                ["uuid", _Quoted(_uid(f"wire:{net}:{index}:{ref_a}:{ref_b}"))],
+            ])
 
     schematic = [
         "kicad_sch", ["version", "20250114"], ["generator", _Quoted("eeschema")],
@@ -311,7 +343,7 @@ def generate_reference_schematic(destination: Path) -> Path:
             ["comment", "2", _Quoted("Review component ratings, layout and protection before production")],
         ],
         ["lib_symbols", *library_symbols],
-        *instances, *labels, *no_connects,
+        *instances, *wires, *labels, *no_connects,
         ["text", _Quoted("STUSB4500QTR — USB Type-C / USB PD sink controller"),
             ["at", "55", "35", "0"], ["effects", ["font", ["size", "2.0", "2.0"]]],
             ["uuid", _Quoted(_uid("text:title"))],
