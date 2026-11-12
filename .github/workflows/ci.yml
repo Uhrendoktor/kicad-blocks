@@ -101,6 +101,7 @@ jobs:
         shell: bash
         env:
           KIPY_SHA: ${{ steps.kipy.outputs.sha }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           PY="${RUNNER_TEMP}/kicad-blocks-venv/bin/python"
