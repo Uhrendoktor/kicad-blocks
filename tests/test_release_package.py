@@ -5,11 +5,13 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 import json
+import os
 import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 from zipfile import ZipFile
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -20,8 +22,26 @@ if SPEC is None or SPEC.loader is None:
 builder = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(builder)
 
+INSTALLER_SCRIPT = ROOT / "scripts" / "install_plugin.py"
+INSTALLER_SPEC = importlib.util.spec_from_file_location("kicad_blocks_installer", INSTALLER_SCRIPT)
+if INSTALLER_SPEC is None or INSTALLER_SPEC.loader is None:
+    raise RuntimeError("Could not load the plugin installer.")
+installer = importlib.util.module_from_spec(INSTALLER_SPEC)
+INSTALLER_SPEC.loader.exec_module(installer)
+
 
 class ReleasePackageTests(unittest.TestCase):
+    def test_default_linux_user_data_root_matches_kicad_directory(self):
+        with patch.dict(
+            os.environ,
+            {"XDG_DATA_HOME": "/home/test-user/.local/share"},
+            clear=True,
+        ):
+            self.assertEqual(
+                installer.default_documents_home(),
+                Path("/home/test-user/.local/share/kicad"),
+            )
+
     def test_archive_is_deterministic_and_contains_only_installable_release_inputs(self):
         with tempfile.TemporaryDirectory(prefix="kicad-blocks-release-") as temp:
             first_dir = Path(temp) / "one"
@@ -38,7 +58,7 @@ class ReleasePackageTests(unittest.TestCase):
             digest = hashlib.sha256(first_zip.read_bytes()).hexdigest()
             self.assertEqual(
                 first_sum.read_text(encoding="ascii"),
-                f"{digest}  {first_zip.name}\n",
+                f"{digest}  {first_zip.name}\\n",
             )
             with ZipFile(first_zip) as archive:
                 names = archive.namelist()
@@ -75,6 +95,7 @@ class ReleasePackageTests(unittest.TestCase):
                 archive.extractall(extract_root)
 
             bundled_root = extract_root / "kicad-blocks-1.1.0-linux-x86_64-cp312"
+            documents_home = temp_root / "user-data" / "kicad"
             result = subprocess.run(
                 [
                     sys.executable,
@@ -82,7 +103,7 @@ class ReleasePackageTests(unittest.TestCase):
                     "--version",
                     "10.99",
                     "--documents-home",
-                    str(temp_root / "KiCad"),
+                    str(documents_home),
                 ],
                 check=True,
                 capture_output=True,
@@ -92,13 +113,12 @@ class ReleasePackageTests(unittest.TestCase):
             self.assertIn("KiCad Blocks installed at:", result.stdout)
 
             installed = (
-                temp_root
-                / "KiCad"
-                / "kicad"
+                documents_home
                 / "10.99"
                 / "plugins"
                 / "org.uhrendoktor.kicadblocks"
             )
+            self.assertIn(str(installed), result.stdout)
             manifest = json.loads((installed / "plugin.json").read_text(encoding="utf-8"))
             self.assertEqual(manifest["identifier"], "org.uhrendoktor.kicadblocks")
             for action in manifest["actions"]:
@@ -119,7 +139,10 @@ class ReleasePackageTests(unittest.TestCase):
                 ignore=shutil.ignore_patterns(".git", "__pycache__", "*.pyc", "dist"),
             )
             requirements = copied / "plugin" / "kicad-blocks" / "requirements.txt"
-            requirements.write_text("kicad-python @ https://example.invalid/wheel.whl\n", encoding="utf-8")
+            requirements.write_text(
+                "kicad-python @ https://example.invalid/wheel.whl\\n",
+                encoding="utf-8",
+            )
             with self.assertRaisesRegex(ValueError, "do not point at the wheel locked"):
                 builder.build_release_package(copied, Path(temp) / "dist", source_commit="3" * 40)
 
