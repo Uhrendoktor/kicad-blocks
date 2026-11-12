@@ -744,6 +744,37 @@ def register_project_symbol_library(
     return table_path
 
 
+def set_project_symbol_defaults(
+    catalog_path: Path, symbol_name: str, values: dict[str, str]
+) -> Path:
+    """Set default user-field values on one project-catalog facade before placement.
+
+    The shared library remains untouched. KiCad copies these values into each
+    newly placed instance; subsequent catalog rebuilds restore library defaults.
+    """
+    catalog_path = Path(catalog_path).expanduser().resolve()
+    tree = parse_sexpr(catalog_path.read_text(encoding="utf-8"))
+    symbol = _named_symbol_node(tree, symbol_name, catalog_path)
+    properties = [
+        item for item in symbol[2:]
+        if _head(item) == "property" and len(item) >= 3
+    ]
+    found = set()
+    for prop in properties:
+        field_name = str(prop[1])
+        if field_name in values:
+            prop[2] = str(values[field_name])
+            found.add(field_name)
+    missing = sorted(set(values) - found)
+    if missing:
+        raise ValueError(
+            f"Facade {symbol_name!r} is missing configurable field(s): "
+            + ", ".join(missing)
+        )
+    atomic_write(catalog_path, _dump(tree) + "\n")
+    return catalog_path
+
+
 def _asset_hashes(block_path: Path, manifest: dict) -> dict[str, str]:
     result = {}
     for file_name in manifest.get("files", []):

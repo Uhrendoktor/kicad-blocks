@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import base64
 import contextlib
 import logging
 import os
 import shutil
 import subprocess
+import tempfile
 import time
 from pathlib import Path
 
@@ -55,6 +57,7 @@ from .repository import (
     register_project_symbol_library,
     remove_library_root,
     set_library_root,
+    set_project_symbol_defaults,
 )
 from .repository import library_roots as configured_library_roots
 
@@ -627,6 +630,207 @@ def sync_selected_local(schematic, kicad, project_dir: Path) -> dict:
     result = publish_local_copy(local_record)
     _reload_symbol_library(kicad, LIBRARY_NICKNAME)
     return result
+
+def _pick_block_for_placement(records, parent):
+    """Choose, inspect and configure a functional block before native placement."""
+    if not records:
+        raise ValueError("No blocks were found in the registered functional-block libraries.")
+
+    dialog = tk.Toplevel(parent)
+    dialog.title("Place Functional Block")
+    dialog.geometry("1040x680")
+    dialog.minsize(820, 560)
+    dialog.transient(parent)
+    dialog.grab_set()
+
+    outer = ttk.Frame(dialog, padding=12)
+    outer.pack(fill="both", expand=True)
+    ttk.Label(outer, text="Search functional blocks").pack(anchor="w")
+    search = tk.StringVar()
+    search_entry = ttk.Entry(outer, textvariable=search)
+    search_entry.pack(fill="x", pady=(4, 8))
+
+    panes = ttk.Panedwindow(outer, orient="horizontal")
+    panes.pack(fill="both", expand=True)
+    left = ttk.Frame(panes, padding=(0, 0, 8, 0))
+    right = ttk.Frame(panes, padding=(8, 0, 0, 0))
+    panes.add(left, weight=1)
+    panes.add(right, weight=2)
+    left.rowconfigure(0, weight=1)
+    left.columnconfigure(0, weight=1)
+
+    tree = ttk.Treeview(left, columns=("library",), show="tree headings", selectmode="browse")
+    tree.heading("#0", text="Functional block")
+    tree.heading("library", text="Library")
+    tree.column("#0", width=250, minwidth=150, stretch=True)
+    tree.column("library", width=120, minwidth=90, stretch=False)
+    scroll = ttk.Scrollbar(left, orient="vertical", command=tree.yview)
+    tree.configure(yscrollcommand=scroll.set)
+    tree.grid(row=0, column=0, sticky="nsew")
+    scroll.grid(row=0, column=1, sticky="ns")
+    _bind_mousewheel(tree, lambda amount: tree.yview_scroll(amount, "units"))
+
+    name = ttk.Label(right, text="Select a functional block")
+    name.pack(anchor="w")
+    description = ttk.Label(right, text="", wraplength=620, justify="left")
+    description.pack(fill="x", anchor="w", pady=(4, 10))
+
+    config = ttk.Frame(right)
+    config.pack(fill="x", pady=(0, 8))
+    config.columnconfigure(1, weight=1)
+    ttk.Label(config, text="Implementation variant").grid(row=0, column=0, sticky="w", padx=(0, 10))
+    variant_value = tk.StringVar()
+    variant_combo = ttk.Combobox(config, textvariable=variant_value, state="readonly", width=32)
+    variant_combo.grid(row=0, column=1, sticky="ew", pady=2)
+    ttk.Label(config, text="Configuration profile").grid(row=1, column=0, sticky="w", padx=(0, 10))
+    profile_value = tk.StringVar()
+    profile_combo = ttk.Combobox(config, textvariable=profile_value, state="readonly", width=32)
+    profile_combo.grid(row=1, column=1, sticky="ew", pady=2)
+
+    preview_box = ttk.LabelFrame(right, text="Schematic Facade — rendered by KiCad", padding=6)
+    preview_box.pack(fill="both", expand=True)
+    preview = tk.Canvas(preview_box, height=310, highlightthickness=0, borderwidth=0)
+    preview.pack(fill="both", expand=True)
+    _bind_mousewheel(preview, lambda amount: preview.yview_scroll(amount, "units"))
+
+    metadata = ttk.Label(right, text="", wraplength=620, justify="left")
+    metadata.pack(fill="x", anchor="w", pady=(8, 0))
+
+    records_by_id = {}
+    visible_records = []
+    selected_record = [None]
+    chosen = [None]
+    updating_config = [False]
+
+    def update_metadata(record):
+        if record is None:
+            name.configure(text="No matching functional blocks")
+            description.configure(text="")
+            metadata.configure(text="")
+            preview.delete("all")
+            variant_combo.configure(values=(), state="disabled")
+            profile_combo.configure(values=(), state="disabled")
+            return
+        manifest = record.manifest
+        name.configure(text=record.name)
+        description.configure(text=str(manifest.get("description", "") or "No description provided."))
+        variants = [str(item["value"]) for item in manifest.get("variants", [])]
+        profiles = manifest.get("profiles", [])
+        variant_combo.configure(values=variants or ("(single implementation)",), state="readonly" if variants else "disabled")
+        profile_names = ["Custom"] + [
+            str(item.get("name", item.get("id", ""))) for item in profiles
+        ]
+        profile_combo.configure(values=profile_names, state="readonly" if profiles else "disabled")
+        variant_value.set(variants[0] if variants else "(single implementation)")
+        profile_value.set("Custom" if profiles else "")
+        pin_count = len(manifest.get("pins", []))
+        parameter_count = len(manifest.get("parameters", []))
+        layout_count = len(_layout_choices(record))
+        metadata.configure(
+            text=(
+                f"Interface: {pin_count} pins    Parameters: {parameter_count}    "
+                f"PCB layouts: {layout_count}    Version: {manifest.get('version', 1)}"
+            )
+        )
+        _draw_facade_preview(preview, record)
+
+    def render_results(*_args):
+        nonlocal visible_records
+        visible_records = _filter_library_records(records, search.get())
+        tree.delete(*tree.get_children())
+        records_by_id.clear()
+        for index, record in enumerate(visible_records):
+            iid = f"{record.manifest['block_id']}:{index}"
+            records_by_id[iid] = record
+            tree.insert("", "end", iid=iid, text=record.name, values=(record.path.parent.name,))
+        preferred = _preferred_library_selection(visible_records, selected_record[0])
+        if preferred is None:
+            selected_record[0] = None
+            update_metadata(None)
+            return
+        iid = next(key for key, value in records_by_id.items() if value is preferred)
+        tree.selection_set(iid)
+        tree.focus(iid)
+        selected_record[0] = preferred
+        update_metadata(preferred)
+
+    def selection_changed(_event=None):
+        selection = tree.selection()
+        record = records_by_id.get(selection[0]) if selection else None
+        selected_record[0] = record
+        update_metadata(record)
+
+    def variant_changed(_event=None):
+        if updating_config[0]:
+            return
+        if selected_record[0] is not None and profile_value.get() != "Custom":
+            updating_config[0] = True
+            profile_value.set("Custom" if selected_record[0].manifest.get("profiles") else "")
+            updating_config[0] = False
+
+    def profile_changed(_event=None):
+        record = selected_record[0]
+        if record is None or profile_value.get() in ("", "Custom"):
+            return
+        profile = next(
+            (item for item in record.manifest.get("profiles", [])
+             if str(item.get("name", item.get("id", ""))) == profile_value.get()),
+            None,
+        )
+        if profile is not None:
+            variant_value.set(str(profile.get("variant") or "(single implementation)"))
+
+    def choose(_event=None):
+        record = selected_record[0]
+        if record is None:
+            return "break"
+        manifest = record.manifest
+        profile = None
+        if profile_value.get() not in ("", "Custom"):
+            profile = next(
+                (item for item in manifest.get("profiles", [])
+                 if str(item.get("name", item.get("id", ""))) == profile_value.get()),
+                None,
+            )
+        if profile is not None:
+            resolved = resolve_profile_configuration(manifest, str(profile["id"]))
+            selected_variant = resolved["variant"]
+            values = dict(resolved["parameters"])
+            layout = resolved["layout"]
+            profile_id = str(profile["id"])
+        else:
+            selected_variant = "" if variant_value.get() == "(single implementation)" else variant_value.get()
+            values = resolve_parameter_values(manifest.get("parameters", []))
+            layout = str(manifest.get("default_layout") or "")
+            profile_id = ""
+        chosen[0] = {
+            "record": record,
+            "variant": selected_variant,
+            "profile": profile_id,
+            "parameters": values,
+            "layout": layout,
+        }
+        dialog.destroy()
+        return "break"
+
+    search.trace_add("write", render_results)
+    tree.bind("<<TreeviewSelect>>", selection_changed)
+    tree.bind("<Double-1>", choose)
+    search_entry.bind("<Return>", lambda _event: (tree.focus_set(), "break"))
+    dialog.bind("<Return>", choose)
+    dialog.bind("<Escape>", lambda _event: dialog.destroy())
+    variant_combo.bind("<<ComboboxSelected>>", variant_changed)
+    profile_combo.bind("<<ComboboxSelected>>", profile_changed)
+
+    buttons = ttk.Frame(outer)
+    buttons.pack(fill="x", pady=(10, 0))
+    ttk.Button(buttons, text="Cancel", command=dialog.destroy).pack(side="right")
+    ttk.Button(buttons, text="Place Block", command=choose).pack(side="right", padx=(0, 8))
+    search_entry.focus_set()
+    render_results()
+    dialog.wait_window()
+    return chosen[0]
+
 
 def _pick_record(records, parent, title: str):
     """Show a searchable modal picker for manager actions that need a library block."""
@@ -1350,77 +1554,102 @@ def _restore_placement_windows(windows: list) -> None:
             window.deiconify()
 
 
+def _native_symbol_preview_photo(record, width: int = 680):
+    """Render the actual facade with KiCad's own symbol SVG exporter."""
+    symbol_name = str(record.manifest["symbol_name"])
+    library_file = Path(record.symbol_library).expanduser().resolve()
+    if not library_file.is_file():
+        raise FileNotFoundError(f"Facade symbol library is missing: {library_file}")
+
+    cache_key = (
+        str(library_file),
+        library_file.stat().st_mtime_ns,
+        symbol_name,
+        int(width),
+    )
+    cached = _NATIVE_PREVIEW_CACHE.get(cache_key)
+    if cached is not None:
+        return cached
+
+    cli = find_kicad_cli()
+    with tempfile.TemporaryDirectory(prefix="kicad-block-preview-") as temporary:
+        output_dir = Path(temporary)
+        result = subprocess.run(
+            [
+                cli, "sym", "export", "svg",
+                "--symbol", symbol_name,
+                "--output", str(output_dir),
+                str(library_file),
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=30,
+        )
+        if result.returncode != 0:
+            detail = (result.stderr or result.stdout).strip()
+            raise RuntimeError(
+                "KiCad could not render the facade symbol"
+                + (f": {detail}" if detail else ".")
+            )
+        svg_file = output_dir / f"{symbol_name}.svg"
+        if not svg_file.is_file():
+            candidates = list(output_dir.glob("*.svg"))
+            if len(candidates) != 1:
+                raise RuntimeError(
+                    "KiCad symbol export did not produce the expected SVG preview."
+                )
+            svg_file = candidates[0]
+
+        # KiCad owns all symbol geometry and typography. CairoSVG only rasterizes
+        # that SVG so Tk can display it; it does not recreate or interpret pins.
+        try:
+            import cairosvg
+        except ImportError as exc:
+            raise RuntimeError(
+                "The native KiCad preview rasterizer is missing. Reinstall KiCad Blocks "
+                "so its CairoSVG dependency is installed."
+            ) from exc
+        png_data = cairosvg.svg2png(
+            url=str(svg_file),
+            output_width=int(width),
+        )
+
+    photo = tk.PhotoImage(data=base64.b64encode(png_data).decode("ascii"))
+    _NATIVE_PREVIEW_CACHE[cache_key] = photo
+    return photo
+
+
+_NATIVE_PREVIEW_CACHE: dict[tuple, object] = {}
+
+
 def _draw_facade_preview(canvas, record) -> None:
-    """Draw a lightweight facade preview using the active Tk theme colors."""
+    """Display a faithful KiCad-rendered facade preview; never approximate it."""
     canvas.delete("all")
-    style = ttk.Style(canvas)
-    background = style.lookup("TFrame", "background") or canvas.cget("background")
-    foreground = style.lookup("TLabel", "foreground") or canvas.cget("foreground")
-    entry_background = style.lookup("TEntry", "fieldbackground") or background
-    muted = style.lookup("TLabel", "foreground") or foreground
-    label_font = style.lookup("TLabel", "font") or "TkDefaultFont"
+    try:
+        photo = _native_symbol_preview_photo(record)
+    except Exception as exc:
+        LOG.exception("Native facade preview failed for %s", record.name)
+        style = ttk.Style(canvas)
+        foreground = style.lookup("TLabel", "foreground") or canvas.cget("foreground")
+        canvas.create_text(
+            max(int(canvas.winfo_width()), 480) / 2,
+            max(int(canvas.winfo_height()), 250) / 2,
+            text=f"KiCad preview unavailable\\n{exc}",
+            fill=foreground,
+            justify="center",
+            width=max(int(canvas.winfo_width()), 480) - 32,
+        )
+        canvas.configure(scrollregion=(0, 0, max(int(canvas.winfo_width()), 480), max(int(canvas.winfo_height()), 250)))
+        return
+
+    canvas._native_preview_photo = photo
     width = max(int(canvas.winfo_width()), 480)
     height = max(int(canvas.winfo_height()), 250)
-    manifest = record.manifest
-    pins = list(manifest.get("pins", []))
-    split = (len(pins) + 1) // 2
-    left_pins, right_pins = pins[:split], pins[split:]
-    rows = max(len(left_pins), len(right_pins), 1)
-    body_height = max(88, rows * 27 + 28)
-    body_width = 190
-    body_left = max(110, (width - body_width) / 2)
-    body_top = max(24, (height - body_height) / 2)
-    body_right = body_left + body_width
-    body_bottom = body_top + body_height
-    canvas.create_rectangle(
-        body_left, body_top, body_right, body_bottom,
-        outline=foreground, width=1, fill=entry_background,
+    canvas.create_image(width / 2, height / 2, image=photo, anchor="center")
+    canvas.configure(
+        scrollregion=(0, 0, max(width, photo.width()), max(height, photo.height()))
     )
-    canvas.create_text(
-        (body_left + body_right) / 2,
-        body_top + body_height * 0.38,
-        text=str(manifest.get("name", record.name)),
-        width=body_width - 24,
-        justify="center",
-        fill=foreground,
-        font=label_font,
-    )
-    canvas.create_text(
-        (body_left + body_right) / 2,
-        body_top + body_height * 0.68,
-        text="SCHEMATIC FACADE",
-        fill=muted,
-        font=label_font,
-    )
-
-    def draw_pin(pin, x1, x2, y, anchor):
-        name = str(pin.get("name", ""))
-        number = str(pin.get("number", ""))
-        kind = str(pin.get("electrical_type", "passive"))
-        canvas.create_line(x1, y, x2, y, fill=foreground, width=1)
-        text_x = x1 - 7 if anchor == "e" else x2 + 7
-        canvas.create_text(
-            text_x, y - 4, text=name, anchor=anchor, fill=foreground,
-            font=label_font,
-        )
-        canvas.create_text(
-            text_x, y + 8, text=f"{number} - {kind}", anchor=anchor,
-            fill=muted, font=label_font,
-        )
-
-    def y_for(index, count):
-        if count <= 1:
-            return (body_top + body_bottom) / 2
-        return body_top + 16 + index * (body_height - 32) / (count - 1)
-
-    for index, pin in enumerate(left_pins):
-        draw_pin(pin, body_left - 42, body_left, y_for(index, len(left_pins)), "e")
-    for index, pin in enumerate(right_pins):
-        draw_pin(pin, body_right, body_right + 42, y_for(index, len(right_pins)), "w")
-
-    if not pins:
-        canvas.create_text(width / 2, height / 2, text="No facade pins", fill=muted)
-    canvas.configure(scrollregion=(0, 0, width, max(height, body_bottom + 32)))
 
 
 def _block_overview_text(record) -> str:
@@ -2683,6 +2912,7 @@ def run_action(action: str) -> None:
     """Run one operation directly from KiCad's native plugin action menu."""
     valid_actions = {
         "manage-library",
+        "place-block",
         "create-block",
         "open-implementation",
         "configure-instance",
@@ -2717,6 +2947,38 @@ def run_action(action: str) -> None:
         library_root.mkdir(parents=True, exist_ok=True)
 
         if action == "manage-library":
+            _show_library_browser(
+                root, schematic, kicad, project_dir, library_paths, editor_window_id
+            )
+            root.mainloop()
+            return
+
+        root.withdraw()
+        if action == "place-block":
+            choice = _pick_block_for_placement(_list_library_records(library_paths), root)
+            if choice is not None:
+                record = choice["record"]
+                _register_block(project_dir, record, kicad, library_paths)
+                defaults = {}
+                if record.manifest.get("variants"):
+                    defaults[VARIANT_FIELD_NAME] = choice["variant"]
+                if record.manifest.get("profiles"):
+                    defaults[PROFILE_FIELD_NAME] = choice["profile"]
+                defaults.update({
+                    parameter_field_name(name): value
+                    for name, value in choice["parameters"].items()
+                })
+                if record.manifest.get("layouts"):
+                    defaults[LAYOUT_FIELD_NAME] = choice["layout"]
+                if defaults:
+                    catalog = project_dir / ".kicad_blocks" / "KBlocks.kicad_sym"
+                    set_project_symbol_defaults(
+                        catalog, str(record.manifest["symbol_name"]), defaults
+                    )
+                    _reload_symbol_library(kicad, LIBRARY_NICKNAME)
+                _start_native_symbol_placement(
+                    kicad, editor_window_id, str(record.manifest["symbol_name"])
+                )
             _show_library_browser(
                 root, schematic, kicad, project_dir, library_paths, editor_window_id
             )

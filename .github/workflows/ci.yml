@@ -85,7 +85,7 @@ jobs:
           python3 -m venv "${RUNNER_TEMP}/kicad-blocks-venv"
           PY="${RUNNER_TEMP}/kicad-blocks-venv/bin/python"
           "$PY" -m pip install --upgrade pip
-          "$PY" -m pip install pytest ruff
+          "$PY" -m pip install pytest ruff cairosvg
           "$PY" --version
           "$PY" -m pip --version
 
@@ -191,6 +191,12 @@ jobs:
         run: |
           xvfb-run -a -s "-screen 0 1280x800x24" \
             "${RUNNER_TEMP}/kicad-blocks-venv/bin/python" tests/test_eeschema_gui.py
+
+      - name: Verify native-rendered functional block picker
+        shell: bash
+        run: |
+          xvfb-run -a -s "-screen 0 1280x800x24" \
+            "${RUNNER_TEMP}/kicad-blocks-venv/bin/python" tests/test_library_picker_gui.py
 
       - name: Verify KiCad plugin discovery and managed environment
         shell: bash

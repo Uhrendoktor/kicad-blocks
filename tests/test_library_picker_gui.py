@@ -103,7 +103,22 @@ def main() -> None:
             raise AssertionError(
                 f"The picker returned {selected.name!r} instead of {target.name!r}."
             )
-        print("Searchable manager block picker passed: type-to-filter → Down → Enter.")
+        preview_root = plugin_actions.tk.Tk()
+        preview_root.withdraw()
+        canvas = plugin_actions.tk.Canvas(preview_root, width=680, height=300)
+        canvas.pack()
+        try:
+            plugin_actions._draw_facade_preview(canvas, target)
+            preview_root.update_idletasks()
+            image_items = canvas.find_withtag("image")
+            if not image_items:
+                raise AssertionError("The native KiCad symbol renderer produced no preview image.")
+            image = getattr(canvas, "_native_preview_photo", None)
+            if image is None or image.width() <= 0 or image.height() <= 0:
+                raise AssertionError("The native KiCad preview image is empty.")
+        finally:
+            preview_root.destroy()
+        print("Searchable block picker and KiCad-native SVG facade preview passed.")
 
 
 if __name__ == "__main__":

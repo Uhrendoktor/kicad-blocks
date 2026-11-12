@@ -8,6 +8,25 @@
   },
   "actions": [
     {
+      "identifier": "place-block",
+      "name": "Place Functional Block",
+      "description": "Search, preview, configure and place a functional block using KiCad's native symbol renderer and placement tool.",
+      "show-button": true,
+      "icons-light": [
+        "icons/create-light-24.png"
+      ],
+      "icons-dark": [
+        "icons/create-dark-24.png"
+      ],
+      "scopes": [
+        "schematic"
+      ],
+      "entrypoint": "actions.py",
+      "args": [
+        "place-block"
+      ]
+    },
+    {
       "identifier": "manage-library",
       "name": "Manage KiCad Functional Blocks",
       "description": "Browse all registered functional-block libraries, preview blocks, and place facades.",
