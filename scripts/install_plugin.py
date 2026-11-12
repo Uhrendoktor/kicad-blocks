@@ -66,7 +66,6 @@ def validate_install_target(
         )
 
 
-
 def default_documents_home() -> Path:
     """Return KiCad's platform-specific user-data root."""
     configured = os.environ.get("KICAD_DOCUMENTS_HOME")
@@ -77,7 +76,7 @@ def default_documents_home() -> Path:
     if sys.platform == "darwin":
         return (Path.home() / "Documents" / "KiCad").resolve()
     data_home = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share"))
-    return (data_home / "KiCad").expanduser().resolve()
+    return (data_home / "kicad").expanduser().resolve()
 
 
 def validate_plugin_package(source: Path) -> dict:
@@ -120,7 +119,7 @@ def validate_plugin_package(source: Path) -> dict:
             )
     requirements = source / "requirements.txt"
     if not requirements.is_file():
-        raise FileNotFoundError("KiCad Blocks package is missing requirements.txt.")
+        raise FileNotFoundError("KiCad plugin package is missing requirements.txt.")
     return manifest
 
 
@@ -136,7 +135,7 @@ def install_plugin(
     source = Path(source).expanduser().resolve()
     documents_home = Path(documents_home).expanduser().resolve()
     manifest = validate_plugin_package(source)
-    destination = documents_home / "kicad" / version / "plugins" / manifest["identifier"]
+    destination = documents_home / version / "plugins" / manifest["identifier"]
 
     if dry_run:
         return destination
