@@ -28,7 +28,6 @@ from .model import (
     resolve_parameter_values,
     resolve_profile_configuration,
     resolve_variant_implementation,
-    slugify,
 )
 from .operations import (
     export_block_bom,
