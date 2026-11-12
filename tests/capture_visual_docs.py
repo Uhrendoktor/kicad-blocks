@@ -284,7 +284,7 @@ def main() -> int:
             library, "STUSB4500 USB-PD Sink",
             parse_pins(
                 "VBUS:input, GND:passive, CC1:bidir, CC2:bidir, VSNK:output, "
-                "SCL:bidir, SDA:bidir, ALERT#:output, RESET:input"
+                "SCL:input, SDA:bidir, ALERT#:output, RESET:input, VMCU:input"
             ),
             description=(
                 "STUSB4500QTR USB Type-C PD sink reference circuit based on "
