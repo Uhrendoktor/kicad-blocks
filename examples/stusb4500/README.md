@@ -16,11 +16,17 @@ The schematic follows the signal flow of ST's reference drawing:
   protected VSNK output at the upper right.
 - Optional MCU I²C, ALERT# and RESET interface at the lower right.
 
-Remote connections use matching KiCad local labels instead of guessed
+Remote connections use matching KiCad local net labels instead of guessed
 coordinate-sorted wire routes. The labels keep the sheet uncluttered while
-preserving unambiguous electrical connectivity. CI exports a KiCad netlist
-and checks critical pin-to-net assignments in addition to rendering the
-schematic.
+preserving unambiguous electrical connectivity. The controller symbol follows
+the QFN-24 EP pinout: pins 1–24 use ST's QFN assignments and pin 25 is the
+exposed ground pad. Pin 22 (VSYS) is grounded for the VDD-only supply
+arrangement shown by ST; pin 24 (VDD) is on VBUS; pin 23 is VREG_2V7; and
+pin 21 is VREG_1V2. Unused controller pins have explicit no-connect markers.
+
+CI exports a KiCad netlist and checks the controller supply pins, CC pins,
+monitor/discharge branch, power-switch control, address straps and MCU
+interface in addition to rendering the schematic.
 
 ## Component set
 
@@ -29,7 +35,7 @@ schematic.
 | U1 | STUSB4500QTR | Standalone USB-PD sink controller |
 | J1 | USB Type-C receptacle | USB-C input |
 | C1 | 1 µF | VREG_1V2 decoupling |
-| C2, C3 | 1 µF | 2V7 regulator/reference decoupling |
+| C2, C3 | 1 µF | VREG_2V7 regulator/reference decoupling |
 | C4 | 1 µF | VBUS_VS_DISCH filter capacitor |
 | C10 | 100 nF | VSNK output bypass capacitor |
 | C50 | 4.7 µF | VBUS input capacitance |
