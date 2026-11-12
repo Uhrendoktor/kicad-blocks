@@ -137,6 +137,7 @@ class BlockModelTests(unittest.TestCase):
         self.assertEqual(manifest["runtime"]["type"], "python")
         self.assertTrue(manifest["actions"])
         expected_scopes = {
+            "place-block": ["schematic"],
             "manage-library": ["schematic"],
             "create-block": ["schematic"],
             "open-implementation": ["schematic"],
@@ -173,6 +174,31 @@ class BlockModelTests(unittest.TestCase):
                 for icon in action.get(key, []):
                     self.assertTrue((PLUGIN / icon).is_file(), icon)
         self.assertNotIn("manager", expected_scopes)
+
+    def test_project_catalog_can_seed_selected_block_configuration(self):
+        from kicad_blocks.repository import set_project_symbol_defaults
+
+        with tempfile.TemporaryDirectory(prefix="kicad-block-placement-defaults-") as temp:
+            root = Path(temp) / "library"
+            project = Path(temp) / "project"
+            root.mkdir()
+            project.mkdir()
+            block = create_block(
+                root,
+                "Placement Defaults Block",
+                parse_pins("VIN:input, GND:passive"),
+                parameters=[{"name": "MODE", "type": "string", "default": "normal"}],
+            )
+            catalog = build_project_symbol_catalog(project, [root])
+            set_project_symbol_defaults(
+                catalog,
+                block.manifest["symbol_name"],
+                {"KB_VARIANT": "industrial", "KB_PARAM_MODE": "fast"},
+            )
+            rendered = catalog.read_text(encoding="utf-8")
+            self.assertIn('(property "KB_VARIANT" "industrial"', rendered)
+            self.assertIn('(property "KB_PARAM_MODE" "fast"', rendered)
+            self.assertIn('(property "KB_PARAM_MODE" "normal"', block.symbol_library.read_text(encoding="utf-8"))
 
     def test_registered_block_libraries_build_one_project_symbol_catalog(self):
         import os
