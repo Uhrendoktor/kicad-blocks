@@ -17,6 +17,29 @@ PLUGIN_IDENTIFIER = "org.uhrendoktor.kicadblocks"
 
 
 class PluginInstallerTests(unittest.TestCase):
+    def test_installer_requires_the_exact_cpython_312_wheel_abi(self):
+        from importlib.util import module_from_spec, spec_from_file_location
+
+        spec = spec_from_file_location("kicad_blocks_installer", INSTALLER)
+        installer = module_from_spec(spec)
+        assert spec and spec.loader
+        spec.loader.exec_module(installer)
+
+        installer.validate_python_runtime(
+            implementation="cpython",
+            version_info=(3, 12, 3),
+        )
+        with self.assertRaisesRegex(ValueError, "requires CPython 3.12"):
+            installer.validate_python_runtime(
+                implementation="cpython",
+                version_info=(3, 13, 0),
+            )
+        with self.assertRaisesRegex(ValueError, "requires CPython 3.12"):
+            installer.validate_python_runtime(
+                implementation="pypy",
+                version_info=(3, 12, 3),
+            )
+
     def test_install_and_reinstall_replace_the_complete_plugin_folder(self):
         with tempfile.TemporaryDirectory(prefix="kicad-blocks-install-test-") as temp:
             user_data = pathlib.Path(temp) / "KiCad"
