@@ -108,6 +108,9 @@ def main() -> None:
         canvas = plugin_actions.tk.Canvas(preview_root, width=680, height=300)
         canvas.pack()
         try:
+            native_image = plugin_actions._native_symbol_preview_photo(target)
+            if native_image.width() <= 0 or native_image.height() <= 0:
+                raise AssertionError("The native KiCad preview image is empty.")
             plugin_actions._draw_facade_preview(canvas, target)
             preview_root.update_idletasks()
             image_items = canvas.find_withtag("image")
