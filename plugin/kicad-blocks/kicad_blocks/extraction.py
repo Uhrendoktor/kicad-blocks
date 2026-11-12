@@ -11,7 +11,7 @@ import uuid
 from pathlib import Path
 
 from .model import BlockPin
-from .pcb_layout import _Quoted, _all, _direct, _dump, _head, parse_sexpr
+from .pcb_layout import _all, _direct, _dump, _head, _Quoted, parse_sexpr
 
 _LABEL_SHAPES = {
     "input": "input",
