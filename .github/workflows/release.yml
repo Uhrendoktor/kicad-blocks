@@ -4,10 +4,8 @@ permissions:
   contents: write
   actions: read
 
+# This workflow is manual-only: pushing or creating a version tag does not publish a release.
 on:
-  push:
-    tags:
-      - "v1.*"
   workflow_dispatch:
     inputs:
       tag:
