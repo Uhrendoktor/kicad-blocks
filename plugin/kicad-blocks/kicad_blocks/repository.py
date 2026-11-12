@@ -878,11 +878,14 @@ def synchronize_local_copy(local_block: BlockRecord) -> dict:
         refreshed_manifest["parameters"] = source_parameters
     if source_variants_changed and not local_variants_changed:
         refreshed_manifest["variants"] = source_variants
+    if source_profiles_changed and not local_profiles_changed:
+        refreshed_manifest["profiles"] = source_profiles
     if source_layouts_changed and not local_layouts_changed:
         _set_layout_configuration(refreshed_manifest, source_layouts)
     refreshed_manifest["base_dependencies"] = source_dependencies
     refreshed_manifest["base_parameters"] = source_parameters
     refreshed_manifest["base_variants"] = source_variants
+    refreshed_manifest["base_profiles"] = source_profiles
     refreshed_manifest["base_layouts"] = source_layouts
     refreshed_manifest["hashes"] = new_hashes
     refreshed_manifest["revision"] = revision_for_hashes(new_hashes)
@@ -896,6 +899,7 @@ def synchronize_local_copy(local_block: BlockRecord) -> dict:
         "dependencies_updated": source_dependencies_changed and not local_dependencies_changed,
         "parameters_updated": source_parameters_changed and not local_parameters_changed,
         "variants_updated": source_variants_changed and not local_variants_changed,
+        "profiles_updated": source_profiles_changed and not local_profiles_changed,
         "layouts_updated": source_layouts_changed and not local_layouts_changed,
         "conflicts": [],
     }
