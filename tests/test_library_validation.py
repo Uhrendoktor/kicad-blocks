@@ -63,7 +63,7 @@ class LibraryValidationTests(unittest.TestCase):
         result = report["blocks"][0]
         self.assertEqual(result["status"], "failed")
         self.assertIn("implementation.kicad_sch", result["hash_mismatches"])
-        self.assertTrue(any("revision" in error for error in result["errors"]))
+        self.assertTrue(any("checksum" in error.casefold() for error in result["errors"]))
 
     def test_missing_assets_are_reported_without_aborting_other_blocks(self):
         first = self.create_block()
