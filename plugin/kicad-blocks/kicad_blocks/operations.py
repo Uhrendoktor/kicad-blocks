@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import json
 import os
 import shutil
 import subprocess
@@ -10,10 +11,17 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from .model import slugify, substitute_parameter_templates
+from .model import (
+    revision_for_hashes,
+    sha256_file,
+    slugify,
+    substitute_parameter_templates,
+    resolve_profile_configuration,
+)
 from .repository import (
     BlockOccurrence,
     BlockRecord,
+    read_manifest,
     resolve_dependency_occurrences,
 )
 
@@ -171,6 +179,151 @@ def export_block_bom(
         "block_count": len(blocks),
         "row_count": len(rows),
     }
+
+
+def validate_block_library(
+    library_root: Path,
+    report_directory: Path,
+    kicad_cli: str | Path | None = None,
+    *,
+    run_erc: bool = True,
+) -> dict[str, Any]:
+    """Validate every shared block's manifest, assets, profiles and dependencies.
+
+    Optionally run recursive KiCad ERC for every block. The machine-readable
+    report is written even when individual block manifests or assets are bad.
+    """
+    library_root = Path(library_root).expanduser().resolve()
+    report_directory = Path(report_directory).expanduser().resolve()
+    if not library_root.is_dir():
+        raise FileNotFoundError(f"Block library directory does not exist: {library_root}")
+
+    report_directory.mkdir(parents=True, exist_ok=True)
+    report_path = report_directory / "library-validation.json"
+    block_reports: list[dict[str, Any]] = []
+    valid_records: list[BlockRecord] = []
+    discovered = sorted(library_root.glob("*.kicad_block"))
+
+    for block_path in discovered:
+        item: dict[str, Any] = {
+            "path": str(block_path),
+            "name": block_path.stem,
+            "status": "passed",
+            "errors": [],
+            "warnings": [],
+            "missing_assets": [],
+            "hash_mismatches": [],
+            "erc": [],
+        }
+        try:
+            manifest = read_manifest(block_path)
+            item["name"] = str(manifest.get("name", block_path.stem))
+            item["block_id"] = str(manifest.get("block_id", ""))
+            record = BlockRecord(path=block_path, manifest=manifest)
+            valid_records.append(record)
+        except Exception as exc:
+            item["status"] = "failed"
+            item["errors"].append(f"Manifest: {exc}")
+            block_reports.append(item)
+            continue
+
+        declared_files = set(str(name) for name in manifest.get("files", []))
+        declared_hashes = manifest.get("hashes", {})
+        actual_hashes: dict[str, str] = {}
+        for file_name in sorted(declared_files):
+            asset_path = block_path / file_name
+            if not asset_path.is_file():
+                item["missing_assets"].append(file_name)
+                continue
+            actual_hashes[file_name] = sha256_file(asset_path)
+            if declared_hashes.get(file_name) != actual_hashes[file_name]:
+                item["hash_mismatches"].append(file_name)
+
+        undeclared_hashes = sorted(set(declared_hashes) - declared_files)
+        if undeclared_hashes:
+            item["errors"].append(
+                "Hash entries are not listed in manifest.files: "
+                + ", ".join(undeclared_hashes)
+            )
+        untracked_files = sorted(declared_files - set(declared_hashes))
+        if untracked_files:
+            item["errors"].append(
+                "Manifest files have no corresponding hash: " + ", ".join(untracked_files)
+            )
+        if item["missing_assets"]:
+            item["errors"].append(
+                "Missing block assets: " + ", ".join(item["missing_assets"])
+            )
+        if item["hash_mismatches"]:
+            item["errors"].append(
+                "Asset checksum mismatch: " + ", ".join(item["hash_mismatches"])
+            )
+        if not item["missing_assets"] and not item["hash_mismatches"] and not undeclared_hashes:
+            calculated_revision = revision_for_hashes(actual_hashes)
+            if manifest.get("revision") != calculated_revision:
+                item["errors"].append(
+                    "Manifest revision does not match the hashes of the current block assets."
+                )
+
+        profile_errors = []
+        for profile in manifest.get("profiles", []):
+            try:
+                resolve_profile_configuration(manifest, str(profile["id"]))
+            except Exception as exc:
+                profile_errors.append(f"{profile.get('name', profile.get('id'))}: {exc}")
+        if profile_errors:
+            item["errors"].append(
+                "Invalid configuration profile(s): " + "; ".join(profile_errors)
+            )
+
+        try:
+            occurrences = resolve_dependency_occurrences(record, library_root)
+            item["dependency_count"] = max(0, len(occurrences) - 1)
+        except Exception as exc:
+            item["errors"].append(f"Dependency graph: {exc}")
+
+        if not item["errors"] and run_erc:
+            try:
+                erc_reports = validate_block_tree(
+                    record,
+                    report_directory / "erc" / str(manifest["block_id"]),
+                    kicad_cli,
+                    library_root,
+                )
+                item["erc"] = erc_reports
+                violations = [
+                    result["block"] for result in erc_reports if result["violations"]
+                ]
+                if violations:
+                    item["warnings"].append(
+                        "ERC violations reported by KiCad for: " + ", ".join(violations)
+                    )
+            except Exception as exc:
+                item["errors"].append(f"Recursive ERC: {exc}")
+
+        if item["errors"]:
+            item["status"] = "failed"
+        elif item["warnings"]:
+            item["status"] = "warnings"
+        block_reports.append(item)
+
+    failed = [item for item in block_reports if item["status"] == "failed"]
+    warning_blocks = [item for item in block_reports if item["status"] == "warnings"]
+    summary = {
+        "library": str(library_root),
+        "report": str(report_path),
+        "block_count": len(block_reports),
+        "passed_count": len(block_reports) - len(failed) - len(warning_blocks),
+        "warning_count": len(warning_blocks),
+        "failed_count": len(failed),
+        "status": "failed" if failed else ("warnings" if warning_blocks else "passed"),
+        "blocks": block_reports,
+    }
+    report_path.write_text(
+        json.dumps(summary, indent=2, ensure_ascii=False) + "\\n",
+        encoding="utf-8",
+    )
+    return summary
 
 
 def validate_block_tree(
