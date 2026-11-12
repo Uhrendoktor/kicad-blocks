@@ -201,7 +201,6 @@ def validate_block_library(
     report_directory.mkdir(parents=True, exist_ok=True)
     report_path = report_directory / "library-validation.json"
     block_reports: list[dict[str, Any]] = []
-    valid_records: list[BlockRecord] = []
     discovered = sorted(library_root.glob("*.kicad_block"))
 
     for block_path in discovered:
@@ -220,7 +219,6 @@ def validate_block_library(
             item["name"] = str(manifest.get("name", block_path.stem))
             item["block_id"] = str(manifest.get("block_id", ""))
             record = BlockRecord(path=block_path, manifest=manifest)
-            valid_records.append(record)
         except Exception as exc:
             item["status"] = "failed"
             item["errors"].append(f"Manifest: {exc}")
@@ -258,7 +256,12 @@ def validate_block_library(
             item["errors"].append(
                 "Asset checksum mismatch: " + ", ".join(item["hash_mismatches"])
             )
-        if not item["missing_assets"] and not item["hash_mismatches"] and not undeclared_hashes:
+        if (
+            not item["missing_assets"]
+            and not item["hash_mismatches"]
+            and not undeclared_hashes
+            and not untracked_files
+        ):
             calculated_revision = revision_for_hashes(actual_hashes)
             if manifest.get("revision") != calculated_revision:
                 item["errors"].append(
