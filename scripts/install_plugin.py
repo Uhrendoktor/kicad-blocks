@@ -174,7 +174,9 @@ def install_plugin(
         shutil.rmtree(staging_root, ignore_errors=True)
         if moved_existing and backup.exists() and not destination.exists():
             backup.rename(destination)
-    legacy_destination = (\n        documents_home / "kicad" / version / "plugins" / PLUGIN_DIRECTORY_NAME\n    )
+    legacy_destination = (
+        documents_home / "kicad" / version / "plugins" / PLUGIN_DIRECTORY_NAME
+    )
     if legacy_destination != destination and legacy_destination.is_dir():
         legacy_manifest_path = legacy_destination / "plugin.json"
         try:
