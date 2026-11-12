@@ -39,6 +39,7 @@ class STUSB4500ReferenceTests(unittest.TestCase):
             '"NC"',
             '(label "VBUS_VS_DISCH"',
             '(label "VREG_1V2"',
+            '(label "VREG_2V7"',
             '(hierarchical_label "VBUS"',
             '(hierarchical_label "CC1"',
             '(hierarchical_label "CC2"',
@@ -65,6 +66,16 @@ class STUSB4500ReferenceTests(unittest.TestCase):
         )
         self.assertNotIn("(global_label ", content)
         self.assertNotIn("VBUS_SENSE", content)
+        self.assertNotIn('(label "1V2"', content)
+        self.assertIn('"21": ("VREG_1V2", "local", "")', content)
+        self.assertIn('"22": ("GND", "local", "")', content)
+        self.assertIn('"23": ("VREG_2V7", "local", "")', content)
+        self.assertIn('"24": ("VBUS", "local", "")', content)
+        self.assertIn('"25": ("GND", "local", "")', content)
+        # These are real named QFN functions left unused in Figure 10, not NC
+        # pins. The generator must leave them explicitly unconnected.
+        for pin in ("11", "14", "15", "17", "20"):
+            self.assertIn(f'"{pin}": ("NC", "nc", "")', content)
 
     def test_external_ports_use_standard_kicad_electrical_shapes(self) -> None:
         with tempfile.TemporaryDirectory(prefix="stusb4500-reference-") as temporary:
