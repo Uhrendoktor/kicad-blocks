@@ -22,7 +22,12 @@ from kicad_blocks.model import (
 )
 from kicad_blocks.repository import (
     add_dependency,
+    add_library_root,
+    build_project_symbol_catalog,
     create_block,
+    default_library_root,
+    library_roots,
+    remove_library_root,
     link_instance_to_local_copy,
     list_blocks,
     local_copy_for_instance,
@@ -131,16 +136,86 @@ class BlockModelTests(unittest.TestCase):
         self.assertEqual(manifest["runtime"]["type"], "python")
         self.assertTrue(manifest["actions"])
         expected_scopes = {
-            "browse-library": ["schematic"],
+            "manage-library": ["schematic"],
+            "create-block": ["schematic"],
             "open-implementation": ["schematic"],
-            "manager": ["schematic"],
+            "configure-instance": ["schematic"],
+            "make-local-copy": ["schematic"],
+            "synchronize-local-copy": ["schematic"],
+            "edit-facade": ["schematic"],
+            "publish-block": ["schematic"],
+            "recursive-bom": ["schematic"],
+            "recursive-erc": ["schematic"],
+            "validate-libraries": ["schematic"],
+            "apply-pcb-layout": ["schematic"],
+            "apply-multiple-pcb-layouts": ["schematic"],
+            "nest-block": ["schematic"],
             "place-imported-layout": ["pcb"],
         }
+        self.assertEqual(
+            {action["identifier"] for action in manifest["actions"]},
+            set(expected_scopes),
+        )
         for action in manifest["actions"]:
             self.assertTrue(action["identifier"])
             self.assertTrue(action["entrypoint"])
             self.assertEqual(action["scopes"], expected_scopes[action["identifier"]])
             self.assertTrue((PLUGIN / action["entrypoint"]).is_file())
+            arguments = action.get("args", [])
+            if action["identifier"] != "place-imported-layout":
+                self.assertEqual(arguments, [action["identifier"]] if action["identifier"] != "manage-library" else ["manage-library"])
+                self.assertEqual(action["entrypoint"], "actions.py")
+            for key in ("icons-light", "icons-dark"):
+                for icon in action.get(key, []):
+                    self.assertTrue((PLUGIN / icon).is_file(), icon)
+        self.assertNotIn("manager", expected_scopes)
+
+    def test_registered_block_libraries_build_one_project_symbol_catalog(self):
+        import os
+        from unittest.mock import patch
+
+        with tempfile.TemporaryDirectory(prefix="kicad-block-multi-library-") as temp:
+            root = Path(temp)
+            settings = root / "settings.json"
+            first_library = root / "library-one"
+            second_library = root / "library-two"
+            project = root / "project"
+            first_library.mkdir()
+            second_library.mkdir()
+            project.mkdir()
+            with patch("kicad_blocks.repository.settings_file", return_value=settings), patch.dict(
+                os.environ, {"KICAD_BLOCKS_LIBRARY": ""}, clear=False
+            ):
+                first = create_block(
+                    first_library,
+                    "Library One Block",
+                    parse_pins("VIN:input, GND:passive"),
+                )
+                second = create_block(
+                    second_library,
+                    "Library Two Block",
+                    parse_pins("SDA:bidirectional, SCL:bidirectional"),
+                )
+
+                add_library_root(first_library, make_default=True)
+                add_library_root(second_library)
+                registered = library_roots()
+                self.assertEqual(registered[:2], [first_library.resolve(), second_library.resolve()])
+                self.assertEqual(default_library_root(), first_library.resolve())
+
+                catalog = build_project_symbol_catalog(
+                    project, [first_library, second_library]
+                )
+                catalog_text = catalog.read_text(encoding="utf-8")
+                self.assertIn(first.manifest["symbol_name"], catalog_text)
+                self.assertIn(second.manifest["symbol_name"], catalog_text)
+                self.assertTrue(catalog.is_file())
+
+                remove_library_root(second_library)
+                self.assertNotIn(second_library.resolve(), library_roots())
+                self.assertTrue(second_library.exists())
+                self.assertEqual(default_library_root(), first_library.resolve())
+
 
     def test_parse_pins_aliases_and_default(self):
         pins = parse_pins("VIN:input, GND, SDA:bidir, ALERT:tristate")
