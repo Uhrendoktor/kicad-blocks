@@ -55,39 +55,30 @@ jobs:
           echo "KICAD_CLI=$CLI" >> "$GITHUB_ENV"
           "$CLI" version
 
-      - name: Install KiCad schematic symbol libraries if missing
+      - name: Fetch pinned official KiCad symbol definitions
         shell: bash
         run: |
           set -euo pipefail
-          if find /usr/share -name Interface_USB.kicad_sym -print -quit 2>/dev/null | grep -q .; then
-            echo "KiCad schematic symbol libraries are already installed."
-            exit 0
-          fi
-          if [[ "$(id -u)" -eq 0 ]]; then
-            SUDO=()
-          elif command -v sudo >/dev/null 2>&1 && sudo -n true; then
-            SUDO=(sudo)
-          else
-            echo "::error::KiCad CLI is installed but the official schematic symbol libraries are missing, and the runner cannot install packages."
-            exit 1
-          fi
-          source /etc/os-release
-          case "${VERSION_CODENAME:-}" in
-            noble)
-              DEB="kicad-nightly-symbols_202610290319+45efbd93b~12~ubuntu24.04.1_all.deb"
-              ;;
-            jammy)
-              DEB="kicad-nightly-symbols_202610290319+45efbd93b~12~ubuntu22.04.1_all.deb"
-              ;;
-            *)
-              echo "::error::No pinned KiCad nightly symbol-library package for ${VERSION_CODENAME:-unknown}."
-              exit 1
-              ;;
-          esac
-          URL="https://deb.kicad.org/kicad-dev-nightly/ubuntu/pool/main/k/kicad-library-symbols/$DEB"
-          curl --fail --location --silent --show-error "$URL" --output "${RUNNER_TEMP}/kicad-nightly-symbols.deb"
-          "${SUDO[@]}" dpkg -i "${RUNNER_TEMP}/kicad-nightly-symbols.deb"
-          find /usr/share -name Interface_USB.kicad_sym -print -quit | grep -q .
+          SYMBOLS_DIR="${RUNNER_TEMP}/kicad-symbols"
+          SYMBOLS_REF="$(tr -d '[:space:]' < examples/stusb4500/kicad-symbols.lock)"
+          mkdir -p "$SYMBOLS_DIR"
+          git -C "$SYMBOLS_DIR" init
+          git -C "$SYMBOLS_DIR" remote add origin https://gitlab.com/kicad/libraries/kicad-symbols.git
+          git -C "$SYMBOLS_DIR" config core.sparseCheckout true
+          cat > "$SYMBOLS_DIR/.git/info/sparse-checkout" <<'EOF'
+          /Interface_USB.kicad_symdir/STUSB4500QTR.kicad_sym
+          /Connector.kicad_symdir/USB_C_Receptacle.kicad_sym
+          /Connector_Generic.kicad_symdir/Conn_01x02.kicad_sym
+          /Connector_Generic.kicad_symdir/Conn_01x06.kicad_sym
+          /Device.kicad_symdir/C.kicad_sym
+          /Device.kicad_symdir/R.kicad_sym
+          /Device.kicad_symdir/D_TVS.kicad_sym
+          /Transistor_FET.kicad_symdir/Q_PMOS_GSD.kicad_sym
+          EOF
+          git -C "$SYMBOLS_DIR" fetch --depth 1 origin "$SYMBOLS_REF"
+          git -C "$SYMBOLS_DIR" checkout --detach FETCH_HEAD
+          test -f "$SYMBOLS_DIR/Interface_USB.kicad_symdir/STUSB4500QTR.kicad_sym"
+          echo "KICAD_SYMBOL_DIR=$SYMBOLS_DIR" >> "$GITHUB_ENV"
 
       - name: Inspect local runner
         shell: bash
