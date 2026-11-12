@@ -24,7 +24,7 @@ class STUSB4500ReferenceTests(unittest.TestCase):
         self.assertIn('(symbol "Connector:USB_C_Receptacle"', content)
         self.assertIn('(symbol "STUSB4500_Custom:ESDA25W"', content)
         self.assertIn('"STL6P3LLH6"', content)
-        self.assertIn('"ESDA25P35"', content)
+        self.assertIn('"ESDA25P35-1U1M"', content)
         self.assertIn('"4.7uF"', content)
         self.assertIn('"100nF"', content)
         self.assertIn('"4.7k"', content)
