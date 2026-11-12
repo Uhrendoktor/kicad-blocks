@@ -273,24 +273,57 @@ def main() -> int:
             library, "Sensor Input", parse_pins("SENSOR:input, GND:passive"),
             description="A second library entry used to demonstrate searchable filtering.",
         )
+        reference_source = Path(temporary) / "stusb4500-reference.kicad_sch"
+        generate_reference_schematic(reference_source)
         target = create_block(
-            library, "USB-C Power",
-            parse_pins("VBUS:input, GND:passive, CC1:bidir, CC2:bidir, VOUT:output"),
-            description="A reusable USB-C interface with selectable power implementation.",
+            library, "STUSB4500 USB-PD Sink",
+            parse_pins(
+                "VBUS:input, GND:passive, CC1:bidir, CC2:bidir, VSNK:output, "
+                "SCL:bidir, SDA:bidir, ALERT#:output, RESET:input"
+            ),
+            description=(
+                "STUSB4500QTR USB Type-C PD sink reference circuit based on "
+                "ST DS12499 Rev. 8 Figure 10."
+            ),
             parameters=[{
-                "name": "CURRENT_LIMIT", "type": "number", "default": "1.5",
-                "description": "Maximum source current in amperes.",
+                "name": "PDO_CURRENT_A", "type": "number", "default": "2.4",
+                "description": "Current rating of the selected sink PDO in amperes.",
             }],
             variant_files=[
-                {"value": "3V3", "path": seed.implementation},
-                {"value": "5V", "path": seed.implementation},
+                {"value": "5V", "path": reference_source},
+                {"value": "9V", "path": reference_source},
+                {"value": "12V", "path": reference_source},
             ],
-            profiles=[{
-                "id": "usb_5v_mode", "name": "USB 5V mode",
-                "description": "Select the 5 V implementation and 3 A current limit.",
-                "variant": "5V", "parameters": {"CURRENT_LIMIT": "3.0"},
-            }],
+            profiles=[
+                {
+                    "id": "pdo1_5v_2a4", "name": "5 V / 2.4 A (PDO1)",
+                    "description": "Datasheet Table 19 example: fixed 5 V sink PDO.",
+                    "variant": "5V", "parameters": {"PDO_CURRENT_A": "2.4"},
+                },
+                {
+                    "id": "pdo2_9v_1a33", "name": "9 V / 1.33 A (PDO2)",
+                    "description": "Datasheet Table 19 example: 9 V sink PDO.",
+                    "variant": "9V", "parameters": {"PDO_CURRENT_A": "1.33"},
+                },
+                {
+                    "id": "pdo3_12v_1a", "name": "12 V / 1.0 A (PDO3)",
+                    "description": "Datasheet Table 19 example: 12 V sink PDO.",
+                    "variant": "12V", "parameters": {"PDO_CURRENT_A": "1.0"},
+                },
+            ],
         )
+        shutil.copy2(reference_source, target.implementation)
+        manifest_path = target.path / "manifest.json"
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest["hashes"]["implementation.kicad_sch"] = hashlib.sha256(
+            target.implementation.read_bytes()
+        ).hexdigest()
+        manifest["revision"] = revision_for_hashes(manifest["hashes"])
+        manifest_path.write_text(
+            json.dumps(manifest, indent=2, ensure_ascii=False) + "\n",
+            encoding="utf-8",
+        )
+        target.manifest.update(manifest)
         render_native_svgs(cli, target, output_dir)
         capture_picker([target, sensor], output_dir)
         build_gif(output_dir)
