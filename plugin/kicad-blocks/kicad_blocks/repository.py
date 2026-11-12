@@ -430,6 +430,7 @@ def create_block(
     reference_prefix: str = "X",
     source_schematic: Path | None = None,
     source_project_name: str | None = None,
+    source_sheet_uuid: str | None = None,
     layout_file: Path | None = None,
     layout_project_file: Path | None = None,
     layout_files: list[dict] | None = None,
@@ -449,17 +450,19 @@ def create_block(
         raise ValueError("Block name cannot be empty.")
     block_id = str(uuid.uuid4())
     implementation_content = None
+    implementation_assets: dict[str, str] = {}
     if source_schematic is not None:
         if pins is not None:
             raise ValueError(
                 "Do not type or pass a pin list when creating from a hierarchical sheet; "
                 "the sheet's hierarchical labels define the facade pins."
             )
-        pins, implementation_content = prepare_block_implementation(
+        pins, implementation_content, implementation_assets = prepare_block_implementation(
             Path(source_schematic),
             name,
             block_id,
             source_project_name or root.name,
+            source_sheet_uuid,
         )
     if not pins:
         raise ValueError(
@@ -529,6 +532,9 @@ def create_block(
             implementation_content, encoding="utf-8"
         )
         files = [SYMBOL_NAME, IMPLEMENTATION_NAME]
+        for nested_file, nested_content in implementation_assets.items():
+            (staging / nested_file).write_text(nested_content, encoding="utf-8")
+        files.extend(sorted(implementation_assets))
         variants: list[dict[str, str]] = []
         seen_variant_values: set[str] = set()
         seen_variant_files: set[str] = set()
