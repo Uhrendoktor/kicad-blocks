@@ -20,7 +20,7 @@ _LABEL_SHAPES = {
     "tri_state": "tristate",
     "passive": "passive",
 }
-_PIN_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_./+-]*\\Z")
+_PIN_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_./+-]*\Z")
 
 
 def _parse_selection(selection_fragment: str) -> list:
