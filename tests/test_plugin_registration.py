@@ -421,6 +421,67 @@ def main() -> None:
             if "plugin environment ready" not in package_probe.stdout:
                 raise AssertionError(package_probe.stdout)
 
+            # Launch the actual script entrypoint exactly as KiCad does: the
+            # script path is the sole positional argument, not an action ID.
+            # Confirm the task hub opens as a real Tk window without needing an
+            # active KiCad IPC document, then close it cleanly.
+            hub_log = root / "task-hub-smoke.log"
+            with hub_log.open("w", encoding="utf-8") as stream:
+                hub_process = subprocess.Popen(
+                    [str(env_python), str(hub_entrypoint)],
+                    env=env,
+                    stdout=stream,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                )
+            hub_window = None
+            hub_title = ""
+            hub_deadline = time.monotonic() + 8.0
+            try:
+                while time.monotonic() < hub_deadline:
+                    if hub_process.poll() is not None:
+                        raise RuntimeError(
+                            "The KiCad Blocks task hub entrypoint exited before opening its window. "
+                            f"exit={hub_process.returncode}; "
+                            f"log={hub_log.read_text(errors='replace')[-6000:]}"
+                        )
+                    for candidate, title, _ in _windows(xdotool):
+                        candidate_pid = subprocess.run(
+                            [xdotool, "getwindowpid", candidate],
+                            capture_output=True,
+                            text=True,
+                            check=False,
+                        ).stdout.strip()
+                        if candidate_pid == str(hub_process.pid):
+                            hub_window, hub_title = candidate, title
+                            break
+                    if hub_window:
+                        break
+                    time.sleep(0.1)
+                if hub_window is None or "KiCad Blocks" not in hub_title:
+                    raise TimeoutError(
+                        "The task hub did not open a visible KiCad Blocks window. "
+                        f"title={hub_title!r}; log={hub_log.read_text(errors='replace')[-6000:]}"
+                    )
+                print(f"Task hub opened successfully: {hub_title}")
+            finally:
+                if hub_window is not None:
+                    subprocess.run(
+                        [xdotool, "windowclose", hub_window],
+                        check=False,
+                        capture_output=True,
+                        text=True,
+                    )
+                try:
+                    hub_process.wait(timeout=3.0)
+                except subprocess.TimeoutExpired:
+                    hub_process.terminate()
+                    try:
+                        hub_process.wait(timeout=3.0)
+                    except subprocess.TimeoutExpired:
+                        hub_process.kill()
+                        hub_process.wait(timeout=3.0)
+
             # Exercise the picker in KiCad's managed plugin environment so
             # CairoSVG and the other declared plugin dependencies are available.
             # The managed interpreter shares the system Tk installation.
