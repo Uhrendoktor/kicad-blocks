@@ -28,7 +28,7 @@ from kicad_blocks.pcb_layout import (
 
 DATASHEET = "https://www.st.com/resource/en/datasheet/stusb4500.pdf"
 ROOT_UUID = str(uuid.uuid5(uuid.NAMESPACE_URL, "kicad-blocks:stusb4500-reference:root"))
-PROJECT = "STUSB4500 reference implementation"
+PROJECT = "functional-block-implementation"
 
 
 def _uid(key: str) -> str:
@@ -381,7 +381,7 @@ def generate_reference_schematic(destination: Path) -> Path:
             ])
 
     schematic = [
-        "kicad_sch", ["version", "20250114"], ["generator", _Quoted("eeschema")],
+        "kicad_sch", ["version", "20250114"], ["generator", _Quoted("kicad-blocks")],
         ["uuid", _Quoted(ROOT_UUID)], ["paper", _Quoted("A3")],
         ["title_block",
             ["title", _Quoted("STUSB4500 USB Power Delivery Sink")],
