@@ -59,7 +59,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if find /usr/share /usr/local/share -name Interface_USB.kicad_sym -print -quit 2>/dev/null | grep -q .; then
+          if find /usr/share -name Interface_USB.kicad_sym -print -quit 2>/dev/null | grep -q .; then
             echo "KiCad schematic symbol libraries are already installed."
             exit 0
           fi
@@ -71,14 +71,23 @@ jobs:
             echo "::error::KiCad CLI is installed but the official schematic symbol libraries are missing, and the runner cannot install packages."
             exit 1
           fi
-          if ! apt-cache show kicad-nightly-symbols >/dev/null 2>&1; then
-            "${SUDO[@]}" apt-get update
-            "${SUDO[@]}" apt-get install -y --no-install-recommends software-properties-common
-            "${SUDO[@]}" add-apt-repository --yes ppa:kicad/kicad-dev-nightly
-            "${SUDO[@]}" apt-get update
-          fi
-          "${SUDO[@]}" apt-get install -y --no-install-recommends kicad-nightly-symbols
-          find /usr/share /usr/local/share -name Interface_USB.kicad_sym -print -quit | grep -q .
+          source /etc/os-release
+          case "${VERSION_CODENAME:-}" in
+            noble)
+              DEB="kicad-nightly-symbols_202610290319+45efbd93b~12~ubuntu24.04.1_all.deb"
+              ;;
+            jammy)
+              DEB="kicad-nightly-symbols_202610290319+45efbd93b~12~ubuntu22.04.1_all.deb"
+              ;;
+            *)
+              echo "::error::No pinned KiCad nightly symbol-library package for ${VERSION_CODENAME:-unknown}."
+              exit 1
+              ;;
+          esac
+          URL="https://deb.kicad.org/kicad-dev-nightly/ubuntu/pool/main/k/kicad-library-symbols/$DEB"
+          curl --fail --location --silent --show-error "$URL" --output "${RUNNER_TEMP}/kicad-nightly-symbols.deb"
+          "${SUDO[@]}" dpkg -i "${RUNNER_TEMP}/kicad-nightly-symbols.deb"
+          find /usr/share -name Interface_USB.kicad_sym -print -quit | grep -q .
 
       - name: Inspect local runner
         shell: bash
