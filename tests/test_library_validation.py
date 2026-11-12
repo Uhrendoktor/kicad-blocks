@@ -93,7 +93,7 @@ class LibraryValidationTests(unittest.TestCase):
 
         self.assertEqual(report["block_count"], 2)
         good_result = next(item for item in report["blocks"] if item["block_id"] == good.manifest["block_id"])
-        broken_result = next(item for item in report["blocks"] if item["name"] == "broken.kicad_block")
+        broken_result = next(item for item in report["blocks"] if item["name"] == "broken")
         self.assertEqual(good_result["status"], "passed")
         self.assertEqual(broken_result["status"], "failed")
         self.assertTrue(any("Manifest" in error for error in broken_result["errors"]))
