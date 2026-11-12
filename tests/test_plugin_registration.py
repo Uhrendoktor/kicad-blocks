@@ -307,7 +307,7 @@ def main() -> None:
         action = next(
             item
             for item in manifest["actions"]
-            if item["identifier"] == "manager"
+            if item["identifier"] == "manage-library"
         )
         if action.get("scopes") != ["schematic"] or not action.get("show-button"):
             raise AssertionError(
