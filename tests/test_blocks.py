@@ -9,6 +9,8 @@ from pathlib import Path
 PLUGIN = Path(__file__).resolve().parents[1] / "plugin" / "kicad-blocks"
 sys.path.insert(0, str(PLUGIN))
 
+from kicad_blocks.extraction import extract_hierarchical_pins
+
 from kicad_blocks.model import (
     facade_pin_connection_points,
     parse_parameters,
@@ -276,6 +278,22 @@ class BlockModelTests(unittest.TestCase):
                 ("SDA", "3", "bidirectional"),
                 ("ALERT", "4", "tristate"),
             ],
+        )
+
+    def test_parse_pins_accepts_active_low_hash_suffix(self):
+        pins = parse_pins("ALERT#:output")
+        self.assertEqual(
+            [(pin.name, pin.electrical_type) for pin in pins],
+            [("ALERT#", "output")],
+        )
+
+    def test_hierarchical_pin_extraction_accepts_active_low_hash_suffix(self):
+        pins = extract_hierarchical_pins(
+            ["kicad_sch", ["hierarchical_label", "ALERT#", ["shape", "output"]]]
+        )
+        self.assertEqual(
+            [(pin.name, pin.electrical_type) for pin in pins],
+            [("ALERT#", "output")],
         )
 
     def test_parse_pins_rejects_invalid_definitions(self):
