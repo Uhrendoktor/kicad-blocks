@@ -2016,23 +2016,9 @@ def _show_library_browser(
     search_entry.focus_set()
 
 def run_library_browser() -> None:
-    """Launch the searchable block library browser as a standalone KiCad action."""
-    _load_tkinter()
-    editor_window_id = _capture_eeschema_window_id()
-    from kipy import KiCad
+    """Launch the all-libraries functional-block browser."""
+    run_action("manage-library")
 
-    kicad = KiCad()
-    schematic = kicad.get_schematic()
-    if schematic is None:
-        raise RuntimeError("No active schematic was found. Open and save a project first.")
-    project_dir = project_directory(schematic)
-    library_root = default_library_root()
-    library_root.mkdir(parents=True, exist_ok=True)
-    root = tk.Tk()
-    _show_library_browser(
-        root, schematic, kicad, project_dir, library_root, editor_window_id
-    )
-    root.mainloop()
 
 
 def _field_value(instance, field_name: str) -> str:
@@ -2128,36 +2114,11 @@ def _open_selected_block_implementation(root, schematic, kicad, project_dir, par
 
 
 def open_selected_implementation_action() -> None:
-    """Standalone KiCad add-on action for opening the selected block facade."""
-    _load_tkinter()
-    parent = tk.Tk()
-    parent.withdraw()
-    try:
-        from kipy import KiCad
-
-        kicad = KiCad()
-        schematic = kicad.get_schematic()
-        if schematic is None:
-            raise RuntimeError("No active schematic was found. Open a project first.")
-        project_dir = project_directory(schematic)
-        library_root = default_library_root()
-        if not library_root.is_dir():
-            raise FileNotFoundError(
-                f"KiCad Blocks library was not found: {library_root}. "
-                "Use the Manager to create or configure a block library first."
-            )
-        _open_selected_block_implementation(
-            library_root, schematic, kicad, project_dir, parent
-        )
-    except Exception as exc:
-        LOG.exception("Open Block Implementation failed")
-        messagebox.showerror("Open Block Implementation", str(exc), parent=parent)
-    finally:
-        with contextlib.suppress(tk.TclError):
-            parent.destroy()
+    """Standalone compatibility entry point for the selected block action."""
+    run_action("open-implementation")
 
 
-def _export_recursive_bom(root: Path, parent, schematic=None, project_dir: Path | None = None) -> None:
+def _export_recursive_bom(root: Path | list[Path], parent, schematic=None, project_dir: Path | None = None) -> None:
     parameter_values = None
     selection = list(schematic.get_selection()) if schematic is not None else []
     selected = [
@@ -2168,9 +2129,10 @@ def _export_recursive_bom(root: Path, parent, schematic=None, project_dir: Path 
         record = _block_record_for_instance(root, project_dir, selected[0])
         parameter_values = _parameter_values_for_instance(selected[0], record)
     else:
-        record = _pick_record(list_blocks(root), parent, "Export Recursive Block BOM")
+        record = _pick_record(_list_library_records(root), parent, "Export Recursive Block BOM")
     if record is None:
         return
+    library_root = record.path.parent
     output = filedialog.asksaveasfilename(
         title="Save recursive block BOM",
         defaultextension=".csv",
@@ -2181,7 +2143,7 @@ def _export_recursive_bom(root: Path, parent, schematic=None, project_dir: Path 
     if not output:
         return
     result = export_block_bom(
-        record, Path(output), find_kicad_cli(), root, parameter_values=parameter_values
+        record, Path(output), find_kicad_cli(), library_root, parameter_values=parameter_values
     )
     messagebox.showinfo(
         "Block BOM Exported",
@@ -2191,44 +2153,54 @@ def _export_recursive_bom(root: Path, parent, schematic=None, project_dir: Path 
     )
 
 
-def _validate_shared_library(root: Path, parent) -> None:
-    """Validate every block's manifest, assets, profiles, dependencies and ERC."""
+def _validate_shared_library(root: Path | list[Path], parent) -> None:
+    """Validate every registered library, keeping each report in its own folder."""
     output = filedialog.askdirectory(
-        title="Select a folder for the library validation report",
+        title="Select a folder for the library validation reports",
         parent=parent,
     )
     if not output:
         return
-    result = validate_block_library(
-        root,
-        Path(output),
-        find_kicad_cli(),
-        run_erc=True,
-    )
+    results = []
+    for library_path in _library_roots_for(root):
+        report_dir = Path(output) / library_path.name
+        result = validate_block_library(
+            library_path,
+            report_dir,
+            find_kicad_cli(),
+            run_erc=True,
+        )
+        results.append((library_path, result))
+
+    blocks = [item for _path, result in results for item in result["blocks"]]
+    passed = sum(result["passed_count"] for _path, result in results)
+    warnings = sum(result["warning_count"] for _path, result in results)
+    failed = sum(result["failed_count"] for _path, result in results)
     details = []
-    for item in result["blocks"]:
-        status = str(item["status"]).upper()
-        detail = f"{status}: {item['name']}"
-        problems = item.get("errors", []) + item.get("warnings", [])
-        if problems:
-            detail += "\\n  " + "\\n  ".join(problems)
-        details.append(detail)
+    for library_path, result in results:
+        details.append(f"Library: {library_path}")
+        for item in result["blocks"]:
+            status = str(item["status"]).upper()
+            detail = f"{status}: {item['name']}"
+            problems = item.get("errors", []) + item.get("warnings", [])
+            if problems:
+                detail += "\\n  " + "\\n  ".join(problems)
+            details.append(detail)
     message = (
-        f"Validated {result['block_count']} block(s).\\n"
-        f"Passed: {result['passed_count']}  |  Warnings: {result['warning_count']}  |  "
-        f"Failed: {result['failed_count']}\\n\\n"
-        + ("\\n\\n".join(details) if details else "The library contains no block assets.")
-        + f"\\n\\nMachine-readable report: {result['report']}"
+        f"Validated {len(blocks)} block(s) across {len(results)} library/libraries.\\n"
+        f"Passed: {passed}  |  Warnings: {warnings}  |  Failed: {failed}\\n\\n"
+        + ("\\n\\n".join(details) if details else "The registered libraries contain no block assets.")
+        + f"\\n\\nReports: {output}"
     )
-    if result["status"] == "failed":
+    if failed:
         messagebox.showwarning("Block Library Validation — problems found", message, parent=parent)
-    elif result["status"] == "warnings":
+    elif warnings:
         messagebox.showwarning("Block Library Validation — ERC warnings", message, parent=parent)
     else:
         messagebox.showinfo("Block Library Validation Passed", message, parent=parent)
 
 
-def _validate_recursive_erc(root: Path, parent, schematic=None, project_dir: Path | None = None) -> None:
+def _validate_recursive_erc(root: Path | list[Path], parent, schematic=None, project_dir: Path | None = None) -> None:
     parameter_values = None
     selection = list(schematic.get_selection()) if schematic is not None else []
     selected = [
@@ -2239,9 +2211,10 @@ def _validate_recursive_erc(root: Path, parent, schematic=None, project_dir: Pat
         record = _block_record_for_instance(root, project_dir, selected[0])
         parameter_values = _parameter_values_for_instance(selected[0], record)
     else:
-        record = _pick_record(list_blocks(root), parent, "Validate Block Tree (ERC)")
+        record = _pick_record(_list_library_records(root), parent, "Validate Block Tree (ERC)")
     if record is None:
         return
+    library_root = record.path.parent
     output = filedialog.askdirectory(
         title="Select a folder for recursive ERC reports",
         parent=parent,
@@ -2249,7 +2222,7 @@ def _validate_recursive_erc(root: Path, parent, schematic=None, project_dir: Pat
     if not output:
         return
     reports = validate_block_tree(
-        record, Path(output), find_kicad_cli(), root, parameter_values=parameter_values
+        record, Path(output), find_kicad_cli(), library_root, parameter_values=parameter_values
     )
     failed = [item for item in reports if item["violations"]]
     details = "\n".join(
@@ -2265,12 +2238,13 @@ def _validate_recursive_erc(root: Path, parent, schematic=None, project_dir: Pat
 
 
 def _publish_block(root, kicad, project_dir, parent) -> None:
-    record = _pick_record(list_blocks(root), parent, "Publish Library Block")
+    library_paths = _library_roots_for(root)
+    record = _pick_record(_list_library_records(library_paths), parent, "Publish Library Block")
     if record is None:
         return
     result = refresh_library_block(record)
     if result["changed"]:
-        _reload_symbol_library(kicad, LIBRARY_NICKNAME)
+        _register_block(project_dir, record, kicad, library_paths)
     messagebox.showinfo(
         "Library Block Published",
         f"Version: {result['version']}\n"
@@ -2590,7 +2564,8 @@ def _apply_selected_block_pcb_layouts(
 
 
 def _add_nested_dependency(root, parent, parent_window) -> None:
-    records = list_blocks(root)
+    library_paths = _library_roots_for(root)
+    records = _list_library_records(library_paths)
     parent_record = _pick_record(records, parent_window, "Select Parent Block")
     if parent_record is None:
         return
@@ -2641,7 +2616,9 @@ def _add_nested_dependency(root, parent, parent_window) -> None:
         updated = add_dependency(
             parent_record, child_record, pin_map=pin_map, orientation=orientation_deg
         )
-        result = compose_block_implementation(updated, root, find_kicad_cli())
+        result = compose_block_implementation(
+            updated, parent_record.path.parent, find_kicad_cli()
+        )
     except Exception:
         manifest_path.write_bytes(original_manifest)
         raise
@@ -2659,14 +2636,31 @@ def _add_nested_dependency(root, parent, parent_window) -> None:
     )
 
 
-def run() -> None:
-    """Open a small action dashboard for the active schematic document."""
+def run_action(action: str) -> None:
+    """Run one operation directly from KiCad's native plugin action menu."""
+    valid_actions = {
+        "manage-library",
+        "create-block",
+        "open-implementation",
+        "configure-instance",
+        "make-local-copy",
+        "synchronize-local-copy",
+        "edit-facade",
+        "publish-block",
+        "recursive-bom",
+        "recursive-erc",
+        "validate-libraries",
+        "apply-pcb-layout",
+        "apply-multiple-pcb-layouts",
+        "nest-block",
+    }
+    if action not in valid_actions:
+        raise ValueError(f"Unknown KiCad Blocks action: {action!r}")
+
     _load_tkinter()
     editor_window_id = _capture_eeschema_window_id()
     root = tk.Tk()
-    root.title("KiCad Blocks")
-    root.geometry("700x720")
-    root.minsize(560, 620)
+    root.title("Manage KiCad Functional Blocks")
     try:
         from kipy import KiCad
 
@@ -2675,145 +2669,78 @@ def run() -> None:
         if schematic is None:
             raise RuntimeError("No active schematic was found. Open and save a project first.")
         project_dir = project_directory(schematic)
+        library_paths = configured_library_roots()
         library_root = default_library_root()
         library_root.mkdir(parents=True, exist_ok=True)
 
-        actions = [
-            ("create", "Create block from selected sheet", "Select one hierarchical sheet. Its hierarchical labels automatically define the facade pins and electrical types."),
-            ("place", "Browse & place block", "Search the library, preview a facade and place it at the mouse cursor."),
-            ("configure", "Configure block instance", "Choose a linked variant, parameter and PCB layout profile, then customize per-instance values."),
-            ("local", "Make local copy", "Give the selected instance an independent implementation."),
-            ("sync", "Synchronize local copy", "Publish and pull non-conflicting local/library edits."),
-            ("edit", "Open implementation", "Open the selected facade's resolved KB_VARIANT in Eeschema."),
-            ("edit-facade", "Edit facade symbol", "Select one block instance and open its library version in KiCad's native Symbol Editor."),
-            ("publish", "Publish library block", "Publish edits to a shared library block."),
-            ("bom", "Recursive BOM", "Export the selected block and all nested components."),
-            ("erc", "Recursive ERC", "Run ERC on the selected block and dependencies."),
-            ("validate-library", "Validate block library", "Check every block's manifest, assets, profiles, dependencies and recursive ERC."),
-            ("pcb", "Apply one PCB layout", "Merge one selected block layout into a new board copy."),
-            ("pcb-many", "Apply multiple PCB layouts", "Merge layouts for multiple selected block instances."),
-            ("nest", "Nest block", "Compose a reusable block into another block."),
-        ]
-        selected_action = tk.StringVar(value="create")
-        outer = ttk.Frame(root, padding=18)
-        outer.pack(fill="both", expand=True)
-        ttk.Label(
-            outer,
-            text="Reusable schematic blocks",
-            font=("TkDefaultFont", 15, "bold"),
-        ).pack(anchor="w")
-        ttk.Label(
-            outer,
-            text="Choose an operation for the active KiCad schematic. "
-            "Select block symbols in Eeschema before running instance actions.",
-            wraplength=610,
-            justify="left",
-        ).pack(anchor="w", pady=(4, 14))
-        choice_pane = ttk.Frame(outer)
-        choice_pane.pack(fill="both", expand=True)
-        canvas = tk.Canvas(choice_pane, highlightthickness=0, borderwidth=0)
-        scrollbar = ttk.Scrollbar(choice_pane, orient="vertical", command=canvas.yview)
-        canvas.configure(yscrollcommand=scrollbar.set)
-        canvas.pack(side="left", fill="both", expand=True)
-        scrollbar.pack(side="right", fill="y")
-        scroll_content = ttk.Frame(canvas)
-        scroll_window = canvas.create_window(
-            (0, 0), window=scroll_content, anchor="nw"
-        )
-        scroll_content.bind(
-            "<Configure>",
-            lambda _event: canvas.configure(scrollregion=canvas.bbox("all")),
-        )
-        canvas.bind(
-            "<Configure>",
-            lambda event: canvas.itemconfigure(scroll_window, width=event.width),
-        )
-        choices = ttk.LabelFrame(scroll_content, text="Actions", padding=10)
-        choices.pack(fill="both", expand=True)
-        for key, label, description in actions:
-            row = ttk.Frame(choices)
-            row.pack(fill="x", pady=4)
-            ttk.Radiobutton(
-                row, text=label, value=key, variable=selected_action
-            ).pack(anchor="w")
-            ttk.Label(
-                row, text=description, foreground="#555555", wraplength=570,
-                justify="left",
-            ).pack(anchor="w", padx=(25, 0))
-        footer = ttk.Frame(outer)
-        footer.pack(fill="x", pady=(14, 0))
+        if action == "manage-library":
+            _show_library_browser(
+                root, schematic, kicad, project_dir, library_paths, editor_window_id
+            )
+            root.mainloop()
+            return
 
-        def dispatch() -> None:
-            action = selected_action.get()
-            try:
-                if action == "create":
-                    library = _choose_library_root(root)
-                    _create_and_place(
-                        library, schematic, kicad, project_dir, root, editor_window_id
-                    )
-                elif action == "place":
-                    _show_library_browser(
-                        tk.Toplevel(root), schematic, kicad, project_dir,
-                        library_root, editor_window_id
-                    )
-                elif action == "configure":
-                    _show_selected_block_configuration(
-                        schematic, project_dir, library_root, root
-                    )
-                elif action == "local":
-                    path = make_selected_local(schematic, kicad, project_dir, library_root)
-                    messagebox.showinfo(
-                        "Local Copy Created",
-                        f"The selected instance now uses an independent project-local block:\n{path}",
-                        parent=root,
-                    )
-                elif action == "sync":
-                    result = sync_selected_local(schematic, kicad, project_dir)
-                    messagebox.showinfo(
-                        "Local Block Synchronized",
-                        "Published local edits: " + (", ".join(result["published"]) or "none") +
-                        "\nPulled library edits: " + (", ".join(result["pulled"]) or "none") +
-                        "\nConverged edits: " + (", ".join(result["converged"]) or "none"),
-                        parent=root,
-                    )
-                elif action == "edit":
-                    _open_selected_block_implementation(
-                        library_root, schematic, kicad, project_dir, root
-                    )
-                elif action == "edit-facade":
-                    _edit_facade_symbol(
-                        library_root, schematic, project_dir, editor_window_id, root
-                    )
-                elif action == "publish":
-                    _publish_block(library_root, kicad, project_dir, root)
-                elif action == "bom":
-                    library = _choose_library_root(root)
-                    _export_recursive_bom(library, root, schematic, project_dir)
-                elif action == "erc":
-                    library = _choose_library_root(root)
-                    _validate_recursive_erc(library, root, schematic, project_dir)
-                elif action == "validate-library":
-                    library = _choose_library_root(root)
-                    _validate_shared_library(library, root)
-                elif action == "pcb":
-                    _apply_block_pcb_layout(schematic, kicad, project_dir, library_root, root)
-                elif action == "pcb-many":
-                    _apply_selected_block_pcb_layouts(
-                        schematic, kicad, project_dir, library_root, root
-                    )
-                elif action == "nest":
-                    library = _choose_library_root(root)
-                    _add_nested_dependency(library, root, root)
-            except Exception as exc:
-                LOG.exception("KiCad Blocks action failed")
-                messagebox.showerror("KiCad Blocks", str(exc), parent=root)
-
-        ttk.Button(footer, text="Run action", command=dispatch).pack(side="right")
-        ttk.Button(footer, text="Close", command=root.destroy).pack(side="right", padx=(0, 8))
-        root.mainloop()
+        root.withdraw()
+        if action == "create-block":
+            _create_and_place(
+                library_root, schematic, kicad, project_dir, root, editor_window_id
+            )
+        elif action == "open-implementation":
+            _open_selected_block_implementation(
+                library_paths, schematic, kicad, project_dir, root
+            )
+        elif action == "configure-instance":
+            _show_selected_block_configuration(
+                schematic, project_dir, library_paths, root
+            )
+        elif action == "make-local-copy":
+            path = make_selected_local(
+                schematic, kicad, project_dir, library_paths
+            )
+            messagebox.showinfo(
+                "Local Copy Created",
+                f"The selected instance now uses an independent project-local block:\n{path}",
+                parent=root,
+            )
+        elif action == "synchronize-local-copy":
+            result = sync_selected_local(schematic, kicad, project_dir)
+            messagebox.showinfo(
+                "Local Block Synchronized",
+                "Published local edits: " + (", ".join(result["published"]) or "none") +
+                "\\nPulled library edits: " + (", ".join(result["pulled"]) or "none") +
+                "\\nConverged edits: " + (", ".join(result["converged"]) or "none"),
+                parent=root,
+            )
+        elif action == "edit-facade":
+            _edit_facade_symbol(
+                library_paths, schematic, project_dir, editor_window_id, root
+            )
+        elif action == "publish-block":
+            _publish_block(library_paths, kicad, project_dir, root)
+        elif action == "recursive-bom":
+            _export_recursive_bom(library_paths, root, schematic, project_dir)
+        elif action == "recursive-erc":
+            _validate_recursive_erc(library_paths, root, schematic, project_dir)
+        elif action == "validate-libraries":
+            _validate_shared_library(library_paths, root)
+        elif action == "apply-pcb-layout":
+            _apply_block_pcb_layout(
+                schematic, kicad, project_dir, library_paths, root
+            )
+        elif action == "apply-multiple-pcb-layouts":
+            _apply_selected_block_pcb_layouts(
+                schematic, kicad, project_dir, library_paths, root
+            )
+        elif action == "nest-block":
+            _add_nested_dependency(library_paths, root, root)
     except Exception as exc:
-        LOG.exception("KiCad Blocks manager failed")
+        LOG.exception("KiCad Blocks action failed: %s", action)
         messagebox.showerror("KiCad Blocks", str(exc), parent=root)
     finally:
         with contextlib.suppress(tk.TclError):
             root.destroy()
+
+
+def run() -> None:
+    """Compatibility entry point for older manager installations."""
+    run_action("manage-library")
