@@ -12,7 +12,11 @@ ROOT = Path(__file__).resolve().parents[1]
 PLUGIN = ROOT / "plugin" / "kicad-blocks"
 sys.path.insert(0, str(PLUGIN))
 
-from kicad_blocks.model import parse_parameters, parse_pins, resolve_profile_configuration
+from kicad_blocks.model import (
+    parse_parameters,
+    parse_pins,
+    resolve_profile_configuration,
+)
 from kicad_blocks.plugin import _parse_profile_parameter_overrides
 from kicad_blocks.repository import (
     create_block,
