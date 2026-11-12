@@ -71,6 +71,11 @@ class PluginInstallerTests(unittest.TestCase):
             self.assertTrue((destination / "main.py").is_file())
             self.assertTrue((destination / "requirements.txt").is_file())
             self.assertTrue((destination / "kicad_blocks" / "plugin.py").is_file())
+            self.assertTrue((destination / "actions.py").is_file())
+            self.assertTrue((destination / "icons" / "manage-light-24.png").is_file())
+            self.assertTrue((destination / "icons" / "manage-dark-24.png").is_file())
+            self.assertTrue((destination / "icons" / "create-light-24.png").is_file())
+            self.assertTrue((destination / "icons" / "create-dark-24.png").is_file())
             self.assertEqual(
                 json.loads((destination / "plugin.json").read_text(encoding="utf-8"))[
                     "identifier"

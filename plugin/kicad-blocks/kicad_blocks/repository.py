@@ -1875,17 +1875,34 @@ def default_library_root() -> Path:
     return registered[0]
 
 
+def _normalized_library_settings_roots(settings: dict) -> list[Path]:
+    """Read the optional library-roots setting without trusting malformed JSON data."""
+    raw_roots = settings.get("library_roots", [])
+    if not isinstance(raw_roots, list):
+        return []
+    roots = []
+    seen = set()
+    for item in raw_roots:
+        if not isinstance(item, str) or not item.strip():
+            continue
+        resolved = Path(item).expanduser().resolve()
+        key = os.path.normcase(str(resolved))
+        if key not in seen:
+            seen.add(key)
+            roots.append(resolved)
+    return roots
+
+
 def add_library_root(path: Path, *, make_default: bool = False) -> list[Path]:
     """Register another shared functional-block library directory."""
     path = Path(path).expanduser().resolve()
     if not path.is_dir():
         raise NotADirectoryError(f"Functional-block library directory does not exist: {path}")
     settings = _read_library_settings()
-    roots = list(settings.get("library_roots", []))
-    normalized = {os.path.normcase(str(Path(item).expanduser().resolve())) for item in roots}
-    if os.path.normcase(str(path)) not in normalized:
-        roots.append(str(path))
-    settings["library_roots"] = roots
+    roots = _normalized_library_settings_roots(settings)
+    if path not in roots:
+        roots.append(path)
+    settings["library_roots"] = [str(item) for item in roots]
     if make_default or not settings.get("library_root"):
         settings["library_root"] = str(path)
     _write_library_settings(settings)
@@ -1893,20 +1910,26 @@ def add_library_root(path: Path, *, make_default: bool = False) -> list[Path]:
 
 
 def remove_library_root(path: Path) -> list[Path]:
-    """Unregister a library; files on disk are never deleted."""
+    """Unregister a library; its files are never deleted."""
     target = Path(path).expanduser().resolve()
-    settings = _read_library_settings()
-    roots = [
-        str(Path(item).expanduser().resolve())
-        for item in settings.get("library_roots", [])
-        if isinstance(item, str)
-        and Path(item).expanduser().resolve() != target
-    ]
-    if not roots and not os.environ.get("KICAD_BLOCKS_LIBRARY"):
+    environment_root = os.environ.get("KICAD_BLOCKS_LIBRARY")
+    if environment_root and Path(environment_root).expanduser().resolve() == target:
+        raise ValueError(
+            "This library is fixed by KICAD_BLOCKS_LIBRARY and cannot be removed here."
+        )
+
+    current_roots = library_roots()
+    if target not in current_roots:
+        raise ValueError(f"This functional-block library is not registered: {target}")
+    remaining = [item for item in current_roots if item != target]
+    if not remaining:
         raise ValueError("At least one functional-block library must remain registered.")
-    settings["library_roots"] = roots
-    if settings.get("library_root") and Path(settings["library_root"]).expanduser().resolve() == target:
-        settings["library_root"] = roots[0] if roots else os.environ["KICAD_BLOCKS_LIBRARY"]
+
+    settings = _read_library_settings()
+    settings["library_roots"] = [str(item) for item in remaining]
+    current_default = settings.get("library_root")
+    if not current_default or Path(current_default).expanduser().resolve() == target:
+        settings["library_root"] = str(remaining[0])
     _write_library_settings(settings)
     return library_roots()
 
@@ -1915,12 +1938,13 @@ def set_library_root(path: Path) -> Path:
     """Set the preferred library while preserving every other registered library."""
     path = Path(path).expanduser().resolve()
     path.mkdir(parents=True, exist_ok=True)
+    if os.environ.get("KICAD_BLOCKS_LIBRARY"):
+        return Path(os.environ["KICAD_BLOCKS_LIBRARY"]).expanduser().resolve()
     settings = _read_library_settings()
-    roots = list(settings.get("library_roots", []))
-    normalized = {os.path.normcase(str(Path(item).expanduser().resolve())) for item in roots}
-    if os.path.normcase(str(path)) not in normalized:
-        roots.append(str(path))
-    settings["library_roots"] = roots
+    roots = _normalized_library_settings_roots(settings)
+    if path not in roots:
+        roots.append(path)
+    settings["library_roots"] = [str(item) for item in roots]
     settings["library_root"] = str(path)
     _write_library_settings(settings)
     return path

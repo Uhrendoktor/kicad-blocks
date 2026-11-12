@@ -17,7 +17,9 @@ from kicad_blocks.model import parse_parameters, parse_pins
 from kicad_blocks.plugin import (
     _block_overview_text,
     _filter_library_records,
+    _library_record_for_instance,
     _library_record_for_tree_row,
+    _bind_mousewheel,
     _minimize_placement_windows,
     _pick_record,
     _preferred_library_selection,
@@ -76,6 +78,43 @@ class LibraryBrowserTests(unittest.TestCase):
         self.assertIn("1V8", overview)
         self.assertIn("3V3", overview)
         self.assertIn("Compact", overview)
+
+    def test_record_lookup_finds_a_block_in_another_registered_library(self):
+        second_root = Path(self.temp.name) / "second-library"
+        other_block = create_block(
+            second_root,
+            "Second Library Block",
+            parse_pins("SDA:bidirectional, SCL:bidirectional"),
+        )
+        instance = SimpleNamespace(
+            definition=SimpleNamespace(
+                id=SimpleNamespace(
+                    library=other_block.manifest["library_nickname"],
+                    name=other_block.manifest["symbol_name"],
+                )
+            )
+        )
+
+        resolved = _library_record_for_instance([self.root, second_root], instance)
+        self.assertEqual(resolved.path, other_block.path)
+
+    def test_mousewheel_scrolls_without_dragging_the_scrollbar(self):
+        class FakeWidget:
+            def __init__(self):
+                self.bindings = {}
+
+            def bind(self, event, callback):
+                self.bindings[event] = callback
+
+        widget = FakeWidget()
+        scrolls = []
+        _bind_mousewheel(widget, scrolls.append)
+
+        widget.bindings["<MouseWheel>"](SimpleNamespace(delta=120, num=None))
+        widget.bindings["<Button-5>"](SimpleNamespace(delta=0, num=5))
+        widget.bindings["<Button-4>"](SimpleNamespace(delta=0, num=4))
+
+        self.assertEqual(scrolls, [-1, 1, -1])
 
     def test_record_picker_returns_single_choice_without_opening_a_dialog(self):
         self.assertIs(_pick_record([self.block], object(), "Pick Block"), self.block)
