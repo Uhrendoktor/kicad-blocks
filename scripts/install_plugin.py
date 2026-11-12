@@ -43,9 +43,9 @@ def validate_python_runtime(
             "The published KiCad Python IPC wheel requires CPython 3.12 "
             "(cp312) on Linux x86_64. "
             f"The installer is running {selected_implementation} {version_text}. "
-            "Run it with the CPython 3.12 executable (for example, "
-            + chr(96) + "python3.12 scripts/install_plugin.py --version 10.99" + chr(96)
-            + ") and set KiCad Preferences > Plugins > Path to Python interpreter "
+            "Run it with python3.12 (for example: python3.12 scripts/install_plugin.py "
+            "--version 10.99) and set KiCad Preferences > Plugins > "
+            "Path to Python interpreter "
             "to that same Python 3.12 executable. KiCad does not currently enforce "
             "the plugin.json runtime min_version field."
         )
