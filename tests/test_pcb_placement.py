@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import sys
 import tempfile
 import unittest
 from pathlib import Path
-from types import SimpleNamespace
+from types import ModuleType, SimpleNamespace
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 PLUGIN = ROOT / "plugin" / "kicad-blocks"
@@ -63,6 +65,41 @@ class PcbPlacementManifestTests(unittest.TestCase):
         moved = move_placement_at_cursor(board, payload["placements"][0])
         self.assertEqual(moved, 2)
         self.assertEqual([item.value for item in board.moved], [self.first, self.second])
+
+    def test_pcb_editor_entrypoint_uses_active_board_file_and_native_move(self):
+        result = {
+            "instance_reference": "X1",
+            "block": "Power Stage",
+            "layout_name": "Compact",
+            "interactive_item_uuids": [self.first, self.second],
+        }
+        write_pcb_placement_manifest(self.board_path, result)
+        board = FakeBoard([self.first, self.second])
+        board.document = SimpleNamespace(
+            board_filename=self.board_path.name,
+            project=SimpleNamespace(path=str(self.board_path.parent)),
+        )
+
+        class FakeKiCad:
+            def get_board(self):
+                return board
+
+        kipy = ModuleType("kipy")
+        kipy.KiCad = FakeKiCad
+        entrypoint = PLUGIN / "place_imported_layout.py"
+        spec = importlib.util.spec_from_file_location("kblocks_pcb_action_test", entrypoint)
+        if spec is None or spec.loader is None:
+            raise RuntimeError(f"Could not load PCB action entrypoint: {entrypoint}")
+        action = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(action)
+
+        with patch.dict(sys.modules, {"kipy": kipy}):
+            action.main()
+
+        self.assertEqual(
+            [item.value for item in board.moved],
+            [self.first, self.second],
+        )
 
     def test_batch_merge_keeps_instance_groups_separate(self):
         result = {
