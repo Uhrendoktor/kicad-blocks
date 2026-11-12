@@ -86,6 +86,26 @@ class VerifyReleaseGateTests(unittest.TestCase):
                 "d" * 40, "token"
             )
 
+    def test_release_workflow_requires_the_tag_commit_to_match_the_packaged_commit(self):
+        workflow = (
+            Path(__file__).resolve().parents[1]
+            / ".github"
+            / "workflows"
+            / "release.yml"
+        ).read_text(encoding="utf-8")
+        self.assertIn(
+            'git fetch --no-tags origin "refs/tags/$RELEASE_TAG:refs/tags/$RELEASE_TAG"',
+            workflow,
+        )
+        self.assertIn(
+            'TAG_TARGET_SHA="$(git rev-parse "$RELEASE_TAG^{commit}")"',
+            workflow,
+        )
+        self.assertIn(
+            'if [[ "$TAG_TARGET_SHA" != "$RELEASE_SOURCE_SHA" ]]; then',
+            workflow,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
