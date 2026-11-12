@@ -18,7 +18,7 @@ messagebox = None
 simpledialog = None
 
 from .composition import compose_block_implementation
-from .extraction import selected_sheet_file
+from .extraction import selected_sheet_file, selected_sheet_instance_uuid
 from .model import (
     LAYOUT_FIELD_NAME,
     PARAMETER_FIELD_PREFIX,
@@ -958,6 +958,7 @@ def _create_and_place(
         )
     selection_fragment = schematic.get_selection_as_string()
     source_sheet = selected_sheet_file(selection_fragment, project_dir)
+    source_sheet_uuid = selected_sheet_instance_uuid(selection_fragment)
 
     name = simpledialog.askstring(
         "Create Block from Hierarchical Sheet",
@@ -981,6 +982,7 @@ def _create_and_place(
         name,
         source_schematic=source_sheet,
         source_project_name=Path(project_dir).name,
+        source_sheet_uuid=source_sheet_uuid,
         description=description,
     )
     record = _register_block(project_dir, record, kicad)
