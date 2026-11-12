@@ -10,8 +10,12 @@ import copy
 import os
 import shutil
 import subprocess
+import sys
 import uuid
 from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / "plugin" / "kicad-blocks"))
 
 from kicad_blocks.pcb_layout import (
     _Quoted,
@@ -334,3 +338,16 @@ def generate_reference_schematic(destination: Path) -> Path:
     destination.parent.mkdir(parents=True, exist_ok=True)
     destination.write_text(_dump(schematic) + "\n", encoding="utf-8")
     return destination
+
+
+if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--output",
+        type=Path,
+        default=Path(__file__).with_name("implementation.kicad_sch"),
+    )
+    arguments = parser.parse_args()
+    print(generate_reference_schematic(arguments.output))
