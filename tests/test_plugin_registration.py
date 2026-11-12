@@ -307,7 +307,7 @@ def main() -> None:
         action = next(
             item
             for item in manifest["actions"]
-            if item["identifier"] == "manager"
+            if item["identifier"] == "manage-library"
         )
         if action.get("scopes") != ["schematic"] or not action.get("show-button"):
             raise AssertionError(
@@ -346,7 +346,10 @@ def main() -> None:
                 cache_home / "kicad" / version / "python-environments" / PLUGIN_IDENTIFIER
             )
             env_python = environment / "bin" / "python"
-            deadline = time.monotonic() + 180.0
+            # A cold KiCad-managed environment may need several minutes to download
+            # ABI-specific wheels (notably the CPython 3.14 Pillow wheel). Keep the
+            # readiness assertion, but allow a realistic installation window.
+            deadline = time.monotonic() + 420.0
             ready_log = False
             loaded_log = False
             last_log = ""
@@ -396,21 +399,20 @@ def main() -> None:
             if "plugin environment ready" not in package_probe.stdout:
                 raise AssertionError(package_probe.stdout)
 
-            # Exercise the searchable modal in the same system Python
-            # interpreter KiCad uses to create the managed plugin environment.
-            # The isolated test venv may not include tkinter, but the product
-            # runtime must have it because the manager UI is Tk-based.
+            # Exercise the picker in KiCad's managed plugin environment so
+            # CairoSVG and the other declared plugin dependencies are available.
+            # The managed interpreter shares the system Tk installation.
             picker_probe = subprocess.run(
-                [python_interpreter, str(ROOT / "tests" / "test_library_picker_gui.py")],
+                [str(env_python), str(ROOT / "tests" / "test_library_picker_gui.py")],
                 env=env,
                 capture_output=True,
                 text=True,
                 check=True,
-                timeout=20.0,
+                timeout=30.0,
             )
-            if "searchable manager block picker passed" not in picker_probe.stdout.casefold():
+            if "kicad-native svg facade preview passed" not in picker_probe.stdout.casefold():
                 raise AssertionError(
-                    "The Tk picker GUI smoke test did not report success. "
+                    "The native-rendered Tk picker smoke test did not report success. "
                     f"stdout: {picker_probe.stdout}; stderr: {picker_probe.stderr}"
                 )
 

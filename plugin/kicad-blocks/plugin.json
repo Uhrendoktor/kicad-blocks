@@ -1,47 +1,242 @@
 {
   "identifier": "org.uhrendoktor.kicadblocks",
   "name": "KiCad Blocks",
-  "description": "Place opaque library-backed schematic symbols with external implementations.",
+  "description": "Manage reusable, library-backed schematic functional blocks.",
   "runtime": {
     "type": "python",
     "min_version": "3.12"
   },
   "actions": [
     {
-      "identifier": "browse-library",
-      "name": "Browse Block Library",
-      "description": "Search blocks, preview facade pins and place the selected block at the cursor.",
+      "identifier": "place-block",
+      "name": "Place Functional Block",
+      "description": "Search, preview, configure and place a functional block using KiCad's native symbol renderer and placement tool.",
       "show-button": true,
+      "icons-light": [
+        "icons/create-light-24.png"
+      ],
+      "icons-dark": [
+        "icons/create-dark-24.png"
+      ],
       "scopes": [
         "schematic"
       ],
-      "entrypoint": "browse_library.py"
+      "entrypoint": "actions.py",
+      "args": [
+        "place-block"
+      ]
+    },
+    {
+      "identifier": "manage-library",
+      "name": "Manage KiCad Functional Blocks",
+      "description": "Browse all registered functional-block libraries, preview blocks, and place facades.",
+      "show-button": true,
+      "icons-light": [
+        "icons/manage-light-24.png"
+      ],
+      "icons-dark": [
+        "icons/manage-dark-24.png"
+      ],
+      "scopes": [
+        "schematic"
+      ],
+      "entrypoint": "actions.py",
+      "args": [
+        "manage-library"
+      ]
+    },
+    {
+      "identifier": "create-block",
+      "name": "Create Block from Selected Sheet",
+      "description": "Create and place a reusable block from the selected hierarchical sheet.",
+      "show-button": true,
+      "icons-light": [
+        "icons/create-light-24.png"
+      ],
+      "icons-dark": [
+        "icons/create-dark-24.png"
+      ],
+      "scopes": [
+        "schematic"
+      ],
+      "entrypoint": "actions.py",
+      "args": [
+        "create-block"
+      ]
     },
     {
       "identifier": "open-implementation",
       "name": "Open Block Implementation",
-      "description": "Open the selected block facade implementation for its KB_VARIANT value.",
+      "description": "Open the selected block's implementation for its KB_VARIANT value.",
       "show-button": true,
+      "icons-light": [
+        "icons/open-light-24.png"
+      ],
+      "icons-dark": [
+        "icons/open-dark-24.png"
+      ],
       "scopes": [
         "schematic"
       ],
-      "entrypoint": "open_implementation.py"
+      "entrypoint": "actions.py",
+      "args": [
+        "open-implementation"
+      ]
     },
     {
-      "identifier": "manager",
-      "name": "KiCad Blocks Manager",
-      "description": "Create, place, localize, synchronize and compose library-backed blocks.",
-      "show-button": true,
+      "identifier": "configure-instance",
+      "name": "Configure Block Instance",
+      "description": "Configure the selected block instance's profile, variant, parameters, and PCB layout.",
+      "show-button": false,
       "scopes": [
         "schematic"
       ],
-      "entrypoint": "main.py"
+      "entrypoint": "actions.py",
+      "args": [
+        "configure-instance"
+      ]
+    },
+    {
+      "identifier": "make-local-copy",
+      "name": "Make Block Instance Local",
+      "description": "Create an independent project-local implementation for the selected block instance.",
+      "show-button": false,
+      "scopes": [
+        "schematic"
+      ],
+      "entrypoint": "actions.py",
+      "args": [
+        "make-local-copy"
+      ]
+    },
+    {
+      "identifier": "synchronize-local-copy",
+      "name": "Synchronize Local Block Copy",
+      "description": "Synchronize the selected project-local block copy with its shared library source.",
+      "show-button": false,
+      "scopes": [
+        "schematic"
+      ],
+      "entrypoint": "actions.py",
+      "args": [
+        "synchronize-local-copy"
+      ]
+    },
+    {
+      "identifier": "edit-facade",
+      "name": "Edit Block Facade Symbol",
+      "description": "Open the selected block facade in KiCad Symbol Editor.",
+      "show-button": false,
+      "scopes": [
+        "schematic"
+      ],
+      "entrypoint": "actions.py",
+      "args": [
+        "edit-facade"
+      ]
+    },
+    {
+      "identifier": "publish-block",
+      "name": "Publish Block to Library",
+      "description": "Publish implementation and facade changes to the shared block library.",
+      "show-button": false,
+      "scopes": [
+        "schematic"
+      ],
+      "entrypoint": "actions.py",
+      "args": [
+        "publish-block"
+      ]
+    },
+    {
+      "identifier": "recursive-bom",
+      "name": "Export Recursive Block BOM",
+      "description": "Export a recursive bill of materials for the selected block and dependencies.",
+      "show-button": false,
+      "scopes": [
+        "schematic"
+      ],
+      "entrypoint": "actions.py",
+      "args": [
+        "recursive-bom"
+      ]
+    },
+    {
+      "identifier": "recursive-erc",
+      "name": "Run Recursive Block ERC",
+      "description": "Run electrical-rule checks for the selected block and nested dependencies.",
+      "show-button": false,
+      "scopes": [
+        "schematic"
+      ],
+      "entrypoint": "actions.py",
+      "args": [
+        "recursive-erc"
+      ]
+    },
+    {
+      "identifier": "validate-libraries",
+      "name": "Validate Block Libraries",
+      "description": "Validate every registered block library, including manifests, assets, dependencies, and ERC.",
+      "show-button": false,
+      "scopes": [
+        "schematic"
+      ],
+      "entrypoint": "actions.py",
+      "args": [
+        "validate-libraries"
+      ]
+    },
+    {
+      "identifier": "apply-pcb-layout",
+      "name": "Apply Selected Block PCB Layout",
+      "description": "Merge the selected block's stored PCB layout into a separate project-board copy.",
+      "show-button": false,
+      "scopes": [
+        "schematic"
+      ],
+      "entrypoint": "actions.py",
+      "args": [
+        "apply-pcb-layout"
+      ]
+    },
+    {
+      "identifier": "apply-multiple-pcb-layouts",
+      "name": "Apply Multiple Block PCB Layouts",
+      "description": "Merge stored PCB layouts for multiple selected block instances into a separate board copy.",
+      "show-button": false,
+      "scopes": [
+        "schematic"
+      ],
+      "entrypoint": "actions.py",
+      "args": [
+        "apply-multiple-pcb-layouts"
+      ]
+    },
+    {
+      "identifier": "nest-block",
+      "name": "Nest Block in Another Block",
+      "description": "Compose one registered functional block into another block implementation.",
+      "show-button": false,
+      "scopes": [
+        "schematic"
+      ],
+      "entrypoint": "actions.py",
+      "args": [
+        "nest-block"
+      ]
     },
     {
       "identifier": "place-imported-layout",
       "name": "Place Imported Block Layout",
       "description": "Move a previously imported KiCad Blocks PCB layout using the native cursor placement tool.",
       "show-button": true,
+      "icons-light": [
+        "icons/pcb-light-24.png"
+      ],
+      "icons-dark": [
+        "icons/pcb-dark-24.png"
+      ],
       "scopes": [
         "pcb"
       ],

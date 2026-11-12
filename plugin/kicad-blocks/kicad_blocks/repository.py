@@ -744,6 +744,37 @@ def register_project_symbol_library(
     return table_path
 
 
+def set_project_symbol_defaults(
+    catalog_path: Path, symbol_name: str, values: dict[str, str]
+) -> Path:
+    """Set default user-field values on one project-catalog facade before placement.
+
+    The shared library remains untouched. KiCad copies these values into each
+    newly placed instance; subsequent catalog rebuilds restore library defaults.
+    """
+    catalog_path = Path(catalog_path).expanduser().resolve()
+    tree = parse_sexpr(catalog_path.read_text(encoding="utf-8"))
+    symbol = _named_symbol_node(tree, symbol_name, catalog_path)
+    properties = [
+        item for item in symbol[2:]
+        if _head(item) == "property" and len(item) >= 3
+    ]
+    found = set()
+    for prop in properties:
+        field_name = str(prop[1])
+        if field_name in values:
+            prop[2] = _Quoted(str(values[field_name]))
+            found.add(field_name)
+    missing = sorted(set(values) - found)
+    if missing:
+        raise ValueError(
+            f"Facade {symbol_name!r} is missing configurable field(s): "
+            + ", ".join(missing)
+        )
+    atomic_write(catalog_path, _dump(tree) + "\n")
+    return catalog_path
+
+
 def _asset_hashes(block_path: Path, manifest: dict) -> dict[str, str]:
     result = {}
     for file_name in manifest.get("files", []):
@@ -1815,23 +1846,177 @@ def settings_file() -> Path:
     return Path.home() / ".config" / "kicad-blocks" / "settings.json"
 
 
+def _read_library_settings() -> dict:
+    settings = settings_file()
+    if not settings.is_file():
+        return {}
+    try:
+        value = json.loads(settings.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return value if isinstance(value, dict) else {}
+
+
+def _write_library_settings(value: dict) -> None:
+    atomic_write(settings_file(), json.dumps(value, indent=2, ensure_ascii=False) + "\n")
+
+
+def library_roots() -> list[Path]:
+    """Return every registered functional-block library, with the default first."""
+    settings = _read_library_settings()
+    candidates = []
+    configured = os.environ.get("KICAD_BLOCKS_LIBRARY")
+    if configured:
+        candidates.append(Path(configured).expanduser())
+
+    default = settings.get("library_root")
+    if default:
+        candidates.append(Path(default).expanduser())
+
+    registered = settings.get("library_roots", [])
+    if isinstance(registered, list):
+        candidates.extend(
+            Path(item).expanduser()
+            for item in registered
+            if isinstance(item, str) and item.strip()
+        )
+
+    candidates.append(Path.home() / "Documents" / "KiCad" / "Blocks")
+    result = []
+    seen = set()
+    for candidate in candidates:
+        resolved = candidate.resolve()
+        key = os.path.normcase(str(resolved))
+        if key not in seen:
+            seen.add(key)
+            result.append(resolved)
+    return result
+
+
 def default_library_root() -> Path:
+    """Return the preferred destination for newly-created functional blocks."""
+    settings = _read_library_settings()
     configured = os.environ.get("KICAD_BLOCKS_LIBRARY")
     if configured:
         return Path(configured).expanduser().resolve()
-    settings = settings_file()
-    if settings.is_file():
-        try:
-            value = json.loads(settings.read_text(encoding="utf-8")).get("library_root")
-            if value:
-                return Path(value).expanduser().resolve()
-        except (OSError, json.JSONDecodeError, TypeError):
-            pass
-    return (Path.home() / "Documents" / "KiCad" / "Blocks").resolve()
+    value = settings.get("library_root")
+    if value:
+        return Path(value).expanduser().resolve()
+    registered = library_roots()
+    return registered[0]
+
+
+def _normalized_library_settings_roots(settings: dict) -> list[Path]:
+    """Read the optional library-roots setting without trusting malformed JSON data."""
+    raw_roots = settings.get("library_roots", [])
+    if not isinstance(raw_roots, list):
+        return []
+    roots = []
+    seen = set()
+    for item in raw_roots:
+        if not isinstance(item, str) or not item.strip():
+            continue
+        resolved = Path(item).expanduser().resolve()
+        key = os.path.normcase(str(resolved))
+        if key not in seen:
+            seen.add(key)
+            roots.append(resolved)
+    return roots
+
+
+def add_library_root(path: Path, *, make_default: bool = False) -> list[Path]:
+    """Register another shared functional-block library directory."""
+    path = Path(path).expanduser().resolve()
+    if not path.is_dir():
+        raise NotADirectoryError(f"Functional-block library directory does not exist: {path}")
+    settings = _read_library_settings()
+    roots = _normalized_library_settings_roots(settings)
+    if path not in roots:
+        roots.append(path)
+    settings["library_roots"] = [str(item) for item in roots]
+    if make_default or not settings.get("library_root"):
+        settings["library_root"] = str(path)
+    _write_library_settings(settings)
+    return library_roots()
+
+
+def remove_library_root(path: Path) -> list[Path]:
+    """Unregister a library; its files are never deleted."""
+    target = Path(path).expanduser().resolve()
+    environment_root = os.environ.get("KICAD_BLOCKS_LIBRARY")
+    if environment_root and Path(environment_root).expanduser().resolve() == target:
+        raise ValueError(
+            "This library is fixed by KICAD_BLOCKS_LIBRARY and cannot be removed here."
+        )
+
+    current_roots = library_roots()
+    if target not in current_roots:
+        raise ValueError(f"This functional-block library is not registered: {target}")
+    remaining = [item for item in current_roots if item != target]
+    if not remaining:
+        raise ValueError("At least one functional-block library must remain registered.")
+
+    settings = _read_library_settings()
+    settings["library_roots"] = [str(item) for item in remaining]
+    current_default = settings.get("library_root")
+    if not current_default or Path(current_default).expanduser().resolve() == target:
+        settings["library_root"] = str(remaining[0])
+    _write_library_settings(settings)
+    return library_roots()
 
 
 def set_library_root(path: Path) -> Path:
+    """Register a folder and make it default unless an environment override is active."""
     path = Path(path).expanduser().resolve()
     path.mkdir(parents=True, exist_ok=True)
-    atomic_write(settings_file(), json.dumps({"library_root": str(path)}, indent=2) + "\n")
+    settings = _read_library_settings()
+    roots = _normalized_library_settings_roots(settings)
+    if path not in roots:
+        roots.append(path)
+    settings["library_roots"] = [str(item) for item in roots]
+    if not os.environ.get("KICAD_BLOCKS_LIBRARY"):
+        settings["library_root"] = str(path)
+    _write_library_settings(settings)
     return path
+
+
+def build_project_symbol_catalog(project_dir: Path, roots: list[Path]) -> Path:
+    """Build the project's single KBlocks catalog from all registered libraries."""
+    project_dir = Path(project_dir).expanduser().resolve()
+    symbols_by_name: dict[str, list] = {}
+    header = None
+
+    for root in roots:
+        for record in list_blocks(root):
+            source = record.symbol_library
+            if not source.is_file():
+                raise FileNotFoundError(
+                    f"Shared facade catalog for block {record.name!r} is missing: {source}"
+                )
+            tree = parse_sexpr(source.read_text(encoding="utf-8"))
+            symbol_name = str(record.manifest.get("symbol_name") or "")
+            symbol = _named_symbol_node(tree, symbol_name, source)
+            existing = symbols_by_name.get(symbol_name)
+            if existing is not None:
+                if _symbol_definition_digest(existing) != _symbol_definition_digest(symbol):
+                    raise ValueError(
+                        f"Two registered block libraries define conflicting facade symbol "
+                        f"{symbol_name!r}. Resolve the duplicate block ID before placing it."
+                    )
+                continue
+            if header is None:
+                header = [copy.deepcopy(item) for item in tree[1:] if _head(item) != "symbol"]
+            symbols_by_name[symbol_name] = copy.deepcopy(symbol)
+
+    if header is None:
+        catalog_tree = parse_sexpr(
+            '(kicad_symbol_lib (version 20231120) (generator "kicad_blocks"))'
+        )
+    else:
+        catalog_tree = ["kicad_symbol_lib", *header]
+    for name in sorted(symbols_by_name, key=str.casefold):
+        catalog_tree.append(symbols_by_name[name])
+
+    destination = project_dir / ".kicad_blocks" / LIBRARY_CATALOG_NAME
+    atomic_write(destination, _dump(catalog_tree) + "\n")
+    return destination

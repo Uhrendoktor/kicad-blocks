@@ -145,6 +145,31 @@ def validate_plugin_package(source: Path) -> dict:
             raise FileNotFoundError(
                 f"Plugin action entrypoint is missing or outside the package: {entrypoint!r}"
             )
+        arguments = action.get("args", [])
+        if not isinstance(arguments, list) or any(
+            not isinstance(argument, str) for argument in arguments
+        ):
+            raise ValueError(
+                f"Plugin action arguments must be a list of strings: {action.get('identifier')!r}"
+            )
+        for icon_key in ("icons-light", "icons-dark"):
+            icons = action.get(icon_key, [])
+            if not isinstance(icons, list):
+                raise ValueError(
+                    f"Plugin action {icon_key} must be a list: {action.get('identifier')!r}"
+                )
+            for icon in icons:
+                if not isinstance(icon, str):
+                    raise ValueError(f"Plugin action icon path must be a string: {icon!r}")
+                icon_path = (source / icon).resolve()
+                if (
+                    not icon_path.is_relative_to(source)
+                    or icon_path.suffix.casefold() != ".png"
+                    or not icon_path.is_file()
+                ):
+                    raise FileNotFoundError(
+                        f"Plugin action icon is missing, invalid, or outside the package: {icon!r}"
+                    )
     requirements = source / "requirements.txt"
     if not requirements.is_file():
         raise FileNotFoundError("KiCad plugin package is missing requirements.txt.")
