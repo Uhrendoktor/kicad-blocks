@@ -763,7 +763,7 @@ def set_project_symbol_defaults(
     for prop in properties:
         field_name = str(prop[1])
         if field_name in values:
-            prop[2] = str(values[field_name])
+            prop[2] = _Quoted(str(values[field_name]))
             found.add(field_name)
     missing = sorted(set(values) - found)
     if missing:
