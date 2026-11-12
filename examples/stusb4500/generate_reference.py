@@ -337,17 +337,26 @@ def generate_reference_schematic(destination: Path) -> Path:
                         if existing[2] != shape_name:
                             raise ValueError(f"Conflicting hierarchical label shapes at {point}.")
                     else:
-                        # Move labels off the symbol pin text and connect them
-                        # with a short stub. This keeps native labels readable
-                        # while preserving the electrical pin connection.
-                        if abs(pin["x"]) >= abs(pin["y"]):
-                            direction = -1 if pin["x"] < 0 else 1
-                            label_x, label_y = px + direction * 5.08, py
-                            justify = "right" if direction < 0 else "left"
-                        else:
-                            direction = -1 if pin["y"] > 0 else 1
-                            label_x, label_y = px, py + direction * 5.08
-                            justify = "left"
+                        # Move labels off pin text along the actual pin axis.
+                        # Coordinate-quadrant guesses are unsafe for stacked
+                        # USB-C connector pins: they can route CC1/CC2 stubs
+                        # vertically across adjacent VBUS pins and short nets.
+                        angle = pin["angle"] % 360
+                        outward = {
+                            0: (-1, 0),
+                            90: (0, 1),
+                            180: (1, 0),
+                            270: (0, -1),
+                        }
+                        if angle not in outward:
+                            raise ValueError(
+                                f"Unsupported pin angle {pin['angle']} for "
+                                f"{reference}.{pin['number']} ({pin['name']})."
+                            )
+                        dx, dy = outward[angle]
+                        label_x = px + dx * 5.08
+                        label_y = py + dy * 5.08
+                        justify = "right" if dx < 0 else "left"
                         # One label is sufficient for stacked connector pins.
                         # Prefer the hierarchical port when it shares a point
                         # with local labels for the same electrical net.
