@@ -323,7 +323,7 @@ def validate_block_library(
         "blocks": block_reports,
     }
     report_path.write_text(
-        json.dumps(summary, indent=2, ensure_ascii=False) + "\\n",
+        json.dumps(summary, indent=2, ensure_ascii=False) + "\n",
         encoding="utf-8",
     )
     return summary
