@@ -1850,7 +1850,7 @@ def library_roots() -> list[Path]:
             if isinstance(item, str) and item.strip()
         )
 
-    candidates.append((Path.home() / "Documents" / "KiCad" / "Blocks"))
+    candidates.append(Path.home() / "Documents" / "KiCad" / "Blocks")
     result = []
     seen = set()
     for candidate in candidates:

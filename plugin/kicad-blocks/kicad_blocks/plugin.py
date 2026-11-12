@@ -1579,7 +1579,7 @@ def _show_library_roots_dialog(parent) -> bool:
             add_library_root(Path(selected))
             changed[0] = True
             render()
-        except Exception as exc:
+        except (OSError, ValueError) as exc:
             messagebox.showerror("Add Block Library", str(exc), parent=dialog)
 
     def remove_library() -> None:
@@ -1590,7 +1590,7 @@ def _show_library_roots_dialog(parent) -> bool:
             remove_library_root(path)
             changed[0] = True
             render()
-        except Exception as exc:
+        except (OSError, ValueError) as exc:
             messagebox.showerror("Remove Block Library", str(exc), parent=dialog)
 
     def make_default() -> None:
@@ -1612,7 +1612,7 @@ def _show_library_roots_dialog(parent) -> bool:
             set_library_root(path)
             changed[0] = True
             render()
-        except Exception as exc:
+        except (OSError, ValueError) as exc:
             messagebox.showerror("Set Default Block Library", str(exc), parent=dialog)
 
     buttons = ttk.Frame(outer)
