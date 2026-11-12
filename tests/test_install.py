@@ -82,7 +82,7 @@ class PluginInstallerTests(unittest.TestCase):
         requirements = (SOURCE / "requirements.txt").read_text(encoding="utf-8")
         self.assertIn(
             "https://github.com/Uhrendoktor/kicad-blocks/releases/download/"
-            "kicad-python-dev/kicad_python-0.9.0.dev0-cp312-cp312-linux_x86_64.whl",
+            "kicad-python-76b47d25/kicad_python-0.9.0.dev0-cp312-cp312-linux_x86_64.whl",
             requirements,
         )
         self.assertNotIn("git+", requirements)

@@ -199,7 +199,7 @@ def main() -> None:
         root = Path(temp)
         home = root / "home"
         home.mkdir()
-        documents_home = home / ".local" / "share" / "KiCad"
+        documents_home = home / ".local" / "share"
         cache_home = home / ".cache"
         project = root / "project"
         project.mkdir()
@@ -330,7 +330,7 @@ def main() -> None:
         installed_requirements = (installed_plugin / "requirements.txt").read_text(encoding="utf-8")
         expected_wheel_url = (
             "https://github.com/Uhrendoktor/kicad-blocks/releases/download/"
-            "kicad-python-dev/kicad_python-0.9.0.dev0-cp312-cp312-linux_x86_64.whl"
+            "kicad-python-76b47d25/kicad_python-0.9.0.dev0-cp312-cp312-linux_x86_64.whl"
         )
         if expected_wheel_url not in installed_requirements or "git+" in installed_requirements:
             raise AssertionError(

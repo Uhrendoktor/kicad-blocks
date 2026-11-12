@@ -1,0 +1,100 @@
+name: Release
+
+permissions:
+  contents: write
+  actions: read
+
+# This workflow is manual-only: pushing or creating a version tag does not publish a release.
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Exact version tag to publish
+        required: true
+        type: string
+      source_sha:
+        description: Exact main commit to package
+        required: true
+        type: string
+
+# Release publication is intentionally serial and tied to an exact version tag.
+concurrency:
+  group: kicad-blocks-release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  package-and-publish:
+    runs-on: [self-hosted, linux, x64]
+    timeout-minutes: 15
+    env:
+      RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+      RELEASE_SOURCE_SHA: ${{ inputs.source_sha || github.sha }}
+    steps:
+      - name: Check out tagged source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_sha || github.sha }}
+          fetch-depth: 0
+
+      - name: Verify version tag and exact successful main CI
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          VERSION="$(tr -d '\r\n' < VERSION)"
+          if [[ "$RELEASE_TAG" != "v$VERSION" ]]; then
+            echo "::error::Tag $RELEASE_TAG does not match VERSION $VERSION."
+            exit 1
+          fi
+          git fetch --no-tags origin "refs/tags/$RELEASE_TAG:refs/tags/$RELEASE_TAG"
+          TAG_TARGET_SHA="$(git rev-parse "$RELEASE_TAG^{commit}")"
+          if [[ "$TAG_TARGET_SHA" != "$RELEASE_SOURCE_SHA" ]]; then
+            echo "::error::Release tag $RELEASE_TAG points to $TAG_TARGET_SHA, not requested source $RELEASE_SOURCE_SHA."
+            exit 1
+          fi
+          python3 scripts/verify_release_gate.py \
+            --repo "$GITHUB_REPOSITORY" \
+            --tag "$RELEASE_TAG" \
+            --source-sha "$RELEASE_SOURCE_SHA" \
+            --version-file VERSION
+          git fetch --no-tags origin main
+          git merge-base --is-ancestor "$RELEASE_SOURCE_SHA" origin/main
+
+      - name: Test and build the release archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m venv "${RUNNER_TEMP}/kicad-blocks-release-venv"
+          PY="${RUNNER_TEMP}/kicad-blocks-release-venv/bin/python"
+          "$PY" -m pip install --upgrade pip pytest
+          "$PY" -m pytest -q tests/test_release_package.py
+          "$PY" scripts/build_release.py --output-dir dist --commit "$RELEASE_SOURCE_SHA"
+          ARCHIVE="$(find dist -maxdepth 1 -type f -name 'kicad-blocks-*.zip' -print -quit)"
+          CHECKSUM="$ARCHIVE.sha256"
+          test -n "$ARCHIVE"
+          test -f "$CHECKSUM"
+          (cd dist && sha256sum --check "$(basename "$CHECKSUM")")
+          python3 - "$ARCHIVE" <<'PY'
+          import sys
+          from zipfile import ZipFile
+          with ZipFile(sys.argv[1]) as archive:
+              names = set(archive.namelist())
+          assert any(name.endswith("/plugin/kicad-blocks/plugin.json") for name in names)
+          assert any(name.endswith("/scripts/install_plugin.py") for name in names)
+          PY
+
+      - name: Publish versioned release ZIP and checksum
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          VERSION="$(tr -d '\r\n' < VERSION)"
+          python3 scripts/publish_release.py \
+            --repo "$GITHUB_REPOSITORY" \
+            --tag "$RELEASE_TAG" \
+            --version "$VERSION" \
+            --source-sha "$RELEASE_SOURCE_SHA" \
+            --changelog CHANGELOG.md \
+            dist/*.zip dist/*.zip.sha256

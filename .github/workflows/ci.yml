@@ -65,18 +65,18 @@ jobs:
           echo "KiCad CLI: $KICAD_CLI"
           echo "Persistent tool cache: ${RUNNER_TOOL_CACHE:-not-set}"
 
-      - name: Resolve KiCad Python IPC binding revision
+      - name: Resolve pinned KiCad Python IPC binding revision
         id: kipy
         shell: bash
         run: |
           set -euo pipefail
-          KIPY_SHA="$(git ls-remote https://gitlab.com/kicad/code/kicad-python.git refs/heads/main | cut -f1)"
-          if [[ -z "$KIPY_SHA" ]]; then
-            echo "::error::Could not resolve official kicad-python main branch."
+          KIPY_SHA="$(tr -d '\r\n' < plugin/kicad-blocks/kicad-python.lock)"
+          if [[ ! "$KIPY_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::plugin/kicad-blocks/kicad-python.lock must contain one 40-character lowercase commit SHA."
             exit 1
           fi
           echo "sha=$KIPY_SHA" >> "$GITHUB_OUTPUT"
-          echo "Using kicad-python commit $KIPY_SHA"
+          echo "Using pinned kicad-python commit $KIPY_SHA"
 
       - name: Create isolated Python environment
         shell: bash
@@ -116,6 +116,18 @@ jobs:
           fi
           test -n "$(find "$WHEELHOUSE" -maxdepth 1 -name 'kicad_python-*.whl' -print -quit)"
           du -sh "$WHEELHOUSE"
+
+      - name: Publish immutable KiCad Python IPC dependency wheel
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          KIPY_SHA: ${{ steps.kipy.outputs.sha }}
+        run: |
+          set -euo pipefail
+          python3 scripts/publish_pinned_ipc_wheel.py \
+            "${RUNNER_TEMP}/kicad-blocks-wheelhouse" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --source-sha "$KIPY_SHA"
 
       - name: Save KiCad Python IPC wheel cache
         if: steps.kipy-wheel.outcome == 'success' && steps.kipy-cache.outputs.cache-hit != 'true'
