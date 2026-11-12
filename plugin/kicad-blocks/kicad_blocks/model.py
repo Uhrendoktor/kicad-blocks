@@ -367,9 +367,9 @@ def parse_pins(spec: str) -> list[BlockPin]:
             raise ValueError(
                 f"Unknown pin type {raw_type!r}; choose {', '.join(PIN_TYPES)}."
             )
-        if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_./+\\-]*", name):
+        if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_./+#-]*", name):
             raise ValueError(
-                f"Invalid pin name {name!r}. Use letters, numbers, _, ., /, + or -; "
+                f"Invalid pin name {name!r}. Use letters, numbers, _, ., /, +, # or -; "
                 "the first character must be a letter or underscore."
             )
         key = name.casefold()
