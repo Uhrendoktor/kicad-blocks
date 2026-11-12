@@ -104,7 +104,7 @@ def extract_hierarchical_pins(schematic_tree: list) -> list[BlockPin]:
         if not _PIN_NAME.fullmatch(name):
             raise ValueError(
                 f"Hierarchical label {name!r} cannot be used as a facade pin name. "
-                "Use letters, numbers, _, ., /, + or -."
+                "Use letters, numbers, _, ., /, +, # or -."
             )
 
         shape_node = _direct(label, "shape")
