@@ -137,6 +137,7 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
             "Power Stage",
             source_schematic=source.resolve(),
             source_project_name=self.project.name,
+            source_sheet_uuid="dddddddd-dddd-4ddd-8ddd-dddddddddddd",
             description="Power stage description",
         )
         register.assert_called_once_with(self.project, self.block, self.kicad)
