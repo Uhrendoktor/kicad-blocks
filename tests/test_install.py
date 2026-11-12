@@ -35,7 +35,7 @@ class PluginInstallerTests(unittest.TestCase):
             )
             subprocess.run(command, check=True, capture_output=True, text=True)
             destination = (
-                user_data / "11.0" / "plugins" / PLUGIN_IDENTIFIER
+                user_data / "kicad" / "11.0" / "plugins" / PLUGIN_IDENTIFIER
             )
             self.assertFalse(legacy_destination.exists())
             self.assertTrue((destination / "plugin.json").is_file())
@@ -71,7 +71,7 @@ class PluginInstallerTests(unittest.TestCase):
                 capture_output=True,
                 text=True,
             )
-            self.assertIn(str(user_data / "11.0" / "plugins" / PLUGIN_IDENTIFIER), result.stdout)
+            self.assertIn(str(user_data / "kicad" / "11.0" / "plugins" / PLUGIN_IDENTIFIER), result.stdout)
             self.assertFalse(user_data.exists())
 
     def test_plugin_runtime_minimum_matches_published_wheel_python_abi(self):
