@@ -1470,38 +1470,181 @@ def _launch_block_asset(kicad, path: Path, description: str):
     return subprocess.Popen([executable, str(path)], close_fds=True)
 
 
+def _show_library_roots_dialog(parent) -> bool:
+    """Manage the set of shared functional-block library directories."""
+    dialog = tk.Toplevel(parent)
+    dialog.title("Manage KiCad Functional Block Libraries")
+    dialog.geometry("760x420")
+    dialog.minsize(560, 320)
+    dialog.transient(parent)
+    dialog.grab_set()
+
+    outer = ttk.Frame(dialog, padding=12)
+    outer.pack(fill="both", expand=True)
+    ttk.Label(
+        outer,
+        text="Registered libraries",
+    ).pack(anchor="w", pady=(0, 8))
+    ttk.Label(
+        outer,
+        text="Every registered library is included in the Block Library browser. "
+        "Removing a library only unregisters its folder; it does not delete files.",
+        wraplength=700,
+    ).pack(anchor="w", pady=(0, 8))
+
+    table_frame = ttk.Frame(outer)
+    table_frame.pack(fill="both", expand=True)
+    table_frame.columnconfigure(0, weight=1)
+    table_frame.rowconfigure(0, weight=1)
+    tree = ttk.Treeview(
+        table_frame,
+        columns=("blocks", "role", "path"),
+        show="tree headings",
+        selectmode="browse",
+    )
+    tree.heading("#0", text="Library")
+    tree.heading("blocks", text="Blocks")
+    tree.heading("role", text="Use")
+    tree.heading("path", text="Folder")
+    tree.column("#0", width=150, minwidth=110, stretch=False)
+    tree.column("blocks", width=60, minwidth=50, stretch=False, anchor="center")
+    tree.column("role", width=90, minwidth=80, stretch=False, anchor="center")
+    tree.column("path", width=380, minwidth=180, stretch=True)
+    scrollbar = ttk.Scrollbar(table_frame, orient="vertical", command=tree.yview)
+    tree.configure(yscrollcommand=scrollbar.set)
+    tree.grid(row=0, column=0, sticky="nsew")
+    scrollbar.grid(row=0, column=1, sticky="ns")
+
+    selected_roots = [configured_library_roots()]
+    changed = [False]
+
+    def render() -> None:
+        selected = tree.selection()
+        selected_path = tree.set(selected[0], "path") if selected else None
+        tree.delete(*tree.get_children())
+        roots = configured_library_roots()
+        selected_roots[0] = roots
+        default = default_library_root()
+        for index, library_path in enumerate(roots):
+            tree.insert(
+                "",
+                "end",
+                iid=str(index),
+                text=library_path.name or str(library_path),
+                values=(
+                    len(list_blocks(library_path)),
+                    "Default" if library_path == default else "",
+                    str(library_path),
+                ),
+            )
+            if selected_path == str(library_path):
+                tree.selection_set(str(index))
+                tree.focus(str(index))
+
+    def selected_path() -> Path | None:
+        selection = tree.selection()
+        if not selection:
+            return None
+        raw = tree.set(selection[0], "path")
+        return Path(raw).expanduser().resolve() if raw else None
+
+    def add_library() -> None:
+        selected = filedialog.askdirectory(
+            title="Add functional-block library folder",
+            parent=dialog,
+        )
+        if not selected:
+            return
+        try:
+            add_library_root(Path(selected))
+            changed[0] = True
+            render()
+        except Exception as exc:
+            messagebox.showerror("Add Block Library", str(exc), parent=dialog)
+
+    def remove_library() -> None:
+        path = selected_path()
+        if path is None:
+            return
+        try:
+            remove_library_root(path)
+            changed[0] = True
+            render()
+        except Exception as exc:
+            messagebox.showerror("Remove Block Library", str(exc), parent=dialog)
+
+    def make_default() -> None:
+        path = selected_path()
+        if path is None:
+            return
+        try:
+            set_library_root(path)
+            changed[0] = True
+            render()
+        except Exception as exc:
+            messagebox.showerror("Set Default Block Library", str(exc), parent=dialog)
+
+    buttons = ttk.Frame(outer)
+    buttons.pack(fill="x", pady=(10, 0))
+    ttk.Button(buttons, text="Add…", command=add_library).pack(side="left")
+    ttk.Button(buttons, text="Remove", command=remove_library).pack(side="left", padx=(6, 0))
+    ttk.Button(buttons, text="Set as default", command=make_default).pack(side="left", padx=(6, 0))
+    ttk.Button(buttons, text="Close", command=dialog.destroy).pack(side="right")
+    render()
+    dialog.wait_window()
+    return changed[0]
+
+
+def _bind_mousewheel(widget, scroll_command) -> None:
+    """Scroll a hovered library pane without requiring a scrollbar drag."""
+    def on_wheel(event):
+        if getattr(event, "num", None) == 4:
+            amount = -1
+        elif getattr(event, "num", None) == 5:
+            amount = 1
+        else:
+            delta = getattr(event, "delta", 0)
+            amount = -1 if delta > 0 else 1 if delta < 0 else 0
+        if amount:
+            scroll_command(amount)
+        return "break"
+
+    widget.bind("<MouseWheel>", on_wheel)
+    widget.bind("<Button-4>", on_wheel)
+    widget.bind("<Button-5>", on_wheel)
+
+
 def _show_library_browser(
     window,
     schematic,
     kicad,
     project_dir: Path,
-    library_root: Path,
+    library_root: Path | list[Path],
     editor_window_id: str | None,
 ) -> None:
-    """Build the searchable library browser in the supplied Tk window."""
-    window.title("KiCad Blocks - Library")
+    """Show every registered block library in one KiCad-themed browser."""
+    window.title("Manage KiCad Functional Blocks")
     window.geometry("1120x720")
     window.minsize(900, 590)
-    current_root = [Path(library_root).expanduser().resolve()]
+    current_roots = [_library_roots_for(library_root)]
     records: list = []
     records_by_id: dict[str, object] = {}
 
-    outer = ttk.Frame(window, padding=12)
+    style = ttk.Style(window)
+    theme_background = style.lookup("TFrame", "background") or window.cget("background")
+    theme_foreground = style.lookup("TLabel", "foreground") or ""
+    outer = ttk.Frame(window, padding=10)
     outer.pack(fill="both", expand=True)
     header = ttk.Frame(outer)
-    header.pack(fill="x", pady=(0, 10))
-    ttk.Label(
-        header, text="Block Library", font=("TkDefaultFont", 16, "bold")
-    ).pack(side="left")
-    library_path = tk.StringVar(value=str(current_root[0]))
-    ttk.Label(header, textvariable=library_path, foreground="#667785").pack(
-        side="right", padx=(12, 0)
-    )
+    header.pack(fill="x", pady=(0, 8))
+    ttk.Label(header, text="Functional Block Library").pack(side="left")
+    library_path = tk.StringVar()
+    ttk.Label(header, textvariable=library_path).pack(side="right", padx=(12, 0))
 
     panes = ttk.Panedwindow(outer, orient="horizontal")
     panes.pack(fill="both", expand=True)
-    left = ttk.Frame(panes, padding=(0, 0, 10, 0))
-    right = ttk.Frame(panes, padding=(10, 0, 0, 0))
+    left = ttk.Frame(panes, padding=(0, 0, 8, 0))
+    right = ttk.Frame(panes, padding=(8, 0, 0, 0))
     panes.add(left, weight=1)
     panes.add(right, weight=3)
 
@@ -1512,7 +1655,6 @@ def _show_library_browser(
     ttk.Label(
         left,
         text="Type to filter · ↓ browse results · Enter place",
-        foreground="#667785",
     ).pack(anchor="w", pady=(0, 6))
     tree_frame = ttk.Frame(left)
     tree_frame.pack(fill="both", expand=True)
@@ -1520,15 +1662,17 @@ def _show_library_browser(
     tree_frame.rowconfigure(0, weight=1)
     tree = ttk.Treeview(
         tree_frame,
-        columns=("pins", "variants", "layouts"),
+        columns=("library", "pins", "variants", "layouts"),
         show="tree headings",
         selectmode="browse",
     )
     tree.heading("#0", text="Block")
+    tree.heading("library", text="Library")
     tree.heading("pins", text="Pins")
     tree.heading("variants", text="Variants")
     tree.heading("layouts", text="Layouts")
-    tree.column("#0", width=175, minwidth=140, stretch=True)
+    tree.column("#0", width=175, minwidth=130, stretch=True)
+    tree.column("library", width=100, minwidth=80, stretch=False)
     tree.column("pins", width=42, minwidth=35, stretch=False, anchor="center")
     tree.column("variants", width=60, minwidth=48, stretch=False, anchor="center")
     tree.column("layouts", width=55, minwidth=45, stretch=False, anchor="center")
@@ -1541,22 +1685,27 @@ def _show_library_browser(
     tree.grid(row=0, column=0, sticky="nsew")
     tree_y_scroll.grid(row=0, column=1, sticky="ns")
     tree_x_scroll.grid(row=1, column=0, sticky="ew")
+    _bind_mousewheel(tree, lambda amount: tree.yview_scroll(amount, "units"))
+
     library_footer = ttk.Frame(left)
     library_footer.pack(fill="x", pady=(8, 0))
 
     name_label = ttk.Label(right, text="Select a block")
     name_label.pack(anchor="w")
     description_label = ttk.Label(
-        right, text="", wraplength=650, justify="left", foreground="#53616b"
+        right, text="", wraplength=650, justify="left"
     )
     description_label.pack(anchor="w", pady=(4, 8))
-    preview_box = ttk.LabelFrame(right, text="Facade preview", padding=6)
+    preview_box = ttk.LabelFrame(right, text="Facade preview", padding=5)
     preview_box.pack(fill="x")
     preview_frame = ttk.Frame(preview_box)
     preview_frame.pack(fill="x", expand=True)
     preview = tk.Canvas(
-        preview_frame, height=250, background="#ffffff", highlightthickness=1,
-        highlightbackground="#c8d0d6",
+        preview_frame,
+        height=250,
+        background=theme_background,
+        highlightthickness=0,
+        borderwidth=0,
     )
     preview_scroll = ttk.Scrollbar(
         preview_frame, orient="vertical", command=preview.yview
@@ -1564,13 +1713,21 @@ def _show_library_browser(
     preview.configure(yscrollcommand=preview_scroll.set)
     preview.pack(side="left", fill="x", expand=True)
     preview_scroll.pack(side="right", fill="y")
-    details_box = ttk.LabelFrame(right, text="Block overview", padding=6)
+    _bind_mousewheel(preview, lambda amount: preview.yview_scroll(amount, "units"))
+
+    details_box = ttk.LabelFrame(right, text="Block overview", padding=5)
     details_box.pack(fill="both", expand=True, pady=(8, 0))
     details_frame = ttk.Frame(details_box)
     details_frame.pack(fill="both", expand=True)
     details = tk.Text(
-        details_frame, height=12, wrap="word", relief="flat",
-        background="#f7f9fa", font=("TkFixedFont", 9),
+        details_frame,
+        height=12,
+        wrap="word",
+        relief="flat",
+        borderwidth=0,
+        background=theme_background,
+        foreground=theme_foreground,
+        font=("TkDefaultFont", 9),
     )
     details_scroll = ttk.Scrollbar(
         details_frame, orient="vertical", command=details.yview
@@ -1579,6 +1736,7 @@ def _show_library_browser(
     details.pack(side="left", fill="both", expand=True)
     details_scroll.pack(side="right", fill="y")
     details.configure(state="disabled")
+    _bind_mousewheel(details, lambda amount: details.yview_scroll(amount, "units"))
 
     selected_record = [None]
 
@@ -1586,7 +1744,7 @@ def _show_library_browser(
         selected_record[0] = record
         if record is None:
             name_label.configure(
-                text="No matching blocks" if search.get().strip() else "No blocks in this library"
+                text="No matching blocks" if search.get().strip() else "No blocks in registered libraries"
             )
             description_label.configure(text="")
             details.configure(state="normal")
@@ -1596,7 +1754,10 @@ def _show_library_browser(
             return
         name_label.configure(text=record.name)
         description_label.configure(
-            text=str(record.manifest.get("description", "") or "No description provided.")
+            text=(
+                str(record.manifest.get("description", "") or "No description provided.")
+                + f"\nLibrary: {record.path.parent.name}"
+            )
         )
         details.configure(state="normal")
         details.delete("1.0", "end")
@@ -1607,51 +1768,58 @@ def _show_library_browser(
     def render_records(*_args):
         visible = _filter_library_records(records, search.get())
         preferred = _preferred_library_selection(visible, selected_record[0])
-        children = tree.get_children()
-        if children:
-            tree.delete(*children)
-        for record in visible:
+        tree.delete(*tree.get_children())
+        records_by_id.clear()
+        for index, record in enumerate(visible):
             block_id = str(record.manifest["block_id"])
+            row_id = f"{block_id}:{index}"
+            records_by_id[row_id] = record
             tree.insert(
-                "", "end", iid=block_id, text=record.name,
+                "",
+                "end",
+                iid=row_id,
+                text=record.name,
                 values=(
+                    record.path.parent.name,
                     len(record.manifest.get("pins", [])),
                     len(record.manifest.get("variants", [])),
                     len(_layout_choices(record)),
                 ),
             )
-        library_path.set(f"{current_root[0]}  -  {len(visible)} of {len(records)} blocks")
+        library_path.set(
+            f"{len(current_roots[0])} libraries  ·  {len(visible)} of {len(records)} blocks"
+        )
         if preferred is not None:
-            preferred_id = str(preferred.manifest["block_id"])
-            tree.selection_set(preferred_id)
-            tree.focus(preferred_id)
+            preferred_id = next(
+                (key for key, value in records_by_id.items() if value is preferred),
+                None,
+            )
+            if preferred_id is not None:
+                tree.selection_set(preferred_id)
+                tree.focus(preferred_id)
         set_details(preferred)
 
-    def refresh_records(library_root: Path | None = None):
-        candidate_root = (
-            Path(library_root).expanduser().resolve()
-            if library_root is not None else current_root[0]
-        )
+    def refresh_records():
         try:
-            refreshed = list_blocks(candidate_root)
-            if candidate_root != current_root[0]:
-                candidate_root = set_library_root(candidate_root)
+            current_roots[0] = _library_roots_for(configured_library_roots())
+            for root_path in current_roots[0]:
+                root_path.mkdir(parents=True, exist_ok=True)
+            refreshed = _list_library_records(current_roots[0])
         except Exception as exc:
-            LOG.exception("Could not refresh the block library at %s", candidate_root)
+            LOG.exception("Could not refresh registered block libraries")
             messagebox.showerror(
                 "Refresh Block Library",
-                f"Could not read the selected library:\n{candidate_root}\n\n{exc}",
+                f"Could not read registered libraries.\n\n{exc}",
                 parent=window,
             )
             return False
-        current_root[0] = candidate_root
         records[:] = refreshed
-        records_by_id.clear()
-        records_by_id.update(
-            {str(record.manifest["block_id"]): record for record in records}
-        )
         render_records()
         return True
+
+    def manage_libraries():
+        _show_library_roots_dialog(window)
+        refresh_records()
 
     def selection_changed(_event=None):
         selection = tree.selection()
@@ -1666,9 +1834,9 @@ def _show_library_browser(
             if not editor_window_id:
                 raise RuntimeError(
                     "The Eeschema window was not captured. Close this browser and launch "
-                    "it again using the KiCad Blocks toolbar action inside Schematic Editor."
+                    "it again from the Schematic Editor."
                 )
-            _register_block(project_dir, record, kicad)
+            _register_block(project_dir, record, kicad, current_roots[0])
             minimized_windows = _minimize_placement_windows(window)
             try:
                 _start_native_symbol_placement(
@@ -1693,7 +1861,7 @@ def _show_library_browser(
                 messagebox.showerror("Open implementation", str(exc), parent=window)
             return
         chooser = tk.Toplevel(window)
-        chooser.title(f"Open implementation - {record.name}")
+        chooser.title(f"Open implementation — {record.name}")
         chooser.transient(window)
         chooser.grab_set()
         frame = ttk.Frame(chooser, padding=12)
@@ -1701,11 +1869,14 @@ def _show_library_browser(
         ttk.Label(frame, text="Select implementation variant:").pack(anchor="w")
         choice = tk.StringVar(value=str(variants[0]["value"]))
         combo = ttk.Combobox(
-            frame, textvariable=choice,
+            frame,
+            textvariable=choice,
             values=[str(item["value"]) for item in variants],
-            state="readonly", width=32,
+            state="readonly",
+            width=32,
         )
         combo.pack(fill="x", pady=8)
+
         def launch_variant():
             selected = next(
                 (item for item in variants if str(item["value"]) == choice.get()),
@@ -1720,6 +1891,7 @@ def _show_library_browser(
                 )
             except (OSError, RuntimeError, ValueError) as exc:
                 messagebox.showerror("Open implementation", str(exc), parent=window)
+
         buttons = ttk.Frame(frame)
         buttons.pack(fill="x")
         ttk.Button(buttons, text="Open", command=launch_variant).pack(side="right")
@@ -1735,11 +1907,13 @@ def _show_library_browser(
         layouts = _layout_choices(record)
         if not layouts:
             messagebox.showinfo(
-                "PCB Layout", f"{record.name} has no stored PCB layout.", parent=window
+                "PCB Layout",
+                f"{record.name} has no stored PCB layout.",
+                parent=window,
             )
             return
         chooser = tk.Toplevel(window)
-        chooser.title(f"Open PCB layout - {record.name}")
+        chooser.title(f"Open PCB layout — {record.name}")
         chooser.transient(window)
         chooser.grab_set()
         frame = ttk.Frame(chooser, padding=12)
@@ -1750,8 +1924,11 @@ def _show_library_browser(
             for item in layouts
         ]
         choice = tk.StringVar(value=labels[0])
-        combo = ttk.Combobox(frame, textvariable=choice, values=labels, state="readonly", width=36)
+        combo = ttk.Combobox(
+            frame, textvariable=choice, values=labels, state="readonly", width=36
+        )
         combo.pack(fill="x", pady=8)
+
         def launch_layout():
             index = labels.index(choice.get()) if choice.get() in labels else -1
             if index < 0:
@@ -1762,6 +1939,7 @@ def _show_library_browser(
                 _launch_block_asset(kicad, target, "PCB layout")
             except (OSError, RuntimeError, ValueError) as exc:
                 messagebox.showerror("Open PCB layout", str(exc), parent=window)
+
         buttons = ttk.Frame(frame)
         buttons.pack(fill="x")
         ttk.Button(buttons, text="Open", command=launch_layout).pack(side="right")
@@ -1770,17 +1948,14 @@ def _show_library_browser(
         )
         combo.focus_set()
 
-    def change_library():
-        selected = filedialog.askdirectory(
-            title="Select shared KiCad Blocks library",
-            initialdir=str(current_root[0]),
-            parent=window,
-        )
-        if selected:
-            refresh_records(Path(selected))
+    ttk.Button(
+        library_footer,
+        text="Manage libraries…",
+        command=manage_libraries,
+    ).pack(side="left")
 
-    ttk.Button(library_footer, text="Change library...", command=change_library).pack(side="left")
     search.trace_add("write", render_records)
+
     def focus_results(_event=None):
         children = tree.get_children()
         if children:
@@ -1812,30 +1987,26 @@ def _show_library_browser(
     tree.bind("<Return>", place_selected)
     tree.bind("<Escape>", focus_search)
     search_entry.bind("<Down>", focus_results)
-    preview.bind("<Configure>", lambda _event: (
-        _draw_facade_preview(preview, selected_record[0])
-        if selected_record[0] is not None else None
-    ))
+    preview.bind(
+        "<Configure>",
+        lambda _event: (
+            _draw_facade_preview(preview, selected_record[0])
+            if selected_record[0] is not None else None
+        ),
+    )
 
     actions = ttk.Frame(right)
     actions.pack(fill="x", pady=(10, 0))
     ttk.Button(actions, text="Place at cursor", command=place_selected).pack(side="left")
-    ttk.Button(actions, text="Open implementation...", command=open_implementation).pack(
-        side="left", padx=(8, 0)
-    )
-    ttk.Button(actions, text="Open PCB layout...", command=open_layout).pack(
-        side="left", padx=(8, 0)
-    )
+    ttk.Button(
+        actions, text="Open implementation…", command=open_implementation
+    ).pack(side="left", padx=(6, 0))
+    ttk.Button(
+        actions, text="Open PCB layout…", command=open_layout
+    ).pack(side="left", padx=(6, 0))
     ttk.Button(actions, text="Refresh", command=refresh_records).pack(side="right")
-    ttk.Label(
-        right,
-        text="Eeschema takes over during placement. Restore this window after Esc to browse again.",
-        foreground="#667785",
-        wraplength=680,
-    ).pack(anchor="w", pady=(5, 0))
     refresh_records()
     search_entry.focus_set()
-
 
 def run_library_browser() -> None:
     """Launch the searchable block library browser as a standalone KiCad action."""
