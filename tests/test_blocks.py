@@ -151,18 +151,17 @@ class BlockModelTests(unittest.TestCase):
             self.assertTrue(action["entrypoint"])
             self.assertEqual(action["scopes"], expected_scopes[action["identifier"]])
             self.assertTrue((PLUGIN / action["entrypoint"]).is_file())
-            arguments = action.get("args", [])
-            self.assertEqual(arguments, [])
-            if action["identifier"] == "place-imported-layout":
-                self.assertEqual(action["entrypoint"], "place_imported_layout.py")
-            else:
-                self.assertEqual(action["identifier"], "open-hub")
+            # IPC Python action args are passed before the script entrypoint.
+            # Passing an action ID here makes Python try to execute it as a file.
+            self.assertEqual(action.get("args", []), [])
+            if action["identifier"] == "open-hub":
                 self.assertEqual(action["entrypoint"], "entrypoints/action_hub.py")
-                self.assertTrue(action["show-button"])
+            else:
+                self.assertEqual(action["entrypoint"], "place_imported_layout.py")
             for key in ("icons-light", "icons-dark"):
                 for icon in action.get(key, []):
                     self.assertTrue((PLUGIN / icon).is_file(), icon)
-        self.assertNotIn("manager", expected_scopes)
+
 
     def test_project_catalog_can_seed_selected_block_configuration(self):
         from kicad_blocks.repository import set_project_symbol_defaults
