@@ -1,0 +1,13 @@
+{
+  "assets": {
+    "block-picker-filtered.png": "925e1346c344c5cd82023a9cca512b051328d116bd7076564c0e7b4360636020",
+    "block-picker-initial.png": "7578bcfecfeb2d174c7e755163751b6d3c70a5ebdd0d3d2faad0b264b35e9468",
+    "block-picker-profile.png": "4a4cf7f45952587a27f42f784a9602b0350fcc34b5e85ef9425c54b2df031d7e",
+    "block-picker-workflow.gif": "0e72f61d3e1c08569b3defe3189dcce23bf0223a751f02a80013b99d74eeb66d",
+    "functional-block-facade.svg": "dc44508f1d85c98f533442c6f8a4d73bb2761abcb1b09ddb5dee4fbd904a0d6f",
+    "functional-block-implementation.svg": "a60bc755298ffc196cd1d1e62aa69283fcbce3e044b83d02c1ac372280d1e8c7"
+  },
+  "source_commit": "dbe8f66a8a3cfc368f559fa13a06a751b14f0004",
+  "workflow_run_id": "43302460909",
+  "workflow_run_number": "388"
+}
