@@ -1,6 +1,6 @@
 # KiCad Encapsulated Blocks
 
-**Current release:** V1.1.0. The verified installable package targets KiCad nightly 10.99.0 on Linux x86_64 with CPython 3.12. See [V1.1.0 release notes](CHANGELOG.md).
+**Release version:** V1.1.0. The installable package is validated for KiCad nightly 10.99.0 on Linux x86_64 with CPython 3.12. Publication status and download assets are shown on the [GitHub Releases page](https://github.com/Uhrendoktor/kicad-blocks/releases). See [V1.1.0 release notes](CHANGELOG.md).
 
 **Project tracker:** [MVP tracking issue #1](https://github.com/Uhrendoktor/kicad-blocks/issues/1). Requirements, decisions, verification evidence, and remaining work are maintained there.
 
@@ -50,10 +50,10 @@ Layout descriptors are part of the block manifest. A new block's `layouts` list 
 
 ## Requirements
 
-- KiCad **10.99 development nightly** (the pre-release development build for KiCad 11) or KiCad 11.0+. Enable the KiCad IPC API in Preferences → Plugins for the Schematic Editor and PCB Editor actions you use. Stable KiCad 10.0.8 and all 10.0.x releases are unsupported: KiCad 9/10 IPC add-ons are limited to PCB Editor; the Schematic Editor add-on scope is introduced in KiCad 11. CI verifies nightly **10.99.0** on Linux.
+- The V1.1 release package is validated only with KiCad **10.99.0 development nightly** (the pre-release development build for KiCad 11) on Linux x86_64. The installer accepts KiCad 11.0+ version directories, but those builds are not verified or advertised as supported until matching wheels and CI targets exist. Enable the KiCad IPC API in Preferences → Plugins for the Schematic Editor and PCB Editor actions you use. Stable KiCad 10.0.8 and all 10.0.x releases are unsupported: KiCad 9/10 IPC add-ons are limited to PCB Editor; the Schematic Editor add-on scope is introduced in KiCad 11.
 - Python runtime managed by KiCad for the plugin, with Tkinter available. On Debian/Ubuntu, install Tkinter and the small X11 automation utility used for native cursor placement with `sudo apt install python3-tk xdotool`. The placement handoff sends Eeschema's default **Add Symbol** shortcut (`A`) to the active editor, then filters KiCad's native symbol chooser; keep that shortcut bound to `A`.
 - The official KiCad `kicad-python` development bindings. V1.1 pins the upstream source revision in `plugin/kicad-blocks/kicad-python.lock` and uses a version-addressed GitHub Release asset (`kicad-python-76b47d25`). CI verifies the asset digest and refuses to replace different bytes. The separate `kicad-python-dev` asset remains a mutable development channel. KiCad's plugin manager installs requirements in binary-wheel-only mode, so the published binary wheel is required; a Git/VCS source requirement will not install through that manager.
-- The currently published `kicad-python` development wheel is tagged `cp312-cp312-linux_x86_64`; `plugin.json` therefore declares Python `min_version` 3.12, and the documented/tested runtime is CPython 3.12 on Linux x86_64. The installer explicitly rejects Windows, macOS, other CPU architectures, and KiCad 10 stable rather than leaving an installation whose required IPC API/wheel cannot load. KiCad 11 stable, other Python ABIs and other platforms need matching tested wheels before they can be advertised as supported.
+- The pinned KiCad Python IPC wheel is tagged `cp312-cp312-linux_x86_64`; `plugin.json` therefore declares Python `min_version` 3.12, and the documented/tested runtime is CPython 3.12 on Linux x86_64. The installer explicitly rejects Windows, macOS, other CPU architectures, and KiCad 10 stable rather than leaving an installation whose required IPC API/wheel cannot load. KiCad 11 stable, other Python ABIs and other platforms need matching tested wheels before they can be advertised as supported.
 
 Schematic placement, selection and library reload APIs used here are part of KiCad's newer schematic IPC interface. This plugin does not support the old SWIG-only plugin interface.
 
