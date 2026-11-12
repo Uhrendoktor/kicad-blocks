@@ -228,7 +228,7 @@ def generate_reference_schematic(destination: Path) -> Path:
             "5": ("VMCU", "hier", "input"), "6": ("GND", "hier", "passive"),
         }),
         ("C50", "Device", "C", "4.7uF", (70, 205), {"1": ("VBUS", "local", ""), "2": ("GND", "local", "")}),
-        ("C1", "Device", "C", "1uF", (215, 95), {"1": ("1V2", "local", ""), "2": ("GND", "local", "")}),
+        ("C1", "Device", "C", "1uF", (215, 95), {"1": ("VREG_1V2", "local", ""), "2": ("GND", "local", "")}),
         ("C2", "Device", "C", "1uF", (240, 95), {"1": ("2V7", "local", ""), "2": ("GND", "local", "")}),
         ("C3", "Device", "C", "1uF", (265, 95), {"1": ("2V7", "local", ""), "2": ("GND", "local", "")}),
         ("C4", "Device", "C", "1uF", (125, 85), {"1": ("VBUS_FILTERED", "local", ""), "2": ("GND", "local", "")}),
