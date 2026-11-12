@@ -31,8 +31,9 @@ path across the upper-right, and the optional MCU/I²C interface on the right.
 | C1, C2, C3, C4 | 1 µF | Controller supply/reference decoupling |
 | C10 | 100 nF | Power-path support capacitor |
 | C50 | 4.7 µF | VBUS input capacitance |
+| D4 | Generic diode symbol; ST does not specify a part number | VBUS input branch (select a rated part for the application) |
 | R1 | 470 Ω | VBUS sensing path |
-| R2, R4 | 1 kΩ | Discharge/sense support |
+| R2, R4 | 1 kΩ | VSNK discharge and VBUS sensing support |
 | R3, R5, R6 | 4.7 kΩ | MCU pull-ups |
 | R10 | 100 kΩ | Power-path gate network |
 | R11 | 22 kΩ | Power-path gate network |
@@ -43,7 +44,7 @@ path across the upper-right, and the optional MCU/I²C interface on the right.
 | D1 | [ESDA25W](https://www.st.com/en/protections-and-emi-filters/esdaxxxwx.html) | CC-line protection array |
 | D50, D11 | [ESDA25P35-1U1M](https://www.st.com/en/protections-and-emi-filters/esda25p35-1u1m.html) | VBUS / sink-output protection |
 | T1, T4 | STL6P3LLH6 | P-channel VBUS power-path switches |
-| J10 | 2-pin connector | VSNK output |
+| J10 | MPT_0.5_2-2.54 | VSNK output connector |
 | J2 | 6-pin connector | Optional MCU SCL/SDA/ALERT#/RESET/VMCU/GND interface |
 
 ## Reproduce
