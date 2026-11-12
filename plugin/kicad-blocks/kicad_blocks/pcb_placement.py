@@ -28,7 +28,7 @@ def _merge_entries(result: dict[str, Any]) -> list[dict[str, Any]]:
     item_ids: set[str] = set()
     for entry in entries:
         if not isinstance(entry, dict):
-            raise ValueError("PCB merge result contains a malformed placement entry.")
+            raise TypeError("PCB merge result contains a malformed placement entry.")
         reference = str(entry.get("instance_reference", "")).strip()
         if not reference:
             raise ValueError("PCB placement is missing its schematic instance reference.")
@@ -100,7 +100,7 @@ def read_pcb_placement_manifest(board_path: Path) -> dict[str, Any]:
     except (OSError, json.JSONDecodeError) as exc:
         raise ValueError(f"Could not read PCB placement manifest {sidecar}: {exc}") from exc
     if not isinstance(payload, dict):
-        raise ValueError("PCB placement manifest must be a JSON object.")
+        raise TypeError("PCB placement manifest must be a JSON object.")
     if payload.get("schema_version") != PLACEMENT_SCHEMA_VERSION:
         raise ValueError(
             f"Unsupported PCB placement manifest schema: {payload.get('schema_version')!r}."
@@ -118,7 +118,7 @@ def read_pcb_placement_manifest(board_path: Path) -> dict[str, Any]:
     seen_items: set[str] = set()
     for placement in placements:
         if not isinstance(placement, dict):
-            raise ValueError("PCB placement manifest contains a malformed placement.")
+            raise TypeError("PCB placement manifest contains a malformed placement.")
         reference = str(placement.get("instance_reference", "")).strip()
         if not reference or reference.casefold() in seen_references:
             raise ValueError(f"PCB placement reference is missing or duplicated: {reference!r}.")

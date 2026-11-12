@@ -316,6 +316,7 @@ def main() -> None:
         ):
             raise AssertionError(f"Imported board-item IDs are incomplete or duplicated: {result!r}")
 
+        parsed = parse_sexpr(output.read_text(encoding="utf-8"))
         top_level_item_ids = {
             str(child[1])
             for item in parsed[1:]
@@ -330,7 +331,6 @@ def main() -> None:
 
         # The imported chain must use mapped project net names and regenerated
         # terminal-pad UUIDs, not references back to the stored library board.
-        parsed = parse_sexpr(output.read_text(encoding="utf-8"))
         chain_section = next(
             item for item in parsed[1:]
             if isinstance(item, list) and item and item[0] == "net_chains"

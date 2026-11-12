@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -10,7 +11,6 @@ from types import SimpleNamespace
 
 ROOT = Path(__file__).resolve().parents[1]
 PLUGIN = ROOT / "plugin" / "kicad-blocks"
-import sys
 sys.path.insert(0, str(PLUGIN))
 
 from kicad_blocks.pcb_placement import (
