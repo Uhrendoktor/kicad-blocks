@@ -568,7 +568,7 @@ def render_symbol_library(
 def render_implementation_schematic(
     display_name: str, block_id: str, pins: Iterable[BlockPin]
 ) -> str:
-    """Generate a separate editable schematic document with interface net labels.
+    """Generate a separate editable schematic document with native hierarchical labels for its external interface.
 
     This is a standalone asset in the block library. It is not included in the
     project hierarchy and creates no child-sheet file when a facade is placed.
