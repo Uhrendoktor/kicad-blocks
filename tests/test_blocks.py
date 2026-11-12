@@ -404,9 +404,11 @@ class BlockRepositoryTests(unittest.TestCase):
         self.assertTrue(record.symbol_library.is_file())
         self.assertTrue(record.implementation.is_file())
         implementation = record.implementation.read_text(encoding="utf-8")
-        self.assertIn('(global_label "VIN"', implementation)
+        self.assertIn('(hierarchical_label "VIN" (shape input)', implementation)
+        self.assertIn('(hierarchical_label "GND" (shape passive)', implementation)
+        self.assertIn('(hierarchical_label "VOUT" (shape output)', implementation)
+        self.assertNotIn("(global_label ", implementation)
         self.assertNotIn("(sheet ", implementation)
-        self.assertNotIn("hierarchical_label", implementation)
         self.assertEqual(len(list_blocks(self.root)), 1)
 
     def test_create_block_stores_multiple_named_layouts_and_parameters(self):
