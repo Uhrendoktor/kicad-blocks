@@ -21,7 +21,7 @@ on:
 
 # Release publication is intentionally serial and tied to an exact version tag.
 concurrency:
-  group: kicad-blocks-release-${{ github.ref }}
+  group: kicad-blocks-release-${{ inputs.tag || github.ref_name }}
   cancel-in-progress: false
 
 jobs:
