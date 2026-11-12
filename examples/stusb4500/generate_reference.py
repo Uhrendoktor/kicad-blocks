@@ -374,11 +374,16 @@ def generate_reference_schematic(destination: Path) -> Path:
             if abs(x_a - x_b) > 0.001 and abs(y_a - y_b) > 0.001:
                 route.append(["xy", f"{x_b:.3f}", f"{y_a:.3f}"])
             route.append(["xy", f"{x_b:.3f}", f"{y_b:.3f}"])
-            wires.append([
-                "wire", ["pts", *route],
-                ["stroke", ["width", "0"], ["type", "default"]],
-                ["uuid", _Quoted(_uid(f"wire:{net}:{index}:{ref_a}:{ref_b}"))],
-            ])
+            for segment_index, (start, end) in enumerate(zip(route, route[1:])):
+                if start[1:] == end[1:]:
+                    continue
+                wires.append([
+                    "wire", ["pts", start, end],
+                    ["stroke", ["width", "0"], ["type", "default"]],
+                    ["uuid", _Quoted(_uid(
+                        f"wire:{net}:{index}:{segment_index}:{ref_a}:{ref_b}"
+                    ))],
+                ])
 
     schematic = [
         "kicad_sch", ["version", "20250114"], ["generator", _Quoted("kicad-blocks")],
