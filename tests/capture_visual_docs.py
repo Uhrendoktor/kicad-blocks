@@ -339,6 +339,13 @@ def main() -> int:
         "source_sha": os.environ.get("GITHUB_SHA", "local"),
         "generator": "tests/capture_visual_docs.py",
         "renderer": "KiCad CLI and the production Place Functional Block Tk dialog",
+        "example": {
+            "component": "STUSB4500QTR",
+            "manufacturer": "STMicroelectronics",
+            "datasheet": "https://www.st.com/resource/en/datasheet/stusb4500.pdf",
+            "datasheet_revision": "DS12499 Rev. 8",
+            "reference": "Figure 10, page 26/42",
+        },
         "assets": assets,
     }
     (output_dir / "manifest.json").write_text(
