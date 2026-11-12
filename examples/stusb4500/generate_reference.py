@@ -347,7 +347,7 @@ def generate_reference_schematic(destination: Path) -> Path:
     # Local labels remain on each pin, so the topology is both readable and
     # unambiguous to KiCad's netlist exporter.
     wires = []
-    for net in ("VBUS", "CC1", "CC2", "VSNK", "SCL", "SDA", "ALERT#", "RESET", "VMCU"):
+    for net in ("VBUS", "CC1", "CC2", "VSNK", "SCL", "SDA", "ALERT#", "RESET", "VMCU", "POWER_OK2", "VBUS_EN_SNK"):
         by_reference = {}
         for reference, x, y in net_points.get(net, []):
             by_reference.setdefault(reference, (x, y))
