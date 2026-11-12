@@ -40,8 +40,8 @@ path across the upper-right, and the optional MCU/I²C interface on the right.
 | R51, R52 | NC | Optional address straps |
 | R53, R54 | 100 kΩ | Address configuration |
 | R55 | 10 kΩ | Reset network |
-| D1 | ESDA25W | CC-line protection array |
-| D50, D11 | ESDA25P35-1U1M | VBUS / sink-output protection |
+| D1 | [ESDA25W](https://www.st.com/en/protections-and-emi-filters/esdaxxxwx.html) | CC-line protection array |
+| D50, D11 | [ESDA25P35-1U1M](https://www.st.com/en/protections-and-emi-filters/esda25p35-1u1m.html) | VBUS / sink-output protection |
 | T1, T4 | STL6P3LLH6 | P-channel VBUS power-path switches |
 | J10 | 2-pin connector | VSNK output |
 | J2 | 6-pin connector | Optional MCU SCL/SDA/ALERT#/RESET/VMCU/GND interface |
