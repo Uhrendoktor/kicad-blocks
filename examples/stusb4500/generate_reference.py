@@ -181,10 +181,10 @@ def generate_reference_schematic(destination: Path) -> Path:
             "5": ("CC2", "local", ""), "6": ("RESET", "local", ""),
             "7": ("SCL", "local", ""), "8": ("SDA", "local", ""),
             "9": ("DISCH", "local", ""), "10": ("GND", "local", ""),
-            "11": ("ATTACH", "local", ""), "12": ("ADDR0", "local", ""),
-            "13": ("ADDR1", "local", ""), "14": ("POWER_OK3", "local", ""),
-            "15": ("GPIO", "local", ""), "16": ("VBUS_EN_SNK", "local", ""),
-            "17": ("A_B_SIDE", "local", ""), "18": ("VBUS_SENSE", "local", ""),
+            "11": ("NC", "nc", ""), "12": ("ADDR0", "local", ""),
+            "13": ("ADDR1", "local", ""), "14": ("NC", "nc", ""),
+            "15": ("NC", "nc", ""), "16": ("VBUS_EN_SNK", "local", ""),
+            "17": ("NC", "nc", ""), "18": ("VBUS_SENSE", "local", ""),
             "19": ("ALERT#", "local", ""), "20": ("POWER_OK2", "local", ""),
             "21": ("1V2", "local", ""), "22": ("GND", "local", ""),
             "23": ("2V7", "local", ""), "24": ("VBUS", "local", ""),
@@ -200,9 +200,10 @@ def generate_reference_schematic(destination: Path) -> Path:
         ("J10", "Connector_Generic", "Conn_01x02", "VSNK output", (300, 95), {
             "1": ("VSNK", "hier", "output"), "2": ("GND", "hier", "passive"),
         }),
-        ("J2", "Connector_Generic", "Conn_01x04", "MCU interface", (300, 180), {
-            "1": ("SCL", "hier", "bidirectional"), "2": ("SDA", "hier", "bidirectional"),
+        ("J2", "Connector_Generic", "Conn_01x06", "MCU interface", (300, 180), {
+            "1": ("SCL", "hier", "input"), "2": ("SDA", "hier", "bidirectional"),
             "3": ("ALERT#", "hier", "output"), "4": ("RESET", "hier", "input"),
+            "5": ("VMCU", "hier", "input"), "6": ("GND", "hier", "passive"),
         }),
         ("C50", "Device", "C", "4.7uF", (105, 65), {"1": ("VBUS", "local", ""), "2": ("GND", "local", "")}),
         ("C1", "Device", "C", "1uF", (135, 65), {"1": ("1V2", "local", ""), "2": ("GND", "local", "")}),
