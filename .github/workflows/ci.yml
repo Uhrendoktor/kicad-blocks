@@ -55,6 +55,31 @@ jobs:
           echo "KICAD_CLI=$CLI" >> "$GITHUB_ENV"
           "$CLI" version
 
+      - name: Install KiCad schematic symbol libraries if missing
+        shell: bash
+        run: |
+          set -euo pipefail
+          if find /usr/share /usr/local/share -name Interface_USB.kicad_sym -print -quit 2>/dev/null | grep -q .; then
+            echo "KiCad schematic symbol libraries are already installed."
+            exit 0
+          fi
+          if [[ "$(id -u)" -eq 0 ]]; then
+            SUDO=()
+          elif command -v sudo >/dev/null 2>&1 && sudo -n true; then
+            SUDO=(sudo)
+          else
+            echo "::error::KiCad CLI is installed but the official schematic symbol libraries are missing, and the runner cannot install packages."
+            exit 1
+          fi
+          if ! apt-cache show kicad-nightly-symbols >/dev/null 2>&1; then
+            "${SUDO[@]}" apt-get update
+            "${SUDO[@]}" apt-get install -y --no-install-recommends software-properties-common
+            "${SUDO[@]}" add-apt-repository --yes ppa:kicad/kicad-dev-nightly
+            "${SUDO[@]}" apt-get update
+          fi
+          "${SUDO[@]}" apt-get install -y --no-install-recommends kicad-nightly-symbols
+          find /usr/share /usr/local/share -name Interface_USB.kicad_sym -print -quit | grep -q .
+
       - name: Inspect local runner
         shell: bash
         run: |
