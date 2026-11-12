@@ -102,6 +102,17 @@ def _custom_esda25w() -> list:
     ]
 
 
+def _strip_embedded_font_flags(node: list) -> None:
+    """Remove per-library font flags; the schematic carries one root-level flag."""
+    node[:] = [
+        child for child in node
+        if not (isinstance(child, list) and _head(child) == "embedded_fonts")
+    ]
+    for child in node:
+        if isinstance(child, list):
+            _strip_embedded_font_flags(child)
+
+
 def _load_symbol(root: Path, library: str, name: str) -> list:
     if library == "STUSB4500_Custom" and name == "ESDA25W":
         return _custom_esda25w()
@@ -116,6 +127,7 @@ def _load_symbol(root: Path, library: str, name: str) -> list:
     for node in _all(tree, "symbol"):
         if str(node[1]) == name:
             result = copy.deepcopy(node)
+            _strip_embedded_font_flags(result)
             result[1] = _Quoted(f"{library}:{name}")
             return result
     raise LookupError(f"Symbol {library}:{name} is not in {path}.")
