@@ -48,6 +48,18 @@ def _validate_stusb4500_netlist(cli: str, output_dir: Path) -> None:
         check=True,
     )
     tree = parse_sexpr(netlist_path.read_text(encoding="utf-8"))
+    # Preserve the native KiCad source, SVG and netlist even when the following
+    # assertions fail, so failures can be visually and electrically inspected.
+    artifact_dir = Path(os.environ.get("RUNNER_TEMP", tempfile.gettempdir())) / "kicad-blocks-visual-docs" / "stusb4500-debug"
+    artifact_dir.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(schematic, artifact_dir / "stusb4500.kicad_sch")
+    shutil.copy2(netlist_path, artifact_dir / "stusb4500.net")
+    svg_dir = artifact_dir / "svg"
+    svg_dir.mkdir(exist_ok=True)
+    subprocess.run(
+        [cli, "sch", "export", "svg", "--output", str(svg_dir), str(schematic)],
+        check=True,
+    )
     actual: dict[tuple[str, str], str] = {}
     nets_container = _direct(tree, "nets")
     if nets_container is None:
@@ -97,6 +109,18 @@ def _validate_stusb4500_netlist(cli: str, output_dir: Path) -> None:
         ("R6", "1"): "VMCU",
         ("R6", "2"): "ALERT#",
     }
+    for net in _all(nets_container, "net"):
+        name_node = _direct(net, "name")
+        if name_node is None:
+            continue
+        nodes = []
+        for node in _all(net, "node"):
+            ref_node = _direct(node, "ref")
+            pin_node = _direct(node, "pin")
+            if ref_node is not None and pin_node is not None:
+                nodes.append((str(ref_node[1]), str(pin_node[1])))
+        print(f"NETLIST {name_node[1]}: {sorted(nodes)}")
+
     mismatches = {
         pin: (expected_name, actual.get(pin))
         for pin, expected_name in expected.items()
