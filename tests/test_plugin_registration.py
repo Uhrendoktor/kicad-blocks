@@ -302,7 +302,7 @@ def main() -> None:
         manifest = json.loads(plugin_manifest_path.read_text(encoding="utf-8"))
         if manifest.get("runtime", {}).get("min_version") != "3.12":
             raise AssertionError(
-                "Plugin metadata must require CPython 3.12 to match its published cp312 wheel."
+                "Plugin metadata must retain the CPython 3.12 minimum; the requirements select the matching supported ABI wheel."
             )
         action = next(
             item

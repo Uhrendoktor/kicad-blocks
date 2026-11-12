@@ -85,9 +85,10 @@ def _get_or_create_release(repo: str, tag: str, source_sha: str, token: str) -> 
         if release.get("tag_name") != tag:
             raise RuntimeError(f"GitHub returned the wrong release for tag {tag!r}.")
         target_body = (
-            "Immutable dependency assets for KiCad Blocks releases.\\n\\n"
-            f"Built from official kicad-python commit {source_sha}. "
-            "Targets: CPython 3.12, 3.13 and 3.14, Linux x86_64."
+            "Immutable dependency assets for KiCad Blocks releases."
+            + chr(10) * 2
+            + f"Built from official kicad-python commit {source_sha}. "
+            + "Targets: CPython 3.12, 3.13 and 3.14, Linux x86_64."
         )
         if release.get("body") != target_body:
             release = _request(

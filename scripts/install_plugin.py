@@ -86,8 +86,8 @@ def validate_install_target(
     }.get(selected_machine, selected_machine)
     if selected_platform != "linux" or normalized_machine != "x86_64":
         raise ValueError(
-            "The currently published KiCad Python IPC wheel supports Linux "
-            "x86_64 with CPython 3.12 only. This installer cannot install a "
+            "The currently published KiCad Python IPC wheels support Linux "
+            "x86_64 with CPython 3.12, 3.13 and 3.14. This installer cannot install a "
             f"working plugin on {selected_platform}/{normalized_machine}. "
             "Use the supported Linux x86_64 target or provide a matching "
             "kicad-python development wheel for this platform."
