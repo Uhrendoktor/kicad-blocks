@@ -1,11 +1,11 @@
 from __future__ import annotations
 
+import sys
 import tempfile
 import unittest
 from pathlib import Path
 
 PLUGIN = Path(__file__).resolve().parents[1] / "plugin" / "kicad-blocks"
-import sys
 sys.path.insert(0, str(PLUGIN))
 
 from kicad_blocks.extraction import selected_sheet_file
