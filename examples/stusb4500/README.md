@@ -48,7 +48,7 @@ path across the upper-right, and the optional MCU/I²C interface on the right.
 
 ## Reproduce
 
-With KiCad CLI and its standard symbol libraries installed:
+With KiCad CLI and its standard symbol libraries installed. The visual-documentation workflow pins the official KiCad 10.0.5 symbol-library release in [kicad-symbols.lock](kicad-symbols.lock) so CI uses a reproducible set of real component symbols:
 
 ```bash
 python examples/stusb4500/generate_reference.py
