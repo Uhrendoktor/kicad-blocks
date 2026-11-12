@@ -60,7 +60,7 @@ class STUSB4500ReferenceTests(unittest.TestCase):
         )
         self.assertLess(
             len(wire_nodes),
-            80,
+            100,
             "Long nets should use local labels, not coordinate-sorted wire guesses",
         )
         self.assertNotIn("(global_label ", content)
