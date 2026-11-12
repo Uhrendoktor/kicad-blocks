@@ -17,6 +17,35 @@ PLUGIN_IDENTIFIER = "org.uhrendoktor.kicadblocks"
 
 
 class PluginInstallerTests(unittest.TestCase):
+    def test_installer_accepts_supported_cpython_minors(self):
+        from importlib.util import module_from_spec, spec_from_file_location
+
+        spec = spec_from_file_location("kicad_blocks_installer", INSTALLER)
+        installer = module_from_spec(spec)
+        assert spec and spec.loader
+        spec.loader.exec_module(installer)
+
+        for minor in (12, 13, 14):
+            with self.subTest(minor=minor):
+                installer.validate_python_runtime(
+                    implementation="cpython",
+                    version_info=(3, minor, 4),
+                )
+        for version in ((3, 11, 9), (3, 15, 0)):
+            with (
+                self.subTest(version=version),
+                self.assertRaisesRegex(ValueError, "CPython 3.12, 3.13 and 3.14"),
+            ):
+                installer.validate_python_runtime(
+                    implementation="cpython",
+                    version_info=version,
+                )
+        with self.assertRaisesRegex(ValueError, "CPython 3.12, 3.13 and 3.14"):
+            installer.validate_python_runtime(
+                implementation="pypy",
+                version_info=(3, 14, 0),
+            )
+
     def test_install_and_reinstall_replace_the_complete_plugin_folder(self):
         with tempfile.TemporaryDirectory(prefix="kicad-blocks-install-test-") as temp:
             user_data = pathlib.Path(temp) / "KiCad"
@@ -80,11 +109,12 @@ class PluginInstallerTests(unittest.TestCase):
 
     def test_plugin_requirements_use_a_published_binary_wheel(self):
         requirements = (SOURCE / "requirements.txt").read_text(encoding="utf-8")
-        self.assertIn(
-            "https://github.com/Uhrendoktor/kicad-blocks/releases/download/"
-            "kicad-python-76b47d25/kicad_python-0.9.0.dev0-cp312-cp312-linux_x86_64.whl",
-            requirements,
-        )
+        for abi in ("cp312", "cp313", "cp314"):
+            self.assertIn(
+                "https://github.com/Uhrendoktor/kicad-blocks/releases/download/"
+                f"kicad-python-76b47d25/kicad_python-0.9.0.dev0-{abi}-{abi}-linux_x86_64.whl",
+                requirements,
+            )
         self.assertNotIn("git+", requirements)
         self.assertNotIn("@main", requirements)
 

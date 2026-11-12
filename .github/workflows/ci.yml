@@ -20,7 +20,7 @@ jobs:
   python-and-kicad:
     if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
     runs-on: [self-hosted, linux, x64]
-    timeout-minutes: 25
+    timeout-minutes: 50
     steps:
       - uses: actions/checkout@v4
 
@@ -209,6 +209,77 @@ jobs:
       - name: Verify PCB block layout merge (headless)
         shell: bash
         run: "${RUNNER_TEMP}/kicad-blocks-venv/bin/python tests/test_pcb_layout.py"
+
+      # Build each ABI-specific dependency wheel with that exact interpreter.
+      # KiCad's plugin manager installs wheels only, so publish a prebuilt
+      # kicad-python wheel and its matching dependencies for every supported ABI.
+      - name: Set up CPython 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Build and publish CPython 3.13 KiCad IPC wheel
+        shell: bash
+        env:
+          KIPY_SHA: ${{ steps.kipy.outputs.sha }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          python3 --version
+          VENV="${RUNNER_TEMP}/kicad-blocks-venv-cp313"
+          WHEELHOUSE="${RUNNER_TEMP}/kicad-blocks-wheelhouse-cp313"
+          rm -rf "$VENV" "$WHEELHOUSE"
+          mkdir -p "$WHEELHOUSE"
+          python3 -m venv "$VENV"
+          PY="$VENV/bin/python"
+          "$PY" -m pip install --upgrade pip
+          "$PY" -m pip wheel --wheel-dir "$WHEELHOUSE" \
+            "git+https://gitlab.com/kicad/code/kicad-python.git@$KIPY_SHA"
+          test -n "$(find "$WHEELHOUSE" -maxdepth 1 -name 'kicad_python-0.9.0.dev0-cp313-cp313-linux_x86_64.whl' -print -quit)"
+          "$PY" -m pip install --no-index --find-links "$WHEELHOUSE" "kicad-python==0.9.0.dev0"
+          "$PY" -c "from kipy import KiCad; from kipy.schematic import Schematic; print('CPython 3.13 KiCad IPC bindings available')"
+          python3 scripts/publish_pinned_ipc_wheel.py \
+            "$WHEELHOUSE" --repo "$GITHUB_REPOSITORY" --source-sha "$KIPY_SHA"
+
+      - name: Verify KiCad plugin discovery on CPython 3.13
+        shell: bash
+        run: |
+          xvfb-run -a -s "-screen 0 1280x800x24" \
+            "${RUNNER_TEMP}/kicad-blocks-venv-cp313/bin/python" tests/test_plugin_registration.py
+
+      - name: Set up CPython 3.14.4
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14.4"
+
+      - name: Build and publish CPython 3.14 KiCad IPC wheel
+        shell: bash
+        env:
+          KIPY_SHA: ${{ steps.kipy.outputs.sha }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          python3 --version
+          VENV="${RUNNER_TEMP}/kicad-blocks-venv-cp314"
+          WHEELHOUSE="${RUNNER_TEMP}/kicad-blocks-wheelhouse-cp314"
+          rm -rf "$VENV" "$WHEELHOUSE"
+          mkdir -p "$WHEELHOUSE"
+          python3 -m venv "$VENV"
+          PY="$VENV/bin/python"
+          "$PY" -m pip install --upgrade pip
+          "$PY" -m pip wheel --wheel-dir "$WHEELHOUSE" \
+            "git+https://gitlab.com/kicad/code/kicad-python.git@$KIPY_SHA"
+          test -n "$(find "$WHEELHOUSE" -maxdepth 1 -name 'kicad_python-0.9.0.dev0-cp314-cp314-linux_x86_64.whl' -print -quit)"
+          "$PY" -m pip install --no-index --find-links "$WHEELHOUSE" "kicad-python==0.9.0.dev0"
+          "$PY" -c "from kipy import KiCad; from kipy.schematic import Schematic; print('CPython 3.14 KiCad IPC bindings available')"
+          python3 scripts/publish_pinned_ipc_wheel.py \
+            "$WHEELHOUSE" --repo "$GITHUB_REPOSITORY" --source-sha "$KIPY_SHA"
+
+      - name: Verify KiCad plugin discovery on CPython 3.14
+        shell: bash
+        run: |
+          xvfb-run -a -s "-screen 0 1280x800x24" \
+            "${RUNNER_TEMP}/kicad-blocks-venv-cp314/bin/python" tests/test_plugin_registration.py
 
       # Release publication is deliberately after validation and best-effort:
       # a transient GitHub upload outage must not mask a green KiCad test suite.

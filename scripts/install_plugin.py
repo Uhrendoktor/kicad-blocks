@@ -21,6 +21,33 @@ DEFAULT_SOURCE = Path(__file__).resolve().parents[1] / "plugin" / PLUGIN_DIRECTO
 
 SUPPORTED_NIGHTLY_DIRECTORY = (10, 99)
 FIRST_STABLE_SCHEMATIC_IPC_MAJOR = 11
+SUPPORTED_PYTHON_IMPLEMENTATION = "cpython"
+SUPPORTED_PYTHON_MINOR_VERSIONS = frozenset({12, 13, 14})
+
+
+def validate_python_runtime(
+    *,
+    implementation: str | None = None,
+    version_info=None,
+) -> None:
+    """Require one of the tested CPython minor versions for the IPC wheel."""
+    selected_implementation = implementation or sys.implementation.name
+    selected_version = version_info or sys.version_info
+    major, minor = int(selected_version[0]), int(selected_version[1])
+    if (
+        selected_implementation.casefold() != SUPPORTED_PYTHON_IMPLEMENTATION
+        or major != 3
+        or minor not in SUPPORTED_PYTHON_MINOR_VERSIONS
+    ):
+        version_text = ".".join(str(part) for part in selected_version[:3])
+        raise ValueError(
+            "KiCad Blocks provides Linux x86_64 IPC wheels for CPython 3.12, "
+            "3.13 and 3.14. "
+            f"The installer is running {selected_implementation} {version_text}. "
+            "Run the installer with a supported CPython version and choose a "
+            "supported CPython 3.12, 3.13 or 3.14 interpreter in KiCad "
+            "Preferences > Plugins > Path to Python interpreter."
+        )
 
 
 def validate_install_target(
@@ -34,8 +61,9 @@ def validate_install_target(
     KiCad 9 and 10 expose IPC add-ons only in PCB Editor. Schematic Editor
     plugins are introduced in KiCad 11; the 10.99 development nightly is the
     current pre-release target. The published kicad-python wheel is currently
-    CPython 3.12 / Linux x86_64 only.
+    CPython 3.12, 3.13 and 3.14 on Linux x86_64.
     """
+    validate_python_runtime()
     if not re.fullmatch(r"\d+\.\d+", version):
         raise ValueError("KiCad version must use MAJOR.MINOR format, for example 10.99.")
     major, minor = (int(part) for part in version.split("."))
@@ -58,8 +86,8 @@ def validate_install_target(
     }.get(selected_machine, selected_machine)
     if selected_platform != "linux" or normalized_machine != "x86_64":
         raise ValueError(
-            "The currently published KiCad Python IPC wheel supports Linux "
-            "x86_64 with CPython 3.12 only. This installer cannot install a "
+            "The currently published KiCad Python IPC wheels support Linux "
+            "x86_64 with CPython 3.12, 3.13 and 3.14. This installer cannot install a "
             f"working plugin on {selected_platform}/{normalized_machine}. "
             "Use the supported Linux x86_64 target or provide a matching "
             "kicad-python development wheel for this platform."

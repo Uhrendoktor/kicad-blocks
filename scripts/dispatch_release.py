@@ -43,7 +43,7 @@ def dispatch_release(repo: str, tag: str, source_sha: str, version: str, token: 
     api = os.environ.get("GITHUB_API_URL", "https://api.github.com").rstrip("/")
     release_url = f"{api}/repos/{repo}/releases/tags/{quote(tag, safe='')}"
     release = _request("GET", release_url, token)
-    archive_name = f"kicad-blocks-{version}-linux-x86_64-cp312.zip"
+    archive_name = f"kicad-blocks-{version}-linux-x86_64.zip"
     required_assets = {archive_name, archive_name + ".sha256"}
     if release is not None:
         assets_by_name = {
