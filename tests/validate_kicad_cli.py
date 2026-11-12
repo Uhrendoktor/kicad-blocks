@@ -12,10 +12,10 @@ PLUGIN = ROOT / "plugin" / "kicad-blocks"
 sys.path.insert(0, str(PLUGIN))
 sys.path.insert(0, str(ROOT / "examples" / "stusb4500"))
 
-from kicad_blocks.model import parse_pins
-from kicad_blocks.pcb_layout import _all, _direct, parse_sexpr
 from generate_reference import generate_reference_schematic
+from kicad_blocks.model import parse_pins
 from kicad_blocks.operations import export_block_bom, validate_block_tree
+from kicad_blocks.pcb_layout import _all, _direct, parse_sexpr
 from kicad_blocks.repository import add_dependency, create_block
 
 
