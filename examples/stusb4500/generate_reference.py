@@ -52,7 +52,52 @@ def _symbol_root() -> Path:
     raise FileNotFoundError("Cannot locate the installed KiCad symbol libraries.")
 
 
+def _custom_esda25w() -> list:
+    """Three-terminal ESDA25W array: CC1, CC2 and common ground."""
+    return [
+        "symbol", _Quoted("STUSB4500_Custom:ESDA25W"),
+        ["in_bom", "yes"], ["on_board", "yes"],
+        ["property", _Quoted("Reference"), _Quoted("D"),
+            ["id", "0"], ["at", "0", "6.35", "0"],
+            ["effects", ["font", ["size", "1.27", "1.27"]]],
+        ],
+        ["property", _Quoted("Value"), _Quoted("ESDA25W"),
+            ["id", "1"], ["at", "0", "-6.35", "0"],
+            ["effects", ["font", ["size", "1.27", "1.27"]]],
+        ],
+        ["property", _Quoted("Footprint"), _Quoted("Package_TO_SOT_SMD:SOT-323_SC-70"),
+            ["id", "2"], ["at", "0", "0", "0"],
+            ["effects", ["font", ["size", "1.27", "1.27"]], "hide"],
+        ],
+        ["property", _Quoted("Datasheet"), _Quoted(""),
+            ["id", "3"], ["at", "0", "0", "0"],
+            ["effects", ["font", ["size", "1.27", "1.27"]], "hide"],
+        ],
+        ["symbol", _Quoted("ESDA25W_0_1"),
+            ["rectangle", ["start", "-5.08", "3.81"], ["end", "5.08", "-3.81"],
+                ["stroke", ["width", "0.254"]], ["fill", ["type", "background"]],
+            ],
+        ],
+        ["symbol", _Quoted("ESDA25W_1_1"),
+            ["pin", "passive", "line", ["at", "-7.62", "0", "0"], ["length", "2.54"],
+                ["name", _Quoted("CC1"), ["effects", ["font", ["size", "1.27", "1.27"]]]],
+                ["number", _Quoted("1"), ["effects", ["font", ["size", "1.27", "1.27"]]]],
+            ],
+            ["pin", "passive", "line", ["at", "7.62", "0", "180"], ["length", "2.54"],
+                ["name", _Quoted("CC2"), ["effects", ["font", ["size", "1.27", "1.27"]]]],
+                ["number", _Quoted("2"), ["effects", ["font", ["size", "1.27", "1.27"]]]],
+            ],
+            ["pin", "passive", "line", ["at", "0", "-6.35", "90"], ["length", "2.54"],
+                ["name", _Quoted("GND"), ["effects", ["font", ["size", "1.27", "1.27"]]]],
+                ["number", _Quoted("3"), ["effects", ["font", ["size", "1.27", "1.27"]]]],
+            ],
+        ],
+    ]
+
+
 def _load_symbol(root: Path, library: str, name: str) -> list:
+    if library == "STUSB4500_Custom" and name == "ESDA25W":
+        return _custom_esda25w()
     path = root / f"{library}.kicad_sym"
     if not path.is_file():
         raise FileNotFoundError(f"KiCad symbol library is missing: {path}")
@@ -175,7 +220,7 @@ def generate_reference_schematic(destination: Path) -> Path:
         ("R53", "Device", "R", "100k", (150, 240), {"1": ("ADDR1", "local", ""), "2": ("GND", "local", "")}),
         ("R54", "Device", "R", "100k", (175, 240), {"1": ("ADDR0", "local", ""), "2": ("GND", "local", "")}),
         ("R55", "Device", "R", "10k", (200, 240), {"1": ("RESET", "local", ""), "2": ("GND", "local", "")}),
-        ("D1", "Device", "D_TVS", "ESDA25W", (90, 165), {"1": ("CC1", "local", ""), "2": ("CC2", "local", "")}),
+        ("D1", "STUSB4500_Custom", "ESDA25W", "ESDA25W", (90, 165), {"1": ("CC1", "local", ""), "2": ("CC2", "local", ""), "3": ("GND", "local", "")}),
         ("D50", "Device", "D_TVS", "ESDA25P35", (115, 165), {"1": ("VBUS", "local", ""), "2": ("GND", "local", "")}),
         ("D11", "Device", "D_TVS", "ESDA25P35", (275, 165), {"1": ("VSNK", "local", ""), "2": ("GND", "local", "")}),
         ("T4", "Transistor_FET", "Q_PMOS_GSD", "STL6P3LLH6", (245, 125), {"1": ("VBUS_EN_SNK", "local", ""), "2": ("VBUS", "local", ""), "3": ("VSNK_GATE", "local", "")}),
