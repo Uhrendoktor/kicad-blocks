@@ -270,10 +270,6 @@ def main() -> int:
 
     with tempfile.TemporaryDirectory(prefix="kicad-blocks-visual-docs-") as temporary:
         library = Path(temporary) / "library"
-        seed = create_block(
-            library, "Visual Fixture Seed", parse_pins("VIN:input, GND:passive"),
-            description="Seed implementation used only by the documentation fixture.",
-        )
         sensor = create_block(
             library, "Sensor Input", parse_pins("SENSOR:input, GND:passive"),
             description="A second library entry used to demonstrate searchable filtering.",
