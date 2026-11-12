@@ -650,7 +650,6 @@ def _pick_record(records, parent, title: str):
     ttk.Label(
         outer,
         text="Type to filter · ↓ browse results · Enter select · Esc cancel",
-        foreground="#667785",
     ).pack(anchor="w", pady=(0, 6))
 
     results_frame = ttk.Frame(outer)
@@ -659,15 +658,17 @@ def _pick_record(records, parent, title: str):
     results_frame.rowconfigure(0, weight=1)
     tree = ttk.Treeview(
         results_frame,
-        columns=("pins", "variants", "layouts"),
+        columns=("library", "pins", "variants", "layouts"),
         show="tree headings",
         selectmode="browse",
     )
     tree.heading("#0", text="Block")
+    tree.heading("library", text="Library")
     tree.heading("pins", text="Pins")
     tree.heading("variants", text="Variants")
     tree.heading("layouts", text="Layouts")
-    tree.column("#0", width=340, minwidth=180, stretch=True)
+    tree.column("#0", width=300, minwidth=180, stretch=True)
+    tree.column("library", width=100, minwidth=80, stretch=False)
     tree.column("pins", width=55, minwidth=45, stretch=False, anchor="center")
     tree.column("variants", width=75, minwidth=60, stretch=False, anchor="center")
     tree.column("layouts", width=65, minwidth=55, stretch=False, anchor="center")
@@ -681,16 +682,12 @@ def _pick_record(records, parent, title: str):
         text="Select a block to see its description.",
         wraplength=700,
         justify="left",
-        foreground="#53616b",
     )
     description.pack(fill="x", anchor="w", pady=(8, 0))
-    count_label = ttk.Label(outer, foreground="#667785")
+    count_label = ttk.Label(outer)
     count_label.pack(anchor="w", pady=(4, 0))
 
-    records_by_id = {
-        str(record.manifest["block_id"]): record
-        for record in records
-    }
+    records_by_id: dict[str, object] = {}
     selected_record = [None]
     chosen_record = [None]
     select_button = ttk.Button(outer, text="Select block", state="disabled")
@@ -707,11 +704,14 @@ def _pick_record(records, parent, title: str):
         children = tree.get_children()
         if children:
             tree.delete(*children)
-        for record in visible:
-            block_id = str(record.manifest["block_id"])
+        records_by_id.clear()
+        for index, record in enumerate(visible):
+            row_id = f"{record.manifest['block_id']}:{index}"
+            records_by_id[row_id] = record
             tree.insert(
-                "", "end", iid=block_id, text=record.name,
+                "", "end", iid=row_id, text=record.name,
                 values=(
+                    record.path.parent.name,
                     len(record.manifest.get("pins", [])),
                     len(record.manifest.get("variants", [])),
                     len(_layout_choices(record)),
@@ -723,7 +723,9 @@ def _pick_record(records, parent, title: str):
             description.configure(text="No matching blocks.")
             select_button.configure(state="disabled")
             return
-        preferred_id = str(preferred.manifest["block_id"])
+        preferred_id = next(
+            key for key, value in records_by_id.items() if value is preferred
+        )
         tree.selection_set(preferred_id)
         tree.focus(preferred_id)
         selected_record[0] = preferred
@@ -772,6 +774,7 @@ def _pick_record(records, parent, title: str):
         selected_record[0] = record
         return choose_selected()
 
+    _bind_mousewheel(tree, lambda amount: tree.yview_scroll(amount, "units"))
     tree.bind("<<TreeviewSelect>>", selection_changed)
     tree.bind("<Return>", choose_selected)
     tree.bind("<Double-1>", choose_double_clicked)
@@ -1347,8 +1350,14 @@ def _restore_placement_windows(windows: list) -> None:
 
 
 def _draw_facade_preview(canvas, record) -> None:
-    """Draw a lightweight vector preview of the facade pin interface."""
+    """Draw a lightweight facade preview using the active Tk theme colors."""
     canvas.delete("all")
+    style = ttk.Style(canvas)
+    background = style.lookup("TFrame", "background") or canvas.cget("background")
+    foreground = style.lookup("TLabel", "foreground") or canvas.cget("foreground")
+    entry_background = style.lookup("TEntry", "fieldbackground") or background
+    muted = style.lookup("TLabel", "foreground") or foreground
+    label_font = style.lookup("TLabel", "font") or "TkDefaultFont"
     width = max(int(canvas.winfo_width()), 480)
     height = max(int(canvas.winfo_height()), 250)
     manifest = record.manifest
@@ -1364,7 +1373,7 @@ def _draw_facade_preview(canvas, record) -> None:
     body_bottom = body_top + body_height
     canvas.create_rectangle(
         body_left, body_top, body_right, body_bottom,
-        outline="#263746", width=2, fill="#f3f6f8",
+        outline=foreground, width=1, fill=entry_background,
     )
     canvas.create_text(
         (body_left + body_right) / 2,
@@ -1372,30 +1381,30 @@ def _draw_facade_preview(canvas, record) -> None:
         text=str(manifest.get("name", record.name)),
         width=body_width - 24,
         justify="center",
-        fill="#14212b",
-        font=("TkDefaultFont", 11, "bold"),
+        fill=foreground,
+        font=label_font,
     )
     canvas.create_text(
         (body_left + body_right) / 2,
         body_top + body_height * 0.68,
         text="SCHEMATIC FACADE",
-        fill="#54636f",
-        font=("TkDefaultFont", 8),
+        fill=muted,
+        font=label_font,
     )
 
     def draw_pin(pin, x1, x2, y, anchor):
         name = str(pin.get("name", ""))
         number = str(pin.get("number", ""))
         kind = str(pin.get("electrical_type", "passive"))
-        canvas.create_line(x1, y, x2, y, fill="#263746", width=2)
+        canvas.create_line(x1, y, x2, y, fill=foreground, width=1)
         text_x = x1 - 7 if anchor == "e" else x2 + 7
         canvas.create_text(
-            text_x, y - 4, text=name, anchor=anchor, fill="#14212b",
-            font=("TkDefaultFont", 9),
+            text_x, y - 4, text=name, anchor=anchor, fill=foreground,
+            font=label_font,
         )
         canvas.create_text(
             text_x, y + 8, text=f"{number} - {kind}", anchor=anchor,
-            fill="#667785", font=("TkDefaultFont", 7),
+            fill=muted, font=label_font,
         )
 
     def y_for(index, count):
@@ -1404,14 +1413,12 @@ def _draw_facade_preview(canvas, record) -> None:
         return body_top + 16 + index * (body_height - 32) / (count - 1)
 
     for index, pin in enumerate(left_pins):
-        y = y_for(index, len(left_pins))
-        draw_pin(pin, body_left - 42, body_left, y, "e")
+        draw_pin(pin, body_left - 42, body_left, y_for(index, len(left_pins)), "e")
     for index, pin in enumerate(right_pins):
-        y = y_for(index, len(right_pins))
-        draw_pin(pin, body_right, body_right + 42, y, "w")
+        draw_pin(pin, body_right, body_right + 42, y_for(index, len(right_pins)), "w")
 
     if not pins:
-        canvas.create_text(width / 2, height / 2, text="No facade pins", fill="#667785")
+        canvas.create_text(width / 2, height / 2, text="No facade pins", fill=muted)
     canvas.configure(scrollregion=(0, 0, width, max(height, body_bottom + 32)))
 
 
