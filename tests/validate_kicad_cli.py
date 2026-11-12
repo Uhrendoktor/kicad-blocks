@@ -72,7 +72,7 @@ def _validate_stusb4500_netlist(cli: str, output_dir: Path) -> None:
             ref_node = _direct(node, "ref")
             pin_node = _direct(node, "pin")
             if ref_node is not None and pin_node is not None:
-                actual[(str(ref_node[1]), str(pin_node[1]))] = str(name_node[1])
+                actual[(str(ref_node[1]), str(pin_node[1]))] = str(name_node[1]).rsplit("/", 1)[-1]
 
     expected = {
         ("U1", "1"): "CC1",
