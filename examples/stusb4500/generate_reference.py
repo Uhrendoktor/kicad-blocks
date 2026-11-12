@@ -178,14 +178,14 @@ def _prop(name: str, value: str, number: int, x: float, y: float, hidden: bool =
 
 def _label(
     name: str, x: float, y: float, *, hierarchical: bool = False,
-    shape: str = "passive", justify: str = "left", key: str,
+    shape: str = "passive", justify: str = "left", angle: int = 0, key: str,
 ) -> list:
     effects = ["effects", ["font", ["size", "1.0", "1.0"]], ["justify", justify, "bottom"]]
     node = ["hierarchical_label" if hierarchical else "label", _Quoted(name)]
     if hierarchical:
         node.append(["shape", shape])
     node.extend([
-        ["at", f"{x:.3f}", f"{y:.3f}", "0"],
+        ["at", f"{x:.3f}", f"{y:.3f}", str(angle)],
         effects,
         ["uuid", _Quoted(_uid(key))],
     ])
@@ -219,7 +219,7 @@ def generate_reference_schematic(destination: Path) -> Path:
             "B4": ("VBUS", "local", ""), "B5": ("CC2", "hier", "bidirectional"),
             "B9": ("VBUS", "local", ""), "B12": ("GND", "local", ""),
         }),
-        ("J10", "Connector_Generic", "Conn_01x02", "MPT_0.5_2-2.54", (395, 85), {
+        ("J10", "Connector_Generic", "Conn_01x02", "MPT_0.5_2-2.54", (375, 85), {
             "1": ("VSNK", "hier", "output"), "2": ("GND", "hier", "passive"),
         }),
         ("J2", "Connector_Generic", "Conn_01x06", "MCU interface", (375, 205), {
@@ -228,9 +228,9 @@ def generate_reference_schematic(destination: Path) -> Path:
             "5": ("VMCU", "hier", "input"), "6": ("GND", "hier", "passive"),
         }),
         ("C50", "Device", "C", "4.7uF", (70, 205), {"1": ("VBUS", "local", ""), "2": ("GND", "local", "")}),
-        ("C1", "Device", "C", "1uF", (215, 95), {"1": ("VREG_1V2", "local", ""), "2": ("GND", "local", "")}),
-        ("C2", "Device", "C", "1uF", (240, 95), {"1": ("VREG_2V7", "local", ""), "2": ("GND", "local", "")}),
-        ("C3", "Device", "C", "1uF", (265, 95), {"1": ("VREG_2V7", "local", ""), "2": ("GND", "local", "")}),
+        ("C1", "Device", "C", "1uF", (200, 110), {"1": ("VREG_1V2", "local", ""), "2": ("GND", "local", "")}),
+        ("C2", "Device", "C", "1uF", (225, 110), {"1": ("VREG_2V7", "local", ""), "2": ("GND", "local", "")}),
+        ("C3", "Device", "C", "1uF", (250, 110), {"1": ("VREG_2V7", "local", ""), "2": ("GND", "local", "")}),
         ("C4", "Device", "C", "1uF", (125, 85), {"1": ("VBUS_FILTERED", "local", ""), "2": ("GND", "local", "")}),
         ("D4", "Device", "D", "D4 (part not specified)", (100, 85), {"1": ("VBUS_FILTERED", "local", ""), "2": ("VBUS", "local", "")}),
         ("C10", "Device", "C", "100nF", (355, 95), {"1": ("VSNK", "local", ""), "2": ("GND", "local", "")}),
@@ -268,7 +268,7 @@ def generate_reference_schematic(destination: Path) -> Path:
     no_connects = []
     label_points: dict[
         tuple[float, float],
-        tuple[str, str, str | None, float, float, str],
+        tuple[str, str, str | None, float, float, str, int],
     ] = {}
     no_connect_points: set[tuple[float, float]] = set()
     for reference, library, symbol_name, value, (sx, sy), pin_map in specs:
@@ -291,10 +291,10 @@ def generate_reference_schematic(destination: Path) -> Path:
             # Keep text well above the four top-side supply pins and their labels.
             field_x, ref_y, value_y = sx, sy - 44, sy - 41
         elif reference == "J1":
-            field_x, ref_y, value_y = sx + 12, sy - 44, sy - 41
+            field_x, ref_y, value_y = sx - 10, sy - 44, sy - 41
         elif reference == "J10":
-            # The connector's two pins face left; place fields above, not over ports.
-            field_x, ref_y, value_y = sx + 12, sy - 19, sy - 16
+            # Keep the long connector value clear of the page boundary.
+            field_x, ref_y, value_y = sx - 12, sy - 19, sy - 16
         elif reference == "J2":
             field_x, ref_y, value_y = sx + 12, sy - 10, sy - 7
         elif reference in {"T4", "T1"}:
@@ -357,11 +357,15 @@ def generate_reference_schematic(destination: Path) -> Path:
                         label_x = px + dx * 5.08
                         label_y = py + dy * 5.08
                         justify = "right" if dx < 0 else "left"
+                        # The QFN regulator pins occupy one 2.54 mm pitch row.
+                        # Rotate only their rail labels to prevent horizontal
+                        # text collisions while keeping other pin labels normal.
+                        label_angle = 90 if reference == "U1" and dy != 0 else 0
                         # One label is sufficient for stacked connector pins.
                         # Prefer the hierarchical port when it shares a point
                         # with local labels for the same electrical net.
                         label_points[point] = (
-                            net, kind, shape_name, label_x, label_y, justify,
+                            net, kind, shape_name, label_x, label_y, justify, label_angle,
                         )
                 elif kind == "nc":
                     no_connect_points.add(point)
@@ -380,12 +384,12 @@ def generate_reference_schematic(destination: Path) -> Path:
         instances.append(instance)
 
     label_stubs = []
-    for point, (net, kind, shape_name, x, y, justify) in sorted(label_points.items()):
+    for point, (net, kind, shape_name, x, y, justify, angle) in sorted(label_points.items()):
         px, py = point
         labels.append(
             _label(
                 net, x, y, hierarchical=kind == "hier", shape=shape_name,
-                justify=justify, key=f"label:{kind}:{net}:{px:.3f}:{py:.3f}",
+                justify=justify, angle=angle, key=f"label:{kind}:{net}:{px:.3f}:{py:.3f}",
             )
         )
         if (round(x, 3), round(y, 3)) != point:
