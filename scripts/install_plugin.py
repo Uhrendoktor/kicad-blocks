@@ -21,6 +21,34 @@ DEFAULT_SOURCE = Path(__file__).resolve().parents[1] / "plugin" / PLUGIN_DIRECTO
 
 SUPPORTED_NIGHTLY_DIRECTORY = (10, 99)
 FIRST_STABLE_SCHEMATIC_IPC_MAJOR = 11
+SUPPORTED_PYTHON_IMPLEMENTATION = "cpython"
+SUPPORTED_PYTHON_VERSION = (3, 12)
+
+
+def validate_python_runtime(
+    *,
+    implementation: str | None = None,
+    version_info=None,
+) -> None:
+    """Require the exact CPython ABI for the published binary IPC wheel."""
+    selected_implementation = implementation or sys.implementation.name
+    selected_version = version_info or sys.version_info
+    major, minor = int(selected_version[0]), int(selected_version[1])
+    if (
+        selected_implementation.casefold() != SUPPORTED_PYTHON_IMPLEMENTATION
+        or (major, minor) != SUPPORTED_PYTHON_VERSION
+    ):
+        version_text = ".".join(str(part) for part in selected_version[:3])
+        raise ValueError(
+            "The published KiCad Python IPC wheel requires CPython 3.12 "
+            "(cp312) on Linux x86_64. "
+            f"The installer is running {selected_implementation} {version_text}. "
+            "Run it with the CPython 3.12 executable (for example, "
+            + chr(96) + "python3.12 scripts/install_plugin.py --version 10.99" + chr(96)
+            + ") and set KiCad Preferences > Plugins > Path to Python interpreter "
+            "to that same Python 3.12 executable. KiCad does not currently enforce "
+            "the plugin.json runtime min_version field."
+        )
 
 
 def validate_install_target(
@@ -36,6 +64,7 @@ def validate_install_target(
     current pre-release target. The published kicad-python wheel is currently
     CPython 3.12 / Linux x86_64 only.
     """
+    validate_python_runtime()
     if not re.fullmatch(r"\d+\.\d+", version):
         raise ValueError("KiCad version must use MAJOR.MINOR format, for example 10.99.")
     major, minor = (int(part) for part in version.split("."))
