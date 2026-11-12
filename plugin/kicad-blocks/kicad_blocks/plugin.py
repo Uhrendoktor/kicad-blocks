@@ -2457,7 +2457,7 @@ def run() -> None:
             ("local", "Make local copy", "Give the selected instance an independent implementation."),
             ("sync", "Synchronize local copy", "Publish and pull non-conflicting local/library edits."),
             ("edit", "Open implementation", "Open the selected facade's resolved KB_VARIANT in Eeschema."),
-            ("edit-facade", "Edit facade symbol", "Open the selected block's facade library in KiCad Symbol Editor."),
+            ("edit-facade", "Edit facade symbol", "Select one block instance and open its library version in KiCad's native Symbol Editor."),
             ("publish", "Publish library block", "Publish edits to a shared library block."),
             ("bom", "Recursive BOM", "Export the selected block and all nested components."),
             ("erc", "Recursive ERC", "Run ERC on the selected block and dependencies."),
