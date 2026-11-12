@@ -589,7 +589,7 @@ def render_implementation_schematic(
         y = 38.1 + row * 5.08
         lines.extend(
             [
-                f"  (global_label {sexpr_quote(pin.name)}",
+                f"  (hierarchical_label {sexpr_quote(pin.name)}",
                 f"    (shape {_KICAD_PIN_TYPES[pin.electrical_type]})",
                 f"    (at {x} {y} 0)",
                 '    (effects (font (size 1.27 1.27)) (justify left bottom))',
