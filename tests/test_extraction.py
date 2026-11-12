@@ -8,7 +8,7 @@ from pathlib import Path
 PLUGIN = Path(__file__).resolve().parents[1] / "plugin" / "kicad-blocks"
 sys.path.insert(0, str(PLUGIN))
 
-from kicad_blocks.extraction import selected_sheet_file
+from kicad_blocks.extraction import selected_sheet_file, selected_sheet_instance_uuid
 from kicad_blocks.pcb_layout import _all, _direct, _dump, _head, parse_sexpr
 from kicad_blocks.repository import create_block, read_manifest, refresh_library_block
 
@@ -83,6 +83,10 @@ class HierarchicalSheetExtractionTests(unittest.TestCase):
         self.assertEqual(
             selected_sheet_file(fragment, self.project),
             self.source.resolve(),
+        )
+        self.assertEqual(
+            selected_sheet_instance_uuid(fragment),
+            "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
         )
 
     def test_create_block_derives_facade_pins_from_all_hierarchical_labels(self):
@@ -258,25 +262,126 @@ class HierarchicalSheetExtractionTests(unittest.TestCase):
                 source_project_name="TestProject",
             )
 
-    def test_nested_subsheets_are_rejected_with_actionable_message(self):
-        implementation = self.source.read_text(encoding="utf-8").replace(
+    def test_nested_hierarchical_sheet_tree_is_copied_and_kept_internal(self):
+        root_sheet_uuid = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"
+        leaf_sheet_uuid = "ffffffff-ffff-4fff-8fff-ffffffffffff"
+        root_source = self.source.read_text(encoding="utf-8").replace(
             "(sheet_instances",
-            '''(sheet
+            f'''(sheet
                 (at 20 20) (size 10 10)
                 (property "Sheetname" "Nested" (at 20 20 0) (effects (font (size 1 1))))
                 (property "Sheetfile" "nested.kicad_sch" (at 20 20 0) (effects (font (size 1 1))))
-                (uuid "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee")
+                (uuid "{root_sheet_uuid}")
+                (instances (project "OriginalProject"
+                    (path "/root/sheet" (page "3"))))
             )
             (sheet_instances''',
         )
-        self.source.write_text(implementation, encoding="utf-8")
-        with self.assertRaisesRegex(ValueError, "nested hierarchical sheets"):
-            create_block(
-                self.root,
-                "Nested Interface",
-                source_schematic=self.source,
-                source_project_name="TestProject",
+        self.source.write_text(root_source, encoding="utf-8")
+
+        nested_source = self.project / "nested.kicad_sch"
+        nested_source.write_text(f'''(kicad_sch
+            (version 20250114)
+            (generator "eeschema")
+            (uuid "22222222-2222-4222-8222-222222222222")
+            (paper "A4")
+            (lib_symbols)
+            (symbol
+                (lib_id "Device:R")
+                (at 20 20 0)
+                (unit 1)
+                (property "Reference" "R2" (at 20 20 0) (effects (font (size 1 1))))
+                (property "Value" "22k" (at 20 20 0) (effects (font (size 1 1))))
+                (instances (project "OriginalProject"
+                    (path "/root/sheet/{root_sheet_uuid}"
+                        (reference "R2") (unit 1))))
             )
+            (hierarchical_label "INNER_SIGNAL"
+                (shape input)
+                (at 10 10 0)
+                (effects (font (size 1.27 1.27)) (justify left bottom))
+                (uuid "abababab-abab-4bab-8bab-abababababab")
+            )
+            (sheet
+                (at 30 30) (size 10 10)
+                (property "Sheetname" "Leaf" (at 30 30 0) (effects (font (size 1 1))))
+                (property "Sheetfile" "leaf.kicad_sch" (at 30 30 0) (effects (font (size 1 1))))
+                (uuid "{leaf_sheet_uuid}")
+                (instances (project "OriginalProject"
+                    (path "/root/sheet/{root_sheet_uuid}" (page "4"))))
+            )
+            (sheet_instances (path "/root/sheet/{root_sheet_uuid}" (page "3")))
+        )''', encoding="utf-8")
+
+        leaf_source = self.project / "leaf.kicad_sch"
+        leaf_source.write_text(f'''(kicad_sch
+            (version 20250114)
+            (generator "eeschema")
+            (uuid "33333333-3333-4333-8333-333333333333")
+            (paper "A4")
+            (lib_symbols)
+            (hierarchical_label "LEAF_SIGNAL"
+                (shape output)
+                (at 5 5 0)
+                (effects (font (size 1.27 1.27)) (justify left bottom))
+                (uuid "cdcdcdcd-cdcd-4dcd-8dcd-cdcdcdcdcdcd")
+            )
+            (sheet_instances
+                (path "/root/sheet/{root_sheet_uuid}/{leaf_sheet_uuid}" (page "4"))
+            )
+        )''', encoding="utf-8")
+
+        original_root = self.source.read_bytes()
+        original_nested = nested_source.read_bytes()
+        original_leaf = leaf_source.read_bytes()
+        record = create_block(
+            self.root,
+            "Nested Interface",
+            source_schematic=self.source,
+            source_project_name="TestProject",
+        )
+
+        manifest = read_manifest(record.path)
+        nested_files = [name for name in manifest["files"] if name.startswith("implementation_sheet_")]
+        self.assertEqual(len(nested_files), 2)
+        self.assertTrue(all((record.path / name).is_file() for name in nested_files))
+
+        root_tree = parse_sexpr(record.implementation.read_text(encoding="utf-8"))
+        root_sheets = [node for node in root_tree[1:] if _head(node) == "sheet"]
+        self.assertEqual(len(root_sheets), 1)
+        root_sheet = root_sheets[0]
+        root_child_file = str(next(p for p in _all(root_sheet, "property") if str(p[1]) == "Sheetfile")[2])
+        root_child_uuid = str(_direct(root_sheet, "uuid")[1])
+        self.assertTrue((record.path / root_child_file).is_file())
+        self.assertEqual(str(_direct(_direct(root_tree, "sheet_instances"), "path")[1]), "/")
+
+        child_tree = parse_sexpr((record.path / root_child_file).read_text(encoding="utf-8"))
+        child_sheets = [node for node in child_tree[1:] if _head(node) == "sheet"]
+        self.assertEqual(len(child_sheets), 1)
+        child_sheet = child_sheets[0]
+        leaf_file = str(next(p for p in _all(child_sheet, "property") if str(p[1]) == "Sheetfile")[2])
+        leaf_uuid = str(_direct(child_sheet, "uuid")[1])
+        self.assertTrue((record.path / leaf_file).is_file())
+        self.assertEqual(
+            str(_direct(_direct(child_tree, "sheet_instances"), "path")[1]),
+            "/" + root_child_uuid,
+        )
+        leaf_tree = parse_sexpr((record.path / leaf_file).read_text(encoding="utf-8"))
+        self.assertEqual(
+            str(_direct(_direct(leaf_tree, "sheet_instances"), "path")[1]),
+            "/" + root_child_uuid + "/" + leaf_uuid,
+        )
+
+        self.assertEqual(
+            [pin["name"] for pin in manifest["pins"]],
+            ["VIN", "GND", "VOUT"],
+        )
+        self.assertEqual(len(_all(child_tree, "hierarchical_label")), 1)
+        self.assertEqual(len(_all(leaf_tree, "hierarchical_label")), 1)
+
+        self.assertEqual(self.source.read_bytes(), original_root)
+        self.assertEqual(nested_source.read_bytes(), original_nested)
+        self.assertEqual(leaf_source.read_bytes(), original_leaf)
 
 
 if __name__ == "__main__":
