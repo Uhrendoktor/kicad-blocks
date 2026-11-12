@@ -220,13 +220,13 @@ def validate_block_library(
             item["name"] = str(manifest.get("name", block_path.stem))
             item["block_id"] = str(manifest.get("block_id", ""))
             record = BlockRecord(path=block_path, manifest=manifest)
-        except Exception as exc:
+        except (OSError, TypeError, ValueError, KeyError) as exc:
             item["status"] = "failed"
             item["errors"].append(f"Manifest: {exc}")
             block_reports.append(item)
             continue
 
-        declared_files = set(str(name) for name in manifest.get("files", []))
+        declared_files = {str(name) for name in manifest.get("files", [])}
         declared_hashes = manifest.get("hashes", {})
         actual_hashes: dict[str, str] = {}
         for file_name in sorted(declared_files):
@@ -273,7 +273,7 @@ def validate_block_library(
         for profile in manifest.get("profiles", []):
             try:
                 resolve_profile_configuration(manifest, str(profile["id"]))
-            except Exception as exc:
+            except (KeyError, TypeError, ValueError) as exc:
                 profile_errors.append(f"{profile.get('name', profile.get('id'))}: {exc}")
         if profile_errors:
             item["errors"].append(
@@ -283,7 +283,7 @@ def validate_block_library(
         try:
             occurrences = resolve_dependency_occurrences(record, library_root)
             item["dependency_count"] = max(0, len(occurrences) - 1)
-        except Exception as exc:
+        except (OSError, RuntimeError, TypeError, ValueError) as exc:
             item["errors"].append(f"Dependency graph: {exc}")
 
         if not item["errors"] and run_erc:
@@ -302,7 +302,7 @@ def validate_block_library(
                     item["warnings"].append(
                         "ERC violations reported by KiCad for: " + ", ".join(violations)
                     )
-            except Exception as exc:
+            except (OSError, RuntimeError, ValueError) as exc:
                 item["errors"].append(f"Recursive ERC: {exc}")
 
         if item["errors"]:
