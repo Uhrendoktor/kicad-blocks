@@ -1,8 +1,8 @@
 """Create opaque block assets from ordinary KiCad hierarchical sheets.
 
-The hierarchical labels in the source subsheet are the interface declaration.
-Their names become facade pin names and their shapes map to KiCad pin electrical
-types. No separate manual pin list is accepted for this creation path.
+The selected sheet's hierarchical labels define the external block interface.
+Its nested hierarchical sheets remain internal and are copied into the block
+asset tree with their relative references and hierarchy paths rebased.
 """
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ _LABEL_SHAPES = {
     "tri_state": "tristate",
     "passive": "passive",
 }
-_PIN_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_./+-]*\Z")
+_PIN_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_./+-]*\\Z")
 
 
 def _parse_selection(selection_fragment: str) -> list:
@@ -39,17 +39,21 @@ def _parse_selection(selection_fragment: str) -> list:
     return wrapper[1:]
 
 
-def selected_sheet_file(selection_fragment: str, project_directory: Path) -> Path:
-    """Resolve the Sheetfile path from exactly one selected hierarchical sheet symbol."""
+def _selected_sheet_node(selection_fragment: str) -> list:
     nodes = _parse_selection(selection_fragment)
     if len(nodes) != 1 or _head(nodes[0]) != "sheet":
         raise ValueError(
             "Select exactly one hierarchical sheet symbol. The block will be built from "
             "that sheet's complete subschematic."
         )
+    return nodes[0]
 
+
+def selected_sheet_file(selection_fragment: str, project_directory: Path) -> Path:
+    """Resolve the Sheetfile path from exactly one selected hierarchical sheet symbol."""
+    sheet = _selected_sheet_node(selection_fragment)
     sheet_file = None
-    for prop in _all(nodes[0], "property"):
+    for prop in _all(sheet, "property"):
         if len(prop) >= 3 and str(prop[1]) == "Sheetfile":
             sheet_file = str(prop[2]).strip()
             break
@@ -67,12 +71,20 @@ def selected_sheet_file(selection_fragment: str, project_directory: Path) -> Pat
     return candidate
 
 
-def extract_hierarchical_pins(schematic_tree: list) -> list[BlockPin]:
-    """Derive facade pins from all hierarchical labels in a parsed source subsheet.
+def selected_sheet_instance_uuid(selection_fragment: str) -> str:
+    """Return the selected root sheet symbol UUID to disambiguate reused Sheetfile paths."""
+    sheet = _selected_sheet_node(selection_fragment)
+    node = _direct(sheet, "uuid")
+    if node is None or len(node) < 2:
+        raise ValueError("The selected hierarchical sheet has no UUID.")
+    return str(node[1])
 
-    Identically named hierarchical labels represent the same sheet interface signal.
-    They collapse to one facade pin when their shapes agree. Conflicting shapes are
-    rejected rather than choosing an arbitrary electrical pin type.
+
+def extract_hierarchical_pins(schematic_tree: list) -> list[BlockPin]:
+    """Derive facade pins from labels on the selected block's root sheet only.
+
+    Identically named root-level hierarchical labels represent one interface signal.
+    Labels in nested child sheets are internal to the block and do not become facade pins.
     """
     if _head(schematic_tree) != "kicad_sch":
         raise ValueError("The selected source file is not a KiCad schematic document.")
@@ -130,57 +142,264 @@ def extract_hierarchical_pins(schematic_tree: list) -> list[BlockPin]:
     return pins
 
 
-def _normalize_symbol_instances(symbol: list, project_name: str) -> None:
-    """Detach a copied sheet's component instance paths from the original hierarchy."""
-    instances = _direct(symbol, "instances")
-    paths: list[list] = []
-    if instances is not None:
-        for project in instances[1:]:
-            if _head(project) != "project":
-                continue
-            for path in project[1:]:
-                if _head(path) == "path":
-                    paths.append(path)
+def _join_hierarchy_path(parent: str, child_uuid: str) -> str:
+    parent = str(parent or "/").strip()
+    prefix = parent.rstrip("/")
+    return f"{prefix}/{child_uuid}" if prefix else f"/{child_uuid}"
 
-    if not paths:
+
+def _path_matches(path_value: str, prefix: str) -> bool:
+    prefix = prefix.rstrip("/") or "/"
+    return path_value == prefix or (
+        prefix != "/" and path_value.startswith(prefix + "/")
+    )
+
+
+def _rebase_path_value(path_value: str, old_prefix: str, new_prefix: str) -> str:
+    if not _path_matches(path_value, old_prefix):
+        return new_prefix
+    normalized_old = old_prefix.rstrip("/") or "/"
+    suffix = path_value[len(normalized_old):]
+    if new_prefix == "/":
+        return "/" + suffix.lstrip("/")
+    return new_prefix.rstrip("/") + suffix
+
+
+def _path_nodes(node: list) -> list[list]:
+    return [child for child in node[1:] if _head(child) == "path"]
+
+
+def _normalize_instance_node(
+    node: list,
+    project_name: str,
+    old_prefix: str,
+    new_prefix: str,
+    *,
+    fallback_reference: bool = False,
+) -> None:
+    instances = _direct(node, "instances")
+    if instances is None:
+        if not fallback_reference:
+            return
         reference = None
-        for prop in _all(symbol, "property"):
+        for prop in _all(node, "property"):
             if len(prop) >= 3 and str(prop[1]) == "Reference":
                 reference = str(prop[2])
                 break
-        unit_node = _direct(symbol, "unit")
+        if not reference:
+            return
+        unit_node = _direct(node, "unit")
         unit = str(unit_node[1]) if unit_node is not None and len(unit_node) >= 2 else "1"
-        if reference:
-            paths = [["path", _Quoted("/"), ["reference", _Quoted(reference)], ["unit", unit]]]
-
-    normalized_paths = []
-    for path in paths:
-        reference_node = _direct(path, "reference")
-        unit_node = _direct(path, "unit")
-        if reference_node is None or len(reference_node) < 2:
-            continue
-        new_path = [
-            "path",
-            _Quoted("/"),
-            ["reference", _Quoted(str(reference_node[1]))],
-        ]
-        if unit_node is not None and len(unit_node) >= 2:
-            new_path.append(["unit", str(unit_node[1])])
-        # Preserve instance-level variant/property overrides on the normalized path.
-        for child in path[1:]:
-            if _head(child) not in {"reference", "unit"} and child != path[1]:
-                new_path.append(child)
-        normalized_paths.append(new_path)
-
-    if normalized_paths:
-        replacement = [
+        node.append([
             "instances",
-            ["project", _Quoted(project_name), *normalized_paths],
+            ["project", _Quoted(project_name),
+             ["path", _Quoted(new_prefix), ["reference", _Quoted(reference)], ["unit", unit]]],
+        ])
+        return
+
+    projects = [item for item in instances[1:] if _head(item) == "project"]
+    for project in projects:
+        if len(project) >= 2:
+            project[1] = _Quoted(project_name)
+        paths = _path_nodes(project)
+        if paths:
+            matching = [
+                path for path in paths
+                if len(path) >= 2 and _path_matches(str(path[1]), old_prefix)
+            ]
+            kept = matching or paths[:1]
+            kept_ids = {id(path) for path in kept}
+            project[1:] = [
+                child for child in project[1:]
+                if _head(child) != "path" or id(child) in kept_ids
+            ]
+            for path in kept:
+                if len(path) >= 2:
+                    path[1] = _Quoted(
+                        _rebase_path_value(str(path[1]), old_prefix, new_prefix)
+                    )
+    if fallback_reference and not projects:
+        node.append([
+            "instances",
+            ["project", _Quoted(project_name),
+             ["path", _Quoted(new_prefix)]],
+        ])
+
+
+def _sheet_instance_paths(tree: list) -> list[list]:
+    instances = _direct(tree, "sheet_instances")
+    if instances is None:
+        return []
+    return _path_nodes(instances)
+
+
+def _select_root_source_prefix(tree: list, selected_sheet_uuid: str | None) -> str:
+    paths = _sheet_instance_paths(tree)
+    if not paths:
+        return "/"
+    values = [str(path[1]) for path in paths if len(path) >= 2]
+    if selected_sheet_uuid:
+        suffix = "/" + str(selected_sheet_uuid).strip("/")
+        selected = [value for value in values if value.endswith(suffix)]
+        if selected:
+            return selected[0]
+    return values[0] if values else "/"
+
+
+def _normalize_sheet_instances(
+    tree: list,
+    old_prefix: str,
+    new_prefix: str,
+    *,
+    is_root: bool,
+) -> None:
+    instances = _direct(tree, "sheet_instances")
+    if instances is None:
+        instances = ["sheet_instances"]
+        tree.append(instances)
+    paths = _path_nodes(instances)
+    matching = [
+        path for path in paths
+        if len(path) >= 2 and _path_matches(str(path[1]), old_prefix)
+    ]
+    kept = matching or paths[:1]
+    if paths:
+        kept_ids = {id(path) for path in kept}
+        instances[1:] = [
+            child for child in instances[1:]
+            if _head(child) != "path" or id(child) in kept_ids
         ]
-        if instances is None:
-            symbol.append(replacement)
+    else:
+        kept = [["path", _Quoted(new_prefix), ["page", _Quoted("1" if is_root else "2")]]]
+        instances.extend(kept)
+    for path in kept:
+        if len(path) >= 2:
+            path[1] = _Quoted(new_prefix)
+        if is_root:
+            page = _direct(path, "page")
+            if page is None:
+                path.append(["page", _Quoted("1")])
+            elif len(page) >= 2:
+                page[1] = _Quoted("1")
+
+
+def _sheet_file_property(sheet: list) -> list:
+    for prop in _all(sheet, "property"):
+        if len(prop) >= 3 and str(prop[1]) == "Sheetfile":
+            return prop
+    raise ValueError("A nested hierarchical sheet has no Sheetfile property.")
+
+
+def _resolve_nested_sheet(parent_file: Path, sheetfile: str) -> Path:
+    candidate = Path(sheetfile).expanduser()
+    if not candidate.is_absolute():
+        candidate = parent_file.parent / candidate
+    candidate = candidate.resolve()
+    if candidate.suffix.casefold() != ".kicad_sch" or not candidate.is_file():
+        raise FileNotFoundError(
+            f"Nested Sheetfile does not resolve to an existing .kicad_sch file: {candidate}"
+        )
+    return candidate
+
+
+def _prepare_sheet_tree(
+    source_file: Path,
+    tree: list,
+    display_name: str,
+    block_id: str,
+    project_name: str,
+    old_prefix: str,
+    new_prefix: str,
+    nested_assets: dict[str, str],
+    ancestry: set[Path],
+    *,
+    is_root: bool,
+) -> str:
+    source_file = Path(source_file).resolve()
+    if source_file in ancestry:
+        cycle = " -> ".join(path.name for path in (*ancestry, source_file))
+        raise ValueError(f"Nested hierarchical sheet cycle detected: {cycle}")
+    if _head(tree) != "kicad_sch":
+        raise ValueError(f"Source file is not a KiCad schematic: {source_file}")
+
+    ancestry = set(ancestry)
+    ancestry.add(source_file)
+
+    document_uuid = _direct(tree, "uuid")
+    if document_uuid is not None and len(document_uuid) >= 2:
+        document_uuid[1] = _Quoted(str(uuid.uuid4()))
+
+    if is_root:
+        title_block = _direct(tree, "title_block")
+        if title_block is not None:
+            title = _direct(title_block, "title")
+            if title is None:
+                title_block.append(["title", _Quoted(display_name)])
+            elif len(title) >= 2:
+                title[1] = _Quoted(display_name)
+            comment = next(
+                (
+                    item for item in title_block[1:]
+                    if _head(item) == "comment" and len(item) >= 3
+                    and str(item[1]) == "1"
+                ),
+                None,
+            )
+            if comment is None:
+                title_block.append(["comment", "1", _Quoted("Block ID: " + block_id)])
+            else:
+                comment[2] = _Quoted("Block ID: " + block_id)
+
+    for node in tree[1:]:
+        if _head(node) == "symbol":
+            _normalize_instance_node(
+                node, project_name, old_prefix, new_prefix, fallback_reference=True
+            )
+        elif _head(node) == "sheet":
+            _normalize_instance_node(
+                node, project_name, old_prefix, new_prefix, fallback_reference=False
+            )
+
+    _normalize_sheet_instances(tree, old_prefix, new_prefix, is_root=is_root)
+
+    for sheet in [node for node in tree[1:] if _head(node) == "sheet"]:
+        sheet_uuid_node = _direct(sheet, "uuid")
+        if sheet_uuid_node is None or len(sheet_uuid_node) < 2:
+            original_sheet_uuid = str(uuid.uuid4())
+            sheet_uuid_node = ["uuid", _Quoted(original_sheet_uuid)]
+            sheet.append(sheet_uuid_node)
         else:
-            symbol[symbol.index(instances)] = replacement
+            original_sheet_uuid = str(sheet_uuid_node[1])
+
+        replacement_uuid = str(uuid.uuid4())
+        sheet_uuid_node[1] = _Quoted(replacement_uuid)
+        old_child_prefix = _join_hierarchy_path(old_prefix, original_sheet_uuid)
+        new_child_prefix = _join_hierarchy_path(new_prefix, replacement_uuid)
+
+        sheetfile_node = _sheet_file_property(sheet)
+        nested_source = _resolve_nested_sheet(source_file, str(sheetfile_node[2]))
+        file_name = f"implementation_sheet_{replacement_uuid.replace('-', '')}.kicad_sch"
+        sheetfile_node[2] = _Quoted(file_name)
+
+        try:
+            nested_tree = parse_sexpr(nested_source.read_text(encoding="utf-8"))
+        except OSError as exc:
+            raise ValueError(f"Could not read nested sheet {nested_source}: {exc}") from exc
+        nested_content = _prepare_sheet_tree(
+            nested_source,
+            nested_tree,
+            display_name,
+            block_id,
+            project_name,
+            old_child_prefix,
+            new_child_prefix,
+            nested_assets,
+            ancestry,
+            is_root=False,
+        )
+        nested_assets[file_name] = nested_content
+
+    return _dump(tree) + "\n"
 
 
 def prepare_block_implementation(
@@ -188,13 +407,13 @@ def prepare_block_implementation(
     display_name: str,
     block_id: str,
     project_name: str,
-) -> tuple[list[BlockPin], str]:
-    """Read a sheet, derive its interface and return a detached implementation document.
+    selected_sheet_uuid: str | None = None,
+) -> tuple[list[BlockPin], str, dict[str, str]]:
+    """Detach the selected sheet and copy its complete nested hierarchy into the block.
 
-    The original file is never modified. Hierarchical labels remain hierarchical labels
-    in the library implementation; they are the ongoing source of truth for the facade
-    pin list and types. Nested sheet symbols are rejected, matching KiCad Design Blocks'
-    current no-nested-sheet constraint.
+    Only root-level hierarchical labels define facade pins. Child sheets, labels and
+    components are preserved as internal implementation assets. Every copied child
+    Sheetfile is rewritten to a sibling file owned by the block.
     """
     source_schematic = Path(source_schematic).expanduser().resolve()
     try:
@@ -204,44 +423,19 @@ def prepare_block_implementation(
     if _head(tree) != "kicad_sch":
         raise ValueError(f"Source file is not a KiCad schematic: {source_schematic}")
 
-    nested_sheets = _all(tree, "sheet")
-    if nested_sheets:
-        raise ValueError(
-            "The selected sheet contains nested hierarchical sheets. Extract those as "
-            "separate blocks first, then compose them with the Nest Block action."
-        )
-
     pins = extract_hierarchical_pins(tree)
-
-    # Give the library document its own root identity and root sheet instance.
-    root_uuid = _direct(tree, "uuid")
-    if root_uuid is not None and len(root_uuid) >= 2:
-        root_uuid[1] = _Quoted(str(uuid.uuid4()))
-
-    title_block = _direct(tree, "title_block")
-    if title_block is not None:
-        title = _direct(title_block, "title")
-        if title is None:
-            title_block.append(["title", _Quoted(display_name)])
-        elif len(title) >= 2:
-            title[1] = _Quoted(display_name)
-        comment = next(
-            (item for item in title_block[1:] if _head(item) == "comment" and len(item) >= 3 and str(item[1]) == "1"),
-            None,
-        )
-        if comment is None:
-            title_block.append(["comment", "1", _Quoted("Block ID: " + block_id)])
-        else:
-            comment[2] = _Quoted("Block ID: " + block_id)
-
-    for symbol in _all(tree, "symbol"):
-        _normalize_symbol_instances(symbol, project_name)
-
-    sheet_instances = _direct(tree, "sheet_instances")
-    root_instance = ["sheet_instances", ["path", _Quoted("/"), ["page", _Quoted("1")]]]
-    if sheet_instances is None:
-        tree.append(root_instance)
-    else:
-        tree[tree.index(sheet_instances)] = root_instance
-
-    return pins, _dump(tree) + "\n"
+    old_root_prefix = _select_root_source_prefix(tree, selected_sheet_uuid)
+    nested_assets: dict[str, str] = {}
+    implementation_content = _prepare_sheet_tree(
+        source_schematic,
+        tree,
+        display_name,
+        block_id,
+        project_name,
+        old_root_prefix,
+        "/",
+        nested_assets,
+        set(),
+        is_root=True,
+    )
+    return pins, implementation_content, nested_assets
