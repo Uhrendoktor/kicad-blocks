@@ -18,6 +18,7 @@ messagebox = None
 simpledialog = None
 
 from .composition import compose_block_implementation
+from .extraction import selected_sheet_file
 from .model import (
     LAYOUT_FIELD_NAME,
     PARAMETER_FIELD_PREFIX,
@@ -953,141 +954,75 @@ def _create_and_place(
     root, schematic, kicad, project_dir, parent,
     editor_window_id: str | None = None,
 ) -> None:
+    """Create a facade from the selected hierarchical sheet; never ask for pins."""
+    if not hasattr(schematic, "get_selection_as_string"):
+        raise RuntimeError(
+            "This KiCad build does not expose the schematic selection serializer."
+        )
+    selection_fragment = schematic.get_selection_as_string()
+    source_sheet = selected_sheet_file(selection_fragment, project_dir)
+
     name = simpledialog.askstring(
-        "Create Block", "Block name:", initialvalue="Buck Converter", parent=parent
+        "Create Block from Hierarchical Sheet",
+        "Block name:",
+        initialvalue=source_sheet.stem.replace("_", " ").replace("-", " ").title(),
+        parent=parent,
     )
     if not name:
         return
-    pin_text = simpledialog.askstring(
-        "Block Interface",
-        "External pins, comma-separated as NAME:type.\n"
-        "Types: input, output, bidirectional, tristate, passive.",
-        initialvalue="VIN:input, GND:passive, VOUT:output, EN:input",
-        parent=parent,
-    )
-    if not pin_text:
-        return
-    pins = parse_pins(pin_text)
     description = simpledialog.askstring(
-        "Block Description", "Description (optional):", initialvalue="", parent=parent
-    ) or ""
-    parameter_text = simpledialog.askstring(
-        "Block Parameters",
-        "Optional typed parameters, comma-separated as NAME[:type]=DEFAULT.\n"
-        "Types: string, number, integer, boolean. Example: OUTPUT_VOLTAGE:number=3.3, ENABLE:boolean=true",
+        "Block Description",
+        "Description (optional):",
         initialvalue="",
         parent=parent,
     )
-    if parameter_text is None:
-        return
-    parameters = parse_parameters(parameter_text)
-
-    selected_variant_schematics = filedialog.askopenfilenames(
-        title="Optional: select variant implementation schematics",
-        filetypes=[("KiCad Schematic", "*.kicad_sch"), ("All files", "*.*")],
-        parent=parent,
-    )
-    variant_files = []
-    for variant_path in selected_variant_schematics:
-        variant_path = Path(variant_path)
-        variant_value = simpledialog.askstring(
-            "Block Variant",
-            f"Which exact KB_VARIANT value opens {variant_path.name}?\n"
-            "Example: 3V3 (the facade field may contain ${SUPPLY_VOLTAGE}).",
-            initialvalue=variant_path.stem,
-            parent=parent,
-        )
-        if variant_value is None:
-            return
-        variant_files.append({"value": variant_value, "path": variant_path})
-
-    selected_layouts = filedialog.askopenfilenames(
-        title="Optional: select one or more named PCB layout alternatives",
-        filetypes=[("KiCad PCB", "*.kicad_pcb"), ("All files", "*.*")],
-        parent=parent,
-    )
-    layouts = []
-    for index, layout_path in enumerate(selected_layouts, start=1):
-        layout_path = Path(layout_path)
-        layout_name = simpledialog.askstring(
-            f"PCB Layout {index}",
-            "Name this layout alternative:",
-            initialvalue=layout_path.stem,
-            parent=parent,
-        )
-        if layout_name is None:
-            return
-        layout_project = filedialog.askopenfilename(
-            title=f"Optional: select project settings for {layout_name}",
-            filetypes=[("KiCad Project", "*.kicad_pro"), ("All files", "*.*")],
-            parent=parent,
-        )
-        default_ports = ", ".join(f"{pin.name}:{pin.name}" for pin in pins)
-        ports_text = simpledialog.askstring(
-            f"PCB Layout Ports — {layout_name}",
-            "Map each facade pin to the corresponding net name in this stored layout.\n"
-            "Format: FACADE_PIN:LAYOUT_NET, comma-separated.",
-            initialvalue=default_ports,
-            parent=parent,
-        )
-        if ports_text is None:
-            return
-        ports = _parse_pin_net_map(ports_text, [pin.name for pin in pins])
-        normalized_layout_name = layout_name.strip() or layout_path.stem
-        layouts.append({
-            "id": slugify(normalized_layout_name),
-            "name": normalized_layout_name,
-            "path": layout_path,
-            "project_path": Path(layout_project) if layout_project else None,
-            "ports": ports,
-        })
-
-    profiles = _collect_block_profiles(parent, parameters, variant_files, layouts)
-    if profiles is None:
+    if description is None:
         return
 
     record = create_block(
         root,
         name,
-        pins,
+        source_schematic=source_sheet,
+        source_project_name=Path(project_dir).name,
         description=description,
-        layout_files=layouts if layouts else None,
-        parameters=parameters,
-        variant_files=variant_files,
-        profiles=profiles,
     )
     record = _register_block(project_dir, record, kicad)
-    layout_names = ", ".join(item["name"] for item in record.manifest.get("layouts", [])) or "none"
-    parameter_names = ", ".join(item["name"] for item in record.manifest.get("parameters", [])) or "none"
+    pins_summary = "\\n".join(
+        f"  • {pin['name']} — {pin['electrical_type']}"
+        for pin in record.manifest.get("pins", [])
+    )
     messagebox.showinfo(
         "Block Created",
-        f"Created and registered {name}.\n\n"
-        f"Library asset: {record.path}\n"
-        f"Implementation schematic: {record.implementation}\n"
-        f"PCB layout alternatives: {layout_names}\n"
-        f"Block parameters: {parameter_names}\n\n"
-        "Click OK to open KiCad's symbol chooser. After selecting the block, "
-        "move the mouse to the desired location and click to place it. Press Esc to cancel. "
-        "The manager minimizes during placement; restore it to create or browse another block. "
-        "Open the implementation file separately in Eeschema to edit the internal circuit; "
-        "use Symbol Properties → Fields to override values per instance.",
+        f"Created {name} from hierarchical sheet {source_sheet.name}.\\n\\n"
+        f"Facade pins were generated from hierarchical labels and their shapes:\\n"
+        f"{pins_summary}\\n\\n"
+        f"Implementation: {record.implementation}\\n"
+        f"Facade symbol: {record.symbol_library}\\n\\n"
+        "The original project sheet is unchanged. Edit the facade in KiCad's "
+        "normal Symbol Editor, then use Publish Library Block. When the "
+        "implementation's hierarchical labels change, Publish synchronizes "
+        "facade pin names and electrical types automatically.",
         parent=parent,
     )
-    minimized_windows = _minimize_placement_windows(parent)
-    try:
-        _start_native_symbol_placement(
-            kicad, editor_window_id, str(record.manifest["symbol_name"])
-        )
-    except Exception as exc:
-        _restore_placement_windows(minimized_windows)
-        LOG.exception("Block was created but interactive placement did not start")
-        messagebox.showwarning(
-            "Block Created — placement not started",
-            f"{name} was saved and registered in the library, but KiCad did not "
-            f"start interactive placement.\n\n{exc}\n\n"
-            "You can still place it later from Browse Block Library.",
+
+
+def _edit_facade_symbol(root, kicad, parent) -> None:
+    """Open the selected block's single-symbol library asset in KiCad Symbol Editor."""
+    record = _pick_record(list_blocks(root), parent, "Edit Facade Symbol")
+    if record is None:
+        return
+    executable = kicad.get_kicad_binary_path("symbol_editor")
+    if not executable:
+        messagebox.showinfo(
+            "Edit Facade Symbol",
+            "Open this block's symbol library in KiCad Symbol Editor:\\n"
+            f"{record.symbol_library}\\n\\n"
+            "Save the library asset, then run Publish Library Block to refresh "
+            "the shared catalog and synchronize its hierarchical-label interface.",
             parent=parent,
         )
+        return
+    subprocess.Popen([executable, str(record.symbol_library)], close_fds=True)
 
 def _place_existing(root, schematic, kicad, project_dir, parent) -> None:
     """Open the searchable browser; placement is handed to KiCad's native cursor tool."""
@@ -2472,12 +2407,13 @@ def run() -> None:
         library_root.mkdir(parents=True, exist_ok=True)
 
         actions = [
-            ("create", "Create block", "Generate a facade, optional implementation variants, typed parameters, PCB layouts and named configuration profiles."),
+            ("create", "Create block from selected sheet", "Select one hierarchical sheet. Its hierarchical labels automatically define the facade pins and electrical types."),
             ("place", "Browse & place block", "Search the library, preview a facade and place it at the mouse cursor."),
             ("configure", "Configure block instance", "Choose a linked variant, parameter and PCB layout profile, then customize per-instance values."),
             ("local", "Make local copy", "Give the selected instance an independent implementation."),
             ("sync", "Synchronize local copy", "Publish and pull non-conflicting local/library edits."),
             ("edit", "Open implementation", "Open the selected facade's resolved KB_VARIANT in Eeschema."),
+            ("edit-facade", "Edit facade symbol", "Open the selected block's facade library in KiCad Symbol Editor."),
             ("publish", "Publish library block", "Publish edits to a shared library block."),
             ("bom", "Recursive BOM", "Export the selected block and all nested components."),
             ("erc", "Recursive ERC", "Run ERC on the selected block and dependencies."),
@@ -2572,6 +2508,8 @@ def run() -> None:
                     _open_selected_block_implementation(
                         library_root, schematic, kicad, project_dir, root
                     )
+                elif action == "edit-facade":
+                    _edit_facade_symbol(library_root, kicad, root)
                 elif action == "publish":
                     _publish_block(library_root, kicad, project_dir, root)
                 elif action == "bom":
