@@ -31,7 +31,12 @@ from .model import (
     resolve_variant_implementation,
     slugify,
 )
-from .operations import export_block_bom, find_kicad_cli, validate_block_tree
+from .operations import (
+    export_block_bom,
+    find_kicad_cli,
+    validate_block_library,
+    validate_block_tree,
+)
 from .pcb_layout import BlockLayoutPlacement, merge_block_layout, merge_block_layouts
 from .repository import (
     LIBRARY_NICKNAME,
@@ -1978,6 +1983,43 @@ def _export_recursive_bom(root: Path, parent, schematic=None, project_dir: Path 
     )
 
 
+def _validate_shared_library(root: Path, parent) -> None:
+    """Validate every block's manifest, assets, profiles, dependencies and ERC."""
+    output = filedialog.askdirectory(
+        title="Select a folder for the library validation report",
+        parent=parent,
+    )
+    if not output:
+        return
+    result = validate_block_library(
+        root,
+        Path(output),
+        find_kicad_cli(),
+        run_erc=True,
+    )
+    details = []
+    for item in result["blocks"]:
+        status = str(item["status"]).upper()
+        detail = f"{status}: {item['name']}"
+        problems = item.get("errors", []) + item.get("warnings", [])
+        if problems:
+            detail += "\\n  " + "\\n  ".join(problems)
+        details.append(detail)
+    message = (
+        f"Validated {result['block_count']} block(s).\\n"
+        f"Passed: {result['passed_count']}  |  Warnings: {result['warning_count']}  |  "
+        f"Failed: {result['failed_count']}\\n\\n"
+        + ("\\n\\n".join(details) if details else "The library contains no block assets.")
+        + f"\\n\\nMachine-readable report: {result['report']}"
+    )
+    if result["status"] == "failed":
+        messagebox.showwarning("Block Library Validation — problems found", message, parent=parent)
+    elif result["status"] == "warnings":
+        messagebox.showwarning("Block Library Validation — ERC warnings", message, parent=parent)
+    else:
+        messagebox.showinfo("Block Library Validation Passed", message, parent=parent)
+
+
 def _validate_recursive_erc(root: Path, parent, schematic=None, project_dir: Path | None = None) -> None:
     parameter_values = None
     selection = list(schematic.get_selection()) if schematic is not None else []
@@ -2441,6 +2483,7 @@ def run() -> None:
             ("publish", "Publish library block", "Publish edits to a shared library block."),
             ("bom", "Recursive BOM", "Export the selected block and all nested components."),
             ("erc", "Recursive ERC", "Run ERC on the selected block and dependencies."),
+            ("validate-library", "Validate block library", "Check every block's manifest, assets, profiles, dependencies and recursive ERC."),
             ("pcb", "Apply one PCB layout", "Merge one selected block layout into a new board copy."),
             ("pcb-many", "Apply multiple PCB layouts", "Merge layouts for multiple selected block instances."),
             ("nest", "Nest block", "Compose a reusable block into another block."),
@@ -2539,6 +2582,9 @@ def run() -> None:
                 elif action == "erc":
                     library = _choose_library_root(root)
                     _validate_recursive_erc(library, root, schematic, project_dir)
+                elif action == "validate-library":
+                    library = _choose_library_root(root)
+                    _validate_shared_library(library, root)
                 elif action == "pcb":
                     _apply_block_pcb_layout(schematic, kicad, project_dir, library_root, root)
                 elif action == "pcb-many":
