@@ -134,9 +134,9 @@ class HierarchicalSheetExtractionTests(unittest.TestCase):
 
         implementation = record.implementation.read_text(encoding="utf-8")
         implementation = implementation.replace(
-            '(hierarchical_label "VIN" (shape input)',
-            '(hierarchical_label "VCC" (shape bidirectional)',
-        )
+            '(hierarchical_label "VIN"',
+            '(hierarchical_label "VCC"',
+        ).replace('(shape input)', '(shape bidirectional)')
         record.implementation.write_text(implementation, encoding="utf-8")
 
         result = refresh_library_block(record)
@@ -154,8 +154,8 @@ class HierarchicalSheetExtractionTests(unittest.TestCase):
 
     def test_conflicting_duplicate_hierarchical_label_shapes_are_rejected(self):
         implementation = self.source.read_text(encoding="utf-8").replace(
-            '(hierarchical_label "GND" (shape passive)',
-            '(hierarchical_label "VIN" (shape passive)',
+            '(hierarchical_label "GND"',
+            '(hierarchical_label "VIN"',
         )
         self.source.write_text(implementation, encoding="utf-8")
         with self.assertRaisesRegex(ValueError, "conflicting shapes"):
