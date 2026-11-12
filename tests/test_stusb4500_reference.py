@@ -39,6 +39,7 @@ class STUSB4500ReferenceTests(unittest.TestCase):
         self.assertIn('(hierarchical_label "SDA"', content)
         self.assertIn('(hierarchical_label "ALERT#"', content)
         self.assertIn('(hierarchical_label "RESET"', content)
+        self.assertIn('(hierarchical_label "VMCU"', content)
         self.assertNotIn("(global_label ", content)
 
     def test_external_ports_use_standard_kicad_electrical_shapes(self) -> None:
@@ -52,10 +53,11 @@ class STUSB4500ReferenceTests(unittest.TestCase):
             ('"CC1"', "bidirectional"),
             ('"CC2"', "bidirectional"),
             ('"VSNK"', "output"),
-            ('"SCL"', "bidirectional"),
+            ('"SCL"', "input"),
             ('"SDA"', "bidirectional"),
             ('"ALERT#"', "output"),
             ('"RESET"', "input"),
+            ('"VMCU"', "input"),
         )
         for name, shape in expected:
             self.assertIn(
