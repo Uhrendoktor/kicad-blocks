@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+import re
 import tempfile
 import unittest
 from pathlib import Path
@@ -38,6 +39,12 @@ class STUSB4500ReferenceTests(unittest.TestCase):
         self.assertIn('(hierarchical_label "SCL"', content)
         self.assertIn('(hierarchical_label "SDA"', content)
         self.assertEqual(content.count("(embedded_fonts no)"), 1)
+        wire_nodes = re.findall(r"\(wire \(pts(.*?)\) \(stroke", content)
+        self.assertTrue(wire_nodes)
+        self.assertTrue(
+            all(len(re.findall(r"\(xy ", wire)) == 2 for wire in wire_nodes),
+            "KiCad wire objects must contain exactly two points",
+        )
         self.assertIn('(hierarchical_label "ALERT#"', content)
         self.assertIn('(hierarchical_label "RESET"', content)
         self.assertIn('(hierarchical_label "VMCU"', content)
