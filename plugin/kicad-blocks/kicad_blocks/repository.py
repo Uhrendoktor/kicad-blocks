@@ -24,7 +24,7 @@ from .model import (
     sha256_file,
     slugify,
 )
-from .pcb_layout import _Quoted, _all, _direct, _dump, _head, parse_sexpr
+from .pcb_layout import _all, _direct, _dump, _head, _Quoted, parse_sexpr
 
 MANIFEST_NAME = "manifest.json"
 SYMBOL_NAME = "block.kicad_sym"
