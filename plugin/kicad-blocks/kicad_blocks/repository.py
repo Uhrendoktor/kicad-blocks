@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
 import math
 import os
@@ -122,6 +123,118 @@ def merge_symbol_catalog(library_root: Path, symbol_file: Path) -> Path:
     return catalog
 
 
+def _named_symbol_node(symbol_library: list, symbol_name: str, source: Path) -> list:
+    """Return exactly one named symbol from a parsed KiCad symbol library."""
+    if _head(symbol_library) != "kicad_symbol_lib":
+        raise ValueError(f"Invalid KiCad symbol library: {source}")
+    matches = [
+        item for item in _all(symbol_library, "symbol")
+        if len(item) >= 2 and str(item[1]) == symbol_name
+    ]
+    if len(matches) != 1:
+        raise ValueError(
+            f"Expected exactly one {symbol_name!r} symbol in {source}; found {len(matches)}."
+        )
+    return matches[0]
+
+
+def _symbol_definition_digest(symbol: list) -> str:
+    return hashlib.sha256(_dump(symbol).encode("utf-8")).hexdigest()
+
+
+def _symbol_definition_digest_from_file(path: Path, symbol_name: str) -> str:
+    tree = parse_sexpr(Path(path).read_text(encoding="utf-8"))
+    return _symbol_definition_digest(_named_symbol_node(tree, symbol_name, Path(path)))
+
+
+def _import_catalog_facade_edit(block: BlockRecord, manifest: dict) -> bool:
+    """Import a Symbol Editor catalog edit into the block's revisioned facade asset.
+
+    KiCad edits the shared KBlocks catalog. The per-block .kicad_sym file is the
+    revisioned asset used by Publish and synchronization. Detect which side changed
+    since the last published baseline and reject divergent edits instead of silently
+    replacing either version.
+    """
+    symbol_file = str(manifest["symbol_file"])
+    symbol_name = str(manifest.get("symbol_name") or "")
+    asset_path = block.path / symbol_file
+    catalog_path = block.path.parent / str(
+        manifest.get("catalog_file", LIBRARY_CATALOG_NAME)
+    )
+    if not catalog_path.is_file():
+        return False
+    if not asset_path.is_file():
+        raise FileNotFoundError(f"Block facade asset does not exist: {asset_path}")
+
+    catalog_tree = parse_sexpr(catalog_path.read_text(encoding="utf-8"))
+    asset_tree = parse_sexpr(asset_path.read_text(encoding="utf-8"))
+    catalog_symbol = _named_symbol_node(catalog_tree, symbol_name, catalog_path)
+    asset_symbol = _named_symbol_node(asset_tree, symbol_name, asset_path)
+    catalog_digest = _symbol_definition_digest(catalog_symbol)
+    asset_digest = _symbol_definition_digest(asset_symbol)
+    if catalog_digest == asset_digest:
+        return False
+
+    baseline_asset_hash = (manifest.get("hashes") or {}).get(symbol_file)
+    asset_changed = (
+        baseline_asset_hash is not None
+        and sha256_file(asset_path) != str(baseline_asset_hash)
+    )
+    baseline_catalog_digest = manifest.get("catalog_symbol_hash")
+    if baseline_catalog_digest is None:
+        # Older manifests did not track the catalog symbol separately. If the
+        # asset is unchanged, a catalog-only difference is a Symbol Editor edit.
+        # If both sides differ, the origin cannot be established safely.
+        if asset_changed:
+            raise RuntimeError(
+                "Facade symbol conflict: both the shared KBlocks catalog and the "
+                "per-block facade asset differ, but this block has no catalog baseline. "
+                "Reconcile the two symbol definitions manually before publishing."
+            )
+        catalog_changed = True
+    else:
+        catalog_changed = catalog_digest != str(baseline_catalog_digest)
+
+    if catalog_changed and asset_changed:
+        raise RuntimeError(
+            "Facade symbol conflict: both the shared KBlocks catalog and the "
+            "per-block facade asset changed since the last publish. Reconcile the "
+            "two symbol definitions manually; neither version was overwritten."
+        )
+    if not catalog_changed:
+        # The block asset changed while the catalog is still at its baseline.
+        # Publish will update the shared catalog from the asset below.
+        return False
+
+    standalone = copy.deepcopy(catalog_tree)
+    standalone[:] = [
+        child for child in standalone
+        if _head(child) != "symbol"
+    ]
+    standalone.append(copy.deepcopy(catalog_symbol))
+    atomic_write(asset_path, _dump(standalone) + "\\n")
+    return True
+
+
+def _save_catalog_symbol_baseline(block: BlockRecord, manifest: dict) -> None:
+    """Record the exact facade definition currently published in the shared catalog."""
+    catalog_path = block.path.parent / str(
+        manifest.get("catalog_file", LIBRARY_CATALOG_NAME)
+    )
+    if not catalog_path.is_file():
+        return
+    digest = _symbol_definition_digest_from_file(
+        catalog_path, str(manifest.get("symbol_name") or "")
+    )
+    if manifest.get("catalog_symbol_hash") == digest:
+        return
+    manifest["catalog_symbol_hash"] = digest
+    atomic_write(
+        block.path / MANIFEST_NAME,
+        json.dumps(manifest, indent=2, ensure_ascii=False) + "\\n",
+    )
+
+
 def rename_block_symbol_asset(block_path: Path, new_symbol_name: str) -> None:
     """Rename a legacy single-symbol asset and its unit sub-symbol identifiers."""
     block_path = Path(block_path).expanduser().resolve()
@@ -168,6 +281,7 @@ def ensure_stable_block_identity(block: BlockRecord) -> BlockRecord:
             json.dumps(manifest, indent=2, ensure_ascii=False) + "\n",
         )
     merge_symbol_catalog(block.path.parent, block.path / manifest["symbol_file"])
+    _save_catalog_symbol_baseline(block, read_manifest(block.path))
     return _record(block.path)
 
 
@@ -547,6 +661,8 @@ def create_block(
         os.replace(staging, folder)
         folder_created = True
         merge_symbol_catalog(root, folder / SYMBOL_NAME)
+        created = _record(folder)
+        _save_catalog_symbol_baseline(created, created.manifest)
         return _record(folder)
     except Exception:
         shutil.rmtree(staging, ignore_errors=True)
@@ -946,6 +1062,7 @@ def synchronize_facade_pins_from_implementation(block: BlockRecord) -> list[str]
     hierarchical labels, and are left unchanged.
     """
     manifest = read_manifest(block.path)
+    _import_catalog_facade_edit(block, manifest)
     implementation_path = block.path / manifest["implementation_file"]
     implementation_tree = parse_sexpr(
         implementation_path.read_text(encoding="utf-8")
@@ -1106,6 +1223,7 @@ def refresh_library_block(block: BlockRecord) -> dict:
         if current_hashes.get(name) != previous_hashes.get(name)
     )
     if not changed:
+        _save_catalog_symbol_baseline(block, manifest)
         return {"changed": [], "version": int(manifest.get("version", 1)), "revision": manifest.get("revision")}
     manifest["files"] = sorted(current_hashes)
     manifest["hashes"] = current_hashes
@@ -1117,6 +1235,7 @@ def refresh_library_block(block: BlockRecord) -> dict:
     )
     if SYMBOL_NAME in changed:
         merge_symbol_catalog(block.path.parent, block.path / SYMBOL_NAME)
+    _save_catalog_symbol_baseline(block, read_manifest(block.path))
     return {"changed": changed, "version": manifest["version"], "revision": manifest["revision"]}
 
 

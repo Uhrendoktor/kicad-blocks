@@ -183,8 +183,43 @@ class HierarchicalSheetExtractionTests(unittest.TestCase):
 
         updated_facade = record.symbol_library.read_text(encoding="utf-8")
         self.assertIn("(width 0.500)", updated_facade)
+        block_asset = (record.path / record.manifest["symbol_file"]).read_text(encoding="utf-8")
+        self.assertIn("(width 0.500)", block_asset)
         self.assertIn('(name "VCC"', updated_facade)
         self.assertIn("(pin bidirectional line", updated_facade)
+
+    def test_publish_rejects_concurrent_catalog_and_block_facade_edits(self):
+        record = create_block(
+            self.root,
+            "Power Stage",
+            source_schematic=self.source,
+            source_project_name="TestProject",
+        )
+        asset_path = record.path / record.manifest["symbol_file"]
+        catalog_path = record.symbol_library
+
+        def change_body_width(path: Path, value: str) -> None:
+            tree = parse_sexpr(path.read_text(encoding="utf-8"))
+            symbol = _all(tree, "symbol")[0]
+            graphic_unit = next(
+                child for child in _all(symbol, "symbol")
+                if str(child[1]).endswith("_0_1")
+            )
+            rectangle = _all(graphic_unit, "rectangle")[0]
+            _direct(_direct(rectangle, "stroke"), "width")[1] = value
+            path.write_text(_dump(tree) + "\\n", encoding="utf-8")
+
+        change_body_width(asset_path, "0.300")
+        change_body_width(catalog_path, "0.500")
+        asset_before = asset_path.read_bytes()
+        catalog_before = catalog_path.read_bytes()
+
+        with self.assertRaisesRegex(RuntimeError, "Facade symbol conflict"):
+            refresh_library_block(record)
+
+        self.assertEqual(asset_path.read_bytes(), asset_before)
+        self.assertEqual(catalog_path.read_bytes(), catalog_before)
+
 
     def test_publish_rejects_an_extracted_block_with_no_hierarchical_labels(self):
         record = create_block(
