@@ -262,6 +262,11 @@ def generate_reference_schematic(destination: Path) -> Path:
             loaded[key] = _load_symbol(root, library, symbol_name)
             library_symbols.append(loaded[key])
 
+    wired_nets = {
+        "VBUS", "CC1", "CC2", "VSNK", "SCL", "SDA", "ALERT#", "RESET",
+        "VMCU", "POWER_OK2", "VBUS_EN_SNK", "VBUS_SENSE", "DISCH",
+        "1V2", "2V7", "ADDR0", "ADDR1",
+    }
     instances = []
     labels = []
     no_connects = []
@@ -314,6 +319,10 @@ def generate_reference_schematic(destination: Path) -> Path:
                 point = (round(px, 3), round(py, 3))
                 if kind in {"hier", "local"}:
                     net_points.setdefault(net, []).append((reference, px, py))
+                    if kind == "local" and net in wired_nets:
+                        # These nets are explicitly routed with KiCad wires;
+                        # duplicate local labels only obscure the component pins.
+                        continue
                     existing = label_points.get(point)
                     shape_name = shape[0] if shape else None
                     if existing and existing[0] != net:
@@ -386,17 +395,14 @@ def generate_reference_schematic(destination: Path) -> Path:
     # Local labels remain on each pin, so the topology is both readable and
     # unambiguous to KiCad's netlist exporter.
     wires = []
-    for net in ("VBUS", "CC1", "CC2", "VSNK", "SCL", "SDA", "ALERT#", "RESET", "VMCU", "POWER_OK2", "VBUS_EN_SNK"):
-        by_reference = {}
-        for reference, x, y in net_points.get(net, []):
-            by_reference.setdefault(reference, (x, y))
+    for net in sorted(wired_nets):
         points = sorted(
-            ((reference, *position) for reference, position in by_reference.items()),
-            key=lambda item: item[1],
+            {(round(x, 3), round(y, 3)) for _, x, y in net_points.get(net, [])},
+            key=lambda point: (point[0], point[1]),
         )
         for index, (left, right) in enumerate(zip(points, points[1:])):
-            ref_a, x_a, y_a = left
-            ref_b, x_b, y_b = right
+            x_a, y_a = left
+            x_b, y_b = right
             route = [["xy", f"{x_a:.3f}", f"{y_a:.3f}"]]
             if abs(x_a - x_b) > 0.001 and abs(y_a - y_b) > 0.001:
                 route.append(["xy", f"{x_b:.3f}", f"{y_a:.3f}"])
@@ -408,7 +414,7 @@ def generate_reference_schematic(destination: Path) -> Path:
                     "wire", ["pts", start, end],
                     ["stroke", ["width", "0"], ["type", "default"]],
                     ["uuid", _Quoted(_uid(
-                        f"wire:{net}:{index}:{segment_index}:{ref_a}:{ref_b}"
+                        f"wire:{net}:{index}:{segment_index}:{x_a:.3f}:{y_a:.3f}:{x_b:.3f}:{y_b:.3f}"
                     ))],
                 ])
 
