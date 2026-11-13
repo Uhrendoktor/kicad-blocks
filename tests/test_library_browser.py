@@ -149,6 +149,47 @@ class LibraryBrowserTests(unittest.TestCase):
         self.assertEqual(removed["variants"], [])
         self.assertFalse(variant_file.exists())
 
+    def test_variant_can_be_edited_without_copying_its_file_onto_itself(self):
+        _save_block_variants(
+            self.filter_block,
+            [{"value": "1V8", "source": str(self.v18)}],
+        )
+        manifest = read_manifest(self.filter_block.path)
+        variant_file = self.filter_block.path / manifest["variants"][0]["file"]
+        original_bytes = variant_file.read_bytes()
+
+        _save_block_variants(
+            self.filter_block,
+            [{"value": "1V8", "source": str(variant_file)}],
+        )
+
+        self.assertEqual(variant_file.read_bytes(), original_bytes)
+        self.assertEqual(
+            read_manifest(self.filter_block.path)["variants"][0]["file"],
+            variant_file.name,
+        )
+
+    def test_invalid_profile_change_does_not_copy_new_variant_files(self):
+        profiled = create_block(
+            self.root,
+            "Profiled Variant Block",
+            parse_pins("VIN:input, VOUT:output"),
+            variant_files=[{"value": "1V8", "path": self.v18}],
+            profiles=[{"name": "Low voltage", "variant": "1V8"}],
+        )
+        with self.assertRaisesRegex(ValueError, "still use an implementation"):
+            _save_block_variants(
+                profiled,
+                [{"value": "3V3", "source": str(self.v33)}],
+            )
+        self.assertFalse(
+            (profiled.path / "implementation_3v3.kicad_sch").exists()
+        )
+        self.assertEqual(
+            read_manifest(profiled.path)["variants"][0]["value"],
+            "1V8",
+        )
+
     def test_variant_editor_refuses_to_remove_an_implementation_used_by_a_profile(self):
         profiled = create_block(
             self.root,
