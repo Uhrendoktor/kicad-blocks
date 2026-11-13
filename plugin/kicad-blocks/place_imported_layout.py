@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+
 from kicad_blocks.json_types import JsonObject
 
 from kicad_blocks.pcb_placement import (
@@ -108,7 +109,15 @@ def main() -> None:
 
         board_path = _active_board_path(board)
         manifest = read_pcb_placement_manifest(board_path)
-        placement = _choose_placement(manifest["placements"])
+        raw_placements = manifest.get("placements")
+        if not isinstance(raw_placements, list):
+            raise TypeError("PCB placement manifest contains no placement list.")
+        placements: list[JsonObject] = []
+        for raw_placement in raw_placements:
+            if not isinstance(raw_placement, dict):
+                raise TypeError("PCB placement manifest contains a malformed placement.")
+            placements.append(raw_placement)
+        placement = _choose_placement(placements)
         if placement is None:
             return
 
