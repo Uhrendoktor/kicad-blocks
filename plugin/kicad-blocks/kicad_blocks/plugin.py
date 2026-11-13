@@ -2205,7 +2205,6 @@ def _bind_mousewheel(widget, scroll_command, *, include_children: bool = False) 
 
 
 def _show_library_browser(
-def _show_library_browser(
     window,
     schematic,
     kicad,
