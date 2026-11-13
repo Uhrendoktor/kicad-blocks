@@ -3,15 +3,12 @@
 from __future__ import annotations
 
 import os
-import sys
 import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
-ROOT = Path(__file__).resolve().parents[1]
-PLUGIN = ROOT / "plugin" / "kicad-blocks"
 from kicad_blocks.model import parse_parameters, parse_pins
 from kicad_blocks.plugin import (
     _bind_mousewheel,
