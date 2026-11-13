@@ -18,4 +18,4 @@ def load_plugin() -> ModuleType:
 
 def run_action(action: str) -> None:
     """Invoke one registered plugin action."""
-    load_plugin().run_action(action)
+    getattr(load_plugin(), "run_action")(action)
