@@ -63,8 +63,8 @@ class BlockProfileTests(unittest.TestCase):
                 "OUTPUT_VOLTAGE:number=3.3, ENABLE:boolean=true, PHASES:integer=2"
             ),
             variant_files=[
-                {"value": "1V8", "path": self.variant_18},
-                {"value": "3V3", "path": self.variant_33},
+                {"value": "1V8", "path": self.variant_18, "layout_id": "compact"},
+                {"value": "3V3", "path": self.variant_33, "layout_id": "standard"},
             ],
             layout_files=[
                 {"id": "standard", "name": "Standard", "path": self.standard},
@@ -77,14 +77,12 @@ class BlockProfileTests(unittest.TestCase):
                     "description": "Default board and supply rail.",
                     "variant": "3V3",
                     "parameters": {"OUTPUT_VOLTAGE": "3.3", "ENABLE": "true"},
-                    "layout": "standard",
                 },
                 {
                     "id": "low_voltage_compact",
                     "name": "Low voltage compact",
                     "variant": "1V8",
                     "parameters": {"OUTPUT_VOLTAGE": "1.8", "PHASES": 1},
-                    "layout": "compact",
                 },
             ],
         )
@@ -106,10 +104,9 @@ class BlockProfileTests(unittest.TestCase):
                 "layout": "compact",
             },
         )
-        self.assertEqual(
-            resolve_profile_configuration(manifest, "standard_3v3")["variant"],
-            "3V3",
-        )
+        standard_profile = resolve_profile_configuration(manifest, "standard_3v3")
+        self.assertEqual(standard_profile["variant"], "3V3")
+        self.assertEqual(standard_profile["layout"], "standard")
 
         facade = (block.path / manifest["symbol_file"]).read_text(encoding="utf-8")
         self.assertIn('property "KB_PROFILE" ""', facade)
