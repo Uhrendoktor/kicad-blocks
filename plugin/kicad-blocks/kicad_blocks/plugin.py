@@ -348,6 +348,10 @@ def _attach_tk_window_to_editor(window, editor_window_id: str | None) -> bool:
         window.update_idletasks()
         window_id = str(window.winfo_id())
         with contextlib.suppress(tk.TclError):
+            # Use the same X11 application class as Eeschema so GNOME groups
+            # the manager in the editor's taskbar entry instead of a new Tk app.
+            window.wm_class("eeschema", "eeschema")
+        with contextlib.suppress(tk.TclError):
             window.wm_attributes("-type", "dialog")
         return _set_x11_transient_owner(window_id, editor_window_id)
     except (AttributeError, tk.TclError, OSError):
