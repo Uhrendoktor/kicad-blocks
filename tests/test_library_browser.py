@@ -210,7 +210,7 @@ class LibraryBrowserTests(unittest.TestCase):
         manifest = read_manifest(self.block.path)
         manifest["variants"][0]["layout_id"] = "missing"
         manifest_path.write_text(
-            __import__("json").dumps(manifest, indent=2) + "\\n",
+            __import__("json").dumps(manifest, indent=2) + "\n",
             encoding="utf-8",
         )
         with self.assertRaisesRegex(ValueError, "links to unknown PCB layout"):
