@@ -3410,7 +3410,6 @@ def _show_action_hub(root):
 
 
 def run_action(action: str) -> None:
-def run_action(action: str) -> None:
     """Run one operation from the task hub or KiCad's PCB Editor action."""
     # Older installations may still invoke this identifier; route it to the
     # one library-browser selection and placement workflow.
