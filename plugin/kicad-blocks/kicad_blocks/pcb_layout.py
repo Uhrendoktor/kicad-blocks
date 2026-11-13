@@ -904,7 +904,7 @@ def merge_block_layouts(
     if len(references) != len(set(references)):
         raise ValueError("Each selected block instance must have a unique reference designator.")
 
-    results: list[dict[str, Any]] = []
+    results: list[JsonObject] = []
     current_board = target_board
     with tempfile.TemporaryDirectory(prefix="kicad-block-batch-") as temp:
         stage_root = Path(temp)
@@ -977,7 +977,7 @@ def merge_block_layout(
     layout_anchor_mm: tuple[float, float] = (0.0, 0.0),
     rotation_deg: float = 0.0,
     layout_id: str | None = None,
-) -> dict[str, Any]:
+) -> JsonObject:
     """Merge a stored block layout into a new copy of a project board.
 
     The manifest's optional layout_ports map relates facade pin names to
