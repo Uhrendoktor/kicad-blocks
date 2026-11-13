@@ -200,6 +200,10 @@ jobs:
           "$PY" -m ruff check examples plugin scripts tests
           "$PY" -m ruff format --check examples plugin scripts tests
 
+      - name: Validate documentation links and images
+        shell: bash
+        run: python3 scripts/validate_docs.py
+
       - name: Python policy and reviewed type inventory
         shell: bash
         run: |
