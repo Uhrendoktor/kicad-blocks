@@ -2119,6 +2119,34 @@ def _capture_eeschema_window_id() -> str | None:
     ).stdout.strip().casefold()
     if "eeschema" not in window_class and "schematic editor" not in window_title:
         return None
+
+    # Tk windows deliberately share Eeschema's WM_CLASS for taskbar grouping.
+    # A WM_TRANSIENT_FOR owner distinguishes those dialogs from the editor.
+    xprop = shutil.which("xprop")
+    if xprop:
+        try:
+            transient = subprocess.run(
+                [xprop, "-id", window_id, "WM_TRANSIENT_FOR"],
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=2,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            transient = None
+        if (
+            transient is not None
+            and transient.returncode == 0
+            and "WM_TRANSIENT_FOR(WINDOW)" in transient.stdout
+            and "not found" not in transient.stdout.casefold()
+            and "not defined" not in transient.stdout.casefold()
+        ):
+            return None
+    if any(
+        marker in window_title
+        for marker in ("kicad blocks", "functional block library", "manage libraries")
+    ):
+        return None
     return window_id
 
 
