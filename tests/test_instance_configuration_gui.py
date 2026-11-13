@@ -129,6 +129,7 @@ def main(screenshot_path: Path | None = None) -> None:
             save=Mock(),
         )
         parent = plugin_actions.tk.Tk()
+        plugin_actions._configure_tk_theme(parent)
         parent.title("KiCad Blocks Configuration Test Parent")
         parent.geometry("380x120+20+20")
         parent.update()
