@@ -192,9 +192,10 @@ def _configure_tk_theme(root) -> None:
     style.configure("TFrame", background=colors["background"])
     style.configure("TPanedwindow", background=colors["background"])
     style.configure("TLabel", background=colors["background"], foreground=colors["foreground"])
-    style.configure("TLabelFrame", background=colors["background"], foreground=colors["foreground"],
-                    bordercolor=colors["border"], relief="solid", borderwidth=1)
-    style.configure("TLabelFrame.Label", background=colors["background"], foreground=colors["muted"], padding=(4, 0))
+    style.configure("TLabelframe", background=colors["background"], foreground=colors["foreground"],
+                    bordercolor=colors["border"], lightcolor=colors["border"],
+                    darkcolor=colors["border"], relief="solid", borderwidth=1)
+    style.configure("TLabelframe.Label", background=colors["background"], foreground=colors["muted"], padding=(4, 0))
     style.configure("TButton", background=colors["surface_alt"], foreground=colors["foreground"],
                     bordercolor=colors["border"], focuscolor=colors["accent"], focusthickness=1,
                     padding=(11, 7), relief="flat")
@@ -227,7 +228,11 @@ def _configure_tk_theme(root) -> None:
                     font=("TkDefaultFont", 9, "bold"))
     style.map("Treeview.Heading", background=[("active", colors["hover"])],
               foreground=[("active", colors["foreground"])])
-    style.configure("TNotebook", background=colors["background"], borderwidth=0, tabmargins=(2, 4, 2, 0))
+    style.configure(
+        "TNotebook", background=colors["background"], borderwidth=0,
+        bordercolor=colors["border"], lightcolor=colors["border"],
+        darkcolor=colors["border"], tabmargins=(2, 4, 2, 0)
+    )
     style.configure("TNotebook.Tab", background=colors["surface_alt"], foreground=colors["muted"],
                     bordercolor=colors["border"], padding=(13, 8))
     style.map("TNotebook.Tab", background=[("selected", colors["surface"]), ("active", colors["hover"])],
@@ -3910,12 +3915,16 @@ def _show_action_hub(root):
 
         content = ttk.Frame(canvas, padding=14)
         content_id = canvas.create_window((0, 0), window=content, anchor="nw")
+        description_labels = []
 
         def update_scroll_region(_event=None, target=canvas):
             target.configure(scrollregion=target.bbox("all"))
 
-        def fit_content_width(event, target=canvas, item=content_id):
+        def fit_content_width(event, target=canvas, item=content_id, labels=description_labels):
             target.itemconfigure(item, width=event.width)
+            wrap = max(260, min(560, event.width - 390))
+            for label in labels:
+                label.configure(wraplength=wrap)
 
         content.bind("<Configure>", update_scroll_region)
         canvas.bind("<Configure>", fit_content_width)
@@ -3934,12 +3943,14 @@ def _show_action_hub(root):
                 command=lambda selected=action_id: dispatch(selected),
                 width=31,
             ).grid(row=0, column=0, sticky="nw", padx=(0, 12))
-            ttk.Label(
+            description_label = ttk.Label(
                 cell,
                 text=description,
-                wraplength=590,
+                wraplength=440,
                 justify="left",
-            ).grid(row=0, column=1, sticky="w")
+            )
+            description_label.grid(row=0, column=1, sticky="ew")
+            description_labels.append(description_label)
             cell.columnconfigure(1, weight=1)
         content.columnconfigure(0, weight=1)
 
