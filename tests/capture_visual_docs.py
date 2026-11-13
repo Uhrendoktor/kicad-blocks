@@ -38,6 +38,8 @@ ASSET_NAMES = (
     "task-hub-dark.png",
     "implementation-variants-light.png",
     "implementation-variants-dark.png",
+    "implementation-details-light.png",
+    "implementation-details-dark.png",
     "create-block-form-light.png",
     "create-block-form-dark.png",
     "functional-block-facade.svg",
@@ -330,7 +332,7 @@ def capture_ui_workflows(library_roots, record, project_dir: Path, output_dir: P
     roots = [Path(item).resolve() for item in library_roots]
     plugin_actions.configured_library_roots = lambda: roots
     plugin_actions.default_library_root = lambda: roots[0]
-    schematic = SimpleNamespace(get_selection=lambda: [])
+    schematic = SimpleNamespace(get_selection=list)
     kicad = SimpleNamespace()
 
     try:
@@ -366,7 +368,7 @@ def capture_ui_workflows(library_roots, record, project_dir: Path, output_dir: P
                 )
                 _capture_modal(
                     root,
-                    lambda: plugin_actions._show_library_roots_dialog(root),
+                    lambda target=root: plugin_actions._show_library_roots_dialog(target),
                     "Manage KiCad Functional Block Libraries",
                     output_dir / f"library-folders-{theme}.png",
                     xdotool,
@@ -394,7 +396,7 @@ def capture_ui_workflows(library_roots, record, project_dir: Path, output_dir: P
             try:
                 _capture_modal(
                     root,
-                    lambda: plugin_actions._show_block_variant_editor(record, root),
+                    lambda target=root: plugin_actions._show_block_variant_editor(record, target),
                     f"Implementations — {record.name}",
                     output_dir / f"implementation-variants-{theme}.png",
                     xdotool,
@@ -403,8 +405,20 @@ def capture_ui_workflows(library_roots, record, project_dir: Path, output_dir: P
                 )
                 _capture_modal(
                     root,
-                    lambda: plugin_actions._ask_create_block_details(
-                        root, Path(record.implementation)
+                    lambda target=root: plugin_actions._ask_implementation_details(
+                        target,
+                        value="5V",
+                        source=str(record.implementation),
+                    ),
+                    "Implementation details",
+                    output_dir / f"implementation-details-{theme}.png",
+                    xdotool,
+                    minimum_size=(600, 240),
+                )
+                _capture_modal(
+                    root,
+                    lambda target=root: plugin_actions._ask_create_block_details(
+                        target, Path(record.implementation)
                     ),
                     "Create Functional Block",
                     output_dir / f"create-block-form-{theme}.png",
