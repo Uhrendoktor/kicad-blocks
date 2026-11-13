@@ -57,6 +57,7 @@ def test_rejects_explicit_any_outside_reviewed_boundaries(tmp_path, monkeypatch)
     errors = policy._check_file(path)
 
     assert any("explicit Any" in error for error in errors)
+    assert sum("explicit Any" in error for error in errors) >= 3
 
 
 def test_allows_the_one_documented_untrusted_object_input(tmp_path, monkeypatch):
