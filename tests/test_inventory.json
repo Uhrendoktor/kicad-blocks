@@ -1,0 +1,160 @@
+{
+  "schema_version": 1,
+  "entries": [
+    {
+      "path": "tests/test_blocks.py",
+      "mode": "pytest",
+      "purpose": "Core block model, facade-symbol rendering, library registration, local-copy publishing and synchronization, and nested dependency graph invariants."
+    },
+    {
+      "path": "tests/test_dispatch_release.py",
+      "mode": "pytest",
+      "purpose": "Release workflow dispatch idempotence and rejection of tag, source revision, or version mismatches."
+    },
+    {
+      "path": "tests/test_download_pinned_ipc_wheel.py",
+      "mode": "pytest",
+      "purpose": "Immutable IPC wheel reuse: ABI and source-SHA matching, digest verification, ZIP validation, and corrupt/missing asset handling."
+    },
+    {
+      "path": "tests/test_editor_workflow.py",
+      "mode": "pytest",
+      "purpose": "Editor and command workflows: selected-sheet handling, native Eeschema edit handoff, instance configuration rollback, and variant/layout selection."
+    },
+    {
+      "path": "tests/test_extraction.py",
+      "mode": "pytest",
+      "purpose": "Hierarchical sheet selection, pin extraction, nested sheet-tree preservation, and safe facade synchronization under concurrent edits."
+    },
+    {
+      "path": "tests/test_install.py",
+      "mode": "pytest",
+      "purpose": "Plugin installer platform/version validation, atomic install and reinstall, dry-run safety, and runtime/dependency compatibility."
+    },
+    {
+      "path": "tests/test_library_browser.py",
+      "mode": "pytest",
+      "purpose": "Library search and preview behavior, variants/profiles UI logic, display geometry, and native keyboard placement handoff."
+    },
+    {
+      "path": "tests/test_library_validation.py",
+      "mode": "pytest",
+      "purpose": "Shared-library manifest, asset hashes, missing/corrupt asset reporting, and recursive ERC validation behavior."
+    },
+    {
+      "path": "tests/test_operations.py",
+      "mode": "pytest",
+      "purpose": "Recursive BOM parameter expansion, reference namespacing, child-instance aggregation, and recursive ERC invocation."
+    },
+    {
+      "path": "tests/test_pcb_layout_unit.py",
+      "mode": "pytest",
+      "purpose": "PCB net-reference serialization, coordinate transforms, project netclass rules, and invalid net-code rejection."
+    },
+    {
+      "path": "tests/test_pcb_placement.py",
+      "mode": "pytest",
+      "purpose": "Persistent PCB placement manifests, unique item ownership, active-board identity, and safe native move selection."
+    },
+    {
+      "path": "tests/test_profiles.py",
+      "mode": "pytest",
+      "purpose": "Named profile validation and round-trip behavior through library copies, synchronization, and conflict-safe publishing."
+    },
+    {
+      "path": "tests/test_publish_ipc_wheel.py",
+      "mode": "pytest",
+      "purpose": "Transient GitHub API retry behavior and publisher recovery after an upload succeeds but its response is lost."
+    },
+    {
+      "path": "tests/test_publish_pinned_ipc_wheel.py",
+      "mode": "pytest",
+      "purpose": "Revision-addressed ABI wheel publication, immutable asset handling, digest checks, and Python-tag selection."
+    },
+    {
+      "path": "tests/test_publish_release.py",
+      "mode": "pytest",
+      "purpose": "Versioned release asset upload and digest verification, including refusing to overwrite changed assets."
+    },
+    {
+      "path": "tests/test_release_package.py",
+      "mode": "pytest",
+      "purpose": "Deterministic release archive contents, install-from-archive behavior, and consistency of pinned binding dependencies."
+    },
+    {
+      "path": "tests/test_stusb4500_reference.py",
+      "mode": "pytest",
+      "purpose": "STUSB4500 example schematic structure, hierarchical ports, electrical pin shapes, grid alignment, and functional zoning."
+    },
+    {
+      "path": "tests/test_variants.py",
+      "mode": "pytest",
+      "purpose": "Implementation variant resolution, no silent fallback, parameter expansion, and local-copy synchronization/publishing."
+    },
+    {
+      "path": "tests/test_verify_release_gate.py",
+      "mode": "pytest",
+      "purpose": "Release gate acceptance only for successful main-branch CI on the exact packaged commit and matching tag/version."
+    },
+    {
+      "path": "tests/test_visual_docs.py",
+      "mode": "pytest",
+      "purpose": "Visual documentation asset inventory, source revision provenance, content hashes, and incomplete/stale bundle rejection."
+    },
+    {
+      "path": "tests/test_python_contracts.py",
+      "mode": "pytest",
+      "purpose": "Static Python policy helpers: explicit-Any detection and changed-file annotation/object-debt metrics."
+    },
+    {
+      "path": "tests/test_test_inventory_contract.py",
+      "mode": "pytest",
+      "purpose": "Test inventory routing completeness, uniqueness, correct execution mode, and generated documentation freshness."
+    },
+    {
+      "path": "tests/test_eeschema_gui.py",
+      "mode": "standalone-gui",
+      "purpose": "Real Eeschema GUI acceptance: opens an implementation for editing, saves an edit, and verifies the source file remains intact."
+    },
+    {
+      "path": "tests/test_instance_configuration_gui.py",
+      "mode": "standalone-gui",
+      "purpose": "Real Tk/X11 instance-configuration form smoke test for interactive field editing and save/undo integration."
+    },
+    {
+      "path": "tests/test_ipc_headless.py",
+      "mode": "standalone-ipc",
+      "purpose": "Headless real KiCad schematic IPC acceptance for facade placement, instance configuration, library synchronization, and conflict protection."
+    },
+    {
+      "path": "tests/test_library_picker_gui.py",
+      "mode": "standalone-gui",
+      "purpose": "Real Tk/X11 searchable block picker keyboard-flow acceptance and selected-record identity."
+    },
+    {
+      "path": "tests/test_pcb_ipc.py",
+      "mode": "standalone-ipc",
+      "purpose": "Live KiCad PCB IPC capability probe for the primitives required by layout import and placement."
+    },
+    {
+      "path": "tests/test_pcb_layout.py",
+      "mode": "standalone-kicad",
+      "purpose": "End-to-end PCB layout import acceptance against real KiCad board files, geometry, nets, and project settings."
+    },
+    {
+      "path": "tests/test_plugin_registration.py",
+      "mode": "standalone-gui",
+      "purpose": "Installed-plugin discovery and action-registration acceptance inside KiCad, including managed Python environment readiness."
+    },
+    {
+      "path": "tests/validate_kicad_cli.py",
+      "mode": "standalone-kicad",
+      "purpose": "Generates a block fixture and validates its generated schematic/symbol output with the native KiCad CLI parser."
+    },
+    {
+      "path": "tests/capture_visual_docs.py",
+      "mode": "workflow-helper",
+      "purpose": "Captures the real KiCad UI and generated documentation visuals used by CI; this is an evidence-generation helper, not a test module."
+    }
+  ]
+}
