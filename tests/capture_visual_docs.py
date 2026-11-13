@@ -243,21 +243,38 @@ def _capture_modal(
 ) -> None:
     """Capture a real modal window and close it without invoking an action."""
     errors: list[str] = []
+    existing_windows = {
+        child.winfo_id()
+        for child in parent.winfo_children()
+        if isinstance(child, plugin_actions.tk.Toplevel)
+    }
 
     def capture_and_close() -> None:
         dialog = None
         try:
             parent.update_idletasks()
+            windows = [
+                child for child in parent.winfo_children()
+                if isinstance(child, plugin_actions.tk.Toplevel)
+            ]
             dialog = next(
-                (
-                    child for child in parent.winfo_children()
-                    if isinstance(child, plugin_actions.tk.Toplevel)
-                    and child.title() == title
-                ),
+                (child for child in windows if child.title() == title),
                 None,
             )
             if dialog is None:
-                raise RuntimeError(f"Tk did not create the expected modal {title!r}.")
+                # A stale expected title must not strand opener() inside
+                # wait_window(). Close the new modal and report the mismatch.
+                dialog = next(
+                    (
+                        child for child in windows
+                        if child.winfo_id() not in existing_windows
+                    ),
+                    None,
+                )
+                actual_title = dialog.title() if dialog is not None else "no new Tk modal"
+                raise RuntimeError(
+                    f"Expected modal {title!r}, but Tk created {actual_title!r}."
+                )
             if prepare is not None:
                 prepare(dialog)
             dialog.update_idletasks()
