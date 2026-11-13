@@ -2481,6 +2481,549 @@ def _save_block_variants(record, variants: list[dict]) -> None:
         (block_path / filename).unlink(missing_ok=True)
 
 
+def _save_block_layouts(
+    record,
+    layouts: list[dict],
+    *,
+    default_layout_id: str | None,
+    variant_layouts: dict[str, str] | None = None,
+) -> None:
+    """Copy stored PCB assets and atomically publish layout/implementation links."""
+    import json
+    import shutil
+
+    from .model import slugify
+    from .repository import (
+        MANIFEST_NAME,
+        _record,
+        atomic_write,
+        read_manifest,
+        refresh_library_block,
+    )
+
+    block_path = Path(record.path).resolve()
+    manifest = read_manifest(block_path)
+    previous = list(manifest.get("layouts", []))
+    previous_files = {
+        str(name)
+        for item in previous
+        for name in (item.get("file"), item.get("project_file"))
+        if name
+    }
+    previous_files.update(
+        str(name)
+        for name in (manifest.get("layout_file"), manifest.get("layout_project_file"))
+        if name
+    )
+    normalized = []
+    files_to_copy = []
+    added_files = set()
+    seen_ids = set()
+    seen_names = set()
+    seen_files = set()
+
+    for index, item in enumerate(layouts, start=1):
+        name = str(item.get("name", "")).strip()
+        layout_id = str(item.get("id") or slugify(name)).casefold()
+        source_value = item.get("source")
+        if not name or len(name) > 80 or not re.fullmatch(r"[a-z0-9_]+", layout_id):
+            raise ValueError("PCB layouts need a name and a lowercase ID using letters, numbers or underscores.")
+        if layout_id in seen_ids or name.casefold() in seen_names:
+            raise ValueError(f"Duplicate PCB layout name or ID: {name!r}.")
+        seen_ids.add(layout_id)
+        seen_names.add(name.casefold())
+
+        if source_value:
+            source = Path(source_value).expanduser().resolve()
+            if not source.is_file() or source.suffix.casefold() != ".kicad_pcb":
+                raise ValueError(f"PCB layout must be an existing .kicad_pcb file: {source}")
+            filename = f"layout_{layout_id}.kicad_pcb"
+            counter = 2
+            while (
+                (block_path / filename).exists()
+                and filename not in previous_files
+                or filename.casefold() in seen_files
+            ):
+                filename = f"layout_{layout_id}_{counter}.kicad_pcb"
+                counter += 1
+            destination = block_path / filename
+            if source != destination.resolve():
+                files_to_copy.append((source, destination))
+                added_files.add(filename)
+        else:
+            filename = str(item.get("file", ""))
+            if (
+                Path(filename).name != filename
+                or Path(filename).suffix.casefold() != ".kicad_pcb"
+                or not (block_path / filename).is_file()
+            ):
+                raise ValueError(f"Stored PCB layout file is missing or unsafe: {filename!r}")
+            destination = block_path / filename
+
+        if filename.casefold() in seen_files:
+            raise ValueError(f"Two PCB layouts use the same file: {filename!r}")
+        seen_files.add(filename.casefold())
+
+        project_source_value = item.get("project_source")
+        if project_source_value:
+            project_source = Path(project_source_value).expanduser().resolve()
+            if not project_source.is_file() or project_source.suffix.casefold() != ".kicad_pro":
+                raise ValueError(f"PCB project settings must be an existing .kicad_pro file: {project_source}")
+            project_filename = f"layout_{layout_id}.kicad_pro"
+            project_destination = block_path / project_filename
+            if project_source != project_destination.resolve():
+                files_to_copy.append((project_source, project_destination))
+                added_files.add(project_filename)
+        else:
+            project_filename = item.get("project_file")
+            if project_filename and (
+                Path(str(project_filename)).name != str(project_filename)
+                or Path(str(project_filename)).suffix.casefold() != ".kicad_pro"
+                or not (block_path / str(project_filename)).is_file()
+            ):
+                raise ValueError(f"Stored project-settings file is missing or unsafe: {project_filename!r}")
+        descriptor = {
+            "id": layout_id,
+            "name": name,
+            "file": filename,
+            "project_file": project_filename,
+        }
+        if item.get("ports") is not None:
+            descriptor["ports"] = dict(item["ports"])
+        normalized.append(descriptor)
+
+    available_ids = {item["id"] for item in normalized}
+    if default_layout_id and default_layout_id not in available_ids:
+        raise ValueError(f"Default PCB layout {default_layout_id!r} is not defined.")
+    if normalized and not default_layout_id:
+        default_layout_id = normalized[0]["id"]
+
+    links = variant_layouts or {}
+    updated_variants = []
+    for variant in manifest.get("variants", []):
+        updated = dict(variant)
+        linked_id = links.get(str(variant["value"]))
+        if linked_id is None:
+            linked_id = links.get(str(variant["value"]).casefold(), variant.get("layout_id"))
+        if linked_id:
+            linked_id = str(linked_id).casefold()
+            if linked_id not in available_ids:
+                raise ValueError(
+                    f"Implementation {variant['value']!r} links to unknown PCB layout {linked_id!r}."
+                )
+            updated["layout_id"] = linked_id
+        else:
+            updated.pop("layout_id", None)
+        updated_variants.append(updated)
+
+    copied_paths = []
+    try:
+        for source, destination in files_to_copy:
+            shutil.copy2(source, destination)
+            copied_paths.append(destination)
+    except OSError:
+        for copied in copied_paths:
+            copied.unlink(missing_ok=True)
+        raise
+
+    removed_files = previous_files - {
+        str(name)
+        for item in normalized
+        for name in (item.get("file"), item.get("project_file"))
+        if name
+    }
+    manifest["layouts"] = normalized
+    manifest["default_layout"] = default_layout_id
+    manifest["variants"] = updated_variants
+    default_layout = next(
+        (item for item in normalized if item["id"] == default_layout_id),
+        {},
+    )
+    manifest["layout_file"] = default_layout.get("file")
+    manifest["layout_project_file"] = default_layout.get("project_file")
+    manifest["files"] = [
+        name for name in manifest.get("files", []) if name not in removed_files
+    ]
+    for name in sorted(added_files):
+        if name not in manifest["files"]:
+            manifest["files"].append(name)
+    atomic_write(
+        block_path / MANIFEST_NAME,
+        json.dumps(manifest, indent=2, ensure_ascii=False) + "\n",
+    )
+    updated_record = _record(block_path)
+    result = refresh_library_block(updated_record)
+    if not result.get("changed"):
+        manifest = read_manifest(block_path)
+        manifest["version"] = int(manifest.get("version", 1)) + 1
+        atomic_write(
+            block_path / MANIFEST_NAME,
+            json.dumps(manifest, indent=2, ensure_ascii=False) + "\n",
+        )
+    for filename in removed_files:
+        (block_path / filename).unlink(missing_ok=True)
+
+
+def _new_blank_pcb_source() -> Path:
+    """Create a minimal empty KiCad PCB document for a new stored layout."""
+    descriptor, filename = tempfile.mkstemp(prefix="kicad-blocks-layout-", suffix=".kicad_pcb")
+    os.close(descriptor)
+    path = Path(filename)
+    path.write_text(
+        '(kicad_pcb\n'
+        '  (version 20250114)\n'
+        '  (generator "pcbnew")\n'
+        '  (general (thickness 1.6))\n'
+        '  (paper "A4")\n'
+        '  (layers\n'
+        '    (0 "F.Cu" signal)\n'
+        '    (31 "B.Cu" signal)\n'
+        '    (32 "B.Adhes" user "B.Adhesive")\n'
+        '    (33 "F.Adhes" user "F.Adhesive")\n'
+        '    (34 "B.Paste" user)\n'
+        '    (35 "F.Paste" user)\n'
+        '    (36 "B.SilkS" user)\n'
+        '    (37 "F.SilkS" user)\n'
+        '    (38 "B.Mask" user)\n'
+        '    (39 "F.Mask" user)\n'
+        '    (40 "Dwgs.User" user)\n'
+        '    (41 "Cmts.User" user)\n'
+        '    (42 "Eco1.User" user)\n'
+        '    (43 "Eco2.User" user)\n'
+        '    (44 "Edge.Cuts" user)\n'
+        '    (45 "Margin" user)\n'
+        '    (46 "B.CrtYd" user)\n'
+        '    (47 "F.CrtYd" user)\n'
+        '    (48 "B.Fab" user)\n'
+        '    (49 "F.Fab" user)\n'
+        '  )\n'
+        '  (setup)\n'
+        '  (net 0 "")\n'
+        ')\n',
+        encoding="utf-8",
+    )
+    return path
+
+
+def _ask_layout_details(parent, record) -> dict | None:
+    """Choose an existing board or create a blank starting point for a named layout."""
+    dialog = tk.Toplevel(parent)
+    dialog.title("Add PCB layout")
+    dialog.transient(parent)
+    _set_window_geometry(dialog, 720, 390, 600, 320)
+    frame = ttk.Frame(dialog, padding=16)
+    frame.pack(fill="both", expand=True)
+    ttk.Label(frame, text="PCB layout name").grid(row=0, column=0, sticky="w")
+    name_value = tk.StringVar(value="New layout")
+    name_entry = ttk.Entry(frame, textvariable=name_value)
+    name_entry.grid(row=1, column=0, columnspan=3, sticky="ew", pady=(4, 12))
+    ttk.Label(frame, text="Starting point").grid(row=2, column=0, sticky="w")
+    mode_value = tk.StringVar(value="Create a new empty board")
+    mode_combo = ttk.Combobox(
+        frame,
+        textvariable=mode_value,
+        values=("Create a new empty board", "Choose an existing PCB file"),
+        state="readonly",
+    )
+    mode_combo.grid(row=3, column=0, columnspan=3, sticky="ew", pady=(4, 12))
+    source_value = tk.StringVar()
+    source_entry = ttk.Entry(frame, textvariable=source_value)
+    source_entry.grid(row=4, column=0, columnspan=2, sticky="ew", pady=(4, 12))
+    browse_button = ttk.Button(frame, text="Choose file…")
+    browse_button.grid(row=4, column=2, sticky="ew", padx=(8, 0), pady=(4, 12))
+    implementation_values = ["Default implementation"] + [
+        str(item["value"]) for item in record.manifest.get("variants", [])
+    ]
+    link_value = tk.StringVar(value=implementation_values[0])
+    ttk.Label(frame, text="Link this layout to").grid(row=5, column=0, sticky="w")
+    link_combo = ttk.Combobox(
+        frame,
+        textvariable=link_value,
+        values=implementation_values,
+        state="readonly",
+    )
+    link_combo.grid(row=6, column=0, columnspan=3, sticky="ew", pady=(4, 12))
+    frame.columnconfigure(0, weight=1)
+    result = [None]
+
+    def browse():
+        selected = _pick_kicad_file(
+            dialog,
+            title="Choose PCB layout",
+            suffix=".kicad_pcb",
+            initial_path=source_value.get(),
+        )
+        if selected:
+            source_value.set(selected)
+
+    browse_button.configure(command=browse)
+
+    def update_mode(_event=None):
+        blank = mode_value.get() == "Create a new empty board"
+        source_entry.configure(state="disabled" if blank else "normal")
+        browse_button.configure(state="disabled" if blank else "normal")
+
+    mode_combo.bind("<<ComboboxSelected>>", update_mode)
+    update_mode()
+
+    def accept():
+        name = name_value.get().strip()
+        if not name or len(name) > 80:
+            messagebox.showerror("Add PCB layout", "Enter a layout name of 1 to 80 characters.", parent=dialog)
+            name_entry.focus_set()
+            return
+        if mode_value.get() == "Create a new empty board":
+            source = _new_blank_pcb_source()
+        else:
+            source = Path(source_value.get()).expanduser().resolve()
+            if not source.is_file() or source.suffix.casefold() != ".kicad_pcb":
+                messagebox.showerror(
+                    "Add PCB layout", "Choose an existing KiCad .kicad_pcb file.", parent=dialog
+                )
+                source_entry.focus_set()
+                return
+        result[0] = {
+            "name": name,
+            "source": str(source),
+            "linked_implementation": link_value.get(),
+        }
+        dialog.destroy()
+
+    buttons = ttk.Frame(frame)
+    buttons.grid(row=7, column=0, columnspan=3, sticky="ew")
+    ttk.Button(buttons, text="Cancel", command=dialog.destroy).pack(side="right")
+    ttk.Button(buttons, text="Add layout", command=accept).pack(side="right", padx=(0, 8))
+    dialog.bind("<Return>", lambda _event: accept())
+    dialog.bind("<Escape>", lambda _event: dialog.destroy())
+    dialog.grab_set()
+    name_entry.focus_set()
+    dialog.wait_window()
+    return result[0]
+
+
+def _show_block_layout_editor(
+    record, parent, kicad=None, editor_window_id: str | None = None
+) -> Path | None:
+    """Manage stored PCB boards and their implementation links."""
+    from .model import slugify
+    from .repository import read_manifest
+
+    dialog = tk.Toplevel(parent)
+    dialog.title(f"PCB layouts — {record.name}")
+    dialog.transient(parent)
+    _set_window_geometry(dialog, 980, 620, 760, 480)
+    frame = ttk.Frame(dialog, padding=14)
+    frame.pack(fill="both", expand=True)
+    frame.columnconfigure(0, weight=1)
+    frame.rowconfigure(1, weight=1)
+    ttk.Label(
+        frame,
+        text="Stored PCB layouts",
+        font=("TkDefaultFont", 12, "bold"),
+    ).grid(row=0, column=0, sticky="w")
+    table_frame = ttk.Frame(frame)
+    table_frame.grid(row=1, column=0, sticky="nsew", pady=(10, 8))
+    table_frame.columnconfigure(0, weight=1)
+    table_frame.rowconfigure(0, weight=1)
+    tree = ttk.Treeview(
+        table_frame,
+        columns=("name", "assigned", "file"),
+        show="headings",
+        selectmode="browse",
+    )
+    tree.heading("name", text="Layout")
+    tree.heading("assigned", text="Linked implementation")
+    tree.heading("file", text="PCB file")
+    tree.column("name", width=190, minwidth=150, stretch=False)
+    tree.column("assigned", width=220, minwidth=160, stretch=False)
+    tree.column("file", width=420, minwidth=240, stretch=True)
+    scroll = ttk.Scrollbar(
+        table_frame, orient="vertical", command=tree.yview, style="Vertical.TScrollbar"
+    )
+    tree.configure(yscrollcommand=scroll.set)
+    tree.grid(row=0, column=0, sticky="nsew")
+    scroll.grid(row=0, column=1, sticky="ns")
+
+    layouts = [dict(item) for item in _layout_choices(record)]
+    for item in layouts:
+        item["id"] = str(item.get("id") or slugify(str(item.get("name") or Path(item["file"]).stem))).casefold()
+    default_layout_id = str(record.manifest.get("default_layout") or "").casefold()
+    if not default_layout_id and layouts:
+        default_layout_id = layouts[0]["id"]
+    variant_layouts = {
+        str(item["value"]): str(item["layout_id"])
+        for item in record.manifest.get("variants", [])
+        if item.get("layout_id")
+    }
+    changed = [False]
+    added_ids = []
+
+    def assigned_to(layout_id: str) -> str:
+        names = []
+        if default_layout_id == layout_id:
+            names.append("Default implementation")
+        names.extend(
+            value for value, linked in variant_layouts.items()
+            if linked == layout_id
+        )
+        return ", ".join(names) or "Not linked"
+
+    def render(selected_id: str | None = None):
+        tree.delete(*tree.get_children())
+        for index, item in enumerate(layouts):
+            iid = str(index)
+            tree.insert(
+                "",
+                "end",
+                iid=iid,
+                values=(item.get("name", item["id"]), assigned_to(item["id"]), item["file"]),
+                tags=("even" if index % 2 == 0 else "odd",),
+            )
+            if item["id"] == selected_id:
+                tree.selection_set(iid)
+                tree.focus(iid)
+        update_actions()
+
+    def selected_layout():
+        selection = tree.selection()
+        if not selection:
+            return None
+        index = int(selection[0])
+        return layouts[index] if 0 <= index < len(layouts) else None
+
+    def add_layout():
+        details = _ask_layout_details(dialog, record)
+        if details is None:
+            return
+        name = details["name"]
+        layout_id = slugify(name).casefold()
+        if any(
+            item["id"] == layout_id or str(item["name"]).casefold() == name.casefold()
+            for item in layouts
+        ):
+            messagebox.showerror("Add PCB layout", f"A layout named {name!r} already exists.", parent=dialog)
+            return
+        item = {
+            "id": layout_id,
+            "name": name,
+            "source": details["source"],
+            "project_file": None,
+        }
+        layouts.append(item)
+        added_ids.append(layout_id)
+        if details["linked_implementation"] == "Default implementation":
+            default_layout_id_holder[0] = layout_id
+        else:
+            variant_layouts[details["linked_implementation"]] = layout_id
+        changed[0] = True
+        render(layout_id)
+
+    default_layout_id_holder = [default_layout_id]
+
+    def remove_layout():
+        item = selected_layout()
+        if item is None:
+            return
+        layouts.remove(item)
+        if default_layout_id_holder[0] == item["id"]:
+            default_layout_id_holder[0] = layouts[0]["id"] if layouts else None
+        for value, linked in list(variant_layouts.items()):
+            if linked == item["id"]:
+                variant_layouts.pop(value)
+        changed[0] = True
+        render(layouts[0]["id"] if layouts else None)
+
+    def make_default():
+        item = selected_layout()
+        if item is None:
+            return
+        default_layout_id_holder[0] = item["id"]
+        changed[0] = True
+        render(item["id"])
+
+    implementation_values = ["Default implementation", "No link"] + [
+        str(item["value"]) for item in record.manifest.get("variants", [])
+    ]
+    implementation_value = tk.StringVar(value="Default implementation")
+
+    def link_selected():
+        item = selected_layout()
+        if item is None:
+            return
+        selected = implementation_value.get()
+        if selected == "Default implementation":
+            default_layout_id_holder[0] = item["id"]
+        elif selected == "No link":
+            for value, linked in list(variant_layouts.items()):
+                if linked == item["id"]:
+                    variant_layouts.pop(value)
+        else:
+            variant_layouts[selected] = item["id"]
+        changed[0] = True
+        render(item["id"])
+
+    def update_actions(_event=None):
+        has_selection = selected_layout() is not None
+        remove_button.configure(state="normal" if has_selection else "disabled")
+        default_button.configure(state="normal" if has_selection else "disabled")
+        link_button.configure(state="normal" if has_selection else "disabled")
+        save_button.configure(state="normal" if changed[0] else "disabled")
+
+    actions = ttk.Frame(frame)
+    actions.grid(row=2, column=0, sticky="ew", pady=(4, 0))
+    add_button = ttk.Button(actions, text="＋ Add layout", command=add_layout)
+    add_button.pack(side="left")
+    remove_button = ttk.Button(actions, text="− Remove", command=remove_layout, state="disabled")
+    remove_button.pack(side="left", padx=(6, 0))
+    default_button = ttk.Button(actions, text="★ Set default", command=make_default, state="disabled")
+    default_button.pack(side="left", padx=(6, 0))
+    implementation_combo = ttk.Combobox(
+        actions,
+        textvariable=implementation_value,
+        values=implementation_values,
+        state="readonly",
+        width=24,
+    )
+    implementation_combo.pack(side="left", padx=(14, 0))
+    link_button = ttk.Button(actions, text="Link selected", command=link_selected, state="disabled")
+    link_button.pack(side="left", padx=(6, 0))
+    close_button = ttk.Button(actions, text="Cancel", command=dialog.destroy)
+    close_button.pack(side="right")
+    save_button = ttk.Button(actions, text="Save layouts", state="disabled")
+    save_button.pack(side="right", padx=(0, 8))
+
+    def save_and_close():
+        if not changed[0]:
+            dialog.destroy()
+            return
+        try:
+            _save_block_layouts(
+                record,
+                layouts,
+                default_layout_id=default_layout_id_holder[0],
+                variant_layouts=variant_layouts,
+            )
+            if added_ids:
+                updated = read_manifest(Path(record.path))
+                new_item = next(
+                    item for item in updated.get("layouts", [])
+                    if item["id"] == added_ids[-1]
+                )
+                created_layout_to_open[0] = Path(record.path) / new_item["file"]
+        except (OSError, RuntimeError, TypeError, ValueError, KeyError, StopIteration) as exc:
+            messagebox.showerror("Save PCB layouts", str(exc), parent=dialog)
+            return
+        dialog.destroy()
+
+    created_layout_to_open = [None]
+    save_button.configure(command=save_and_close)
+    tree.bind("<<TreeviewSelect>>", update_actions)
+    render(layouts[0]["id"] if layouts else None)
+    dialog.grab_set()
+    dialog.wait_window()
+    return created_layout_to_open[0]
+
+
 def _pick_kicad_file(
     parent,
     *,
