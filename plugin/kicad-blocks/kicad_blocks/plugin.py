@@ -903,6 +903,7 @@ def _show_selected_block_configuration(
 
         if variant_combo is not None:
             variant_combo.bind("<<ComboboxSelected>>", update_layout_for_variant)
+            variant_combo.bind("<KeyRelease>", update_layout_for_variant)
 
     profile_application_active = [False]
 
@@ -4170,7 +4171,33 @@ def _show_library_browser(
         )
         details.configure(state="normal")
         details.delete("1.0", "end")
-        details.insert("1.0", _block_overview_text(record))
+        details.tag_configure(
+            "section",
+            foreground=palette.get("accent", "#4c789f"),
+            font=("TkDefaultFont", 9, "bold"),
+            spacing1=8,
+            spacing3=2,
+        )
+        details.tag_configure(
+            "muted",
+            foreground=palette.get("muted", "#5f6871"),
+            font=("TkDefaultFont", 8),
+        )
+        overview = _block_overview_text(record)
+        details.insert("1.0", overview)
+        for line_number, line in enumerate(overview.splitlines(), start=1):
+            if line.startswith((
+                "Purpose",
+                "Connections",
+                "Configurable settings",
+                "Circuit implementations",
+                "PCB layout options",
+                "Ready-made configurations",
+                "Library ·",
+            )):
+                details.tag_add("section", f"{line_number}.0", f"{line_number}.end")
+            elif line.startswith("Version ·"):
+                details.tag_add("muted", f"{line_number}.0", f"{line_number}.end")
         details.configure(state="disabled")
         _draw_facade_preview(preview, record)
 
@@ -4270,15 +4297,24 @@ def _show_library_browser(
         record = selected_record[0]
         if record is None:
             return
-        variants = list(record.manifest.get("variants", []))
-        if not variants:
+        choices = [
+            {
+                "label": "Default — " + str(record.manifest["implementation_file"]),
+                "file": str(record.manifest["implementation_file"]),
+            },
+            *[
+                {"label": str(item["value"]), "file": str(item["file"])}
+                for item in record.manifest.get("variants", [])
+            ],
+        ]
+        if len(choices) == 1:
             try:
                 _launch_block_asset(
-                kicad,
-                record.implementation,
-                "implementation schematic",
-                editor_window_id=editor_window_id,
-            )
+                    kicad,
+                    record.path / choices[0]["file"],
+                    "implementation schematic",
+                    editor_window_id=editor_window_id,
+                )
             except (OSError, RuntimeError, ValueError) as exc:
                 messagebox.showerror("Open implementation", str(exc), parent=window)
             return
@@ -4288,20 +4324,20 @@ def _show_library_browser(
         chooser.grab_set()
         frame = ttk.Frame(chooser, padding=12)
         frame.pack(fill="both", expand=True)
-        ttk.Label(frame, text="Select implementation variant:").pack(anchor="w")
-        choice = tk.StringVar(value=str(variants[0]["value"]))
+        ttk.Label(frame, text="Select circuit implementation:").pack(anchor="w")
+        choice = tk.StringVar(value=choices[0]["label"])
         combo = ttk.Combobox(
             frame,
             textvariable=choice,
-            values=[str(item["value"]) for item in variants],
+            values=[item["label"] for item in choices],
             state="readonly",
-            width=32,
+            width=42,
         )
         combo.pack(fill="x", pady=8)
 
         def launch_variant():
             selected = next(
-                (item for item in variants if str(item["value"]) == choice.get()),
+                (item for item in choices if item["label"] == choice.get()),
                 None,
             )
             if selected is None:
@@ -4323,6 +4359,7 @@ def _show_library_browser(
         ttk.Button(buttons, text="Cancel", command=chooser.destroy).pack(
             side="right", padx=(0, 6)
         )
+        _set_window_geometry(chooser, 500, 190, 440, 160)
         combo.focus_set()
 
     def edit_facade(_event=None):
