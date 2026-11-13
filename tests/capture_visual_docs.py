@@ -348,7 +348,7 @@ def capture_ui_workflows(library_roots, record, project_dir: Path, output_dir: P
                 _capture_modal(
                     root,
                     lambda target=root: plugin_actions._show_library_roots_dialog(target),
-                    "Manage KiCad Functional Block Libraries",
+                    "Manage Libraries",
                     output_dir / f"library-folders-{theme}.png",
                     xdotool,
                     minimum_size=(900, 550),
