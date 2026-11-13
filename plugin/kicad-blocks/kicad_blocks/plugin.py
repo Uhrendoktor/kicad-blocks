@@ -3011,31 +3011,33 @@ def _show_block_variant_editor(record, parent) -> None:
 def _show_library_roots_dialog(parent) -> bool:
     """Manage registered library folders with explicit add/create/edit actions."""
     dialog = tk.Toplevel(parent)
-    dialog.title("Manage KiCad Functional Block Libraries")
+    dialog.title("Manage Libraries")
     _set_window_geometry(dialog, 1180, 720, 940, 600)
     dialog.transient(parent)
     dialog.grab_set()
 
     outer = ttk.Frame(dialog, padding=14)
     outer.pack(fill="both", expand=True)
+    outer.columnconfigure(0, weight=1)
+    outer.rowconfigure(2, weight=1)
     ttk.Label(
         outer,
         text="Registered block libraries",
         font=("TkDefaultFont", 12, "bold"),
-    ).pack(anchor="w")
+    ).grid(row=0, column=0, sticky="w")
     ttk.Label(
         outer,
         text=(
-            "Add an existing folder or create a new, empty library. Select a row to change "
-            "its registered folder, choose the default destination, or unregister it. "
-            "Unregistering never deletes files. Changing a path does not move files."
+            "Register existing libraries, create new ones, change their folder, "
+            "set the default destination or unregister a library. Unregistering "
+            "never deletes files; changing a path does not move files."
         ),
         wraplength=900,
         justify="left",
-    ).pack(anchor="w", pady=(4, 12))
+    ).grid(row=1, column=0, sticky="ew", pady=(4, 12))
 
     table_frame = ttk.Frame(outer)
-    table_frame.pack(fill="both", expand=True)
+    table_frame.grid(row=2, column=0, sticky="nsew")
     table_frame.columnconfigure(0, weight=1)
     table_frame.rowconfigure(0, weight=1)
     tree = ttk.Treeview(
@@ -3067,7 +3069,9 @@ def _show_library_roots_dialog(parent) -> bool:
     _bind_mousewheel(tree, lambda amount: tree.yview_scroll(amount, "units"))
 
     status = tk.StringVar()
-    ttk.Label(outer, textvariable=status, wraplength=900).pack(anchor="w", pady=(8, 0))
+    ttk.Label(outer, textvariable=status, wraplength=900).grid(
+        row=3, column=0, sticky="ew", pady=(8, 0)
+    )
 
     changed = [False]
     environment_value = os.environ.get("KICAD_BLOCKS_LIBRARY")
@@ -3227,21 +3231,26 @@ def _show_library_roots_dialog(parent) -> bool:
         except (OSError, ValueError) as exc:
             messagebox.showerror("Set default library", str(exc), parent=dialog)
 
-    actions = ttk.LabelFrame(outer, text="Library folder actions", padding=8)
-    actions.pack(fill="x", pady=(10, 0))
-    ttk.Button(actions, text="Add existing folder…", command=add_library).pack(side="left")
-    ttk.Button(
-        actions, text="Create new library…", command=create_library
-    ).pack(side="left", padx=(6, 0))
-    change_button = ttk.Button(
-        actions, text="Change registered folder…", command=change_library_folder
-    )
-    change_button.pack(side="left", padx=(6, 0))
-    remove_button = ttk.Button(actions, text="Unregister", command=remove_library)
-    remove_button.pack(side="left", padx=(6, 0))
-    default_button = ttk.Button(actions, text="Set as default", command=make_default)
-    default_button.pack(side="left", padx=(6, 0))
-    ttk.Button(actions, text="Close", command=dialog.destroy).pack(side="right")
+    actions = ttk.LabelFrame(outer, text="Library actions", padding=8)
+    actions.grid(row=4, column=0, sticky="ew", pady=(10, 0))
+    add_button = ttk.Button(actions, text="＋", width=3, command=add_library)
+    add_button.pack(side="left")
+    _add_tooltip(add_button, "Add an existing library folder")
+    create_button = ttk.Button(actions, text="▣", width=3, command=create_library)
+    create_button.pack(side="left", padx=(5, 0))
+    _add_tooltip(create_button, "Create a new library")
+    change_button = ttk.Button(actions, text="↔", width=3, command=change_library_folder)
+    change_button.pack(side="left", padx=(5, 0))
+    _add_tooltip(change_button, "Change the registered folder")
+    remove_button = ttk.Button(actions, text="−", width=3, command=remove_library)
+    remove_button.pack(side="left", padx=(5, 0))
+    _add_tooltip(remove_button, "Unregister this library without deleting it")
+    default_button = ttk.Button(actions, text="★", width=3, command=make_default)
+    default_button.pack(side="left", padx=(5, 0))
+    _add_tooltip(default_button, "Set this library as the default destination")
+    close_button = ttk.Button(actions, text="×", width=3, command=dialog.destroy)
+    close_button.pack(side="right")
+    _add_tooltip(close_button, "Close Manage Libraries")
 
     def update_selection_actions(_event=None) -> None:
         path = selected_path()
@@ -3304,7 +3313,7 @@ def _show_library_browser(
 ) -> None:
     """Show every registered block library in one KiCad-themed browser."""
     window.title("Functional Block Library")
-    _set_window_geometry(window, 1480, 980, 1160, 740)
+    _set_window_geometry(window, 1480, 920, 1160, 700)
     current_roots = [_library_roots_for(library_root)]
     records: list = []
     records_by_id: dict[str, object] = {}
@@ -3370,19 +3379,21 @@ def _show_library_browser(
     library_footer = ttk.Frame(left)
     library_footer.pack(fill="x", pady=(8, 0))
 
+    right.columnconfigure(0, weight=1)
+    right.rowconfigure(3, weight=1)
     name_label = ttk.Label(right, text="Select a block")
-    name_label.pack(anchor="w")
+    name_label.grid(row=0, column=0, sticky="ew")
     description_label = ttk.Label(
-        right, text="", wraplength=650, justify="left"
+        right, text="", wraplength=560, justify="left"
     )
-    description_label.pack(anchor="w", pady=(4, 8))
+    description_label.grid(row=1, column=0, sticky="ew", pady=(4, 8))
     preview_box = ttk.LabelFrame(right, text="Facade preview", padding=5)
-    preview_box.pack(fill="x")
+    preview_box.grid(row=2, column=0, sticky="ew")
     preview_frame = ttk.Frame(preview_box)
     preview_frame.pack(fill="x", expand=True)
     preview = tk.Canvas(
         preview_frame,
-        height=250,
+        height=190,
         background=theme_background,
         highlightthickness=0,
         borderwidth=0,
@@ -3396,7 +3407,7 @@ def _show_library_browser(
     _bind_mousewheel(preview, lambda amount: preview.yview_scroll(amount, "units"))
 
     details_box = ttk.LabelFrame(right, text="Block overview", padding=5)
-    details_box.pack(fill="both", expand=True, pady=(8, 0))
+    details_box.grid(row=3, column=0, sticky="nsew", pady=(8, 0))
     details_frame = ttk.Frame(details_box)
     details_frame.pack(fill="both", expand=True)
     details = tk.Text(
@@ -3433,11 +3444,13 @@ def _show_library_browser(
             preview.delete("all")
             return
         name_label.configure(text=record.name)
+        description = " ".join(
+            str(record.manifest.get("description", "") or "No description provided.").split()
+        )
+        if len(description) > 150:
+            description = description[:147].rstrip() + "…"
         description_label.configure(
-            text=(
-                str(record.manifest.get("description", "") or "No description provided.")
-                + f"\nLibrary: {record.path.parent.name}"
-            )
+            text=f"{description}  ·  {record.path.parent.name}"
         )
         details.configure(state="normal")
         details.delete("1.0", "end")
@@ -3674,11 +3687,13 @@ def _show_library_browser(
         )
         combo.focus_set()
 
-    ttk.Button(
+    manage_button = ttk.Button(
         library_footer,
-        text="Manage library folders…",
+        text="Manage Libraries…",
         command=manage_libraries,
-    ).pack(fill="x")
+    )
+    manage_button.pack(fill="x")
+    _add_tooltip(manage_button, "Register, create, change or remove shared block libraries")
 
     search.trace_add("write", render_records)
 
@@ -3722,21 +3737,25 @@ def _show_library_browser(
     )
 
     actions = ttk.Frame(right)
-    actions.pack(fill="x", pady=(10, 0))
-    ttk.Button(actions, text="Place at cursor", command=place_selected).pack(side="left")
-    ttk.Button(
-        actions, text="Edit implementation…", command=open_implementation
-    ).pack(side="left", padx=(6, 0))
-    ttk.Button(
-        actions, text="Edit facade…", command=edit_facade
-    ).pack(side="left", padx=(6, 0))
-    ttk.Button(
-        actions, text="Manage variants…", command=edit_variants
-    ).pack(side="left", padx=(6, 0))
-    ttk.Button(
-        actions, text="Open PCB layout…", command=open_layout
-    ).pack(side="left", padx=(6, 0))
-    ttk.Button(actions, text="Refresh", command=refresh_records).pack(side="right")
+    actions.grid(row=4, column=0, sticky="ew", pady=(10, 0))
+    place_button = ttk.Button(actions, text="▶", width=3, command=place_selected)
+    place_button.pack(side="left")
+    _add_tooltip(place_button, "Place the selected block at the Eeschema cursor")
+    implementation_button = ttk.Button(actions, text="▤", width=3, command=open_implementation)
+    implementation_button.pack(side="left", padx=(5, 0))
+    _add_tooltip(implementation_button, "Open this block's implementation schematic")
+    facade_button = ttk.Button(actions, text="✎", width=3, command=edit_facade)
+    facade_button.pack(side="left", padx=(5, 0))
+    _add_tooltip(facade_button, "Edit the selected placed facade in Symbol Editor")
+    variants_button = ttk.Button(actions, text="◇", width=3, command=edit_variants)
+    variants_button.pack(side="left", padx=(5, 0))
+    _add_tooltip(variants_button, "Manage the default and alternative implementations")
+    layout_button = ttk.Button(actions, text="▧", width=3, command=open_layout)
+    layout_button.pack(side="left", padx=(5, 0))
+    _add_tooltip(layout_button, "Open or create a stored PCB layout")
+    refresh_button = ttk.Button(actions, text="↻", width=3, command=refresh_records)
+    refresh_button.pack(side="right")
+    _add_tooltip(refresh_button, "Refresh registered libraries")
     refresh_records()
     search_entry.focus_set()
 
