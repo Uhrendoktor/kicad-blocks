@@ -1,0 +1,1 @@
+Temporary validation-only file. The source and tests are mirrored from PR #25.
