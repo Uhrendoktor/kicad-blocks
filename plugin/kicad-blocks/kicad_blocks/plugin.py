@@ -1957,8 +1957,50 @@ def _restore_placement_windows(windows: list) -> None:
             window.deiconify()
 
 
-def _native_symbol_preview_photo(record, width: int = 680):
-    """Render the actual facade with KiCad's own symbol SVG exporter."""
+def _clean_facade_preview_svg(svg_file: Path, record, output_dir: Path) -> Path:
+    """Remove component-name and reference placeholder artwork from the SVG."""
+    import xml.etree.ElementTree as ET
+
+    root = ET.parse(svg_file).getroot()
+    display_labels = {
+        str(record.manifest.get("name", "")).strip(),
+        str(record.manifest.get("symbol_name", "")).strip(),
+    }
+    reference_prefix = str(record.manifest.get("reference_prefix", "X") or "X").strip()
+    if reference_prefix:
+        display_labels.add(f"{reference_prefix}?")
+    display_labels.discard("")
+
+    def contained_labels(node) -> set[str]:
+        labels = set()
+        for child in node.iter():
+            if child.tag.rsplit("}", 1)[-1] not in {"text", "desc"}:
+                continue
+            value = (child.text or "").strip()
+            if value:
+                labels.add(value)
+        return labels
+
+    # KiCad's SVG renderer groups text glyph paths with <text>/<desc> labels.
+    # Remove the containing group instead of just its hidden text node.
+    for parent_node in list(root.iter()):
+        for child_node in list(parent_node):
+            if contained_labels(child_node) & display_labels:
+                parent_node.remove(child_node)
+
+    cleaned_svg = output_dir / "facade-preview.svg"
+    ET.ElementTree(root).write(
+        cleaned_svg, encoding="utf-8", xml_declaration=True
+    )
+    return cleaned_svg
+
+
+def _native_symbol_preview_photo(
+    record,
+    width: int = 680,
+    max_height: int = 260,
+):
+    """Render a clean, centered KiCad facade within the available preview height."""
     symbol_name = str(record.manifest["symbol_name"])
     library_file = Path(record.symbol_library).expanduser().resolve()
     if not library_file.is_file():
@@ -1969,6 +2011,7 @@ def _native_symbol_preview_photo(record, width: int = 680):
         library_file.stat().st_mtime_ns,
         symbol_name,
         int(width),
+        int(max_height),
     )
     png_data = _NATIVE_PREVIEW_CACHE.get(cache_key)
     if png_data is None:
@@ -2009,48 +2052,45 @@ def _native_symbol_preview_photo(record, width: int = 680):
                     "The native KiCad preview rasterizer is missing. Reinstall KiCad Blocks "
                     "so its CairoSVG dependency is installed."
                 ) from exc
-            try:
-                import xml.etree.ElementTree as ET
-                svg_root = ET.parse(svg_file).getroot()
-                display_names = {
-                    str(record.manifest.get("name", "")).strip(),
-                    str(record.manifest.get("symbol_name", "")).strip(),
-                }
-                for parent_node in svg_root.iter():
-                    for node in list(parent_node):
-                        if node.text and node.text.strip() in display_names:
-                            parent_node.remove(node)
-                cleaned_svg = output_dir / "facade-preview.svg"
-                ET.ElementTree(svg_root).write(cleaned_svg, encoding="utf-8", xml_declaration=True)
-                svg_file = cleaned_svg
-            except (OSError, ValueError):
-                pass
-            png_data = cairosvg.svg2png(url=str(svg_file), output_width=int(width))
+
+            svg_file = _clean_facade_preview_svg(svg_file, record, output_dir)
+            png_data = cairosvg.svg2png(
+                url=str(svg_file), output_width=int(width)
+            )
             try:
                 from io import BytesIO
 
                 from PIL import Image
+
                 image = Image.open(BytesIO(png_data)).convert("RGBA")
                 bounds = image.getbbox()
                 if bounds:
                     image = image.crop(bounds)
-                max_height = 260
-                scale = min(1.0, int(width) / max(1, image.width), max_height / max(1, image.height))
+                scale = min(
+                    1.0,
+                    int(width) / max(1, image.width),
+                    int(max_height) / max(1, image.height),
+                )
                 if scale < 1.0:
                     image = image.resize(
-                        (max(1, round(image.width * scale)), max(1, round(image.height * scale))),
+                        (
+                            max(1, round(image.width * scale)),
+                            max(1, round(image.height * scale)),
+                        ),
                         Image.Resampling.LANCZOS,
                     )
                 buffer = BytesIO()
                 image.save(buffer, format="PNG")
                 png_data = buffer.getvalue()
             except (ImportError, OSError, ValueError):
-                pass
+                LOG.warning(
+                    "Pillow is unavailable; facade preview could exceed its display area. "
+                    "Install the declared Pillow dependency to enable automatic cropping."
+                )
         _NATIVE_PREVIEW_CACHE[cache_key] = png_data
 
     # Tk images belong to a particular Tcl interpreter, so cache only PNG bytes.
     return tk.PhotoImage(data=base64.b64encode(png_data).decode("ascii"))
-
 
 _NATIVE_PREVIEW_CACHE: dict[tuple, object] = {}
 
@@ -2058,8 +2098,12 @@ _NATIVE_PREVIEW_CACHE: dict[tuple, object] = {}
 def _draw_facade_preview(canvas, record) -> None:
     """Display a faithful KiCad-rendered facade preview; never approximate it."""
     canvas.delete("all")
+    height = max(int(canvas.winfo_height()), 250)
+    max_preview_height = max(160, min(280, height - 24))
     try:
-        photo = _native_symbol_preview_photo(record)
+        photo = _native_symbol_preview_photo(
+            record, max_height=max_preview_height
+        )
     except Exception as exc:
         LOG.exception("Native facade preview failed for %s", record.name)
         style = ttk.Style(canvas)
@@ -2711,14 +2755,14 @@ def _show_library_browser(
     )
     tree.heading("block", text="Block")
     tree.heading("library", text="Library")
-    tree.heading("pins", text="Pins")
+    tree.heading("pins", text="I/O")
     tree.heading("variants", text="Variants")
-    tree.heading("layouts", text="Layouts")
-    tree.column("block", width=210, minwidth=160, stretch=True)
-    tree.column("library", width=115, minwidth=90, stretch=False)
-    tree.column("pins", width=42, minwidth=35, stretch=False, anchor="center")
-    tree.column("variants", width=60, minwidth=48, stretch=False, anchor="center")
-    tree.column("layouts", width=55, minwidth=45, stretch=False, anchor="center")
+    tree.heading("layouts", text="PCB")
+    tree.column("block", width=165, minwidth=140, stretch=True)
+    tree.column("library", width=90, minwidth=75, stretch=False)
+    tree.column("pins", width=44, minwidth=40, stretch=False, anchor="center")
+    tree.column("variants", width=78, minwidth=72, stretch=False, anchor="center")
+    tree.column("layouts", width=52, minwidth=48, stretch=False, anchor="center")
     tree_y_scroll = ttk.Scrollbar(tree_frame, orient="vertical", command=tree.yview, style="Vertical.TScrollbar")
     tree_x_scroll = ttk.Scrollbar(tree_frame, orient="horizontal", command=tree.xview, style="Horizontal.TScrollbar")
     tree.configure(
