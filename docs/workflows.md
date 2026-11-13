@@ -58,7 +58,7 @@ The project receives a combined catalog at `.kicad_blocks/KBlocks.kicad_sym` and
 
 ### Manage shared library folders
 
-Open **Manage library folders…** from the browser. The manager can add an existing folder, create a new empty library, change a registered folder path, unregister a folder or choose the default destination.
+Open **Manage Libraries…** from the browser. The manager can add an existing folder, create a new empty library, change a registered folder path, unregister a folder or choose the default destination.
 
 Changing a registered path does not move files. Unregistering a library does not delete it.
 
