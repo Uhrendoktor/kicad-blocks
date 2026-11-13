@@ -25,10 +25,10 @@ from kicad_blocks.plugin import (
     _pick_record,
     _preferred_library_selection,
     _restore_placement_windows,
-    _start_native_symbol_placement,
-    _system_prefers_dark_theme,
     _save_block_variants,
     _set_window_geometry,
+    _start_native_symbol_placement,
+    _system_prefers_dark_theme,
 )
 from kicad_blocks.repository import create_block, read_manifest
 
