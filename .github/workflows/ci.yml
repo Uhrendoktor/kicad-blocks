@@ -3,6 +3,9 @@ name: CI
 permissions:
   contents: write
 
+env:
+  PYTHONPATH: ${{ github.workspace }}/plugin/kicad-blocks:${{ github.workspace }}/examples/stusb4500
+
 on:
   push:
     branches: [main]
