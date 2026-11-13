@@ -4132,16 +4132,18 @@ def _show_library_browser(
     panes.add(left, weight=3)
     panes.add(right, weight=4)
 
-    ttk.Label(left, text="Search blocks").pack(anchor="w")
+    left.columnconfigure(0, weight=1)
+    left.rowconfigure(3, weight=1)
+    ttk.Label(left, text="Search blocks").grid(row=0, column=0, sticky="w")
     search = tk.StringVar()
     search_entry = ttk.Entry(left, textvariable=search)
-    search_entry.pack(fill="x", pady=(4, 3))
+    search_entry.grid(row=1, column=0, sticky="ew", pady=(4, 3))
     ttk.Label(
         left,
         text="Type to filter · ↓ browse results · Enter place",
-    ).pack(anchor="w", pady=(0, 6))
+    ).grid(row=2, column=0, sticky="w", pady=(0, 6))
     tree_frame = ttk.Frame(left)
-    tree_frame.pack(fill="both", expand=True)
+    tree_frame.grid(row=3, column=0, sticky="nsew")
     tree_frame.columnconfigure(0, weight=1)
     tree_frame.rowconfigure(0, weight=1)
     tree = ttk.Treeview(
@@ -4172,7 +4174,7 @@ def _show_library_browser(
     _bind_mousewheel(tree, lambda amount: tree.yview_scroll(amount, "units"))
 
     library_footer = ttk.Frame(left)
-    library_footer.pack(fill="x", pady=(8, 0))
+    library_footer.grid(row=4, column=0, sticky="ew", pady=(8, 0))
 
     right.columnconfigure(0, weight=1)
     right.rowconfigure(3, weight=1)
