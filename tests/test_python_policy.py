@@ -101,3 +101,20 @@ def test_pyright_inventory_requires_every_core_module_or_a_host_exclusion(tmp_pa
     errors = policy._check_pyright_inventory()
     assert any("model.py" in error for error in errors)
     assert any("plugin.py" in error for error in errors)
+
+def test_rejects_unreviewed_nested_object_annotations(tmp_path, monkeypatch):
+    """Reject generic object types in parameters, returns, and local variables."""
+    monkeypatch.setattr(policy, "ROOT", tmp_path)
+    path = _write_source(
+        tmp_path,
+        "plugin/example.py",
+        '"""Policy fixture."""\n'
+        "def transform(values: dict[str, object]) -> object:\n"
+        "    cache: dict[str, object] = {}\n"
+        "    return values\n",
+    )
+
+    errors = policy._check_file(path)
+
+    object_errors = [error for error in errors if "generic object annotation" in error]
+    assert len(object_errors) == 3
