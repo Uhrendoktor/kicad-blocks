@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from .kicad_blocks.json_types import JsonObject
+from kicad_blocks.json_types import JsonObject
 
 from kicad_blocks.pcb_placement import (
     move_placement_at_cursor,
