@@ -49,7 +49,6 @@ class VerifyVisualBundleTests(unittest.TestCase):
             "create-block-form-light.png",
         }
         self.assertTrue(expected.issubset(ASSET_NAMES))
-        self.assertEqual(set(ASSET_NAMES), set(sorted(ASSET_NAMES)))
 
     def test_rejects_stale_source_commit(self) -> None:
         with self.assertRaisesRegex(ValueError, "not checked-out source"):
