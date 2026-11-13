@@ -512,8 +512,21 @@ def place_block(schematic, record, x_mm: float, y_mm: float):
     return instance
 
 
+def _safe_schematic_selection(schematic) -> list:
+    """Return the current selection, normalizing KiCad's empty-selection IPC error."""
+    if schematic is None or not hasattr(schematic, "get_selection"):
+        return []
+    try:
+        return list(schematic.get_selection())
+    except Exception as exc:
+        error_text = str(exc).casefold()
+        if "selection" in error_text and "empty" in error_text:
+            return []
+        raise
+
+
 def _selected_symbols(schematic) -> list:
-    selection = list(schematic.get_selection())
+    selection = _safe_schematic_selection(schematic)
     symbols = [
         item for item in selection
         if hasattr(item, "definition") and hasattr(item.definition, "id")
@@ -1817,13 +1830,7 @@ def _selected_sheet_symbol_source(
     """Resolve one selected KiCad SheetSymbol through its IPC fields."""
     if not hasattr(schematic, "get_selection"):
         return None
-    try:
-        selection = list(schematic.get_selection())
-    except Exception as exc:
-        error_text = str(exc).casefold()
-        if "selection is empty" in error_text or "empty selection" in error_text:
-            return None
-        raise
+    selection = _safe_schematic_selection(schematic)
     if len(selection) != 1:
         return None
     item = selection[0]
@@ -2017,7 +2024,7 @@ def _place_existing(root, schematic, kicad, project_dir, parent) -> None:
 
 def _edit_block_implementation(root, schematic, kicad, project_dir, parent) -> None:
     """Compatibility helper for opening a library implementation from the manager."""
-    selected = list(schematic.get_selection())
+    selected = _safe_schematic_selection(schematic)
     if len(selected) == 1 and hasattr(selected[0], "definition"):
         record = _block_record_for_instance(root, project_dir, selected[0])
     else:
@@ -4366,7 +4373,7 @@ def _show_library_browser(
         record = selected_record[0]
         if record is None:
             return
-        selection = list(schematic.get_selection()) if hasattr(schematic, "get_selection") else []
+        selection = _safe_schematic_selection(schematic)
         if len(selection) != 1 or not hasattr(selection[0], "definition"):
             messagebox.showinfo(
                 "Edit facade symbol",
@@ -4680,7 +4687,7 @@ def open_selected_implementation_action() -> None:
 
 def _export_recursive_bom(root: Path | list[Path], parent, schematic=None, project_dir: Path | None = None) -> None:
     parameter_values = None
-    selection = list(schematic.get_selection()) if schematic is not None else []
+    selection = _safe_schematic_selection(schematic)
     selected = [
         item for item in selection
         if hasattr(item, "definition") and hasattr(item.definition, "id")
@@ -4762,7 +4769,7 @@ def _validate_shared_library(root: Path | list[Path], parent) -> None:
 
 def _validate_recursive_erc(root: Path | list[Path], parent, schematic=None, project_dir: Path | None = None) -> None:
     parameter_values = None
-    selection = list(schematic.get_selection()) if schematic is not None else []
+    selection = _safe_schematic_selection(schematic)
     selected = [
         item for item in selection
         if hasattr(item, "definition") and hasattr(item.definition, "id")
