@@ -133,7 +133,7 @@ def render() -> str:
         cases = _cases(path)
         if cases and path.name not in MODULE_PURPOSES:
             unclassified.append(f"{path.relative_to(ROOT).as_posix()}: missing module purpose")
-        elif not cases and path.name not in runner_names:
+        elif not cases and (path.parent != TEST_ROOT or path.name not in runner_names):
             unclassified.append(
                 f"{path.relative_to(ROOT).as_posix()}: neither pytest tests nor a declared runner"
             )
