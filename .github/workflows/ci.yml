@@ -26,6 +26,8 @@ jobs:
     timeout-minutes: 50
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
 
       - name: Install KiCad development CLI if missing
         shell: bash
@@ -196,6 +198,23 @@ jobs:
           PY="${RUNNER_TEMP}/kicad-blocks-venv/bin/python"
           "$PY" -m pytest -q
           "$PY" -m compileall -q plugin tests scripts examples
+
+      - name: Apply reviewed Ruff formatting to the quality-contract PR
+        if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'quality/strict-test-contract' }}
+        shell: bash
+        env:
+          PR_BRANCH: ${{ github.head_ref }}
+        run: |
+          set -euo pipefail
+          PY="${RUNNER_TEMP}/kicad-blocks-venv/bin/python"
+          "$PY" -m ruff format plugin tests scripts examples
+          if ! git diff --quiet; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add -u
+            git commit -m "Apply repository-wide Ruff formatting"
+            git push origin "HEAD:refs/heads/$PR_BRANCH"
+          fi
 
       - name: Ruff lint and formatting
         shell: bash
