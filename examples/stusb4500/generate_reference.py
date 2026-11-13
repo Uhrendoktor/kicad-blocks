@@ -633,8 +633,13 @@ def generate_reference_schematic(destination: Path) -> Path:
     c10_vsnk = pin_world_points[("C10", "1")]
     d11_vsnk = pin_world_points[("D11", "1")]
     output_rail_y = c10_vsnk[1]
+    output_lane_x = round(c10_vsnk[0] + 5.08, 3)
+    # Leave T1 pin 3 horizontally to the right before turning up/down to the
+    # output spine. A vertical segment directly above the FET body would cross
+    # the adjacent FET_MID lead at T1 pin 2 and short the two nets.
     add_route("VSNK", [
-        t1_vsnk, (t1_vsnk[0], output_rail_y),
+        t1_vsnk, (output_lane_x, t1_vsnk[1]),
+        (output_lane_x, output_rail_y), (c10_vsnk[0], output_rail_y),
         c10_vsnk, (j10_vsnk[0], output_rail_y), j10_vsnk,
     ], "protected-output-spine")
     remove_local_label("T1", "3", "VSNK")
