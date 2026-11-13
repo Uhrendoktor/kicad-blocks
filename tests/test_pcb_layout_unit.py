@@ -8,8 +8,6 @@ from pathlib import Path
 from types import SimpleNamespace
 
 PLUGIN = Path(__file__).resolve().parents[1] / "plugin" / "kicad-blocks"
-sys.path.insert(0, str(PLUGIN))
-
 from kicad_blocks.pcb_layout import (
     _dump,
     _merge_project_net_settings,
