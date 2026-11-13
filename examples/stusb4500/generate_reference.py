@@ -250,7 +250,7 @@ def generate_reference_schematic(destination: Path) -> Path:
         ("C3", "Device", "C", "1uF", (236.22, 96.52), {"1": ("VREG_2V7", "local", ""), "2": ("GND", "local", "")}),
         ("C4", "Device", "C", "1uF", (78.74, 96.52), {"1": ("VBUS_FILTERED", "local", ""), "2": ("GND", "local", "")}),
         ("D4", "Device", "D", "D4 (part not specified)", (93.98, 88.9), {"1": ("VBUS_FILTERED", "local", ""), "2": ("VBUS", "local", "")}),
-        ("C10", "Device", "C", "100nF", (360.68, 97.79), {"1": ("VSNK", "local", ""), "2": ("GND", "local", "")}),
+        ("C10", "Device", "C", "100nF", (360.68, 92.71), {"1": ("VSNK", "local", ""), "2": ("GND", "local", "")}),
         ("R1", "Device", "R", "470", (144.78, 127), {"1": ("VBUS_FILTERED", "local", ""), "2": ("VBUS_VS_DISCH", "local", "")}),
         ("R2", "Device", "R", "1k", (274.32, 175.26), {"1": ("DISCH", "local", ""), "2": ("VSNK", "local", "")}),
         ("R3", "Device", "R", "4.7k", (309.88, 213.36), {"1": ("VMCU", "local", ""), "2": ("SCL", "local", "")}),
@@ -524,7 +524,7 @@ def generate_reference_schematic(destination: Path) -> Path:
     # a horizontal VSNK_GATE wire; the branch lands at R13's pin-1 node.
     fet_gate = pin_world_points[("T1", "1")]
     gate_resistor = pin_world_points[("R13", "1")]
-    gate_out = (round(fet_gate[0] + 15.24, 3), fet_gate[1])
+    gate_out = (round(fet_gate[0] + 10.16, 3), fet_gate[1])
     if gate_out[0] >= gate_resistor[0]:
         raise ValueError("T1 gate route corridor no longer fits its resistor branch.")
     gate_route = [
@@ -630,7 +630,6 @@ def generate_reference_schematic(destination: Path) -> Path:
         d4_filtered, (c4_filtered[0], d4_filtered[1]), c4_filtered,
     ], "filter-capacitor-connection")
     remove_local_label("D4", "1", "VBUS_FILTERED")
-    remove_local_label("C4", "1", "VBUS_FILTERED")
 
     # Protected VSNK runs above the switches to J10. C10 and D11 branch from
     # the connector-side output node, keeping the power path visually distinct
@@ -639,15 +638,14 @@ def generate_reference_schematic(destination: Path) -> Path:
     j10_vsnk = pin_world_points[("J10", "1")]
     c10_vsnk = pin_world_points[("C10", "1")]
     d11_vsnk = pin_world_points[("D11", "1")]
-    output_rail_y = 66.04
+    output_rail_y = c10_vsnk[1]
     add_route("VSNK", [
         t1_vsnk, (t1_vsnk[0], output_rail_y),
-        (j10_vsnk[0], output_rail_y), j10_vsnk,
+        c10_vsnk, (j10_vsnk[0], output_rail_y), j10_vsnk,
     ], "protected-output-spine")
     remove_local_label("T1", "3", "VSNK")
-    add_route("VSNK", [j10_vsnk, c10_vsnk], "output-bypass-capacitor")
     remove_local_label("C10", "1", "VSNK")
-    output_tap = (d11_vsnk[0], j10_vsnk[1])
+    output_tap = (d11_vsnk[0], output_rail_y)
     add_route("VSNK", [output_tap, d11_vsnk], "d11-output-tap")
     remove_local_label("D11", "1", "VSNK")
     add_junction(output_tap, "VSNK:D11-tap")
