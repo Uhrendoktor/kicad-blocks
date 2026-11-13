@@ -13,7 +13,13 @@ respect-gitignore = true
 [tool.ruff.lint]
 # Explicit correctness/maintainability rules; avoid blanket ALL/preview expansion.
 select = ["E4", "E7", "E9", "F", "I", "B", "C4", "DTZ", "PIE", "RET", "SIM", "UP"]
-ignore = ["E501"]
+# E402 is intentional for KiCad scripts that add the plugin/runtime path before host imports.
+# E501 is formatter-owned; SIM105 keeps best-effort cleanup and Tk teardown explicit.
+ignore = ["E402", "E501", "SIM105"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["kicad_blocks"]
+known-local-folder = ["_bootstrap"]
 
 [tool.ruff.format]
 docstring-code-format = true

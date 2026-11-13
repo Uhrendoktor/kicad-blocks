@@ -8,8 +8,8 @@ import json
 import os
 import re
 import time
-from urllib.request import Request, urlopen
 from pathlib import Path
+from urllib.request import Request, urlopen
 
 
 def verify_release_gate(repo: str, tag: str, version_file: Path, source_sha: str, token: str) -> dict:

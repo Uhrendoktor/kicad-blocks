@@ -7,12 +7,12 @@ import argparse
 import json
 import os
 import platform
-from pathlib import Path
 import re
 import shutil
 import sys
 import tempfile
 import uuid
+from pathlib import Path
 
 
 PLUGIN_IDENTIFIER = "org.uhrendoktor.kicadblocks"
