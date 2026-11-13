@@ -1,8 +1,8 @@
 # KiCad Blocks
 
-**Use one normal library symbol for a complete circuit, and choose its internal implementation separately for each instance.**
+**Share complete KiCad circuit setups as reusable library components.**
 
-Only the symbol and its pins appear in the project schematic; the full editable, nestable implementation stays in a shared block library. Register or clone the library once, then browse and place blocks in any project. Each instance can use a different circuit variant, profile, parameter set or PCB layout.
+A block is placed as one library symbol, while its full editable schematic stays in the shared library. Each placed instance can select its own circuit variant. Clone or download the library, register it once, and browse and place blocks in any project—without copying implementation sheets and symbol files.
 
 [![CI](https://github.com/Uhrendoktor/kicad-blocks/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Uhrendoktor/kicad-blocks/actions/workflows/ci.yml)
 [![MIT License](https://img.shields.io/github/license/Uhrendoktor/kicad-blocks)](LICENSE)
