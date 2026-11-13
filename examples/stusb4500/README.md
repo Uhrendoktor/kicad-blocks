@@ -10,7 +10,7 @@ The full A3 schematic is rendered by KiCad CLI from the editable `.kicad_sch` fi
 
 <p align="center">
   <a href="https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/functional-block-implementation.svg">
-    <img src="https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/functional-block-implementation.svg" alt="Complete KiCad-rendered STUSB4500 reference schematic showing USB-C input and CC protection, VBUS filtering, the controller, power switches, protected output and optional MCU interface" width="1100">
+    <img src="https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/functional-block-implementation.svg" alt="A3 KiCad-rendered STUSB4500 schematic showing USB-C input, VBUS filtering, the controller, power switches and host interface" width="1100">
   </a>
 </p>
 
