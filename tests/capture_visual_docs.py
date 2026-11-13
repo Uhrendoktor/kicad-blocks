@@ -320,6 +320,116 @@ def _make_themed_root(theme: str, title: str):
     return root
 
 
+def _select_default_implementation(dialog) -> None:
+    tree = next(
+        (
+            widget for widget in walk_widgets(dialog)
+            if widget.winfo_class() == "Treeview"
+        ),
+        None,
+    )
+    if tree is None or "0" not in tree.get_children():
+        raise RuntimeError("The implementations dialog does not contain its Default row.")
+    tree.selection_set("0")
+    tree.focus("0")
+    tree.event_generate("<<TreeviewSelect>>")
+    dialog.update_idletasks()
+    dialog.update()
+
+    buttons = [
+        widget for widget in walk_widgets(dialog)
+        if widget.winfo_class() == "TButton"
+        and widget.cget("text") in {"Edit default", "Edit variant"}
+    ]
+    edit_button = next(
+        (widget for widget in buttons if widget.cget("text") == "Edit default"),
+        None,
+    )
+    if edit_button is None or not edit_button.instate(["!disabled"]):
+        selection = tree.selection()
+        state = [
+            (widget.cget("text"), widget.cget("state"))
+            for widget in buttons
+        ]
+        raise RuntimeError(
+            "The Default row edit action is unavailable: "
+            f"rows={tree.get_children()!r}, selection={selection!r}, buttons={state!r}."
+        )
+
+
+def _select_existing_pcb_file(dialog) -> None:
+    combos = [
+        widget for widget in walk_widgets(dialog)
+        if widget.winfo_class() == "TCombobox"
+    ]
+    if len(combos) < 2:
+        raise RuntimeError("Add PCB layout is missing its source and implementation selectors.")
+    combos[0].set("Choose an existing PCB file")
+    combos[0].event_generate("<<ComboboxSelected>>")
+    dialog.update_idletasks()
+    fields = [
+        widget for widget in walk_widgets(dialog)
+        if widget.winfo_class() in {"TEntry", "Entry"}
+    ]
+    choose_button = next(
+        (
+            widget for widget in walk_widgets(dialog)
+            if widget.winfo_class() == "TButton" and widget.cget("text") == "Choose file…"
+        ),
+        None,
+    )
+    if (
+        len(fields) < 2
+        or not fields[1].winfo_ismapped()
+        or choose_button is None
+        or not choose_button.winfo_ismapped()
+    ):
+        raise RuntimeError("Selecting an existing PCB file did not reveal its file picker.")
+
+
+def _assert_layout_manager_footer(dialog) -> None:
+    labels = {"Save layouts", "Cancel"}
+    visible = {
+        widget.cget("text")
+        for widget in walk_widgets(dialog)
+        if widget.winfo_class() == "TButton" and widget.winfo_ismapped()
+    }
+    missing = sorted(labels - visible)
+    if missing:
+        raise RuntimeError("PCB layout manager footer buttons are not visible: " + ", ".join(missing))
+
+
+def _assert_blank_pcb_file_picker_hidden(dialog) -> None:
+    fields = [
+        widget for widget in walk_widgets(dialog)
+        if widget.winfo_class() in {"TEntry", "Entry"}
+    ]
+    choose_button = next(
+        (
+            widget for widget in walk_widgets(dialog)
+            if widget.winfo_class() == "TButton" and widget.cget("text") == "Choose file…"
+        ),
+        None,
+    )
+    if len(fields) < 2 or fields[1].winfo_ismapped() or (
+        choose_button is not None and choose_button.winfo_ismapped()
+    ):
+        raise RuntimeError("The blank-board mode should hide its PCB file entry and Choose file button.")
+    _assert_add_layout_footer(dialog)
+
+
+def _assert_add_layout_footer(dialog) -> None:
+    labels = {"Add layout", "Cancel"}
+    visible = {
+        widget.cget("text")
+        for widget in walk_widgets(dialog)
+        if widget.winfo_class() == "TButton" and widget.winfo_ismapped()
+    }
+    missing = sorted(labels - visible)
+    if missing:
+        raise RuntimeError("Add PCB layout footer buttons are not visible: " + ", ".join(missing))
+
+
 def capture_ui_workflows(library_roots, record, project_dir: Path, output_dir: Path) -> None:
     """Export actual app windows, using the same theme initialization as run_action."""
     from types import SimpleNamespace
@@ -440,7 +550,37 @@ def capture_ui_workflows(library_roots, record, project_dir: Path, output_dir: P
                     output_dir / f"implementation-variants-{theme}.png",
                     xdotool,
                     minimum_size=(800, 500),
-                    prepare=lambda dialog: _select_first_table_row(dialog),
+                    prepare=_select_default_implementation,
+                )
+                _capture_modal(
+                    root,
+                    lambda target=root: plugin_actions._show_block_layout_editor(record, target),
+                    f"PCB layouts — {record.name}",
+                    output_dir / f"pcb-layout-manager-{theme}.png",
+                    xdotool,
+                    minimum_size=(900, 600),
+                    prepare=lambda dialog: (
+                        _select_first_table_row(dialog),
+                        _assert_layout_manager_footer(dialog),
+                    ),
+                )
+                _capture_modal(
+                    root,
+                    lambda target=root: plugin_actions._ask_layout_details(target, record),
+                    "Add PCB layout",
+                    output_dir / f"add-pcb-layout-blank-{theme}.png",
+                    xdotool,
+                    minimum_size=(640, 460),
+                    prepare=_assert_blank_pcb_file_picker_hidden,
+                )
+                _capture_modal(
+                    root,
+                    lambda target=root: plugin_actions._ask_layout_details(target, record),
+                    "Add PCB layout",
+                    output_dir / f"add-pcb-layout-file-{theme}.png",
+                    xdotool,
+                    minimum_size=(640, 460),
+                    prepare=_select_existing_pcb_file,
                 )
                 _capture_modal(
                     root,
@@ -602,6 +742,8 @@ def main() -> int:
         )
         reference_source = Path(temporary) / "stusb4500-reference.kicad_sch"
         generate_reference_schematic(reference_source)
+        layout_source = Path(temporary) / "stusb4500-reference.kicad_pcb"
+        layout_source.write_text("(kicad_pcb)\n", encoding="utf-8")
         target = create_block(
             library,
             "STUSB4500 USB-PD Sink",
@@ -626,6 +768,7 @@ def main() -> int:
                 {"value": "9V", "path": reference_source},
                 {"value": "12V", "path": reference_source},
             ],
+            layout_files=[{"name": "Reference PCB", "path": layout_source}],
             profiles=[
                 {
                     "id": "pdo1_5v_2a4",
@@ -685,8 +828,9 @@ def main() -> int:
         "source_sha": os.environ.get("GITHUB_SHA", "local"),
         "generator": "tests/capture_visual_docs.py",
         "renderer": (
-            "KiCad CLI and production Tk windows: all three task-hub tabs, functional-block browser, "
-            "Manage Libraries window, instance configuration, variant editor, creation form, and placement chooser"
+            "KiCad CLI and production Tk windows: all task-hub tabs, functional-block browser, "
+            "Manage Libraries, instance configuration, implementation and PCB layout dialogs, "
+            "creation form, and placement chooser"
         ),
         "example": {
             "component": "STUSB4500QTR",
