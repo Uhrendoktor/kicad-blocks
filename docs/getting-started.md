@@ -19,7 +19,7 @@ Stable KiCad 10.x, KiCad 11 stable, Windows, macOS, ARM and other Python version
 
 KiCad Blocks uses the newer schematic IPC interface. The older KiCad 9/10 add-on API is limited to PCB Editor and is not sufficient for the schematic commands.
 
-## 2. Install the current development version
+## Install the current development version
 
 A packaged KiCad Blocks release ZIP is not published yet. For now, install from a Git clone:
 
@@ -29,11 +29,11 @@ cd kicad-blocks
 python3.14 scripts/install_plugin.py --version 10.99
 ```
 
-Use `python3.12`, `python3.13` or `python3.14` to match the interpreter you will select in KiCad. The installer copies the plugin from `plugin/kicad-blocks` into the user's KiCad IPC add-on directory. To preview the destination without installing, add `--dry-run`.
+Use `python3.12`, `python3.13` or `python3.14` to match the interpreter you will select in KiCad. The installer copies the plugin from `plugin/kicad-blocks` into the user's KiCad IPC add-on directory. To preview the destination without installing, add `--dry-run`. Pass `--documents-home PATH` to override the XDG data directory.
 
 Check [Releases](https://github.com/Uhrendoktor/kicad-blocks/releases) for a packaged installer when one becomes available. Do not treat GitHub's automatically generated source-code ZIP as a prebuilt plugin package.
 
-## 3. Enable the KiCad API
+## Enable the KiCad API
 
 In Eeschema:
 
@@ -52,9 +52,9 @@ The remaining commands are grouped under **Tools → External Plugins → KiCad 
 
 Enable the KiCad IPC API in PCB Editor as well when you want to apply a stored PCB layout or place an imported layout group.
 
-## 4. Choose a block library
+## Choose a block library
 
-The default shared library folder is:
+On Debian or Ubuntu, install the matching interpreter's Tkinter and virtual-environment packages if they are not already present (often named `python3.14-tk` and `python3.14-venv`; use the package names for your Python minor version).\n\nThe default shared library folder is:
 
 ```text
 ~/Documents/KiCad/Blocks/
@@ -72,7 +72,7 @@ export KICAD_BLOCKS_LIBRARY="$HOME/my-kicad-block-library"
 
 A shared library can be a normal folder that you distribute with Git, a shared drive or an archive. Once the folder is registered, browse its blocks from any project.
 
-## 5. Place a block
+## Place a block
 
 1. Open a saved KiCad project in Eeschema.
 2. Choose **Browse and Place Functional Blocks**.
@@ -90,7 +90,7 @@ The screenshot below shows the STUSB4500 example selected in the placement choos
   <img src="https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/block-picker-profile.png" alt="STUSB4500 block selected in the placement chooser with the 5 V implementation and 5 V / 2.4 A profile" width="900">
 </p>
 
-## 6. Create a block from your own sheet
+## Create a block from your own sheet
 
 1. In the parent schematic, select the hierarchical sheet symbol you want to package. You can also open that sheet directly and run the command with nothing selected.
 2. Choose **Create Block from Selected Sheet**.
