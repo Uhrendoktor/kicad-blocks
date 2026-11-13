@@ -102,6 +102,7 @@ def test_pyright_inventory_requires_every_core_module_or_a_host_exclusion(tmp_pa
     assert any("model.py" in error for error in errors)
     assert any("plugin.py" in error for error in errors)
 
+
 def test_rejects_unreviewed_nested_object_annotations(tmp_path, monkeypatch):
     """Reject generic object types in parameters, returns, and local variables."""
     monkeypatch.setattr(policy, "ROOT", tmp_path)
@@ -116,5 +117,6 @@ def test_rejects_unreviewed_nested_object_annotations(tmp_path, monkeypatch):
 
     errors = policy._check_file(path)
 
-    object_errors = [error for error in errors if "generic object annotation" in error]
-    assert len(object_errors) == 3
+    assert any("generic object annotation needs an explicit reviewed boundary" in error for error in errors)
+    assert any("generic object return annotation is not allowed" in error for error in errors)
+    assert any("generic object variable annotation is not allowed" in error for error in errors)
