@@ -10,7 +10,6 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-INVENTORY_PATH = ROOT / "tests" / "test_inventory.json"
 DOCUMENTATION_PATH = ROOT / "docs" / "test-inventory.md"
 PYTEST_MODE = "pytest"
 STANDALONE_MODES = {"standalone-gui", "standalone-ipc", "standalone-kicad"}
