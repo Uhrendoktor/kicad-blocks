@@ -418,7 +418,7 @@ def capture_ui_workflows(library_roots, record, project_dir: Path, output_dir: P
                 _capture_modal(
                     root,
                     lambda target=root: plugin_actions._ask_create_block_details(
-                        target, Path(record.implementation)
+                        target, Path("stusb4500_reference.kicad_sch")
                     ),
                     "Create Functional Block",
                     output_dir / f"create-block-form-{theme}.png",
