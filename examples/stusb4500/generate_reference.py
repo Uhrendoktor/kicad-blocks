@@ -244,30 +244,30 @@ def generate_reference_schematic(destination: Path) -> Path:
             "3": ("ALERT#", "hier", "output"), "4": ("RESET", "hier", "input"),
             "5": ("VMCU", "hier", "input"), "6": ("GND", "hier", "passive"),
         }),
-        ("C50", "Device", "C", "4.7uF", (73.66, 213.36), {"1": ("VBUS", "local", ""), "2": ("GND", "local", "")}),
+        ("C50", "Device", "C", "4.7uF", (88.9, 190.5), {"1": ("VBUS", "local", ""), "2": ("GND", "local", "")}),
         ("C1", "Device", "C", "1uF", (190.5, 96.52), {"1": ("VREG_1V2", "local", ""), "2": ("GND", "local", "")}),
         ("C2", "Device", "C", "1uF", (213.36, 96.52), {"1": ("VREG_2V7", "local", ""), "2": ("GND", "local", "")}),
         ("C3", "Device", "C", "1uF", (236.22, 96.52), {"1": ("VREG_2V7", "local", ""), "2": ("GND", "local", "")}),
         ("C4", "Device", "C", "1uF", (119.38, 88.9), {"1": ("VBUS_FILTERED", "local", ""), "2": ("GND", "local", "")}),
         ("D4", "Device", "D", "D4 (part not specified)", (93.98, 88.9), {"1": ("VBUS_FILTERED", "local", ""), "2": ("VBUS", "local", "")}),
-        ("C10", "Device", "C", "100nF", (360.68, 134.62), {"1": ("VSNK", "local", ""), "2": ("GND", "local", "")}),
+        ("C10", "Device", "C", "100nF", (360.68, 97.79), {"1": ("VSNK", "local", ""), "2": ("GND", "local", "")}),
         ("R1", "Device", "R", "470", (144.78, 127), {"1": ("VBUS_FILTERED", "local", ""), "2": ("VBUS_VS_DISCH", "local", "")}),
         ("R2", "Device", "R", "1k", (274.32, 175.26), {"1": ("DISCH", "local", ""), "2": ("VSNK", "local", "")}),
         ("R3", "Device", "R", "4.7k", (309.88, 213.36), {"1": ("VMCU", "local", ""), "2": ("SCL", "local", "")}),
         ("R4", "Device", "R", "1k", (167.64, 127), {"1": ("VREG_2V7", "local", ""), "2": ("VBUS_VS_DISCH", "local", "")}),
         ("R5", "Device", "R", "4.7k", (332.74, 213.36), {"1": ("VMCU", "local", ""), "2": ("SDA", "local", "")}),
         ("R6", "Device", "R", "4.7k", (355.6, 213.36), {"1": ("VMCU", "local", ""), "2": ("ALERT#", "local", "")}),
-        ("R10", "Device", "R", "100k", (284.48, 116.84), {"1": ("FET_MID", "local", ""), "2": ("VSNK_GATE", "local", "")}),
-        ("R11", "Device", "R", "22k", (312.42, 116.84), {"1": ("VSNK_GATE", "local", ""), "2": ("GND", "local", "")}),
-        ("R13", "Device", "R", "100", (340.36, 116.84), {"1": ("VSNK_GATE", "local", ""), "2": ("VBUS_EN_SNK", "local", "")}),
+        ("R10", "Device", "R", "100k", (297.18, 116.84), {"1": ("FET_MID", "local", ""), "2": ("VSNK_GATE", "local", "")}),
+        ("R11", "Device", "R", "22k", (325.12, 124.46), {"1": ("VSNK_GATE", "local", ""), "2": ("GND", "local", "")}),
+        ("R13", "Device", "R", "100", (353.06, 124.46), {"1": ("VSNK_GATE", "local", ""), "2": ("VBUS_EN_SNK", "local", "")}),
         ("R51", "Device", "R", "NC", (147.32, 228.6), {"1": ("VREG_2V7", "local", ""), "2": ("ADDR1", "local", "")}),
         ("R52", "Device", "R", "NC", (172.72, 228.6), {"1": ("VREG_2V7", "local", ""), "2": ("ADDR0", "local", "")}),
         ("R53", "Device", "R", "100k", (198.12, 228.6), {"1": ("ADDR1", "local", ""), "2": ("GND", "local", "")}),
         ("R54", "Device", "R", "100k", (223.52, 228.6), {"1": ("ADDR0", "local", ""), "2": ("GND", "local", "")}),
         ("R55", "Device", "R", "10k", (261.62, 228.6), {"1": ("RESET", "local", ""), "2": ("GND", "local", "")}),
-        ("D1", "STUSB4500_Custom", "ESDA25W", "ESDA25W", (137.16, 177.8), {"1": ("CC1", "local", ""), "2": ("CC2", "local", ""), "3": ("GND", "local", "")}),
-        ("D50", "Device", "D_TVS", "ESDA25P35-1U1M", (96.52, 213.36), {"1": ("VBUS", "local", ""), "2": ("GND", "local", "")}),
-        ("D11", "Device", "D_TVS", "ESDA25P35-1U1M", (383.54, 134.62), {"1": ("VSNK", "local", ""), "2": ("GND", "local", "")}),
+        ("D1", "STUSB4500_Custom", "ESDA25W", "ESDA25W", (88.9, 139.7), {"1": ("CC1", "local", ""), "2": ("CC2", "local", ""), "3": ("GND", "local", "")}),
+        ("D50", "Device", "D_TVS", "ESDA25P35-1U1M", (106.68, 190.5), {"1": ("VBUS", "local", ""), "2": ("GND", "local", "")}),
+        ("D11", "Device", "D_TVS", "ESDA25P35-1U1M", (371.22, 123.19), {"1": ("VSNK", "local", ""), "2": ("GND", "local", "")}),
         ("T4", "Transistor_FET", "Q_PMOS_GSD", "STL6P3LLH6", (284.48, 76.2), {"1": ("VBUS_EN_SNK", "local", ""), "2": ("VBUS", "local", ""), "3": ("FET_MID", "local", "")}),
         ("T1", "Transistor_FET", "Q_PMOS_GSD", "STL6P3LLH6", (337.82, 76.2), {"1": ("VSNK_GATE", "local", ""), "2": ("FET_MID", "local", ""), "3": ("VSNK", "local", "")}),
     ]
@@ -436,7 +436,7 @@ def generate_reference_schematic(destination: Path) -> Path:
         ("VREG_2V7", [("R51", "1"), ("R52", "1")], ("R51", "1")),
         ("GND", [("R53", "2"), ("R54", "2")], ("R53", "2")),
         ("VMCU", [("R3", "1"), ("R5", "1"), ("R6", "1")], ("R3", "1")),
-        ("VSNK_GATE", [("R11", "1"), ("R13", "1")], ("R11", "1")),
+        ("VSNK_GATE", [("R10", "2"), ("R11", "1"), ("R13", "1")], ("R11", "1")),
     ]
     wires = []
     junctions = []
@@ -486,7 +486,7 @@ def generate_reference_schematic(destination: Path) -> Path:
     if fet_t1_source[1] <= fet_t4_drain[1] or fet_r10_node[1] <= fet_t1_source[1]:
         raise ValueError("FET_MID route corridor no longer fits between the FETs and R10.")
     fet_out = (fet_t4_drain[0], round(fet_t4_drain[1] - 5.08, 3))
-    fet_lane_x = round(min(fet_t4_drain[0], fet_r10_node[0]) - 15.24, 3)
+    fet_lane_x = fet_r10_node[0]
     fet_track_y = round(fet_t1_source[1] + 10.16, 3)
     fet_tee = (fet_r10_node[0], fet_track_y)
     fet_end_track = (fet_t1_source[0], fet_track_y)
@@ -495,7 +495,6 @@ def generate_reference_schematic(destination: Path) -> Path:
         fet_out,
         (fet_lane_x, fet_out[1]),
         (fet_lane_x, fet_track_y),
-        fet_tee,
         fet_end_track,
         fet_t1_source,
     ]
@@ -549,6 +548,120 @@ def generate_reference_schematic(destination: Path) -> Path:
     if gate_label is None or gate_label[0] != "VSNK_GATE" or gate_label[1] != "local":
         raise ValueError("Expected local VSNK_GATE label is missing at T1 gate.")
     label_points.pop(fet_gate)
+
+    # Core input path: the USB-C VBUS contact feeds a clear top rail to the
+    # first PMOS switch. A separate short branch serves the input capacitor
+    # and TVS at the receptacle; the routes deliberately avoid the CC pair.
+    def add_route(net: str, points: list[tuple[float, float]], key: str) -> None:
+        if len(points) < 2:
+            raise ValueError(f"{net} route {key} needs at least two points.")
+        for index, (start, end) in enumerate(zip(points, points[1:])):
+            wires.append(_wire(start, end, f"{net}:{key}:{index}"))
+
+    def add_junction(point: tuple[float, float], key: str) -> None:
+        junctions.append([
+            "junction",
+            ["at", f"{point[0]:.3f}", f"{point[1]:.3f}"],
+            ["diameter", "0"],
+            ["color", "0", "0", "0", "0"],
+            ["uuid", _Quoted(_uid(f"junction:{key}:{point[0]:.3f}:{point[1]:.3f}"))],
+        ])
+
+    def remove_local_label(reference: str, pin_number: str, net: str) -> None:
+        point = pin_world_points[(reference, pin_number)]
+        label = label_points.get(point)
+        if label is None or label[0] != net or label[1] != "local":
+            raise ValueError(f"Expected {net} local label is missing at {reference}.{pin_number}.")
+        label_points.pop(point)
+
+    # J1 VBUS -> top VBUS spine -> T4 source.
+    usb_vbus = pin_world_points[("J1", "A4")]
+    t4_vbus = pin_world_points[("T4", "2")]
+    add_route("VBUS", [
+        usb_vbus, (63.5, usb_vbus[1]), (63.5, 81.28), t4_vbus,
+    ], "usb-input-to-power-spine")
+    remove_local_label("T4", "2", "VBUS")
+
+    # D4 is the VBUS feed for the filter capacitor; bring its input up to the
+    # main rail with a short branch. The crossing is an intentional T-junction.
+    d4_vbus = pin_world_points[("D4", "2")]
+    d4_rail = (d4_vbus[0], 81.28)
+    add_route("VBUS", [d4_vbus, d4_rail], "d4-vbus-tap")
+    remove_local_label("D4", "2", "VBUS")
+    add_junction(d4_rail, "VBUS:D4-tap")
+
+    # Input bulk capacitance and TVS sit beside the receptacle. The feed leaves
+    # the VBUS pin below the CC stubs, then branches to C50 and D50.
+    c50_vbus = pin_world_points[("C50", "1")]
+    d50_vbus = pin_world_points[("D50", "1")]
+    input_branch_x = 95.25
+    input_branch_y = 116.84
+    input_branch_bottom = d50_vbus[1]
+    add_route("VBUS", [
+        usb_vbus, (input_branch_x, input_branch_y),
+        (input_branch_x, input_branch_bottom), d50_vbus,
+    ], "input-cap-tvss-feed")
+    remove_local_label("C50", "1", "VBUS")
+    remove_local_label("D50", "1", "VBUS")
+    c50_tap = (input_branch_x, c50_vbus[1])
+    add_route("VBUS", [c50_tap, c50_vbus], "c50-bulk-cap-tap")
+    add_junction(c50_tap, "VBUS:C50-tap")
+
+    # A single local ground route joins the input capacitor and the TVS cathode.
+    c50_gnd = pin_world_points[("C50", "2")]
+    d50_gnd = pin_world_points[("D50", "2")]
+    add_route("GND", [
+        c50_gnd, (d50_gnd[0], c50_gnd[1]), d50_gnd,
+    ], "input-protection-ground")
+    remove_local_label("D50", "2", "GND")
+
+    # CC1 and CC2 are routed independently from the receptacle to the
+    # protection array. The hierarchical port labels remain at the connector.
+    cc1_j1 = pin_world_points[("J1", "A5")]
+    cc2_j1 = pin_world_points[("J1", "B5")]
+    cc1_d1 = pin_world_points[("D1", "1")]
+    cc2_d1 = pin_world_points[("D1", "2")]
+    add_route("CC1", [
+        cc1_j1, (73.66, cc1_j1[1]), (73.66, cc1_d1[1]), cc1_d1,
+    ], "usb-cc1-to-esd")
+    add_route("CC2", [
+        cc2_j1, (78.74, cc2_j1[1]), (78.74, cc2_d1[1]), cc2_d1,
+    ], "usb-cc2-to-esd")
+    remove_local_label("D1", "1", "CC1")
+    remove_local_label("D1", "2", "CC2")
+
+    # VBUS filtered sense: D4 output, C4 bypass and R1 feed share one visible
+    # net. R1 then joins R4 at VBUS_VS_DISCH, which is labelled at the IC pin.
+    d4_filtered = pin_world_points[("D4", "1")]
+    c4_filtered = pin_world_points[("C4", "1")]
+    r1_filtered = pin_world_points[("R1", "1")]
+    filter_tap = (c4_filtered[0], d4_filtered[1])
+    add_route("VBUS_FILTERED", [
+        d4_filtered, filter_tap, (r1_filtered[0], filter_tap[1]), r1_filtered,
+    ], "filter-to-sense-feed")
+    add_route("VBUS_FILTERED", [filter_tap, c4_filtered], "filter-capacitor-tap")
+    remove_local_label("D4", "1", "VBUS_FILTERED")
+    remove_local_label("C4", "1", "VBUS_FILTERED")
+    add_junction(filter_tap, "VBUS_FILTERED:C4-tap")
+
+    # Protected VSNK output rail feeds J10 and C10. D11 is a shunt TVS branch
+    # below the rail, so its ground terminal cannot sit in series with VSNK.
+    t1_vsnk = pin_world_points[("T1", "3")]
+    j10_vsnk = pin_world_points[("J10", "1")]
+    c10_vsnk = pin_world_points[("C10", "1")]
+    d11_vsnk = pin_world_points[("D11", "1")]
+    output_lane_x = 345.44
+    output_rail_y = j10_vsnk[1]
+    output_tap = (d11_vsnk[0], output_rail_y)
+    add_route("VSNK", [
+        t1_vsnk, (output_lane_x, t1_vsnk[1]),
+        (output_lane_x, output_rail_y), c10_vsnk, j10_vsnk,
+    ], "protected-output-rail")
+    remove_local_label("T1", "3", "VSNK")
+    remove_local_label("C10", "1", "VSNK")
+    add_route("VSNK", [output_tap, d11_vsnk], "d11-output-tap")
+    remove_local_label("D11", "1", "VSNK")
+    add_junction(output_tap, "VSNK:D11-tap")
 
     # Functional-zone separator; avoid decorative boxes around the circuitry.
     rules = [
