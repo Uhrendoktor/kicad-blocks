@@ -46,7 +46,7 @@ Run the documentation checks from the repository root:
 python scripts/validate_docs.py
 ~~~
 
-The check validates relative Markdown links, local heading anchors, and alt text for Markdown images. It does not attempt to fetch external websites, so external links still need to be chosen carefully.
+The check validates relative Markdown and HTML links, local heading anchors, and non-empty alt text for Markdown and HTML images. It does not attempt to fetch external websites, so external links still need to be chosen carefully.
 
 When changing the UI, regenerate the visual bundle:
 

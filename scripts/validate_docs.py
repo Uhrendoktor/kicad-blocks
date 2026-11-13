@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate local Markdown links, heading fragments, and image alt text."""
+"""Validate local Markdown/HTML links, heading fragments, and image alt text."""
 
 from __future__ import annotations
 
@@ -12,10 +12,19 @@ ROOT = Path(__file__).resolve().parents[1]
 MARKDOWN_ROOTS = (ROOT / "docs", ROOT / "examples")
 ROOT_MARKDOWN = (ROOT / "README.md", ROOT / "CHANGELOG.md")
 
-LINK_RE = re.compile(r"(?<!!)\[[^\]]+\]\(([^)]+)\)")
-IMAGE_RE = re.compile(r"!\[([^\]]*)\]\(([^)]+)\)")
-HEADING_RE = re.compile(r"^ {0,3}#{1,6}\s+(.+?)\s*#*\s*$")
-FENCE_RE = re.compile(r"^ {0,3}(`{3,}|~{3,})")
+LINK_RE = re.compile(r"(?<!!)\\[[^\\]]+\\]\\(([^)]+)\\)")
+IMAGE_RE = re.compile(r"!\\[([^\\]]*)\\]\\(([^)]+)\\)")
+HTML_LINK_RE = re.compile(
+    r"""<a\\b[^>]*?\\bhref\\s*=\\s*(?:"([^"]+)"|'([^']+)')""",
+    re.IGNORECASE | re.DOTALL,
+)
+HTML_IMAGE_RE = re.compile(r"<img\\b([^>]*)>", re.IGNORECASE | re.DOTALL)
+HTML_ALT_RE = re.compile(
+    r"""(?:^|\\s)alt\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s>]+))""",
+    re.IGNORECASE,
+)
+HEADING_RE = re.compile(r"^ {0,3}#{1,6}\\s+(.+?)\\s*#*\\s*$")
+FENCE_RE = re.compile(r"^ {0,3}(\`{3,}|~{3,})")
 
 
 def markdown_files() -> list[Path]:
@@ -47,15 +56,15 @@ def strip_fenced_code(text: str) -> str:
             result.append("")
         else:
             result.append(line)
-    return "\n".join(result)
+    return "\\n".join(result)
 
 
 def slugify_heading(text: str) -> str:
     """Approximate GitHub's automatic heading slug for ordinary Markdown headings."""
-    value = re.sub(r"`", "", text).strip().casefold()
+    value = text.replace(chr(96), "").strip().casefold()
     value = re.sub(r"<[^>]+>", "", value)
-    value = re.sub(r"[^\w\- ]", "", value, flags=re.UNICODE)
-    return re.sub(r"\s+", "-", value)
+    value = re.sub(r"[^\\w\\- ]", "", value, flags=re.UNICODE)
+    return re.sub(r"\\s+", "-", value)
 
 
 def heading_slugs(path: Path) -> set[str]:
@@ -75,7 +84,7 @@ def heading_slugs(path: Path) -> set[str]:
 
 
 def destination(raw: str) -> str:
-    """Normalize a simple Markdown link destination and remove an optional title."""
+    """Normalize a simple Markdown or HTML link destination."""
     value = raw.strip()
     if value.startswith("<") and ">" in value:
         value = value[1:value.index(">")]
@@ -84,48 +93,107 @@ def destination(raw: str) -> str:
     return unquote(value)
 
 
+def _line_number(source: str, offset: int) -> int:
+    """Return the one-based source line for a regex match offset."""
+    return source.count("\\n", 0, offset) + 1
+
+
+def _validate_target(
+    target: str,
+    *,
+    path: Path,
+    line_number: int,
+    source_slugs: set[str],
+) -> list[str]:
+    """Validate one local link target and optional heading fragment."""
+    errors: list[str] = []
+    normalized = destination(target)
+    parsed = urlsplit(normalized)
+    if parsed.scheme or parsed.netloc or normalized.startswith("//"):
+        return errors
+
+    resolved = path if not parsed.path else (path.parent / parsed.path).resolve()
+    if not resolved.is_file():
+        errors.append(
+            f"{path.relative_to(ROOT)}:{line_number}: local target does not exist: {target}"
+        )
+        return errors
+
+    if parsed.fragment:
+        target_slugs = source_slugs if resolved == path else heading_slugs(resolved)
+        if parsed.fragment not in target_slugs:
+            errors.append(
+                f"{path.relative_to(ROOT)}:{line_number}: missing heading anchor "
+                f"#{parsed.fragment} in {resolved.relative_to(ROOT)}"
+            )
+    return errors
+
+
 def validate_file(path: Path) -> list[str]:
     """Return documentation errors found in one Markdown source."""
     errors: list[str] = []
     source = strip_fenced_code(path.read_text(encoding="utf-8"))
     source_slugs = heading_slugs(path)
-    for line_number, line in enumerate(source.splitlines(), start=1):
-        for image_match in IMAGE_RE.finditer(line):
-            if not image_match.group(1).strip():
-                errors.append(
-                    f"{path.relative_to(ROOT)}:{line_number}: image is missing alt text"
-                )
-        for match in LINK_RE.finditer(line):
-            target = destination(match.group(1))
-            parsed = urlsplit(target)
-            if parsed.scheme or parsed.netloc or target.startswith("//"):
-                continue
-            resolved = path if not parsed.path else (path.parent / parsed.path).resolve()
-            if not resolved.is_file():
-                errors.append(
-                    f"{path.relative_to(ROOT)}:{line_number}: local target does not exist: {target}"
-                )
-                continue
-            if parsed.fragment:
-                target_slugs = source_slugs if resolved == path else heading_slugs(resolved)
-                if parsed.fragment not in target_slugs:
-                    errors.append(
-                        f"{path.relative_to(ROOT)}:{line_number}: missing heading anchor "
-                        f"#{parsed.fragment} in {resolved.relative_to(ROOT)}"
-                    )
+
+    for match in IMAGE_RE.finditer(source):
+        if not match.group(1).strip():
+            errors.append(
+                f"{path.relative_to(ROOT)}:{_line_number(source, match.start())}: "
+                "Markdown image is missing alt text"
+            )
+
+    for match in HTML_IMAGE_RE.finditer(source):
+        attributes = match.group(1)
+        alt_match = HTML_ALT_RE.search(attributes)
+        alt_text = ""
+        if alt_match:
+            alt_text = next(
+                (value for value in alt_match.groups() if value is not None),
+                "",
+            ).strip()
+        if not alt_match or not alt_text:
+            errors.append(
+                f"{path.relative_to(ROOT)}:{_line_number(source, match.start())}: "
+                "HTML image is missing alt text"
+            )
+
+    for match in LINK_RE.finditer(source):
+        errors.extend(
+            _validate_target(
+                match.group(1),
+                path=path,
+                line_number=_line_number(source, match.start()),
+                source_slugs=source_slugs,
+            )
+        )
+
+    for match in HTML_LINK_RE.finditer(source):
+        target = next(
+            (value for value in match.groups() if value is not None),
+            "",
+        )
+        errors.extend(
+            _validate_target(
+                target,
+                path=path,
+                line_number=_line_number(source, match.start()),
+                source_slugs=source_slugs,
+            )
+        )
+
     return errors
 
 
 def main() -> int:
-    """Validate all project Markdown files without making network requests."""
+    """Validate all project Markdown sources without making network requests."""
     files = markdown_files()
     errors = [error for path in files for error in validate_file(path)]
     if errors:
-        print("\n".join(errors), file=sys.stderr)
+        print("\\n".join(errors), file=sys.stderr)
         return 1
     print(
         f"Documentation checks passed: {len(files)} Markdown files, "
-        "local links, heading anchors, and image alt text."
+        "Markdown/HTML local links, heading anchors, and Markdown/HTML image alt text."
     )
     return 0
 

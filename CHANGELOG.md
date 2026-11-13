@@ -24,7 +24,7 @@ Changes are grouped by project version. Items under **Unreleased** describe chan
 - Keep visual-capture and publishing inventories in one shared module so new screenshots remain included in provenance-checked publishing.
 - Document the current toolbar action name, **Create Block from Sheet**, and the working **Edit default** implementation action.
 - Correct installation guidance so a source checkout is not presented as a published plugin release package.
-- Add automated checks for broken local Markdown links, heading anchors, and missing image descriptions.
+- Add automated checks for broken local Markdown/HTML links, heading anchors, and missing image descriptions.
 
 ## 1.1.0 — 2026-11-12
 
@@ -37,6 +37,7 @@ Changes are grouped by project version. Items under **Unreleased** describe chan
 - Validate shared libraries, manifests, revisions, dependency graphs, and recursive ERC.
 
 ### Changed
+- Remove the duplicate “Quick place a block” picker; block selection now happens in the library browser.
 - Create opaque blocks from selected hierarchical sheets; facade pins and electrical types are derived from root-sheet hierarchical labels.
 - Preserve nested hierarchical-sheet trees inside a block by copying child schematics, rewriting `Sheetfile` references, and rebasing instance paths.
 - Edit facade symbols in KiCad Symbol Editor and reconcile catalog artwork with revisioned block assets.
