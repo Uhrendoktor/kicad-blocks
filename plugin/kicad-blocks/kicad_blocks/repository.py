@@ -382,6 +382,12 @@ def read_manifest(block_path: Path) -> dict:
             raise ValueError(
                 f"Layout {layout_id!r} ports must map every facade pin to a non-empty net name."
             )
+    for variant in variants:
+        linked_layout = variant.get("layout_id")
+        if linked_layout and str(linked_layout).casefold() not in seen_layout_ids:
+            raise ValueError(
+                f"Variant {variant['value']!r} links to unknown PCB layout {linked_layout!r}."
+            )
     default_layout = manifest.get("default_layout")
     if default_layout and str(default_layout).casefold() not in seen_layout_ids:
         raise ValueError(f"Block default layout {default_layout!r} is not defined in layouts.")
@@ -559,7 +565,10 @@ def create_block(
             seen_variant_files.add(file_name.casefold())
             shutil.copy2(source_path, staging / file_name)
             files.append(file_name)
-            variants.append({"value": value, "file": file_name})
+            variant_descriptor = {"value": value, "file": file_name}
+            if raw_variant.get("layout_id"):
+                variant_descriptor["layout_id"] = str(raw_variant["layout_id"]).casefold()
+            variants.append(variant_descriptor)
 
         layouts: list[dict] = []
         seen_layout_ids: set[str] = set()
