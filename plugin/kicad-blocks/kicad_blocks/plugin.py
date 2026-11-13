@@ -3203,6 +3203,19 @@ def _show_block_layout_editor(
             if item["id"] == selected_id:
                 tree.selection_set(iid)
                 tree.focus(iid)
+        if selected_id is not None:
+            if default_layout_id_holder[0] == selected_id:
+                implementation_value.set("Default")
+            else:
+                linked_variant = next(
+                    (
+                        value
+                        for value, linked_id in variant_layouts.items()
+                        if linked_id == selected_id
+                    ),
+                    "No variant link",
+                )
+                implementation_value.set(linked_variant)
         update_actions()
 
     def selected_layout():
