@@ -341,7 +341,7 @@ def _select_default_implementation(dialog) -> None:
         (widget for widget in buttons if widget.cget("text") == "Edit default"),
         None,
     )
-    if edit_button is None or edit_button.cget("state") != "normal":
+    if edit_button is None or not edit_button.instate(["!disabled"]):
         selection = tree.selection()
         state = [
             (widget.cget("text"), widget.cget("state"))
