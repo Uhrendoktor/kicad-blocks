@@ -6,6 +6,7 @@ import base64
 import contextlib
 import logging
 import os
+import re
 import shutil
 import subprocess
 import sys
