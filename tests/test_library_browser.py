@@ -216,6 +216,30 @@ class LibraryBrowserTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "links to unknown PCB layout"):
             read_manifest(self.block.path)
 
+    def test_editing_implementation_variants_preserves_pcb_layout_links(self):
+        layouts = _layout_choices(self.block)
+        linked_block = _save_block_layouts(
+            self.block,
+            layouts,
+            default_layout_id="compact",
+            variant_layouts={"1V8": "compact"},
+        )
+        before = read_manifest(self.block.path)
+        editor_values = [
+            {"value": item["value"], "file": item["file"]}
+            for item in before["variants"]
+        ]
+
+        # The implementation editor only edits selector/file data; it must not
+        # silently discard PCB links configured in the separate layout manager.
+        _save_block_variants(linked_block, editor_values)
+
+        after = read_manifest(self.block.path)
+        variant_1v8 = next(
+            item for item in after["variants"] if item["value"] == "1V8"
+        )
+        self.assertEqual(variant_1v8["layout_id"], "compact")
+
     def test_variant_metadata_can_be_added_edited_and_removed_from_library(self):
         initial_version = read_manifest(self.filter_block.path)["version"]
 
