@@ -2370,6 +2370,7 @@ def _ask_implementation_details(
         selected = filedialog.askopenfilename(**options)
         if selected:
             source_value.set(selected)
+            source_entry.xview_moveto(1.0)
 
     ttk.Button(frame, text="Browse…", command=browse).grid(
         row=4, column=2, sticky="ew", padx=(8, 0), pady=(4, 14)
@@ -2411,6 +2412,8 @@ def _ask_implementation_details(
     dialog.bind("<Return>", lambda _event: accept())
     dialog.bind("<Escape>", lambda _event: dialog.destroy())
     dialog.grab_set()
+    dialog.update_idletasks()
+    source_entry.xview_moveto(1.0)
     value_entry.focus_set()
     dialog.wait_window()
     return result[0]
@@ -2936,7 +2939,7 @@ def _show_library_browser(
     tree.heading("variants", text="Variants")
     tree.heading("layouts", text="PCB")
     tree.column("block", width=165, minwidth=140, stretch=True)
-    tree.column("library", width=90, minwidth=75, stretch=False)
+    tree.column("library", width=110, minwidth=90, stretch=False)
     tree.column("pins", width=44, minwidth=40, stretch=False, anchor="center")
     tree.column("variants", width=78, minwidth=72, stretch=False, anchor="center")
     tree.column("layouts", width=52, minwidth=48, stretch=False, anchor="center")
