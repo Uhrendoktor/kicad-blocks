@@ -54,7 +54,9 @@ Enable the KiCad IPC API in PCB Editor as well when you want to apply a stored P
 
 ## Choose a block library
 
-On Debian or Ubuntu, install the matching interpreter's Tkinter and virtual-environment packages if they are not already present (often named `python3.14-tk` and `python3.14-venv`; use the package names for your Python minor version).\n\nThe default shared library folder is:
+On Debian or Ubuntu, install the matching interpreter's Tkinter and virtual-environment packages if they are not already present (often named `python3.14-tk` and `python3.14-venv`; use the package names for your Python minor version).
+
+The default shared library folder is:
 
 ```text
 ~/Documents/KiCad/Blocks/
