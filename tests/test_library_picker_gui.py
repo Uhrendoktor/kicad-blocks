@@ -5,13 +5,10 @@ from __future__ import annotations
 import contextlib
 import shutil
 import subprocess
-import sys
 import tempfile
 import time
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
-PLUGIN_SOURCE = ROOT / "plugin" / "kicad-blocks"
 from kicad_blocks import plugin as plugin_actions
 from kicad_blocks.model import parse_pins
 from kicad_blocks.repository import create_block
