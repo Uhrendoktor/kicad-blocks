@@ -3114,7 +3114,7 @@ def _pick_kicad_file(
             )
         if not directories and not files:
             tree.insert("", "end", iid="empty", text="No matching files", values=("",))
-        tree.selection_remove(tree.selection())
+        tree.selection_remove(*tree.selection())
 
     def navigate(_event=None):
         raw = Path(directory_var.get()).expanduser()
@@ -4128,7 +4128,12 @@ def _show_library_browser(
         variants = list(record.manifest.get("variants", []))
         if not variants:
             try:
-                _launch_block_asset(kicad, record.implementation, "implementation schematic")
+                _launch_block_asset(
+                kicad,
+                record.implementation,
+                "implementation schematic",
+                editor_window_id=editor_window_id,
+            )
             except (OSError, RuntimeError, ValueError) as exc:
                 messagebox.showerror("Open implementation", str(exc), parent=window)
             return
@@ -4159,7 +4164,10 @@ def _show_library_browser(
             chooser.destroy()
             try:
                 _launch_block_asset(
-                    kicad, record.path / selected["file"], "implementation schematic"
+                    kicad,
+                    record.path / selected["file"],
+                    "implementation schematic",
+                    editor_window_id=editor_window_id,
                 )
             except (OSError, RuntimeError, ValueError) as exc:
                 messagebox.showerror("Open implementation", str(exc), parent=window)
@@ -4199,6 +4207,21 @@ def _show_library_browser(
         except (OSError, RuntimeError, ValueError, LookupError, subprocess.SubprocessError) as exc:
             messagebox.showerror("Edit facade symbol", str(exc), parent=window)
 
+    def manage_layouts(_event=None):
+        record = selected_record[0]
+        if record is None:
+            return
+        try:
+            created_layout = _show_block_layout_editor(
+                record, window, kicad, editor_window_id
+            )
+            refresh_records()
+            if created_layout is not None:
+                _launch_block_asset(kicad, created_layout, "PCB layout")
+        except Exception as exc:
+            LOG.exception("Could not update PCB layouts")
+            messagebox.showerror("Manage PCB layouts", str(exc), parent=window)
+
     def edit_variants(_event=None):
         record = selected_record[0]
         if record is None:
@@ -4228,11 +4251,12 @@ def _show_library_browser(
             return
         layouts = _layout_choices(record)
         if not layouts:
-            messagebox.showinfo(
-                "PCB Layout",
-                f"{record.name} has no stored PCB layout.",
-                parent=window,
+            created_layout = _show_block_layout_editor(
+                record, window, kicad, editor_window_id
             )
+            refresh_records()
+            if created_layout is not None:
+                _launch_block_asset(kicad, created_layout, "PCB layout")
             return
         chooser = tk.Toplevel(window)
         chooser.title(f"Open PCB layout — {record.name}")
@@ -4245,7 +4269,16 @@ def _show_library_browser(
             f"{item.get('name', item.get('id'))} [{item.get('id', 'legacy')}]"
             for item in layouts
         ]
-        choice = tk.StringVar(value=labels[0])
+        default_label = next(
+            (
+                labels[index]
+                for index, item in enumerate(layouts)
+                if str(item.get("id") or "").casefold()
+                == str(record.manifest.get("default_layout") or "").casefold()
+            ),
+            labels[0],
+        )
+        choice = tk.StringVar(value=default_label)
         combo = ttk.Combobox(
             frame, textvariable=choice, values=labels, state="readonly", width=36
         )
@@ -4262,12 +4295,23 @@ def _show_library_browser(
             except (OSError, RuntimeError, ValueError) as exc:
                 messagebox.showerror("Open PCB layout", str(exc), parent=window)
 
+        def manage_layouts():
+            chooser.destroy()
+            created_layout = _show_block_layout_editor(
+                record, window, kicad, editor_window_id
+            )
+            refresh_records()
+            if created_layout is not None:
+                _launch_block_asset(kicad, created_layout, "PCB layout")
+
         buttons = ttk.Frame(frame)
         buttons.pack(fill="x")
+        ttk.Button(buttons, text="Manage layouts…", command=manage_layouts).pack(side="left")
         ttk.Button(buttons, text="Open", command=launch_layout).pack(side="right")
         ttk.Button(buttons, text="Cancel", command=chooser.destroy).pack(
             side="right", padx=(0, 6)
         )
+        _set_window_geometry(chooser, 500, 200, 440, 170)
         combo.focus_set()
 
     manage_button = ttk.Button(
@@ -4335,7 +4379,12 @@ def _show_library_browser(
     _add_tooltip(variants_button, "Manage the default and alternative implementations")
     layout_button = ttk.Button(actions, text="▧", width=3, command=open_layout)
     layout_button.pack(side="left", padx=(5, 0))
-    _add_tooltip(layout_button, "Open or create a stored PCB layout")
+    _add_tooltip(layout_button, "Open a stored PCB layout")
+    manage_layout_button = ttk.Button(
+        actions, text="☷", width=3, command=manage_layouts
+    )
+    manage_layout_button.pack(side="left", padx=(5, 0))
+    _add_tooltip(manage_layout_button, "Manage PCB layouts and link them to implementations")
     refresh_button = ttk.Button(actions, text="↻", width=3, command=refresh_records)
     refresh_button.pack(side="right")
     _add_tooltip(refresh_button, "Refresh registered libraries")
