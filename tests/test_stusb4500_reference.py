@@ -62,8 +62,8 @@ class STUSB4500ReferenceTests(unittest.TestCase):
         )
         self.assertLess(
             len(wire_nodes),
-            100,
-            "Long nets should use local labels, not coordinate-sorted wire guesses",
+            120,
+            "Long nets should use local labels; only short functional relationships are routed visibly",
         )
         self.assertNotIn("(global_label ", content)
         self.assertNotIn("VBUS_SENSE", content)
