@@ -9,11 +9,9 @@ from __future__ import annotations
 import copy
 import os
 import subprocess
-import sys
 import uuid
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[2]
 from kicad_blocks.pcb_layout import (
     _Quoted,
     _all,
