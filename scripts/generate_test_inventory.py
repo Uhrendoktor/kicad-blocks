@@ -129,17 +129,22 @@ def render() -> str:
     discovered = sorted(TEST_ROOT.rglob("test_*.py"))
     runner_names = {filename for filename, _command, _purpose in SCRIPTED_ACCEPTANCE}
     unclassified: list[str] = []
-    discovered_names = {path.name for path in discovered}
     for path in discovered:
         cases = _cases(path)
+        relative = path.relative_to(TEST_ROOT).as_posix()
         if cases and path.name not in MODULE_PURPOSES:
             unclassified.append(f"{path.relative_to(ROOT).as_posix()}: missing module purpose")
         elif not cases and path.name not in runner_names:
             unclassified.append(
                 f"{path.relative_to(ROOT).as_posix()}: neither pytest tests nor a declared runner"
             )
-    for filename in sorted(runner_names - discovered_names):
-        unclassified.append(f"tests/{filename}: declared runner does not exist")
+        elif not cases and not (TEST_ROOT / path.name).is_file():
+            unclassified.append(
+                f"{path.relative_to(ROOT).as_posix()}: declared runner must exist at tests/{path.name}"
+            )
+    for filename in sorted(runner_names):
+        if not (TEST_ROOT / filename).is_file():
+            unclassified.append(f"tests/{filename}: declared runner does not exist")
     for filename, _command, _purpose in SUPPORT_SCRIPTS:
         if not (TEST_ROOT / filename).is_file():
             unclassified.append(f"tests/{filename}: declared support script does not exist")
