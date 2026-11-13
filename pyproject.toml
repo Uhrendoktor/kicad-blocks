@@ -1,0 +1,14 @@
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+respect-gitignore = true
+force-exclude = false
+
+[tool.ruff.lint]
+# Keep a small, explicit correctness-focused ruleset. Expand only with reviewed,
+# repository-wide changes rather than silently inheriting all future rules.
+select = ["E4", "E7", "E9", "F", "I", "B", "SIM", "RUF"]
+ignore = ["E501"]
+
+[tool.ruff.format]
+docstring-code-format = true
