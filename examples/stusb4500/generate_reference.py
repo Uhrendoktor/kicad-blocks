@@ -511,12 +511,17 @@ def generate_reference_schematic(destination: Path) -> Path:
         ["color", "0", "0", "0", "0"],
         ["uuid", _Quoted(_uid(f"junction:FET_MID:{fet_tee[0]:.3f}:{fet_tee[1]:.3f}"))],
     ])
-    for ref, pin_number in (("T4", "3"), ("T1", "2"), ("R10", "1")):
+    # Keep one label on the now-wired island so the exported net retains the
+    # stable FET_MID name used by downstream netlist checks.
+    for ref, pin_number in (("T4", "3"), ("T1", "2")):
         point = pin_world_points[(ref, pin_number)]
         label = label_points.get(point)
         if label is None or label[0] != "FET_MID" or label[1] != "local":
             raise ValueError(f"Expected local FET_MID label is missing at {ref}.{pin_number}.")
         label_points.pop(point)
+    anchor_label = label_points.get(fet_r10_node)
+    if anchor_label is None or anchor_label[0] != "FET_MID":
+        raise ValueError("The FET_MID label anchor at R10.1 is missing.")
 
     # Show the short FET gate-to-divider connection. R11 and R13 already share
     # a horizontal VSNK_GATE wire; the branch lands at R13's pin-1 node.
