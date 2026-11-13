@@ -107,6 +107,7 @@ def capture_picker(records, output_dir: Path) -> dict:
     tk = plugin_actions.tk
     parent = tk.Tk()
     parent.title("KiCad Blocks visual fixture host")
+    plugin_actions._configure_tk_theme(parent)
     parent.geometry("320x100+10+10")
     parent.update()
 
