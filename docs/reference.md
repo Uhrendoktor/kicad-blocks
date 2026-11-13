@@ -11,9 +11,11 @@ Use this page when you need exact action names, stored filenames, instance field
 - [Per-instance fields](#per-instance-fields)
 - [Parameters and token expansion](#parameters-and-token-expansion)
 - [Variants and profiles](#variants-and-profiles)
+- [Nested block composition](#nested-block-composition)
 - [PCB layout descriptors and merge behavior](#pcb-layout-descriptors-and-merge-behavior)
 - [Local-copy synchronization](#local-copy-synchronization)
 - [Validation reports](#validation-reports)
+- [Recursive BOM and ERC](#recursive-bom-and-erc)
 - [Locations and settings](#locations-and-settings)
 - [Compatibility and known limits](#compatibility-and-known-limits)
 
@@ -142,9 +144,15 @@ A named profile is a reusable partial configuration containing a profile name an
 
 Applying a profile writes the profile, variant, parameter and layout fields to the selected facade in one schematic IPC transaction. Editing a linked field turns the instance into a custom configuration and clears `KB_PROFILE`.
 
+## Nested block composition
+
+Each nested dependency occurrence records a unique instance ID, reference, placement, orientation (0°, 90°, 180° or 270°) and child-pin-to-parent-net mapping. KiCad Blocks composes the rotated child facade and labels at the transformed pin endpoints in the parent implementation.
+
+The child remains a separate library asset. Cyclic dependencies are rejected. The child implementation is not created as a native hierarchical sheet; its facade is composed into the parent implementation.
+
 ## PCB layout descriptors and merge behavior
 
-A block may expose multiple named `.kicad_pcb` layouts. Each descriptor identifies its ID, display name and board file; it may also name an optional `.kicad_pro` sidecar and a map from facade pins to layout nets.
+A block may expose multiple named `.kicad_pcb` layouts. Each descriptor identifies its ID, display name and board file; it may also name an optional `.kicad_pro` sidecar and a map from facade pins to layout nets. Unless the manifest specifies another default, the first layout ID is selected by default.
 
 The merge operation:
 
@@ -182,6 +190,12 @@ It writes:
 - Per-block ERC report files — implementation-level ERC output.
 
 Broken manifests are reported as validation errors rather than silently skipped.
+
+## Recursive BOM and ERC
+
+**Export recursive BOM** runs KiCad CLI on the selected block implementation and its nested dependencies, then aggregates the component rows for that block tree. Tokens in implementation text fields are expanded using parameter overrides from the selected root instance; nested dependencies use their declared defaults.
+
+**Run recursive ERC** checks the selected implementation and its nested dependencies with KiCad CLI. These actions are separate from the project's native BOM, netlist and ERC, which see the facade symbol and its external pins only.
 
 ## Locations and settings
 
