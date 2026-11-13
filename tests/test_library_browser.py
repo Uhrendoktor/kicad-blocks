@@ -18,6 +18,7 @@ from kicad_blocks.model import parse_parameters, parse_pins
 from kicad_blocks.plugin import (
     _bind_mousewheel,
     _block_overview_text,
+    _choose_block_layout,
     _clean_facade_preview_svg,
     _filter_library_records,
     _library_record_for_instance,
@@ -26,7 +27,9 @@ from kicad_blocks.plugin import (
     _pick_record,
     _preferred_library_selection,
     _restore_placement_windows,
+    _save_block_layouts,
     _save_block_variants,
+    _new_blank_pcb_source,
     _set_window_geometry,
     _start_native_symbol_placement,
     _system_prefers_dark_theme,
@@ -114,11 +117,104 @@ class LibraryBrowserTests(unittest.TestCase):
         self.assertIn("1V8", overview)
         self.assertIn("3V3", overview)
         self.assertIn("Compact", overview)
+        self.assertIn("Default · implementation.kicad_sch", overview)
+        self.assertIn("Circuit implementations · 3", overview)
         self.assertIn("Synchronous buck regulator", overview)
         self.assertIn("Connections · 4", overview)
         self.assertNotIn("Block ID", overview)
         self.assertNotIn(str(self.block.manifest["block_id"]), overview)
 
+
+    def test_new_pcb_layout_is_created_as_default_and_saved_in_block(self):
+        source = _new_blank_pcb_source()
+        try:
+            _save_block_layouts(
+                self.filter_block,
+                [{"name": "Native", "source": str(source)}],
+                default_layout_id=None,
+            )
+        finally:
+            source.unlink(missing_ok=True)
+
+        manifest = read_manifest(self.filter_block.path)
+        self.assertEqual(manifest["default_layout"], "native")
+        self.assertEqual(manifest["layouts"][0]["name"], "Native")
+        self.assertEqual(manifest["layouts"][0]["file"], "layout_native.kicad_pcb")
+        self.assertTrue(
+            (self.filter_block.path / manifest["layouts"][0]["file"]).is_file()
+        )
+
+    def test_layout_linked_to_implementation_is_used_when_instance_has_default(self):
+        original_layouts = [dict(item) for item in self.block.manifest["layouts"]]
+        _save_block_layouts(
+            self.block,
+            original_layouts,
+            default_layout_id="compact",
+            variant_layouts={"1V8": "compact"},
+        )
+        manifest = read_manifest(self.block.path)
+        linked_variant = next(
+            item for item in manifest["variants"] if item["value"] == "1V8"
+        )
+        self.assertEqual(linked_variant["layout_id"], "compact")
+
+        instance = SimpleNamespace(
+            reference="X1",
+            user_fields=[
+                SimpleNamespace(
+                    name="KB_VARIANT",
+                    text=SimpleNamespace(value="1V8"),
+                ),
+                SimpleNamespace(
+                    name="KB_LAYOUT",
+                    text=SimpleNamespace(value="compact"),
+                ),
+            ],
+        )
+        resolved = _choose_block_layout(self.block, object(), instance=instance)
+        self.assertEqual(resolved["id"], "compact")
+
+    def test_instance_layout_override_beats_implementation_link(self):
+        original_layouts = [dict(item) for item in self.block.manifest["layouts"]]
+        second_board = Path(self.temp.name) / "standard.kicad_pcb"
+        second_board.write_text("(kicad_pcb)", encoding="utf-8")
+        original_layouts.append({
+            "id": "standard",
+            "name": "Standard",
+            "source": str(second_board),
+        })
+        _save_block_layouts(
+            self.block,
+            original_layouts,
+            default_layout_id="compact",
+            variant_layouts={"1V8": "standard"},
+        )
+        instance = SimpleNamespace(
+            reference="X1",
+            user_fields=[
+                SimpleNamespace(
+                    name="KB_VARIANT",
+                    text=SimpleNamespace(value="1V8"),
+                ),
+                SimpleNamespace(
+                    name="KB_LAYOUT",
+                    text=SimpleNamespace(value="compact"),
+                ),
+            ],
+        )
+        resolved = _choose_block_layout(self.block, object(), instance=instance)
+        self.assertEqual(resolved["id"], "standard")
+
+    def test_manifest_rejects_variant_link_to_unknown_layout(self):
+        manifest_path = self.block.path / "manifest.json"
+        manifest = read_manifest(self.block.path)
+        manifest["variants"][0]["layout_id"] = "missing"
+        manifest_path.write_text(
+            __import__("json").dumps(manifest, indent=2) + "\\n",
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(ValueError, "links to unknown PCB layout"):
+            read_manifest(self.block.path)
 
     def test_variant_metadata_can_be_added_edited_and_removed_from_library(self):
         initial_version = read_manifest(self.filter_block.path)["version"]
