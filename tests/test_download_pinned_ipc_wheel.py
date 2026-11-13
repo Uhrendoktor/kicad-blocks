@@ -44,7 +44,8 @@ class DownloadPinnedWheelTests(unittest.TestCase):
                     Path(temporary), "Uhrendoktor/kicad-blocks", self.source_sha, "token"
                 )
             self.assertIsNotNone(path)
-            assert path is not None
+            if path is None:
+                self.fail("Validated cached wheel path was unexpectedly None.")
             self.assertEqual(path.name, self.wheel_name)
             self.assertEqual(path.read_bytes(), self.payload)
 

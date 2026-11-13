@@ -23,6 +23,8 @@ jobs:
     timeout-minutes: 50
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Install KiCad development CLI if missing
         shell: bash
@@ -182,6 +184,17 @@ jobs:
           "$PY" -m pip install "$WHEELHOUSE/kicad_python-0.9.0.dev0-cp312-cp312-linux_x86_64.whl"
           "$PY" -c "from kipy import KiCad; from kipy.schematic import Schematic; print('Schematic IPC bindings available')"
 
+      - name: Enforce test inventory and quality policies
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/test_inventory.py --check
+          if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
+            python3 scripts/check_test_quality.py --base "origin/$GITHUB_BASE_REF"
+          else
+            python3 scripts/check_test_quality.py
+          fi
+
       - name: Run unit tests and compile
         shell: bash
         run: |
@@ -192,7 +205,14 @@ jobs:
 
       - name: Ruff lint
         shell: bash
-        run: "${RUNNER_TEMP}/kicad-blocks-venv/bin/python -m ruff check plugin tests"
+        run: "${RUNNER_TEMP}/kicad-blocks-venv/bin/python -m ruff check plugin tests scripts"
+
+      - name: Ruff format check for quality tooling
+        shell: bash
+        run: >-
+          "${RUNNER_TEMP}/kicad-blocks-venv/bin/python" -m ruff format --check
+          scripts/test_inventory.py scripts/check_test_quality.py
+          tests/test_test_inventory.py tests/test_test_quality.py
 
       - name: Validate generated files with KiCad
         shell: bash
@@ -429,6 +449,8 @@ jobs:
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Fetch pinned official KiCad symbol definitions
         shell: bash
@@ -490,9 +512,17 @@ jobs:
           set -euo pipefail
           PY="${RUNNER_TEMP}/kicad-blocks-visual-venv/bin/python"
           "$PY" -m pip install -r plugin/kicad-blocks/requirements.txt pytest ruff
+          if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
+            "$PY" scripts/test_inventory.py --check
+            "$PY" scripts/check_test_quality.py --base "origin/$GITHUB_BASE_REF"
+          else
+            "$PY" scripts/test_inventory.py --check
+            "$PY" scripts/check_test_quality.py
+          fi
           "$PY" -m pytest -q
           "$PY" -m compileall -q plugin tests
-          "$PY" -m ruff check plugin tests
+          "$PY" -m ruff check plugin tests scripts
+          "$PY" -m ruff format --check scripts/test_inventory.py scripts/check_test_quality.py tests/test_test_inventory.py tests/test_test_quality.py
 
       - name: Validate generated reference files with KiCad CLI
         shell: bash
