@@ -52,7 +52,9 @@ class PinnedWheelPublisherTests(unittest.TestCase):
         self.assertEqual(request.call_count, 2)
         self.assertEqual(request.call_args_list[0].args[0], "GET")
         self.assertEqual(request.call_args_list[1].args[0], "PATCH")
-        self.assertIn("CPython 3.12, 3.13 and 3.14", request.call_args_list[1].kwargs["payload"]["body"])
+        self.assertIn(
+            "CPython 3.12, 3.13 and 3.14", request.call_args_list[1].kwargs["payload"]["body"]
+        )
 
     def test_existing_asset_with_different_digest_is_not_overwritten(self):
         asset = {
@@ -61,9 +63,10 @@ class PinnedWheelPublisherTests(unittest.TestCase):
             "digest": "sha256:" + "0" * 64,
             "browser_download_url": "https://example.invalid/wrong.whl",
         }
-        with patch.object(
-            publisher, "_request", return_value={**self.release, "assets": [asset]}
-        ), self.assertRaisesRegex(RuntimeError, "refusing to replace"):
+        with (
+            patch.object(publisher, "_request", return_value={**self.release, "assets": [asset]}),
+            self.assertRaisesRegex(RuntimeError, "refusing to replace"),
+        ):
             publisher.publish_pinned_wheel(self.wheelhouse, "owner/repo", SHA, "token")
 
     def test_new_asset_upload_is_verified_against_the_release_digest(self):

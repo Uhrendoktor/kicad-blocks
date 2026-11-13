@@ -6,10 +6,9 @@ from __future__ import annotations
 import argparse
 import json
 import os
-from pathlib import Path
-import socket
 import ssl
 import time
+from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote
 from urllib.request import Request, urlopen
@@ -82,7 +81,7 @@ def _api_request(
             raise RuntimeError(
                 f"GitHub API {method} {url} failed with HTTP {exc.code}: {details}"
             ) from exc
-        except (TimeoutError, socket.timeout, ssl.SSLError, URLError, ConnectionError) as exc:
+        except (TimeoutError, ssl.SSLError, URLError, ConnectionError) as exc:
             if attempt >= max_retries:
                 raise RuntimeError(
                     f"GitHub API {method} {url} failed after {attempt + 1} attempts: {exc}"
@@ -150,9 +149,7 @@ def _matching_asset(release: dict, name: str, size: int) -> dict | None:
 
 def publish_wheel(wheelhouse: Path, repo: str, token: str) -> str:
     wheelhouse = Path(wheelhouse).expanduser().resolve()
-    wheels = sorted(
-        path for path in wheelhouse.glob(f"{ASSET_PREFIX}*.whl") if path.is_file()
-    )
+    wheels = sorted(path for path in wheelhouse.glob(f"{ASSET_PREFIX}*.whl") if path.is_file())
     if len(wheels) != 1:
         raise FileNotFoundError(
             f"Expected exactly one {ASSET_PREFIX}*.whl in {wheelhouse}; "
@@ -196,9 +193,7 @@ def publish_wheel(wheelhouse: Path, repo: str, token: str) -> str:
     except RuntimeError:
         # A timed-out upload may nevertheless have reached GitHub. Verify the
         # release state before retrying the whole publication or failing CI.
-        refreshed_release = _api_request(
-            "GET", _release_url(repo), token, allow_not_found=True
-        )
+        refreshed_release = _api_request("GET", _release_url(repo), token, allow_not_found=True)
         uploaded = (
             _matching_asset(refreshed_release, wheel.name, wheel_size)
             if refreshed_release is not None

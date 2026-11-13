@@ -22,7 +22,9 @@ def _request(method: str, url: str, token: str, payload: dict | None = None) -> 
     if data is not None:
         headers["Content-Type"] = "application/json"
     try:
-        with urlopen(Request(url, data=data, headers=headers, method=method), timeout=45) as response:
+        with urlopen(
+            Request(url, data=data, headers=headers, method=method), timeout=45
+        ) as response:
             raw = response.read()
     except HTTPError as exc:
         if method == "GET" and exc.code == 404:
@@ -46,16 +48,18 @@ def dispatch_release(repo: str, tag: str, source_sha: str, version: str, token: 
     archive_name = f"kicad-blocks-{version}-linux-x86_64.zip"
     required_assets = {archive_name, archive_name + ".sha256"}
     if release is not None:
-        assets_by_name = {
-            asset.get("name"): asset for asset in release.get("assets", [])
-        }
+        assets_by_name = {asset.get("name"): asset for asset in release.get("assets", [])}
         if required_assets.issubset(assets_by_name):
             complete = all(
                 assets_by_name[name].get("size", 0) > 0
                 and str(assets_by_name[name].get("digest", "")).startswith("sha256:")
                 for name in required_assets
             )
-            if complete and not release.get("draft", False) and not release.get("prerelease", False):
+            if (
+                complete
+                and not release.get("draft", False)
+                and not release.get("prerelease", False)
+            ):
                 print(f"Release {tag} already has its ZIP and checksum; not dispatching again.")
                 return False
 

@@ -7,7 +7,7 @@ import shutil
 import tempfile
 import uuid
 from pathlib import Path
-from typing import Any
+from .json_types import JsonObject
 
 from .model import (
     BlockPin,
@@ -31,7 +31,7 @@ from .repository import (
 
 
 def _child_record(
-    parent: BlockRecord, dependency: dict[str, Any], records: dict[str, BlockRecord]
+    parent: BlockRecord, dependency: JsonObject, records: dict[str, BlockRecord]
 ) -> BlockRecord:
     block_id = str(dependency.get("block_id", ""))
     child = records.get(block_id)
@@ -82,15 +82,13 @@ def _refresh_local_revision(record: BlockRecord) -> None:
 
 def _compose_direct_children(
     parent: BlockRecord,
-    dependencies: list[tuple[dict[str, Any], BlockRecord]],
+    dependencies: list[tuple[JsonObject, BlockRecord]],
     kicad_cli: str,
-) -> dict[str, Any]:
+) -> JsonObject:
     if not dependencies:
         return {"placed": [], "labels": 0}
 
-    backup_dir = Path(
-        tempfile.mkdtemp(prefix=".kicad-block-compose-backup-", dir=parent.path)
-    )
+    backup_dir = Path(tempfile.mkdtemp(prefix=".kicad-block-compose-backup-", dir=parent.path))
     schematic_path = parent.implementation
     table_path = parent.path / "sym-lib-table"
     shutil.copy2(schematic_path, backup_dir / schematic_path.name)
@@ -127,9 +125,7 @@ def _compose_direct_children(
         kicad.load_all_libraries(types=[1])
         kicad.wait_for_libraries(types=[1], timeout_s=120.0)
 
-        symbols_by_reference = {
-            item.reference: item for item in schematic.get_symbols()
-        }
+        symbols_by_reference = {item.reference: item for item in schematic.get_symbols()}
         labels_by_position = {
             _point_key(item.position): item
             for item in schematic.get_labels()
@@ -146,10 +142,7 @@ def _compose_direct_children(
             existing = symbols_by_reference.get(reference)
             if existing is not None:
                 lib_id = existing.definition.id
-                if (
-                    lib_id.library != nickname
-                    or lib_id.name != symbol_name
-                ):
+                if lib_id.library != nickname or lib_id.name != symbol_name:
                     raise ValueError(
                         f"Reference {reference!r} already belongs to another symbol in "
                         f"{parent.name!r}; refusing to replace it."
@@ -218,7 +211,7 @@ def _compose_direct_children(
                 schematic.create_items(new_labels)
             except AttributeError as exc:
                 # Some KiCad development builds have returned a CreateItem
-                # result with no packed Any payload even though the object
+                # result with no packed extension payload even though the object
                 # was applied to the document. Verify document state before
                 # deciding whether this was a harmless response issue.
                 if "type_url" not in str(exc):
@@ -236,7 +229,8 @@ def _compose_direct_children(
                     if (
                         str(label.text.value),
                         _point_key(label.position),
-                    ) not in actual_labels
+                    )
+                    not in actual_labels
                 ]
                 if missing_labels:
                     raise RuntimeError(
@@ -266,7 +260,7 @@ def compose_block_implementation(
     block: BlockRecord,
     library_root: Path,
     kicad_cli: str | Path,
-) -> dict[str, Any]:
+) -> JsonObject:
     """Recursively compose dependency facade instances into parent implementations."""
     root = Path(library_root).expanduser().resolve()
     cli = str(kicad_cli)
@@ -274,7 +268,7 @@ def compose_block_implementation(
     records[block.manifest["block_id"]] = block
     visiting: set[str] = set()
     completed: set[str] = set()
-    reports: list[dict[str, Any]] = []
+    reports: list[JsonObject] = []
 
     def compose(current: BlockRecord) -> None:
         block_id = current.manifest["block_id"]
@@ -284,7 +278,7 @@ def compose_block_implementation(
             return
         visiting.add(block_id)
         current_manifest = read_manifest(current.path)
-        direct: list[tuple[dict[str, Any], BlockRecord]] = []
+        direct: list[tuple[JsonObject, BlockRecord]] = []
         for dependency in current_manifest.get("dependencies", []):
             child = _child_record(current, dependency, records)
             pinned_revision = dependency.get("revision")

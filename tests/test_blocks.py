@@ -114,7 +114,7 @@ class BlockModelTests(unittest.TestCase):
         self.assertEqual(points["VIN"][0], -7.62)
         self.assertEqual(points["GND"][0], -7.62)
         self.assertEqual(points["VOUT"][0], 7.62)
-        self.assertEqual(points["VIN"][2], 1)   # SLSS_LEFT, extending outward
+        self.assertEqual(points["VIN"][2], 1)  # SLSS_LEFT, extending outward
         self.assertEqual(points["VOUT"][2], 3)  # SLSS_RIGHT, extending outward
 
     def test_facade_body_widens_for_long_opposing_pin_names(self):
@@ -127,9 +127,7 @@ class BlockModelTests(unittest.TestCase):
         self.assertLess(points["CC1"][0], -7.62)
         self.assertGreater(points["ALERT#"][0], 7.62)
 
-        symbol = render_symbol_library(
-            "UsbPdFacade", "USB PD Sink", "test-block", pins
-        )
+        symbol = render_symbol_library("UsbPdFacade", "USB PD Sink", "test-block", pins)
         self.assertIn(
             f"(start {round(points['CC1'][0] + 2.54, 4)} ",
             symbol,
@@ -152,9 +150,7 @@ class BlockModelTests(unittest.TestCase):
         self.assertEqual(_selected_symbols(schematic), [first, second])
 
     def test_plugin_manifest_has_valid_action_scope_contract(self):
-        manifest = json.loads(
-            (PLUGIN / "plugin.json").read_text(encoding="utf-8")
-        )
+        manifest = json.loads((PLUGIN / "plugin.json").read_text(encoding="utf-8"))
         self.assertEqual(manifest["runtime"]["type"], "python")
         self.assertTrue(manifest["actions"])
         expected_scopes = {
@@ -198,7 +194,6 @@ class BlockModelTests(unittest.TestCase):
                 for icon in action.get(key, []):
                     self.assertTrue((PLUGIN / icon).is_file(), icon)
 
-
     def test_project_catalog_can_seed_selected_block_configuration(self):
         from kicad_blocks.repository import set_project_symbol_defaults
 
@@ -222,7 +217,10 @@ class BlockModelTests(unittest.TestCase):
             rendered = catalog.read_text(encoding="utf-8")
             self.assertIn('(property "KB_VARIANT" "industrial"', rendered)
             self.assertIn('(property "KB_PARAM_MODE" "fast"', rendered)
-            self.assertIn('(property "KB_PARAM_MODE" "normal"', block.symbol_library.read_text(encoding="utf-8"))
+            self.assertIn(
+                '(property "KB_PARAM_MODE" "normal"',
+                block.symbol_library.read_text(encoding="utf-8"),
+            )
 
     def test_registered_block_libraries_build_one_project_symbol_catalog(self):
         import os
@@ -237,8 +235,9 @@ class BlockModelTests(unittest.TestCase):
             first_library.mkdir()
             second_library.mkdir()
             project.mkdir()
-            with patch("kicad_blocks.repository.settings_file", return_value=settings), patch.dict(
-                os.environ, {"KICAD_BLOCKS_LIBRARY": ""}, clear=False
+            with (
+                patch("kicad_blocks.repository.settings_file", return_value=settings),
+                patch.dict(os.environ, {"KICAD_BLOCKS_LIBRARY": ""}, clear=False),
             ):
                 first = create_block(
                     first_library,
@@ -254,12 +253,12 @@ class BlockModelTests(unittest.TestCase):
                 add_library_root(first_library, make_default=True)
                 add_library_root(second_library)
                 registered = library_roots()
-                self.assertEqual(registered[:2], [first_library.resolve(), second_library.resolve()])
+                self.assertEqual(
+                    registered[:2], [first_library.resolve(), second_library.resolve()]
+                )
                 self.assertEqual(default_library_root(), first_library.resolve())
 
-                catalog = build_project_symbol_catalog(
-                    project, [first_library, second_library]
-                )
+                catalog = build_project_symbol_catalog(project, [first_library, second_library])
                 catalog_text = catalog.read_text(encoding="utf-8")
                 self.assertIn(first.manifest["symbol_name"], catalog_text)
                 self.assertIn(second.manifest["symbol_name"], catalog_text)
@@ -269,7 +268,6 @@ class BlockModelTests(unittest.TestCase):
                 self.assertNotIn(second_library.resolve(), library_roots())
                 self.assertTrue(second_library.exists())
                 self.assertEqual(default_library_root(), first_library.resolve())
-
 
     def test_selected_library_is_registered_even_when_environment_overrides_default(self):
         import os
@@ -282,8 +280,9 @@ class BlockModelTests(unittest.TestCase):
             override.mkdir()
             selected.mkdir()
             settings = root / "settings.json"
-            with patch("kicad_blocks.repository.settings_file", return_value=settings), patch.dict(
-                os.environ, {"KICAD_BLOCKS_LIBRARY": str(override)}
+            with (
+                patch("kicad_blocks.repository.settings_file", return_value=settings),
+                patch.dict(os.environ, {"KICAD_BLOCKS_LIBRARY": str(override)}),
             ):
                 self.assertEqual(set_library_root(selected), selected.resolve())
                 self.assertEqual(default_library_root(), override.resolve())
@@ -318,7 +317,13 @@ class BlockModelTests(unittest.TestCase):
         )
 
     def test_parse_pins_rejects_invalid_definitions(self):
-        for bad in ("", "A:unknown", "VIN:input,vin:output", "bad name:input", "A:input,B:output,C:passive" + "," + ",".join(f"P{i}" for i in range(4, 66))):
+        for bad in (
+            "",
+            "A:unknown",
+            "VIN:input,vin:output",
+            "bad name:input",
+            "A:input,B:output,C:passive" + "," + ",".join(f"P{i}" for i in range(4, 66)),
+        ):
             with self.subTest(bad=bad), self.assertRaises(ValueError):
                 parse_pins(bad)
 
@@ -332,13 +337,12 @@ class BlockModelTests(unittest.TestCase):
             text,
             r'\(property "Value" "Buck Converter".*?\(effects \(font \(size 1\.27 1\.27\)\).*? hide\)\)',
         )
-        self.assertIn('(pin input line', text)
-        self.assertIn('(pin passive line', text)
-        self.assertIn('(pin output line', text)
-        self.assertIn('(pin bidirectional line', text)
+        self.assertIn("(pin input line", text)
+        self.assertIn("(pin passive line", text)
+        self.assertIn("(pin output line", text)
+        self.assertIn("(pin bidirectional line", text)
         self.assertEqual(text.count("(pin "), len(pins))
         self.assertNotIn("hierarchical", text.casefold())
-
 
     def test_parameter_templates_only_expand_inside_quoted_fields_and_escape_values(self):
         parameters = parse_parameters("PART=STM32, LABEL=3V3")
@@ -352,7 +356,7 @@ class BlockModelTests(unittest.TestCase):
             parameters,
             {"PART": 'part "A"\\rev'},
         )
-        self.assertIn(r'part \"A\"\\rev', escaped)
+        self.assertIn(r"part \"A\"\\rev", escaped)
         escaped_quote_source = r'(property "Value" "quoted \"label\" {{LABEL}}" (at 0 0 0))'
         self.assertEqual(
             substitute_parameter_templates(escaped_quote_source, parameters),
@@ -360,20 +364,19 @@ class BlockModelTests(unittest.TestCase):
         )
         for source in (
             '(property "Value" {{PART}})',
-            '; {{PART}}\n',
+            "; {{PART}}\n",
             '; "commented string {{PART}}\n',
-            '{{PART}}',
+            "{{PART}}",
         ):
-            with self.subTest(source=source), self.assertRaisesRegex(
-                ValueError, "inside quoted KiCad text fields"
+            with (
+                self.subTest(source=source),
+                self.assertRaisesRegex(ValueError, "inside quoted KiCad text fields"),
             ):
                 substitute_parameter_templates(source, parameters)
 
-
     def test_parse_typed_parameters_and_rejects_invalid_values(self):
         parameters = parse_parameters(
-            "OUTPUT_VOLTAGE:number=3.3, CHANNELS:integer=4, "
-            "ENABLE:boolean=yes, PART=STM32"
+            "OUTPUT_VOLTAGE:number=3.3, CHANNELS:integer=4, ENABLE:boolean=yes, PART=STM32"
         )
         self.assertEqual(
             [(item["name"], item["type"], item["default"]) for item in parameters],
@@ -407,14 +410,17 @@ class BlockModelTests(unittest.TestCase):
     def test_parameterized_symbol_library_creates_hidden_instance_fields(self):
         parameters = parse_parameters("OUTPUT_VOLTAGE:number=3.3, ENABLE:boolean=true")
         content = render_symbol_library(
-            "power_block", "Power Block", "block-id", parse_pins("VIN:input, GND"),
+            "power_block",
+            "Power Block",
+            "block-id",
+            parse_pins("VIN:input, GND"),
             parameters=parameters,
         )
         self.assertTrue(_balanced_sexpr(content))
         self.assertIn('(property "KB_PARAM_OUTPUT_VOLTAGE" "3.3"', content)
         self.assertIn('(property "KB_PARAM_ENABLE" "true"', content)
         self.assertEqual(content.count('(property "KB_PARAM_'), 2)
-        self.assertIn('(effects (font (size 1.0 1.0)) hide)', content)
+        self.assertIn("(effects (font (size 1.0 1.0)) hide)", content)
 
 
 class BlockRepositoryTests(unittest.TestCase):
@@ -434,9 +440,7 @@ class BlockRepositoryTests(unittest.TestCase):
         from kicad_blocks.plugin import _symbol_identifier
 
         instance = SimpleNamespace(
-            definition=SimpleNamespace(
-                id=SimpleNamespace(library="KBlocks", name="buck_1234abcd")
-            )
+            definition=SimpleNamespace(id=SimpleNamespace(library="KBlocks", name="buck_1234abcd"))
         )
         self.assertEqual(_symbol_identifier(instance), ("KBlocks", "buck_1234abcd"))
 
@@ -505,7 +509,9 @@ class BlockRepositoryTests(unittest.TestCase):
         )
         self.assertEqual(manifest["parameters"], parameters)
         self.assertEqual(manifest["default_layout"], "standard")
-        self.assertIn('(property "KB_LAYOUT" "standard"', record.symbol_library.read_text(encoding="utf-8"))
+        self.assertIn(
+            '(property "KB_LAYOUT" "standard"', record.symbol_library.read_text(encoding="utf-8")
+        )
         self.assertEqual(manifest["layout_file"], "layout_standard.kicad_pcb")
         self.assertEqual(
             (record.path / "layout_low_profile.kicad_pcb").read_text(encoding="utf-8"),
@@ -523,11 +529,13 @@ class BlockRepositoryTests(unittest.TestCase):
                 self.root,
                 "Incomplete Layout Ports",
                 self.pins,
-                layout_files=[{
-                    "name": "broken",
-                    "path": source_board,
-                    "ports": {"VIN": "VIN"},
-                }],
+                layout_files=[
+                    {
+                        "name": "broken",
+                        "path": source_board,
+                        "ports": {"VIN": "VIN"},
+                    }
+                ],
             )
 
     def test_create_block_copies_optional_pcb_and_project_settings_assets(self):
@@ -558,7 +566,9 @@ class BlockRepositoryTests(unittest.TestCase):
             "(kicad_pcb)\n",
         )
         self.assertEqual(
-            json.loads((record.path / "layout.kicad_pro").read_text(encoding="utf-8"))["meta"]["filename"],
+            json.loads((record.path / "layout.kicad_pro").read_text(encoding="utf-8"))["meta"][
+                "filename"
+            ],
             "board.kicad_pro",
         )
         self.assertIn("layout.kicad_pro", record.manifest["files"])
@@ -632,7 +642,9 @@ class BlockRepositoryTests(unittest.TestCase):
         self.assertEqual(result["changed"], ["implementation.kicad_sch"])
         self.assertEqual(result["version"], original_version + 1)
         current = read_manifest(record.path)
-        self.assertEqual(current["hashes"]["implementation.kicad_sch"], sha256_file(record.implementation))
+        self.assertEqual(
+            current["hashes"]["implementation.kicad_sch"], sha256_file(record.implementation)
+        )
         self.assertEqual(refresh_library_block(record)["changed"], [])
 
     def test_project_library_table_has_one_stable_catalog_row_for_all_blocks(self):
@@ -694,7 +706,9 @@ class BlockRepositoryTests(unittest.TestCase):
         source.implementation.write_text("; upstream implementation\n", encoding="utf-8")
         with self.assertRaisesRegex(RuntimeError, "Sync conflict"):
             synchronize_local_copy(local)
-        self.assertEqual(local.implementation.read_text(encoding="utf-8"), "; local implementation\n")
+        self.assertEqual(
+            local.implementation.read_text(encoding="utf-8"), "; local implementation\n"
+        )
 
     def test_sync_refuses_pin_interface_changes(self):
         source = create_block(self.root, "Power Stage", self.pins)
@@ -728,17 +742,21 @@ class BlockRepositoryTests(unittest.TestCase):
         local = make_local_copy(source, self.project)
         add_dependency(source, child_a)
         local_manifest = read_manifest(local.path)
-        local_manifest["dependencies"] = [{
-            "block_id": child_b.manifest["block_id"],
-            "name": child_b.name,
-            "path": str(child_b.path),
-            "revision": child_b.manifest["revision"],
-        }]
+        local_manifest["dependencies"] = [
+            {
+                "block_id": child_b.manifest["block_id"],
+                "name": child_b.name,
+                "path": str(child_b.path),
+                "revision": child_b.manifest["revision"],
+            }
+        ]
         (local.path / "manifest.json").write_text(
             json.dumps(local_manifest, indent=2) + "\n", encoding="utf-8"
         )
         with self.assertRaisesRegex(RuntimeError, "manifest.dependencies"):
-            synchronize_local_copy(type("Record", (), {"path": local.path, "manifest": local_manifest})())
+            synchronize_local_copy(
+                type("Record", (), {"path": local.path, "manifest": local_manifest})()
+            )
 
     def test_layout_configuration_is_pulled_into_local_copy(self):
         first_board = self.project / "sync_standard.kicad_pcb"
@@ -769,9 +787,7 @@ class BlockRepositoryTests(unittest.TestCase):
         self.assertEqual(local_manifest["default_layout"], "low_profile")
         self.assertEqual(local_manifest["layouts"][1]["name"], "Low profile Rev B")
         self.assertEqual(local_manifest["base_layouts"]["default_layout"], "low_profile")
-        self.assertEqual(
-            local_manifest["base_layouts"]["layouts"][1]["name"], "Low profile Rev B"
-        )
+        self.assertEqual(local_manifest["base_layouts"]["layouts"][1]["name"], "Low profile Rev B")
 
     def test_layout_configuration_local_edits_publish_and_divergent_edits_conflict(self):
         first_board = self.project / "publish_standard.kicad_pcb"
@@ -819,10 +835,7 @@ class BlockRepositoryTests(unittest.TestCase):
         )
         with self.assertRaisesRegex(RuntimeError, "manifest.layouts"):
             publish_local_copy(local)
-        self.assertEqual(
-            read_manifest(source.path)["layouts"][1]["name"], "Library Divergence"
-        )
-
+        self.assertEqual(read_manifest(source.path)["layouts"][1]["name"], "Library Divergence")
 
     def test_parameter_schema_is_pulled_into_local_copy(self):
         source = create_block(
@@ -882,7 +895,6 @@ class BlockRepositoryTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "manifest.parameters"):
             publish_local_copy(local)
         self.assertEqual(read_manifest(source.path)["parameters"][0]["default"], "5.0")
-
 
     def test_local_copy_can_publish_local_edit_to_library(self):
         source = create_block(self.root, "Publish Local Edit", self.pins)
@@ -974,7 +986,9 @@ class BlockRepositoryTests(unittest.TestCase):
         self.assertEqual(result["pulled"], [])
         self.assertEqual(result["converged"], ["implementation.kicad_sch"])
         self.assertEqual(result["version"], original_version)
-        self.assertEqual(read_manifest(local.path)["base_hashes"], read_manifest(source.path)["hashes"])
+        self.assertEqual(
+            read_manifest(local.path)["base_hashes"], read_manifest(source.path)["hashes"]
+        )
 
     def test_local_publish_rejects_divergent_library_edit_without_overwrite(self):
         source = create_block(self.root, "Publish Conflict", self.pins)
@@ -1017,9 +1031,7 @@ class BlockRepositoryTests(unittest.TestCase):
     def test_same_child_can_be_instantiated_twice_with_unique_occurrence_metadata(self):
         parent = create_block(self.root, "Dual Power Controller", self.pins)
         child = create_block(self.root, "Reusable Power Stage", self.pins)
-        parent = add_dependency(
-            parent, child, reference="B1", position_mm=(80.0, 100.0)
-        )
+        parent = add_dependency(parent, child, reference="B1", position_mm=(80.0, 100.0))
         parent = add_dependency(
             parent,
             child,
@@ -1029,7 +1041,11 @@ class BlockRepositoryTests(unittest.TestCase):
         )
 
         occurrences = resolve_dependency_occurrences(parent, self.root)
-        children = [item for item in occurrences if item.record.manifest["block_id"] == child.manifest["block_id"]]
+        children = [
+            item
+            for item in occurrences
+            if item.record.manifest["block_id"] == child.manifest["block_id"]
+        ]
 
         self.assertEqual(len(children), 2)
         self.assertEqual(
@@ -1086,7 +1102,9 @@ class BlockRepositoryTests(unittest.TestCase):
         self.assertIn("${KIPRJMOD}/../", content)
         relocated_child = self.project / "different" / "relocated.kicad_sym"
         relocated_child.parent.mkdir(parents=True)
-        relocated_child.write_text(child.symbol_library.read_text(encoding="utf-8"), encoding="utf-8")
+        relocated_child.write_text(
+            child.symbol_library.read_text(encoding="utf-8"), encoding="utf-8"
+        )
         register_project_symbol_library(
             parent.path,
             child.manifest["library_nickname"],

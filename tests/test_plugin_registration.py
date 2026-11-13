@@ -74,11 +74,7 @@ def _wait_for_editor(
             )
         windows = _windows(xdotool)
         setup = next(
-            (
-                item
-                for item in windows
-                if "kicad setup" in (item[1] + " " + item[2]).casefold()
-            ),
+            (item for item in windows if "kicad setup" in (item[1] + " " + item[2]).casefold()),
             None,
         )
         if setup is not None and setup_steps < 12:
@@ -108,10 +104,7 @@ def _wait_for_editor(
                 item
                 for item in reversed(windows)
                 if schematic.stem.casefold() in item[1].casefold()
-                and (
-                    "schematic editor" in item[1].casefold()
-                    or "eeschema" in item[2].casefold()
-                )
+                and ("schematic editor" in item[1].casefold() or "eeschema" in item[2].casefold())
             ),
             None,
         )
@@ -173,12 +166,8 @@ def _launch(
 
 
 def main() -> None:
-    eeschema = os.environ.get("KICAD_EESCHEMA") or _find_executable(
-        "eeschema-nightly", "eeschema"
-    )
-    cli = os.environ.get("KICAD_CLI") or _find_executable(
-        "kicad-cli-nightly", "kicad-cli"
-    )
+    eeschema = os.environ.get("KICAD_EESCHEMA") or _find_executable("eeschema-nightly", "eeschema")
+    cli = os.environ.get("KICAD_CLI") or _find_executable("kicad-cli-nightly", "kicad-cli")
     xdotool = _find_executable("xdotool")
     if not os.environ.get("DISPLAY"):
         raise RuntimeError("Run this test under xvfb-run; DISPLAY is not set.")
@@ -255,9 +244,7 @@ def main() -> None:
         # Let KiCad create its version-specific first-run profile, and accept
         # its default setup wizard before enabling the API preference.
         first_log = root / "eeschema-first-run.log"
-        first_process, first_window = _launch(
-            eeschema, schematic, env, xdotool, first_log
-        )
+        first_process, first_window = _launch(eeschema, schematic, env, xdotool, first_log)
         _close_editor(first_process, first_window, xdotool)
 
         config_files = list(home.rglob("kicad_common.json"))
@@ -295,9 +282,7 @@ def main() -> None:
             capture_output=True,
             text=True,
         )
-        installed_plugin = (
-            documents_home / "kicad" / version / "plugins" / PLUGIN_IDENTIFIER
-        )
+        installed_plugin = documents_home / "kicad" / version / "plugins" / PLUGIN_IDENTIFIER
         plugin_manifest_path = installed_plugin / "plugin.json"
         manifest = json.loads(plugin_manifest_path.read_text(encoding="utf-8"))
         if manifest.get("runtime", {}).get("min_version") != "3.12":
@@ -317,9 +302,7 @@ def main() -> None:
                 "schematic actions, and the PCB placement action."
             )
         for identifier, (entrypoint, show_button) in expected_schematic_actions.items():
-            action = next(
-                item for item in manifest["actions"] if item["identifier"] == identifier
-            )
+            action = next(item for item in manifest["actions"] if item["identifier"] == identifier)
             if action.get("scopes") != ["schematic"]:
                 raise AssertionError(f"{identifier} is not scoped to Eeschema: {action!r}")
             if action.get("show-button", False) is not show_button:
@@ -329,9 +312,7 @@ def main() -> None:
             if not (installed_plugin / entrypoint).is_file():
                 raise FileNotFoundError(f"Installed action entrypoint is missing: {entrypoint}")
         pcb_action = next(
-            item
-            for item in manifest["actions"]
-            if item["identifier"] == "place-imported-layout"
+            item for item in manifest["actions"] if item["identifier"] == "place-imported-layout"
         )
         if pcb_action.get("scopes") != ["pcb"] or not pcb_action.get("show-button"):
             raise AssertionError(
@@ -362,9 +343,7 @@ def main() -> None:
         log_path = root / "eeschema-plugin-discovery.log"
         process, window_id = _launch(eeschema, schematic, env, xdotool, log_path)
         try:
-            environment = (
-                cache_home / "kicad" / version / "python-environments" / PLUGIN_IDENTIFIER
-            )
+            environment = cache_home / "kicad" / version / "python-environments" / PLUGIN_IDENTIFIER
             env_python = environment / "bin" / "python"
             # A cold KiCad-managed environment may need several minutes to download
             # ABI-specific wheels (notably the CPython 3.14 Pillow wheel). Keep the
@@ -430,10 +409,7 @@ def main() -> None:
                 check=False,
                 timeout=20.0,
             )
-            if (
-                hub_probe.returncode != 0
-                or "task hub ui passed" not in hub_probe.stdout.casefold()
-            ):
+            if hub_probe.returncode != 0 or "task hub ui passed" not in hub_probe.stdout.casefold():
                 raise RuntimeError(
                     "The KiCad Blocks task hub UI smoke test failed. "
                     f"exit={hub_probe.returncode}; "

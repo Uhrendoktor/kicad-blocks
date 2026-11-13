@@ -126,7 +126,6 @@ class LibraryBrowserTests(unittest.TestCase):
         self.assertNotIn("Block ID", overview)
         self.assertNotIn(str(self.block.manifest["block_id"]), overview)
 
-
     def test_new_pcb_layout_is_created_as_default_and_saved_in_block(self):
         source = _new_blank_pcb_source()
         try:
@@ -142,9 +141,7 @@ class LibraryBrowserTests(unittest.TestCase):
         self.assertEqual(manifest["default_layout"], "native")
         self.assertEqual(manifest["layouts"][0]["name"], "Native")
         self.assertEqual(manifest["layouts"][0]["file"], "layout_native.kicad_pcb")
-        self.assertTrue(
-            (self.filter_block.path / manifest["layouts"][0]["file"]).is_file()
-        )
+        self.assertTrue((self.filter_block.path / manifest["layouts"][0]["file"]).is_file())
 
     def test_layout_linked_to_implementation_is_used_when_instance_has_default(self):
         original_layouts = [dict(item) for item in self.block.manifest["layouts"]]
@@ -155,9 +152,7 @@ class LibraryBrowserTests(unittest.TestCase):
             variant_layouts={"1V8": "compact"},
         )
         manifest = read_manifest(self.block.path)
-        linked_variant = next(
-            item for item in manifest["variants"] if item["value"] == "1V8"
-        )
+        linked_variant = next(item for item in manifest["variants"] if item["value"] == "1V8")
         self.assertEqual(linked_variant["layout_id"], "compact")
 
         instance = SimpleNamespace(
@@ -180,11 +175,13 @@ class LibraryBrowserTests(unittest.TestCase):
         original_layouts = [dict(item) for item in self.block.manifest["layouts"]]
         second_board = Path(self.temp.name) / "standard.kicad_pcb"
         second_board.write_text("(kicad_pcb)", encoding="utf-8")
-        original_layouts.append({
-            "id": "standard",
-            "name": "Standard",
-            "source": str(second_board),
-        })
+        original_layouts.append(
+            {
+                "id": "standard",
+                "name": "Standard",
+                "source": str(second_board),
+            }
+        )
         updated_block = _save_block_layouts(
             self.block,
             original_layouts,
@@ -228,8 +225,7 @@ class LibraryBrowserTests(unittest.TestCase):
         )
         before = read_manifest(self.block.path)
         editor_values = [
-            {"value": item["value"], "file": item["file"]}
-            for item in before["variants"]
+            {"value": item["value"], "file": item["file"]} for item in before["variants"]
         ]
 
         # The implementation editor only edits selector/file data; it must not
@@ -237,9 +233,7 @@ class LibraryBrowserTests(unittest.TestCase):
         _save_block_variants(linked_block, editor_values)
 
         after = read_manifest(self.block.path)
-        variant_1v8 = next(
-            item for item in after["variants"] if item["value"] == "1V8"
-        )
+        variant_1v8 = next(item for item in after["variants"] if item["value"] == "1V8")
         self.assertEqual(variant_1v8["layout_id"], "compact")
 
         replacement_source = Path(self.temp.name) / "renamed_implementation.kicad_sch"
@@ -264,8 +258,7 @@ class LibraryBrowserTests(unittest.TestCase):
         )
         renamed = read_manifest(self.block.path)
         renamed_implementation = next(
-            item for item in renamed["variants"]
-            if item["value"] == "1V8 low-noise"
+            item for item in renamed["variants"] if item["value"] == "1V8 low-noise"
         )
         self.assertEqual(renamed_implementation["layout_id"], "compact")
 
@@ -331,9 +324,7 @@ class LibraryBrowserTests(unittest.TestCase):
                 profiled,
                 [{"value": "3V3", "source": str(self.v33)}],
             )
-        self.assertFalse(
-            (profiled.path / "implementation_3v3.kicad_sch").exists()
-        )
+        self.assertFalse((profiled.path / "implementation_3v3.kicad_sch").exists())
         self.assertEqual(
             read_manifest(profiled.path)["variants"][0]["value"],
             "1V8",
@@ -479,6 +470,7 @@ class LibraryBrowserTests(unittest.TestCase):
         preferred = _preferred_library_selection(visible, self.block)
         self.assertIs(preferred, self.filter_block)
         self.assertIsNone(_preferred_library_selection([], self.block))
+
     def test_double_click_row_lookup_never_reuses_a_previous_selection(self):
         records = {
             str(self.block.manifest["block_id"]): self.block,
@@ -673,15 +665,22 @@ class LibraryBrowserTests(unittest.TestCase):
         ):
             _start_native_symbol_placement(
                 SimpleNamespace(),
-                "0x111", "buck_converter_ab12cd34",
-                xdotool=None, command_runner=Mock(), pause=lambda _seconds: None,
+                "0x111",
+                "buck_converter_ab12cd34",
+                xdotool=None,
+                command_runner=Mock(),
+                pause=lambda _seconds: None,
             )
         with self.assertRaisesRegex(RuntimeError, "identify the active Eeschema window"):
             _start_native_symbol_placement(
                 SimpleNamespace(),
-                None, "buck_converter_ab12cd34",
-                xdotool="/usr/bin/xdotool", command_runner=Mock(), pause=lambda _seconds: None,
+                None,
+                "buck_converter_ab12cd34",
+                xdotool="/usr/bin/xdotool",
+                command_runner=Mock(),
+                pause=lambda _seconds: None,
             )
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -35,6 +35,7 @@ from kicad_blocks.repository import (
     local_copy_for_instance,
     register_project_symbol_library,
 )
+
 from kipy import KiCad
 from kipy.geometry import Vector2
 
@@ -71,12 +72,14 @@ def main() -> None:
             parse_pins("VIN:input, GND:passive, VOUT:output"),
             parameters=parse_parameters("OUTPUT_VOLTAGE:number=3.3, ENABLE:boolean=true"),
             layout_files=[{"id": "default", "name": "Default", "path": default_layout}],
-            profiles=[{
-                "id": "default_profile",
-                "name": "Default configuration",
-                "parameters": {"OUTPUT_VOLTAGE": "3.3", "ENABLE": "true"},
-                "layout": "default",
-            }],
+            profiles=[
+                {
+                    "id": "default_profile",
+                    "name": "Default configuration",
+                    "parameters": {"OUTPUT_VOLTAGE": "3.3", "ENABLE": "true"},
+                    "layout": "default",
+                }
+            ],
         )
         nickname = block.manifest["library_nickname"]
         symbol_name = block.manifest["symbol_name"]
@@ -116,17 +119,28 @@ def main() -> None:
             # instance values can be edited without replacing the facade ID.
             instance_fields = {field.name: field for field in instance.user_fields}
             parameter_fields = {
-                name: field for name, field in instance_fields.items()
+                name: field
+                for name, field in instance_fields.items()
                 if name.startswith("KB_PARAM_")
             }
             if set(parameter_fields) != {"KB_PARAM_OUTPUT_VOLTAGE", "KB_PARAM_ENABLE"}:
                 raise AssertionError(
                     f"Expected typed block parameter fields, got {sorted(parameter_fields)}."
                 )
-            if "KB_LAYOUT" not in instance_fields or instance_fields["KB_LAYOUT"].text.value != "default":
-                raise AssertionError("The generated facade did not expose its default PCB layout field.")
-            if "KB_PROFILE" not in instance_fields or instance_fields["KB_PROFILE"].text.value != "":
-                raise AssertionError("The generated facade did not expose its blank profile selector.")
+            if (
+                "KB_LAYOUT" not in instance_fields
+                or instance_fields["KB_LAYOUT"].text.value != "default"
+            ):
+                raise AssertionError(
+                    "The generated facade did not expose its default PCB layout field."
+                )
+            if (
+                "KB_PROFILE" not in instance_fields
+                or instance_fields["KB_PROFILE"].text.value != ""
+            ):
+                raise AssertionError(
+                    "The generated facade did not expose its blank profile selector."
+                )
             schematic.save()
 
             symbols = list(schematic.get_symbols())
@@ -170,11 +184,7 @@ def main() -> None:
                 raise AssertionError("Instance configuration duplicated the facade.")
             instance = configured_symbols[0]
             configured_values = {
-                name: next(
-                    field.text.value
-                    for field in instance.user_fields
-                    if field.name == name
-                )
+                name: next(field.text.value for field in instance.user_fields if field.name == name)
                 for name in (
                     "KB_PARAM_OUTPUT_VOLTAGE",
                     "KB_PARAM_ENABLE",
@@ -209,9 +219,7 @@ def main() -> None:
 
             original_instance_id = str(instance.id)
             selection = SimpleNamespace(get_selection=lambda: [instance])
-            local_path = make_selected_local(
-                selection, kicad, project_dir, library_root
-            )
+            local_path = make_selected_local(selection, kicad, project_dir, library_root)
             linked_local = local_copy_for_instance(project_dir, original_instance_id)
             link_file = project_dir / ".kicad_blocks" / "instances.json"
             link_data = json.loads(link_file.read_text(encoding="utf-8"))
@@ -234,12 +242,16 @@ def main() -> None:
                 or symbols_after_local[0].reference != "X1"
                 or str(symbols_after_local[0].id) != original_instance_id
             ):
-                raise AssertionError("Local-copy binding changed or duplicated the facade instance.")
+                raise AssertionError(
+                    "Local-copy binding changed or duplicated the facade instance."
+                )
             if (
                 symbols_after_local[0].definition.id.library != nickname
                 or symbols_after_local[0].definition.id.name != symbol_name
             ):
-                raise AssertionError("Local-copy binding unexpectedly changed the facade library ID.")
+                raise AssertionError(
+                    "Local-copy binding unexpectedly changed the facade library ID."
+                )
 
             local_text = local.implementation.read_text(encoding="utf-8")
             local.implementation.write_text(
@@ -250,7 +262,9 @@ def main() -> None:
             if "implementation.kicad_sch" not in published["published"]:
                 raise AssertionError(f"Local implementation edit was not published: {published!r}")
             if "; local IPC publish test" not in block.implementation.read_text(encoding="utf-8"):
-                raise AssertionError("Publishing a local implementation did not update its library source.")
+                raise AssertionError(
+                    "Publishing a local implementation did not update its library source."
+                )
 
             source_text = block.implementation.read_text(encoding="utf-8")
             block.implementation.write_text(
@@ -308,7 +322,9 @@ def main() -> None:
             )
             schematic.save()
             if late_instance.definition.id.library != nickname:
-                raise AssertionError("A newly added facade did not reload through the stable KBlocks nickname.")
+                raise AssertionError(
+                    "A newly added facade did not reload through the stable KBlocks nickname."
+                )
         finally:
             kicad.close()
 
@@ -325,7 +341,9 @@ def main() -> None:
         if "(sheet " in saved_text:
             raise AssertionError("Saved parent schematic unexpectedly contains a child sheet.")
         if f'(lib_id "{nickname}:{late_block.manifest["symbol_name"]}")' not in saved_text:
-            raise AssertionError("The runtime-registered facade was not saved into the parent schematic.")
+            raise AssertionError(
+                "The runtime-registered facade was not saved into the parent schematic."
+            )
 
         print(
             "KiCad IPC passed: one stable catalog, local-instance metadata, runtime block addition, "
@@ -436,10 +454,7 @@ def main() -> None:
                         f"Nested facade {reference} was not placed at {rotation} degrees."
                     )
 
-            labels_by_name = {
-                label.text.value: label
-                for label in parent_schematic.get_labels()
-            }
+            labels_by_name = {label.text.value: label for label in parent_schematic.get_labels()}
             expected_names = {
                 net_name
                 for item in expected_instances.values()
@@ -461,14 +476,11 @@ def main() -> None:
                     offset_x, offset_y = transform_symbol_point_to_schematic(
                         local_x, local_y, rotation
                     )
-                    expected_point = Vector2.from_xy_mm(
-                        origin_x + offset_x, origin_y + offset_y
-                    )
+                    expected_point = Vector2.from_xy_mm(origin_x + offset_x, origin_y + offset_y)
                     actual_label = labels_by_name[pin_map[pin_name]]
-                    if (
-                        int(actual_label.position.x) != int(expected_point.x)
-                        or int(actual_label.position.y) != int(expected_point.y)
-                    ):
+                    if int(actual_label.position.x) != int(expected_point.x) or int(
+                        actual_label.position.y
+                    ) != int(expected_point.y):
                         raise AssertionError(
                             f"Label {pin_map[pin_name]} is not on the transformed pin endpoint: "
                             f"got {actual_label.position}, expected {expected_point}."
@@ -516,7 +528,9 @@ def main() -> None:
         try:
             child_schematic = child_kicad.get_schematic()
             if child_schematic is None:
-                raise RuntimeError("Could not reopen the recursively composed child implementation.")
+                raise RuntimeError(
+                    "Could not reopen the recursively composed child implementation."
+                )
             child_kicad.load_all_libraries(types=[1])
             child_kicad.wait_for_libraries(types=[1], timeout_s=120.0)
             leaf_symbols = list(child_schematic.get_symbols())
@@ -539,9 +553,7 @@ def main() -> None:
             )
             leaf_pin_map = {"A": "IN", "GND": "GND", "B": "OUT"}
             for pin_name, (local_x, local_y, spin) in leaf_pin_points.items():
-                delta_x, delta_y = transform_symbol_point_to_schematic(
-                    local_x, local_y, 270
-                )
+                delta_x, delta_y = transform_symbol_point_to_schematic(local_x, local_y, 270)
                 expected_point = Vector2.from_xy_mm(160.0 + delta_x, 100.0 + delta_y)
                 expected_spin = rotate_label_spin_style(spin, 270)
                 matching = [
@@ -589,7 +601,6 @@ def main() -> None:
             "Nested block composition passed: two recursive levels (90° child and 270° leaf facades), "
             "zero hierarchical sheets and no copied child schematic."
         )
-
 
 
 if __name__ == "__main__":

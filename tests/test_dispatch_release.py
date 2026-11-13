@@ -34,10 +34,13 @@ class DispatchReleaseTests(unittest.TestCase):
             result = dispatcher.dispatch_release("owner/repo", TAG, SHA, VERSION, "token")
         self.assertTrue(result)
         self.assertEqual(len(calls), 2)
-        self.assertEqual(calls[1][2], {
-            "ref": "main",
-            "inputs": {"tag": TAG, "source_sha": SHA},
-        })
+        self.assertEqual(
+            calls[1][2],
+            {
+                "ref": "main",
+                "inputs": {"tag": TAG, "source_sha": SHA},
+            },
+        )
 
     def test_does_not_dispatch_when_both_release_assets_exist(self):
         release = {

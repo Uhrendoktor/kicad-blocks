@@ -43,55 +43,64 @@ class VerifyReleaseGateTests(unittest.TestCase):
             "status": "completed",
             "conclusion": "success",
         }
-        payload = {"workflow_runs": [
-            {**run, "conclusion": "failure"},
-            {**run, "head_branch": "feature"},
-            run,
-        ]}
+        payload = {
+            "workflow_runs": [
+                {**run, "conclusion": "failure"},
+                {**run, "head_branch": "feature"},
+                run,
+            ]
+        }
         with patch.object(gate, "urlopen", return_value=_Response(payload)):
             result = gate.verify_release_gate(
-                "owner/repo", "v1.1.0",
+                "owner/repo",
+                "v1.1.0",
                 Path(__file__).resolve().parents[1] / "VERSION",
-                sha, "token"
+                sha,
+                "token",
             )
         self.assertEqual(result["id"], 123)
 
     def test_refuses_failed_or_wrong_commit_ci(self):
         sha = "b" * 40
-        payload = {"workflow_runs": [{
-            "id": 124,
-            "head_sha": "c" * 40,
-            "head_branch": "main",
-            "event": "push",
-            "path": ".github/workflows/ci.yml",
-            "status": "completed",
-            "conclusion": "success",
-        }]}
+        payload = {
+            "workflow_runs": [
+                {
+                    "id": 124,
+                    "head_sha": "c" * 40,
+                    "head_branch": "main",
+                    "event": "push",
+                    "path": ".github/workflows/ci.yml",
+                    "status": "completed",
+                    "conclusion": "success",
+                }
+            ]
+        }
         with (
             patch.object(gate, "urlopen", return_value=_Response(payload)),
             patch.object(gate.time, "sleep"),
             self.assertRaisesRegex(RuntimeError, "No successful main push CI"),
         ):
             gate.verify_release_gate(
-                "owner/repo", "v1.1.0",
+                "owner/repo",
+                "v1.1.0",
                 Path(__file__).resolve().parents[1] / "VERSION",
-                sha, "token"
+                sha,
+                "token",
             )
 
     def test_rejects_tag_that_does_not_match_version(self):
         with self.assertRaisesRegex(ValueError, "does not match"):
             gate.verify_release_gate(
-                "owner/repo", "v1.2.0",
+                "owner/repo",
+                "v1.2.0",
                 Path(__file__).resolve().parents[1] / "VERSION",
-                "d" * 40, "token"
+                "d" * 40,
+                "token",
             )
 
     def test_release_workflow_requires_the_tag_commit_to_match_the_packaged_commit(self):
         workflow = (
-            Path(__file__).resolve().parents[1]
-            / ".github"
-            / "workflows"
-            / "release.yml"
+            Path(__file__).resolve().parents[1] / ".github" / "workflows" / "release.yml"
         ).read_text(encoding="utf-8")
         self.assertIn(
             'git fetch --no-tags origin "refs/tags/$RELEASE_TAG:refs/tags/$RELEASE_TAG"',

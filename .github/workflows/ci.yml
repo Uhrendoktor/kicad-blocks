@@ -23,6 +23,8 @@ jobs:
     timeout-minutes: 50
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Install KiCad development CLI if missing
         shell: bash
@@ -111,7 +113,7 @@ jobs:
           python3 -m venv "${RUNNER_TEMP}/kicad-blocks-venv"
           PY="${RUNNER_TEMP}/kicad-blocks-venv/bin/python"
           "$PY" -m pip install --upgrade pip
-          "$PY" -m pip install pytest ruff cairosvg pillow
+          "$PY" -m pip install pytest ruff cairosvg pillow pyright==1.1.414 vulture==2.16
           "$PY" --version
           "$PY" -m pip --version
 
@@ -188,15 +190,32 @@ jobs:
           set -euo pipefail
           PY="${RUNNER_TEMP}/kicad-blocks-venv/bin/python"
           "$PY" -m pytest -q
-          "$PY" -m compileall -q plugin tests
+          "$PY" -m compileall -q examples plugin scripts tests
 
-      - name: Ruff lint
+      - name: Ruff lint and format verification
         shell: bash
-        run: "${RUNNER_TEMP}/kicad-blocks-venv/bin/python -m ruff check plugin tests"
+        run: |
+          set -euo pipefail
+          PY="${RUNNER_TEMP}/kicad-blocks-venv/bin/python"
+          "$PY" -m ruff check examples plugin scripts tests
+          "$PY" -m ruff format --check examples plugin scripts tests
 
       - name: Validate documentation links and images
         shell: bash
         run: python3 scripts/validate_docs.py
+
+      - name: Python policy and reviewed type inventory
+        shell: bash
+        run: |
+          set -euo pipefail
+          PY="${RUNNER_TEMP}/kicad-blocks-venv/bin/python"
+          "$PY" scripts/check_python_policy.py --base origin/main
+          "$PY" scripts/generate_test_inventory.py --check
+          "$PY" -m pyright --project pyrightconfig.json
+
+      - name: High-confidence dead-code scan
+        shell: bash
+        run: "${RUNNER_TEMP}/kicad-blocks-venv/bin/python scripts/check_dead_code.py"
 
       - name: Validate generated files with KiCad
         shell: bash
@@ -496,7 +515,8 @@ jobs:
           "$PY" -m pip install -r plugin/kicad-blocks/requirements.txt pytest ruff
           "$PY" -m pytest -q
           "$PY" -m compileall -q plugin tests
-          "$PY" -m ruff check plugin tests
+          "$PY" -m ruff check examples plugin scripts tests
+          "$PY" -m ruff format --check examples plugin scripts tests
 
       - name: Validate generated reference files with KiCad CLI
         shell: bash

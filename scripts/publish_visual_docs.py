@@ -19,9 +19,16 @@ except ImportError:  # pragma: no cover - exercised by the release CLI.
 BRANCH = "docs/previews"
 
 
-def run(*args: str, cwd: Path | None = None, check: bool = True) -> subprocess.CompletedProcess[str]:
+def run(
+    *args: str, cwd: Path | None = None, check: bool = True
+) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        args, cwd=cwd, check=check, capture_output=True, text=True, timeout=60,
+        args,
+        cwd=cwd,
+        check=check,
+        capture_output=True,
+        text=True,
+        timeout=60,
     )
 
 
@@ -49,7 +56,9 @@ def verify_bundle(source_dir: Path, source_sha: str) -> dict:
         raise FileNotFoundError(f"Visual documentation manifest is missing: {manifest_path}")
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     if manifest.get("schema_version") != 1:
-        raise ValueError(f"Unsupported visual documentation schema: {manifest.get('schema_version')!r}")
+        raise ValueError(
+            f"Unsupported visual documentation schema: {manifest.get('schema_version')!r}"
+        )
     if manifest.get("source_sha") != source_sha:
         raise ValueError(
             f"Visual assets represent {manifest.get('source_sha')!r}, not checked-out source {source_sha!r}."
@@ -82,14 +91,26 @@ def publish(
     with tempfile.TemporaryDirectory(prefix="kicad-blocks-visual-publish-") as temporary:
         worktree = Path(temporary) / "repository"
         git(
-            token, "clone", "--filter=blob:none",
-            f"https://github.com/{repository}.git", str(worktree),
+            token,
+            "clone",
+            "--filter=blob:none",
+            f"https://github.com/{repository}.git",
+            str(worktree),
         )
 
-        remote_exists = git(
-            token, "ls-remote", "--exit-code", "--heads", "origin", BRANCH,
-            cwd=worktree, check=False,
-        ).returncode == 0
+        remote_exists = (
+            git(
+                token,
+                "ls-remote",
+                "--exit-code",
+                "--heads",
+                "origin",
+                BRANCH,
+                cwd=worktree,
+                check=False,
+            ).returncode
+            == 0
+        )
         if remote_exists:
             git(token, "fetch", "origin", BRANCH, cwd=worktree)
             git(token, "checkout", "-B", BRANCH, f"origin/{BRANCH}", cwd=worktree)
@@ -116,14 +137,25 @@ def publish(
 
         run("git", "-C", str(worktree), "config", "user.name", "github-actions[bot]")
         run(
-            "git", "-C", str(worktree), "config", "user.email",
+            "git",
+            "-C",
+            str(worktree),
+            "config",
+            "user.email",
             "41898282+github-actions[bot]@users.noreply.github.com",
         )
         run("git", "-C", str(worktree), "add", "previews")
-        changed = run("git", "-C", str(worktree), "diff", "--cached", "--quiet", check=False).returncode != 0
+        changed = (
+            run("git", "-C", str(worktree), "diff", "--cached", "--quiet", check=False).returncode
+            != 0
+        )
         if changed:
             run(
-                "git", "-C", str(worktree), "commit", "-m",
+                "git",
+                "-C",
+                str(worktree),
+                "commit",
+                "-m",
                 f"ci: publish KiCad Blocks visual previews for {source_sha[:12]}",
             )
             git(token, "push", "origin", f"HEAD:{BRANCH}", cwd=worktree)
@@ -132,7 +164,9 @@ def publish(
         remote_sha = run("git", "-C", str(worktree), "rev-parse", f"origin/{BRANCH}").stdout.strip()
         local_sha = run("git", "-C", str(worktree), "rev-parse", "HEAD").stdout.strip()
         if remote_sha != local_sha:
-            raise RuntimeError(f"Published visual branch mismatch: remote={remote_sha} local={local_sha}")
+            raise RuntimeError(
+                f"Published visual branch mismatch: remote={remote_sha} local={local_sha}"
+            )
         print(
             f"kicad-visual-publish=passed source_sha={source_sha} "
             f"asset_count={len(ASSET_NAMES)} branch={BRANCH} commit={remote_sha}"

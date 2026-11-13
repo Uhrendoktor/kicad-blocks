@@ -36,3 +36,8 @@ Read these pages to understand why KiCad Blocks behaves as it does.
 ## Contribute
 
 The [contributor guide](contributing.md) describes the documentation structure, editorial conventions, and validation checks. When product behavior changes, update the relevant guide in the same pull request as the code.
+## Maintainer and test-quality references
+
+- [Test inventory](testing-inventory.md) — every pytest case, the purpose of each test, and the standalone KiCad GUI/IPC acceptance scripts.
+- [Quality gates](quality-gates.md) — strict test, lint, type, Python-policy, and dead-code checks with the reviewed static-analysis boundaries.
+- [Repository audit](repository-audit.md) — test overlap, unused wrappers, duplicated entrypoint logic, and cleanup decisions.

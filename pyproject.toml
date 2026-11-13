@@ -1,0 +1,34 @@
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["plugin/kicad-blocks"]
+strict_config = true
+strict_markers = true
+xfail_strict = true
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+respect-gitignore = true
+
+[tool.ruff.lint]
+# Explicit correctness/maintainability rules; avoid blanket ALL/preview expansion.
+select = ["E4", "E7", "E9", "F", "I", "B", "C4", "DTZ", "PIE", "RET", "SIM", "UP"]
+# E402 is intentional for KiCad scripts that add the plugin/runtime path before host imports.
+# E501 is formatter-owned; SIM105 keeps best-effort cleanup and Tk teardown explicit.
+ignore = ["E402", "E501", "SIM105"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["kicad_blocks", "scripts", "_bootstrap", "generate_reference"]
+
+[tool.ruff.format]
+docstring-code-format = true
+
+[tool.ruff.lint.per-file-ignores]
+# These executable KiCad entrypoints and acceptance scripts must resolve modules
+# from runtime-injected sys.path roots; keep their import grouping explicit.
+"plugin/kicad-blocks/entrypoints/*.py" = ["I001"]
+"scripts/install_plugin.py" = ["I001"]
+"tests/capture_visual_docs.py" = ["I001"]
+"tests/test_ipc_headless.py" = ["I001"]
+"tests/test_stusb4500_reference.py" = ["I001"]
+"tests/validate_kicad_cli.py" = ["I001"]

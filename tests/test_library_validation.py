@@ -79,8 +79,12 @@ class LibraryValidationTests(unittest.TestCase):
         report = validate_block_library(self.root, self.reports, run_erc=False)
 
         self.assertEqual(report["block_count"], 2)
-        failed = next(item for item in report["blocks"] if item["block_id"] == first.manifest["block_id"])
-        passed = next(item for item in report["blocks"] if item["block_id"] == second.manifest["block_id"])
+        failed = next(
+            item for item in report["blocks"] if item["block_id"] == first.manifest["block_id"]
+        )
+        passed = next(
+            item for item in report["blocks"] if item["block_id"] == second.manifest["block_id"]
+        )
         self.assertEqual(failed["status"], "failed")
         self.assertIn("implementation.kicad_sch", failed["missing_assets"])
         self.assertEqual(passed["status"], "passed")
@@ -94,7 +98,9 @@ class LibraryValidationTests(unittest.TestCase):
         report = validate_block_library(self.root, self.reports, run_erc=False)
 
         self.assertEqual(report["block_count"], 2)
-        good_result = next(item for item in report["blocks"] if item["block_id"] == good.manifest["block_id"])
+        good_result = next(
+            item for item in report["blocks"] if item["block_id"] == good.manifest["block_id"]
+        )
         broken_result = next(item for item in report["blocks"] if item["name"] == "broken")
         self.assertEqual(good_result["status"], "passed")
         self.assertEqual(broken_result["status"], "failed")

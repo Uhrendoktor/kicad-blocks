@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
 
+from kicad_blocks.json_types import JsonObject
 from kicad_blocks.pcb_placement import (
     move_placement_at_cursor,
     read_pcb_placement_manifest,
@@ -30,7 +30,7 @@ def _active_board_path(board) -> Path:
     return (Path(project_path).expanduser() / candidate).resolve()
 
 
-def _choose_placement(placements: list[dict[str, Any]]) -> dict[str, Any] | None:
+def _choose_placement(placements: list[JsonObject]) -> JsonObject | None:
     if len(placements) == 1:
         return placements[0]
 
@@ -41,12 +41,15 @@ def _choose_placement(placements: list[dict[str, Any]]) -> dict[str, Any] | None
     root.title("Place Imported Block Layout")
     root.resizable(False, False)
     root.geometry("520x150")
-    selected: dict[str, Any] = {"placement": None}
-    labels = [
-        f"{item['instance_reference']} — {item.get('block', 'Block')} / {item.get('layout_name', 'Layout')} "
-        f"({len(item['item_uuids'])} board objects)"
-        for item in placements
-    ]
+    selected_placement: JsonObject | None = None
+    labels: list[str] = []
+    for item in placements:
+        item_uuids = item.get("item_uuids")
+        object_count = len(item_uuids) if isinstance(item_uuids, list) else 0
+        labels.append(
+            f"{item.get('instance_reference', '')} — {item.get('block', 'Block')} / "
+            f"{item.get('layout_name', 'Layout')} ({object_count} board objects)"
+        )
 
     ttk.Label(
         root,
@@ -62,10 +65,11 @@ def _choose_placement(placements: list[dict[str, Any]]) -> dict[str, Any] | None
     buttons.pack(padx=16, pady=16, anchor="e")
 
     def accept() -> None:
+        nonlocal selected_placement
         try:
-            selected["placement"] = placements[labels.index(choice.get())]
+            selected_placement = placements[labels.index(choice.get())]
         except ValueError:
-            selected["placement"] = None
+            selected_placement = None
         root.destroy()
 
     def cancel() -> None:
@@ -77,7 +81,7 @@ def _choose_placement(placements: list[dict[str, Any]]) -> dict[str, Any] | None
     combo.bind("<Return>", lambda _event: accept())
     root.bind("<Escape>", lambda _event: cancel())
     root.mainloop()
-    return selected["placement"]
+    return selected_placement
 
 
 def _show_error(error: Exception) -> None:
@@ -104,7 +108,15 @@ def main() -> None:
 
         board_path = _active_board_path(board)
         manifest = read_pcb_placement_manifest(board_path)
-        placement = _choose_placement(manifest["placements"])
+        raw_placements = manifest.get("placements")
+        if not isinstance(raw_placements, list):
+            raise TypeError("PCB placement manifest contains no placement list.")
+        placements: list[JsonObject] = []
+        for raw_placement in raw_placements:
+            if not isinstance(raw_placement, dict):
+                raise TypeError("PCB placement manifest contains a malformed placement.")
+            placements.append(raw_placement)
+        placement = _choose_placement(placements)
         if placement is None:
             return
 
@@ -115,7 +127,7 @@ def main() -> None:
         # This is the final IPC request: KiCad keeps its server busy until the
         # user commits or cancels the interactive move with its normal UI.
         move_placement_at_cursor(board, placement)
-    except Exception as exc:  # noqa: BLE001 - present IPC and data errors to the KiCad user
+    except Exception as exc:
         _show_error(exc)
 
 
