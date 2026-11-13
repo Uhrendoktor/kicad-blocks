@@ -10,7 +10,7 @@ The animation shows the searchable block library, a filtered result and a profil
   <img src="https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/block-picker-workflow.gif" alt="Search the library, filter to a block and select a configuration profile" width="900">
 </p>
 
-## Library browser and folder manager
+## Library browser and Manage Libraries
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/library-browser-light.png" alt="Functional Block Library browser in light theme" width="900">
@@ -82,7 +82,7 @@ The reference circuit uses the STUSB4500QTR, a USB Type-C receptacle, protection
 
 ## What is actually verified
 
-The visual acceptance fixture runs on the self-hosted Linux x86_64 runner under Xvfb. It creates a library with multiple blocks, implementation variants, profiles and a parameter; opens the production browser, folder manager, task hub, variant editor, creation form and configuration form; captures each rendered window; and validates that the placement profile selects the intended implementation and parameter.
+The visual acceptance fixture runs on the self-hosted Linux x86_64 runner under Xvfb. It creates a library with multiple blocks, implementation variants, profiles and a parameter; opens the production browser, Manage Libraries window, task hub, variant editor, creation form and configuration form; captures each rendered window; and validates that the placement profile selects the intended implementation and parameter.
 
 KiCad CLI exports the facade symbol and implementation schematic to SVG. The CI manifest records the source commit and SHA-256 hashes for every generated asset. The publisher verifies the manifest and file hashes before pushing the generated bundle to the separate docs/previews branch. Pull-request runs upload the same bundle as a workflow artifact for reviewer inspection.
 
