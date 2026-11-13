@@ -409,9 +409,9 @@ def _facade_body_half_width(pins: Iterable[BlockPin]) -> float:
         right_index = left_count + row
         right_name = pins[right_index].name if row < right_count else ""
         label_width = 0.9 * (len(left_name) + len(right_name))
-        # Keep 2.54 mm between opposing labels, in addition to each 0.762 mm
+        # Keep 2.0 mm between opposing labels, in addition to each 0.762 mm
         # KiCad pin-name offset from the body edge.
-        required_half_width = (label_width + 2.54 + 2 * 0.762) / 2
+        required_half_width = (label_width + 2.0 + 2 * 0.762) / 2
         maximum_width = max(maximum_width, required_half_width)
     return round(max(5.08, maximum_width), 4)
 
