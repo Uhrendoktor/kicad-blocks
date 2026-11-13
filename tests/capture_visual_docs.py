@@ -20,6 +20,7 @@ sys.path.insert(0, str(ROOT / "plugin" / "kicad-blocks"))
 from kicad_blocks import plugin as plugin_actions
 from kicad_blocks.model import parse_pins
 from kicad_blocks.repository import create_block, revision_for_hashes
+
 from scripts.visual_asset_inventory import ASSET_NAMES
 
 sys.path.insert(0, str(ROOT / 'examples' / 'stusb4500'))
