@@ -653,7 +653,7 @@ def main() -> int:
         "generator": "tests/capture_visual_docs.py",
         "renderer": (
             "KiCad CLI and production Tk windows: all three task-hub tabs, functional-block browser, "
-            "library-folder manager, instance configuration, variant editor, creation form, and placement chooser"
+            "Manage Libraries window, instance configuration, variant editor, creation form, and placement chooser"
         ),
         "example": {
             "component": "STUSB4500QTR",
