@@ -21,6 +21,7 @@ from kicad_blocks.plugin import (
     _choose_block_layout,
     _clean_facade_preview_svg,
     _filter_library_records,
+    _layout_choices,
     _library_record_for_instance,
     _library_record_for_tree_row,
     _minimize_placement_windows,
