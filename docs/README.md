@@ -21,6 +21,11 @@ Use the [workflow guides](workflows.md) when you know the result you want:
 - **[Visual guide](visual-evidence.md)** — real KiCad renders and screenshots of the plugin.
 - **[Feature reference](reference.md)** — exact action names, folder contents, instance fields, parameter rules and current limitations.
 
+## Contribute and validate
+
+- **[Test inventory](test-inventory.md)** — every unit test and standalone acceptance entrypoint, its purpose, and how CI executes it.
+- **[Repository audit](developers/REPOSITORY_AUDIT.md)** — reviewed test/code overlap, cleanup candidates, and retention decisions.
+
 ## A note about the examples
 
 The STUSB4500 page documents the editable reference schematic. Some UI screenshots are generated from an automated library fixture built around that schematic; the page labels those captures so they are not mistaken for proof that the schematic changes electrically when a profile is selected.
