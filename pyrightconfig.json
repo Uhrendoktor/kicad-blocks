@@ -10,7 +10,6 @@
   ],
   "exclude": [
     "plugin/kicad-blocks/kicad_blocks/plugin.py",
-    "plugin/kicad-blocks/entrypoints/**",
     "examples/**",
     "tests/**"
   ],
