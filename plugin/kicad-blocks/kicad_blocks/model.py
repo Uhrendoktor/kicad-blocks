@@ -11,6 +11,8 @@ import uuid
 from collections.abc import Iterable
 from dataclasses import dataclass
 
+from .json_types import JsonValue
+
 PIN_TYPES = ("input", "output", "bidirectional", "tristate", "passive")
 _KICAD_PIN_TYPES = {
     "input": "input",
@@ -294,7 +296,7 @@ def parse_parameters(spec: str) -> list[dict[str, str]]:
 
 
 def resolve_parameter_values(
-    parameters: Iterable[dict] | None, overrides: dict[str, object] | None = None
+    parameters: Iterable[dict] | None, overrides: dict[str, JsonValue] | None = None
 ) -> dict[str, str]:
     """Resolve defaults plus caller overrides, rejecting unknown parameters."""
     definitions = normalize_parameters(parameters)
@@ -310,7 +312,7 @@ def resolve_parameter_values(
 def substitute_parameter_templates(
     content: str,
     parameters: Iterable[dict] | None,
-    overrides: dict[str, object] | None = None,
+    overrides: dict[str, JsonValue] | None = None,
 ) -> str:
     """Substitute {{NAME}} tokens in KiCad text fields using validated values.
 
