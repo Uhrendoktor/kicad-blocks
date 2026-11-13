@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 import contextlib
 import sys
 import tempfile
@@ -25,7 +26,38 @@ def _walk(widget):
         yield from _walk(child)
 
 
-def main() -> None:
+def _walk(widget):
+    yield widget
+    for child in widget.winfo_children():
+        yield from _walk(child)
+
+
+def _capture_dialog(dialog, destination: Path) -> None:
+    """Save a screenshot of the actual configuration dialog while it is visible."""
+    from PIL import ImageGrab, ImageStat
+
+    dialog.update_idletasks()
+    dialog.update()
+    time.sleep(0.2)
+    x, y = dialog.winfo_rootx(), dialog.winfo_rooty()
+    width, height = dialog.winfo_width(), dialog.winfo_height()
+    if width < 500 or height < 260:
+        raise AssertionError(
+            f"Configuration dialog is unexpectedly small: {width}x{height}."
+        )
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    image = ImageGrab.grab(bbox=(x, y, x + width, y + height))
+    if image.width < 500 or image.height < 260:
+        raise AssertionError(
+            f"Captured configuration image is unexpectedly small: {image.size!r}."
+        )
+    sample = image.convert("RGB").resize((48, 32))
+    if max(ImageStat.Stat(sample).stddev) < 2.0:
+        raise AssertionError("Configuration dialog screenshot appears blank.")
+    image.save(destination, format="PNG")
+
+
+def main(screenshot_path: Path | None = None) -> None:
     plugin_actions._load_tkinter()
     with tempfile.TemporaryDirectory(prefix="kicad-block-config-gui-") as temp:
         root_dir = Path(temp)
@@ -160,6 +192,8 @@ def main() -> None:
                     raise AssertionError("Selecting the profile did not choose its schematic variant.")
                 if combos[2].get() != "Compact  [compact]":
                     raise AssertionError("Selecting the profile did not choose its PCB layout.")
+                if screenshot_path is not None:
+                    _capture_dialog(dialog, screenshot_path)
                 save_button.invoke()
             except (
                 AssertionError,
@@ -219,4 +253,10 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--screenshot",
+        type=Path,
+        help="Save the rendered configuration dialog before submitting it.",
+    )
+    main(parser.parse_args().screenshot)
