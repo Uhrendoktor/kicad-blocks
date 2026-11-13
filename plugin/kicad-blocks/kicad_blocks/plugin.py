@@ -2194,7 +2194,7 @@ def _launch_block_asset(kicad, path: Path, description: str):
 
 
 def _save_block_variants(record, variants: list[dict]) -> None:
-    """Add/remove implementation files and publish the updated variant metadata."""
+    """Add, replace, or remove implementation files and publish new metadata."""
     import json
     import shutil
 
@@ -2213,37 +2213,59 @@ def _save_block_variants(record, variants: list[dict]) -> None:
     previous_files = {str(item["file"]) for item in previous}
     normalized = []
     retained_files = set()
+    files_to_copy = []
     added_files = set()
     seen_values = set()
     seen_files = set()
+
     for item in variants:
         value = str(item.get("value", "")).strip()
         if not value or value.casefold() in seen_values:
-            raise ValueError(f"Implementation values must be unique and non-empty: {value!r}")
+            raise ValueError(
+                f"Implementation values must be unique and non-empty: {value!r}"
+            )
         seen_values.add(value.casefold())
+
         if item.get("file"):
             filename = str(item["file"])
             source = None
         else:
             source = Path(item.get("source", "")).expanduser().resolve()
-            if not source.is_file() or source.suffix.casefold() != ".kicad_sch":
-                raise ValueError(f"Implementation variant must be an existing .kicad_sch file: {source}")
+            if (
+                not source.is_file()
+                or source.suffix.casefold() != ".kicad_sch"
+            ):
+                raise ValueError(
+                    "Implementation variant must be an existing .kicad_sch file: "
+                    f"{source}"
+                )
             stem = slugify(value)
             filename = f"implementation_{stem}.kicad_sch"
             suffix = 2
             while (
-                ((block_path / filename).exists() and filename not in previous_files)
+                (
+                    (block_path / filename).exists()
+                    and filename not in previous_files
+                )
                 or filename.casefold() in seen_files
             ):
                 filename = f"implementation_{stem}_{suffix}.kicad_sch"
                 suffix += 1
-        if Path(filename).name != filename or Path(filename).suffix.casefold() != ".kicad_sch":
+
+        if (
+            Path(filename).name != filename
+            or Path(filename).suffix.casefold() != ".kicad_sch"
+        ):
             raise ValueError(f"Unsafe implementation filename: {filename!r}")
         if filename.casefold() in seen_files:
-            raise ValueError(f"Two implementation variants use the same file: {filename!r}")
+            raise ValueError(
+                f"Two implementation variants use the same file: {filename!r}"
+            )
         seen_files.add(filename.casefold())
-        if source is not None:
-            shutil.copy2(source, block_path / filename)
+
+        destination = block_path / filename
+        if source is not None and source != destination.resolve():
+            files_to_copy.append((source, destination))
             added_files.add(filename)
         retained_files.add(filename)
         normalized.append({"value": value, "file": filename})
@@ -2257,15 +2279,27 @@ def _save_block_variants(record, variants: list[dict]) -> None:
     ]
     if dangling_profiles:
         raise ValueError(
-            "These configuration profiles still use an implementation being removed or renamed: "
+            "These configuration profiles still use an implementation being removed "
+            "or renamed: "
             + ", ".join(dangling_profiles)
             + ". Update those profiles before changing the implementation list."
         )
 
+    copied_paths = []
+    try:
+        for source, destination in files_to_copy:
+            shutil.copy2(source, destination)
+            copied_paths.append(destination)
+    except OSError:
+        for path in copied_paths:
+            path.unlink(missing_ok=True)
+        raise
+
     removed_files = previous_files - retained_files
     manifest["variants"] = normalized
     manifest["files"] = [
-        filename for filename in manifest.get("files", [])
+        filename
+        for filename in manifest.get("files", [])
         if filename not in removed_files
     ]
     for filename in sorted(added_files):
@@ -2288,6 +2322,100 @@ def _save_block_variants(record, variants: list[dict]) -> None:
         (block_path / filename).unlink(missing_ok=True)
 
 
+def _ask_implementation_details(
+    parent,
+    *,
+    value: str = "",
+    source: str = "",
+) -> tuple[str, str] | None:
+    """Collect an implementation value and schematic path in one focused dialog."""
+    dialog = tk.Toplevel(parent)
+    dialog.title("Implementation details")
+    dialog.transient(parent)
+    _set_window_geometry(dialog, 760, 290, 620, 250)
+    frame = ttk.Frame(dialog, padding=16)
+    frame.pack(fill="both", expand=True)
+    ttk.Label(
+        frame,
+        text="Implementation variant",
+        font=("TkDefaultFont", 12, "bold"),
+    ).grid(row=0, column=0, columnspan=3, sticky="w", pady=(0, 14))
+
+    ttk.Label(frame, text="Variant value").grid(
+        row=1, column=0, columnspan=3, sticky="w"
+    )
+    variant_value = tk.StringVar(value=value)
+    value_entry = ttk.Entry(frame, textvariable=variant_value)
+    value_entry.grid(row=2, column=0, columnspan=3, sticky="ew", pady=(4, 12))
+
+    ttk.Label(frame, text="Implementation schematic (.kicad_sch)").grid(
+        row=3, column=0, columnspan=3, sticky="w"
+    )
+    source_value = tk.StringVar(value=source)
+    source_entry = ttk.Entry(frame, textvariable=source_value)
+    source_entry.grid(row=4, column=0, columnspan=2, sticky="ew", pady=(4, 14))
+
+    def browse():
+        initial = Path(source_value.get()).expanduser()
+        options = {
+            "title": "Choose implementation schematic",
+            "filetypes": [("KiCad schematic", "*.kicad_sch")],
+            "parent": dialog,
+        }
+        if initial.is_file():
+            options["initialdir"] = str(initial.parent)
+            options["initialfile"] = initial.name
+        elif initial.parent.is_dir():
+            options["initialdir"] = str(initial.parent)
+        selected = filedialog.askopenfilename(**options)
+        if selected:
+            source_value.set(selected)
+
+    ttk.Button(frame, text="Browse…", command=browse).grid(
+        row=4, column=2, sticky="ew", padx=(8, 0), pady=(4, 14)
+    )
+    frame.columnconfigure(0, weight=1)
+    frame.columnconfigure(1, weight=1)
+
+    result = [None]
+
+    def accept():
+        selected_value = variant_value.get().strip()
+        selected_source = Path(source_value.get()).expanduser().resolve()
+        if not selected_value:
+            messagebox.showerror(
+                "Implementation details", "Enter a variant value.", parent=dialog
+            )
+            value_entry.focus_set()
+            return
+        if (
+            not selected_source.is_file()
+            or selected_source.suffix.casefold() != ".kicad_sch"
+        ):
+            messagebox.showerror(
+                "Implementation details",
+                "Choose an existing KiCad .kicad_sch implementation.",
+                parent=dialog,
+            )
+            source_entry.focus_set()
+            return
+        result[0] = (selected_value, str(selected_source))
+        dialog.destroy()
+
+    buttons = ttk.Frame(frame)
+    buttons.grid(row=5, column=0, columnspan=3, sticky="ew")
+    ttk.Button(buttons, text="Cancel", command=dialog.destroy).pack(side="right")
+    ttk.Button(buttons, text="Use implementation", command=accept).pack(
+        side="right", padx=(0, 8)
+    )
+    dialog.bind("<Return>", lambda _event: accept())
+    dialog.bind("<Escape>", lambda _event: dialog.destroy())
+    dialog.grab_set()
+    value_entry.focus_set()
+    dialog.wait_window()
+    return result[0]
+
+
 def _show_block_variant_editor(record, parent) -> None:
     """Manage named implementation variants after the block has been created."""
     dialog = tk.Toplevel(parent)
@@ -2303,22 +2431,37 @@ def _show_block_variant_editor(record, parent) -> None:
     ).pack(anchor="w")
     ttk.Label(
         frame,
-        text="Each value selects a complete alternative .kicad_sch implementation through KB_VARIANT.",
+        text=(
+            "Each value selects a complete alternative .kicad_sch implementation "
+            "through KB_VARIANT."
+        ),
         wraplength=900,
     ).pack(anchor="w", pady=(4, 12))
+
     table = ttk.Frame(frame)
     table.pack(fill="both", expand=True)
     table.columnconfigure(0, weight=1)
     table.rowconfigure(0, weight=1)
-    tree = ttk.Treeview(table, columns=("value", "file"), show="headings", selectmode="browse")
+    tree = ttk.Treeview(
+        table,
+        columns=("value", "file"),
+        show="headings",
+        selectmode="browse",
+    )
     tree.heading("value", text="Variant value")
     tree.heading("file", text="Implementation file")
     tree.column("value", width=220, minwidth=160, stretch=False)
     tree.column("file", width=620, minwidth=300, stretch=True)
-    scroll = ttk.Scrollbar(table, orient="vertical", command=tree.yview, style="Vertical.TScrollbar")
+    scroll = ttk.Scrollbar(
+        table,
+        orient="vertical",
+        command=tree.yview,
+        style="Vertical.TScrollbar",
+    )
     tree.configure(yscrollcommand=scroll.set)
     tree.grid(row=0, column=0, sticky="nsew")
     scroll.grid(row=0, column=1, sticky="ns")
+
     palette = getattr(parent, "_kicad_blocks_palette", {})
     tree.tag_configure("even", background=palette.get("surface", "#f4f5f6"))
     tree.tag_configure("odd", background=palette.get("surface_alt", "#e8eaed"))
@@ -2326,95 +2469,124 @@ def _show_block_variant_editor(record, parent) -> None:
         {"value": str(item["value"]), "file": str(item["file"])}
         for item in record.manifest.get("variants", [])
     ]
+    dirty = [False]
 
-    def render():
+    def render(selected_index: int | None = None):
         tree.delete(*tree.get_children())
         for index, item in enumerate(variants):
             tree.insert(
-                "", "end", iid=str(index),
+                "",
+                "end",
+                iid=str(index),
                 values=(item["value"], item["file"]),
                 tags=("even" if index % 2 == 0 else "odd",),
             )
+        if selected_index is not None and 0 <= selected_index < len(variants):
+            iid = str(selected_index)
+            tree.selection_set(iid)
+            tree.focus(iid)
+        update_actions()
+
+    def selected_index() -> int | None:
+        selection = tree.selection()
+        return int(selection[0]) if selection else None
+
+    def update_actions(_event=None):
+        has_selection = selected_index() is not None
+        edit_button.configure(state="normal" if has_selection else "disabled")
+        remove_button.configure(state="normal" if has_selection else "disabled")
+        save_button.configure(state="normal" if dirty[0] else "disabled")
 
     def add_variant():
-        value = simpledialog.askstring(
-            "Add implementation",
-            "Variant value (for example 1V8 or 3V3):",
-            parent=dialog,
-        )
-        if value is None:
+        details = _ask_implementation_details(dialog)
+        if details is None:
             return
-        value = value.strip()
-        if not value:
-            return
+        value, source = details
         if any(item["value"].casefold() == value.casefold() for item in variants):
-            messagebox.showerror("Add implementation", f"The value {value!r} already exists.", parent=dialog)
-            return
-        source = filedialog.askopenfilename(
-            title="Choose implementation schematic",
-            filetypes=[("KiCad schematic", "*.kicad_sch")],
-            parent=dialog,
-        )
-        if not source:
+            messagebox.showerror(
+                "Add implementation",
+                f"The value {value!r} already exists.",
+                parent=dialog,
+            )
             return
         variants.append({"value": value, "source": source})
-        render()
+        dirty[0] = True
+        render(len(variants) - 1)
 
     def edit_variant():
-        selection = tree.selection()
-        if not selection:
+        index = selected_index()
+        if index is None:
             return
-        index = int(selection[0])
         current = variants[index]
-        value = simpledialog.askstring(
-            "Edit implementation",
-            "Variant value:",
-            initialvalue=current["value"],
-            parent=dialog,
+        current_source = current.get("source") or str(
+            Path(record.path) / current["file"]
         )
-        if value is None:
+        details = _ask_implementation_details(
+            dialog,
+            value=current["value"],
+            source=current_source,
+        )
+        if details is None:
             return
-        value = value.strip()
-        if not value:
-            return
+        value, source = details
         if any(
-            other_index != index and item["value"].casefold() == value.casefold()
+            other_index != index
+            and item["value"].casefold() == value.casefold()
             for other_index, item in enumerate(variants)
         ):
-            messagebox.showerror("Edit implementation", f"The value {value!r} already exists.", parent=dialog)
-            return
-        source = filedialog.askopenfilename(
-            title="Choose replacement implementation schematic",
-            filetypes=[("KiCad schematic", "*.kicad_sch")],
-            parent=dialog,
-        )
-        if not source:
+            messagebox.showerror(
+                "Edit implementation",
+                f"The value {value!r} already exists.",
+                parent=dialog,
+            )
             return
         variants[index] = {"value": value, "source": source}
-        render()
+        dirty[0] = True
+        render(index)
 
     def remove_variant():
-        selection = tree.selection()
-        if not selection:
+        index = selected_index()
+        if index is None:
             return
-        variants.pop(int(selection[0]))
-        render()
+        variants.pop(index)
+        dirty[0] = True
+        render(min(index, len(variants) - 1) if variants else None)
 
     def save_and_close():
+        if not dirty[0]:
+            dialog.destroy()
+            return
         try:
             _save_block_variants(record, variants)
         except (OSError, RuntimeError, TypeError, ValueError, KeyError) as exc:
-            messagebox.showerror("Save implementation variants", str(exc), parent=dialog)
+            messagebox.showerror(
+                "Save implementation variants", str(exc), parent=dialog
+            )
             return
         dialog.destroy()
 
     actions = ttk.Frame(frame)
     actions.pack(fill="x", pady=(12, 0))
-    ttk.Button(actions, text="Add implementation…", command=add_variant).pack(side="left")
-    ttk.Button(actions, text="Edit selected…", command=edit_variant).pack(side="left", padx=(8, 0))
-    ttk.Button(actions, text="Remove selected", command=remove_variant).pack(side="left", padx=(8, 0))
+    ttk.Button(
+        actions, text="Add implementation…", command=add_variant
+    ).pack(side="left")
+    edit_button = ttk.Button(
+        actions, text="Edit selected…", command=edit_variant, state="disabled"
+    )
+    edit_button.pack(side="left", padx=(8, 0))
+    remove_button = ttk.Button(
+        actions, text="Remove selected", command=remove_variant, state="disabled"
+    )
+    remove_button.pack(side="left", padx=(8, 0))
     ttk.Button(actions, text="Cancel", command=dialog.destroy).pack(side="right")
-    ttk.Button(actions, text="Save changes", command=save_and_close).pack(side="right", padx=(0, 8))
+    save_button = ttk.Button(
+        actions, text="Save changes", command=save_and_close, state="disabled"
+    )
+    save_button.pack(side="right", padx=(0, 8))
+
+    tree.bind("<<TreeviewSelect>>", update_actions)
+    tree.bind("<Double-1>", lambda _event: edit_variant())
+    tree.bind("<Delete>", lambda _event: remove_variant())
     render()
     dialog.grab_set()
     dialog.wait_window()
