@@ -1,137 +1,127 @@
-# Getting started
+# Install and enable KiCad Blocks
 
-This page takes you from a supported KiCad setup to placing a block in a project. For a specific task after installation, use the [workflow guides](workflows.md).
+This guide installs the current source version, enables the KiCad IPC plugin, and registers a shared library. For a complete first-use walkthrough, continue with the [first-block tutorial](tutorials/first-block.md).
 
-## Supported environment
+## Check the supported environment
 
-The currently validated environment is:
+The current full integration target is KiCad **10.99.0 development nightly**, Linux **x86_64**, and **CPython 3.12**. The plugin uses the Schematic Editor IPC API, Tkinter dialogs, and a native symbol-placement handoff.
 
-| Component | Validated target |
+| Component | Current evidence |
 | --- | --- |
-| KiCad | **10.99.0 development nightly** (development build for KiCad 11) |
-| Operating system | Linux |
-| Architecture | x86_64 |
-| Python | CPython 3.12, 3.13 or 3.14 |
-| Python modules | Tkinter and virtual-environment support |
-| KiCad API | Enable the IPC API in Eeschema; also enable it in PCB Editor for PCB-layout actions |
+| KiCad | 10.99.0 development nightly — full Eeschema, schematic IPC, PCB IPC, and CLI integration |
+| Operating system and architecture | Linux x86_64 |
+| CPython 3.12 | Full unit, GUI, plugin, schematic, and PCB integration |
+| CPython 3.13 and 3.14 | Plugin discovery and managed-environment smoke tests on Linux x86_64; not the full KiCad integration matrix |
+| Tkinter | Required by the plugin's dialogs |
+| `xdotool` | Required for the Linux native Add Symbol focus and placement handoff |
+| KiCad API | Enable the IPC API in Eeschema; enable it in PCB Editor for PCB actions |
 
-Stable KiCad 10.x, KiCad 11 stable, Windows, macOS, ARM and other Python versions are not validated. The installer's version-directory check is not a compatibility guarantee.
+Stable KiCad 10.x does not provide the Schematic Editor IPC plugin surface used by KiCad Blocks. KiCad 11 adds that surface, but a stable KiCad 11 build has not yet been validated by this repository's full CI matrix. Windows, macOS, ARM, and non-CPython-3.12 full integration are also unvalidated. See [compatibility and test coverage](explanation/compatibility.md) for the evidence and boundaries.
 
-KiCad Blocks uses the newer schematic IPC interface. The older KiCad 9/10 add-on API is limited to PCB Editor and is not sufficient for the schematic commands.
+## Install from a Git checkout
 
-## Install the current development version
+A KiCad Blocks 1.1.0 application ZIP is not currently published. Install the plugin from the source repository:
 
-A packaged KiCad Blocks release ZIP is not published yet. For now, install from a Git clone:
-
-```bash
+~~~bash
 git clone https://github.com/Uhrendoktor/kicad-blocks.git
 cd kicad-blocks
-python3.14 scripts/install_plugin.py --version 10.99
-```
+python3.12 scripts/install_plugin.py --version 10.99
+~~~
 
-Use `python3.12`, `python3.13` or `python3.14` to match the interpreter you will select in KiCad. The installer copies the plugin from `plugin/kicad-blocks` into the user's KiCad IPC add-on directory. To preview the destination without installing, add `--dry-run`. Pass `--documents-home PATH` to override the XDG data directory.
+The installer validates the Python runtime and target directory, checks the plugin manifest and entrypoints, stages the plugin, and replaces an existing installation atomically. It prints the exact destination path.
 
-Check [Releases](https://github.com/Uhrendoktor/kicad-blocks/releases) for a packaged installer when one becomes available. Do not treat GitHub's automatically generated source-code ZIP as a prebuilt plugin package.
+To inspect the destination without changing files, run:
 
-## Enable the KiCad API
+~~~bash
+python3.12 scripts/install_plugin.py --version 10.99 --dry-run
+~~~
 
-In Eeschema:
+Use `python3.13` or `python3.14` only when you understand the coverage distinction: those interpreters have plugin-discovery smoke-test coverage, while the full KiCad integration target remains CPython 3.12.
 
-1. Open **Preferences → Plugins**.
-2. Enable **Enable KiCad API**.
-3. Set **Path to Python interpreter** to the supported CPython executable used for installation.
-4. Keep KiCad's **Add Symbol** shortcut bound to `A`. KiCad Blocks uses the native symbol-placement command after you choose a block.
+## Enable the IPC plugin
 
-Restart KiCad after installation. Eeschema should show these toolbar actions:
+1. Start the KiCad 10.99 development nightly build.
+2. In Eeschema, open **Preferences → Plugins**.
+3. Enable the KiCad API for the Schematic Editor.
+4. Set **Path to Python interpreter** to the supported CPython executable. Use the same interpreter minor version that you used to run the installer.
+5. Confirm that the system has Tkinter and `xdotool` available.
+6. Keep KiCad's **Add Symbol** shortcut bound to `A`. KiCad Blocks uses the native Add Symbol command after you select a facade.
+7. Restart KiCad so the plugin environment can be created and its actions can be registered.
+
+The plugin identifier is `org.uhrendoktor.kicadblocks`. KiCad creates a managed Python environment for the plugin and installs the pinned dependencies there. Do not manually install dependencies into that managed environment during normal setup.
+
+The common Eeschema toolbar actions are:
 
 - **Browse and Place Functional Blocks**
-- **Create Block from Selected Sheet**
+- **Create Block from Sheet**
 - **Open Block Implementation**
 
-The remaining commands are grouped under **Tools → External Plugins → KiCad Blocks Tasks**. They are arranged in three tabs: **Use & build**, **Edit & maintain** and **Checks & PCB**.
+Other operations are grouped under **Tools → External Plugins → KiCad Blocks Tasks** in the **Use & build**, **Edit & maintain**, and **Checks & PCB** tabs. The PCB Editor also provides **Place Imported Block Layout** for an already merged layout group.
 
-Enable the KiCad IPC API in PCB Editor as well when you want to apply a stored PCB layout or place an imported layout group.
+Enable the KiCad API in PCB Editor as well when you need to import or position PCB layouts.
 
-## Choose a block library
+## Register a shared library folder
 
-On Debian or Ubuntu, install the matching interpreter's Tkinter and virtual-environment packages if they are not already present (often named `python3.14-tk` and `python3.14-venv`; use the package names for your Python minor version).
+The default destination for newly created blocks is:
 
-The default shared library folder is:
-
-```text
+~~~text
 ~/Documents/KiCad/Blocks/
-```
+~~~
 
-Open **Manage Libraries…** from the block browser to register a folder that already contains blocks, create a new empty library, or change the default destination.
+Open **Browse and Place Functional Blocks**, then choose **Manage Libraries**. The manager can:
 
-Registering a folder does not move its files. Unregistering it does not delete it.
+- **Add library** — register an existing folder.
+- **Create library** — create an empty library folder.
+- **Change folder** — change the registered path.
+- **Unregister** — remove a folder from the registered list without deleting files.
+- **Set default** — choose the destination for newly created blocks.
 
-To change the default destination for newly created blocks, set this environment variable before launching KiCad:
+Registering a folder does not move its contents. Unregistering a folder does not delete it.
 
-```bash
+To override the default destination, set the environment variable before launching KiCad:
+
+~~~bash
 export KICAD_BLOCKS_LIBRARY="$HOME/my-kicad-block-library"
-```
+~~~
 
-A shared library can be a normal folder that you distribute with Git, a shared drive or an archive. Once the folder is registered, browse its blocks from any project.
+The browser searches all registered roots. A valid library contains a `KBlocks.kicad_sym` facade catalog and one or more `.kicad_block` block directories.
 
-## Place a block
+## First-run checklist
 
-1. Open a saved KiCad project in Eeschema.
-2. Choose **Browse and Place Functional Blocks**.
-3. Search by block name, description, pin name, parameter or implementation variant.
-4. Select a result to inspect its pins, description and available configurations.
-5. Choose a variant or profile if the block defines them.
-6. Choose **Place at cursor** or double-click the result.
-7. KiCad's native **Choose Symbol** dialog opens with the facade selected. Confirm it and place the symbol as usual.
+Before creating or placing a block, confirm that:
 
-The project receives a local symbol catalog under `.kicad_blocks/`. The shared library remains in its original folder; you do not need to copy its implementation sheets into the project.
+- The correct KiCad 10.99 nightly build is running.
+- The Schematic Editor API is enabled.
+- The selected CPython interpreter is supported and has Tkinter.
+- `xdotool` is available and the Add Symbol shortcut is still `A`.
+- At least one shared library folder is registered, or the default destination is writable.
 
-The screenshot below shows the STUSB4500 example selected in the placement chooser, with a 5 V variant and a named PDO profile selected.
+Continue with the [first-block tutorial](tutorials/first-block.md).
 
-<p align="center">
-  <img src="https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/block-picker-profile.png" alt="STUSB4500 block selected in the placement chooser with the 5 V implementation and 5 V / 2.4 A profile" width="900">
-</p>
+## Troubleshoot plugin startup
 
-## Create a block from your own sheet
+### Plugin actions do not appear
 
-1. In the parent schematic, select the hierarchical sheet symbol you want to package. You can also open that sheet directly and run the command with nothing selected.
-2. Choose **Create Block from Selected Sheet**.
-3. Enter a name and description.
-4. Choose the shared library destination.
-5. Open the new block in the browser and review its facade and implementation.
+Wait for KiCad to finish creating the managed plugin environment, then restart KiCad. Confirm the interpreter path in **Preferences → Plugins** and inspect KiCad's warning messages or API log for dependency-install errors.
 
-KiCad Blocks copies the selected sheet and its child sheets into the library. It leaves the source project untouched. The selected sheet's root hierarchical labels become the external pins of the facade symbol; labels on child sheets remain internal.
+### The managed environment needs to be recreated
 
-Continue with [Create and maintain blocks](workflows.md#create-a-block-from-a-hierarchical-sheet) for publishing changes, creating local copies and composing nested blocks.
+Close KiCad and remove the plugin's cached environment, then start KiCad again:
 
-## Troubleshooting
-
-### The plugin actions do not appear
-
-Confirm that the plugin is installed in the KiCad version directory you launched, that the IPC API is enabled in Eeschema, and that KiCad is using the supported CPython interpreter. Restart KiCad and inspect the plugin log if the actions are still missing.
-
-### KiCad reports that the Python wheel is unavailable
-
-The validated wheel is specific to Linux x86_64 and CPython 3.12, 3.13 or 3.14. Check the interpreter selected in **Preferences → Plugins**. KiCad manages an isolated environment for the add-on; do not install the same dependencies into that environment manually.
-
-If the managed environment is broken, close KiCad and remove the plugin environment below:
-
-```text
+~~~text
 ~/.cache/kicad/<version>/python-environments/org.uhrendoktor.kicadblocks
-```
+~~~
 
-Reopen KiCad and allow it to recreate the environment. You can also right-click a plugin action in **Preferences → Plugins** and choose **Recreate Plugin Environment**.
+Alternatively, right-click a KiCad Blocks action in the plugin preferences and choose **Recreate Plugin Environment**.
 
-### The browser opens but shows no blocks
+### The block browser opens but contains no blocks
 
-Open **Manage Libraries…** and check that a library folder is registered. A valid library contains a `KBlocks.kicad_sym` catalog and one or more `.kicad_block` directories. Use **Validate registered libraries** to find missing files or invalid block manifests.
+Use **Manage Libraries** to check registered folders. Select a library that contains a `KBlocks.kicad_sym` catalog and `.kicad_block` directories. Run **Validate registered libraries** to inspect manifest and asset errors.
 
-### PCB layout actions are unavailable
+### Native symbol placement cannot take focus
 
-The block must contain a stored `.kicad_pcb` layout. Enable the IPC API in PCB Editor, apply the layout to create a separate board copy, then use **Place Imported Block Layout**. The destination board must contain the layers used by the stored layout.
+On Linux, install `xdotool` and make sure Eeschema is still open. Keep the default Add Symbol shortcut bound to `A`. The browser cannot safely type the facade name into the native chooser if it cannot identify and focus the Eeschema window.
 
-## Next
+### PCB actions are unavailable
 
-- [Create, configure and maintain blocks](workflows.md)
-- [See the STUSB4500 example and generated images](../examples/stusb4500/README.md)
-- [Look up exact fields, files and limitations](reference.md)
+The block must contain a stored `.kicad_pcb` layout. Enable the IPC API in PCB Editor. The destination board must contain all layers used by the stored layout.

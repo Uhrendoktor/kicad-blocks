@@ -1,12 +1,13 @@
 # Feature reference
 
-Use this page when you need exact action names, stored filenames, instance fields, parameter rules or technical limits. For step-by-step tasks, see the [workflow guides](workflows.md).
+This page describes exact action names, files, instance fields, parameter syntax, stored PCB layout behavior, and known limits. Use the [tutorial](tutorials/first-block.md) for a first-use sequence and the [how-to guides](workflows.md) for individual tasks.
 
 ## Contents
 
 - [Terminology](#terminology)
 - [Action map](#action-map)
-- [Block folder and project files](#block-folder-and-project-files)
+- [Browser and manager actions](#browser-and-manager-actions)
+- [Block and project files](#block-and-project-files)
 - [Facade pins](#facade-pins)
 - [Per-instance fields](#per-instance-fields)
 - [Parameters and token expansion](#parameters-and-token-expansion)
@@ -17,70 +18,80 @@ Use this page when you need exact action names, stored filenames, instance field
 - [Validation reports](#validation-reports)
 - [Recursive BOM and ERC](#recursive-bom-and-erc)
 - [Locations and settings](#locations-and-settings)
-- [Compatibility and known limits](#compatibility-and-known-limits)
+- [Compatibility](#compatibility)
 
 ## Terminology
 
 | Term | Meaning |
 | --- | --- |
-| **Facade symbol** | The ordinary KiCad symbol placed in the project schematic. Its pins are the block's external interface. |
-| **Implementation** | The editable schematic tree stored in the shared `.kicad_block` folder. |
-| **Variant** | A named choice of implementation schematic for a placed instance. |
-| **Profile** | A reusable set of instance settings: variant, parameter overrides and optional PCB layout. |
-| **Shared library** | The source folder registered with KiCad Blocks and reused across projects. |
-| **Local copy** | An independent project copy of one block implementation, stored under `.kicad_blocks/local/`. |
+| **Facade symbol** | The ordinary KiCad symbol placed in the project schematic. Its pins form the block's external interface. |
+| **Implementation** | The editable schematic tree stored in the shared `.kicad_block` directory. |
+| **Variant** | A named choice of implementation schematic for one placed instance. |
+| **Profile** | A reusable partial configuration containing a variant, parameter overrides, and an optional PCB layout. |
+| **Shared library** | A source folder registered with KiCad Blocks and reused across projects. |
+| **Local copy** | An independent project copy of a block implementation under `.kicad_blocks/local/`. |
 
 ## Action map
 
-### Eeschema
-
-| Entry point | Action | Selection / context |
-| --- | --- | --- |
-| Toolbar | **Browse and Place Functional Blocks** | Open a saved project and browse registered shared libraries. |
-| Toolbar | **Create Block from Selected Sheet** | Select a hierarchical sheet symbol in its parent, or run with nothing selected from the open sheet. |
-| Toolbar | **Open Block Implementation** | Select exactly one placed block instance. |
-| KiCad Blocks Tasks | **Configure selected instance** | Select exactly one block instance. |
-| Library browser / task hub | **Edit facade symbol** | Select exactly one block instance. |
-| KiCad Blocks Tasks | **Publish implementation** | Choose a shared library block to publish. |
-| KiCad Blocks Tasks | **Make selected instance local** | Select one library-linked instance. |
-| KiCad Blocks Tasks | **Synchronize local copy** | Select one instance already linked to a local copy. |
-| KiCad Blocks Tasks | **Nest a block** | Choose a parent block and a child block. |
-| KiCad Blocks Tasks | **Validate registered libraries** | Checks all registered shared library roots. |
-| KiCad Blocks Tasks | **Export recursive BOM** | Select one block instance. |
-| KiCad Blocks Tasks | **Run recursive ERC** | Select one block instance. |
-| KiCad Blocks Tasks | **Apply selected PCB layout** | Select one instance with a stored layout. |
-| KiCad Blocks Tasks | **Apply multiple PCB layouts** | Select two or more instances with stored layouts. |
-
-### PCB Editor
+The common Eeschema entry points are separate toolbar actions:
 
 | Entry point | Action | Context |
 | --- | --- | --- |
-| PCB Editor action | **Place Imported Block Layout** | Open the generated board copy with a `.kicad-blocks-placement.json` sidecar, then choose one imported instance group. |
+| Eeschema toolbar | **Browse and Place Functional Blocks** | Browse all registered shared libraries. |
+| Eeschema toolbar | **Create Block from Sheet** | Select a hierarchical sheet symbol in its parent, or run with no selection from the open sheet. |
+| Eeschema toolbar | **Open Block Implementation** | Select one placed block instance. |
+| Eeschema task hub | **KiCad Blocks Tasks** | Open the grouped task hub. |
 
-The KiCad IPC action manifest does not expose a custom nested menu tree. The three frequent schematic operations are separate toolbar actions; the other commands are grouped in the task hub's **Use & build**, **Edit & maintain** and **Checks & PCB** tabs.
+The task hub groups these operations by tab:
 
-## Block folder and project files
+| Tab | Actions |
+| --- | --- |
+| **Use & build** | Browse and place blocks; create block from sheet; open block implementation. |
+| **Edit & maintain** | Configure selected instance; edit facade symbol; publish implementation; make selected instance local; synchronize local copy; nest a block. |
+| **Checks & PCB** | Validate registered libraries; export recursive BOM; run recursive ERC; apply selected PCB layout; apply multiple PCB layouts. |
 
-A shared library root contains one facade catalog and one directory per block:
+The PCB Editor provides a separate **Place Imported Block Layout** action for a merged board copy that contains imported block groups and a placement sidecar.
 
-```text
+## Browser and manager actions
+
+The Functional Block Library browser presents these primary actions:
+
+- **Place block** — starts KiCad's native symbol chooser and placement tool for the selected block.
+- **Open implementation** — opens the default or selected implementation schematic.
+- **Edit selected facade** — edits the library symbol in Symbol Editor. This action is enabled only when one placed instance of the highlighted block is selected in Eeschema.
+- **Implementations** — opens the default and named implementation list.
+- **Open PCB layout** — opens a stored board file for inspection.
+- **Manage PCB layouts** — edits stored boards, implementation links, and the default layout.
+- **Refresh** — reloads the registered library list.
+
+The Implementations dialog contains a **Default** row and any named variants. Selecting **Default** enables **Edit default**, which opens the default schematic. Named rows enable **Edit variant**. A variant can be added from an existing schematic, a new blank schematic, or a copy of another library implementation.
+
+The PCB layout manager separates the layout table, assignment controls, and Save/Cancel footer. The **Assign selected layout to** selector can choose **Default**, a named variant, or **No variant link**.
+
+The **Add PCB layout** dialog supports two starting modes: **Create a new empty board** and **Choose an existing PCB file**. The file entry and **Choose file** button are visible only in the existing-file mode. **Use for implementation** associates the new board with **Default** or a named variant.
+
+## Block and project files
+
+A shared library root contains one facade catalog and one directory per block. A typical library looks like this:
+
+~~~text
 KiCad/Blocks/
   KBlocks.kicad_sym
   Buck_Converter_<id>.kicad_block/
     manifest.json
     block.kicad_sym
     implementation.kicad_sch
-    implementation_1v8.kicad_sch       # optional variant
-    implementation_3v3.kicad_sch       # optional variant
-    layout.kicad_pcb                   # optional default layout
-    layout.kicad_pro                   # optional layout settings
-```
+    implementation_1v8.kicad_sch        # optional variant schematic
+    implementation_3v3.kicad_sch        # optional variant schematic
+    layout_<id>.kicad_pcb                # optional named board layout
+    layout_<id>.kicad_pro                # optional matching project settings
+~~~
 
-The manifest records the block identity, symbol name, description, revision and asset hashes, pins, typed parameters, variants, named profiles, layout alternatives and nested dependencies.
+A manifest records the block identity, symbol name, description, revision and asset hashes, facade pins, typed parameters, variants, profiles, PCB layouts, and nested dependencies. File names for variants and layouts are generated from their values or IDs; the example names above are illustrative.
 
-When a block is placed, KiCad Blocks creates project-local catalog and instance data:
+A consuming project receives local symbol and instance data:
 
-```text
+~~~text
 <project>/
   .kicad_blocks/
     KBlocks.kicad_sym
@@ -91,13 +102,13 @@ When a block is placed, KiCad Blocks creates project-local catalog and instance 
         block.kicad_sym
         implementation.kicad_sch
         ...
-```
+~~~
 
-The project uses one combined `KBlocks` catalog row. `instances.json` maps each placed symbol KIID to a relative local-copy path. A local copy can use an independent implementation without changing the facade symbol or project wiring.
+The combined `KBlocks.kicad_sym` catalog is registered with the project. `instances.json` maps placed symbol KIID values to relative local-copy paths. A local copy can provide an independent implementation without changing the facade symbol or project wiring.
 
 ## Facade pins
 
-The facade is derived from hierarchical labels on the root implementation sheet. Supported electrical types are:
+Facade pins are derived from hierarchical labels on the implementation's root sheet. Supported electrical types are:
 
 - `input`
 - `output`
@@ -105,11 +116,11 @@ The facade is derived from hierarchical labels on the root implementation sheet.
 - `tristate`
 - `passive`
 
-Pin numbers follow label declaration order. When a label name is preserved during publishing, its facade pin number, location and graphics are retained. New labels receive generated initial locations. Duplicate root-label names produce one external facade pin. Labels on nested child sheets remain internal.
+Pin numbers follow root-label declaration order. When a label name is preserved during publishing, its facade pin number, location, and graphics are retained. New labels receive generated initial locations. Duplicate root-label names collapse to one external pin when their definitions agree; conflicting definitions are rejected. Labels on child sheets remain internal.
 
 ## Per-instance fields
 
-The facade stores implementation choices on each placed symbol:
+The facade stores configuration on each placed symbol instance:
 
 | Field | Meaning |
 | --- | --- |
@@ -118,51 +129,51 @@ The facade stores implementation choices on each placed symbol:
 | `KB_LAYOUT` | Selected PCB layout ID. |
 | `KB_PARAM_<NAME>` | Typed override for a declared block parameter. |
 
-Edit these through **KiCad Blocks Tasks → Configure selected instance** or KiCad's **Symbol Properties → Fields** page. The fields belong to the selected instance, not to the shared library as a whole.
+Edit these fields through **KiCad Blocks Tasks → Configure selected instance** or KiCad's **Symbol Properties → Fields** page. They belong to the selected symbol instance, not to the shared library.
 
 ## Parameters and token expansion
 
 Parameter declarations are comma-separated. For example:
 
-```text
+~~~text
 OUTPUT_VOLTAGE:number=3.3, CHANNELS:integer=4, ENABLE:boolean=true, PART=STM32
-```
+~~~
 
-Supported kinds are text (the default), number, integer and boolean. A token such as `{{OUTPUT_VOLTAGE}}` in a quoted text field in the implementation schematic (for example a component Value field) is substituted during recursive BOM/ERC processing.
+Supported kinds are text (the default), number, integer, and boolean. A token such as `{{OUTPUT_VOLTAGE}}` in a supported quoted implementation text field, such as a component Value field, is substituted during recursive BOM/ERC processing.
 
-The selected root instance's overrides are applied to its implementation. Nested dependency instances currently use their declared defaults. Parameters do not evaluate arbitrary expressions, change circuit connectivity or dynamically reconfigure the top-level schematic.
+The selected root instance's overrides are applied to its implementation. Nested dependency instances currently use their declared defaults. Parameters do not evaluate arbitrary expressions, change circuit connectivity, or dynamically reconfigure the top-level schematic.
 
 ## Variants and profiles
 
 A variant maps a `KB_VARIANT` string to an alternative implementation schematic.
 
 - Matching is case-insensitive but otherwise exact.
-- If a block declares variants, an empty, unresolved or unknown value is an error. The plugin does not guess a default.
+- If a block declares variants, an empty, unresolved, or unknown value is an error. The plugin does not guess a default.
 - A block without variants uses `implementation.kicad_sch`.
 
-A named profile is a reusable partial configuration containing a profile name and ID, a variant value, optional typed parameter overrides and an optional PCB layout ID. Parameters not specified by the profile inherit block defaults.
+A named profile is a reusable partial configuration containing a profile name and ID, a variant value, optional typed parameter overrides, and an optional PCB layout ID. Parameters not specified by the profile inherit block defaults.
 
-Applying a profile writes the profile, variant, parameter and layout fields to the selected facade in one schematic IPC transaction. Editing a linked field turns the instance into a custom configuration and clears `KB_PROFILE`.
+Applying a profile writes the profile, variant, parameter, and layout fields to the selected facade in one schematic IPC transaction. Editing a linked field turns the instance into a custom configuration and clears `KB_PROFILE`.
 
 ## Nested block composition
 
-Each nested dependency occurrence records a unique instance ID, reference, placement, orientation (0°, 90°, 180° or 270°) and child-pin-to-parent-net mapping. KiCad Blocks composes the rotated child facade and labels at the transformed pin endpoints in the parent implementation.
+Each nested dependency occurrence records a unique instance ID, reference, placement, orientation (0°, 90°, 180°, or 270°), and child-pin-to-parent-net mapping. KiCad Blocks composes the rotated child facade and labels at the transformed pin endpoints in the parent implementation.
 
-The child remains a separate library asset. Cyclic dependencies are rejected. The child implementation is not created as a native hierarchical sheet; its facade is composed into the parent implementation.
+The child remains a separate library asset. Cyclic dependencies are rejected. The child implementation is not created as a native hierarchical sheet; its facade and connection labels are composed into the parent implementation.
 
 ## PCB layout descriptors and merge behavior
 
-A block may expose multiple named `.kicad_pcb` layouts. Each descriptor identifies its ID, display name and board file; it may also name an optional `.kicad_pro` sidecar and a map from facade pins to layout nets. Unless the manifest specifies another default, the first layout ID is selected by default.
+A block can store multiple named `.kicad_pcb` layouts. Each descriptor identifies its ID, display name, and board file. It can also name an optional `.kicad_pro` sidecar and a map from facade pins to layout nets. The manifest can select a default layout and associate a different layout with a named variant.
 
 The merge operation:
 
-- maps facade pins to named layout nets;
-- namespaces internal nets and footprint references;
-- transforms board objects around the declared anchor and rotates them counter-clockwise;
-- copies footprints, tracks, vias, zones and graphics;
-- regenerates object UUIDs and writes a per-instance placement manifest.
+- Maps facade pins to named layout nets.
+- Namespaces internal nets and footprint references.
+- Transforms board objects around the declared anchor and applies rotation.
+- Copies supported footprints, tracks, vias, zones, and graphics.
+- Regenerates object UUIDs and writes a per-instance placement manifest.
 
-For an optional `.kicad_pro` sidecar, named netclasses and relevant exact assignments are merged into a matching copied project settings file. Block-specific wildcard or anchored-regex rules are resolved only against nets inside that stored layout, then converted to exact assignments. Supported bus-vector expressions are expanded to member nets. Unmatched or unsupported patterns are reported. Net-chain members, terminal-pad UUIDs and chain-class/netclass associations are remapped. Unrelated board setup is not copied.
+For an optional `.kicad_pro` sidecar, named netclasses and relevant exact assignments are merged into the matching copied project settings file. Block-specific wildcard or anchored-regex rules are resolved only against nets inside that stored layout, then converted to exact assignments. Supported bus-vector expressions are expanded to member nets. Unmatched or unsupported patterns are reported. Net-chain members, terminal-pad UUIDs, and chain-class/netclass associations are remapped. Unrelated board setup is not copied.
 
 The destination is a **separate board copy**. The operation does not overwrite a board currently open in PCB Editor. The destination board must provide the layers used by the source layout. Inspect the merged board and project settings before replacing project files.
 
@@ -178,11 +189,11 @@ A local-copy baseline tracks asset revisions:
 | Different concurrent changes to the same file | Reject before modifying either side; resolve deliberately. |
 | External pin/interface change | Requires explicit migration. |
 
-Implementation files, parameter schema and named-layout metadata participate in synchronization. Per-instance local paths are relative to the project folder.
+Implementation files, parameter schema, and named-layout metadata participate in synchronization. Per-instance local paths are relative to the project folder. Synchronization does not perform a graphical three-way merge of schematic content.
 
 ## Validation reports
 
-**Validate registered libraries** checks manifests, profile consistency, required assets, dependency references, cycles, hashes and recursive ERC.
+**Validate registered libraries** checks manifests, profile consistency, required assets, dependency references, cycles, hashes, and recursive ERC.
 
 It writes:
 
@@ -195,7 +206,7 @@ Broken manifests are reported as validation errors rather than silently skipped.
 
 **Export recursive BOM** runs KiCad CLI on the selected block implementation and its nested dependencies, then aggregates the component rows for that block tree. Tokens in implementation text fields are expanded using parameter overrides from the selected root instance; nested dependencies use their declared defaults.
 
-**Run recursive ERC** checks the selected implementation and its nested dependencies with KiCad CLI. These actions are separate from the project's native BOM, netlist and ERC, which see the facade symbol and its external pins only.
+**Run recursive ERC** checks the selected implementation and its nested dependencies with KiCad CLI. These actions are separate from the consuming project's native BOM, netlist, and ERC, which see the facade symbol and its external pins only.
 
 ## Locations and settings
 
@@ -204,20 +215,10 @@ Broken manifests are reported as validation errors rather than silently skipped.
 | Default shared library folder | `~/Documents/KiCad/Blocks` |
 | Override for new blocks | `KICAD_BLOCKS_LIBRARY=/path/to/library` |
 | Persisted library preferences | `~/.config/kicad-blocks/settings.json` |
-| Theme override | `KICAD_BLOCKS_THEME=system|light|dark` |
+| Theme override | `KICAD_BLOCKS_THEME=system`, `light`, or `dark` |
 | Project-local assets | `<project>/.kicad_blocks/` |
 | Native Add Symbol shortcut used for placement handoff | `A` |
 
-## Compatibility and known limits
+## Compatibility
 
-Validated V1.1.0 target: KiCad **10.99.0 development nightly**, Linux **x86_64**, CPython **3.12, 3.13 and 3.14**. Stable KiCad 10.x, KiCad 11 stable, Windows, macOS and ARM are not validated.
-
-Current functional limits:
-
-- Native project-level BOM, netlist and ERC see the facade symbol only. Use recursive BOM/ERC for the internal circuitry.
-- A variant selects the implementation to open. It does not dynamically change the parent schematic or arbitrary nested instances.
-- Nested dependencies are composed inline into the parent implementation schematic; they are not native nested sheet symbols.
-- The IPC action manifest does not support custom nested menu trees.
-- The imported PCB layout action uses KiCad's native cursor tool; the complete mouse-driven commit/cancel sequence in PCB Editor is not automated in CI.
-- The Symbol Editor shortcut handoff is unit-tested, but a complete live GUI save/edit/publish sequence is not yet part of CI.
-- Recursive extraction is tested with a two-level fixture and KiCad CLI validation. A manual GUI exercise on a complex multi-sheet project remains recommended.
+See [compatibility and test coverage](explanation/compatibility.md) for the tested interpreter matrix, supported KiCad API surface, packaging status, and current end-to-end coverage limits.

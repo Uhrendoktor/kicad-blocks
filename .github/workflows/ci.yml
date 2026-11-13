@@ -194,6 +194,10 @@ jobs:
         shell: bash
         run: "${RUNNER_TEMP}/kicad-blocks-venv/bin/python -m ruff check plugin tests"
 
+      - name: Validate documentation links and images
+        shell: bash
+        run: python3 scripts/validate_docs.py
+
       - name: Validate generated files with KiCad
         shell: bash
         run: "${RUNNER_TEMP}/kicad-blocks-venv/bin/python tests/validate_kicad_cli.py"

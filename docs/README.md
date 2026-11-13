@@ -1,26 +1,38 @@
 # Documentation
 
-Choose the page that matches what you are trying to do.
+Choose a guide by the kind of help you need. This documentation uses four complementary forms: a tutorial teaches one complete first-use path, how-to guides solve specific tasks, explanations describe the design and trade-offs, and reference pages state exact behavior.
 
-## Start here
+## Tutorial
 
-- **[Getting started](getting-started.md)** — check the supported setup, install the current development version, register a library and place your first block.
-- **[STUSB4500 example](../examples/stusb4500/README.md)** — see a complete reference circuit, its library symbol and the way it appears in KiCad Blocks.
+Start with the [first-block tutorial](tutorials/first-block.md) to create a block from a hierarchical sheet, inspect its interface, and place it in a project.
 
-## Do a task
+## How-to guides
 
-Use the [workflow guides](workflows.md) when you know the result you want:
+Use a task guide when you already know the outcome you want.
 
-- Create a block from an existing hierarchical sheet.
-- Find, configure and place a block.
-- Edit a shared implementation or customize one project.
-- Combine blocks, run checks or reuse a PCB layout.
+- [Install and enable the plugin](getting-started.md)
+- [Create, find, and place blocks](how-to/create-and-place.md)
+- [Configure an instance](how-to/configure.md)
+- [Edit, publish, and synchronize implementations](how-to/publish-and-sync.md)
+- [Nest blocks and validate libraries](how-to/nesting-and-validation.md)
+- [Manage and apply PCB layouts](how-to/pcb-layouts.md)
 
-## Understand what you are looking at
+The [how-to index](workflows.md) groups these tasks by workflow.
 
-- **[Visual guide](visual-evidence.md)** — real KiCad renders and screenshots of the plugin.
-- **[Feature reference](reference.md)** — exact action names, folder contents, instance fields, parameter rules and current limitations.
+## Explanations
 
-## A note about the examples
+Read these pages to understand why KiCad Blocks behaves as it does.
 
-The STUSB4500 page documents the editable reference schematic. Some UI screenshots are generated from an automated library fixture built around that schematic; the page labels those captures so they are not mistaken for proof that the schematic changes electrically when a profile is selected.
+- [Architecture and design model](explanation/architecture.md) — facade symbols, stored implementations, variants, parameters, local copies, nesting, and the native KiCad boundary.
+- [Compatibility and test coverage](explanation/compatibility.md) — tested environment, interpreter coverage, unvalidated targets, and known gaps.
+
+## Reference
+
+- [Feature reference](reference.md) — action names, block and project files, instance fields, parameter syntax, PCB merge behavior, report files, and settings.
+- [Visual evidence](visual-evidence.md) — current plugin screenshots and native KiCad renders.
+- [STUSB4500 example](../examples/stusb4500/README.md) — a datasheet-derived editable circuit and its generated evidence.
+- [Changelog](../CHANGELOG.md) — version history and changes not yet assigned to a release.
+
+## Contribute
+
+The [contributor guide](contributing.md) describes the documentation structure, editorial conventions, and validation checks. When product behavior changes, update the relevant guide in the same pull request as the code.
