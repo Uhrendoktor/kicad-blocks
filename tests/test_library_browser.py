@@ -78,7 +78,7 @@ class LibraryBrowserTests(unittest.TestCase):
         overview = _block_overview_text(self.block)
         self.assertIn("VIN", overview)
         self.assertIn("input", overview)
-        self.assertIn("OUTPUT_VOLTAGE : number = 3.3", overview)
+        self.assertIn("OUTPUT_VOLTAGE  ·  number  ·  default: 3.3", overview)
         self.assertIn("1V8", overview)
         self.assertIn("3V3", overview)
         self.assertIn("Compact", overview)
