@@ -47,9 +47,11 @@ def test_rejects_explicit_any_outside_reviewed_boundaries(tmp_path, monkeypatch)
         tmp_path,
         "plugin/example.py",
         '"""Policy fixture."""\n'
-        "from typing import Any\n"
-        "def process(value: Any) -> Any:\n"
-        "    return value\n",
+        "from typing import Any as DynamicValue\n"
+        "import typing as typing_module\n"
+        "def process(value: DynamicValue) -> typing_module.Any:\n"
+        "    return value\n"
+        "items: list[typing_module.Any] = []\n",
     )
 
     errors = policy._check_file(path)
