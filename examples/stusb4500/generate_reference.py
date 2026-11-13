@@ -640,7 +640,7 @@ def generate_reference_schematic(destination: Path) -> Path:
     add_route("VSNK", [
         t1_vsnk, (output_lane_x, t1_vsnk[1]),
         (output_lane_x, output_rail_y), (c10_vsnk[0], output_rail_y),
-        c10_vsnk, (j10_vsnk[0], output_rail_y), j10_vsnk,
+        (j10_vsnk[0], output_rail_y), j10_vsnk,
     ], "protected-output-spine")
     remove_local_label("T1", "3", "VSNK")
     remove_local_label("C10", "1", "VSNK")
