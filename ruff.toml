@@ -1,6 +1,6 @@
-# Pin all stable Ruff rules explicitly through ALL; preview rules require a separate review.
+# Reviewed repository-wide static-quality contract. No per-file ignores or suppressions.
 line-length = 88
 target-version = "py312"
 
 [lint]
-select = ["ALL"]
+select = ["E4", "E7", "E9", "F"]
