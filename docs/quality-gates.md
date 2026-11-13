@@ -1,6 +1,6 @@
 # Python quality and testing contract
 
-The quality gates are deliberately explicit. They are intended to catch correctness defects and prevent new maintenance debt without applying a blanket style policy to KiCad's dynamic host adapter.
+The quality gates are deliberately explicit. They are intended to catch correctness defects and prevent new maintenance debt without applying a blanket style policy to KiCad's dynamic host adapter. CI installs the reviewed static-analysis tools into its isolated environment (`pyright==1.1.414` and `vulture==2.16`) rather than relying on runner-global packages.
 
 ## Blocking checks
 
