@@ -28,6 +28,16 @@ ASSET_NAMES = (
     "block-picker-filtered.png",
     "block-picker-profile.png",
     "block-picker-workflow.gif",
+    "library-browser-light.png",
+    "library-browser-dark.png",
+    "library-folders-light.png",
+    "library-folders-dark.png",
+    "task-hub-light.png",
+    "task-hub-dark.png",
+    "implementation-variants-light.png",
+    "implementation-variants-dark.png",
+    "create-block-form-light.png",
+    "create-block-form-dark.png",
     "functional-block-facade.svg",
     "functional-block-implementation.svg",
     "functional-block-implementation.kicad_sch",
@@ -48,16 +58,22 @@ def walk_widgets(widget):
         yield from walk_widgets(child)
 
 
-def window_id(xdotool: str) -> str | None:
+def window_id(xdotool: str, title: str = "Place Functional Block") -> str | None:
     result = subprocess.run(
-        [xdotool, "search", "--onlyvisible", "--name", "Place Functional Block"],
+        [xdotool, "search", "--onlyvisible", "--name", title],
         capture_output=True, text=True, check=False, timeout=5,
     )
     ids = [line for line in result.stdout.splitlines() if line.strip().isdigit()]
     return ids[-1] if ids else None
 
 
-def capture_window(xdotool: str, identifier: str, destination: Path) -> None:
+def capture_window(
+    xdotool: str,
+    identifier: str,
+    destination: Path,
+    *,
+    minimum_size: tuple[int, int] = (600, 400),
+) -> None:
     from PIL import ImageGrab
 
     geometry = subprocess.run(
@@ -74,8 +90,11 @@ def capture_window(xdotool: str, identifier: str, destination: Path) -> None:
         values["X"] + values["WIDTH"], values["Y"] + values["HEIGHT"],
     )
     image = ImageGrab.grab(bbox=bbox)
-    if image.width < 600 or image.height < 400:
-        raise RuntimeError(f"Chooser capture is too small: {image.width}x{image.height}")
+    if image.width < minimum_size[0] or image.height < minimum_size[1]:
+        raise RuntimeError(
+            f"Window capture is too small: {image.width}x{image.height}; "
+            f"expected at least {minimum_size[0]}x{minimum_size[1]}"
+        )
     image.save(destination, format="PNG")
 
 
@@ -198,6 +217,200 @@ def capture_picker(records, output_dir: Path) -> dict:
     if len({hashlib.sha256(path.read_bytes()).hexdigest() for path in frame_paths}) != 3:
         raise AssertionError("The three chooser states were not captured as distinct images.")
     return selected
+
+
+
+
+def _capture_visible_window(
+    xdotool: str,
+    title: str,
+    destination: Path,
+    *,
+    minimum_size: tuple[int, int] = (600, 400),
+) -> None:
+    identifier = window_id(xdotool, title)
+    if identifier is None:
+        raise TimeoutError(f"Window {title!r} was not visible for capture.")
+    time.sleep(0.3)
+    capture_window(
+        xdotool, identifier, destination, minimum_size=minimum_size
+    )
+
+
+def _capture_modal(
+    parent,
+    opener,
+    title: str,
+    destination: Path,
+    xdotool: str,
+    *,
+    minimum_size: tuple[int, int] = (600, 400),
+    prepare=None,
+) -> None:
+    """Capture a real modal window and close it without invoking an action."""
+    errors: list[str] = []
+
+    def capture_and_close() -> None:
+        dialog = None
+        try:
+            parent.update_idletasks()
+            dialog = next(
+                (
+                    child for child in parent.winfo_children()
+                    if isinstance(child, plugin_actions.tk.Toplevel)
+                    and child.title() == title
+                ),
+                None,
+            )
+            if dialog is None:
+                raise RuntimeError(f"Tk did not create the expected modal {title!r}.")
+            if prepare is not None:
+                prepare(dialog)
+            dialog.update_idletasks()
+            dialog.update()
+            _capture_visible_window(
+                xdotool, title, destination, minimum_size=minimum_size
+            )
+        except (
+            ImportError,
+            KeyError,
+            OSError,
+            RuntimeError,
+            subprocess.SubprocessError,
+            TimeoutError,
+            plugin_actions.tk.TclError,
+            TypeError,
+            ValueError,
+        ) as exc:
+            errors.append(f"{type(exc).__name__}: {exc}")
+        finally:
+            if dialog is not None:
+                with contextlib.suppress(plugin_actions.tk.TclError):
+                    dialog.destroy()
+
+    parent.after(400, capture_and_close)
+    opener()
+    if errors:
+        raise RuntimeError(f"Could not capture {title!r}: {errors[0]}")
+
+
+def _make_themed_root(theme: str, title: str):
+    plugin_actions._load_tkinter()
+    root = plugin_actions.tk.Tk()
+    os.environ["KICAD_BLOCKS_THEME"] = theme
+    plugin_actions._configure_tk_theme(root)
+    root.title(title)
+    root.update_idletasks()
+    root.update()
+    return root
+
+
+def capture_ui_workflows(library_roots, record, project_dir: Path, output_dir: Path) -> None:
+    """Export actual app windows, using the same theme initialization as run_action."""
+    from types import SimpleNamespace
+
+    xdotool = find_executable("xdotool")
+    original_theme = os.environ.get("KICAD_BLOCKS_THEME")
+    original_library_override = os.environ.pop("KICAD_BLOCKS_LIBRARY", None)
+    original_configured_roots = plugin_actions.configured_library_roots
+    original_default_root = plugin_actions.default_library_root
+    roots = [Path(item).resolve() for item in library_roots]
+    plugin_actions.configured_library_roots = lambda: roots
+    plugin_actions.default_library_root = lambda: roots[0]
+    schematic = SimpleNamespace(get_selection=lambda: [])
+    kicad = SimpleNamespace()
+
+    try:
+        for theme in ("light", "dark"):
+            root = _make_themed_root(theme, "Functional Block Library")
+            try:
+                plugin_actions._show_library_browser(
+                    root, schematic, kicad, project_dir, roots, "0x1"
+                )
+                root.update_idletasks()
+                root.update()
+                _capture_visible_window(
+                    xdotool,
+                    "Functional Block Library",
+                    output_dir / f"library-browser-{theme}.png",
+                    minimum_size=(1000, 650),
+                )
+                _capture_modal(
+                    root,
+                    lambda: plugin_actions._show_library_roots_dialog(root),
+                    "Manage KiCad Functional Block Libraries",
+                    output_dir / f"library-folders-{theme}.png",
+                    xdotool,
+                    minimum_size=(900, 550),
+                    prepare=lambda dialog: _select_first_table_row(dialog),
+                )
+            finally:
+                root.destroy()
+
+            root = _make_themed_root(theme, "KiCad Blocks — Tasks")
+            try:
+                plugin_actions._show_action_hub(root)
+                root.update_idletasks()
+                root.update()
+                _capture_visible_window(
+                    xdotool,
+                    "KiCad Blocks — Tasks",
+                    output_dir / f"task-hub-{theme}.png",
+                    minimum_size=(700, 500),
+                )
+            finally:
+                root.destroy()
+
+            root = _make_themed_root(theme, "KiCad Blocks dialog fixture")
+            try:
+                _capture_modal(
+                    root,
+                    lambda: plugin_actions._show_block_variant_editor(record, root),
+                    f"Implementations — {record.name}",
+                    output_dir / f"implementation-variants-{theme}.png",
+                    xdotool,
+                    minimum_size=(800, 500),
+                    prepare=lambda dialog: _select_first_table_row(dialog),
+                )
+                _capture_modal(
+                    root,
+                    lambda: plugin_actions._ask_create_block_details(
+                        root, Path(record.implementation)
+                    ),
+                    "Create Functional Block",
+                    output_dir / f"create-block-form-{theme}.png",
+                    xdotool,
+                    minimum_size=(560, 320),
+                )
+            finally:
+                root.destroy()
+    finally:
+        plugin_actions.configured_library_roots = original_configured_roots
+        plugin_actions.default_library_root = original_default_root
+        if original_theme is None:
+            os.environ.pop("KICAD_BLOCKS_THEME", None)
+        else:
+            os.environ["KICAD_BLOCKS_THEME"] = original_theme
+        if original_library_override is not None:
+            os.environ["KICAD_BLOCKS_LIBRARY"] = original_library_override
+
+
+def _select_first_table_row(dialog) -> None:
+    tree = next(
+        (
+            widget for widget in walk_widgets(dialog)
+            if widget.winfo_class() == "Treeview"
+        ),
+        None,
+    )
+    if tree is None or not tree.get_children():
+        raise RuntimeError("The table contains no rows to select for the UI capture.")
+    first = tree.get_children()[0]
+    tree.selection_set(first)
+    tree.focus(first)
+    tree.event_generate("<<TreeviewSelect>>")
+    dialog.update_idletasks()
+    dialog.update()
 
 
 def build_gif(output_dir: Path) -> None:
@@ -338,6 +551,14 @@ def main() -> int:
         )
         target.manifest.update(manifest)
         render_native_svgs(cli, target, output_dir)
+        extra_library = Path(temporary) / "support-library"
+        create_block(
+            extra_library,
+            "USB Protection",
+            parse_pins("VBUS:input, GND:passive, USB_P:bidirectional, USB_N:bidirectional"),
+            description="Input ESD protection and common-mode filtering.",
+        )
+        capture_ui_workflows([library, extra_library], target, Path(temporary), output_dir)
         capture_picker([target, sensor], output_dir)
         build_gif(output_dir)
 
@@ -351,7 +572,10 @@ def main() -> int:
         "schema_version": 1,
         "source_sha": os.environ.get("GITHUB_SHA", "local"),
         "generator": "tests/capture_visual_docs.py",
-        "renderer": "KiCad CLI and the production Place Functional Block Tk dialog",
+        "renderer": (
+            "KiCad CLI and production Tk windows: task hub, functional-block browser, "
+            "library-folder manager, variant editor, creation form, and placement chooser"
+        ),
         "example": {
             "component": "STUSB4500QTR",
             "manufacturer": "STMicroelectronics",
