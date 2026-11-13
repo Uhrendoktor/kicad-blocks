@@ -107,7 +107,7 @@ The capture tests check that windows are visible, images are non-blank, and the 
 
 ## What CI does and does not verify
 
-CI checks the block browser, folder manager, task hub, creation form, variant editor, instance configuration, native symbol chooser handoff, project-library registration and schematic/PCB operations.
+CI checks the block browser, Manage Libraries window, task hub, creation form, variant editor, instance configuration, native symbol chooser handoff, project-library registration and schematic/PCB operations.
 
 Some manual validation is still useful:
 
