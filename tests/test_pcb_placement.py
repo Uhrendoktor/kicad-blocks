@@ -13,8 +13,6 @@ from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 PLUGIN = ROOT / "plugin" / "kicad-blocks"
-sys.path.insert(0, str(PLUGIN))
-
 from kicad_blocks.pcb_placement import (
     move_placement_at_cursor,
     placement_manifest_path,
