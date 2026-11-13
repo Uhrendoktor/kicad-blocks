@@ -106,7 +106,6 @@ def _check_file(path: Path) -> list[str]:
     )
 
     for node in ast.walk(tree):
-
         if isinstance(node, ast.Call):
             function = node.func
             if isinstance(function, ast.Name) and function.id in {"eval", "exec"}:
@@ -125,12 +124,20 @@ def _check_file(path: Path) -> list[str]:
                     and argument.annotation.id == "object"
                     and (relative, f"{owner}.{argument.arg}") in ALLOWED_OBJECT_ANNOTATIONS
                 )
-                if argument.annotation is not None and _has_object_annotation(argument.annotation) and not allowed:
+                if (
+                    argument.annotation is not None
+                    and _has_object_annotation(argument.annotation)
+                    and not allowed
+                ):
                     errors.append(
                         f"{relative}:{argument.lineno}: generic object annotation needs an explicit reviewed boundary"
                     )
             for argument in (node.args.vararg, node.args.kwarg):
-                if argument is not None and argument.annotation is not None and _has_object_annotation(argument.annotation):
+                if (
+                    argument is not None
+                    and argument.annotation is not None
+                    and _has_object_annotation(argument.annotation)
+                ):
                     errors.append(
                         f"{relative}:{argument.lineno}: generic object annotation needs an explicit reviewed boundary"
                     )
@@ -230,8 +237,13 @@ def _check_annotation_ratchet(base_ref: str) -> list[str]:
     try:
         merge_base = _git("merge-base", base_ref, "HEAD").strip()
         changed = _git(
-            "diff", "--name-only", "--diff-filter=ACMR",
-            f"{merge_base}...HEAD", "--", "*.py", "*.pyi"
+            "diff",
+            "--name-only",
+            "--diff-filter=ACMR",
+            f"{merge_base}...HEAD",
+            "--",
+            "*.py",
+            "*.pyi",
         )
     except (OSError, subprocess.SubprocessError) as exc:
         return [f"annotation ratchet: cannot resolve {base_ref!r}: {exc}"]
@@ -264,10 +276,13 @@ def _check_annotation_ratchet(base_ref: str) -> list[str]:
         except SyntaxError as exc:
             errors.append(f"{relative}: cannot measure annotation debt: {exc}")
             continue
-        for index, label in enumerate(("missing function annotations", "generic object annotations")):
+        for index, label in enumerate(
+            ("missing function annotations", "generic object annotations")
+        ):
             if current_metrics[index] > previous_metrics[index]:
                 errors.append(
-                    f"{relative}: {label} increased from {previous_metrics[index]} to {current_metrics[index]}"
+                    f"{relative}: {label} increased from {previous_metrics[index]} "
+                    f"to {current_metrics[index]}"
                 )
     return errors
 
