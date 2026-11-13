@@ -42,11 +42,14 @@ def _choose_placement(placements: list[JsonObject]) -> JsonObject | None:
     root.resizable(False, False)
     root.geometry("520x150")
     selected_placement: JsonObject | None = None
-    labels = [
-        f"{item['instance_reference']} — {item.get('block', 'Block')} / {item.get('layout_name', 'Layout')} "
-        f"({len(item['item_uuids'])} board objects)"
-        for item in placements
-    ]
+    labels: list[str] = []
+    for item in placements:
+        item_uuids = item.get("item_uuids")
+        object_count = len(item_uuids) if isinstance(item_uuids, list) else 0
+        labels.append(
+            f"{item.get('instance_reference', '')} — {item.get('block', 'Block')} / "
+            f"{item.get('layout_name', 'Layout')} ({object_count} board objects)"
+        )
 
     ttk.Label(
         root,
@@ -62,8 +65,8 @@ def _choose_placement(placements: list[JsonObject]) -> JsonObject | None:
     buttons.pack(padx=16, pady=16, anchor="e")
 
     def accept() -> None:
+        nonlocal selected_placement
         try:
-            nonlocal selected_placement
             selected_placement = placements[labels.index(choice.get())]
         except ValueError:
             selected_placement = None
