@@ -26,12 +26,6 @@ def _walk(widget):
         yield from _walk(child)
 
 
-def _walk(widget):
-    yield widget
-    for child in widget.winfo_children():
-        yield from _walk(child)
-
-
 def _capture_dialog(dialog, destination: Path) -> None:
     """Save a screenshot of the actual configuration dialog while it is visible."""
     from PIL import ImageGrab, ImageStat
