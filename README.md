@@ -9,7 +9,7 @@ A block is placed as one library symbol, while its full editable schematic stays
 ![KiCad 10.99 nightly](https://img.shields.io/badge/KiCad-10.99%20nightly-blue?logo=kicad)
 ![Python 3.12–3.14](https://img.shields.io/badge/Python-3.12%E2%80%933.14-blue?logo=python)
 
-**[Get started](docs/getting-started.md)** · **[Feature workflows](docs/workflows.md)** · **[Visual gallery](docs/visual-evidence.md)** · **[STUSB4500 example](examples/stusb4500/README.md)**
+**[Documentation map](docs/README.md)** · **[Get started](docs/getting-started.md)** · **[How-to guides](docs/workflows.md)** · **[Visual guide](docs/visual-evidence.md)** · **[STUSB4500 example](examples/stusb4500/README.md)**
 
 ## What stays in the library
 
@@ -63,10 +63,11 @@ See the [STUSB4500 example guide](examples/stusb4500/README.md) for connectivity
 
 | Guide | Contents |
 | --- | --- |
-| [Getting started](docs/getting-started.md) | Supported environment, installation, KiCad setup and troubleshooting. |
-| [Feature workflows](docs/workflows.md) | Creating, placing, configuring, editing, nesting, validating and PCB reuse. |
+| [Documentation map](docs/README.md) | Choose a guide based on what you want to do or learn. |
+| [Getting started](docs/getting-started.md) | Supported setup, installation from source and first use. |
+| [How-to guides](docs/workflows.md) | Create, place, configure, maintain, validate and reuse blocks. |
 | [Feature reference](docs/reference.md) | Actions, block storage, instance fields, parameters and technical boundaries. |
-| [Visual evidence](docs/visual-evidence.md) | Full light/dark UI gallery, native KiCad renders and test coverage. |
+| [Visual guide](docs/visual-evidence.md) | Generated plugin screenshots, facade symbol and schematic renders. |
 | [Changelog](CHANGELOG.md) | Version history and known coverage limits. |
 
 ## Support and contributions
