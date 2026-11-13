@@ -24,7 +24,7 @@ The animation shows the searchable block library, a filtered result and a profil
   <img src="https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/library-folders-light.png" alt="Registered shared library folders and management controls" width="900">
 </p>
 
-The browser capture includes the searchable result list, facade preview and designer-oriented block overview. The folder-manager capture shows registered libraries and the add/create/change/unregister/default-folder actions.
+The browser capture includes the searchable result list, facade preview and designer-oriented block overview. The Manage Libraries window capture shows registered libraries and the add/create/change/unregister/default-folder actions.
 
 ## Task hub: every tab
 
