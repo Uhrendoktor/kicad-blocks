@@ -12,19 +12,21 @@ ROOT = Path(__file__).resolve().parents[1]
 MARKDOWN_ROOTS = (ROOT / "docs", ROOT / "examples")
 ROOT_MARKDOWN = (ROOT / "README.md", ROOT / "CHANGELOG.md")
 
-LINK_RE = re.compile(r"(?<!!)\\[[^\\]]+\\]\\(([^)]+)\\)")
-IMAGE_RE = re.compile(r"!\\[([^\\]]*)\\]\\(([^)]+)\\)")
+LINK_RE = re.compile(r"(?<!)\[[^\]]+\]\(([^)]+)\)")
+IMAGE_RE = re.compile(r"!\[([^\]]*)\]\(([^)]+)\)")
 HTML_LINK_RE = re.compile(
-    r"""<a\\b[^>]*?\\bhref\\s*=\\s*(?:"([^"]+)"|'([^']+)')""",
+    r"""<a\b[^>]*?\bhref\s*=\s*(?:"([^"]+)"|'([^']+)')""",
     re.IGNORECASE | re.DOTALL,
 )
-HTML_IMAGE_RE = re.compile(r"<img\\b([^>]*)>", re.IGNORECASE | re.DOTALL)
+HTML_IMAGE_RE = re.compile(r"<img\b([^>]*)>", re.IGNORECASE | re.DOTALL)
 HTML_ALT_RE = re.compile(
-    r"""(?:^|\\s)alt\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s>]+))""",
+    r"""(?:^|\s)alt\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))""",
     re.IGNORECASE,
 )
-HEADING_RE = re.compile(r"^ {0,3}#{1,6}\\s+(.+?)\\s*#*\\s*$")
-FENCE_RE = re.compile(r"^ {0,3}(\`{3,}|~{3,})")
+HEADING_RE = re.compile(r"^ {0,3}#{1,6}\s+(.+?)\s*#*\s*$")
+FENCE_RE = re.compile(
+    r"^ {0,3}(" + re.escape(chr(96)) + r"{3,}|~{3,})"
+)
 
 
 def markdown_files() -> list[Path]:
@@ -56,15 +58,15 @@ def strip_fenced_code(text: str) -> str:
             result.append("")
         else:
             result.append(line)
-    return "\\n".join(result)
+    return "\n".join(result)
 
 
 def slugify_heading(text: str) -> str:
     """Approximate GitHub's automatic heading slug for ordinary Markdown headings."""
     value = text.replace(chr(96), "").strip().casefold()
     value = re.sub(r"<[^>]+>", "", value)
-    value = re.sub(r"[^\\w\\- ]", "", value, flags=re.UNICODE)
-    return re.sub(r"\\s+", "-", value)
+    value = re.sub(r"[^\w\- ]", "", value, flags=re.UNICODE)
+    return re.sub(r"\s+", "-", value)
 
 
 def heading_slugs(path: Path) -> set[str]:
@@ -95,7 +97,7 @@ def destination(raw: str) -> str:
 
 def _line_number(source: str, offset: int) -> int:
     """Return the one-based source line for a regex match offset."""
-    return source.count("\\n", 0, offset) + 1
+    return source.count("\n", 0, offset) + 1
 
 
 def _validate_target(
@@ -189,7 +191,7 @@ def main() -> int:
     files = markdown_files()
     errors = [error for path in files for error in validate_file(path)]
     if errors:
-        print("\\n".join(errors), file=sys.stderr)
+        print("\n".join(errors), file=sys.stderr)
         return 1
     print(
         f"Documentation checks passed: {len(files)} Markdown files, "
