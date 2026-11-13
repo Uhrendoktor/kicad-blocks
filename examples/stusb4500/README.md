@@ -16,17 +16,32 @@ The schematic follows the signal flow of ST's reference drawing:
   protected VSNK output at the upper right.
 - Optional MCU I²C, ALERT# and RESET interface at the lower right.
 
-Remote connections use matching KiCad local net labels instead of guessed
-coordinate-sorted wire routes. The labels keep the sheet uncluttered while
-preserving unambiguous electrical connectivity. The controller symbol follows
-the QFN-24 EP pinout: pins 1–24 use ST's QFN assignments and pin 25 is the
-exposed ground pad. Pin 22 (VSYS) is grounded for the VDD-only supply
+The sheet uses A3 landscape and a 2.54 mm placement grid. Functional zones
+read left-to-right from the receptacle and CC ESD network, through VBUS
+filtering/sensing and the STUSB4500 with local bypass capacitors, to the
+back-to-back P-channel switch and protected VSNK output. The optional host
+interface and address/reset straps form a separate lower band. Consistent
+zone captions, aligned passive rows, and a restrained header rule establish
+the visual hierarchy without decorative boxes or ambiguous crossing wires.
+
+Local electrical relationships are drawn as orthogonal KiCad wires:
+the receptacle CC1/CC2 paths run through the ESD array, the VBUS input spine
+feeds the back-to-back switch, and the input/output capacitors and TVS parts
+branch from their respective rails. The VBUS monitor filter, FET midpoint,
+gate divider, regulator bypass and MCU pull-up rows use short local wiring.
+Longer control and supply nets retain matching labels or hierarchical ports
+rather than sprawling across the sheet.
+
+The controller symbol follows the QFN-24 EP pinout: pins 1–24 use ST's QFN
+assignments and pin 25 is the exposed ground pad. Pin 22 (VSYS) is grounded for the VDD-only supply
 arrangement shown by ST; pin 24 (VDD) is on VBUS; pin 23 is VREG_2V7; and
 pin 21 is VREG_1V2. Unused controller pins have explicit no-connect markers.
 
 CI exports a KiCad netlist and checks the controller supply pins, CC pins,
-monitor/discharge branch, power-switch control, address straps and MCU
-interface in addition to rendering the schematic.
+USB-C receptacle contacts, CC protection array, VBUS monitor/discharge
+branch, both power MOSFETs, VSNK connector, address straps and MCU pull-ups.
+A generator regression also checks the A3 functional-zone headings and
+grid-aligned component placements.
 
 ## Component set
 

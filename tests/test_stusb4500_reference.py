@@ -13,6 +13,7 @@ sys.path.insert(0, str(ROOT / "plugin" / "kicad-blocks"))
 sys.path.insert(0, str(ROOT / "examples" / "stusb4500"))
 
 from generate_reference import generate_reference_schematic
+from kicad_blocks.pcb_layout import _all, _direct, parse_sexpr
 
 
 class STUSB4500ReferenceTests(unittest.TestCase):
@@ -61,8 +62,8 @@ class STUSB4500ReferenceTests(unittest.TestCase):
         )
         self.assertLess(
             len(wire_nodes),
-            100,
-            "Long nets should use local labels, not coordinate-sorted wire guesses",
+            145,
+            "Long nets should use local labels; short functional relationships should be routed visibly",
         )
         self.assertNotIn("(global_label ", content)
         self.assertNotIn("VBUS_SENSE", content)
@@ -95,6 +96,79 @@ class STUSB4500ReferenceTests(unittest.TestCase):
                 f'(hierarchical_label {name} (shape {shape})',
                 content,
             )
+
+
+    def test_layout_is_grid_aligned_and_functionally_zoned(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="stusb4500-layout-") as temporary:
+            schematic = generate_reference_schematic(
+                Path(temporary) / "reference.kicad_sch"
+            )
+            content = schematic.read_text(encoding="utf-8")
+
+        for token in (
+            '(paper "A3")',
+            '(text "USB-C INPUT / CC ESD"',
+            '(text "VBUS FILTER / SENSE"',
+            '(text "PD CONTROLLER / BYPASS"',
+            '(text "BACK-TO-BACK POWER SWITCH"',
+            '(text "PROTECTED VSNK OUTPUT"',
+            '(text "OPTIONAL HOST / I2C INTERFACE"',
+            '(text "I2C ADDRESS / RESET STRAPS"',
+            '(polyline',
+            '"Layout revision 2"',
+            'D4 order code is not specified by ST',
+            'REFERENCE ONLY',
+        ):
+            self.assertIn(token, content)
+
+        tree = parse_sexpr(content)
+        placements = {}
+        for instance in _all(tree, "symbol"):
+            if _direct(instance, "lib_id") is None:
+                continue
+            reference = next(
+                (
+                    str(prop[2])
+                    for prop in _all(instance, "property")
+                    if len(prop) >= 3 and str(prop[1]) == "Reference"
+                ),
+                None,
+            )
+            at = _direct(instance, "at")
+            if reference is None or at is None:
+                continue
+            x, y = float(at[1]), float(at[2])
+            placements[reference] = (x, y)
+            self.assertAlmostEqual(
+                x / 2.54, round(x / 2.54), places=3,
+                msg=f"{reference} X coordinate is off the 2.54 mm grid",
+            )
+            self.assertAlmostEqual(
+                y / 2.54, round(y / 2.54), places=3,
+                msg=f"{reference} Y coordinate is off the 2.54 mm grid",
+            )
+
+        expected = {
+            "J1": (50.8, 142.24),
+            "D1": (88.9, 139.7),
+            "C4": (78.74, 96.52),
+            "D4": (93.98, 88.9),
+            "C50": (88.9, 190.5),
+            "D50": (106.68, 190.5),
+            "U1": (213.36, 157.48),
+            "T4": (284.48, 76.2),
+            "T1": (337.82, 76.2),
+            "R10": (297.18, 116.84),
+            "R11": (325.12, 124.46),
+            "R13": (353.06, 124.46),
+            "C10": (360.68, 93.98),
+            "D11": (373.38, 124.46),
+            "J10": (388.62, 93.98),
+            "J2": (373.38, 213.36),
+        }
+        for reference, position in expected.items():
+            self.assertEqual(placements.get(reference), position)
+
 
 
 if __name__ == "__main__":
