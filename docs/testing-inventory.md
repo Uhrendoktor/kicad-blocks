@@ -292,11 +292,11 @@ Regression coverage for syntax-aware policy violations, reviewed dynamic typing 
 
 | Test | Purpose |
 | --- | --- |
-| `test_rejects_inline_suppressions_and_dynamic_execution` | Rejects inline suppressions and dynamic execution. |
-| `test_rejects_explicit_any_outside_reviewed_boundaries` | Rejects explicit Any outside reviewed boundaries. |
-| `test_allows_the_one_documented_untrusted_object_input` | Allows the one documented untrusted object input. |
-| `test_requires_documentation_for_production_python_modules` | Requires documentation for production Python modules. |
-| `test_pyright_inventory_requires_every_core_module_or_a_host_exclusion` | Pyright inventory requires every core module or a host exclusion. |
+| `test_rejects_inline_suppressions_and_dynamic_execution` | rejects inline suppressions and dynamic execution. |
+| `test_rejects_explicit_any_outside_reviewed_boundaries` | rejects explicit Any outside reviewed boundaries. |
+| `test_allows_the_one_documented_untrusted_object_input` | allows the one documented untrusted object input. |
+| `test_requires_documentation_for_production_python_modules` | requires documentation for production Python modules. |
+| `test_pyright_inventory_requires_every_core_module_or_a_host_exclusion` | pyright inventory requires every core module or a host exclusion. |
 
 ### `tests/test_release_package.py`
 

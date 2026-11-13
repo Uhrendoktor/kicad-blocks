@@ -59,7 +59,7 @@ def _purpose(name: str) -> str:
     """Describe the behavior identified by one test's explicit name."""
     words = name.removeprefix("test_").split("_")
     description = " ".join(ACRONYMS.get(word, word) for word in words)
-    return description[:1].upper() + description[1:] + "."
+    return description + "."
 
 
 def _cases(path: Path) -> list[tuple[int, str, str]]:
