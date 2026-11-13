@@ -11,6 +11,8 @@ import uuid
 from collections.abc import Iterable
 from dataclasses import dataclass
 
+from .json_types import JsonMapping, JsonValue
+
 PIN_TYPES = ("input", "output", "bidirectional", "tristate", "passive")
 _KICAD_PIN_TYPES = {
     "input": "input",
@@ -53,7 +55,7 @@ def parameter_field_name(name: str) -> str:
     return PARAMETER_FIELD_PREFIX + str(name)
 
 
-def resolve_variant_implementation(manifest: dict, value: str) -> str:
+def resolve_variant_implementation(manifest: JsonMapping, value: str) -> str:
     """Return the implementation filename for an exact variant value."""
     variants = manifest.get("variants") or []
     if not variants:
@@ -71,7 +73,7 @@ def resolve_variant_implementation(manifest: dict, value: str) -> str:
     return str(matches[0]["file"])
 
 
-def validate_parameter_value(parameter: dict, value: object) -> str:
+def validate_parameter_value(parameter: JsonMapping, value: JsonValue) -> str:
     """Validate and normalize one single-line parameter value."""
     name = str(parameter.get("name", "parameter"))
     kind = str(parameter.get("type", "string")).casefold()
@@ -101,7 +103,7 @@ def validate_parameter_value(parameter: dict, value: object) -> str:
     raise ValueError(f"Unsupported type {kind!r} for parameter {name!r}.")
 
 
-def normalize_parameters(parameters: Iterable[dict] | None) -> list[dict[str, str]]:
+def normalize_parameters(parameters: Iterable[JsonMapping] | None) -> list[dict[str, str]]:
     """Validate parameter declarations from a block manifest or API call."""
     normalized: list[dict[str, str]] = []
     seen: set[str] = set()
@@ -135,10 +137,10 @@ def normalize_parameters(parameters: Iterable[dict] | None) -> list[dict[str, st
 
 
 def normalize_profiles(
-    profiles: Iterable[dict] | None,
-    parameters: Iterable[dict] | None,
-    variants: Iterable[dict] | None,
-    layouts: Iterable[dict] | None,
+    profiles: Iterable[JsonMapping] | None,
+    parameters: Iterable[JsonMapping] | None,
+    variants: Iterable[JsonMapping] | None,
+    layouts: Iterable[JsonMapping] | None,
     default_layout: str | None = None,
 ) -> list[dict]:
     """Validate named configuration profiles for one block.
@@ -233,7 +235,7 @@ def normalize_profiles(
     return normalized
 
 
-def resolve_profile_configuration(manifest: dict, profile_id: str) -> dict:
+def resolve_profile_configuration(manifest: JsonMapping, profile_id: str) -> dict[str, JsonValue]:
     """Resolve one profile into its complete per-instance field values."""
     requested = str(profile_id or "").strip().casefold()
     profiles = manifest.get("profiles") or []
@@ -274,7 +276,7 @@ def parse_parameters(spec: str) -> list[dict[str, str]]:
 
 
 def resolve_parameter_values(
-    parameters: Iterable[dict] | None, overrides: dict[str, object] | None = None
+    parameters: Iterable[JsonMapping] | None, overrides: dict[str, object] | None = None
 ) -> dict[str, str]:
     """Resolve defaults plus caller overrides, rejecting unknown parameters."""
     definitions = normalize_parameters(parameters)
@@ -289,8 +291,8 @@ def resolve_parameter_values(
 
 def substitute_parameter_templates(
     content: str,
-    parameters: Iterable[dict] | None,
-    overrides: dict[str, object] | None = None,
+    parameters: Iterable[JsonMapping] | None,
+    overrides: dict[str, JsonValue] | None = None,
 ) -> str:
     """Substitute {{NAME}} tokens in KiCad text fields using validated values.
 

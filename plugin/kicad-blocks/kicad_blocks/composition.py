@@ -7,7 +7,7 @@ import shutil
 import tempfile
 import uuid
 from pathlib import Path
-from typing import Any
+from .json_types import JsonMapping, JsonObject
 
 from .model import (
     BlockPin,
@@ -31,7 +31,7 @@ from .repository import (
 
 
 def _child_record(
-    parent: BlockRecord, dependency: dict[str, Any], records: dict[str, BlockRecord]
+    parent: BlockRecord, dependency: JsonMapping, records: dict[str, BlockRecord]
 ) -> BlockRecord:
     block_id = str(dependency.get("block_id", ""))
     child = records.get(block_id)
@@ -82,9 +82,9 @@ def _refresh_local_revision(record: BlockRecord) -> None:
 
 def _compose_direct_children(
     parent: BlockRecord,
-    dependencies: list[tuple[dict[str, Any], BlockRecord]],
+    dependencies: list[tuple[JsonMapping, BlockRecord]],
     kicad_cli: str,
-) -> dict[str, Any]:
+) -> JsonObject:
     if not dependencies:
         return {"placed": [], "labels": 0}
 

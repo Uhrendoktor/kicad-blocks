@@ -15,7 +15,7 @@ import tempfile
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from .json_types import BlockLayoutSource, JsonObject, JsonValue, SExpr
 
 
 class _Quoted(str):
@@ -88,7 +88,7 @@ def parse_sexpr(source: str) -> list:
     return root[0]
 
 
-def _dump(value: Any) -> str:
+def _dump(value: SExpr) -> str:
     if isinstance(value, list):
         return "(" + " ".join(_dump(item) for item in value) + ")"
     if isinstance(value, _Quoted):
@@ -96,7 +96,7 @@ def _dump(value: Any) -> str:
     return str(value)
 
 
-def _head(node: Any) -> str | None:
+def _head(node: SExpr) -> str | None:
     return str(node[0]) if isinstance(node, list) and node and isinstance(node[0], str) else None
 
 
@@ -108,7 +108,7 @@ def _all(node: list, tag: str) -> list[list]:
     return [child for child in node[1:] if _head(child) == tag]
 
 
-def _num(value: Any) -> float:
+def _num(value: SExpr) -> float:
     try:
         result = float(str(value))
     except (TypeError, ValueError) as exc:
@@ -157,7 +157,7 @@ def _reference(footprint: list) -> str | None:
     return None
 
 
-def _refresh_ids(node: Any, id_remap: dict[str, str] | None = None) -> None:
+def _refresh_ids(node: SExpr, id_remap: dict[str, str] | None = None) -> None:
     """Regenerate item IDs, optionally retaining old-to-new UUID correspondence."""
     if not isinstance(node, list):
         return
@@ -172,7 +172,7 @@ def _refresh_ids(node: Any, id_remap: dict[str, str] | None = None) -> None:
 
 
 def _rewrite_nets(
-    node: Any,
+    node: SExpr,
     mapping: dict[int, tuple[int, str]],
     *,
     include_net_name: bool,
@@ -265,7 +265,7 @@ def _transform_item(
 
     absolute_tags = {"at", "start", "mid", "end", "center", "xy", "pts"}
 
-    def walk(item: Any) -> None:
+    def walk(item: SExpr) -> None:
         if not isinstance(item, list):
             return
         tag = _head(item)
@@ -382,7 +382,7 @@ def _merge_net_chain_sections(
 
         members = _direct(chain, "members")
         if members is not None:
-            def rewrite_member(node: Any, chain_name: str = source_name) -> None:
+            def rewrite_member(node: SExpr, chain_name: str = source_name) -> None:
                 if not isinstance(node, list):
                     return
                 if _head(node) == "net" and len(node) >= 2:
@@ -439,7 +439,7 @@ def _atomic_write(path: Path, content: str) -> None:
 
 
 
-def _normalise_class_assignment(value: Any) -> list[str]:
+def _normalise_class_assignment(value: JsonValue) -> list[str]:
     """Normalize old single-class and current list-valued project assignments."""
     if value is None:
         return []
@@ -450,7 +450,7 @@ def _normalise_class_assignment(value: Any) -> list[str]:
     raise ValueError(f"Invalid KiCad netclass assignment value: {value!r}")
 
 
-def _netclass_signature(netclass: dict[str, Any]) -> str:
+def _netclass_signature(netclass: JsonObject) -> str:
     """Compare classes by their electrical properties, excluding identity/order."""
     values = dict(netclass)
     values.pop("name", None)
@@ -538,7 +538,7 @@ def _merge_project_net_settings(
     pin_to_board_net: dict[str, str],
     source_net_to_board_net: dict[str, str] | None = None,
     source_chain_name_map: dict[str, str] | None = None,
-) -> dict[str, Any] | None:
+) -> JsonObject | None:
     """Build a copied project file with block netclasses/assignments merged.
 
     The target project's settings remain authoritative. Named block netclasses
@@ -579,7 +579,7 @@ def _merge_project_net_settings(
     if not isinstance(target_classes, list) or not isinstance(source_classes, list):
         raise TypeError("KiCad net_settings.classes must be arrays.")
 
-    class_by_name: dict[str, dict[str, Any]] = {
+    class_by_name: dict[str, JsonObject] = {
         str(item["name"]): item
         for item in target_classes
         if isinstance(item, dict) and isinstance(item.get("name"), str)
@@ -672,7 +672,7 @@ def _merge_project_net_settings(
             if destination_net not in assigned_nets:
                 assigned_nets.append(destination_net)
 
-    applied_patterns: list[dict[str, Any]] = []
+    applied_patterns: list[JsonObject] = []
     unmatched_patterns: list[str] = []
     source_net_map = source_net_to_board_net or {}
     source_patterns = source_settings.get("netclass_patterns") or []
@@ -791,7 +791,7 @@ def _merge_project_net_settings(
     }
 
 
-def resolve_block_layout(block, layout_id: str | None = None) -> dict[str, Any]:
+def resolve_block_layout(block: BlockLayoutSource, layout_id: str | None = None) -> JsonObject:
     """Resolve a named layout asset, retaining support for legacy single-layout blocks."""
     layouts = block.manifest.get("layouts") or []
     if layouts:
@@ -852,7 +852,7 @@ def resolve_block_layout(block, layout_id: str | None = None) -> dict[str, Any]:
 class BlockLayoutPlacement:
     """One schematic block occurrence and its desired PCB placement."""
 
-    block: Any
+    block: BlockLayoutSource
     instance_reference: str
     position_mm: tuple[float, float]
     pin_to_board_net: dict[str, str]
@@ -865,7 +865,7 @@ def merge_block_layouts(
     target_board: Path,
     placements: list[BlockLayoutPlacement],
     output_board: Path,
-) -> dict[str, Any]:
+) -> JsonObject:
     """Apply several block layouts to one new output board, in order.
 
     Intermediate board/project copies live in a temporary directory. The
@@ -894,7 +894,7 @@ def merge_block_layouts(
     if len(references) != len(set(references)):
         raise ValueError("Each selected block instance must have a unique reference designator.")
 
-    results: list[dict[str, Any]] = []
+    results: list[JsonObject] = []
     current_board = target_board
     with tempfile.TemporaryDirectory(prefix="kicad-block-batch-") as temp:
         stage_root = Path(temp)
@@ -958,7 +958,7 @@ def merge_block_layouts(
 
 def merge_block_layout(
     target_board: Path,
-    block,
+    block: BlockLayoutSource,
     output_board: Path,
     *,
     instance_reference: str,
@@ -967,7 +967,7 @@ def merge_block_layout(
     layout_anchor_mm: tuple[float, float] = (0.0, 0.0),
     rotation_deg: float = 0.0,
     layout_id: str | None = None,
-) -> dict[str, Any]:
+) -> JsonObject:
     """Merge a stored block layout into a new copy of a project board.
 
     The manifest's optional layout_ports map relates facade pin names to

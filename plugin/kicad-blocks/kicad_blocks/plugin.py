@@ -1156,7 +1156,7 @@ def _pick_record(records, parent, title: str):
     count_label = ttk.Label(outer)
     count_label.pack(anchor="w", pady=(4, 0))
 
-    records_by_id: dict[str, object] = {}
+    records_by_id: dict[str, BlockRecord] = {}
     selected_record = [None]
     chosen_record = [None]
     select_button = ttk.Button(outer, text="Select block", state="disabled")
@@ -2097,7 +2097,7 @@ def _native_symbol_preview_photo(
     # Tk images belong to a particular Tcl interpreter, so cache only PNG bytes.
     return tk.PhotoImage(data=base64.b64encode(png_data).decode("ascii"))
 
-_NATIVE_PREVIEW_CACHE: dict[tuple, object] = {}
+_NATIVE_PREVIEW_CACHE: dict[tuple[str, int, str, int, int], bytes] = {}
 
 
 def _draw_facade_preview(canvas, record) -> None:
@@ -2894,7 +2894,7 @@ def _show_library_browser(
     _set_window_geometry(window, 1480, 980, 1160, 740)
     current_roots = [_library_roots_for(library_root)]
     records: list = []
-    records_by_id: dict[str, object] = {}
+    records_by_id: dict[str, BlockRecord] = {}
 
     style = ttk.Style(window)
     palette = getattr(window, "_kicad_blocks_palette", {})

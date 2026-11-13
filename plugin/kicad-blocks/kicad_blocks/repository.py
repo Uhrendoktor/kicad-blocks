@@ -14,6 +14,8 @@ import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
+from .json_types import JsonObject
+
 from .extraction import extract_hierarchical_pins, prepare_block_implementation
 from .model import (
     BlockPin,
@@ -50,7 +52,7 @@ class BlockOccurrence:
 @dataclass(frozen=True, slots=True)
 class BlockRecord:
     path: Path
-    manifest: dict
+    manifest: JsonObject
 
     @property
     def name(self) -> str:
