@@ -3312,7 +3312,7 @@ def _show_library_browser(
         actions, text="Edit implementation…", command=open_implementation
     ).pack(side="left", padx=(6, 0))
     ttk.Button(
-        actions, text="Edit facade…", command=edit_facade
+        actions, text="Edit placed facade…", command=edit_facade
     ).pack(side="left", padx=(6, 0))
     ttk.Button(
         actions, text="Manage variants…", command=edit_variants
