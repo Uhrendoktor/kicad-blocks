@@ -255,18 +255,6 @@ Configuration-profile normalization, parameter/variant/layout resolution, local-
 | `test_profiles_round_trip_through_local_copy_sync_and_publish` | profiles round trip through local copy sync and publish. |
 | `test_divergent_profile_changes_are_rejected_without_overwrite` | divergent profile changes are rejected without overwrite. |
 
-### `tests/test_python_policy.py`
-
-Regression coverage for syntax-aware policy violations, reviewed dynamic typing boundaries, production module docstrings, and Pyright include/exclude inventory enforcement.
-
-| Test | Purpose |
-| --- | --- |
-| `test_rejects_inline_suppressions_and_dynamic_execution` | Rejects inline suppressions and dynamic execution. |
-| `test_rejects_explicit_any_outside_reviewed_boundaries` | Rejects explicit Any outside reviewed boundaries. |
-| `test_allows_the_one_documented_untrusted_object_input` | Allows the one documented untrusted object input. |
-| `test_requires_documentation_for_production_python_modules` | Requires documentation for production Python modules. |
-| `test_pyright_inventory_requires_every_core_module_or_a_host_exclusion` | Pyright inventory requires every core module or a host exclusion. |
-
 ### `tests/test_publish_ipc_wheel.py`
 
 Transient versus permanent GitHub API failures and recovery when a wheel upload succeeded but its response was lost.
@@ -297,6 +285,18 @@ Versioned release asset upload, checksum verification, and immutable existing-as
 | --- | --- |
 | `test_release_assets_are_uploaded_and_verified_by_digest` | release assets are uploaded and verified by digest. |
 | `test_existing_asset_with_changed_digest_is_never_replaced` | existing asset with changed digest is never replaced. |
+
+### `tests/test_python_policy.py`
+
+Regression coverage for syntax-aware policy violations, reviewed dynamic typing boundaries, production module docstrings, and Pyright include/exclude inventory enforcement.
+
+| Test | Purpose |
+| --- | --- |
+| `test_rejects_inline_suppressions_and_dynamic_execution` | Rejects inline suppressions and dynamic execution. |
+| `test_rejects_explicit_any_outside_reviewed_boundaries` | Rejects explicit Any outside reviewed boundaries. |
+| `test_allows_the_one_documented_untrusted_object_input` | Allows the one documented untrusted object input. |
+| `test_requires_documentation_for_production_python_modules` | Requires documentation for production Python modules. |
+| `test_pyright_inventory_requires_every_core_module_or_a_host_exclusion` | Pyright inventory requires every core module or a host exclusion. |
 
 ### `tests/test_release_package.py`
 

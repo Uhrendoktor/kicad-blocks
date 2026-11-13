@@ -58,7 +58,8 @@ ACRONYMS = {"kicad": "KiCad", "kiCad": "KiCad", "ipc": "IPC", "pcb": "PCB", "erc
 def _purpose(name: str) -> str:
     """Describe the behavior identified by one test's explicit name."""
     words = name.removeprefix("test_").split("_")
-    return " ".join(ACRONYMS.get(word, word) for word in words) + "."
+    description = " ".join(ACRONYMS.get(word, word) for word in words)
+    return description[:1].upper() + description[1:] + "."
 
 
 def _cases(path: Path) -> list[tuple[int, str, str]]:
