@@ -15,9 +15,16 @@ from urllib.request import Request, urlopen
 API_VERSION = "2022-11-28"
 
 
-def _request(method: str, url: str, token: str, *, payload: dict | None = None,
-             body: bytes | None = None, content_type: str = "application/vnd.github+json",
-             allow_not_found: bool = False) -> dict | None:
+def _request(
+    method: str,
+    url: str,
+    token: str,
+    *,
+    payload: dict | None = None,
+    body: bytes | None = None,
+    content_type: str = "application/vnd.github+json",
+    allow_not_found: bool = False,
+) -> dict | None:
     headers = {
         "Accept": "application/vnd.github+json",
         "Authorization": f"Bearer {token}",
@@ -30,7 +37,9 @@ def _request(method: str, url: str, token: str, *, payload: dict | None = None,
     elif body is not None:
         headers["Content-Type"] = content_type
     try:
-        with urlopen(Request(url, data=data, headers=headers, method=method), timeout=60) as response:
+        with urlopen(
+            Request(url, data=data, headers=headers, method=method), timeout=60
+        ) as response:
             raw = response.read()
     except HTTPError as exc:
         if allow_not_found and exc.code == 404:
@@ -78,7 +87,9 @@ def publish_release(
             },
         )
     if not release or not release.get("id") or release.get("tag_name") != tag:
-        raise RuntimeError("Could not create or retrieve the expected versioned release.")
+        raise RuntimeError(
+            "Could not create or retrieve the expected versioned release."
+        )
 
     release_id = release["id"]
     upload_url = release.get("upload_url", "").split("{", 1)[0]
@@ -92,11 +103,17 @@ def publish_release(
             raise FileNotFoundError(path)
         expected[path.name] = (path.stat().st_size, _digest(path))
         existing = next(
-            (asset for asset in release.get("assets", []) if asset.get("name") == path.name),
+            (
+                asset
+                for asset in release.get("assets", [])
+                if asset.get("name") == path.name
+            ),
             None,
         )
         if existing is not None:
-            if existing.get("size") != path.stat().st_size or existing.get("digest") != _digest(path):
+            if existing.get("size") != path.stat().st_size or existing.get(
+                "digest"
+            ) != _digest(path):
                 raise RuntimeError(
                     f"Release asset {path.name!r} already exists with different bytes; refusing overwrite."
                 )
@@ -118,7 +135,9 @@ def publish_release(
             None,
         )
         if asset is None or asset.get("size") != size or asset.get("digest") != digest:
-            raise RuntimeError(f"Release asset verification failed for {name!r}: {asset!r}")
+            raise RuntimeError(
+                f"Release asset verification failed for {name!r}: {asset!r}"
+            )
     url = f"https://github.com/{repo}/releases/tag/{tag}"
     print(f"Published and verified {url}")
     return url

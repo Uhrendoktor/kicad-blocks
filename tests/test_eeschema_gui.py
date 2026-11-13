@@ -145,7 +145,8 @@ def main() -> None:
 
                     setup = next(
                         (
-                            item for item in windows
+                            item
+                            for item in windows
                             if "kicad setup" in (item[1] + " " + item[2]).casefold()
                         ),
                         None,
@@ -178,7 +179,8 @@ def main() -> None:
 
                     editor = next(
                         (
-                            item for item in reversed(windows)
+                            item
+                            for item in reversed(windows)
                             if implementation.stem.casefold() in item[1].casefold()
                             and (
                                 "schematic editor" in item[1].casefold()
@@ -224,7 +226,12 @@ def main() -> None:
                             check=False,
                         ).stdout.strip()
                         window_diagnostics.append(
-                            {"id": candidate, "title": name, "class": window_class, "pid": pid}
+                            {
+                                "id": candidate,
+                                "title": name,
+                                "class": window_class,
+                                "pid": pid,
+                            }
                         )
                     geometry = subprocess.run(
                         ["xdotool", "getdisplaygeometry"],
@@ -332,7 +339,9 @@ def main() -> None:
                     if key in {"X", "Y", "WIDTH", "HEIGHT"}
                 }
                 if not {"X", "Y", "WIDTH", "HEIGHT"}.issubset(dimensions):
-                    raise RuntimeError(f"Could not read Eeschema window geometry: {geometry!r}")
+                    raise RuntimeError(
+                        f"Could not read Eeschema window geometry: {geometry!r}"
+                    )
                 # Use absolute desktop coordinates derived from the actual window
                 # origin, rather than mixing window-relative canvas coordinates
                 # with the outer-frame dimensions.
@@ -372,7 +381,9 @@ def main() -> None:
                 time.sleep(1.0)
 
                 if not implementation.is_file() or not implementation.stat().st_size:
-                    raise AssertionError("Eeschema removed or emptied the implementation schematic.")
+                    raise AssertionError(
+                        "Eeschema removed or emptied the implementation schematic."
+                    )
                 if edit_label not in implementation.read_text(encoding="utf-8"):
                     raise AssertionError(
                         "The global label placed through the Eeschema GUI was not saved "
@@ -400,7 +411,9 @@ def main() -> None:
                         process.wait(timeout=5.0)
 
         if implementation.read_bytes() == before:
-            raise AssertionError("The Eeschema GUI session did not persist a content edit.")
+            raise AssertionError(
+                "The Eeschema GUI session did not persist a content edit."
+            )
         edited_source = implementation.read_text(encoding="utf-8")
         if edit_label not in edited_source:
             raise AssertionError("The GUI-edited label was lost before Publish.")
@@ -435,15 +448,23 @@ def main() -> None:
             )
         published_manifest = read_manifest(block.path)
         if published_manifest["version"] <= version_before_publish:
-            raise AssertionError("Plugin Publish did not advance the library block revision.")
+            raise AssertionError(
+                "Plugin Publish did not advance the library block revision."
+            )
         if "implementation.kicad_sch" not in published_manifest["hashes"]:
-            raise AssertionError("Published library manifest does not hash the edited implementation.")
+            raise AssertionError(
+                "Published library manifest does not hash the edited implementation."
+            )
         if edit_label not in block.implementation.read_text(encoding="utf-8"):
             raise AssertionError("Plugin Publish lost the Eeschema GUI edit.")
         if local_copy.implementation.read_bytes() != local_before:
-            raise AssertionError("Publishing the library unexpectedly modified the existing local copy.")
+            raise AssertionError(
+                "Publishing the library unexpectedly modified the existing local copy."
+            )
         if not reload_calls:
-            raise AssertionError("Plugin Publish did not refresh the stable KiCad symbol catalog.")
+            raise AssertionError(
+                "Plugin Publish did not refresh the stable KiCad symbol catalog."
+            )
 
         # Invoke the same selected-instance Sync helper used by the plugin.
         # This KIID was bound to the project-local copy before the GUI edit.
@@ -469,9 +490,16 @@ def main() -> None:
                 f"Plugin Sync did not pull the published GUI edit: {sync_result!r}"
             )
         if edit_label not in local_copy.implementation.read_text(encoding="utf-8"):
-            raise AssertionError("The pre-existing local copy did not receive the published GUI edit.")
-        if read_manifest(local_copy.path)["source_revision"] != published_manifest["revision"]:
-            raise AssertionError("The local sync baseline was not advanced to the published revision.")
+            raise AssertionError(
+                "The pre-existing local copy did not receive the published GUI edit."
+            )
+        if (
+            read_manifest(local_copy.path)["source_revision"]
+            != published_manifest["revision"]
+        ):
+            raise AssertionError(
+                "The local sync baseline was not advanced to the published revision."
+            )
         print(
             "Eeschema GUI edit -> plugin Publish -> existing KIID-bound local copy Sync passed."
         )
@@ -499,7 +527,9 @@ def main() -> None:
             text=True,
         )
         if not list(output_dir.glob("*.svg")):
-            raise AssertionError("KiCad CLI could not export the implementation after GUI save.")
+            raise AssertionError(
+                "KiCad CLI could not export the implementation after GUI save."
+            )
         local_output = root / "local-svg"
         local_output.mkdir()
         subprocess.run(
@@ -517,7 +547,9 @@ def main() -> None:
             text=True,
         )
         if not list(local_output.glob("*.svg")):
-            raise AssertionError("KiCad CLI could not export the synchronized local implementation.")
+            raise AssertionError(
+                "KiCad CLI could not export the synchronized local implementation."
+            )
         print("KiCad CLI re-parsed both published and synchronized implementations.")
 
 

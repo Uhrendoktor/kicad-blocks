@@ -38,7 +38,10 @@ class PublishIpcWheelTests(unittest.TestCase):
             patch.object(
                 publisher,
                 "urlopen",
-                side_effect=[TimeoutError("TLS handshake timed out"), _Response(b'{"ok":true}')],
+                side_effect=[
+                    TimeoutError("TLS handshake timed out"),
+                    _Response(b'{"ok":true}'),
+                ],
             ) as urlopen,
             patch.object(publisher.time, "sleep") as sleep,
         ):
@@ -74,7 +77,9 @@ class PublishIpcWheelTests(unittest.TestCase):
                 "kicad_python-0.9.0.dev0-cp312-cp312-linux_x86_64.whl"
             )
             wheel.write_bytes(b"wheel-bytes")
-            release_url = "https://api.github.com/repos/owner/repo/releases/tags/kicad-python-dev"
+            release_url = (
+                "https://api.github.com/repos/owner/repo/releases/tags/kicad-python-dev"
+            )
             upload_url = "https://uploads.github.com/repos/owner/repo/releases/1/assets"
             asset = {
                 "name": wheel.name,
@@ -94,12 +99,16 @@ class PublishIpcWheelTests(unittest.TestCase):
                 if method == "GET" and url == release_url:
                     return {**release, "assets": [asset] if len(calls) > 1 else []}
                 if method == "POST" and url.startswith(upload_url):
-                    raise RuntimeError("upload response timed out after server accepted bytes")
+                    raise RuntimeError(
+                        "upload response timed out after server accepted bytes"
+                    )
                 return {}
 
             with (
                 patch.object(publisher, "_api_request", side_effect=fake_request),
-                patch.dict(publisher.os.environ, {"GITHUB_API_URL": "https://api.github.com"}),
+                patch.dict(
+                    publisher.os.environ, {"GITHUB_API_URL": "https://api.github.com"}
+                ),
             ):
                 result = publisher.publish_wheel(Path(temp), "owner/repo", "token")
 

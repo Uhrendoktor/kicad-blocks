@@ -28,7 +28,6 @@ def _find_kicad_cli() -> str:
     )
 
 
-
 def _validate_stusb4500_netlist(cli: str, output_dir: Path) -> None:
     schematic = generate_reference_schematic(output_dir / "stusb4500.kicad_sch")
     netlist_path = output_dir / "stusb4500.net"
@@ -200,7 +199,9 @@ def main() -> None:
         symbol_svgs = list(symbol_out.glob("*.svg"))
         schematic_svgs = list(schematic_out.glob("*.svg"))
         if not symbol_svgs:
-            raise RuntimeError("KiCad did not export an SVG for the generated block symbol.")
+            raise RuntimeError(
+                "KiCad did not export an SVG for the generated block symbol."
+            )
         if not schematic_svgs:
             raise RuntimeError(
                 "KiCad did not export an SVG for the generated implementation schematic."
@@ -215,14 +216,18 @@ def main() -> None:
         bom_output = Path(temp) / "recursive-bom.csv"
         bom_result = export_block_bom(parent, bom_output, cli, Path(temp) / "library")
         if not bom_output.is_file() or bom_result["block_count"] != 2:
-            raise RuntimeError("Recursive KiCad CLI BOM export did not include both blocks.")
+            raise RuntimeError(
+                "Recursive KiCad CLI BOM export did not include both blocks."
+            )
         erc_reports = validate_block_tree(
             parent, Path(temp) / "erc-reports", cli, Path(temp) / "library"
         )
         if len(erc_reports) != 2 or not all(
             Path(item["report"]).is_file() for item in erc_reports
         ):
-            raise RuntimeError("Recursive KiCad CLI ERC did not report both block implementations.")
+            raise RuntimeError(
+                "Recursive KiCad CLI ERC did not report both block implementations."
+            )
         _validate_stusb4500_netlist(cli, Path(temp))
         print(
             f"KiCad CLI validated symbol ({symbol_svgs[0].name}), "

@@ -23,10 +23,7 @@ def _smoke_test() -> None:
     try:
         notebook = plugin_module._show_action_hub(root)
         root.update()
-        tab_names = [
-            notebook.tab(tab_id, "text")
-            for tab_id in notebook.tabs()
-        ]
+        tab_names = [notebook.tab(tab_id, "text") for tab_id in notebook.tabs()]
 
         def descendants(widget):
             for child in widget.winfo_children():

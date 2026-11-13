@@ -54,12 +54,16 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
         ]
 
         with (
-            patch.object(plugin_actions.shutil, "which", return_value="/usr/bin/xdotool"),
+            patch.object(
+                plugin_actions.shutil, "which", return_value="/usr/bin/xdotool"
+            ),
             patch.object(
                 plugin_actions, "_block_record_for_instance", return_value=self.block
             ) as resolve_block,
             patch.object(
-                plugin_actions, "_minimize_placement_windows", return_value=[self.parent]
+                plugin_actions,
+                "_minimize_placement_windows",
+                return_value=[self.parent],
             ) as minimize,
             patch.object(plugin_actions, "_restore_placement_windows") as restore,
             patch.object(
@@ -94,11 +98,11 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
     def test_create_block_from_selected_sheet_never_prompts_for_manual_pins(self):
         source = self.project / "power_stage.kicad_sch"
         source.write_text("(kicad_sch)", encoding="utf-8")
-        selection = '''(sheet
+        selection = """(sheet
             (property "Sheetname" "Power Stage" (at 100 100 0) (effects (font (size 1 1))))
             (property "Sheetfile" "power_stage.kicad_sch" (at 100 100 0) (effects (font (size 1 1))))
             (uuid "dddddddd-dddd-4ddd-8ddd-dddddddddddd")
-        )'''
+        )"""
         schematic = SimpleNamespace(
             get_selection_as_string=Mock(return_value=selection)
         )
@@ -110,8 +114,12 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
                 return_value=("Power Stage", "Power stage description"),
             ) as details,
             patch.object(plugin_actions, "messagebox", messagebox),
-            patch.object(plugin_actions, "create_block", return_value=self.block) as create,
-            patch.object(plugin_actions, "_register_block", return_value=self.block) as register,
+            patch.object(
+                plugin_actions, "create_block", return_value=self.block
+            ) as create,
+            patch.object(
+                plugin_actions, "_register_block", return_value=self.block
+            ) as register,
         ):
             plugin_actions._create_and_place(
                 self.library,
@@ -133,7 +141,6 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
         )
         register.assert_called_once_with(self.project, self.block, self.kicad)
         messagebox.showinfo.assert_called_once()
-
 
     def test_create_block_without_selection_uses_the_current_hierarchical_sheet(self):
         source = self.project / "power_stage.kicad_sch"
@@ -158,9 +165,7 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
         schematic = SimpleNamespace(
             get_selection_as_string=Mock(return_value=""),
             get_hierarchy=Mock(return_value=SimpleNamespace(root=root_sheet)),
-            document=SimpleNamespace(
-                sheet_path=FakeSheetPath(["root-id", "sheet-id"])
-            ),
+            document=SimpleNamespace(sheet_path=FakeSheetPath(["root-id", "sheet-id"])),
         )
         messagebox = SimpleNamespace(showinfo=Mock())
 
@@ -171,7 +176,9 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
                 return_value=("Power Stage", "Current sheet capture"),
             ) as details,
             patch.object(plugin_actions, "messagebox", messagebox),
-            patch.object(plugin_actions, "create_block", return_value=self.block) as create,
+            patch.object(
+                plugin_actions, "create_block", return_value=self.block
+            ) as create,
             patch.object(plugin_actions, "_register_block", return_value=self.block),
         ):
             plugin_actions._create_and_place(
@@ -194,7 +201,9 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
             wait_for_libraries=Mock(
                 return_value=[SimpleNamespace(nickname="KBlocks", error_message=None)]
             ),
-            load_all_libraries=Mock(side_effect=AssertionError("headless-only API called")),
+            load_all_libraries=Mock(
+                side_effect=AssertionError("headless-only API called")
+            ),
         )
 
         self.assertTrue(plugin_actions._reload_symbol_library(kicad, "KBlocks"))
@@ -206,7 +215,9 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
 
     def test_edit_facade_requires_one_selected_symbol(self):
         schematic = SimpleNamespace(get_selection=Mock(return_value=[]))
-        with self.assertRaisesRegex(ValueError, "Select one or more block symbol instances"):
+        with self.assertRaisesRegex(
+            ValueError, "Select one or more block symbol instances"
+        ):
             plugin_actions._edit_facade_symbol(
                 self.library,
                 schematic,
@@ -254,7 +265,9 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
 
         published_manifest = read_manifest(self.block.path)
         self.assertGreater(published_manifest["version"], initial_manifest["version"])
-        self.assertNotEqual(published_manifest["revision"], initial_manifest["revision"])
+        self.assertNotEqual(
+            published_manifest["revision"], initial_manifest["revision"]
+        )
         self.assertIn("implementation.kicad_sch", published_manifest["hashes"])
         self.kicad.reload_library.assert_called_once()
         self.kicad.wait_for_libraries.assert_called_once()
@@ -264,8 +277,12 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
         from google.protobuf.empty_pb2 import Empty
         from kipy.proto.common.commands import editor_commands_pb2
 
-        first = SimpleNamespace(name="KB_PARAM_OUTPUT_VOLTAGE", text=SimpleNamespace(value="3.3"))
-        second = SimpleNamespace(name="KB_LAYOUT", text=SimpleNamespace(value="standard"))
+        first = SimpleNamespace(
+            name="KB_PARAM_OUTPUT_VOLTAGE", text=SimpleNamespace(value="3.3")
+        )
+        second = SimpleNamespace(
+            name="KB_LAYOUT", text=SimpleNamespace(value="standard")
+        )
         instance = SimpleNamespace(
             reference="X1",
             user_fields=[first, second],
@@ -306,7 +323,9 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
         from google.protobuf.empty_pb2 import Empty
         from kipy.proto.common.commands import editor_commands_pb2
 
-        field = SimpleNamespace(name="KB_PARAM_OUTPUT_VOLTAGE", text=SimpleNamespace(value="3.3"))
+        field = SimpleNamespace(
+            name="KB_PARAM_OUTPUT_VOLTAGE", text=SimpleNamespace(value="3.3")
+        )
         instance = SimpleNamespace(reference="X1", user_fields=[field], proto=Empty())
         response = editor_commands_pb2.UpdateItemsResponse(status=1)
         rejected = response.updated_items.add()
@@ -348,12 +367,18 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
             self.library,
             "Typed Field Block",
             parse_pins("VIN:input"),
-            parameters=parse_parameters("OUTPUT_VOLTAGE:number=3.3, ENABLE:boolean=true"),
+            parameters=parse_parameters(
+                "OUTPUT_VOLTAGE:number=3.3, ENABLE:boolean=true"
+            ),
         )
         instance = SimpleNamespace(
             user_fields=[
-                SimpleNamespace(name="KB_PARAM_OUTPUT_VOLTAGE", text=SimpleNamespace(value="1.8")),
-                SimpleNamespace(name="KB_PARAM_ENABLE", text=SimpleNamespace(value="no")),
+                SimpleNamespace(
+                    name="KB_PARAM_OUTPUT_VOLTAGE", text=SimpleNamespace(value="1.8")
+                ),
+                SimpleNamespace(
+                    name="KB_PARAM_ENABLE", text=SimpleNamespace(value="no")
+                ),
             ]
         )
         self.assertEqual(
@@ -363,7 +388,6 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
         instance.user_fields[0].text.value = "not-a-number"
         with self.assertRaisesRegex(ValueError, "must be a number"):
             plugin_actions._parameter_values_for_instance(instance, block)
-
 
     def test_layout_selection_reads_instance_field(self):
         standard = self.project / "standard.kicad_pcb"
@@ -379,7 +403,9 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
                 {"name": "Low profile", "path": low_profile},
             ],
         )
-        field = SimpleNamespace(name="KB_LAYOUT", text=SimpleNamespace(value="low_profile"))
+        field = SimpleNamespace(
+            name="KB_LAYOUT", text=SimpleNamespace(value="low_profile")
+        )
         instance = SimpleNamespace(
             id="00000000-0000-0000-0000-000000000789",
             reference="X7",
@@ -409,11 +435,12 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
         )
         instance = SimpleNamespace(
             reference="X1",
-            user_fields=[SimpleNamespace(name="KB_LAYOUT", text=SimpleNamespace(value="removed"))],
+            user_fields=[
+                SimpleNamespace(name="KB_LAYOUT", text=SimpleNamespace(value="removed"))
+            ],
         )
         with self.assertRaisesRegex(ValueError, "selects unknown layout"):
             plugin_actions._choose_block_layout(block, self.parent, instance=instance)
-
 
     def test_open_generated_pcb_copy_launches_only_selected_output_file(self):
         board_copy = self.project / "project_with_block.kicad_pcb"
@@ -433,9 +460,13 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
         kicad.get_kicad_binary_path.assert_called_once_with("pcbnew")
 
     def test_open_generated_pcb_copy_rejects_missing_output(self):
-        kicad = SimpleNamespace(get_kicad_binary_path=Mock(return_value="/usr/bin/pcbnew"))
+        kicad = SimpleNamespace(
+            get_kicad_binary_path=Mock(return_value="/usr/bin/pcbnew")
+        )
         missing = self.project / "missing.kicad_pcb"
-        with self.assertRaisesRegex(FileNotFoundError, "Generated PCB board does not exist"):
+        with self.assertRaisesRegex(
+            FileNotFoundError, "Generated PCB board does not exist"
+        ):
             plugin_actions._open_generated_pcb_copy(kicad, missing)
 
     def test_local_implementation_edit_opens_project_copy_not_library_source(self):
@@ -470,7 +501,6 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
         )
         self.assertNotEqual(local.implementation, self.block.implementation)
 
-
     def test_create_block_empty_selection_ipc_error_uses_active_sheet(self):
         source = self.project / "power_stage.kicad_sch"
         source.write_text("(kicad_sch)", encoding="utf-8")
@@ -497,9 +527,7 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
             ),
             get_selection=Mock(return_value=[]),
             get_hierarchy=Mock(return_value=SimpleNamespace(root=root_sheet)),
-            document=SimpleNamespace(
-                sheet_path=FakeSheetPath(["root-id", "sheet-id"])
-            ),
+            document=SimpleNamespace(sheet_path=FakeSheetPath(["root-id", "sheet-id"])),
         )
         with (
             patch.object(
@@ -508,7 +536,9 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
                 return_value=("Power Stage", "Active sheet fallback"),
             ),
             patch.object(plugin_actions, "messagebox", self.messagebox),
-            patch.object(plugin_actions, "create_block", return_value=self.block) as create,
+            patch.object(
+                plugin_actions, "create_block", return_value=self.block
+            ) as create,
             patch.object(plugin_actions, "_register_block", return_value=self.block),
         ):
             plugin_actions._create_and_place(
@@ -561,9 +591,7 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
             get_selection_as_string=Mock(return_value=""),
             get_selection=Mock(return_value=[selected_sheet]),
             get_hierarchy=Mock(return_value=SimpleNamespace(root=root_sheet)),
-            document=SimpleNamespace(
-                sheet_path=FakeSheetPath(["root-id", "sheet-id"])
-            ),
+            document=SimpleNamespace(sheet_path=FakeSheetPath(["root-id", "sheet-id"])),
         )
         with (
             patch.object(
@@ -572,7 +600,9 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
                 return_value=("UART Interface", "Selected child sheet"),
             ),
             patch.object(plugin_actions, "messagebox", self.messagebox),
-            patch.object(plugin_actions, "create_block", return_value=self.block) as create,
+            patch.object(
+                plugin_actions, "create_block", return_value=self.block
+            ) as create,
             patch.object(plugin_actions, "_register_block", return_value=self.block),
         ):
             plugin_actions._create_and_place(
@@ -618,6 +648,7 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
             root._kicad_blocks_editor_window_id,
             "0x100",
         )
+
 
 if __name__ == "__main__":
     unittest.main()

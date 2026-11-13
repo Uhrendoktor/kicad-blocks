@@ -62,20 +62,30 @@ AUXILIARY_CI_CHECKS: dict[str, str] = {
 
 def pytest_module_purposes() -> dict[str, str]:
     """Return the pytest module inventory flattened in stable group order."""
-    return {path: purpose for group in PYTEST_GROUPS.values() for path, purpose in group.items()}
+    return {
+        path: purpose
+        for group in PYTEST_GROUPS.values()
+        for path, purpose in group.items()
+    }
 
 
-def collect_test_case_names(source: str, *, filename: str = "<test-source>") -> tuple[str, ...]:
+def collect_test_case_names(
+    source: str, *, filename: str = "<test-source>"
+) -> tuple[str, ...]:
     """Return module-level and test-class test function names from Python source."""
     tree = ast.parse(source, filename=filename)
     names: list[str] = []
     for node in tree.body:
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name.startswith("test_"):
+        if isinstance(
+            node, (ast.FunctionDef, ast.AsyncFunctionDef)
+        ) and node.name.startswith("test_"):
             names.append(node.name)
         elif isinstance(node, ast.ClassDef):
             names.extend(
-                child.name for child in node.body
-                if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)) and child.name.startswith("test_")
+                child.name
+                for child in node.body
+                if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef))
+                and child.name.startswith("test_")
             )
     return tuple(names)
 
@@ -86,8 +96,10 @@ def _has_main_guard(tree: ast.Module) -> bool:
         test = node.test if isinstance(node, ast.If) else None
         if (
             isinstance(test, ast.Compare)
-            and isinstance(test.left, ast.Name) and test.left.id == "__name__"
-            and len(test.ops) == 1 and isinstance(test.ops[0], ast.Eq)
+            and isinstance(test.left, ast.Name)
+            and test.left.id == "__name__"
+            and len(test.ops) == 1
+            and isinstance(test.ops[0], ast.Eq)
             and len(test.comparators) == 1
             and isinstance(test.comparators[0], ast.Constant)
             and test.comparators[0].value == "__main__"
@@ -102,17 +114,31 @@ def validate_routing(root: Path = ROOT) -> tuple[str, ...]:
     pytest_routes = pytest_module_purposes()
     routes = (*pytest_routes, *STANDALONE_TESTS)
     counts = Counter(routes)
-    errors = [f"{path} is routed {count} times." for path, count in counts.items() if count != 1]
+    errors = [
+        f"{path} is routed {count} times."
+        for path, count in counts.items()
+        if count != 1
+    ]
 
     tests_dir = root / "tests"
-    discovered = {
-        path.relative_to(root).as_posix() for path in tests_dir.glob("test_*.py")
-    } if tests_dir.is_dir() else set()
+    discovered = (
+        {path.relative_to(root).as_posix() for path in tests_dir.glob("test_*.py")}
+        if tests_dir.is_dir()
+        else set()
+    )
     configured = set(routes)
-    errors.extend(f"{path} is not routed in the test inventory." for path in sorted(discovered - configured))
-    errors.extend(f"{path} is listed but does not exist." for path in sorted(configured - discovered))
+    errors.extend(
+        f"{path} is not routed in the test inventory."
+        for path in sorted(discovered - configured)
+    )
+    errors.extend(
+        f"{path} is listed but does not exist."
+        for path in sorted(configured - discovered)
+    )
 
-    workflow = CI_WORKFLOW if root == ROOT else root / ".github" / "workflows" / "ci.yml"
+    workflow = (
+        CI_WORKFLOW if root == ROOT else root / ".github" / "workflows" / "ci.yml"
+    )
     workflow_text = workflow.read_text(encoding="utf-8") if workflow.is_file() else ""
     if not workflow_text:
         errors.append("The required .github/workflows/ci.yml file is missing.")
@@ -122,12 +148,16 @@ def validate_routing(root: Path = ROOT) -> tuple[str, ...]:
         if not path.is_file():
             continue
         try:
-            cases = collect_test_case_names(path.read_text(encoding="utf-8"), filename=relative_path)
+            cases = collect_test_case_names(
+                path.read_text(encoding="utf-8"), filename=relative_path
+            )
         except (OSError, SyntaxError) as exc:
             errors.append(f"{relative_path} cannot be parsed: {exc}")
             continue
         if not cases:
-            errors.append(f"{relative_path} is routed to pytest but defines no test cases.")
+            errors.append(
+                f"{relative_path} is routed to pytest but defines no test cases."
+            )
 
     for relative_path in sorted(STANDALONE_TESTS):
         path = root / relative_path
@@ -139,17 +169,24 @@ def validate_routing(root: Path = ROOT) -> tuple[str, ...]:
             errors.append(f"{relative_path} cannot be parsed: {exc}")
             continue
         has_main = any(
-            isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == "main"
+            isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+            and node.name == "main"
             for node in tree.body
         )
         if not has_main or not _has_main_guard(tree):
-            errors.append(f"{relative_path} must define main() and a __main__ entry point.")
+            errors.append(
+                f"{relative_path} must define main() and a __main__ entry point."
+            )
         if relative_path not in workflow_text:
-            errors.append(f"{relative_path} is not invoked by .github/workflows/ci.yml.")
+            errors.append(
+                f"{relative_path} is not invoked by .github/workflows/ci.yml."
+            )
     return tuple(errors)
 
 
-def expected_modules_for_args(args: Sequence[str], root: Path = ROOT) -> frozenset[Path]:
+def expected_modules_for_args(
+    args: Sequence[str], root: Path = ROOT
+) -> frozenset[Path]:
     """Resolve which inventoried pytest modules an invocation promises to collect."""
     root = root.resolve()
     module_paths = {(root / path).resolve() for path in pytest_module_purposes()}
@@ -205,56 +242,68 @@ def render_inventory(root: Path = ROOT) -> str:
             lines.append(
                 f"| {group} | [{relative_path}](../../{relative_path}) | {count} | {purpose} |"
             )
-    lines.extend([
-        "",
-        f"**Pytest total:** {len(routes)} modules, {total} test cases.",
-        "",
-        "## Standalone KiCad integration tests",
-        "",
-        "These tests require a live KiCad process, KiCad IPC, Tk/X11 or the native KiCad CLI. "
-        "They are executed as scripts rather than collected by pytest.",
-        "",
-        "| Script | Purpose |",
-        "| --- | --- |",
-    ])
+    lines.extend(
+        [
+            "",
+            f"**Pytest total:** {len(routes)} modules, {total} test cases.",
+            "",
+            "## Standalone KiCad integration tests",
+            "",
+            "These tests require a live KiCad process, KiCad IPC, Tk/X11 or the native KiCad CLI. "
+            "They are executed as scripts rather than collected by pytest.",
+            "",
+            "| Script | Purpose |",
+            "| --- | --- |",
+        ]
+    )
     for relative_path, purpose in STANDALONE_TESTS.items():
         lines.append(f"| [{relative_path}](../../{relative_path}) | {purpose} |")
-    lines.extend([
-        "",
-        "## Supporting CI validations",
-        "",
-        "| Check | Purpose |",
-        "| --- | --- |",
-    ])
+    lines.extend(
+        [
+            "",
+            "## Supporting CI validations",
+            "",
+            "| Check | Purpose |",
+            "| --- | --- |",
+        ]
+    )
     for check, purpose in AUXILIARY_CI_CHECKS.items():
         if check.startswith("tests/"):
             lines.append(f"| [{check}](../../{check}) | {purpose} |")
         else:
             lines.append(f"| {check} | {purpose} |")
-    lines.extend([
-        "",
-        "## Collection and maintenance rules",
-        "",
-        "- Add every tests/test_*.py file to exactly one pytest group or to STANDALONE_TESTS; "
-        "an unlisted or multiply listed module fails CI.",
-        "- Pytest-routed modules must define at least one collectable test function or "
-        "test-class method.",
-        "- Standalone tests must define main(), use a __main__ guard and be invoked explicitly "
-        "by CI.",
-        "- The pytest collection hook verifies that every module selected by an invocation "
-        "produces at least one collected item.",
-        "- Regenerate this file after inventory changes with python scripts/test_inventory.py "
-        "--write-docs.",
-        "",
-    ])
+    lines.extend(
+        [
+            "",
+            "## Collection and maintenance rules",
+            "",
+            "- Add every tests/test_*.py file to exactly one pytest group or to STANDALONE_TESTS; "
+            "an unlisted or multiply listed module fails CI.",
+            "- Pytest-routed modules must define at least one collectable test function or "
+            "test-class method.",
+            "- Standalone tests must define main(), use a __main__ guard and be invoked explicitly "
+            "by CI.",
+            "- The pytest collection hook verifies that every module selected by an invocation "
+            "produces at least one collected item.",
+            "- Regenerate this file after inventory changes with python scripts/test_inventory.py "
+            "--write-docs.",
+            "",
+        ]
+    )
     return "\n".join(lines)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     """Validate the inventory contract and optionally regenerate its documentation."""
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--write-docs", action="store_true", help="regenerate the inventory Markdown")
-    parser.add_argument("--check-docs", action="store_true", help="fail if the inventory Markdown is stale")
+    parser.add_argument(
+        "--write-docs", action="store_true", help="regenerate the inventory Markdown"
+    )
+    parser.add_argument(
+        "--check-docs",
+        action="store_true",
+        help="fail if the inventory Markdown is stale",
+    )
     args = parser.parse_args(argv)
     errors = validate_routing()
     if errors:
@@ -266,11 +315,21 @@ def main(argv: Sequence[str] | None = None) -> int:
         INVENTORY_DOC.parent.mkdir(parents=True, exist_ok=True)
         INVENTORY_DOC.write_text(rendered, encoding="utf-8")
     else:
-        if not INVENTORY_DOC.is_file() or INVENTORY_DOC.read_text(encoding="utf-8") != rendered:
-            print("ERROR: Test inventory Markdown is missing or stale; run with --write-docs.", file=sys.stderr)
+        if (
+            not INVENTORY_DOC.is_file()
+            or INVENTORY_DOC.read_text(encoding="utf-8") != rendered
+        ):
+            print(
+                "ERROR: Test inventory Markdown is missing or stale; run with --write-docs.",
+                file=sys.stderr,
+            )
             return 1
     case_count = sum(
-        len(collect_test_case_names((ROOT / path).read_text(encoding="utf-8"), filename=path))
+        len(
+            collect_test_case_names(
+                (ROOT / path).read_text(encoding="utf-8"), filename=path
+            )
+        )
         for path in pytest_module_purposes()
     )
     print(

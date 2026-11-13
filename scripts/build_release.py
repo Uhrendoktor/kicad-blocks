@@ -23,7 +23,9 @@ EXTRA_FILES = (Path("scripts") / "install_plugin.py",)
 
 def _load_installer(root: Path):
     installer_path = root / "scripts" / "install_plugin.py"
-    spec = importlib.util.spec_from_file_location("kicad_blocks_release_installer", installer_path)
+    spec = importlib.util.spec_from_file_location(
+        "kicad_blocks_release_installer", installer_path
+    )
     if spec is None or spec.loader is None:
         raise RuntimeError(f"Cannot load bundled installer: {installer_path}")
     module = importlib.util.module_from_spec(spec)
@@ -77,10 +79,18 @@ def build_release_package(
     output = Path(output_dir).expanduser().resolve()
     version_text = (root / "VERSION").read_text(encoding="utf-8").strip()
     if not re.fullmatch(r"\d+\.\d+\.\d+", version_text):
-        raise ValueError(f"VERSION must be plain MAJOR.MINOR.PATCH, got {version_text!r}.")
-    lock = (root / PACKAGE_RELATIVE / "kicad-python.lock").read_text(encoding="utf-8").strip()
+        raise ValueError(
+            f"VERSION must be plain MAJOR.MINOR.PATCH, got {version_text!r}."
+        )
+    lock = (
+        (root / PACKAGE_RELATIVE / "kicad-python.lock")
+        .read_text(encoding="utf-8")
+        .strip()
+    )
     if not re.fullmatch(r"[0-9a-f]{40}", lock):
-        raise ValueError("kicad-python.lock must contain one 40-character lowercase commit SHA.")
+        raise ValueError(
+            "kicad-python.lock must contain one 40-character lowercase commit SHA."
+        )
 
     installer = _load_installer(root)
     plugin_root = root / PACKAGE_RELATIVE
@@ -126,7 +136,11 @@ def build_release_package(
         temp_path = Path(temp.name)
     try:
         with ZipFile(
-            temp_path, "w", compression=ZIP_DEFLATED, compresslevel=9, strict_timestamps=True
+            temp_path,
+            "w",
+            compression=ZIP_DEFLATED,
+            compresslevel=9,
+            strict_timestamps=True,
         ) as archive:
             for path in files:
                 relative = path.relative_to(root).as_posix()
@@ -139,8 +153,7 @@ def build_release_package(
                 info.external_attr = (stat.S_IFREG | 0o644) << 16
                 info.flag_bits |= 0x800
                 archive.writestr(
-                    info, path.read_bytes(),
-                    compress_type=ZIP_DEFLATED, compresslevel=9
+                    info, path.read_bytes(), compress_type=ZIP_DEFLATED, compresslevel=9
                 )
             info = ZipInfo(
                 f"{archive_root}/RELEASE_INFO.json",
@@ -151,17 +164,17 @@ def build_release_package(
             info.external_attr = (stat.S_IFREG | 0o644) << 16
             info.flag_bits |= 0x800
             archive.writestr(
-                info, release_info.encode("utf-8"),
-                compress_type=ZIP_DEFLATED, compresslevel=9
+                info,
+                release_info.encode("utf-8"),
+                compress_type=ZIP_DEFLATED,
+                compresslevel=9,
             )
         temp_path.replace(archive_path)
     finally:
         temp_path.unlink(missing_ok=True)
 
     digest = hashlib.sha256(archive_path.read_bytes()).hexdigest()
-    checksum_path.write_text(
-        f"{digest}  {archive_path.name}\n", encoding="ascii"
-    )
+    checksum_path.write_text(f"{digest}  {archive_path.name}\n", encoding="ascii")
     print(f"Built {archive_path} ({archive_path.stat().st_size} bytes)")
     print(f"SHA-256 {digest}")
     return archive_path, checksum_path

@@ -90,10 +90,9 @@ class STUSB4500ReferenceTests(unittest.TestCase):
         )
         for name, shape in expected:
             self.assertIn(
-                f'(hierarchical_label {name} (shape {shape})',
+                f"(hierarchical_label {name} (shape {shape})",
                 content,
             )
-
 
     def test_layout_is_grid_aligned_and_functionally_zoned(self) -> None:
         with tempfile.TemporaryDirectory(prefix="stusb4500-layout-") as temporary:
@@ -111,10 +110,10 @@ class STUSB4500ReferenceTests(unittest.TestCase):
             '(text "PROTECTED VSNK OUTPUT"',
             '(text "OPTIONAL HOST / I2C INTERFACE"',
             '(text "I2C ADDRESS / RESET STRAPS"',
-            '(polyline',
+            "(polyline",
             '"Layout revision 2"',
-            'D4 order code is not specified by ST',
-            'REFERENCE ONLY',
+            "D4 order code is not specified by ST",
+            "REFERENCE ONLY",
         ):
             self.assertIn(token, content)
 
@@ -137,11 +136,15 @@ class STUSB4500ReferenceTests(unittest.TestCase):
             x, y = float(at[1]), float(at[2])
             placements[reference] = (x, y)
             self.assertAlmostEqual(
-                x / 2.54, round(x / 2.54), places=3,
+                x / 2.54,
+                round(x / 2.54),
+                places=3,
                 msg=f"{reference} X coordinate is off the 2.54 mm grid",
             )
             self.assertAlmostEqual(
-                y / 2.54, round(y / 2.54), places=3,
+                y / 2.54,
+                round(y / 2.54),
+                places=3,
                 msg=f"{reference} Y coordinate is off the 2.54 mm grid",
             )
 
@@ -165,7 +168,6 @@ class STUSB4500ReferenceTests(unittest.TestCase):
         }
         for reference, position in expected.items():
             self.assertEqual(placements.get(reference), position)
-
 
 
 if __name__ == "__main__":

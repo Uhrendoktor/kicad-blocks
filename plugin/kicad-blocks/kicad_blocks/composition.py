@@ -44,7 +44,9 @@ def _child_record(
         )
     child = _record(path)
     if child.manifest["block_id"] != block_id:
-        raise ValueError(f"Nested dependency path for {block_id} resolves to another block.")
+        raise ValueError(
+            f"Nested dependency path for {block_id} resolves to another block."
+        )
     records[block_id] = child
     return child
 
@@ -123,7 +125,9 @@ def _compose_direct_children(
         )
         schematic = kicad.get_schematic()
         if schematic is None:
-            raise RuntimeError(f"KiCad could not load block implementation {schematic_path}.")
+            raise RuntimeError(
+                f"KiCad could not load block implementation {schematic_path}."
+            )
         kicad.load_all_libraries(types=[1])
         kicad.wait_for_libraries(types=[1], timeout_s=120.0)
 
@@ -146,10 +150,7 @@ def _compose_direct_children(
             existing = symbols_by_reference.get(reference)
             if existing is not None:
                 lib_id = existing.definition.id
-                if (
-                    lib_id.library != nickname
-                    or lib_id.name != symbol_name
-                ):
+                if lib_id.library != nickname or lib_id.name != symbol_name:
                     raise ValueError(
                         f"Reference {reference!r} already belongs to another symbol in "
                         f"{parent.name!r}; refusing to replace it."
@@ -164,7 +165,9 @@ def _compose_direct_children(
             else:
                 position = dependency.get("position_mm", [100.0, 160.0])
                 if len(position) != 2:
-                    raise ValueError(f"Invalid position for nested instance {reference!r}.")
+                    raise ValueError(
+                        f"Invalid position for nested instance {reference!r}."
+                    )
                 existing = schematic.place_symbol_from_library(
                     f"{nickname}:{symbol_name}",
                     Vector2.from_xy_mm(float(position[0]), float(position[1])),
@@ -236,7 +239,8 @@ def _compose_direct_children(
                     if (
                         str(label.text.value),
                         _point_key(label.position),
-                    ) not in actual_labels
+                    )
+                    not in actual_labels
                 ]
                 if missing_labels:
                     raise RuntimeError(
@@ -279,7 +283,9 @@ def compose_block_implementation(
     def compose(current: BlockRecord) -> None:
         block_id = current.manifest["block_id"]
         if block_id in visiting:
-            raise ValueError(f"Nested block dependency cycle detected at {current.name!r}.")
+            raise ValueError(
+                f"Nested block dependency cycle detected at {current.name!r}."
+            )
         if block_id in completed:
             return
         visiting.add(block_id)
@@ -306,7 +312,9 @@ def compose_block_implementation(
                 revised_dependencies.append(revised)
             if revised_dependencies != refreshed_manifest.get("dependencies", []):
                 refreshed_manifest["dependencies"] = revised_dependencies
-                refreshed_manifest["version"] = int(refreshed_manifest.get("version", 1)) + 1
+                refreshed_manifest["version"] = (
+                    int(refreshed_manifest.get("version", 1)) + 1
+                )
                 atomic_write(
                     current.path / "manifest.json",
                     json.dumps(refreshed_manifest, indent=2, ensure_ascii=False) + "\n",

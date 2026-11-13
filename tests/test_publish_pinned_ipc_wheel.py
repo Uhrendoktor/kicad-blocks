@@ -47,12 +47,17 @@ class PinnedWheelPublisherTests(unittest.TestCase):
         with patch.object(
             publisher, "_request", return_value={**self.release, "assets": [asset]}
         ) as request:
-            url = publisher.publish_pinned_wheel(self.wheelhouse, "owner/repo", SHA, "token")
+            url = publisher.publish_pinned_wheel(
+                self.wheelhouse, "owner/repo", SHA, "token"
+            )
         self.assertEqual(url, asset["browser_download_url"])
         self.assertEqual(request.call_count, 2)
         self.assertEqual(request.call_args_list[0].args[0], "GET")
         self.assertEqual(request.call_args_list[1].args[0], "PATCH")
-        self.assertIn("CPython 3.12, 3.13 and 3.14", request.call_args_list[1].kwargs["payload"]["body"])
+        self.assertIn(
+            "CPython 3.12, 3.13 and 3.14",
+            request.call_args_list[1].kwargs["payload"]["body"],
+        )
 
     def test_existing_asset_with_different_digest_is_not_overwritten(self):
         asset = {
@@ -61,9 +66,12 @@ class PinnedWheelPublisherTests(unittest.TestCase):
             "digest": "sha256:" + "0" * 64,
             "browser_download_url": "https://example.invalid/wrong.whl",
         }
-        with patch.object(
-            publisher, "_request", return_value={**self.release, "assets": [asset]}
-        ), self.assertRaisesRegex(RuntimeError, "refusing to replace"):
+        with (
+            patch.object(
+                publisher, "_request", return_value={**self.release, "assets": [asset]}
+            ),
+            self.assertRaisesRegex(RuntimeError, "refusing to replace"),
+        ):
             publisher.publish_pinned_wheel(self.wheelhouse, "owner/repo", SHA, "token")
 
     def test_new_asset_upload_is_verified_against_the_release_digest(self):
@@ -88,9 +96,13 @@ class PinnedWheelPublisherTests(unittest.TestCase):
             raise AssertionError((method, url))
 
         with patch.object(publisher, "_request", side_effect=fake_request):
-            url = publisher.publish_pinned_wheel(self.wheelhouse, "owner/repo", SHA, "token")
+            url = publisher.publish_pinned_wheel(
+                self.wheelhouse, "owner/repo", SHA, "token"
+            )
         self.assertEqual(url, asset["browser_download_url"])
-        self.assertEqual([method for method, _ in calls], ["GET", "PATCH", "POST", "GET"])
+        self.assertEqual(
+            [method for method, _ in calls], ["GET", "PATCH", "POST", "GET"]
+        )
 
     def test_publisher_selects_the_matching_tag_for_each_supported_python(self):
         for minor in (12, 13, 14):
@@ -110,7 +122,9 @@ class PinnedWheelPublisherTests(unittest.TestCase):
 
     def test_invalid_source_sha_is_rejected(self):
         with self.assertRaisesRegex(ValueError, "40-character"):
-            publisher.publish_pinned_wheel(self.wheelhouse, "owner/repo", "latest", "token")
+            publisher.publish_pinned_wheel(
+                self.wheelhouse, "owner/repo", "latest", "token"
+            )
 
 
 if __name__ == "__main__":

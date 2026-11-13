@@ -12,7 +12,9 @@ from urllib.parse import quote
 from urllib.request import Request, urlopen
 
 
-def _request(method: str, url: str, token: str, payload: dict | None = None) -> dict | None:
+def _request(
+    method: str, url: str, token: str, payload: dict | None = None
+) -> dict | None:
     headers = {
         "Accept": "application/vnd.github+json",
         "Authorization": f"Bearer {token}",
@@ -22,7 +24,9 @@ def _request(method: str, url: str, token: str, payload: dict | None = None) -> 
     if data is not None:
         headers["Content-Type"] = "application/json"
     try:
-        with urlopen(Request(url, data=data, headers=headers, method=method), timeout=45) as response:
+        with urlopen(
+            Request(url, data=data, headers=headers, method=method), timeout=45
+        ) as response:
             raw = response.read()
     except HTTPError as exc:
         if method == "GET" and exc.code == 404:
@@ -34,11 +38,15 @@ def _request(method: str, url: str, token: str, payload: dict | None = None) -> 
     return json.loads(raw.decode("utf-8")) if raw else {}
 
 
-def dispatch_release(repo: str, tag: str, source_sha: str, version: str, token: str) -> bool:
+def dispatch_release(
+    repo: str, tag: str, source_sha: str, version: str, token: str
+) -> bool:
     if tag != f"v{version}" or not re.fullmatch(r"\d+\.\d+\.\d+", version):
         raise ValueError(f"Release tag {tag!r} does not match version {version!r}.")
     if not re.fullmatch(r"[0-9a-f]{40}", source_sha):
-        raise ValueError("Release source SHA must be 40 lowercase hexadecimal characters.")
+        raise ValueError(
+            "Release source SHA must be 40 lowercase hexadecimal characters."
+        )
 
     api = os.environ.get("GITHUB_API_URL", "https://api.github.com").rstrip("/")
     release_url = f"{api}/repos/{repo}/releases/tags/{quote(tag, safe='')}"
@@ -55,8 +63,14 @@ def dispatch_release(repo: str, tag: str, source_sha: str, version: str, token: 
                 and str(assets_by_name[name].get("digest", "")).startswith("sha256:")
                 for name in required_assets
             )
-            if complete and not release.get("draft", False) and not release.get("prerelease", False):
-                print(f"Release {tag} already has its ZIP and checksum; not dispatching again.")
+            if (
+                complete
+                and not release.get("draft", False)
+                and not release.get("prerelease", False)
+            ):
+                print(
+                    f"Release {tag} already has its ZIP and checksum; not dispatching again."
+                )
                 return False
 
     payload = {

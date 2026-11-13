@@ -186,12 +186,16 @@ def main() -> None:
     ).stdout
     version_match = re.search(r"(\d+\.\d+)", version_output)
     if version_match is None:
-        raise RuntimeError(f"Could not determine KiCad MAJOR.MINOR version: {version_output!r}")
+        raise RuntimeError(
+            f"Could not determine KiCad MAJOR.MINOR version: {version_output!r}"
+        )
     version = version_match.group(1)
 
     python_interpreter = shutil.which("python3")
     if not python_interpreter:
-        raise FileNotFoundError("System python3 was not found for the KiCad plugin manager.")
+        raise FileNotFoundError(
+            "System python3 was not found for the KiCad plugin manager."
+        )
 
     with tempfile.TemporaryDirectory(prefix="kicad-blocks-plugin-discovery-") as temp:
         root = Path(temp)
@@ -308,7 +312,9 @@ def main() -> None:
             "create-block": ("entrypoints/create_block.py", True),
             "open-implementation": ("entrypoints/open_implementation.py", True),
         }
-        expected_action_ids = set(expected_schematic_actions) | {"place-imported-layout"}
+        expected_action_ids = set(expected_schematic_actions) | {
+            "place-imported-layout"
+        }
         if {item["identifier"] for item in manifest["actions"]} != expected_action_ids:
             raise AssertionError(
                 "The plugin must expose the task-hub menu command, three standalone "
@@ -319,13 +325,21 @@ def main() -> None:
                 item for item in manifest["actions"] if item["identifier"] == identifier
             )
             if action.get("scopes") != ["schematic"]:
-                raise AssertionError(f"{identifier} is not scoped to Eeschema: {action!r}")
+                raise AssertionError(
+                    f"{identifier} is not scoped to Eeschema: {action!r}"
+                )
             if action.get("show-button", False) is not show_button:
-                raise AssertionError(f"Unexpected toolbar visibility for {identifier}: {action!r}")
+                raise AssertionError(
+                    f"Unexpected toolbar visibility for {identifier}: {action!r}"
+                )
             if action.get("entrypoint") != entrypoint or action.get("args", []) != []:
-                raise AssertionError(f"Invalid no-argument entrypoint for {identifier}: {action!r}")
+                raise AssertionError(
+                    f"Invalid no-argument entrypoint for {identifier}: {action!r}"
+                )
             if not (installed_plugin / entrypoint).is_file():
-                raise FileNotFoundError(f"Installed action entrypoint is missing: {entrypoint}")
+                raise FileNotFoundError(
+                    f"Installed action entrypoint is missing: {entrypoint}"
+                )
         pcb_action = next(
             item
             for item in manifest["actions"]
@@ -345,13 +359,18 @@ def main() -> None:
                 f"Installed PCB Editor action entrypoint is missing: {pcb_entrypoint}"
             )
         hub_entrypoint = installed_plugin / expected_schematic_actions["open-hub"][0]
-        installed_requirements = (installed_plugin / "requirements.txt").read_text(encoding="utf-8")
+        installed_requirements = (installed_plugin / "requirements.txt").read_text(
+            encoding="utf-8"
+        )
         abi = f"cp{sys.version_info.major}{sys.version_info.minor}"
         expected_wheel_url = (
             "https://github.com/Uhrendoktor/kicad-blocks/releases/download/"
             f"kicad-python-76b47d25/kicad_python-0.9.0.dev0-{abi}-{abi}-linux_x86_64.whl"
         )
-        if expected_wheel_url not in installed_requirements or "git+" in installed_requirements:
+        if (
+            expected_wheel_url not in installed_requirements
+            or "git+" in installed_requirements
+        ):
             raise AssertionError(
                 "Installed plugin requirements must use the published prebuilt wheel, "
                 "not a source checkout."
@@ -361,7 +380,11 @@ def main() -> None:
         process, window_id = _launch(eeschema, schematic, env, xdotool, log_path)
         try:
             environment = (
-                cache_home / "kicad" / version / "python-environments" / PLUGIN_IDENTIFIER
+                cache_home
+                / "kicad"
+                / version
+                / "python-environments"
+                / PLUGIN_IDENTIFIER
             )
             env_python = environment / "bin" / "python"
             # A cold KiCad-managed environment may need several minutes to download
@@ -450,7 +473,10 @@ def main() -> None:
                 check=True,
                 timeout=30.0,
             )
-            if "kicad-native svg facade preview passed" not in picker_probe.stdout.casefold():
+            if (
+                "kicad-native svg facade preview passed"
+                not in picker_probe.stdout.casefold()
+            ):
                 raise AssertionError(
                     "The native-rendered Tk picker smoke test did not report success. "
                     f"stdout: {picker_probe.stdout}; stderr: {picker_probe.stderr}"
@@ -473,7 +499,10 @@ def main() -> None:
                     f"(exit {configuration_probe.returncode}). "
                     f"stdout: {configuration_probe.stdout}; stderr: {configuration_probe.stderr}"
                 )
-            if "instance configuration gui passed" not in configuration_probe.stdout.casefold():
+            if (
+                "instance configuration gui passed"
+                not in configuration_probe.stdout.casefold()
+            ):
                 raise AssertionError(
                     "The instance configuration GUI smoke test did not report success. "
                     f"stdout: {configuration_probe.stdout}; stderr: {configuration_probe.stderr}"
@@ -490,7 +519,9 @@ def main() -> None:
                 check=True,
             ).stdout.strip()
             if not editor_pid:
-                raise AssertionError("Could not determine the Eeschema window process ID.")
+                raise AssertionError(
+                    "Could not determine the Eeschema window process ID."
+                )
             subprocess.run(
                 [xdotool, "windowfocus", "--sync", window_id],
                 check=True,
@@ -542,7 +573,14 @@ def main() -> None:
             # KBlocks catalog and choose it. Eeschema should then return to the
             # editor with the selected facade attached to the cursor.
             subprocess.run(
-                [xdotool, "type", "--clearmodifiers", "--delay", "15", placement_symbol_name],
+                [
+                    xdotool,
+                    "type",
+                    "--clearmodifiers",
+                    "--delay",
+                    "15",
+                    placement_symbol_name,
+                ],
                 check=True,
                 capture_output=True,
                 text=True,

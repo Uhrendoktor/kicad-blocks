@@ -66,7 +66,9 @@ def _api_request(
             try:
                 return json.loads(raw.decode("utf-8"))
             except json.JSONDecodeError as exc:
-                raise RuntimeError(f"GitHub API returned non-JSON data for {url}.") from exc
+                raise RuntimeError(
+                    f"GitHub API returned non-JSON data for {url}."
+                ) from exc
         except HTTPError as exc:
             details = exc.read().decode("utf-8", errors="replace")
             if allow_not_found and exc.code == 404:
@@ -82,7 +84,13 @@ def _api_request(
             raise RuntimeError(
                 f"GitHub API {method} {url} failed with HTTP {exc.code}: {details}"
             ) from exc
-        except (TimeoutError, socket.timeout, ssl.SSLError, URLError, ConnectionError) as exc:
+        except (
+            TimeoutError,
+            socket.timeout,
+            ssl.SSLError,
+            URLError,
+            ConnectionError,
+        ) as exc:
             if attempt >= max_retries:
                 raise RuntimeError(
                     f"GitHub API {method} {url} failed after {attempt + 1} attempts: {exc}"

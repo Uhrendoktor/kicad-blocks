@@ -63,7 +63,9 @@ class LibraryValidationTests(unittest.TestCase):
         result = report["blocks"][0]
         self.assertEqual(result["status"], "failed")
         self.assertIn("implementation.kicad_sch", result["hash_mismatches"])
-        self.assertTrue(any("checksum" in error.casefold() for error in result["errors"]))
+        self.assertTrue(
+            any("checksum" in error.casefold() for error in result["errors"])
+        )
 
     def test_missing_assets_are_reported_without_aborting_other_blocks(self):
         first = self.create_block()
@@ -77,8 +79,16 @@ class LibraryValidationTests(unittest.TestCase):
         report = validate_block_library(self.root, self.reports, run_erc=False)
 
         self.assertEqual(report["block_count"], 2)
-        failed = next(item for item in report["blocks"] if item["block_id"] == first.manifest["block_id"])
-        passed = next(item for item in report["blocks"] if item["block_id"] == second.manifest["block_id"])
+        failed = next(
+            item
+            for item in report["blocks"]
+            if item["block_id"] == first.manifest["block_id"]
+        )
+        passed = next(
+            item
+            for item in report["blocks"]
+            if item["block_id"] == second.manifest["block_id"]
+        )
         self.assertEqual(failed["status"], "failed")
         self.assertIn("implementation.kicad_sch", failed["missing_assets"])
         self.assertEqual(passed["status"], "passed")
@@ -92,8 +102,14 @@ class LibraryValidationTests(unittest.TestCase):
         report = validate_block_library(self.root, self.reports, run_erc=False)
 
         self.assertEqual(report["block_count"], 2)
-        good_result = next(item for item in report["blocks"] if item["block_id"] == good.manifest["block_id"])
-        broken_result = next(item for item in report["blocks"] if item["name"] == "broken")
+        good_result = next(
+            item
+            for item in report["blocks"]
+            if item["block_id"] == good.manifest["block_id"]
+        )
+        broken_result = next(
+            item for item in report["blocks"] if item["name"] == "broken"
+        )
         self.assertEqual(good_result["status"], "passed")
         self.assertEqual(broken_result["status"], "failed")
         self.assertTrue(any("Manifest" in error for error in broken_result["errors"]))

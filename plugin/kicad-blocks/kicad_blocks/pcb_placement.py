@@ -31,9 +31,13 @@ def _merge_entries(result: dict[str, Any]) -> list[dict[str, Any]]:
             raise TypeError("PCB merge result contains a malformed placement entry.")
         reference = str(entry.get("instance_reference", "")).strip()
         if not reference:
-            raise ValueError("PCB placement is missing its schematic instance reference.")
+            raise ValueError(
+                "PCB placement is missing its schematic instance reference."
+            )
         if reference.casefold() in references:
-            raise ValueError(f"PCB placement reference {reference!r} occurs more than once.")
+            raise ValueError(
+                f"PCB placement reference {reference!r} occurs more than once."
+            )
         references.add(reference.casefold())
 
         raw_ids = entry.get("interactive_item_uuids")
@@ -45,10 +49,14 @@ def _merge_entries(result: dict[str, Any]) -> list[dict[str, Any]]:
         for raw_id in raw_ids:
             item_id = str(raw_id).strip()
             if not item_id:
-                raise ValueError(f"PCB placement {reference!r} contains an empty board-item UUID.")
+                raise ValueError(
+                    f"PCB placement {reference!r} contains an empty board-item UUID."
+                )
             folded = item_id.casefold()
             if folded in item_ids:
-                raise ValueError(f"PCB board-item UUID {item_id!r} is assigned more than once.")
+                raise ValueError(
+                    f"PCB board-item UUID {item_id!r} is assigned more than once."
+                )
             item_ids.add(folded)
             placement_ids.append(item_id)
 
@@ -64,7 +72,9 @@ def _merge_entries(result: dict[str, Any]) -> list[dict[str, Any]]:
     return normalized
 
 
-def write_pcb_placement_manifest(board_path: Path, merge_result: dict[str, Any]) -> Path:
+def write_pcb_placement_manifest(
+    board_path: Path, merge_result: dict[str, Any]
+) -> Path:
     """Write an exclusive sidecar binding each imported block to its root item IDs."""
     board_path = Path(board_path).expanduser().resolve()
     if not board_path.is_file():
@@ -83,7 +93,9 @@ def write_pcb_placement_manifest(board_path: Path, merge_result: dict[str, Any])
         with sidecar.open("x", encoding="utf-8", newline="\n") as stream:
             stream.write(serialized)
     except FileExistsError:
-        raise FileExistsError(f"PCB placement sidecar already exists: {sidecar}") from None
+        raise FileExistsError(
+            f"PCB placement sidecar already exists: {sidecar}"
+        ) from None
     return sidecar
 
 
@@ -98,7 +110,9 @@ def read_pcb_placement_manifest(board_path: Path) -> dict[str, Any]:
     try:
         payload = json.loads(sidecar.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
-        raise ValueError(f"Could not read PCB placement manifest {sidecar}: {exc}") from exc
+        raise ValueError(
+            f"Could not read PCB placement manifest {sidecar}: {exc}"
+        ) from exc
     if not isinstance(payload, dict):
         raise TypeError("PCB placement manifest must be a JSON object.")
     if payload.get("schema_version") != PLACEMENT_SCHEMA_VERSION:
@@ -106,7 +120,10 @@ def read_pcb_placement_manifest(board_path: Path) -> dict[str, Any]:
             f"Unsupported PCB placement manifest schema: {payload.get('schema_version')!r}."
         )
     recorded_path = payload.get("board_path")
-    if not isinstance(recorded_path, str) or Path(recorded_path).expanduser().resolve() != board_path:
+    if (
+        not isinstance(recorded_path, str)
+        or Path(recorded_path).expanduser().resolve() != board_path
+    ):
         raise ValueError(
             "PCB placement manifest belongs to a different board path; refusing to move items."
         )
@@ -121,7 +138,9 @@ def read_pcb_placement_manifest(board_path: Path) -> dict[str, Any]:
             raise TypeError("PCB placement manifest contains a malformed placement.")
         reference = str(placement.get("instance_reference", "")).strip()
         if not reference or reference.casefold() in seen_references:
-            raise ValueError(f"PCB placement reference is missing or duplicated: {reference!r}.")
+            raise ValueError(
+                f"PCB placement reference is missing or duplicated: {reference!r}."
+            )
         seen_references.add(reference.casefold())
         item_ids = placement.get("item_uuids")
         if not isinstance(item_ids, list) or not item_ids:
@@ -129,7 +148,9 @@ def read_pcb_placement_manifest(board_path: Path) -> dict[str, Any]:
         for value in item_ids:
             item_id = str(value).strip()
             if not item_id or item_id.casefold() in seen_items:
-                raise ValueError(f"PCB board-item UUID is empty or duplicated: {item_id!r}.")
+                raise ValueError(
+                    f"PCB board-item UUID is empty or duplicated: {item_id!r}."
+                )
             seen_items.add(item_id.casefold())
     return payload
 
@@ -141,16 +162,22 @@ def resolve_placement_item_ids(board, placement: dict[str, Any]) -> list[Any]:
         raise ValueError("Selected PCB block placement has no board-item UUIDs.")
     requested_ids = [str(value).strip() for value in requested]
     if any(not value for value in requested_ids):
-        raise ValueError("Selected PCB block placement contains an empty board-item UUID.")
+        raise ValueError(
+            "Selected PCB block placement contains an empty board-item UUID."
+        )
     if len({value.casefold() for value in requested_ids}) != len(requested_ids):
-        raise ValueError("Selected PCB block placement contains duplicate board-item UUIDs.")
+        raise ValueError(
+            "Selected PCB block placement contains duplicate board-item UUIDs."
+        )
 
     available: dict[str, Any] = {}
     for item in board.get_items():
         item_id = getattr(item, "id", None)
         value = getattr(item_id, "value", None)
         if value is None or not str(value).strip():
-            raise TypeError("KiCad returned a board item without a readable KIID value.")
+            raise TypeError(
+                "KiCad returned a board item without a readable KIID value."
+            )
         available[str(value).casefold()] = item_id
 
     missing = [value for value in requested_ids if value.casefold() not in available]

@@ -44,14 +44,20 @@ class LibraryBrowserTests(unittest.TestCase):
         self.board.write_text("(kicad_pcb)", encoding="utf-8")
         self.v18 = Path(self.temp.name) / "implementation_1v8.kicad_sch"
         self.v33 = Path(self.temp.name) / "implementation_3v3.kicad_sch"
-        self.v18.write_text('(kicad_sch (version 20250114) (generator "test"))\n', encoding="utf-8")
-        self.v33.write_text('(kicad_sch (version 20250114) (generator "test"))\n', encoding="utf-8")
+        self.v18.write_text(
+            '(kicad_sch (version 20250114) (generator "test"))\n', encoding="utf-8"
+        )
+        self.v33.write_text(
+            '(kicad_sch (version 20250114) (generator "test"))\n', encoding="utf-8"
+        )
         self.block = create_block(
             self.root,
             "Buck Converter",
             parse_pins("VIN:input, GND:passive, VOUT:output, EN:input"),
             description="Synchronous buck regulator with enable input",
-            parameters=parse_parameters("OUTPUT_VOLTAGE:number=3.3, ENABLE:boolean=true"),
+            parameters=parse_parameters(
+                "OUTPUT_VOLTAGE:number=3.3, ENABLE:boolean=true"
+            ),
             variant_files=[
                 {"value": "1V8", "path": self.v18},
                 {"value": "3V3", "path": self.v33},
@@ -61,7 +67,9 @@ class LibraryBrowserTests(unittest.TestCase):
         self.filter_block = create_block(
             self.root,
             "USB Filter",
-            parse_pins("VBUS:input, GND:passive, USB_P:bidirectional, USB_N:bidirectional"),
+            parse_pins(
+                "VBUS:input, GND:passive, USB_P:bidirectional, USB_N:bidirectional"
+            ),
             description="USB input protection and common-mode filtering",
         )
 
@@ -70,11 +78,21 @@ class LibraryBrowserTests(unittest.TestCase):
 
     def test_search_matches_description_pins_and_variant_values(self):
         records = [self.block, self.filter_block]
-        self.assertEqual(_filter_library_records(records, "buck")[0].name, "Buck Converter")
-        self.assertEqual(_filter_library_records(records, "common-mode")[0].name, "USB Filter")
-        self.assertEqual(_filter_library_records(records, "USB_P")[0].name, "USB Filter")
-        self.assertEqual(_filter_library_records(records, "1v8")[0].name, "Buck Converter")
-        self.assertEqual(_filter_library_records(records, "vout")[0].name, "Buck Converter")
+        self.assertEqual(
+            _filter_library_records(records, "buck")[0].name, "Buck Converter"
+        )
+        self.assertEqual(
+            _filter_library_records(records, "common-mode")[0].name, "USB Filter"
+        )
+        self.assertEqual(
+            _filter_library_records(records, "USB_P")[0].name, "USB Filter"
+        )
+        self.assertEqual(
+            _filter_library_records(records, "1v8")[0].name, "Buck Converter"
+        )
+        self.assertEqual(
+            _filter_library_records(records, "vout")[0].name, "Buck Converter"
+        )
         self.assertEqual(_filter_library_records(records, ""), records)
 
     def test_native_facade_preview_removes_reference_and_component_name(self):
@@ -122,7 +140,6 @@ class LibraryBrowserTests(unittest.TestCase):
         self.assertIn("Connections · 4", overview)
         self.assertNotIn("Block ID", overview)
         self.assertNotIn(str(self.block.manifest["block_id"]), overview)
-
 
     def test_new_pcb_layout_is_created_as_default_and_saved_in_block(self):
         source = _new_blank_pcb_source()
@@ -177,11 +194,13 @@ class LibraryBrowserTests(unittest.TestCase):
         original_layouts = [dict(item) for item in self.block.manifest["layouts"]]
         second_board = Path(self.temp.name) / "standard.kicad_pcb"
         second_board.write_text("(kicad_pcb)", encoding="utf-8")
-        original_layouts.append({
-            "id": "standard",
-            "name": "Standard",
-            "source": str(second_board),
-        })
+        original_layouts.append(
+            {
+                "id": "standard",
+                "name": "Standard",
+                "source": str(second_board),
+            }
+        )
         updated_block = _save_block_layouts(
             self.block,
             original_layouts,
@@ -234,9 +253,7 @@ class LibraryBrowserTests(unittest.TestCase):
         _save_block_variants(linked_block, editor_values)
 
         after = read_manifest(self.block.path)
-        variant_1v8 = next(
-            item for item in after["variants"] if item["value"] == "1V8"
-        )
+        variant_1v8 = next(item for item in after["variants"] if item["value"] == "1V8")
         self.assertEqual(variant_1v8["layout_id"], "compact")
 
         replacement_source = Path(self.temp.name) / "renamed_implementation.kicad_sch"
@@ -261,8 +278,7 @@ class LibraryBrowserTests(unittest.TestCase):
         )
         renamed = read_manifest(self.block.path)
         renamed_implementation = next(
-            item for item in renamed["variants"]
-            if item["value"] == "1V8 low-noise"
+            item for item in renamed["variants"] if item["value"] == "1V8 low-noise"
         )
         self.assertEqual(renamed_implementation["layout_id"], "compact")
 
@@ -328,9 +344,7 @@ class LibraryBrowserTests(unittest.TestCase):
                 profiled,
                 [{"value": "3V3", "source": str(self.v33)}],
             )
-        self.assertFalse(
-            (profiled.path / "implementation_3v3.kicad_sch").exists()
-        )
+        self.assertFalse((profiled.path / "implementation_3v3.kicad_sch").exists())
         self.assertEqual(
             read_manifest(profiled.path)["variants"][0]["value"],
             "1V8",
@@ -476,13 +490,16 @@ class LibraryBrowserTests(unittest.TestCase):
         preferred = _preferred_library_selection(visible, self.block)
         self.assertIs(preferred, self.filter_block)
         self.assertIsNone(_preferred_library_selection([], self.block))
+
     def test_double_click_row_lookup_never_reuses_a_previous_selection(self):
         records = {
             str(self.block.manifest["block_id"]): self.block,
             str(self.filter_block.manifest["block_id"]): self.filter_block,
         }
         self.assertIs(
-            _library_record_for_tree_row(records, str(self.filter_block.manifest["block_id"])),
+            _library_record_for_tree_row(
+                records, str(self.filter_block.manifest["block_id"])
+            ),
             self.filter_block,
         )
         self.assertIsNone(_library_record_for_tree_row(records, ""))
@@ -541,7 +558,9 @@ class LibraryBrowserTests(unittest.TestCase):
         self.assertEqual(browser.events, [])
         self.assertEqual(manager.events, ["iconify"])
 
-    def test_native_placement_handoff_uses_add_symbol_hotkey_and_exact_library_name(self):
+    def test_native_placement_handoff_uses_add_symbol_hotkey_and_exact_library_name(
+        self,
+    ):
         calls = []
         focus_values = iter(("0x222", "0x111"))
 
@@ -573,7 +592,9 @@ class LibraryBrowserTests(unittest.TestCase):
             commands,
         )
         self.assertIn(["key", "--clearmodifiers", "Return"], commands)
-        self.assertNotIn("position", " ".join(" ".join(command) for command in commands).casefold())
+        self.assertNotIn(
+            "position", " ".join(" ".join(command) for command in commands).casefold()
+        )
         self.assertTrue(pauses)
 
     def test_native_placement_refuses_to_type_when_choose_symbol_dialog_is_absent(self):
@@ -599,7 +620,9 @@ class LibraryBrowserTests(unittest.TestCase):
                 pause=lambda _seconds: None,
             )
         self.assertFalse(any(command[1] == "type" for command in calls))
-        self.assertIn(["key", "--clearmodifiers", "Escape"], [command[1:] for command in calls])
+        self.assertIn(
+            ["key", "--clearmodifiers", "Escape"], [command[1:] for command in calls]
+        )
 
     def test_native_placement_requires_xdotool_and_editor_window(self):
         with (
@@ -608,15 +631,24 @@ class LibraryBrowserTests(unittest.TestCase):
         ):
             _start_native_symbol_placement(
                 SimpleNamespace(),
-                "0x111", "buck_converter_ab12cd34",
-                xdotool=None, command_runner=Mock(), pause=lambda _seconds: None,
+                "0x111",
+                "buck_converter_ab12cd34",
+                xdotool=None,
+                command_runner=Mock(),
+                pause=lambda _seconds: None,
             )
-        with self.assertRaisesRegex(RuntimeError, "identify the active Eeschema window"):
+        with self.assertRaisesRegex(
+            RuntimeError, "identify the active Eeschema window"
+        ):
             _start_native_symbol_placement(
                 SimpleNamespace(),
-                None, "buck_converter_ab12cd34",
-                xdotool="/usr/bin/xdotool", command_runner=Mock(), pause=lambda _seconds: None,
+                None,
+                "buck_converter_ab12cd34",
+                xdotool="/usr/bin/xdotool",
+                command_runner=Mock(),
+                pause=lambda _seconds: None,
             )
+
 
 if __name__ == "__main__":
     unittest.main()

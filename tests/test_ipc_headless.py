@@ -67,14 +67,18 @@ def main() -> None:
             library_root,
             "Headless IPC Smoke Block",
             parse_pins("VIN:input, GND:passive, VOUT:output"),
-            parameters=parse_parameters("OUTPUT_VOLTAGE:number=3.3, ENABLE:boolean=true"),
+            parameters=parse_parameters(
+                "OUTPUT_VOLTAGE:number=3.3, ENABLE:boolean=true"
+            ),
             layout_files=[{"id": "default", "name": "Default", "path": default_layout}],
-            profiles=[{
-                "id": "default_profile",
-                "name": "Default configuration",
-                "parameters": {"OUTPUT_VOLTAGE": "3.3", "ENABLE": "true"},
-                "layout": "default",
-            }],
+            profiles=[
+                {
+                    "id": "default_profile",
+                    "name": "Default configuration",
+                    "parameters": {"OUTPUT_VOLTAGE": "3.3", "ENABLE": "true"},
+                    "layout": "default",
+                }
+            ],
         )
         nickname = block.manifest["library_nickname"]
         symbol_name = block.manifest["symbol_name"]
@@ -114,17 +118,28 @@ def main() -> None:
             # instance values can be edited without replacing the facade ID.
             instance_fields = {field.name: field for field in instance.user_fields}
             parameter_fields = {
-                name: field for name, field in instance_fields.items()
+                name: field
+                for name, field in instance_fields.items()
                 if name.startswith("KB_PARAM_")
             }
             if set(parameter_fields) != {"KB_PARAM_OUTPUT_VOLTAGE", "KB_PARAM_ENABLE"}:
                 raise AssertionError(
                     f"Expected typed block parameter fields, got {sorted(parameter_fields)}."
                 )
-            if "KB_LAYOUT" not in instance_fields or instance_fields["KB_LAYOUT"].text.value != "default":
-                raise AssertionError("The generated facade did not expose its default PCB layout field.")
-            if "KB_PROFILE" not in instance_fields or instance_fields["KB_PROFILE"].text.value != "":
-                raise AssertionError("The generated facade did not expose its blank profile selector.")
+            if (
+                "KB_LAYOUT" not in instance_fields
+                or instance_fields["KB_LAYOUT"].text.value != "default"
+            ):
+                raise AssertionError(
+                    "The generated facade did not expose its default PCB layout field."
+                )
+            if (
+                "KB_PROFILE" not in instance_fields
+                or instance_fields["KB_PROFILE"].text.value != ""
+            ):
+                raise AssertionError(
+                    "The generated facade did not expose its blank profile selector."
+                )
             schematic.save()
 
             symbols = list(schematic.get_symbols())
@@ -190,20 +205,28 @@ def main() -> None:
                     f"KiCad IPC did not persist the edited instance fields: {configured_values!r}"
                 )
             if str(instance.id) != original_configured_id or instance.reference != "X1":
-                raise AssertionError("Configuration changed the facade KIID or reference.")
+                raise AssertionError(
+                    "Configuration changed the facade KIID or reference."
+                )
             if len(symbols) != 1:
-                raise AssertionError(f"Expected one facade symbol; found {len(symbols)}.")
+                raise AssertionError(
+                    f"Expected one facade symbol; found {len(symbols)}."
+                )
             if len(sheet_symbols) != 0:
                 raise AssertionError(
                     f"Expected zero hierarchical sheet symbols; found {len(sheet_symbols)}."
                 )
             if instance.reference != "X1":
-                raise AssertionError(f"Unexpected reference designator: {instance.reference!r}.")
+                raise AssertionError(
+                    f"Unexpected reference designator: {instance.reference!r}."
+                )
             if (
                 instance.definition.id.library != nickname
                 or instance.definition.id.name != symbol_name
             ):
-                raise AssertionError("Placed facade has the wrong KiCad library identifier.")
+                raise AssertionError(
+                    "Placed facade has the wrong KiCad library identifier."
+                )
 
             original_instance_id = str(instance.id)
             selection = SimpleNamespace(get_selection=lambda: [instance])
@@ -232,12 +255,16 @@ def main() -> None:
                 or symbols_after_local[0].reference != "X1"
                 or str(symbols_after_local[0].id) != original_instance_id
             ):
-                raise AssertionError("Local-copy binding changed or duplicated the facade instance.")
+                raise AssertionError(
+                    "Local-copy binding changed or duplicated the facade instance."
+                )
             if (
                 symbols_after_local[0].definition.id.library != nickname
                 or symbols_after_local[0].definition.id.name != symbol_name
             ):
-                raise AssertionError("Local-copy binding unexpectedly changed the facade library ID.")
+                raise AssertionError(
+                    "Local-copy binding unexpectedly changed the facade library ID."
+                )
 
             local_text = local.implementation.read_text(encoding="utf-8")
             local.implementation.write_text(
@@ -246,9 +273,15 @@ def main() -> None:
             )
             published = sync_selected_local(selection, kicad, project_dir)
             if "implementation.kicad_sch" not in published["published"]:
-                raise AssertionError(f"Local implementation edit was not published: {published!r}")
-            if "; local IPC publish test" not in block.implementation.read_text(encoding="utf-8"):
-                raise AssertionError("Publishing a local implementation did not update its library source.")
+                raise AssertionError(
+                    f"Local implementation edit was not published: {published!r}"
+                )
+            if "; local IPC publish test" not in block.implementation.read_text(
+                encoding="utf-8"
+            ):
+                raise AssertionError(
+                    "Publishing a local implementation did not update its library source."
+                )
 
             source_text = block.implementation.read_text(encoding="utf-8")
             block.implementation.write_text(
@@ -257,9 +290,15 @@ def main() -> None:
             )
             pulled = sync_selected_local(selection, kicad, project_dir)
             if "implementation.kicad_sch" not in pulled["pulled"]:
-                raise AssertionError(f"Upstream implementation edit was not pulled: {pulled!r}")
-            if "; upstream IPC pull test" not in local.implementation.read_text(encoding="utf-8"):
-                raise AssertionError("Synchronizing did not pull the library implementation edit.")
+                raise AssertionError(
+                    f"Upstream implementation edit was not pulled: {pulled!r}"
+                )
+            if "; upstream IPC pull test" not in local.implementation.read_text(
+                encoding="utf-8"
+            ):
+                raise AssertionError(
+                    "Synchronizing did not pull the library implementation edit."
+                )
 
             local_before_conflict = local.implementation.read_text(encoding="utf-8")
             source_before_conflict = block.implementation.read_text(encoding="utf-8")
@@ -278,10 +317,16 @@ def main() -> None:
                     raise
             else:
                 raise AssertionError("Divergent local/library edits were not rejected.")
-            if "; local concurrent edit" not in local.implementation.read_text(encoding="utf-8"):
+            if "; local concurrent edit" not in local.implementation.read_text(
+                encoding="utf-8"
+            ):
                 raise AssertionError("Conflict detection overwrote the local version.")
-            if "; library concurrent edit" not in block.implementation.read_text(encoding="utf-8"):
-                raise AssertionError("Conflict detection overwrote the library version.")
+            if "; library concurrent edit" not in block.implementation.read_text(
+                encoding="utf-8"
+            ):
+                raise AssertionError(
+                    "Conflict detection overwrote the library version."
+                )
 
             symbols_after_sync = list(schematic.get_symbols())
             if (
@@ -289,7 +334,9 @@ def main() -> None:
                 or str(symbols_after_sync[0].id) != original_instance_id
                 or symbols_after_sync[0].reference != "X1"
             ):
-                raise AssertionError("Local synchronization changed the facade KIID/reference.")
+                raise AssertionError(
+                    "Local synchronization changed the facade KIID/reference."
+                )
 
             # Test the plugin's actual dynamic registration path: this library
             # did not exist in sym-lib-table when KiCad was started.
@@ -306,11 +353,15 @@ def main() -> None:
             )
             schematic.save()
             if late_instance.definition.id.library != nickname:
-                raise AssertionError("A newly added facade did not reload through the stable KBlocks nickname.")
+                raise AssertionError(
+                    "A newly added facade did not reload through the stable KBlocks nickname."
+                )
         finally:
             kicad.close()
 
-        project_schematics = sorted(path.name for path in project_dir.glob("*.kicad_sch"))
+        project_schematics = sorted(
+            path.name for path in project_dir.glob("*.kicad_sch")
+        )
         if project_schematics != [schematic_path.name]:
             raise AssertionError(
                 "Block placement created an unexpected project schematic file: "
@@ -319,11 +370,20 @@ def main() -> None:
         saved_text = schematic_path.read_text(encoding="utf-8")
         expected_lib_id = f'(lib_id "{nickname}:{symbol_name}")'
         if expected_lib_id not in saved_text:
-            raise AssertionError("Saved project schematic does not contain the facade library ID.")
+            raise AssertionError(
+                "Saved project schematic does not contain the facade library ID."
+            )
         if "(sheet " in saved_text:
-            raise AssertionError("Saved parent schematic unexpectedly contains a child sheet.")
-        if f'(lib_id "{nickname}:{late_block.manifest["symbol_name"]}")' not in saved_text:
-            raise AssertionError("The runtime-registered facade was not saved into the parent schematic.")
+            raise AssertionError(
+                "Saved parent schematic unexpectedly contains a child sheet."
+            )
+        if (
+            f'(lib_id "{nickname}:{late_block.manifest["symbol_name"]}")'
+            not in saved_text
+        ):
+            raise AssertionError(
+                "The runtime-registered facade was not saved into the parent schematic."
+            )
 
         print(
             "KiCad IPC passed: one stable catalog, local-instance metadata, runtime block addition, "
@@ -391,12 +451,16 @@ def main() -> None:
         try:
             parent_schematic = parent_kicad.get_schematic()
             if parent_schematic is None:
-                raise RuntimeError("Could not reopen the composed parent implementation.")
+                raise RuntimeError(
+                    "Could not reopen the composed parent implementation."
+                )
             parent_kicad.load_all_libraries(types=[1])
             parent_kicad.wait_for_libraries(types=[1], timeout_s=120.0)
             nested_symbols = list(parent_schematic.get_symbols())
             nested_sheets = list(parent_schematic.get_sheet_symbols())
-            symbols_by_reference = {symbol.reference: symbol for symbol in nested_symbols}
+            symbols_by_reference = {
+                symbol.reference: symbol for symbol in nested_symbols
+            }
             if set(symbols_by_reference) != {"B1", "B2"}:
                 raise AssertionError(
                     f"Expected two independent instances of the same child block; "
@@ -429,14 +493,15 @@ def main() -> None:
             for reference, expected in expected_instances.items():
                 symbol = symbols_by_reference[reference]
                 rotation = expected["orientation"]
-                if int(symbol.transform.orientation) != schematic_symbol_orientation(rotation):
+                if int(symbol.transform.orientation) != schematic_symbol_orientation(
+                    rotation
+                ):
                     raise AssertionError(
                         f"Nested facade {reference} was not placed at {rotation} degrees."
                     )
 
             labels_by_name = {
-                label.text.value: label
-                for label in parent_schematic.get_labels()
+                label.text.value: label for label in parent_schematic.get_labels()
             }
             expected_names = {
                 net_name
@@ -463,15 +528,16 @@ def main() -> None:
                         origin_x + offset_x, origin_y + offset_y
                     )
                     actual_label = labels_by_name[pin_map[pin_name]]
-                    if (
-                        int(actual_label.position.x) != int(expected_point.x)
-                        or int(actual_label.position.y) != int(expected_point.y)
-                    ):
+                    if int(actual_label.position.x) != int(expected_point.x) or int(
+                        actual_label.position.y
+                    ) != int(expected_point.y):
                         raise AssertionError(
                             f"Label {pin_map[pin_name]} is not on the transformed pin endpoint: "
                             f"got {actual_label.position}, expected {expected_point}."
                         )
-                    if int(actual_label.spin_style) != rotate_label_spin_style(spin, rotation):
+                    if int(actual_label.spin_style) != rotate_label_spin_style(
+                        spin, rotation
+                    ):
                         raise AssertionError(
                             f"Label {pin_map[pin_name]} has the wrong orientation "
                             f"for {rotation}-degree rotation."
@@ -479,7 +545,9 @@ def main() -> None:
         finally:
             parent_kicad.close()
 
-        parent_schematics = sorted(path.name for path in parent.path.glob("*.kicad_sch"))
+        parent_schematics = sorted(
+            path.name for path in parent.path.glob("*.kicad_sch")
+        )
         if parent_schematics != ["implementation.kicad_sch"]:
             raise AssertionError(
                 "Nested composition generated an unexpected schematic file: "
@@ -500,7 +568,9 @@ def main() -> None:
             check=True,
         )
         if not list(nested_svg_dir.glob("*.svg")):
-            raise AssertionError("KiCad CLI could not export the composed parent implementation.")
+            raise AssertionError(
+                "KiCad CLI could not export the composed parent implementation."
+            )
         # Verify the second level independently: the child implementation
         # must contain its rotated leaf facade, while the parent still contains
         # only the child facade. Both remain ordinary symbols on their own
@@ -514,7 +584,9 @@ def main() -> None:
         try:
             child_schematic = child_kicad.get_schematic()
             if child_schematic is None:
-                raise RuntimeError("Could not reopen the recursively composed child implementation.")
+                raise RuntimeError(
+                    "Could not reopen the recursively composed child implementation."
+                )
             child_kicad.load_all_libraries(types=[1])
             child_kicad.wait_for_libraries(types=[1], timeout_s=120.0)
             leaf_symbols = list(child_schematic.get_symbols())
@@ -526,10 +598,16 @@ def main() -> None:
                 raise AssertionError(
                     f"Expected nested leaf reference B9; found {leaf_symbols[0].reference!r}."
                 )
-            if int(leaf_symbols[0].transform.orientation) != schematic_symbol_orientation(270):
-                raise AssertionError("Nested leaf facade was not placed at 270 degrees.")
+            if int(
+                leaf_symbols[0].transform.orientation
+            ) != schematic_symbol_orientation(270):
+                raise AssertionError(
+                    "Nested leaf facade was not placed at 270 degrees."
+                )
             if child_schematic.get_sheet_symbols():
-                raise AssertionError("Second-level composition created a hierarchical sheet.")
+                raise AssertionError(
+                    "Second-level composition created a hierarchical sheet."
+                )
 
             child_labels = list(child_schematic.get_labels())
             leaf_pin_points = facade_pin_connection_points(
@@ -582,12 +660,13 @@ def main() -> None:
             check=True,
         )
         if not list(child_svg_dir.glob("*.svg")):
-            raise AssertionError("KiCad CLI could not export the second-level implementation.")
+            raise AssertionError(
+                "KiCad CLI could not export the second-level implementation."
+            )
         print(
             "Nested block composition passed: two recursive levels (90° child and 270° leaf facades), "
             "zero hierarchical sheets and no copied child schematic."
         )
-
 
 
 if __name__ == "__main__":

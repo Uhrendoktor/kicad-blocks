@@ -13,7 +13,9 @@ from kicad_blocks.pcb_placement import (
 
 def _active_board_path(board) -> Path:
     document = board.document
-    filename = str(getattr(document, "board_filename", "") or getattr(board, "name", "")).strip()
+    filename = str(
+        getattr(document, "board_filename", "") or getattr(board, "name", "")
+    ).strip()
     if not filename:
         raise RuntimeError("KiCad did not report a file name for the active PCB board.")
     candidate = Path(filename).expanduser()
@@ -54,7 +56,9 @@ def _choose_placement(placements: list[dict[str, Any]]) -> dict[str, Any] | None
         wraplength=480,
     ).pack(padx=16, pady=(16, 8), anchor="w")
     choice = tk.StringVar(value=labels[0])
-    combo = ttk.Combobox(root, textvariable=choice, values=labels, state="readonly", width=68)
+    combo = ttk.Combobox(
+        root, textvariable=choice, values=labels, state="readonly", width=68
+    )
     combo.pack(padx=16, fill="x")
     combo.current(0)
 
@@ -71,7 +75,9 @@ def _choose_placement(placements: list[dict[str, Any]]) -> dict[str, Any] | None
     def cancel() -> None:
         root.destroy()
 
-    ttk.Button(buttons, text="Move at cursor", command=accept).pack(side="right", padx=(8, 0))
+    ttk.Button(buttons, text="Move at cursor", command=accept).pack(
+        side="right", padx=(8, 0)
+    )
     ttk.Button(buttons, text="Cancel", command=cancel).pack(side="right")
     root.protocol("WM_DELETE_WINDOW", cancel)
     combo.bind("<Return>", lambda _event: accept())

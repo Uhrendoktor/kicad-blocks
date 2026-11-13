@@ -19,29 +19,38 @@ class DownloadPinnedWheelTests(unittest.TestCase):
         self.wheel_name = "kicad_python-0.9.0.dev0-cp312-cp312-linux_x86_64.whl"
         buffer = io.BytesIO()
         with zipfile.ZipFile(buffer, "w") as archive:
-            archive.writestr("kicad_python-0.9.0.dev0.dist-info/WHEEL", "Wheel-Version: 1.0\n")
+            archive.writestr(
+                "kicad_python-0.9.0.dev0.dist-info/WHEEL", "Wheel-Version: 1.0\n"
+            )
         self.payload = buffer.getvalue()
         self.digest = f"sha256:{hashlib.sha256(self.payload).hexdigest()}"
         self.release = {
             "tag_name": "kicad-python-76b47d25",
-            "assets": [{
-                "name": self.wheel_name,
-                "state": "uploaded",
-                "browser_download_url": "https://example.invalid/wheel.whl",
-                "digest": self.digest,
-                "size": len(self.payload),
-            }],
+            "assets": [
+                {
+                    "name": self.wheel_name,
+                    "state": "uploaded",
+                    "browser_download_url": "https://example.invalid/wheel.whl",
+                    "digest": self.digest,
+                    "size": len(self.payload),
+                }
+            ],
         }
 
     def test_reuses_exact_abi_wheel_after_digest_and_archive_validation(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             with (
-                patch.object(downloader, "expected_wheel_name", return_value=self.wheel_name),
+                patch.object(
+                    downloader, "expected_wheel_name", return_value=self.wheel_name
+                ),
                 patch.object(downloader, "_api_get_release", return_value=self.release),
                 patch.object(downloader, "_download_asset", return_value=self.payload),
             ):
                 path = downloader.download_pinned_wheel(
-                    Path(temporary), "Uhrendoktor/kicad-blocks", self.source_sha, "token"
+                    Path(temporary),
+                    "Uhrendoktor/kicad-blocks",
+                    self.source_sha,
+                    "token",
                 )
             self.assertIsNotNone(path)
             assert path is not None
@@ -50,29 +59,43 @@ class DownloadPinnedWheelTests(unittest.TestCase):
 
     def test_returns_none_when_release_or_abi_asset_is_missing(self) -> None:
         with (
-            patch.object(downloader, "expected_wheel_name", return_value=self.wheel_name),
+            patch.object(
+                downloader, "expected_wheel_name", return_value=self.wheel_name
+            ),
             patch.object(downloader, "_api_get_release", return_value=None),
         ):
             self.assertIsNone(
                 downloader.download_pinned_wheel(
-                    Path(tempfile.gettempdir()), "Uhrendoktor/kicad-blocks", self.source_sha, "token"
+                    Path(tempfile.gettempdir()),
+                    "Uhrendoktor/kicad-blocks",
+                    self.source_sha,
+                    "token",
                 )
             )
         release_without_asset = {**self.release, "assets": []}
         with (
-            patch.object(downloader, "expected_wheel_name", return_value=self.wheel_name),
-            patch.object(downloader, "_api_get_release", return_value=release_without_asset),
+            patch.object(
+                downloader, "expected_wheel_name", return_value=self.wheel_name
+            ),
+            patch.object(
+                downloader, "_api_get_release", return_value=release_without_asset
+            ),
         ):
             self.assertIsNone(
                 downloader.download_pinned_wheel(
-                    Path(tempfile.gettempdir()), "Uhrendoktor/kicad-blocks", self.source_sha, "token"
+                    Path(tempfile.gettempdir()),
+                    "Uhrendoktor/kicad-blocks",
+                    self.source_sha,
+                    "token",
                 )
             )
 
     def test_rejects_corrupt_or_changed_asset_bytes(self) -> None:
         with (
             tempfile.TemporaryDirectory() as temporary,
-            patch.object(downloader, "expected_wheel_name", return_value=self.wheel_name),
+            patch.object(
+                downloader, "expected_wheel_name", return_value=self.wheel_name
+            ),
             patch.object(downloader, "_api_get_release", return_value=self.release),
             patch.object(downloader, "_download_asset", return_value=b"wrong bytes"),
             self.assertRaisesRegex(RuntimeError, "digest mismatch"),
@@ -84,7 +107,10 @@ class DownloadPinnedWheelTests(unittest.TestCase):
     def test_rejects_wrong_source_sha(self) -> None:
         with self.assertRaisesRegex(ValueError, "40-character SHA"):
             downloader.download_pinned_wheel(
-                Path(tempfile.gettempdir()), "Uhrendoktor/kicad-blocks", "not-a-sha", "token"
+                Path(tempfile.gettempdir()),
+                "Uhrendoktor/kicad-blocks",
+                "not-a-sha",
+                "token",
             )
 
 

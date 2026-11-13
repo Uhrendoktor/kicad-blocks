@@ -62,8 +62,12 @@ def main(screenshot_path: Path | None = None) -> None:
         variant_33 = root_dir / "implementation_3v3.kicad_sch"
         standard.write_text("(kicad_pcb)\\n", encoding="utf-8")
         compact.write_text("(kicad_pcb)\\n", encoding="utf-8")
-        variant_18.write_text('(kicad_sch (version 20250114) (generator "test"))\\n', encoding="utf-8")
-        variant_33.write_text('(kicad_sch (version 20250114) (generator "test"))\\n', encoding="utf-8")
+        variant_18.write_text(
+            '(kicad_sch (version 20250114) (generator "test"))\\n', encoding="utf-8"
+        )
+        variant_33.write_text(
+            '(kicad_sch (version 20250114) (generator "test"))\\n', encoding="utf-8"
+        )
         block = create_block(
             library,
             "Configuration GUI Block",
@@ -136,7 +140,9 @@ def main(screenshot_path: Path | None = None) -> None:
         original_showinfo = plugin_actions.messagebox.showinfo
         original_showerror = plugin_actions.messagebox.showerror
         plugin_actions.messagebox.showinfo = lambda *_args, **_kwargs: None
-        plugin_actions.messagebox.showerror = lambda _title, message, **_kwargs: interaction_errors.append(str(message))
+        plugin_actions.messagebox.showerror = lambda _title, message, **_kwargs: (
+            interaction_errors.append(str(message))
+        )
         deadline = time.monotonic() + 8.0
 
         def drive_form() -> None:
@@ -151,24 +157,33 @@ def main(screenshot_path: Path | None = None) -> None:
                     if time.monotonic() < deadline:
                         parent.after(100, drive_form)
                         return
-                    raise TimeoutError("The Configure Block Instance form did not appear.")
+                    raise TimeoutError(
+                        "The Configure Block Instance form did not appear."
+                    )
                 dialog = dialogs[-1]
                 widgets = list(_walk(dialog))
                 combos = [
-                    widget for widget in widgets
+                    widget
+                    for widget in widgets
                     if isinstance(widget, plugin_actions.ttk.Combobox)
                 ]
                 entries = [
-                    widget for widget in widgets
+                    widget
+                    for widget in widgets
                     if isinstance(widget, plugin_actions.ttk.Entry)
                     and not isinstance(widget, plugin_actions.ttk.Combobox)
                 ]
                 buttons = [
-                    widget for widget in widgets
+                    widget
+                    for widget in widgets
                     if isinstance(widget, plugin_actions.ttk.Button)
                 ]
                 save_button = next(
-                    (button for button in buttons if button.cget("text") == "Save instance"),
+                    (
+                        button
+                        for button in buttons
+                        if button.cget("text") == "Save instance"
+                    ),
                     None,
                 )
                 if len(entries) != 1 or len(combos) != 3 or save_button is None:
@@ -180,11 +195,17 @@ def main(screenshot_path: Path | None = None) -> None:
                 combos[0].event_generate("<<ComboboxSelected>>")
                 dialog.update()
                 if entries[0].get() != "1.8":
-                    raise AssertionError("Selecting the profile did not apply its typed parameter preset.")
+                    raise AssertionError(
+                        "Selecting the profile did not apply its typed parameter preset."
+                    )
                 if combos[1].get() != "1V8":
-                    raise AssertionError("Selecting the profile did not choose its schematic variant.")
+                    raise AssertionError(
+                        "Selecting the profile did not choose its schematic variant."
+                    )
                 if combos[2].get() != "Compact  [compact]":
-                    raise AssertionError("Selecting the profile did not choose its PCB layout.")
+                    raise AssertionError(
+                        "Selecting the profile did not choose its PCB layout."
+                    )
                 if screenshot_path is not None:
                     _capture_dialog(dialog, screenshot_path)
                 save_button.invoke()
@@ -203,8 +224,8 @@ def main(screenshot_path: Path | None = None) -> None:
 
         update_calls: list[str] = []
         original_update = plugin_actions._update_schematic_item_checked
-        plugin_actions._update_schematic_item_checked = (
-            lambda _schematic, target: update_calls.append(str(target.reference))
+        plugin_actions._update_schematic_item_checked = lambda _schematic, target: (
+            update_calls.append(str(target.reference))
         )
         parent.after(200, drive_form)
         try:
@@ -220,7 +241,8 @@ def main(screenshot_path: Path | None = None) -> None:
 
         if interaction_errors:
             raise RuntimeError(
-                "Instance configuration GUI interaction failed: " + interaction_errors[0]
+                "Instance configuration GUI interaction failed: "
+                + interaction_errors[0]
             )
         if update_calls != ["X1"]:
             raise AssertionError(
@@ -233,7 +255,9 @@ def main(screenshot_path: Path | None = None) -> None:
             "KB_PARAM_OUTPUT_VOLTAGE": "1.8",
             "KB_LAYOUT": "compact",
         }:
-            raise AssertionError(f"Configuration form did not save the edited fields: {values!r}")
+            raise AssertionError(
+                f"Configuration form did not save the edited fields: {values!r}"
+            )
         schematic.begin_commit.assert_called_once_with()
         schematic.push_commit.assert_called_once_with(
             commit, "Configure KiCad block instance"

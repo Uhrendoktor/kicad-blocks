@@ -24,7 +24,9 @@ from kicad_blocks.pcb_placement import (
 
 class FakeBoard:
     def __init__(self, values):
-        self.items = [SimpleNamespace(id=SimpleNamespace(value=value)) for value in values]
+        self.items = [
+            SimpleNamespace(id=SimpleNamespace(value=value)) for value in values
+        ]
         self.moved = None
 
     def get_items(self):
@@ -45,7 +47,9 @@ class PcbPlacementManifestTests(unittest.TestCase):
     def tearDown(self):
         self.temp.cleanup()
 
-    def test_single_merge_manifest_round_trip_and_native_move_uses_only_recorded_items(self):
+    def test_single_merge_manifest_round_trip_and_native_move_uses_only_recorded_items(
+        self,
+    ):
         result = {
             "instance_reference": "X1",
             "block": "Power Stage",
@@ -62,7 +66,9 @@ class PcbPlacementManifestTests(unittest.TestCase):
         board = FakeBoard([self.first, unrelated, self.second])
         moved = move_placement_at_cursor(board, payload["placements"][0])
         self.assertEqual(moved, 2)
-        self.assertEqual([item.value for item in board.moved], [self.first, self.second])
+        self.assertEqual(
+            [item.value for item in board.moved], [self.first, self.second]
+        )
 
     def test_pcb_editor_entrypoint_uses_active_board_file_and_native_move(self):
         result = {
@@ -85,7 +91,9 @@ class PcbPlacementManifestTests(unittest.TestCase):
         kipy = ModuleType("kipy")
         kipy.KiCad = FakeKiCad
         entrypoint = PLUGIN / "place_imported_layout.py"
-        spec = importlib.util.spec_from_file_location("kblocks_pcb_action_test", entrypoint)
+        spec = importlib.util.spec_from_file_location(
+            "kblocks_pcb_action_test", entrypoint
+        )
         if spec is None or spec.loader is None:
             raise RuntimeError(f"Could not load PCB action entrypoint: {entrypoint}")
         action = importlib.util.module_from_spec(spec)

@@ -65,7 +65,9 @@ def validate_install_target(
     """
     validate_python_runtime()
     if not re.fullmatch(r"\d+\.\d+", version):
-        raise ValueError("KiCad version must use MAJOR.MINOR format, for example 10.99.")
+        raise ValueError(
+            "KiCad version must use MAJOR.MINOR format, for example 10.99."
+        )
     major, minor = (int(part) for part in version.split("."))
     if not (
         (major, minor) == SUPPORTED_NIGHTLY_DIRECTORY
@@ -160,7 +162,9 @@ def validate_plugin_package(source: Path) -> dict:
                 )
             for icon in icons:
                 if not isinstance(icon, str):
-                    raise ValueError(f"Plugin action icon path must be a string: {icon!r}")
+                    raise ValueError(
+                        f"Plugin action icon path must be a string: {icon!r}"
+                    )
                 icon_path = (source / icon).resolve()
                 if (
                     not icon_path.is_relative_to(source)
@@ -188,7 +192,9 @@ def install_plugin(
     source = Path(source).expanduser().resolve()
     documents_home = Path(documents_home).expanduser().resolve()
     manifest = validate_plugin_package(source)
-    destination = documents_home / "kicad" / version / "plugins" / manifest["identifier"]
+    destination = (
+        documents_home / "kicad" / version / "plugins" / manifest["identifier"]
+    )
 
     if dry_run:
         return destination
@@ -198,9 +204,7 @@ def install_plugin(
         tempfile.mkdtemp(prefix=".kicad-blocks-install-", dir=destination.parent)
     )
     staged_plugin = staging_root / manifest["identifier"]
-    backup = destination.with_name(
-        f"{destination.name}.backup-{uuid.uuid4().hex[:8]}"
-    )
+    backup = destination.with_name(f"{destination.name}.backup-{uuid.uuid4().hex[:8]}")
     moved_existing = False
     try:
         shutil.copytree(
@@ -266,7 +270,9 @@ def main() -> int:
         args.version,
         dry_run=args.dry_run,
     )
-    print(f"KiCad Blocks {'would be installed' if args.dry_run else 'installed'} at: {destination}")
+    print(
+        f"KiCad Blocks {'would be installed' if args.dry_run else 'installed'} at: {destination}"
+    )
     print("Enable the KiCad API in Preferences > Plugins, then restart KiCad.")
     return 0
 

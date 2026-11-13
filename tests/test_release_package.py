@@ -16,14 +16,18 @@ from zipfile import ZipFile
 
 ROOT = Path(__file__).resolve().parents[1]
 BUILD_SCRIPT = ROOT / "scripts" / "build_release.py"
-SPEC = importlib.util.spec_from_file_location("kicad_blocks_build_release", BUILD_SCRIPT)
+SPEC = importlib.util.spec_from_file_location(
+    "kicad_blocks_build_release", BUILD_SCRIPT
+)
 if SPEC is None or SPEC.loader is None:
     raise RuntimeError("Could not load the release builder.")
 builder = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(builder)
 
 INSTALLER_SCRIPT = ROOT / "scripts" / "install_plugin.py"
-INSTALLER_SPEC = importlib.util.spec_from_file_location("kicad_blocks_installer", INSTALLER_SCRIPT)
+INSTALLER_SPEC = importlib.util.spec_from_file_location(
+    "kicad_blocks_installer", INSTALLER_SCRIPT
+)
 if INSTALLER_SPEC is None or INSTALLER_SPEC.loader is None:
     raise RuntimeError("Could not load the plugin installer.")
 installer = importlib.util.module_from_spec(INSTALLER_SPEC)
@@ -42,7 +46,9 @@ class ReleasePackageTests(unittest.TestCase):
                 Path("/home/test-user/.local/share"),
             )
 
-    def test_archive_is_deterministic_and_contains_only_installable_release_inputs(self):
+    def test_archive_is_deterministic_and_contains_only_installable_release_inputs(
+        self,
+    ):
         with tempfile.TemporaryDirectory(prefix="kicad-blocks-release-") as temp:
             first_dir = Path(temp) / "one"
             second_dir = Path(temp) / "two"
@@ -71,8 +77,14 @@ class ReleasePackageTests(unittest.TestCase):
                 self.assertIn(prefix + "plugin/kicad-blocks/plugin.json", names)
                 self.assertIn(prefix + "plugin/kicad-blocks/requirements.txt", names)
                 self.assertIn(prefix + "RELEASE_INFO.json", names)
-                self.assertFalse(any(name.startswith(prefix + "tests/") for name in names))
-                self.assertFalse(any("__pycache__" in name or name.endswith(".pyc") for name in names))
+                self.assertFalse(
+                    any(name.startswith(prefix + "tests/") for name in names)
+                )
+                self.assertFalse(
+                    any(
+                        "__pycache__" in name or name.endswith(".pyc") for name in names
+                    )
+                )
                 info = json.loads(archive.read(prefix + "RELEASE_INFO.json"))
                 self.assertEqual(info["version"], "1.1.0")
                 self.assertEqual(info["source_commit"], "1" * 40)
@@ -84,7 +96,9 @@ class ReleasePackageTests(unittest.TestCase):
                     self.assertEqual(entry.date_time, (1980, 1, 1, 0, 0, 0))
 
     def test_extracted_release_archive_installs_using_its_bundled_installer(self):
-        with tempfile.TemporaryDirectory(prefix="kicad-blocks-release-install-") as temp:
+        with tempfile.TemporaryDirectory(
+            prefix="kicad-blocks-release-install-"
+        ) as temp:
             temp_root = Path(temp)
             archive_path, checksum_path = builder.build_release_package(
                 ROOT, temp_root / "dist", source_commit="2" * 40
@@ -120,7 +134,9 @@ class ReleasePackageTests(unittest.TestCase):
                 / "org.uhrendoktor.kicadblocks"
             )
             self.assertIn(str(installed), result.stdout)
-            manifest = json.loads((installed / "plugin.json").read_text(encoding="utf-8"))
+            manifest = json.loads(
+                (installed / "plugin.json").read_text(encoding="utf-8")
+            )
             self.assertEqual(manifest["identifier"], "org.uhrendoktor.kicadblocks")
             for action in manifest["actions"]:
                 self.assertTrue((installed / action["entrypoint"]).is_file())
@@ -132,7 +148,9 @@ class ReleasePackageTests(unittest.TestCase):
     def test_release_builder_rejects_mismatched_binding_dependency_url(self):
         import shutil
 
-        with tempfile.TemporaryDirectory(prefix="kicad-blocks-release-invalid-") as temp:
+        with tempfile.TemporaryDirectory(
+            prefix="kicad-blocks-release-invalid-"
+        ) as temp:
             copied = Path(temp) / "source"
             shutil.copytree(
                 ROOT,
@@ -145,7 +163,9 @@ class ReleasePackageTests(unittest.TestCase):
                 encoding="utf-8",
             )
             with self.assertRaisesRegex(ValueError, "do not point at the wheel locked"):
-                builder.build_release_package(copied, Path(temp) / "dist", source_commit="3" * 40)
+                builder.build_release_package(
+                    copied, Path(temp) / "dist", source_commit="3" * 40
+                )
 
 
 if __name__ == "__main__":

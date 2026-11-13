@@ -48,7 +48,10 @@ def window_id(xdotool: str, title: str = "Place Functional Block") -> str | None
     for candidate in dict.fromkeys(candidates):
         result = subprocess.run(
             [xdotool, "search", "--onlyvisible", "--name", candidate],
-            capture_output=True, text=True, check=False, timeout=5,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=5,
         )
         ids = [line for line in result.stdout.splitlines() if line.strip().isdigit()]
         if ids:
@@ -67,7 +70,10 @@ def capture_window(
 
     geometry = subprocess.run(
         [xdotool, "getwindowgeometry", "--shell", identifier],
-        capture_output=True, text=True, check=True, timeout=5,
+        capture_output=True,
+        text=True,
+        check=True,
+        timeout=5,
     ).stdout
     values = {}
     for line in geometry.splitlines():
@@ -75,8 +81,10 @@ def capture_window(
             key, value = line.split("=", 1)
             values[key] = int(value)
     bbox = (
-        values["X"], values["Y"],
-        values["X"] + values["WIDTH"], values["Y"] + values["HEIGHT"],
+        values["X"],
+        values["Y"],
+        values["X"] + values["WIDTH"],
+        values["Y"] + values["HEIGHT"],
     )
     image = ImageGrab.grab(bbox=bbox)
     if image.width < minimum_size[0] or image.height < minimum_size[1]:
@@ -119,8 +127,10 @@ def capture_picker(records, output_dir: Path) -> dict:
                 raise TimeoutError("The Place Functional Block chooser did not appear.")
             dialog = next(
                 (
-                    child for child in parent.winfo_children()
-                    if isinstance(child, tk.Toplevel) and child.title() == "Place Functional Block"
+                    child
+                    for child in parent.winfo_children()
+                    if isinstance(child, tk.Toplevel)
+                    and child.title() == "Place Functional Block"
                 ),
                 None,
             )
@@ -134,10 +144,14 @@ def capture_picker(records, output_dir: Path) -> dict:
             dialog.update()
             capture_window(xdotool, identifier, frame_paths[0])
             widgets = list(walk_widgets(dialog))
-            entries = [item for item in widgets if item.winfo_class() in ("TEntry", "Entry")]
+            entries = [
+                item for item in widgets if item.winfo_class() in ("TEntry", "Entry")
+            ]
             combos = [item for item in widgets if item.winfo_class() == "TCombobox"]
             if not entries or len(combos) < 2:
-                raise RuntimeError(f"Unexpected chooser controls: entries={len(entries)}, combos={len(combos)}")
+                raise RuntimeError(
+                    f"Unexpected chooser controls: entries={len(entries)}, combos={len(combos)}"
+                )
 
             entries[0].delete(0, "end")
             entries[0].insert(0, "usb")
@@ -148,13 +162,17 @@ def capture_picker(records, output_dir: Path) -> dict:
             combos[1].event_generate("<<ComboboxSelected>>")
             dialog.update()
             if combos[0].get() != "5V":
-                raise AssertionError(f"Profile did not select the 5V implementation: {combos[0].get()!r}")
+                raise AssertionError(
+                    f"Profile did not select the 5V implementation: {combos[0].get()!r}"
+                )
             capture_window(xdotool, identifier, frame_paths[2])
 
             place = next(
                 (
-                    item for item in widgets
-                    if item.winfo_class() == "TButton" and item.cget("text") == "Place Block"
+                    item
+                    for item in widgets
+                    if item.winfo_class() == "TButton"
+                    and item.cget("text") == "Place Block"
                 ),
                 None,
             )
@@ -190,25 +208,34 @@ def capture_picker(records, output_dir: Path) -> dict:
     if errors:
         raise RuntimeError("Real chooser capture failed: " + errors[0])
     if not completed[0] or selected is None:
-        raise AssertionError("The placement chooser did not complete the scripted selection.")
+        raise AssertionError(
+            "The placement chooser did not complete the scripted selection."
+        )
     if (
         selected["record"].name != "STUSB4500 USB-PD Sink"
         or selected["variant"] != "5V"
         or selected["profile"] != "pdo1_5v_2a4"
         or float(selected["parameters"]["PDO_CURRENT_A"]) != 2.4
     ):
-        raise AssertionError(f"Unexpected profile-driven placement result: {selected!r}")
+        raise AssertionError(
+            f"Unexpected profile-driven placement result: {selected!r}"
+        )
 
     for path in frame_paths:
         with Image.open(path) as image:
             sample = image.convert("RGB").resize((48, 32))
             if max(ImageStat.Stat(sample).stddev) < 2.0:
-                raise AssertionError(f"Screenshot appears blank or uniform: {path.name}")
-    if len({hashlib.sha256(path.read_bytes()).hexdigest() for path in frame_paths}) != 3:
-        raise AssertionError("The three chooser states were not captured as distinct images.")
+                raise AssertionError(
+                    f"Screenshot appears blank or uniform: {path.name}"
+                )
+    if (
+        len({hashlib.sha256(path.read_bytes()).hexdigest() for path in frame_paths})
+        != 3
+    ):
+        raise AssertionError(
+            "The three chooser states were not captured as distinct images."
+        )
     return selected
-
-
 
 
 def _capture_visible_window(
@@ -222,9 +249,7 @@ def _capture_visible_window(
     if identifier is None:
         raise TimeoutError(f"Window {title!r} was not visible for capture.")
     time.sleep(0.3)
-    capture_window(
-        xdotool, identifier, destination, minimum_size=minimum_size
-    )
+    capture_window(xdotool, identifier, destination, minimum_size=minimum_size)
 
 
 def _capture_modal(
@@ -250,7 +275,8 @@ def _capture_modal(
         try:
             parent.update_idletasks()
             windows = [
-                child for child in parent.winfo_children()
+                child
+                for child in parent.winfo_children()
                 if isinstance(child, plugin_actions.tk.Toplevel)
             ]
             dialog = next(
@@ -262,12 +288,15 @@ def _capture_modal(
                 # wait_window(). Close the new modal and report the mismatch.
                 dialog = next(
                     (
-                        child for child in windows
+                        child
+                        for child in windows
                         if child.winfo_id() not in existing_windows
                     ),
                     None,
                 )
-                actual_title = dialog.title() if dialog is not None else "no new Tk modal"
+                actual_title = (
+                    dialog.title() if dialog is not None else "no new Tk modal"
+                )
                 raise RuntimeError(
                     f"Expected modal {title!r}, but Tk created {actual_title!r}."
                 )
@@ -312,7 +341,9 @@ def _make_themed_root(theme: str, title: str):
     return root
 
 
-def capture_ui_workflows(library_roots, record, project_dir: Path, output_dir: Path) -> None:
+def capture_ui_workflows(
+    library_roots, record, project_dir: Path, output_dir: Path
+) -> None:
     """Export actual app windows, using the same theme initialization as run_action."""
     from types import SimpleNamespace
 
@@ -343,11 +374,14 @@ def capture_ui_workflows(library_roots, record, project_dir: Path, output_dir: P
                     minimum_size=(1000, 650),
                 )
                 browser_entries = [
-                    widget for widget in walk_widgets(root)
+                    widget
+                    for widget in walk_widgets(root)
                     if widget.winfo_class() in {"TEntry", "Entry"}
                 ]
                 if not browser_entries:
-                    raise RuntimeError("The production library browser search field is missing.")
+                    raise RuntimeError(
+                        "The production library browser search field is missing."
+                    )
                 browser_entries[0].delete(0, "end")
                 browser_entries[0].insert(0, "STUSB")
                 root.update_idletasks()
@@ -360,7 +394,9 @@ def capture_ui_workflows(library_roots, record, project_dir: Path, output_dir: P
                 )
                 _capture_modal(
                     root,
-                    lambda target=root: plugin_actions._show_library_roots_dialog(target),
+                    lambda target=root: plugin_actions._show_library_roots_dialog(
+                        target
+                    ),
                     "Manage Libraries",
                     output_dir / f"library-folders-{theme}.png",
                     xdotool,
@@ -402,7 +438,9 @@ def capture_ui_workflows(library_roots, record, project_dir: Path, output_dir: P
             # This dedicated GUI smoke test drives the production configuration
             # form, changes a named profile, and captures the rendered dialog
             # before submitting the single undoable schematic update.
-            configuration_screenshot = output_dir / f"instance-configuration-{theme}.png"
+            configuration_screenshot = (
+                output_dir / f"instance-configuration-{theme}.png"
+            )
             capture_environment = os.environ.copy()
             capture_environment["KICAD_BLOCKS_THEME"] = theme
             configuration_run = subprocess.run(
@@ -428,7 +466,9 @@ def capture_ui_workflows(library_roots, record, project_dir: Path, output_dir: P
             try:
                 _capture_modal(
                     root,
-                    lambda target=root: plugin_actions._show_block_variant_editor(record, target),
+                    lambda target=root: plugin_actions._show_block_variant_editor(
+                        record, target
+                    ),
                     f"Implementations — {record.name}",
                     output_dir / f"implementation-variants-{theme}.png",
                     xdotool,
@@ -473,7 +513,8 @@ def capture_ui_workflows(library_roots, record, project_dir: Path, output_dir: P
 def _select_first_table_row(dialog) -> None:
     tree = next(
         (
-            widget for widget in walk_widgets(dialog)
+            widget
+            for widget in walk_widgets(dialog)
             if widget.winfo_class() == "Treeview"
         ),
         None,
@@ -491,23 +532,39 @@ def _select_first_table_row(dialog) -> None:
 def build_gif(output_dir: Path) -> None:
     from PIL import Image
 
-    names = ("block-picker-initial.png", "block-picker-filtered.png", "block-picker-profile.png")
+    names = (
+        "block-picker-initial.png",
+        "block-picker-filtered.png",
+        "block-picker-profile.png",
+    )
     frames = [Image.open(output_dir / name).convert("RGB") for name in names]
     try:
-        size = (max(frame.width for frame in frames), max(frame.height for frame in frames))
+        size = (
+            max(frame.width for frame in frames),
+            max(frame.height for frame in frames),
+        )
         normalized = []
         for frame in frames:
             canvas = Image.new("RGB", size, (248, 248, 248))
-            canvas.paste(frame, ((size[0] - frame.width) // 2, (size[1] - frame.height) // 2))
+            canvas.paste(
+                frame, ((size[0] - frame.width) // 2, (size[1] - frame.height) // 2)
+            )
             normalized.append(canvas)
         destination = output_dir / "block-picker-workflow.gif"
         normalized[0].save(
-            destination, save_all=True, append_images=normalized[1:],
-            duration=1100, loop=0, optimize=True, disposal=2,
+            destination,
+            save_all=True,
+            append_images=normalized[1:],
+            duration=1100,
+            loop=0,
+            optimize=True,
+            disposal=2,
         )
         with Image.open(destination) as gif:
             if gif.n_frames != 3:
-                raise AssertionError(f"Expected three animation frames, found {gif.n_frames}.")
+                raise AssertionError(
+                    f"Expected three animation frames, found {gif.n_frames}."
+                )
     finally:
         for frame in frames:
             frame.close()
@@ -520,14 +577,26 @@ def render_native_svgs(cli: str, record, output_dir: Path) -> None:
     schematic_dir.mkdir()
     # Preserve the editable source even if KiCad's renderer rejects it; the
     # always-uploaded CI artifact then contains the exact failing input.
-    shutil.copy2(record.implementation, output_dir / "functional-block-implementation.kicad_sch")
+    shutil.copy2(
+        record.implementation, output_dir / "functional-block-implementation.kicad_sch"
+    )
 
     symbol_export = subprocess.run(
         [
-            cli, "sym", "export", "svg", "--symbol", str(record.manifest["symbol_name"]),
-            "--output", str(symbol_dir), str(record.symbol_library),
+            cli,
+            "sym",
+            "export",
+            "svg",
+            "--symbol",
+            str(record.manifest["symbol_name"]),
+            "--output",
+            str(symbol_dir),
+            str(record.symbol_library),
         ],
-        check=False, capture_output=True, text=True, timeout=60,
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=60,
     )
     if symbol_export.returncode:
         raise RuntimeError(
@@ -535,8 +604,19 @@ def render_native_svgs(cli: str, record, output_dir: Path) -> None:
             f"{symbol_export.stdout}\n{symbol_export.stderr}"
         )
     schematic_export = subprocess.run(
-        [cli, "sch", "export", "svg", "--output", str(schematic_dir), str(record.implementation)],
-        check=False, capture_output=True, text=True, timeout=60,
+        [
+            cli,
+            "sch",
+            "export",
+            "svg",
+            "--output",
+            str(schematic_dir),
+            str(record.implementation),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=60,
     )
     if schematic_export.returncode:
         raise RuntimeError(
@@ -546,7 +626,9 @@ def render_native_svgs(cli: str, record, output_dir: Path) -> None:
     symbols = sorted(symbol_dir.glob("*.svg"))
     schematics = sorted(schematic_dir.glob("*.svg"))
     if len(symbols) != 1 or not schematics:
-        raise RuntimeError(f"KiCad SVG export failed: symbols={len(symbols)}, schematics={len(schematics)}")
+        raise RuntimeError(
+            f"KiCad SVG export failed: symbols={len(symbols)}, schematics={len(schematics)}"
+        )
     shutil.copy2(symbols[0], output_dir / "functional-block-facade.svg")
     shutil.copy2(schematics[0], output_dir / "functional-block-implementation.svg")
     for name in ("functional-block-facade.svg", "functional-block-implementation.svg"):
@@ -564,20 +646,25 @@ def main() -> int:
     args = parser.parse_args()
     output_dir = args.output_dir.expanduser().resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
-    cli = os.environ.get("KICAD_CLI") or find_executable("kicad-cli-nightly", "kicad-cli")
+    cli = os.environ.get("KICAD_CLI") or find_executable(
+        "kicad-cli-nightly", "kicad-cli"
+    )
 
     import tempfile
 
     with tempfile.TemporaryDirectory(prefix="kicad-blocks-visual-docs-") as temporary:
         library = Path(temporary) / "library"
         sensor = create_block(
-            library, "Sensor Input", parse_pins("SENSOR:input, GND:passive"),
+            library,
+            "Sensor Input",
+            parse_pins("SENSOR:input, GND:passive"),
             description="A second library entry used to demonstrate searchable filtering.",
         )
         reference_source = Path(temporary) / "stusb4500-reference.kicad_sch"
         generate_reference_schematic(reference_source)
         target = create_block(
-            library, "STUSB4500 USB-PD Sink",
+            library,
+            "STUSB4500 USB-PD Sink",
             parse_pins(
                 "VBUS:input, GND:passive, CC1:bidir, CC2:bidir, VSNK:output, "
                 "SCL:input, SDA:bidir, ALERT#:output, RESET:input, VMCU:input"
@@ -586,10 +673,14 @@ def main() -> int:
                 "STUSB4500QTR USB Type-C PD sink reference circuit based on "
                 "ST DS12499 Rev. 8 Figure 10."
             ),
-            parameters=[{
-                "name": "PDO_CURRENT_A", "type": "number", "default": "2.4",
-                "description": "Current rating of the selected sink PDO in amperes.",
-            }],
+            parameters=[
+                {
+                    "name": "PDO_CURRENT_A",
+                    "type": "number",
+                    "default": "2.4",
+                    "description": "Current rating of the selected sink PDO in amperes.",
+                }
+            ],
             variant_files=[
                 {"value": "5V", "path": reference_source},
                 {"value": "9V", "path": reference_source},
@@ -597,19 +688,25 @@ def main() -> int:
             ],
             profiles=[
                 {
-                    "id": "pdo1_5v_2a4", "name": "5 V / 2.4 A (PDO1)",
+                    "id": "pdo1_5v_2a4",
+                    "name": "5 V / 2.4 A (PDO1)",
                     "description": "Datasheet Table 19 example: fixed 5 V sink PDO.",
-                    "variant": "5V", "parameters": {"PDO_CURRENT_A": "2.4"},
+                    "variant": "5V",
+                    "parameters": {"PDO_CURRENT_A": "2.4"},
                 },
                 {
-                    "id": "pdo2_9v_1a33", "name": "9 V / 1.33 A (PDO2)",
+                    "id": "pdo2_9v_1a33",
+                    "name": "9 V / 1.33 A (PDO2)",
                     "description": "Datasheet Table 19 example: 9 V sink PDO.",
-                    "variant": "9V", "parameters": {"PDO_CURRENT_A": "1.33"},
+                    "variant": "9V",
+                    "parameters": {"PDO_CURRENT_A": "1.33"},
                 },
                 {
-                    "id": "pdo3_12v_1a", "name": "12 V / 1.0 A (PDO3)",
+                    "id": "pdo3_12v_1a",
+                    "name": "12 V / 1.0 A (PDO3)",
                     "description": "Datasheet Table 19 example: 12 V sink PDO.",
-                    "variant": "12V", "parameters": {"PDO_CURRENT_A": "1.0"},
+                    "variant": "12V",
+                    "parameters": {"PDO_CURRENT_A": "1.0"},
                 },
             ],
         )
@@ -630,10 +727,14 @@ def main() -> int:
         create_block(
             extra_library,
             "USB Protection",
-            parse_pins("VBUS:input, GND:passive, USB_P:bidirectional, USB_N:bidirectional"),
+            parse_pins(
+                "VBUS:input, GND:passive, USB_P:bidirectional, USB_N:bidirectional"
+            ),
             description="Input ESD protection and common-mode filtering.",
         )
-        capture_ui_workflows([library, extra_library], target, Path(temporary), output_dir)
+        capture_ui_workflows(
+            [library, extra_library], target, Path(temporary), output_dir
+        )
         capture_picker([target, sensor], output_dir)
         build_gif(output_dir)
 
@@ -661,7 +762,8 @@ def main() -> int:
         "assets": assets,
     }
     (output_dir / "manifest.json").write_text(
-        json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8",
+        json.dumps(manifest, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
     )
     print(
         f"kicad-visual-docs=passed asset_count={len(assets)} "

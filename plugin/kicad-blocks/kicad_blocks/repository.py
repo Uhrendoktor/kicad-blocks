@@ -60,10 +60,14 @@ class BlockRecord:
     def symbol_library(self) -> Path:
         """Stable facade catalog shared by every block in this library."""
         if self.manifest.get("local_copy") and self.manifest.get("source_path"):
-            library_root = Path(self.manifest["source_path"]).expanduser().resolve().parent
+            library_root = (
+                Path(self.manifest["source_path"]).expanduser().resolve().parent
+            )
         else:
             library_root = self.path.parent
-        return library_root / str(self.manifest.get("catalog_file", LIBRARY_CATALOG_NAME))
+        return library_root / str(
+            self.manifest.get("catalog_file", LIBRARY_CATALOG_NAME)
+        )
 
     @property
     def implementation(self) -> Path:
@@ -112,7 +116,11 @@ def merge_symbol_catalog(library_root: Path, symbol_file: Path) -> Path:
         if _head(item) == "symbol"
     ]
     match = next(
-        (index for index, item in existing_symbols if len(item) > 1 and str(item[1]) == symbol_name),
+        (
+            index
+            for index, item in existing_symbols
+            if len(item) > 1 and str(item[1]) == symbol_name
+        ),
         None,
     )
     if match is None:
@@ -128,7 +136,8 @@ def _named_symbol_node(symbol_library: list, symbol_name: str, source: Path) -> 
     if _head(symbol_library) != "kicad_symbol_lib":
         raise ValueError(f"Invalid KiCad symbol library: {source}")
     matches = [
-        item for item in _all(symbol_library, "symbol")
+        item
+        for item in _all(symbol_library, "symbol")
         if len(item) >= 2 and str(item[1]) == symbol_name
     ]
     if len(matches) != 1:
@@ -176,9 +185,8 @@ def _import_catalog_facade_edit(block: BlockRecord, manifest: dict) -> bool:
         return False
 
     baseline_asset_hash = (manifest.get("hashes") or {}).get(symbol_file)
-    asset_changed = (
-        baseline_asset_hash is not None
-        and sha256_file(asset_path) != str(baseline_asset_hash)
+    asset_changed = baseline_asset_hash is not None and sha256_file(asset_path) != str(
+        baseline_asset_hash
     )
     baseline_catalog_digest = manifest.get("catalog_symbol_hash")
     if baseline_catalog_digest is None:
@@ -207,10 +215,7 @@ def _import_catalog_facade_edit(block: BlockRecord, manifest: dict) -> bool:
         return False
 
     standalone = copy.deepcopy(catalog_tree)
-    standalone[:] = [
-        child for child in standalone
-        if _head(child) != "symbol"
-    ]
+    standalone[:] = [child for child in standalone if _head(child) != "symbol"]
     standalone.append(copy.deepcopy(catalog_symbol))
     atomic_write(asset_path, _dump(standalone) + "\n")
     return True
@@ -246,13 +251,21 @@ def rename_block_symbol_asset(block_path: Path, new_symbol_name: str) -> None:
         raise ValueError(f"Expected one facade symbol in {symbol_path}.")
     symbol = symbols[0]
     old_name = str(symbol[1])
-    symbol[1] = type(symbol[1])(new_symbol_name) if isinstance(symbol[1], str) else new_symbol_name
+    symbol[1] = (
+        type(symbol[1])(new_symbol_name)
+        if isinstance(symbol[1], str)
+        else new_symbol_name
+    )
     for child in symbol[1:]:
         if _head(child) == "symbol" and len(child) > 1:
             child_name = str(child[1])
             if child_name.startswith(old_name + "_"):
-                suffix = child_name[len(old_name):]
-                child[1] = type(child[1])(new_symbol_name + suffix) if isinstance(child[1], str) else new_symbol_name + suffix
+                suffix = child_name[len(old_name) :]
+                child[1] = (
+                    type(child[1])(new_symbol_name + suffix)
+                    if isinstance(child[1], str)
+                    else new_symbol_name + suffix
+                )
     atomic_write(symbol_path, _dump(root) + "\n")
 
 
@@ -316,11 +329,16 @@ def read_manifest(block_path: Path) -> dict:
         value = str(variant.get("value", "")).strip()
         file_name = str(variant.get("file", ""))
         if (
-            not value or len(value) > 128 or "\n" in value or "\r" in value
+            not value
+            or len(value) > 128
+            or "\n" in value
+            or "\r" in value
             or Path(file_name).name != file_name
             or Path(file_name).suffix.casefold() != ".kicad_sch"
         ):
-            raise ValueError("Each block variant needs a single-line value and a safe .kicad_sch filename.")
+            raise ValueError(
+                "Each block variant needs a single-line value and a safe .kicad_sch filename."
+            )
         if value.casefold() in seen_variant_values:
             raise ValueError(f"Duplicate block variant value: {value!r}")
         if file_name.casefold() in seen_variant_files:
@@ -332,11 +350,17 @@ def read_manifest(block_path: Path) -> dict:
     if not isinstance(layouts, list):
         raise TypeError("Block manifest layouts must be a list.")
     pin_items = manifest.get("pins", [])
-    if not isinstance(pin_items, list) or not pin_items or any(
-        not isinstance(pin, dict) or not str(pin.get("name", "")).strip()
-        for pin in pin_items
+    if (
+        not isinstance(pin_items, list)
+        or not pin_items
+        or any(
+            not isinstance(pin, dict) or not str(pin.get("name", "")).strip()
+            for pin in pin_items
+        )
     ):
-        raise ValueError("Block manifest pins must be a non-empty list of named pin objects.")
+        raise ValueError(
+            "Block manifest pins must be a non-empty list of named pin objects."
+        )
     pin_names = {str(pin["name"]) for pin in pin_items}
     seen_layout_ids: set[str] = set()
     seen_layout_names: set[str] = set()
@@ -355,7 +379,9 @@ def read_manifest(block_path: Path) -> dict:
             or Path(layout_file).name != layout_file
             or Path(layout_file).suffix.casefold() != ".kicad_pcb"
         ):
-            raise ValueError("Each block layout needs a safe id, display name and .kicad_pcb file.")
+            raise ValueError(
+                "Each block layout needs a safe id, display name and .kicad_pcb file."
+            )
         if layout_id.casefold() in seen_layout_ids:
             raise ValueError(f"Duplicate block layout id: {layout_id}")
         if layout_name.casefold() in seen_layout_names:
@@ -372,12 +398,17 @@ def read_manifest(block_path: Path) -> dict:
                 Path(project_file).name != project_file
                 or Path(project_file).suffix.casefold() != ".kicad_pro"
             ):
-                raise ValueError(f"Invalid project-settings file name for layout {layout_id!r}.")
+                raise ValueError(
+                    f"Invalid project-settings file name for layout {layout_id!r}."
+                )
         ports = layout.get("ports")
         if ports is not None and (
             not isinstance(ports, dict)
             or set(ports) != pin_names
-            or any(not isinstance(value, str) or not value.strip() for value in ports.values())
+            or any(
+                not isinstance(value, str) or not value.strip()
+                for value in ports.values()
+            )
         ):
             raise ValueError(
                 f"Layout {layout_id!r} ports must map every facade pin to a non-empty net name."
@@ -390,7 +421,9 @@ def read_manifest(block_path: Path) -> dict:
             )
     default_layout = manifest.get("default_layout")
     if default_layout and str(default_layout).casefold() not in seen_layout_ids:
-        raise ValueError(f"Block default layout {default_layout!r} is not defined in layouts.")
+        raise ValueError(
+            f"Block default layout {default_layout!r} is not defined in layouts."
+        )
     manifest["profiles"] = normalize_profiles(
         manifest.get("profiles", []),
         manifest["parameters"],
@@ -463,12 +496,14 @@ def create_block(
                 "Do not type or pass a pin list when creating from a hierarchical sheet; "
                 "the sheet's hierarchical labels define the facade pins."
             )
-        pins, implementation_content, implementation_assets = prepare_block_implementation(
-            Path(source_schematic),
-            name,
-            block_id,
-            source_project_name or root.name,
-            source_sheet_uuid,
+        pins, implementation_content, implementation_assets = (
+            prepare_block_implementation(
+                Path(source_schematic),
+                name,
+                block_id,
+                source_project_name or root.name,
+                source_sheet_uuid,
+            )
         )
     if not pins:
         raise ValueError(
@@ -476,18 +511,24 @@ def create_block(
             "sheet with hierarchical labels."
         )
 
-    if layout_files is not None and (layout_file is not None or layout_project_file is not None):
-        raise ValueError("Use layout_files or the legacy single-layout arguments, not both.")
+    if layout_files is not None and (
+        layout_file is not None or layout_project_file is not None
+    ):
+        raise ValueError(
+            "Use layout_files or the legacy single-layout arguments, not both."
+        )
     if layout_files is None:
         if layout_project_file is not None and layout_file is None:
             raise ValueError("A KiCad project-settings sidecar requires a PCB layout.")
         raw_layouts = (
-            [{
-                "name": Path(layout_file).stem,
-                "path": layout_file,
-                "project_path": layout_project_file,
-                "legacy": True,
-            }]
+            [
+                {
+                    "name": Path(layout_file).stem,
+                    "path": layout_file,
+                    "project_path": layout_project_file,
+                    "legacy": True,
+                }
+            ]
             if layout_file is not None
             else []
         )
@@ -511,7 +552,9 @@ def create_block(
         if not first_source:
             raise ValueError("First PCB layout is missing its source PCB path.")
         first_name = str(first_layout.get("name") or Path(first_source).stem).strip()
-        default_layout_id = str(first_layout.get("id") or slugify(first_name)).casefold()
+        default_layout_id = str(
+            first_layout.get("id") or slugify(first_name)
+        ).casefold()
         if not re.fullmatch(r"[a-z0-9_]+", default_layout_id):
             raise ValueError(f"Invalid default PCB layout id {default_layout_id!r}.")
     slug = slugify(name)
@@ -533,7 +576,9 @@ def create_block(
         )
         (staging / SYMBOL_NAME).write_text(symbol_content, encoding="utf-8")
         if implementation_content is None:
-            implementation_content = render_implementation_schematic(name, block_id, pins)
+            implementation_content = render_implementation_schematic(
+                name, block_id, pins
+            )
         (staging / IMPLEMENTATION_NAME).write_text(
             implementation_content, encoding="utf-8"
         )
@@ -550,24 +595,40 @@ def create_block(
             value = str(raw_variant.get("value", "")).strip()
             source_value = raw_variant.get("path", raw_variant.get("file"))
             if not value or len(value) > 128 or "\n" in value or "\r" in value:
-                raise ValueError(f"Variant {index} needs a single-line value of 1 to 128 characters.")
+                raise ValueError(
+                    f"Variant {index} needs a single-line value of 1 to 128 characters."
+                )
             if not source_value:
-                raise ValueError(f"Variant {value!r} is missing its source schematic path.")
+                raise ValueError(
+                    f"Variant {value!r} is missing its source schematic path."
+                )
             source_path = Path(source_value).expanduser().resolve()
-            if not source_path.is_file() or source_path.suffix.casefold() != ".kicad_sch":
-                raise ValueError(f"Variant implementation must be an existing .kicad_sch file: {source_path}")
+            if (
+                not source_path.is_file()
+                or source_path.suffix.casefold() != ".kicad_sch"
+            ):
+                raise ValueError(
+                    f"Variant implementation must be an existing .kicad_sch file: {source_path}"
+                )
             file_name = f"implementation_{slugify(value)}.kicad_sch"
             if value.casefold() in seen_variant_values:
                 raise ValueError(f"Duplicate block variant value: {value!r}")
-            if file_name.casefold() in seen_variant_files or file_name == IMPLEMENTATION_NAME:
-                raise ValueError(f"Duplicate or reserved variant implementation filename: {file_name!r}")
+            if (
+                file_name.casefold() in seen_variant_files
+                or file_name == IMPLEMENTATION_NAME
+            ):
+                raise ValueError(
+                    f"Duplicate or reserved variant implementation filename: {file_name!r}"
+                )
             seen_variant_values.add(value.casefold())
             seen_variant_files.add(file_name.casefold())
             shutil.copy2(source_path, staging / file_name)
             files.append(file_name)
             variant_descriptor = {"value": value, "file": file_name}
             if raw_variant.get("layout_id"):
-                variant_descriptor["layout_id"] = str(raw_variant["layout_id"]).casefold()
+                variant_descriptor["layout_id"] = str(
+                    raw_variant["layout_id"]
+                ).casefold()
             variants.append(variant_descriptor)
 
         layouts: list[dict] = []
@@ -580,15 +641,25 @@ def create_block(
             if not source_value:
                 raise ValueError(f"Layout {index} is missing its source PCB path.")
             source_path = Path(source_value).expanduser().resolve()
-            if not source_path.is_file() or source_path.suffix.casefold() != ".kicad_pcb":
-                raise ValueError(f"PCB layout must be an existing .kicad_pcb file: {source_path}")
+            if (
+                not source_path.is_file()
+                or source_path.suffix.casefold() != ".kicad_pcb"
+            ):
+                raise ValueError(
+                    f"PCB layout must be an existing .kicad_pcb file: {source_path}"
+                )
             layout_name = str(raw_layout.get("name") or source_path.stem).strip()
             if not layout_name or len(layout_name) > 80:
                 raise ValueError("PCB layout names must contain 1 to 80 characters.")
             layout_id = str(raw_layout.get("id") or slugify(layout_name)).casefold()
             if not re.fullmatch(r"[a-z0-9_]+", layout_id):
-                raise ValueError(f"Invalid layout id {layout_id!r}; use letters, numbers and underscores.")
-            if layout_id in seen_layout_ids or layout_name.casefold() in seen_layout_names:
+                raise ValueError(
+                    f"Invalid layout id {layout_id!r}; use letters, numbers and underscores."
+                )
+            if (
+                layout_id in seen_layout_ids
+                or layout_name.casefold() in seen_layout_names
+            ):
                 raise ValueError(f"Duplicate PCB layout name or id: {layout_name!r}.")
             seen_layout_ids.add(layout_id)
             seen_layout_names.add(layout_name.casefold())
@@ -598,19 +669,34 @@ def create_block(
             shutil.copy2(source_path, staging / board_name)
             files.append(board_name)
 
-            project_value = raw_layout.get("project_path", raw_layout.get("project_file"))
+            project_value = raw_layout.get(
+                "project_path", raw_layout.get("project_file")
+            )
             project_name = None
             if project_value:
                 project_path = Path(project_value).expanduser().resolve()
-                if not project_path.is_file() or project_path.suffix.casefold() != ".kicad_pro":
-                    raise ValueError(f"PCB project settings must be an existing .kicad_pro file: {project_path}")
+                if (
+                    not project_path.is_file()
+                    or project_path.suffix.casefold() != ".kicad_pro"
+                ):
+                    raise ValueError(
+                        f"PCB project settings must be an existing .kicad_pro file: {project_path}"
+                    )
                 try:
                     project_data = json.loads(project_path.read_text(encoding="utf-8"))
                 except (OSError, json.JSONDecodeError) as exc:
-                    raise ValueError(f"Could not read KiCad project settings JSON: {exc}") from exc
+                    raise ValueError(
+                        f"Could not read KiCad project settings JSON: {exc}"
+                    ) from exc
                 if not isinstance(project_data, dict):
-                    raise ValueError("KiCad project settings must contain a JSON object.")
-                project_name = LAYOUT_PROJECT_NAME if is_legacy else f"layout_{layout_id}.kicad_pro"
+                    raise ValueError(
+                        "KiCad project settings must contain a JSON object."
+                    )
+                project_name = (
+                    LAYOUT_PROJECT_NAME
+                    if is_legacy
+                    else f"layout_{layout_id}.kicad_pro"
+                )
                 shutil.copy2(project_path, staging / project_name)
                 files.append(project_name)
 
@@ -620,8 +706,13 @@ def create_block(
                     raise ValueError(
                         f"Layout {layout_name!r} ports must map every block facade pin exactly once."
                     )
-                if any(not isinstance(value, str) or not value.strip() for value in ports.values()):
-                    raise ValueError(f"Layout {layout_name!r} port mappings cannot contain empty net names.")
+                if any(
+                    not isinstance(value, str) or not value.strip()
+                    for value in ports.values()
+                ):
+                    raise ValueError(
+                        f"Layout {layout_name!r} port mappings cannot contain empty net names."
+                    )
 
             descriptor = {
                 "id": layout_id,
@@ -630,7 +721,9 @@ def create_block(
                 "project_file": project_name,
             }
             if ports is not None:
-                descriptor["ports"] = {str(key): str(value) for key, value in ports.items()}
+                descriptor["ports"] = {
+                    str(key): str(value) for key, value in ports.items()
+                }
             layouts.append(descriptor)
 
         hashes = {file_name: sha256_file(staging / file_name) for file_name in files}
@@ -661,7 +754,10 @@ def create_block(
             "parameters": parameters,
             "variants": variants,
             "profiles": normalize_profiles(
-                profiles, parameters, variants, layouts,
+                profiles,
+                parameters,
+                variants,
+                layouts,
                 first_layout.get("id") if layouts else None,
             ),
             "dependencies": [],
@@ -707,18 +803,21 @@ def register_project_symbol_library(
     table_path = project_dir / "sym-lib-table"
     if table_path.exists():
         text = table_path.read_text(encoding="utf-8")
-        if not text.lstrip().startswith("(sym_lib_table") or not text.rstrip().endswith(")"):
+        if not text.lstrip().startswith("(sym_lib_table") or not text.rstrip().endswith(
+            ")"
+        ):
             raise ValueError(f"Invalid KiCad symbol library table: {table_path}")
     else:
         text = "(sym_lib_table\n)\n"
     pattern = re.compile(
-        r"\(lib\s+\(name\s+\"" + re.escape(nickname)
-        + r"\"\)(.*?)\)\s*\)",
+        r"\(lib\s+\(name\s+\"" + re.escape(nickname) + r"\"\)(.*?)\)\s*\)",
         re.DOTALL,
     )
     existing = pattern.search(text)
     if prefer_relative:
-        uri = "${KIPRJMOD}/" + Path(os.path.relpath(library_path, project_dir)).as_posix()
+        uri = (
+            "${KIPRJMOD}/" + Path(os.path.relpath(library_path, project_dir)).as_posix()
+        )
     else:
         try:
             relative_path = library_path.relative_to(project_dir)
@@ -726,8 +825,8 @@ def register_project_symbol_library(
         except ValueError:
             uri = library_path.as_posix()
     entry = (
-        f"  (lib (name {_sexpr_string(nickname)}) (type \"KiCad\") "
-        f"(uri {_sexpr_string(uri)}) (options \"\") (descr {_sexpr_string(description)}))"
+        f'  (lib (name {_sexpr_string(nickname)}) (type "KiCad") '
+        f'(uri {_sexpr_string(uri)}) (options "") (descr {_sexpr_string(description)}))'
     )
     if existing:
         current_uri = re.search(r'\(uri\s+"([^"]+)"\)', existing.group(0))
@@ -735,7 +834,7 @@ def register_project_symbol_library(
             current_value = current_uri.group(1)
             if current_value.startswith("${KIPRJMOD}/"):
                 current_path = (
-                    project_dir / current_value[len("${KIPRJMOD}/"):]
+                    project_dir / current_value[len("${KIPRJMOD}/") :]
                 ).resolve()
             else:
                 current_path = Path(current_value).expanduser().resolve()
@@ -745,7 +844,7 @@ def register_project_symbol_library(
             raise ValueError(
                 f"Symbol library nickname {nickname!r} is already used by another path."
             )
-        updated = text[:existing.start()] + entry + text[existing.end():]
+        updated = text[: existing.start()] + entry + text[existing.end() :]
     else:
         close = text.rfind(")")
         updated = text[:close].rstrip() + "\n" + entry + "\n)\n"
@@ -765,8 +864,7 @@ def set_project_symbol_defaults(
     tree = parse_sexpr(catalog_path.read_text(encoding="utf-8"))
     symbol = _named_symbol_node(tree, symbol_name, catalog_path)
     properties = [
-        item for item in symbol[2:]
-        if _head(item) == "property" and len(item) >= 3
+        item for item in symbol[2:] if _head(item) == "property" and len(item) >= 3
     ]
     found = set()
     for prop in properties:
@@ -804,10 +902,7 @@ _LAYOUT_MANIFEST_KEYS = (
 
 def _layout_configuration(manifest: dict) -> dict:
     """Return the manifest fields that define a block's PCB implementations."""
-    return {
-        key: copy.deepcopy(manifest.get(key))
-        for key in _LAYOUT_MANIFEST_KEYS
-    }
+    return {key: copy.deepcopy(manifest.get(key)) for key in _LAYOUT_MANIFEST_KEYS}
 
 
 def _set_layout_configuration(manifest: dict, configuration: dict) -> None:
@@ -824,9 +919,9 @@ def _base_layout_configuration(manifest: dict, source_manifest: dict) -> dict:
     """Load the layout three-way baseline, handling local copies created by older versions."""
     if "base_layouts" in manifest:
         return copy.deepcopy(manifest["base_layouts"])
-    if manifest.get("source_version", source_manifest.get("version", 1)) != source_manifest.get(
-        "version", 1
-    ):
+    if manifest.get(
+        "source_version", source_manifest.get("version", 1)
+    ) != source_manifest.get("version", 1):
         raise RuntimeError(
             "This local copy predates layout-metadata synchronization and its library source "
             "has since changed. Recreate the local copy from the current library block before "
@@ -860,7 +955,9 @@ def make_local_copy(source: BlockRecord, project_dir: Path) -> BlockRecord:
             "base_variants": source.manifest.get("variants", []),
             "base_profiles": source.manifest.get("profiles", []),
             "base_layouts": _layout_configuration(source.manifest),
-            "library_nickname": source.manifest.get("library_nickname", LIBRARY_NICKNAME),
+            "library_nickname": source.manifest.get(
+                "library_nickname", LIBRARY_NICKNAME
+            ),
             "symbol_name": source.manifest.get("symbol_name"),
             "catalog_file": source.manifest.get("catalog_file", LIBRARY_CATALOG_NAME),
         }
@@ -873,7 +970,9 @@ def make_local_copy(source: BlockRecord, project_dir: Path) -> BlockRecord:
 
 
 def _instance_links_path(project_dir: Path) -> Path:
-    return Path(project_dir).expanduser().resolve() / ".kicad_blocks" / INSTANCE_LINKS_NAME
+    return (
+        Path(project_dir).expanduser().resolve() / ".kicad_blocks" / INSTANCE_LINKS_NAME
+    )
 
 
 def link_instance_to_local_copy(
@@ -894,7 +993,9 @@ def link_instance_to_local_copy(
         raise ValueError(f"Invalid project block-link metadata: {path}") from exc
     entries = data.setdefault("instances", {})
     entries[instance_id] = {
-        "local_path": Path(os.path.relpath(local_block.path, Path(project_dir).resolve())).as_posix(),
+        "local_path": Path(
+            os.path.relpath(local_block.path, Path(project_dir).resolve())
+        ).as_posix(),
         "source_block_id": local_block.manifest.get("source_block_id"),
         "updated_at": __import__("datetime").datetime.now().astimezone().isoformat(),
     }
@@ -914,7 +1015,9 @@ def local_copy_for_instance(project_dir: Path, instance_id: str) -> BlockRecord 
     entry = data.get("instances", {}).get(str(instance_id).strip())
     if entry is None:
         return None
-    local_path = (Path(project_dir).expanduser().resolve() / entry["local_path"]).resolve()
+    local_path = (
+        Path(project_dir).expanduser().resolve() / entry["local_path"]
+    ).resolve()
     if not local_path.is_dir():
         raise FileNotFoundError(
             f"Project-local block bound to instance {instance_id} is missing: {local_path}"
@@ -959,8 +1062,12 @@ def synchronize_local_copy(local_block: BlockRecord) -> dict:
     base_hashes = manifest.get("base_hashes", {})
     local_hashes = _asset_hashes(local_block.path, manifest)
     source_hashes = _asset_hashes(source.path, source.manifest)
-    base_dependencies = manifest.get("base_dependencies", manifest.get("dependencies", []))
-    base_parameters = manifest.get("base_parameters", source.manifest.get("parameters", []))
+    base_dependencies = manifest.get(
+        "base_dependencies", manifest.get("dependencies", [])
+    )
+    base_parameters = manifest.get(
+        "base_parameters", source.manifest.get("parameters", [])
+    )
     base_variants = manifest.get("base_variants", source.manifest.get("variants", []))
     local_variants = manifest.get("variants", [])
     source_variants = source.manifest.get("variants", [])
@@ -976,7 +1083,11 @@ def synchronize_local_copy(local_block: BlockRecord) -> dict:
     )
     local_variants_changed = local_variants != base_variants
     source_variants_changed = source_variants != base_variants
-    variant_conflict = local_variants_changed and source_variants_changed and local_variants != source_variants
+    variant_conflict = (
+        local_variants_changed
+        and source_variants_changed
+        and local_variants != source_variants
+    )
     base_layouts = _base_layout_configuration(manifest, source.manifest)
     local_layouts = _layout_configuration(manifest)
     source_layouts = _layout_configuration(source.manifest)
@@ -1060,7 +1171,9 @@ def synchronize_local_copy(local_block: BlockRecord) -> dict:
     refreshed_source = _record(source.path)
     new_hashes = _asset_hashes(local_block.path, refreshed_source.manifest)
     refreshed_manifest = read_manifest(local_block.path)
-    refreshed_manifest["base_hashes"] = _asset_hashes(source.path, refreshed_source.manifest)
+    refreshed_manifest["base_hashes"] = _asset_hashes(
+        source.path, refreshed_source.manifest
+    )
     refreshed_manifest["source_version"] = refreshed_source.manifest.get("version", 1)
     refreshed_manifest["source_revision"] = refreshed_source.manifest.get("revision")
     refreshed_manifest["files"] = refreshed_source.manifest.get("files", [])
@@ -1090,8 +1203,10 @@ def synchronize_local_copy(local_block: BlockRecord) -> dict:
     return {
         "copied": copy_files,
         "preserved": sorted(set(local_hashes) - set(copy_files)),
-        "dependencies_updated": source_dependencies_changed and not local_dependencies_changed,
-        "parameters_updated": source_parameters_changed and not local_parameters_changed,
+        "dependencies_updated": source_dependencies_changed
+        and not local_dependencies_changed,
+        "parameters_updated": source_parameters_changed
+        and not local_parameters_changed,
         "variants_updated": source_variants_changed and not local_variants_changed,
         "profiles_updated": source_profiles_changed and not local_profiles_changed,
         "layouts_updated": source_layouts_changed and not local_layouts_changed,
@@ -1113,9 +1228,7 @@ def synchronize_facade_pins_from_implementation(block: BlockRecord) -> list[str]
         return []
 
     implementation_path = block.path / manifest["implementation_file"]
-    implementation_tree = parse_sexpr(
-        implementation_path.read_text(encoding="utf-8")
-    )
+    implementation_tree = parse_sexpr(implementation_path.read_text(encoding="utf-8"))
     if not _all(implementation_tree, "hierarchical_label"):
         raise ValueError(
             "This block derives its facade pins from hierarchical labels, but its "
@@ -1149,13 +1262,10 @@ def synchronize_facade_pins_from_implementation(block: BlockRecord) -> list[str]
             number = str(next_number)
             used_numbers.add(number)
             next_number += 1
-        normalized_pins.append(
-            BlockPin(pin.name, pin.electrical_type, number)
-        )
+        normalized_pins.append(BlockPin(pin.name, pin.electrical_type, number))
 
     new_manifest_pins = [
-        pin.as_manifest(index + 1)
-        for index, pin in enumerate(normalized_pins)
+        pin.as_manifest(index + 1) for index, pin in enumerate(normalized_pins)
     ]
     if new_manifest_pins == previous:
         return []
@@ -1170,8 +1280,10 @@ def synchronize_facade_pins_from_implementation(block: BlockRecord) -> list[str]
     pin_unit_name = symbol_name + "_1_1"
     pin_unit = next(
         (
-            item for item in symbol[1:]
-            if _head(item) == "symbol" and len(item) >= 2
+            item
+            for item in symbol[1:]
+            if _head(item) == "symbol"
+            and len(item) >= 2
             and str(item[1]) == pin_unit_name
         ),
         None,
@@ -1202,9 +1314,9 @@ def synchronize_facade_pins_from_implementation(block: BlockRecord) -> list[str]
     )
     default_symbol = _all(default_symbol_tree, "symbol")[0]
     default_pin_unit = next(
-        item for item in default_symbol[1:]
-        if _head(item) == "symbol" and len(item) >= 2
-        and str(item[1]) == pin_unit_name
+        item
+        for item in default_symbol[1:]
+        if _head(item) == "symbol" and len(item) >= 2 and str(item[1]) == pin_unit_name
     )
     default_pin_nodes = _all(default_pin_unit, "pin")
     default_by_name = {}
@@ -1221,7 +1333,9 @@ def synchronize_facade_pins_from_implementation(block: BlockRecord) -> list[str]
             node = copy.deepcopy(existing)
             # The hierarchical-label shape is authoritative for electrical type.
             node[1] = _Quoted(
-                "tri_state" if pin.electrical_type == "tristate" else pin.electrical_type
+                "tri_state"
+                if pin.electrical_type == "tristate"
+                else pin.electrical_type
             )
             name_node = _direct(node, "name")
             if name_node is not None and len(name_node) >= 2:
@@ -1234,10 +1348,7 @@ def synchronize_facade_pins_from_implementation(block: BlockRecord) -> list[str]
         updated_pin_nodes.append(node)
 
     # Keep all symbol-body artwork untouched; only replace the pin unit's pins.
-    other_children = [
-        child for child in pin_unit[1:]
-        if _head(child) != "pin"
-    ]
+    other_children = [child for child in pin_unit[1:] if _head(child) != "pin"]
     pin_unit[:] = [pin_unit[0], *other_children, *updated_pin_nodes]
     atomic_write(symbol_path, _dump(symbol_library) + "\n")
     manifest["pins"] = new_manifest_pins
@@ -1246,14 +1357,15 @@ def synchronize_facade_pins_from_implementation(block: BlockRecord) -> list[str]
         json.dumps(manifest, indent=2, ensure_ascii=False) + "\n",
     )
     return [
-        pin.name for pin in normalized_pins
+        pin.name
+        for pin in normalized_pins
         if pin.name.casefold() not in current_by_name
     ] + [
-        pin.name for pin in normalized_pins
+        pin.name
+        for pin in normalized_pins
         if pin.name.casefold() in current_by_name
-        and str(current_by_name[pin.name.casefold()][1]) != (
-            "tri_state" if pin.electrical_type == "tristate" else pin.electrical_type
-        )
+        and str(current_by_name[pin.name.casefold()][1])
+        != ("tri_state" if pin.electrical_type == "tristate" else pin.electrical_type)
     ]
 
 
@@ -1267,12 +1379,17 @@ def refresh_library_block(block: BlockRecord) -> dict:
     current_hashes = _asset_hashes(block.path, manifest)
     previous_hashes = manifest.get("hashes", {})
     changed = sorted(
-        name for name in set(current_hashes) | set(previous_hashes)
+        name
+        for name in set(current_hashes) | set(previous_hashes)
         if current_hashes.get(name) != previous_hashes.get(name)
     )
     if not changed:
         _save_catalog_symbol_baseline(block, manifest)
-        return {"changed": [], "version": int(manifest.get("version", 1)), "revision": manifest.get("revision")}
+        return {
+            "changed": [],
+            "version": int(manifest.get("version", 1)),
+            "revision": manifest.get("revision"),
+        }
     manifest["files"] = sorted(current_hashes)
     manifest["hashes"] = current_hashes
     manifest["revision"] = revision_for_hashes(current_hashes)
@@ -1284,7 +1401,11 @@ def refresh_library_block(block: BlockRecord) -> dict:
     if SYMBOL_NAME in changed:
         merge_symbol_catalog(block.path.parent, block.path / SYMBOL_NAME)
     _save_catalog_symbol_baseline(block, read_manifest(block.path))
-    return {"changed": changed, "version": manifest["version"], "revision": manifest["revision"]}
+    return {
+        "changed": changed,
+        "version": manifest["version"],
+        "revision": manifest["revision"],
+    }
 
 
 def publish_local_copy(local_block: BlockRecord) -> dict:
@@ -1313,7 +1434,9 @@ def publish_local_copy(local_block: BlockRecord) -> dict:
     base_dependencies = manifest.get(
         "base_dependencies", source.manifest.get("dependencies", [])
     )
-    base_parameters = manifest.get("base_parameters", source.manifest.get("parameters", []))
+    base_parameters = manifest.get(
+        "base_parameters", source.manifest.get("parameters", [])
+    )
     base_variants = manifest.get("base_variants", source.manifest.get("variants", []))
     local_variants = manifest.get("variants", [])
     source_variants = source.manifest.get("variants", [])
@@ -1329,7 +1452,11 @@ def publish_local_copy(local_block: BlockRecord) -> dict:
         and local_profiles != source_profiles
     )
     source_variants_changed = source_variants != base_variants
-    variant_conflict = local_variants_changed and source_variants_changed and local_variants != source_variants
+    variant_conflict = (
+        local_variants_changed
+        and source_variants_changed
+        and local_variants != source_variants
+    )
     base_layouts = _base_layout_configuration(manifest, source.manifest)
     local_layouts = _layout_configuration(manifest)
     source_layouts = _layout_configuration(source.manifest)
@@ -1410,7 +1537,8 @@ def publish_local_copy(local_block: BlockRecord) -> dict:
     push_variants = local_variants_changed and not source_variants_changed
     pull_variants = source_variants_changed and not local_variants_changed
     converged_variants = (
-        local_variants_changed and source_variants_changed
+        local_variants_changed
+        and source_variants_changed
         and local_variants == source_variants
     )
     push_profiles = local_profiles_changed and not source_profiles_changed
@@ -1475,7 +1603,9 @@ def publish_local_copy(local_block: BlockRecord) -> dict:
         tempfile.mkdtemp(prefix=".kicad-block-source-backup-", dir=source.path.parent)
     )
     local_backup = Path(
-        tempfile.mkdtemp(prefix=".kicad-block-local-backup-", dir=local_block.path.parent)
+        tempfile.mkdtemp(
+            prefix=".kicad-block-local-backup-", dir=local_block.path.parent
+        )
     )
     source_originals: dict[str, bool] = {}
     local_originals: dict[str, bool] = {}
@@ -1485,7 +1615,9 @@ def publish_local_copy(local_block: BlockRecord) -> dict:
     shutil.copy2(source_manifest_path, source_backup / MANIFEST_NAME)
     shutil.copy2(local_manifest_path, local_backup / MANIFEST_NAME)
 
-    def backup_file(root: Path, backup_root: Path, name: str, originals: dict[str, bool]) -> None:
+    def backup_file(
+        root: Path, backup_root: Path, name: str, originals: dict[str, bool]
+    ) -> None:
         path = root / name
         existed = path.is_file()
         originals[name] = existed
@@ -1512,8 +1644,12 @@ def publish_local_copy(local_block: BlockRecord) -> dict:
         for file_name in pull_files:
             backup_file(local_block.path, local_backup, file_name, local_originals)
         if SYMBOL_NAME in push_files:
-            catalog_name = str(source.manifest.get("catalog_file", LIBRARY_CATALOG_NAME))
-            backup_file(source.path.parent, source_backup, catalog_name, catalog_originals)
+            catalog_name = str(
+                source.manifest.get("catalog_file", LIBRARY_CATALOG_NAME)
+            )
+            backup_file(
+                source.path.parent, source_backup, catalog_name, catalog_originals
+            )
 
         for file_name in push_files:
             source_file = source.path / file_name
@@ -1575,7 +1711,12 @@ def publish_local_copy(local_block: BlockRecord) -> dict:
             )
 
         source_changed = bool(
-            push_files or push_dependencies or push_parameters or push_variants or push_profiles or push_layouts
+            push_files
+            or push_dependencies
+            or push_parameters
+            or push_variants
+            or push_profiles
+            or push_layouts
         )
         if source_changed:
             source_manifest["hashes"] = source_hashes_after
@@ -1640,8 +1781,12 @@ def publish_local_copy(local_block: BlockRecord) -> dict:
         "pulled": pulled,
         "version": int(source_manifest.get("version", 1)),
         "revision": source_manifest.get("revision"),
-        "dependencies_updated": push_dependencies or pull_dependencies or converged_dependencies,
-        "parameters_updated": push_parameters or pull_parameters or converged_parameters,
+        "dependencies_updated": push_dependencies
+        or pull_dependencies
+        or converged_dependencies,
+        "parameters_updated": push_parameters
+        or pull_parameters
+        or converged_parameters,
         "variants_updated": push_variants or pull_variants or converged_variants,
         "profiles_updated": push_profiles or pull_profiles or converged_profiles,
         "layouts_updated": push_layouts or pull_layouts or converged_layouts,
@@ -1687,9 +1832,13 @@ def add_dependency(
         reference = f"B{index}"
     reference = reference.strip()
     if not re.fullmatch(r"[A-Za-z][A-Za-z0-9]*", reference):
-        raise ValueError("Nested block reference must start with a letter and contain only letters and digits.")
+        raise ValueError(
+            "Nested block reference must start with a letter and contain only letters and digits."
+        )
     if reference.casefold() in used_references:
-        raise ValueError(f"Nested block reference {reference!r} is already used by this parent.")
+        raise ValueError(
+            f"Nested block reference {reference!r} is already used by this parent."
+        )
 
     if orientation not in (0, 90, 180, 270):
         raise ValueError("Nested block orientation must be 0, 90, 180 or 270 degrees.")
@@ -1697,15 +1846,17 @@ def add_dependency(
         index = len(dependencies)
         position_mm = (100.0 + (index % 2) * 65.0, 160.0 + (index // 2) * 50.0)
     if len(position_mm) != 2 or not all(
-        isinstance(value, (int, float)) and math.isfinite(value) for value in position_mm
+        isinstance(value, (int, float)) and math.isfinite(value)
+        for value in position_mm
     ):
-        raise ValueError("Nested block position must contain two finite millimetre coordinates.")
+        raise ValueError(
+            "Nested block position must contain two finite millimetre coordinates."
+        )
 
-    child_pins = {
-        str(pin["name"])
-        for pin in child.manifest.get("pins", [])
-    }
-    mapping = dict(pin_map) if pin_map is not None else {name: name for name in child_pins}
+    child_pins = {str(pin["name"]) for pin in child.manifest.get("pins", [])}
+    mapping = (
+        dict(pin_map) if pin_map is not None else {name: name for name in child_pins}
+    )
     if set(mapping) != child_pins:
         missing = sorted(child_pins - set(mapping))
         extra = sorted(set(mapping) - child_pins)
@@ -1748,7 +1899,11 @@ def add_dependency(
 def _dependency_anchor(block_path: Path, manifest: dict) -> Path:
     """Return the canonical source directory for resolving relative children."""
     source_path = manifest.get("source_path") if manifest.get("local_copy") else None
-    return Path(source_path).expanduser().resolve() if source_path else Path(block_path).resolve()
+    return (
+        Path(source_path).expanduser().resolve()
+        if source_path
+        else Path(block_path).resolve()
+    )
 
 
 def _dependency_path(block_path: Path, manifest: dict, dependency: dict) -> Path | None:
@@ -1774,8 +1929,10 @@ def _depends_on(block_path: Path, target_id: str, visited: set[str]) -> bool:
         if dependency.get("block_id") == target_id:
             return True
         child_path = _dependency_path(block_path, manifest, dependency)
-        if child_path is not None and child_path.is_dir() and _depends_on(
-            child_path, target_id, visited
+        if (
+            child_path is not None
+            and child_path.is_dir()
+            and _depends_on(child_path, target_id, visited)
         ):
             return True
     return False
@@ -1794,7 +1951,11 @@ def resolve_dependency_occurrences(
         if block.manifest.get("local_copy")
         else block.path.resolve()
     )
-    root = Path(library_root).expanduser().resolve() if library_root else source_path.parent
+    root = (
+        Path(library_root).expanduser().resolve()
+        if library_root
+        else source_path.parent
+    )
     records = {record.manifest["block_id"]: record for record in list_blocks(root)}
     records[block.manifest["block_id"]] = block
     ordered: list[BlockOccurrence] = []
@@ -1807,13 +1968,19 @@ def resolve_dependency_occurrences(
     ) -> None:
         block_id = current.manifest["block_id"]
         if block_id in visiting:
-            raise ValueError(f"Nested block dependency cycle detected at {current.name!r}.")
+            raise ValueError(
+                f"Nested block dependency cycle detected at {current.name!r}."
+            )
         visiting.add(block_id)
-        for index, dependency in enumerate(current.manifest.get("dependencies", []), start=1):
+        for index, dependency in enumerate(
+            current.manifest.get("dependencies", []), start=1
+        ):
             child_id = dependency.get("block_id")
             child = records.get(child_id)
             if child is None:
-                child_path = _dependency_path(current.path, current.manifest, dependency)
+                child_path = _dependency_path(
+                    current.path, current.manifest, dependency
+                )
                 if child_path is not None and child_path.is_dir():
                     child = _record(child_path)
                     records[child_id] = child
@@ -1868,7 +2035,9 @@ def _read_library_settings() -> dict:
 
 
 def _write_library_settings(value: dict) -> None:
-    atomic_write(settings_file(), json.dumps(value, indent=2, ensure_ascii=False) + "\n")
+    atomic_write(
+        settings_file(), json.dumps(value, indent=2, ensure_ascii=False) + "\n"
+    )
 
 
 def library_roots() -> list[Path]:
@@ -1938,7 +2107,9 @@ def add_library_root(path: Path, *, make_default: bool = False) -> list[Path]:
     """Register another shared functional-block library directory."""
     path = Path(path).expanduser().resolve()
     if not path.is_dir():
-        raise NotADirectoryError(f"Functional-block library directory does not exist: {path}")
+        raise NotADirectoryError(
+            f"Functional-block library directory does not exist: {path}"
+        )
     settings = _read_library_settings()
     roots = _normalized_library_settings_roots(settings)
     if path not in roots:
@@ -1964,7 +2135,9 @@ def remove_library_root(path: Path) -> list[Path]:
         raise ValueError(f"This functional-block library is not registered: {target}")
     remaining = [item for item in current_roots if item != target]
     if not remaining:
-        raise ValueError("At least one functional-block library must remain registered.")
+        raise ValueError(
+            "At least one functional-block library must remain registered."
+        )
 
     settings = _read_library_settings()
     settings["library_roots"] = [str(item) for item in remaining]
@@ -2008,14 +2181,18 @@ def build_project_symbol_catalog(project_dir: Path, roots: list[Path]) -> Path:
             symbol = _named_symbol_node(tree, symbol_name, source)
             existing = symbols_by_name.get(symbol_name)
             if existing is not None:
-                if _symbol_definition_digest(existing) != _symbol_definition_digest(symbol):
+                if _symbol_definition_digest(existing) != _symbol_definition_digest(
+                    symbol
+                ):
                     raise ValueError(
                         f"Two registered block libraries define conflicting facade symbol "
                         f"{symbol_name!r}. Resolve the duplicate block ID before placing it."
                     )
                 continue
             if header is None:
-                header = [copy.deepcopy(item) for item in tree[1:] if _head(item) != "symbol"]
+                header = [
+                    copy.deepcopy(item) for item in tree[1:] if _head(item) != "symbol"
+                ]
             symbols_by_name[symbol_name] = copy.deepcopy(symbol)
 
     if header is None:

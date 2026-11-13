@@ -36,32 +36,32 @@ def _minimal_board(path: Path) -> None:
     path.write_text(
         "(kicad_pcb\n"
         "  (version 20250114)\n"
-        "  (generator \"pcbnew\")\n"
+        '  (generator "pcbnew")\n'
         "  (general (thickness 1.6))\n"
-        "  (paper \"A4\")\n"
+        '  (paper "A4")\n'
         "  (layers\n"
-        "    (0 \"F.Cu\" signal) (31 \"B.Cu\" signal)\n"
-        "    (32 \"B.Adhes\" user \"B.Adhesive\") (33 \"F.Adhes\" user \"F.Adhesive\")\n"
-        "    (34 \"B.Paste\" user) (35 \"F.Paste\" user)\n"
-        "    (36 \"B.SilkS\" user) (37 \"F.SilkS\" user)\n"
-        "    (38 \"B.Mask\" user) (39 \"F.Mask\" user)\n"
-        "    (40 \"Dwgs.User\" user) (41 \"Cmts.User\" user)\n"
-        "    (42 \"Eco1.User\" user) (43 \"Eco2.User\" user)\n"
-        "    (44 \"Edge.Cuts\" user) (45 \"Margin\" user)\n"
-        "    (46 \"B.CrtYd\" user) (47 \"F.CrtYd\" user)\n"
-        "    (48 \"B.Fab\" user) (49 \"F.Fab\" user)\n"
+        '    (0 "F.Cu" signal) (31 "B.Cu" signal)\n'
+        '    (32 "B.Adhes" user "B.Adhesive") (33 "F.Adhes" user "F.Adhesive")\n'
+        '    (34 "B.Paste" user) (35 "F.Paste" user)\n'
+        '    (36 "B.SilkS" user) (37 "F.SilkS" user)\n'
+        '    (38 "B.Mask" user) (39 "F.Mask" user)\n'
+        '    (40 "Dwgs.User" user) (41 "Cmts.User" user)\n'
+        '    (42 "Eco1.User" user) (43 "Eco2.User" user)\n'
+        '    (44 "Edge.Cuts" user) (45 "Margin" user)\n'
+        '    (46 "B.CrtYd" user) (47 "F.CrtYd" user)\n'
+        '    (48 "B.Fab" user) (49 "F.Fab" user)\n'
         "  )\n"
         "  (setup)\n"
-        "  (net 0 \"\")\n"
-        "  (footprint \"Test:BlockResistor\"\n"
-        "    (layer \"F.Cu\") (uuid \"00000000-0000-0000-0000-000000000001\") (at 100 100 0)\n"
-        "    (path \"/00000000-0000-0000-0000-000000000001\")\n"
-        "    (property \"Reference\" \"R1\" (at 100 98 0) (layer \"F.SilkS\") (effects (font (size 1 1))))\n"
-        "    (property \"Value\" \"10k\" (at 100 102 0) (layer \"F.Fab\") (effects (font (size 1 1))))\n"
-        "    (fp_text reference \"R1\" (at 0 -1.5 0) (layer \"F.SilkS\") (effects (font (size 1 1))))\n"
-        "    (fp_text value \"10k\" (at 0 1.5 0) (layer \"F.Fab\") (effects (font (size 1 1))))\n"
-        "    (pad \"1\" smd rect (at -0.75 0 0) (size 0.8 1.2) (layers \"F.Cu\" \"F.Paste\" \"F.Mask\") (uuid \"00000000-0000-0000-0000-000000000011\") (net 0 \"\"))\n"
-        "    (pad \"2\" smd rect (at 0.75 0 0) (size 0.8 1.2) (layers \"F.Cu\" \"F.Paste\" \"F.Mask\") (uuid \"00000000-0000-0000-0000-000000000012\") (net 0 \"\"))\n"
+        '  (net 0 "")\n'
+        '  (footprint "Test:BlockResistor"\n'
+        '    (layer "F.Cu") (uuid "00000000-0000-0000-0000-000000000001") (at 100 100 0)\n'
+        '    (path "/00000000-0000-0000-0000-000000000001")\n'
+        '    (property "Reference" "R1" (at 100 98 0) (layer "F.SilkS") (effects (font (size 1 1))))\n'
+        '    (property "Value" "10k" (at 100 102 0) (layer "F.Fab") (effects (font (size 1 1))))\n'
+        '    (fp_text reference "R1" (at 0 -1.5 0) (layer "F.SilkS") (effects (font (size 1 1))))\n'
+        '    (fp_text value "10k" (at 0 1.5 0) (layer "F.Fab") (effects (font (size 1 1))))\n'
+        '    (pad "1" smd rect (at -0.75 0 0) (size 0.8 1.2) (layers "F.Cu" "F.Paste" "F.Mask") (uuid "00000000-0000-0000-0000-000000000011") (net 0 ""))\n'
+        '    (pad "2" smd rect (at 0.75 0 0) (size 0.8 1.2) (layers "F.Cu" "F.Paste" "F.Mask") (uuid "00000000-0000-0000-0000-000000000012") (net 0 ""))\n'
         "  )\n"
         ")\n",
         encoding="utf-8",
@@ -86,7 +86,18 @@ def main() -> None:
         baseline_svg_dir = root / "baseline-svg"
         baseline_svg_dir.mkdir()
         subprocess.run(
-            [cli, "pcb", "export", "svg", "--mode-multi", "--layers", "F.Cu,B.Cu", "--output", str(baseline_svg_dir), str(target)],
+            [
+                cli,
+                "pcb",
+                "export",
+                "svg",
+                "--mode-multi",
+                "--layers",
+                "F.Cu,B.Cu",
+                "--output",
+                str(baseline_svg_dir),
+                str(target),
+            ],
             check=True,
         )
         if not list(baseline_svg_dir.glob("*.svg")):
@@ -109,16 +120,22 @@ def main() -> None:
             1,
         )
         source_text = source_text.rsplit(")", 1)[0] + (
-            '  (segment (start 100 100) (end 105 100) (width 0.25) '
+            "  (segment (start 100 100) (end 105 100) (width 0.25) "
             '(layer "F.Cu") (net 3) (uuid "00000000-0000-0000-0000-000000000002"))\n'
             '  (net_chains (net_chain (name "PWR_CHAIN") '
             '(members (net "VIN") (net "GND")) '
             '(terminal_pad "00000000-0000-0000-0000-000000000011") '
             '(terminal_pad "00000000-0000-0000-0000-000000000012")))\n)\n'
         )
-        if '(uuid "00000000-0000-0000-0000-000000000011") (net 1 "VIN")' not in source_text:
+        if (
+            '(uuid "00000000-0000-0000-0000-000000000011") (net 1 "VIN")'
+            not in source_text
+        ):
             raise AssertionError("Test fixture did not assign VIN to source pad 1.")
-        if '(uuid "00000000-0000-0000-0000-000000000012") (net 2 "GND")' not in source_text:
+        if (
+            '(uuid "00000000-0000-0000-0000-000000000012") (net 2 "GND")'
+            not in source_text
+        ):
             raise AssertionError("Test fixture did not assign GND to source pad 2.")
         source.write_text(source_text, encoding="utf-8")
         (block_dir / "layout.kicad_pcb").write_text(source_text, encoding="utf-8")
@@ -130,9 +147,23 @@ def main() -> None:
                     "meta": {"filename": target_project.name, "version": 3},
                     "net_settings": {
                         "classes": [
-                            {"name": "Default", "priority": 2147483647, "clearance": 0.2},
-                            {"name": "LowNoise", "priority": 0, "clearance": 0.3, "track_width": 0.3},
-                            {"name": "HighSpeed", "priority": 1, "clearance": 0.25, "track_width": 0.25},
+                            {
+                                "name": "Default",
+                                "priority": 2147483647,
+                                "clearance": 0.2,
+                            },
+                            {
+                                "name": "LowNoise",
+                                "priority": 0,
+                                "clearance": 0.3,
+                                "track_width": 0.3,
+                            },
+                            {
+                                "name": "HighSpeed",
+                                "priority": 1,
+                                "clearance": 0.25,
+                                "track_width": 0.25,
+                            },
                         ],
                         "netclass_assignments": {"VIN_BOARD": ["LowNoise"]},
                         "net_chain_classes": {"EXISTING_CHAIN": "EXISTING_GROUP"},
@@ -151,8 +182,19 @@ def main() -> None:
                     "meta": {"filename": source_project.name, "version": 3},
                     "net_settings": {
                         "classes": [
-                            {"name": "Default", "priority": 2147483647, "clearance": 0.2},
-                            {"name": "HighSpeed", "priority": 0, "clearance": 0.1, "track_width": 0.15, "via_diameter": 0.5, "via_drill": 0.25},
+                            {
+                                "name": "Default",
+                                "priority": 2147483647,
+                                "clearance": 0.2,
+                            },
+                            {
+                                "name": "HighSpeed",
+                                "priority": 0,
+                                "clearance": 0.1,
+                                "track_width": 0.15,
+                                "via_diameter": 0.5,
+                                "via_drill": 0.25,
+                            },
                         ],
                         "netclass_assignments": {
                             "VIN": ["HighSpeed"],
@@ -177,8 +219,16 @@ def main() -> None:
         source_svg_dir.mkdir()
         subprocess.run(
             [
-                cli, "pcb", "export", "svg", "--mode-multi", "--layers", "F.Cu,B.Cu",
-                "--output", str(source_svg_dir), str(source),
+                cli,
+                "pcb",
+                "export",
+                "svg",
+                "--mode-multi",
+                "--layers",
+                "F.Cu,B.Cu",
+                "--output",
+                str(source_svg_dir),
+                str(source),
             ],
             check=True,
         )
@@ -219,7 +269,9 @@ def main() -> None:
         if collision_board.read_text(encoding="utf-8") != "preserve this PCB":
             raise AssertionError("Existing output PCB was overwritten.")
         if collision_board.with_suffix(".kicad_pro").exists():
-            raise AssertionError("PCB collision check unexpectedly created a project file.")
+            raise AssertionError(
+                "PCB collision check unexpectedly created a project file."
+            )
 
         collision_project = root / "settings-exists.kicad_pro"
         collision_project.write_text("preserve these settings", encoding="utf-8")
@@ -237,13 +289,17 @@ def main() -> None:
             )
         except FileExistsError as exc:
             if "Output project settings already exist" not in str(exc):
-                raise AssertionError(f"Unexpected project-file collision error: {exc}") from exc
+                raise AssertionError(
+                    f"Unexpected project-file collision error: {exc}"
+                ) from exc
         else:
             raise AssertionError("Existing output project settings were not rejected.")
         if collision_project.read_text(encoding="utf-8") != "preserve these settings":
             raise AssertionError("Existing output project settings were overwritten.")
         if collision_board_for_project.exists():
-            raise AssertionError("PCB output was written despite a project-file collision.")
+            raise AssertionError(
+                "PCB output was written despite a project-file collision."
+            )
 
         result = merge_block_layout(
             target,
@@ -256,48 +312,80 @@ def main() -> None:
             rotation_deg=90.0,
         )
         if not output.is_file() or target.read_bytes() == output.read_bytes():
-            raise AssertionError("Merged board output was not written separately from the source board.")
+            raise AssertionError(
+                "Merged board output was not written separately from the source board."
+            )
         output_project = output.with_suffix(".kicad_pro")
         if not output_project.is_file():
-            raise AssertionError("Merged output did not receive a matching KiCad project file.")
-        if target_project.read_bytes() != original_target_project or source_project.read_bytes() != original_source_project:
-            raise AssertionError("Project-settings merge modified one of its input project files.")
+            raise AssertionError(
+                "Merged output did not receive a matching KiCad project file."
+            )
+        if (
+            target_project.read_bytes() != original_target_project
+            or source_project.read_bytes() != original_source_project
+        ):
+            raise AssertionError(
+                "Project-settings merge modified one of its input project files."
+            )
         merged_project = json.loads(output_project.read_text(encoding="utf-8"))
         net_settings = merged_project["net_settings"]
         class_names = {item["name"] for item in net_settings["classes"]}
         if "X1_HighSpeed" not in class_names or "LowNoise" not in class_names:
-            raise AssertionError(f"Netclass definitions were not merged: {sorted(class_names)}")
+            raise AssertionError(
+                f"Netclass definitions were not merged: {sorted(class_names)}"
+            )
         assignments = net_settings["netclass_assignments"]
         if assignments.get("VIN_BOARD") != ["LowNoise", "X1_HighSpeed"]:
-            raise AssertionError(f"External netclass assignments were not merged: {assignments!r}")
+            raise AssertionError(
+                f"External netclass assignments were not merged: {assignments!r}"
+            )
         if assignments.get("X1_SW") != ["X1_HighSpeed"]:
-            raise AssertionError(f"Internal namespaced netclass assignment missing: {assignments!r}")
+            raise AssertionError(
+                f"Internal namespaced netclass assignment missing: {assignments!r}"
+            )
         if assignments.get("GND_BOARD") != ["X1_HighSpeed"]:
-            raise AssertionError(f"Wildcard pattern was not mapped to external board net: {assignments!r}")
+            raise AssertionError(
+                f"Wildcard pattern was not mapped to external board net: {assignments!r}"
+            )
         if result["applied_project_patterns"] != [
             {"pattern": "G*", "netclass": "HighSpeed", "resolved_nets": ["GND_BOARD"]},
             {"pattern": "S*", "netclass": "HighSpeed", "resolved_nets": ["X1_SW"]},
         ]:
-            raise AssertionError(f"Unexpected resolved netclass patterns: {result['applied_project_patterns']!r}")
+            raise AssertionError(
+                f"Unexpected resolved netclass patterns: {result['applied_project_patterns']!r}"
+            )
         if result["ignored_project_patterns"]:
-            raise AssertionError(f"All fixture patterns should have resolved: {result['unmatched_project_patterns']!r}")
+            raise AssertionError(
+                f"All fixture patterns should have resolved: {result['unmatched_project_patterns']!r}"
+            )
         if merged_project["meta"]["filename"] != output_project.name:
             raise AssertionError("Merged project metadata filename was not updated.")
         if result["merged_netclasses"] != ["X1_HighSpeed"]:
             raise AssertionError(f"Unexpected netclass merge summary: {result!r}")
         if result["merged_board_chains"] != ["X1_PWR_CHAIN"]:
-            raise AssertionError(f"Board net-chain topology was not imported: {result!r}")
+            raise AssertionError(
+                f"Board net-chain topology was not imported: {result!r}"
+            )
         if result["merged_project_chain_names"] != ["X1_PWR_CHAIN"]:
             raise AssertionError(f"Project chain settings were not mapped: {result!r}")
-        if result["ignored_project_chain_classes"] or result["unmatched_project_chains"]:
-            raise AssertionError(f"All source chain settings should have mapped: {result!r}")
+        if (
+            result["ignored_project_chain_classes"]
+            or result["unmatched_project_chains"]
+        ):
+            raise AssertionError(
+                f"All source chain settings should have mapped: {result!r}"
+            )
         if net_settings["net_chain_classes"] != {
             "EXISTING_CHAIN": "EXISTING_GROUP",
             "X1_PWR_CHAIN": "POWER_GROUP",
         }:
-            raise AssertionError(f"Net-chain class labels were not merged: {net_settings['net_chain_classes']!r}")
+            raise AssertionError(
+                f"Net-chain class labels were not merged: {net_settings['net_chain_classes']!r}"
+            )
         if net_settings["net_chain_netclasses"] != {"X1_PWR_CHAIN": "X1_HighSpeed"}:
-            raise AssertionError(f"Net-chain netclass override was not mapped: {net_settings['net_chain_netclasses']!r}")
+            raise AssertionError(
+                f"Net-chain netclass override was not mapped: {net_settings['net_chain_netclasses']!r}"
+            )
         if result["unmatched_project_patterns"]:
             raise AssertionError(
                 f"All fixture patterns should match stored block nets: {result['unmatched_project_patterns']!r}"
@@ -312,7 +400,9 @@ def main() -> None:
             len(result["interactive_item_uuids"]) != result["object_count"]
             or len(set(result["interactive_item_uuids"])) != result["object_count"]
         ):
-            raise AssertionError(f"Imported board-item IDs are incomplete or duplicated: {result!r}")
+            raise AssertionError(
+                f"Imported board-item IDs are incomplete or duplicated: {result!r}"
+            )
 
         parsed = parse_sexpr(output.read_text(encoding="utf-8"))
         top_level_item_ids = {
@@ -320,7 +410,10 @@ def main() -> None:
             for item in parsed[1:]
             if isinstance(item, list) and item
             for child in item[1:]
-            if isinstance(child, list) and child and child[0] == "uuid" and len(child) > 1
+            if isinstance(child, list)
+            and child
+            and child[0] == "uuid"
+            and len(child) > 1
         }
         if not set(result["interactive_item_uuids"]).issubset(top_level_item_ids):
             raise AssertionError(
@@ -330,24 +423,32 @@ def main() -> None:
         # The imported chain must use mapped project net names and regenerated
         # terminal-pad UUIDs, not references back to the stored library board.
         chain_section = next(
-            item for item in parsed[1:]
+            item
+            for item in parsed[1:]
             if isinstance(item, list) and item and item[0] == "net_chains"
         )
         chains = [
-            item for item in chain_section[1:]
+            item
+            for item in chain_section[1:]
             if isinstance(item, list) and item and item[0] == "net_chain"
         ]
         if len(chains) != 1:
-            raise AssertionError(f"Expected one imported PCB net chain; found {len(chains)}.")
+            raise AssertionError(
+                f"Expected one imported PCB net chain; found {len(chains)}."
+            )
         imported_chain = chains[0]
         chain_name_node = next(
-            item for item in imported_chain[1:]
+            item
+            for item in imported_chain[1:]
             if isinstance(item, list) and item and item[0] == "name"
         )
         if str(chain_name_node[1]) != "X1_PWR_CHAIN":
-            raise AssertionError(f"Net chain name was not namespaced: {chain_name_node!r}")
+            raise AssertionError(
+                f"Net chain name was not namespaced: {chain_name_node!r}"
+            )
         member_node = next(
-            item for item in imported_chain[1:]
+            item
+            for item in imported_chain[1:]
             if isinstance(item, list) and item and item[0] == "members"
         )
         chain_members = {
@@ -356,7 +457,9 @@ def main() -> None:
             if isinstance(item, list) and item and item[0] == "net"
         }
         if chain_members != {"VIN_BOARD", "GND_BOARD"}:
-            raise AssertionError(f"Net-chain members were not remapped: {chain_members!r}")
+            raise AssertionError(
+                f"Net-chain members were not remapped: {chain_members!r}"
+            )
         chain_terminal_ids = {
             str(item[1])
             for item in imported_chain[1:]
@@ -386,18 +489,26 @@ def main() -> None:
             )
         if chain_terminal_ids & original_pad_ids:
             raise AssertionError("Net-chain terminal-pad UUIDs were not regenerated.")
-        nets = {int(str(item[1])): str(item[2]) for item in parsed[1:] if isinstance(item, list) and item and item[0] == "net"}
+        nets = {
+            int(str(item[1])): str(item[2])
+            for item in parsed[1:]
+            if isinstance(item, list) and item and item[0] == "net"
+        }
         internal_net_code = next(code for code, name in nets.items() if name == "X1_SW")
         merged_segment = next(
-            item for item in parsed[1:]
+            item
+            for item in parsed[1:]
             if isinstance(item, list) and item and item[0] == "segment"
         )
         segment_net = next(
-            item for item in merged_segment[1:]
+            item
+            for item in merged_segment[1:]
             if isinstance(item, list) and item and item[0] == "net"
         )
         if len(segment_net) != 2 or int(str(segment_net[1])) != internal_net_code:
-            raise AssertionError(f"KiCad track net must contain only its mapped code: {segment_net!r}")
+            raise AssertionError(
+                f"KiCad track net must contain only its mapped code: {segment_net!r}"
+            )
         if "X1_SW" not in nets.values() or "VIN_BOARD" not in nets.values():
             raise AssertionError(f"Project board nets were not merged: {nets!r}")
         imported_footprints = []
@@ -406,12 +517,25 @@ def main() -> None:
             if not isinstance(item, list) or not item:
                 continue
             if item[0] == "footprint":
-                ref_prop = next((x for x in item[1:] if isinstance(x, list) and x and x[0] == "property" and str(x[1]).casefold() == "reference"), None)
+                ref_prop = next(
+                    (
+                        x
+                        for x in item[1:]
+                        if isinstance(x, list)
+                        and x
+                        and x[0] == "property"
+                        and str(x[1]).casefold() == "reference"
+                    ),
+                    None,
+                )
                 if ref_prop and str(ref_prop[2]) == "X1_R1":
                     imported_footprints.append(item)
             if item[0] == "segment" and any(
-                isinstance(x, list) and x and x[0] == "net"
-                and len(x) == 2 and int(str(x[1])) == internal_net_code
+                isinstance(x, list)
+                and x
+                and x[0] == "net"
+                and len(x) == 2
+                and int(str(x[1])) == internal_net_code
                 for x in item[1:]
             ):
                 imported_segments.append(item)
@@ -425,27 +549,53 @@ def main() -> None:
                     None,
                 )
                 if net_node is None or len(net_node) != 3:
-                    raise AssertionError(f"Imported pad does not have a named net: {pad!r}")
+                    raise AssertionError(
+                        f"Imported pad does not have a named net: {pad!r}"
+                    )
                 copied_pad_nets[str(pad[1])] = (int(str(net_node[1])), str(net_node[2]))
         if copied_pad_nets != {"1": (1, "VIN_BOARD"), "2": (2, "GND_BOARD")}:
-            raise AssertionError(f"Imported pad nets were not mapped: {copied_pad_nets!r}")
-        fp_at = next(x for x in imported_footprints[0][1:] if isinstance(x, list) and x and x[0] == "at")
+            raise AssertionError(
+                f"Imported pad nets were not mapped: {copied_pad_nets!r}"
+            )
+        fp_at = next(
+            x
+            for x in imported_footprints[0][1:]
+            if isinstance(x, list) and x and x[0] == "at"
+        )
         if (float(fp_at[1]), float(fp_at[2]), float(fp_at[3])) != (120.0, 130.0, 90.0):
             raise AssertionError(f"Footprint was not rotated/translated: {fp_at!r}")
         ref_property = next(
-            x for x in imported_footprints[0][1:]
-            if isinstance(x, list) and x and x[0] == "property"
+            x
+            for x in imported_footprints[0][1:]
+            if isinstance(x, list)
+            and x
+            and x[0] == "property"
             and str(x[1]).casefold() == "reference"
         )
-        ref_at = next(x for x in ref_property[1:] if isinstance(x, list) and x and x[0] == "at")
-        if (float(ref_at[1]), float(ref_at[2]), float(ref_at[3])) != (118.0, 130.0, 90.0):
-            raise AssertionError(f"Footprint reference field was not rotated: {ref_at!r}")
+        ref_at = next(
+            x for x in ref_property[1:] if isinstance(x, list) and x and x[0] == "at"
+        )
+        if (float(ref_at[1]), float(ref_at[2]), float(ref_at[3])) != (
+            118.0,
+            130.0,
+            90.0,
+        ):
+            raise AssertionError(
+                f"Footprint reference field was not rotated: {ref_at!r}"
+            )
         merged_segment = next(
-            item for item in parsed[1:]
+            item
+            for item in parsed[1:]
             if isinstance(item, list) and item and item[0] == "segment"
         )
-        segment_start = next(x for x in merged_segment[1:] if isinstance(x, list) and x and x[0] == "start")
-        segment_end = next(x for x in merged_segment[1:] if isinstance(x, list) and x and x[0] == "end")
+        segment_start = next(
+            x
+            for x in merged_segment[1:]
+            if isinstance(x, list) and x and x[0] == "start"
+        )
+        segment_end = next(
+            x for x in merged_segment[1:] if isinstance(x, list) and x and x[0] == "end"
+        )
         if (float(segment_start[1]), float(segment_start[2])) != (120.0, 130.0):
             raise AssertionError(f"Track start was not transformed: {segment_start!r}")
         if (float(segment_end[1]), float(segment_end[2])) != (120.0, 125.0):
@@ -455,7 +605,18 @@ def main() -> None:
         svg_dir = root / "svg"
         svg_dir.mkdir()
         export_result = subprocess.run(
-            [cli, "pcb", "export", "svg", "--mode-multi", "--layers", "F.Cu,B.Cu", "--output", str(svg_dir), str(output)],
+            [
+                cli,
+                "pcb",
+                "export",
+                "svg",
+                "--mode-multi",
+                "--layers",
+                "F.Cu,B.Cu",
+                "--output",
+                str(svg_dir),
+                str(output),
+            ],
             capture_output=True,
             text=True,
             check=False,
@@ -464,7 +625,11 @@ def main() -> None:
             serialized = output.read_text(encoding="utf-8")
             offset_match = re.search(r"offset (\d+)", export_result.stderr)
             offset = int(offset_match.group(1)) if offset_match else -1
-            snippet = serialized[max(0, offset - 180):offset + 180] if offset >= 0 else serialized[:500]
+            snippet = (
+                serialized[max(0, offset - 180) : offset + 180]
+                if offset >= 0
+                else serialized[:500]
+            )
             try:
                 parsed_output = parse_sexpr(serialized)
                 top_level = [
@@ -488,7 +653,9 @@ def main() -> None:
             raise AssertionError("KiCad did not export the merged board to SVG.")
 
         # Load the result through the real PCB IPC API and inspect footprint/nets.
-        kicad = KiCad(headless=True, kicad_cli_path=cli, file_path=str(output), timeout_ms=30000)
+        kicad = KiCad(
+            headless=True, kicad_cli_path=cli, file_path=str(output), timeout_ms=30000
+        )
         try:
             board = kicad.get_board()
             if board is None:
@@ -501,7 +668,9 @@ def main() -> None:
                 raise AssertionError(f"Imported footprint refs missing: {sorted(refs)}")
             tracks = list(board.get_tracks())
             if not tracks:
-                raise AssertionError("The stored block track was not present in the merged board.")
+                raise AssertionError(
+                    "The stored block track was not present in the merged board."
+                )
         finally:
             kicad.close()
 
@@ -535,34 +704,55 @@ def main() -> None:
             batch_output,
         )
         if batch["block_count"] != 2 or batch["footprint_count"] != 2:
-            raise AssertionError(f"Batch merge did not retain both block instances: {batch!r}")
+            raise AssertionError(
+                f"Batch merge did not retain both block instances: {batch!r}"
+            )
         batch_parsed = parse_sexpr(batch_output.read_text(encoding="utf-8"))
         batch_footprint_refs = {
             str(prop[2])
             for footprint in batch_parsed[1:]
             if isinstance(footprint, list) and footprint and footprint[0] == "footprint"
             for prop in footprint[1:]
-            if isinstance(prop, list) and prop and prop[0] == "property"
+            if isinstance(prop, list)
+            and prop
+            and prop[0] == "property"
             and str(prop[1]).casefold() == "reference"
         }
         if not {"R1", "X1_R1", "X2_R1"}.issubset(batch_footprint_refs):
-            raise AssertionError(f"Batch footprint references are incomplete: {batch_footprint_refs}")
+            raise AssertionError(
+                f"Batch footprint references are incomplete: {batch_footprint_refs}"
+            )
         batch_net_names = {
             str(item[2])
             for item in batch_parsed[1:]
             if isinstance(item, list) and item and item[0] == "net" and len(item) >= 3
         }
         expected_batch_nets = {
-            "VIN_ONE", "GND_ONE", "X1_SW", "VIN_TWO", "GND_TWO", "X2_SW"
+            "VIN_ONE",
+            "GND_ONE",
+            "X1_SW",
+            "VIN_TWO",
+            "GND_TWO",
+            "X2_SW",
         }
         if not expected_batch_nets.issubset(batch_net_names):
-            raise AssertionError(f"Batch output lost mapped/internal nets: {batch_net_names}")
+            raise AssertionError(
+                f"Batch output lost mapped/internal nets: {batch_net_names}"
+            )
         batch_svg = root / "batch-svg"
         batch_svg.mkdir()
         subprocess.run(
             [
-                cli, "pcb", "export", "svg", "--mode-multi", "--layers", "F.Cu,B.Cu",
-                "--output", str(batch_svg), str(batch_output),
+                cli,
+                "pcb",
+                "export",
+                "svg",
+                "--mode-multi",
+                "--layers",
+                "F.Cu,B.Cu",
+                "--output",
+                str(batch_svg),
+                str(batch_output),
             ],
             check=True,
         )
@@ -578,19 +768,24 @@ def main() -> None:
             batch_board = batch_kicad.get_board()
             if batch_board is None:
                 raise RuntimeError("KiCad IPC did not load the combined batch PCB.")
-            batch_refs = {item.reference_field.text.value for item in batch_board.get_footprints()}
+            batch_refs = {
+                item.reference_field.text.value for item in batch_board.get_footprints()
+            }
             if not {"R1", "X1_R1", "X2_R1"}.issubset(batch_refs):
-                raise AssertionError(f"Batch PCB IPC footprint refs are incomplete: {batch_refs}")
+                raise AssertionError(
+                    f"Batch PCB IPC footprint refs are incomplete: {batch_refs}"
+                )
             batch_track_count = len(list(batch_board.get_tracks()))
             if batch_track_count < 2:
-                raise AssertionError("Batch PCB did not preserve routed tracks from both instances.")
+                raise AssertionError(
+                    "Batch PCB did not preserve routed tracks from both instances."
+                )
         finally:
             batch_kicad.close()
         print(
             "PCB batch merge passed: two instances of one reusable block, "
             "separate mapped nets/references, KiCad CLI export and IPC reload."
         )
-
 
 
 if __name__ == "__main__":

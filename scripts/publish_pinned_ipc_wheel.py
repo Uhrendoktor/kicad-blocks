@@ -61,7 +61,9 @@ def _request(
     elif body is not None:
         headers["Content-Type"] = content_type
     try:
-        with urlopen(Request(url, data=data, headers=headers, method=method), timeout=60) as response:
+        with urlopen(
+            Request(url, data=data, headers=headers, method=method), timeout=60
+        ) as response:
             raw = response.read()
     except HTTPError as exc:
         if exc.code == 404 and method == "GET":
@@ -112,7 +114,9 @@ def _get_or_create_release(repo: str, tag: str, source_sha: str, token: str) -> 
         "prerelease": False,
     }
     try:
-        created = _request("POST", f"{root}/repos/{repo}/releases", token, payload=payload)
+        created = _request(
+            "POST", f"{root}/repos/{repo}/releases", token, payload=payload
+        )
     except RuntimeError:
         # A concurrent CI run may have created the same release. Only reuse it
         # after reading the tag back from GitHub.
@@ -120,13 +124,19 @@ def _get_or_create_release(repo: str, tag: str, source_sha: str, token: str) -> 
         if created is None:
             raise
     if created is None or not created.get("id"):
-        raise RuntimeError(f"Could not create or retrieve pinned wheel release {tag!r}.")
+        raise RuntimeError(
+            f"Could not create or retrieve pinned wheel release {tag!r}."
+        )
     return created
 
 
-def publish_pinned_wheel(wheelhouse: Path, repo: str, source_sha: str, token: str) -> str:
+def publish_pinned_wheel(
+    wheelhouse: Path, repo: str, source_sha: str, token: str
+) -> str:
     if not re.fullmatch(r"[0-9a-f]{40}", source_sha):
-        raise ValueError("The pinned kicad-python source revision must be a 40-character SHA.")
+        raise ValueError(
+            "The pinned kicad-python source revision must be a 40-character SHA."
+        )
     wheelhouse = Path(wheelhouse).expanduser().resolve()
     wheels = sorted(
         item for item in wheelhouse.glob(f"{WHEEL_PREFIX}*.whl") if item.is_file()
@@ -151,11 +161,18 @@ def publish_pinned_wheel(wheelhouse: Path, repo: str, source_sha: str, token: st
         raise RuntimeError("The pinned wheel release has no release ID.")
 
     existing = next(
-        (asset for asset in release.get("assets", []) if asset.get("name") == wheel.name),
+        (
+            asset
+            for asset in release.get("assets", [])
+            if asset.get("name") == wheel.name
+        ),
         None,
     )
     if existing is not None:
-        if existing.get("digest") != expected_digest or existing.get("size") != wheel.stat().st_size:
+        if (
+            existing.get("digest") != expected_digest
+            or existing.get("size") != wheel.stat().st_size
+        ):
             raise RuntimeError(
                 "Pinned dependency asset already exists with different bytes; refusing to replace "
                 f"the immutable release asset. Expected {expected_digest}, "
@@ -182,7 +199,11 @@ def publish_pinned_wheel(wheelhouse: Path, repo: str, source_sha: str, token: st
     if refreshed is None:
         raise RuntimeError("Pinned wheel release disappeared after upload.")
     uploaded = next(
-        (asset for asset in refreshed.get("assets", []) if asset.get("name") == wheel.name),
+        (
+            asset
+            for asset in refreshed.get("assets", [])
+            if asset.get("name") == wheel.name
+        ),
         None,
     )
     if (
@@ -194,7 +215,9 @@ def publish_pinned_wheel(wheelhouse: Path, repo: str, source_sha: str, token: st
         raise RuntimeError(
             f"Pinned wheel upload could not be verified against {expected_digest}: {uploaded!r}"
         )
-    print(f"Verified immutable dependency asset: {uploaded['browser_download_url']} ({expected_digest})")
+    print(
+        f"Verified immutable dependency asset: {uploaded['browser_download_url']} ({expected_digest})"
+    )
     return str(uploaded["browser_download_url"])
 
 

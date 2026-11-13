@@ -57,15 +57,15 @@ class PluginInstallerTests(unittest.TestCase):
                 "--documents-home",
                 str(user_data),
             ]
-            legacy_destination = user_data / "kicad" / "11.0" / "plugins" / "kicad-blocks"
+            legacy_destination = (
+                user_data / "kicad" / "11.0" / "plugins" / "kicad-blocks"
+            )
             legacy_destination.mkdir(parents=True)
             (legacy_destination / "plugin.json").write_text(
                 json.dumps({"identifier": "kicad-blocks"}), encoding="utf-8"
             )
             subprocess.run(command, check=True, capture_output=True, text=True)
-            destination = (
-                user_data / "kicad" / "11.0" / "plugins" / PLUGIN_IDENTIFIER
-            )
+            destination = user_data / "kicad" / "11.0" / "plugins" / PLUGIN_IDENTIFIER
             self.assertFalse(legacy_destination.exists())
             self.assertTrue((destination / "plugin.json").is_file())
             self.assertTrue((destination / "main.py").is_file())
@@ -89,7 +89,9 @@ class PluginInstallerTests(unittest.TestCase):
             self.assertFalse(stale_file.exists())
 
     def test_dry_run_does_not_create_installation_directory(self):
-        with tempfile.TemporaryDirectory(prefix="kicad-blocks-install-dry-run-") as temp:
+        with tempfile.TemporaryDirectory(
+            prefix="kicad-blocks-install-dry-run-"
+        ) as temp:
             user_data = pathlib.Path(temp) / "KiCad"
             result = subprocess.run(
                 [
@@ -105,7 +107,10 @@ class PluginInstallerTests(unittest.TestCase):
                 capture_output=True,
                 text=True,
             )
-            self.assertIn(str(user_data / "kicad" / "11.0" / "plugins" / PLUGIN_IDENTIFIER), result.stdout)
+            self.assertIn(
+                str(user_data / "kicad" / "11.0" / "plugins" / PLUGIN_IDENTIFIER),
+                result.stdout,
+            )
             self.assertFalse(user_data.exists())
 
     def test_plugin_runtime_minimum_matches_published_wheel_python_abi(self):
@@ -149,7 +154,9 @@ class PluginInstallerTests(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("reverse-DNS", result.stderr)
 
-    def test_installer_rejects_kicad_10_stable_because_it_has_no_schematic_ipc_addons(self):
+    def test_installer_rejects_kicad_10_stable_because_it_has_no_schematic_ipc_addons(
+        self,
+    ):
         from importlib.util import module_from_spec, spec_from_file_location
 
         spec = spec_from_file_location("kicad_blocks_installer", INSTALLER)
@@ -157,9 +164,13 @@ class PluginInstallerTests(unittest.TestCase):
         assert spec and spec.loader
         spec.loader.exec_module(installer)
         with self.assertRaisesRegex(ValueError, "PCB Editor"):
-            installer.validate_install_target("10.0", platform_name="linux", machine="x86_64")
+            installer.validate_install_target(
+                "10.0", platform_name="linux", machine="x86_64"
+            )
         with self.assertRaisesRegex(ValueError, "PCB Editor"):
-            installer.validate_install_target("10.8", platform_name="linux", machine="x86_64")
+            installer.validate_install_target(
+                "10.8", platform_name="linux", machine="x86_64"
+            )
 
     def test_installer_allows_kiCad_10_99_nightly_and_11_or_newer(self):
         from importlib.util import module_from_spec, spec_from_file_location
@@ -170,7 +181,9 @@ class PluginInstallerTests(unittest.TestCase):
         spec.loader.exec_module(installer)
         for version in ("10.99", "11.0", "11.1", "12.0"):
             with self.subTest(version=version):
-                installer.validate_install_target(version, platform_name="linux", machine="x86_64")
+                installer.validate_install_target(
+                    version, platform_name="linux", machine="x86_64"
+                )
 
     def test_installer_rejects_unsupported_platform_and_architecture(self):
         from importlib.util import module_from_spec, spec_from_file_location
@@ -180,14 +193,22 @@ class PluginInstallerTests(unittest.TestCase):
         assert spec and spec.loader
         spec.loader.exec_module(installer)
         with self.assertRaisesRegex(ValueError, "Linux x86_64"):
-            installer.validate_install_target("10.99", platform_name="win32", machine="AMD64")
+            installer.validate_install_target(
+                "10.99", platform_name="win32", machine="AMD64"
+            )
         with self.assertRaisesRegex(ValueError, "Linux x86_64"):
-            installer.validate_install_target("10.99", platform_name="linux", machine="aarch64")
+            installer.validate_install_target(
+                "10.99", platform_name="linux", machine="aarch64"
+            )
         with self.assertRaisesRegex(ValueError, "Linux x86_64"):
-            installer.validate_install_target("11.0", platform_name="darwin", machine="arm64")
+            installer.validate_install_target(
+                "11.0", platform_name="darwin", machine="arm64"
+            )
 
     def test_installer_rejects_invalid_kicad_version_format(self):
-        with tempfile.TemporaryDirectory(prefix="kicad-blocks-install-version-") as temp:
+        with tempfile.TemporaryDirectory(
+            prefix="kicad-blocks-install-version-"
+        ) as temp:
             result = subprocess.run(
                 [
                     sys.executable,

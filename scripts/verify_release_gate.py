@@ -12,14 +12,18 @@ from urllib.request import Request, urlopen
 from pathlib import Path
 
 
-def verify_release_gate(repo: str, tag: str, version_file: Path, source_sha: str, token: str) -> dict:
+def verify_release_gate(
+    repo: str, tag: str, version_file: Path, source_sha: str, token: str
+) -> dict:
     version = version_file.read_text(encoding="utf-8").strip()
     if not re.fullmatch(r"\d+\.\d+\.\d+", version):
         raise ValueError(f"Invalid VERSION file value: {version!r}.")
     if tag != f"v{version}":
         raise ValueError(f"Tag {tag!r} does not match release version {version!r}.")
     if not re.fullmatch(r"[0-9a-f]{40}", source_sha):
-        raise ValueError("Release source SHA must be a 40-character lowercase commit hash.")
+        raise ValueError(
+            "Release source SHA must be a 40-character lowercase commit hash."
+        )
 
     api = os.environ.get("GITHUB_API_URL", "https://api.github.com").rstrip("/")
     url = f"{api}/repos/{repo}/actions/runs?head_sha={source_sha}&per_page=100"
@@ -34,7 +38,8 @@ def verify_release_gate(repo: str, tag: str, version_file: Path, source_sha: str
             payload = json.loads(response.read().decode("utf-8"))
         last_runs = payload.get("workflow_runs", [])
         passing = [
-            run for run in last_runs
+            run
+            for run in last_runs
             if run.get("head_sha") == source_sha
             and run.get("head_branch") == "main"
             and run.get("event") == "push"

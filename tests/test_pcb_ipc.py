@@ -23,7 +23,7 @@ def _find_cli() -> str:
 def _write_minimal_board(path: Path) -> None:
     """Write a small but valid empty board document for an IPC test."""
     path.write_text(
-        "(kicad_pcb\n  (version 20250114)\n  (generator \"pcbnew\")\n  (general (thickness 1.6))\n  (paper \"A4\")\n  (layers\n    (0 \"F.Cu\" signal)\n    (31 \"B.Cu\" signal)\n    (32 \"B.Adhes\" user \"B.Adhesive\")\n    (33 \"F.Adhes\" user \"F.Adhesive\")\n    (34 \"B.Paste\" user)\n    (35 \"F.Paste\" user)\n    (36 \"B.SilkS\" user)\n    (37 \"F.SilkS\" user)\n    (38 \"B.Mask\" user)\n    (39 \"F.Mask\" user)\n    (40 \"Dwgs.User\" user)\n    (41 \"Cmts.User\" user)\n    (42 \"Eco1.User\" user)\n    (43 \"Eco2.User\" user)\n    (44 \"Edge.Cuts\" user)\n    (45 \"Margin\" user)\n    (46 \"B.CrtYd\" user)\n    (47 \"F.CrtYd\" user)\n    (48 \"B.Fab\" user)\n    (49 \"F.Fab\" user)\n  )\n  (setup)\n  (net 0 \"\")\n  (footprint \"Test:BlockResistor\"\n    (layer \"F.Cu\")\n    (at 100 100 0)\n    (path \"/00000000-0000-0000-0000-000000000001\")\n    (property \"Reference\" \"R1\" (at 100 98 0) (layer \"F.SilkS\") (effects (font (size 1 1))))\n    (property \"Value\" \"10k\" (at 100 102 0) (layer \"F.Fab\") (effects (font (size 1 1))))\n    (fp_text reference \"R1\" (at 0 -1.5 0) (layer \"F.SilkS\") (effects (font (size 1 1))))\n    (fp_text value \"10k\" (at 0 1.5 0) (layer \"F.Fab\") (effects (font (size 1 1))))\n    (pad \"1\" smd rect (at -0.75 0 0) (size 0.8 1.2) (layers \"F.Cu\" \"F.Paste\" \"F.Mask\") (net 0 \"\"))\n    (pad \"2\" smd rect (at 0.75 0 0) (size 0.8 1.2) (layers \"F.Cu\" \"F.Paste\" \"F.Mask\") (net 0 \"\"))\n  )\n)\n",
+        '(kicad_pcb\n  (version 20250114)\n  (generator "pcbnew")\n  (general (thickness 1.6))\n  (paper "A4")\n  (layers\n    (0 "F.Cu" signal)\n    (31 "B.Cu" signal)\n    (32 "B.Adhes" user "B.Adhesive")\n    (33 "F.Adhes" user "F.Adhesive")\n    (34 "B.Paste" user)\n    (35 "F.Paste" user)\n    (36 "B.SilkS" user)\n    (37 "F.SilkS" user)\n    (38 "B.Mask" user)\n    (39 "F.Mask" user)\n    (40 "Dwgs.User" user)\n    (41 "Cmts.User" user)\n    (42 "Eco1.User" user)\n    (43 "Eco2.User" user)\n    (44 "Edge.Cuts" user)\n    (45 "Margin" user)\n    (46 "B.CrtYd" user)\n    (47 "F.CrtYd" user)\n    (48 "B.Fab" user)\n    (49 "F.Fab" user)\n  )\n  (setup)\n  (net 0 "")\n  (footprint "Test:BlockResistor"\n    (layer "F.Cu")\n    (at 100 100 0)\n    (path "/00000000-0000-0000-0000-000000000001")\n    (property "Reference" "R1" (at 100 98 0) (layer "F.SilkS") (effects (font (size 1 1))))\n    (property "Value" "10k" (at 100 102 0) (layer "F.Fab") (effects (font (size 1 1))))\n    (fp_text reference "R1" (at 0 -1.5 0) (layer "F.SilkS") (effects (font (size 1 1))))\n    (fp_text value "10k" (at 0 1.5 0) (layer "F.Fab") (effects (font (size 1 1))))\n    (pad "1" smd rect (at -0.75 0 0) (size 0.8 1.2) (layers "F.Cu" "F.Paste" "F.Mask") (net 0 ""))\n    (pad "2" smd rect (at 0.75 0 0) (size 0.8 1.2) (layers "F.Cu" "F.Paste" "F.Mask") (net 0 ""))\n  )\n)\n',
         encoding="utf-8",
     )
 
@@ -69,7 +69,9 @@ def main() -> None:
 
             pads = [pad for pad in board.get_pads() if pad.parent == footprint.id]
             if not pads:
-                raise AssertionError("The placed footprint has no pads in the board IPC view.")
+                raise AssertionError(
+                    "The placed footprint has no pads in the board IPC view."
+                )
             target_pad = next((pad for pad in pads if pad.number == "1"), None)
             if target_pad is None:
                 raise AssertionError("The test footprint has no pad number 1.")
@@ -114,9 +116,13 @@ def main() -> None:
                 raise AssertionError("The test netlist was not written to disk.")
             netlist_text = netlist_path.read_text(encoding="utf-8")
             if not netlist_text.lstrip().startswith('(export (version "E")'):
-                raise AssertionError("The file is not in KiCad PCB-import netlist format.")
+                raise AssertionError(
+                    "The file is not in KiCad PCB-import netlist format."
+                )
             if "BLOCK_INTERNAL" not in netlist_text or '(ref "R1")' not in netlist_text:
-                raise AssertionError("The PCB-import netlist fixture is missing the expected net/component.")
+                raise AssertionError(
+                    "The PCB-import netlist fixture is missing the expected net/component."
+                )
 
             result = board.import_netlist(
                 str(netlist_path.resolve()),

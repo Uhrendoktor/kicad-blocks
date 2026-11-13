@@ -91,7 +91,9 @@ def export_block_bom(
     with tempfile.TemporaryDirectory(prefix="kicad-blocks-bom-") as temp:
         for index, occurrence in enumerate(blocks):
             record = occurrence.record
-            block_csv = Path(temp) / f"{index:03d}_{record.manifest['block_id'][:8]}.csv"
+            block_csv = (
+                Path(temp) / f"{index:03d}_{record.manifest['block_id'][:8]}.csv"
+            )
             implementation = _implementation_for_export(
                 occurrence, Path(temp), index, parameter_values
             )
@@ -108,7 +110,9 @@ def export_block_bom(
                 "Reference,Value,Footprint,Qty,DNP",
                 str(implementation),
             ]
-            result = subprocess.run(command, capture_output=True, text=True, check=False)
+            result = subprocess.run(
+                command, capture_output=True, text=True, check=False
+            )
             if result.returncode != 0:
                 raise RuntimeError(
                     f"KiCad BOM export failed for block {record.name!r} "
@@ -127,7 +131,11 @@ def export_block_bom(
                         f"KiCad produced an empty BOM header for block {record.name!r}."
                     )
                 reference_column = next(
-                    (name for name in headers if name.strip().casefold() == "reference"),
+                    (
+                        name
+                        for name in headers
+                        if name.strip().casefold() == "reference"
+                    ),
                     None,
                 )
                 if reference_column is None:
@@ -152,7 +160,11 @@ def export_block_bom(
                         continue
                     if reference:
                         instance_prefix = "/".join(occurrence.instance_path)
-                        owner = f"{instance_prefix}/{record.name}" if instance_prefix else record.name
+                        owner = (
+                            f"{instance_prefix}/{record.name}"
+                            if instance_prefix
+                            else record.name
+                        )
                         item[reference_column] = f"{owner}::{reference}"
                     item["Block"] = (
                         "/".join(occurrence.instance_path + (record.name,))
@@ -196,7 +208,9 @@ def validate_block_library(
     library_root = Path(library_root).expanduser().resolve()
     report_directory = Path(report_directory).expanduser().resolve()
     if not library_root.is_dir():
-        raise FileNotFoundError(f"Block library directory does not exist: {library_root}")
+        raise FileNotFoundError(
+            f"Block library directory does not exist: {library_root}"
+        )
 
     report_directory.mkdir(parents=True, exist_ok=True)
     report_path = report_directory / "library-validation.json"
@@ -247,7 +261,8 @@ def validate_block_library(
         untracked_files = sorted(declared_files - set(declared_hashes))
         if untracked_files:
             item["errors"].append(
-                "Manifest files have no corresponding hash: " + ", ".join(untracked_files)
+                "Manifest files have no corresponding hash: "
+                + ", ".join(untracked_files)
             )
         if item["missing_assets"]:
             item["errors"].append(
@@ -274,7 +289,9 @@ def validate_block_library(
             try:
                 resolve_profile_configuration(manifest, str(profile["id"]))
             except (KeyError, TypeError, ValueError) as exc:
-                profile_errors.append(f"{profile.get('name', profile.get('id'))}: {exc}")
+                profile_errors.append(
+                    f"{profile.get('name', profile.get('id'))}: {exc}"
+                )
         if profile_errors:
             item["errors"].append(
                 "Invalid configuration profile(s): " + "; ".join(profile_errors)
@@ -370,7 +387,9 @@ def validate_block_tree(
                 "--exit-code-violations",
                 str(implementation),
             ]
-            result = subprocess.run(command, capture_output=True, text=True, check=False)
+            result = subprocess.run(
+                command, capture_output=True, text=True, check=False
+            )
             if result.returncode not in (0, 5):
                 raise RuntimeError(
                     f"KiCad ERC could not check block {record.name!r} "

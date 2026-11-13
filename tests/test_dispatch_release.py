@@ -31,13 +31,18 @@ class DispatchReleaseTests(unittest.TestCase):
             return {}
 
         with patch.object(dispatcher, "_request", side_effect=fake_request):
-            result = dispatcher.dispatch_release("owner/repo", TAG, SHA, VERSION, "token")
+            result = dispatcher.dispatch_release(
+                "owner/repo", TAG, SHA, VERSION, "token"
+            )
         self.assertTrue(result)
         self.assertEqual(len(calls), 2)
-        self.assertEqual(calls[1][2], {
-            "ref": "main",
-            "inputs": {"tag": TAG, "source_sha": SHA},
-        })
+        self.assertEqual(
+            calls[1][2],
+            {
+                "ref": "main",
+                "inputs": {"tag": TAG, "source_sha": SHA},
+            },
+        )
 
     def test_does_not_dispatch_when_both_release_assets_exist(self):
         release = {
@@ -46,11 +51,17 @@ class DispatchReleaseTests(unittest.TestCase):
             "prerelease": False,
             "assets": [
                 {"name": ARCHIVE, "size": 123, "digest": "sha256:" + "1" * 64},
-                {"name": ARCHIVE + ".sha256", "size": 88, "digest": "sha256:" + "2" * 64},
+                {
+                    "name": ARCHIVE + ".sha256",
+                    "size": 88,
+                    "digest": "sha256:" + "2" * 64,
+                },
             ],
         }
         with patch.object(dispatcher, "_request", return_value=release) as request:
-            result = dispatcher.dispatch_release("owner/repo", TAG, SHA, VERSION, "token")
+            result = dispatcher.dispatch_release(
+                "owner/repo", TAG, SHA, VERSION, "token"
+            )
         self.assertFalse(result)
         request.assert_called_once()
 

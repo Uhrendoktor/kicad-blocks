@@ -39,7 +39,10 @@ class PublishReleaseTests(unittest.TestCase):
             checksum = Path(temp) / (archive.name + ".sha256")
             archive.write_bytes(b"archive payload")
             checksum.write_text(
-                hashlib.sha256(archive.read_bytes()).hexdigest() + "  " + archive.name + "\n",
+                hashlib.sha256(archive.read_bytes()).hexdigest()
+                + "  "
+                + archive.name
+                + "\n",
                 encoding="ascii",
             )
             assets = []
@@ -61,12 +64,15 @@ class PublishReleaseTests(unittest.TestCase):
                     name = url.split("name=", 1)[1]
                     payload = kwargs["body"]
                     from urllib.parse import unquote
+
                     name = unquote(name)
-                    assets.append({
-                        "name": name,
-                        "size": len(payload),
-                        "digest": "sha256:" + hashlib.sha256(payload).hexdigest(),
-                    })
+                    assets.append(
+                        {
+                            "name": name,
+                            "size": len(payload),
+                            "digest": "sha256:" + hashlib.sha256(payload).hexdigest(),
+                        }
+                    )
                     return {}
                 if method == "GET" and url.endswith("/releases/99"):
                     return {**release, "assets": list(assets)}
@@ -74,12 +80,21 @@ class PublishReleaseTests(unittest.TestCase):
 
             with patch.object(publisher, "_request", side_effect=fake_request):
                 result = publisher.publish_release(
-                    [archive, checksum], "owner/repo", "v1.1.0", "1.1.0",
-                    "e" * 40, "# Changelog", "token"
+                    [archive, checksum],
+                    "owner/repo",
+                    "v1.1.0",
+                    "1.1.0",
+                    "e" * 40,
+                    "# Changelog",
+                    "token",
                 )
-            self.assertEqual(result, "https://github.com/owner/repo/releases/tag/v1.1.0")
+            self.assertEqual(
+                result, "https://github.com/owner/repo/releases/tag/v1.1.0"
+            )
             self.assertEqual(len(assets), 2)
-            self.assertEqual([method for method, _ in calls], ["GET", "POST", "POST", "POST", "GET"])
+            self.assertEqual(
+                [method for method, _ in calls], ["GET", "POST", "POST", "POST", "GET"]
+            )
 
     def test_existing_asset_with_changed_digest_is_never_replaced(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -89,19 +104,26 @@ class PublishReleaseTests(unittest.TestCase):
                 "id": 10,
                 "tag_name": "v1.1.0",
                 "upload_url": "https://uploads.github.com/repos/owner/repo/releases/10/assets{?name,label}",
-                "assets": [{
-                    "name": "release.zip",
-                    "size": path.stat().st_size,
-                    "digest": "sha256:" + "0" * 64,
-                }],
+                "assets": [
+                    {
+                        "name": "release.zip",
+                        "size": path.stat().st_size,
+                        "digest": "sha256:" + "0" * 64,
+                    }
+                ],
             }
             with (
                 patch.object(publisher, "_request", return_value=release),
                 self.assertRaisesRegex(RuntimeError, "refusing overwrite"),
             ):
                 publisher.publish_release(
-                    [path], "owner/repo", "v1.1.0", "1.1.0",
-                    "f" * 40, "# Changelog", "token"
+                    [path],
+                    "owner/repo",
+                    "v1.1.0",
+                    "1.1.0",
+                    "f" * 40,
+                    "# Changelog",
+                    "token",
                 )
 
 

@@ -28,7 +28,9 @@ class RecursiveBlockOperationTests(unittest.TestCase):
     def tearDown(self):
         self.temp.cleanup()
 
-    def test_bom_expands_root_instance_parameters_without_modifying_library_schematic(self):
+    def test_bom_expands_root_instance_parameters_without_modifying_library_schematic(
+        self,
+    ):
         block = create_block(
             self.root,
             "Parameterized Controller",
@@ -38,7 +40,7 @@ class RecursiveBlockOperationTests(unittest.TestCase):
         original = block.implementation.read_text(encoding="utf-8")
         block.implementation.write_text(
             original + '\n  (property "Value" "{{OUTPUT_VOLTAGE}}" '
-            '(at 50 50 0) (effects (font (size 1 1))))\n',
+            "(at 50 50 0) (effects (font (size 1 1))))\n",
             encoding="utf-8",
         )
         output = Path(self.temp.name) / "parameterized.csv"
@@ -65,7 +67,9 @@ class RecursiveBlockOperationTests(unittest.TestCase):
         self.assertNotEqual(observed["path"], block.implementation)
         self.assertIn('(property "Value" "1.8"', observed["content"])
         self.assertNotIn("{{OUTPUT_VOLTAGE}}", observed["content"])
-        self.assertIn("{{OUTPUT_VOLTAGE}}", block.implementation.read_text(encoding="utf-8"))
+        self.assertIn(
+            "{{OUTPUT_VOLTAGE}}", block.implementation.read_text(encoding="utf-8")
+        )
 
     def test_bom_rejects_undeclared_parameter_templates(self):
         block = create_block(
@@ -74,7 +78,7 @@ class RecursiveBlockOperationTests(unittest.TestCase):
             parse_pins("VIN:input"),
         )
         block.implementation.write_text(
-            block.implementation.read_text(encoding="utf-8") + '\n; {{UNDECLARED}}\n',
+            block.implementation.read_text(encoding="utf-8") + "\n; {{UNDECLARED}}\n",
             encoding="utf-8",
         )
         with (
@@ -125,7 +129,9 @@ class RecursiveBlockOperationTests(unittest.TestCase):
         def fake_run(command, capture_output, text, check):
             output_path = Path(command[command.index("--output") + 1])
             implementation_path = Path(command[-1])
-            reference = "R1" if implementation_path == self.child.implementation else "U1"
+            reference = (
+                "R1" if implementation_path == self.child.implementation else "U1"
+            )
             output_path.write_text(
                 f"Reference,Qty,Value\n{reference},1,10k\n",
                 encoding="utf-8",
@@ -150,7 +156,9 @@ class RecursiveBlockOperationTests(unittest.TestCase):
             code = 5 if implementation_path == self.child.implementation else 0
             return SimpleNamespace(returncode=code, stdout="", stderr="")
 
-        with patch("kicad_blocks.operations.subprocess.run", side_effect=fake_run) as run:
+        with patch(
+            "kicad_blocks.operations.subprocess.run", side_effect=fake_run
+        ) as run:
             reports = validate_block_tree(
                 self.parent,
                 Path(self.temp.name) / "erc",
@@ -159,7 +167,9 @@ class RecursiveBlockOperationTests(unittest.TestCase):
             )
 
         self.assertEqual(run.call_count, 2)
-        self.assertEqual([item["block"] for item in reports], ["Power Stage", "Controller"])
+        self.assertEqual(
+            [item["block"] for item in reports], ["Power Stage", "Controller"]
+        )
         self.assertEqual([item["violations"] for item in reports], [True, False])
         self.assertTrue(all(Path(item["report"]).is_file() for item in reports))
 

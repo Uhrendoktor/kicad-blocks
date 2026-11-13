@@ -25,7 +25,9 @@ def main() -> None:
     with tempfile.TemporaryDirectory(prefix="kicad-block-picker-") as temp:
         library = Path(temp) / "library"
         first = create_block(
-            library, "Plugin Registration Smoke Block", parse_pins("VIN:input, GND:passive")
+            library,
+            "Plugin Registration Smoke Block",
+            parse_pins("VIN:input, GND:passive"),
         )
         target = create_block(
             library,
@@ -53,7 +55,9 @@ def main() -> None:
                     if time.monotonic() < deadline:
                         parent.after(100, drive_picker)
                         return
-                    raise TimeoutError(f"Picker window {picker_title!r} did not appear.")
+                    raise TimeoutError(
+                        f"Picker window {picker_title!r} did not appear."
+                    )
                 subprocess.run(
                     [xdotool, "windowfocus", "--sync", matching[-1]],
                     check=True,
@@ -78,7 +82,12 @@ def main() -> None:
                     capture_output=True,
                     text=True,
                 )
-            except (OSError, RuntimeError, subprocess.SubprocessError, TimeoutError) as exc:
+            except (
+                OSError,
+                RuntimeError,
+                subprocess.SubprocessError,
+                TimeoutError,
+            ) as exc:
                 interaction_errors.append(str(exc))
                 for child in parent.winfo_children():
                     with contextlib.suppress(Exception):
@@ -111,9 +120,13 @@ def main() -> None:
                 raise AssertionError("The native KiCad preview image is empty.")
             plugin_actions._draw_facade_preview(canvas, target)
             preview_root.update_idletasks()
-            image_items = [item for item in canvas.find_all() if canvas.type(item) == "image"]
+            image_items = [
+                item for item in canvas.find_all() if canvas.type(item) == "image"
+            ]
             if not image_items:
-                raise AssertionError("The native KiCad symbol renderer produced no preview image.")
+                raise AssertionError(
+                    "The native KiCad symbol renderer produced no preview image."
+                )
             image = getattr(canvas, "_native_preview_photo", None)
             if image is None or image.width() <= 0 or image.height() <= 0:
                 raise AssertionError("The native KiCad preview image is empty.")
