@@ -2028,6 +2028,7 @@ def _native_symbol_preview_photo(record, width: int = 680):
             png_data = cairosvg.svg2png(url=str(svg_file), output_width=int(width))
             try:
                 from io import BytesIO
+
                 from PIL import Image
                 image = Image.open(BytesIO(png_data)).convert("RGBA")
                 bounds = image.getbbox()
@@ -2353,7 +2354,7 @@ def _show_block_variant_editor(record, parent) -> None:
     def save_and_close():
         try:
             _save_block_variants(record, variants)
-        except Exception as exc:
+        except (OSError, RuntimeError, TypeError, ValueError, KeyError) as exc:
             messagebox.showerror("Save implementation variants", str(exc), parent=dialog)
             return
         dialog.destroy()
@@ -2974,7 +2975,7 @@ def _show_library_browser(
             _edit_facade_symbol(
                 current_roots[0], schematic, project_dir, editor_window_id, window
             )
-        except Exception as exc:
+        except (OSError, RuntimeError, ValueError, LookupError, subprocess.SubprocessError) as exc:
             messagebox.showerror("Edit facade symbol", str(exc), parent=window)
 
     def edit_variants(_event=None):
