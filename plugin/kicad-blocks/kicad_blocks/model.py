@@ -149,9 +149,13 @@ def normalize_profiles(
     """
     parameter_definitions = normalize_parameters(parameters)
     parameter_names = {item["name"] for item in parameter_definitions}
-    variant_values = {
-        str(item.get("value", "")).casefold(): str(item.get("value", ""))
+    variant_definitions = {
+        str(item.get("value", "")).casefold(): item
         for item in variants or ()
+    }
+    variant_values = {
+        key: str(item.get("value", ""))
+        for key, item in variant_definitions.items()
     }
     layout_ids = {
         str(item.get("id", "")).casefold(): str(item.get("id", ""))
@@ -207,9 +211,16 @@ def normalize_profiles(
         }
 
         raw_layout = str(item.get("layout", "") or "").strip()
+        variant_definition = variant_definitions.get(
+            str(variant or "").casefold()
+        )
+        linked_layout = (
+            str(variant_definition.get("layout_id", "") or "")
+            if variant_definition else ""
+        )
         if layout_ids:
             selected_layout = layout_ids.get(
-                (raw_layout or str(default_layout or "")).casefold()
+                (raw_layout or linked_layout or str(default_layout or "")).casefold()
             )
             if selected_layout is None:
                 choices = ", ".join(layout_ids.values())
