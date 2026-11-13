@@ -30,10 +30,10 @@ The browser shows the selected block's description, facade pins, parameters, imp
   <img src="https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/library-browser-details-light.png" alt="Library browser showing STUSB4500 name, ten external pins, one parameter and three implementation choices" width="1000">
 </p>
 
-To register or manage shared folders, use **Manage library folders…**:
+To register or manage shared folders, use **Manage Libraries…**:
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/library-folders-light.png" alt="Library folder manager showing registered shared folders and controls to add or change a library" width="900">
+  <img src="https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/library-folders-light.png" alt="Manage Libraries window showing registered shared folders and controls to add or change a library" width="900">
 </p>
 
 ## Create, configure and maintain blocks
@@ -54,7 +54,7 @@ The following editor captures are **UI test fixtures**. They demonstrate the con
   <img src="https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/instance-configuration-light.png" alt="Instance configuration form showing a profile, implementation variant, parameter and PCB layout selection" width="720">
 </p>
 
-Dark-theme captures are also generated for the browser, folder manager, task hub, creation form, variant editor, implementation details and instance-configuration dialog. They use the same filenames with `-dark` before the extension.
+Dark-theme captures are also generated for the browser, Manage Libraries window, task hub, creation form, variant editor, implementation details and instance-configuration dialog. They use the same filenames with `-dark` before the extension.
 
 ## Task hub
 
