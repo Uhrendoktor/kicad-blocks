@@ -7,15 +7,12 @@ import os
 import re
 import shutil
 import subprocess
-import sys
 import tempfile
 from pathlib import Path
 from types import SimpleNamespace
 
 from kipy import KiCad
 
-ROOT = Path(__file__).resolve().parents[1]
-PLUGIN = ROOT / "plugin" / "kicad-blocks"
 from kicad_blocks.pcb_layout import (
     BlockLayoutPlacement,
     merge_block_layout,
