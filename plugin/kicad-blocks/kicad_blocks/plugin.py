@@ -11,6 +11,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import uuid
 from pathlib import Path
 
 # The core block model and IPC helpers must remain importable in headless
@@ -308,6 +309,126 @@ def _set_window_geometry(window, width: int, height: int, min_width: int, min_he
     h = min(height, usable_height)
     window.geometry(f"{w}x{h}+{max(0, (sw-w)//2)}+{max(0, (sh-h)//2)}")
     window.minsize(min(min_width, w), min(min_height, h))
+
+
+def _set_x11_transient_owner(window_id: str, owner_window_id: str) -> bool:
+    """Set an X11 window's transient owner so GNOME groups it with KiCad."""
+    xprop = shutil.which("xprop")
+    if not xprop or not window_id or not owner_window_id:
+        return False
+    try:
+        result = subprocess.run(
+            [
+                xprop,
+                "-id",
+                str(window_id),
+                "-f",
+                "WM_TRANSIENT_FOR",
+                "32x",
+                "-set",
+                "WM_TRANSIENT_FOR",
+                str(owner_window_id),
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=2,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        LOG.debug("Could not set the X11 transient owner for %s", window_id, exc_info=True)
+        return False
+    return result.returncode == 0
+
+
+def _attach_tk_window_to_editor(window, editor_window_id: str | None) -> bool:
+    """Make a Tk manager window a transient dialog of the invoking KiCad editor."""
+    if not editor_window_id:
+        return False
+    try:
+        window.update_idletasks()
+        window_id = str(window.winfo_id())
+        with contextlib.suppress(tk.TclError):
+            window.wm_attributes("-type", "dialog")
+        return _set_x11_transient_owner(window_id, editor_window_id)
+    except (AttributeError, tk.TclError, OSError):
+        LOG.debug("Could not associate the Tk window with KiCad", exc_info=True)
+        return False
+
+
+def _attach_process_window_to_editor(
+    process: subprocess.Popen, editor_window_id: str | None
+) -> bool:
+    """Group a separately opened KiCad document window with its owning editor."""
+    xdotool = shutil.which("xdotool")
+    if not xdotool or not editor_window_id or not getattr(process, "pid", None):
+        return False
+    for _attempt in range(25):
+        try:
+            result = subprocess.run(
+                [xdotool, "search", "--onlyvisible", "--pid", str(process.pid)],
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=2,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            return False
+        window_ids = [
+            item.strip()
+            for item in result.stdout.splitlines()
+            if item.strip() and item.strip().isdigit()
+        ]
+        if result.returncode == 0 and window_ids:
+            if _set_x11_transient_owner(window_ids[-1], editor_window_id):
+                return True
+        if process.poll() is not None:
+            return False
+        time.sleep(0.1)
+    return False
+
+
+def _add_tooltip(widget, text: str) -> None:
+    """Attach a small themed tooltip to a compact icon button."""
+    tooltip = [None]
+
+    def show(_event=None):
+        if tooltip[0] is not None or not widget.winfo_exists():
+            return
+        palette = getattr(widget.winfo_toplevel(), "_kicad_blocks_palette", {})
+        background = palette.get("surface_alt", "#e8eaed")
+        foreground = palette.get("foreground", "#20252a")
+        popup = tk.Toplevel(widget)
+        popup.wm_overrideredirect(True)
+        with contextlib.suppress(tk.TclError):
+            popup.wm_attributes("-topmost", True)
+        label = tk.Label(
+            popup,
+            text=text,
+            background=background,
+            foreground=foreground,
+            relief="solid",
+            borderwidth=1,
+            padx=7,
+            pady=4,
+            font=("TkDefaultFont", 9),
+        )
+        label.pack()
+        popup.update_idletasks()
+        x = widget.winfo_rootx()
+        y = widget.winfo_rooty() + widget.winfo_height() + 5
+        popup.geometry(f"+{x}+{y}")
+        tooltip[0] = popup
+
+    def hide(_event=None):
+        popup = tooltip[0]
+        tooltip[0] = None
+        if popup is not None:
+            with contextlib.suppress(tk.TclError):
+                popup.destroy()
+
+    widget.bind("<Enter>", show, add="+")
+    widget.bind("<Leave>", hide, add="+")
+    widget.bind("<ButtonPress>", hide, add="+")
 
 
 def project_directory(schematic) -> Path:
@@ -1627,10 +1748,16 @@ def _create_and_place(
     editor_window_id: str | None = None,
 ) -> None:
     """Create from the selected sheet symbol or the currently displayed sheet."""
-    selection_fragment = (
-        schematic.get_selection_as_string()
-        if hasattr(schematic, "get_selection_as_string") else ""
-    )
+    try:
+        selection_fragment = (
+            schematic.get_selection_as_string()
+            if hasattr(schematic, "get_selection_as_string") else ""
+        )
+    except Exception as exc:
+        error_text = str(exc).casefold()
+        if "selection is empty" not in error_text and "empty selection" not in error_text:
+            raise
+        selection_fragment = ""
     if selection_fragment.strip():
         source_sheet = selected_sheet_file(selection_fragment, project_dir)
         source_sheet_uuid = selected_sheet_instance_uuid(selection_fragment)
@@ -1738,9 +1865,12 @@ def _edit_facade_symbol(
 
 def _place_existing(root, schematic, kicad, project_dir, parent) -> None:
     """Open the searchable browser; placement is handed to KiCad's native cursor tool."""
+    editor_window_id = getattr(parent, "_kicad_blocks_editor_window_id", None)
+    browser = tk.Toplevel(parent)
+    _attach_tk_window_to_editor(browser, editor_window_id)
     _show_library_browser(
-        tk.Toplevel(parent), schematic, kicad, project_dir,
-        default_library_root(), _capture_eeschema_window_id(),
+        browser, schematic, kicad, project_dir,
+        default_library_root(), editor_window_id,
     )
 
 
@@ -1753,10 +1883,12 @@ def _edit_block_implementation(root, schematic, kicad, project_dir, parent) -> N
         record = _pick_record(list_blocks(root), parent, "Edit Block Implementation")
     if record is None:
         return None
-    executable = kicad.get_kicad_binary_path("eeschema")
-    if not executable:
-        raise RuntimeError("KiCad did not provide an Eeschema executable path.")
-    process = subprocess.Popen([executable, str(record.implementation)], close_fds=True)
+    process = _launch_block_asset(
+        kicad,
+        record.implementation,
+        "implementation schematic",
+        editor_window_id=getattr(parent, "_kicad_blocks_editor_window_id", None),
+    )
     messagebox.showinfo(
         "Block Implementation",
         f"Opened {record.name} implementation in Eeschema.\n\n"
@@ -2182,7 +2314,14 @@ def _block_overview_text(record) -> str:
 
 
 
-def _launch_block_asset(kicad, path: Path, description: str):
+def _launch_block_asset(
+    kicad,
+    path: Path,
+    description: str,
+    *,
+    editor_window_id: str | None = None,
+):
+    """Open a stored KiCad asset and group schematic windows with Eeschema."""
     path = Path(path).expanduser().resolve()
     if not path.is_file():
         raise FileNotFoundError(f"The selected {description} is missing: {path}")
@@ -2190,7 +2329,10 @@ def _launch_block_asset(kicad, path: Path, description: str):
     executable = kicad.get_kicad_binary_path(executable_name)
     if not executable:
         raise RuntimeError(f"KiCad did not provide an executable path for {description}.")
-    return subprocess.Popen([executable, str(path)], close_fds=True)
+    process = subprocess.Popen([executable, str(path)], close_fds=True)
+    if description != "PCB layout" and editor_window_id:
+        _attach_process_window_to_editor(process, editor_window_id)
+    return process
 
 
 def _save_block_variants(record, variants: list[dict]) -> None:
@@ -3411,10 +3553,12 @@ def _open_selected_block_implementation(root, schematic, kicad, project_dir, par
         raise FileNotFoundError(
             f"The implementation for KB_VARIANT={resolved_variant!r} is missing: {implementation_path}"
         )
-    executable = kicad.get_kicad_binary_path("eeschema")
-    if not executable:
-        raise RuntimeError("KiCad did not provide an Eeschema executable path.")
-    process = subprocess.Popen([executable, str(implementation_path)], close_fds=True)
+    process = _launch_block_asset(
+        kicad,
+        implementation_path,
+        "implementation schematic",
+        editor_window_id=getattr(parent, "_kicad_blocks_editor_window_id", None),
+    )
     if parent is not None:
         detail = (
             f"Opened {record.name} — variant {resolved_variant}."
@@ -4064,8 +4208,9 @@ def _show_action_hub(root):
     ]
 
     def dispatch(selected_action: str) -> None:
+        editor_window_id = getattr(root, "_kicad_blocks_editor_window_id", None)
         root.destroy()
-        run_action(selected_action)
+        run_action(selected_action, editor_window_id=editor_window_id)
 
     canvas_background = (
         ttk.Style(root).lookup("TFrame", "background") or root.cget("background")
@@ -4144,7 +4289,7 @@ def _show_action_hub(root):
     return tabs
 
 
-def run_action(action: str) -> None:
+def run_action(action: str, *, editor_window_id: str | None = None) -> None:
     """Run one operation from the task hub or KiCad's PCB Editor action."""
     # Older installations may still invoke this identifier; route it to the
     # one library-browser selection and placement workflow.
@@ -4171,17 +4316,22 @@ def run_action(action: str) -> None:
     if action not in valid_actions:
         raise ValueError(f"Unknown KiCad Blocks action: {action!r}")
 
+    # Capture the KiCad window while it is still the focused window. Creating
+    # the Tk root first changes focus and can otherwise capture the browser itself.
+    if editor_window_id is None:
+        editor_window_id = _capture_eeschema_window_id()
     _load_tkinter()
     root = tk.Tk()
+    root._kicad_blocks_editor_window_id = editor_window_id
     _configure_tk_theme(root)
     root.title("KiCad Blocks — Tasks" if action == "open-hub" else "KiCad Blocks")
+    _attach_tk_window_to_editor(root, editor_window_id)
     try:
         if action == "open-hub":
             _show_action_hub(root)
             root.mainloop()
             return
 
-        editor_window_id = _capture_eeschema_window_id()
         from kipy import KiCad
 
         kicad = KiCad()
