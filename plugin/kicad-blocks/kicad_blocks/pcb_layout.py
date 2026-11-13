@@ -16,6 +16,7 @@ import tempfile
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Protocol
 
 from .json_types import JsonObject, JsonValue, SExpr
 
@@ -26,9 +27,6 @@ class _BlockRecordLike(Protocol):
     path: Path
     name: str
     manifest: JsonObject
-
-
-from typing import Protocol
 
 
 class _Quoted(str):
