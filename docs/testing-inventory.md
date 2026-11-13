@@ -155,7 +155,7 @@ Installer runtime/platform gating, safe replacement, dry-run behavior, manifest 
 
 ### `tests/test_library_browser.py`
 
-Library search and preview, layout/variant editing, profile safety, selection behavior, scroll handling, and native placement handoff.
+Library search and preview, layout/variant editing, profile safety, selection behavior, scroll handling, editor-window discovery, and native placement handoff.
 
 | Test | Purpose |
 | --- | --- |
@@ -184,6 +184,8 @@ Library search and preview, layout/variant editing, profile safety, selection be
 | `test_double_click_row_lookup_never_reuses_a_previous_selection` | double click row lookup never reuses a previous selection. |
 | `test_placement_minimizes_browser_and_manager_and_restores_on_failure` | placement minimizes browser and manager and restores on failure. |
 | `test_minimizer_leaves_already_hidden_windows_unchanged` | minimizer leaves already hidden windows unchanged. |
+| `test_editor_capture_finds_eeschema_when_browser_has_focus` | editor capture finds Eeschema when browser has focus. |
+| `test_editor_capture_does_not_treat_plugin_browser_as_eeschema` | editor capture does not treat plugin browser as Eeschema. |
 | `test_native_placement_handoff_uses_add_symbol_hotkey_and_exact_library_name` | native placement handoff uses add symbol hotkey and exact library name. |
 | `test_native_placement_refuses_to_type_when_choose_symbol_dialog_is_absent` | native placement refuses to type when choose symbol dialog is absent. |
 | `test_native_placement_requires_xdotool_and_editor_window` | native placement requires xdotool and editor window. |
@@ -288,7 +290,7 @@ Versioned release asset upload, checksum verification, and immutable existing-as
 
 ### `tests/test_python_policy.py`
 
-Regression coverage for global typing policy violations, diagnostic suppression/dynamic execution bans, production module docstrings, and Pyright inventory enforcement.
+Regression coverage for global typing policy violations, nested object annotations, diagnostic suppression/dynamic execution bans, production module docstrings, and Pyright inventory enforcement.
 
 | Test | Purpose |
 | --- | --- |
@@ -297,6 +299,7 @@ Regression coverage for global typing policy violations, diagnostic suppression/
 | `test_allows_the_one_documented_untrusted_object_input` | allows the one documented untrusted object input. |
 | `test_requires_documentation_for_production_python_modules` | requires documentation for production Python modules. |
 | `test_pyright_inventory_requires_every_core_module_or_a_host_exclusion` | pyright inventory requires every core module or a host exclusion. |
+| `test_rejects_unreviewed_nested_object_annotations` | rejects unreviewed nested object annotations. |
 
 ### `tests/test_release_package.py`
 
@@ -356,7 +359,7 @@ Visual documentation inventory completeness, source-commit freshness, asset hash
 | `test_rejects_modified_generated_asset` | rejects modified generated asset. |
 | `test_rejects_incomplete_asset_inventory` | rejects incomplete asset inventory. |
 
-**Pytest inventory total: 196 test cases across 22 modules.**
+**Pytest inventory total: 199 test cases across 22 modules.**
 
 ## Host-driven KiCad acceptance scripts
 
