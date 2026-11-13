@@ -386,9 +386,12 @@ def _attach_process_window_to_editor(
             for item in result.stdout.splitlines()
             if item.strip() and item.strip().isdigit()
         ]
-        if result.returncode == 0 and window_ids:
-            if _set_x11_transient_owner(window_ids[-1], editor_window_id):
-                return True
+        if (
+            result.returncode == 0
+            and window_ids
+            and _set_x11_transient_owner(window_ids[-1], editor_window_id)
+        ):
+            return True
 
         # Eeschema can forward a document-open request to an already-running
         # process; that window will not belong to the short-lived launcher PID.
@@ -418,9 +421,11 @@ def _attach_process_window_to_editor(
                         )
                     except (OSError, subprocess.TimeoutExpired):
                         continue
-                    if target_name.casefold() in title.stdout.casefold():
-                        if _set_x11_transient_owner(candidate_id, editor_window_id):
-                            return True
+                    if (
+                        target_name.casefold() in title.stdout.casefold()
+                        and _set_x11_transient_owner(candidate_id, editor_window_id)
+                    ):
+                        return True
         if process.poll() is not None:
             return False
         time.sleep(0.1)
