@@ -30,7 +30,7 @@ The routing in scripts/test_inventory.py is authoritative. Every tests/test_*.py
 | Packaging, release and CI tooling | [tests/test_verify_release_gate.py](../../tests/test_verify_release_gate.py) | 4 | Exact-commit main-CI release gating, tag/version agreement and rejection of failed or unrelated workflow runs. |
 | Packaging, release and CI tooling | [tests/test_visual_docs.py](../../tests/test_visual_docs.py) | 5 | Visual-documentation asset inventory, source-commit provenance, SHA-256 integrity and stale/incomplete bundle rejection. |
 
-**Pytest total:** 20 modules, 191 test cases.
+**Pytest total:** 21 modules, 191 test cases.
 
 ## Standalone KiCad integration tests
 
