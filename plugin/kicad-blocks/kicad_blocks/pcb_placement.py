@@ -21,8 +21,6 @@ def _is_board_item_id(value: object) -> TypeGuard[_BoardItemId]:
     return isinstance(getattr(value, "value", None), str)
 
 
-
-
 PLACEMENT_SCHEMA_VERSION = 1
 PLACEMENT_SIDECAR_SUFFIX = ".kicad-blocks-placement.json"
 
