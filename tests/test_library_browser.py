@@ -18,6 +18,7 @@ from kicad_blocks.model import parse_parameters, parse_pins
 from kicad_blocks.plugin import (
     _bind_mousewheel,
     _block_overview_text,
+    _capture_eeschema_window_id,
     _choose_block_layout,
     _clean_facade_preview_svg,
     _filter_library_records,
@@ -534,6 +535,68 @@ class LibraryBrowserTests(unittest.TestCase):
         self.assertEqual(minimized, [manager])
         self.assertEqual(browser.events, [])
         self.assertEqual(manager.events, ["iconify"])
+
+    def test_editor_capture_finds_eeschema_when_browser_has_focus(self):
+        def command_runner(arguments, **kwargs):
+            command = arguments[1:]
+            if command == ["getwindowfocus"]:
+                return SimpleNamespace(stdout="0x222", returncode=0)
+            if command == ["search", "--onlyvisible", "--class", "eeschema"]:
+                return SimpleNamespace(stdout="0x111\n", returncode=0)
+            if command == ["search", "--onlyvisible", "--name", "[Ss]chematic [Ee]ditor"]:
+                return SimpleNamespace(stdout="0x111\n", returncode=0)
+            if command == ["getwindowclassname", "0x222"]:
+                return SimpleNamespace(stdout="eeschema", returncode=0)
+            if command == ["getwindowname", "0x222"]:
+                return SimpleNamespace(stdout="Functional Block Library", returncode=0)
+            if command == ["getwindowclassname", "0x111"]:
+                return SimpleNamespace(stdout="eeschema", returncode=0)
+            if command == ["getwindowname", "0x111"]:
+                return SimpleNamespace(stdout="Schematic Editor — project", returncode=0)
+            if arguments[0] == "/usr/bin/xprop":
+                return SimpleNamespace(stdout="WM_TRANSIENT_FOR: not found.", returncode=0)
+            return SimpleNamespace(stdout="", returncode=0)
+
+        with (
+            patch(
+                "kicad_blocks.plugin.shutil.which",
+                side_effect=lambda name: {
+                    "xdotool": "/usr/bin/xdotool",
+                    "xprop": "/usr/bin/xprop",
+                }.get(name),
+            ),
+            patch("kicad_blocks.plugin.subprocess.run", side_effect=command_runner),
+        ):
+            self.assertEqual(_capture_eeschema_window_id(), "0x111")
+
+    def test_editor_capture_does_not_treat_plugin_browser_as_eeschema(self):
+        def command_runner(arguments, **kwargs):
+            command = arguments[1:]
+            if command == ["getwindowfocus"]:
+                return SimpleNamespace(stdout="0x222", returncode=0)
+            if command == ["search", "--onlyvisible", "--class", "eeschema"]:
+                return SimpleNamespace(stdout="", returncode=1)
+            if command == ["search", "--onlyvisible", "--name", "[Ss]chematic [Ee]ditor"]:
+                return SimpleNamespace(stdout="", returncode=1)
+            if command == ["getwindowclassname", "0x222"]:
+                return SimpleNamespace(stdout="eeschema", returncode=0)
+            if command == ["getwindowname", "0x222"]:
+                return SimpleNamespace(stdout="Functional Block Library", returncode=0)
+            if arguments[0] == "/usr/bin/xprop":
+                return SimpleNamespace(stdout="WM_TRANSIENT_FOR: not found.", returncode=0)
+            return SimpleNamespace(stdout="", returncode=0)
+
+        with (
+            patch(
+                "kicad_blocks.plugin.shutil.which",
+                side_effect=lambda name: {
+                    "xdotool": "/usr/bin/xdotool",
+                    "xprop": "/usr/bin/xprop",
+                }.get(name),
+            ),
+            patch("kicad_blocks.plugin.subprocess.run", side_effect=command_runner),
+        ):
+            self.assertIsNone(_capture_eeschema_window_id())
 
     def test_native_placement_handoff_uses_add_symbol_hotkey_and_exact_library_name(self):
         calls = []
