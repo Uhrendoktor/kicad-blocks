@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Added
+- Rework the project landing page and add separate getting-started, feature-workflow, feature-reference, and visual-evidence guides.
+- Extend generated UI evidence to include all task-hub tabs and the instance-configuration dialog in light and dark themes.
+
+### Fixed
+- Keep the generated visual-capture and publishing inventories in one shared module so newly added UI screenshots do not make the provenance publisher reject the bundle.
+
+
 ### Fixed
 - Size and center the library browser and folder manager to the usable display area; keep action buttons visible and replace Treeview's implicit tree column with explicit heading columns so the first row is no longer clipped.
 - Extend the light/dark palette to classic Tk controls, table headers, borders, selection colors, and arrow-free scrollbars; add more breathing room and alternating table rows.
