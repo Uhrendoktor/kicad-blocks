@@ -473,5 +473,153 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
         self.assertNotEqual(local.implementation, self.block.implementation)
 
 
+    def test_create_block_empty_selection_ipc_error_uses_active_sheet(self):
+        source = self.project / "power_stage.kicad_sch"
+        source.write_text("(kicad_sch)", encoding="utf-8")
+
+        class FakeSheetPath:
+            def __init__(self, path):
+                self.path = path
+
+        current_sheet = SimpleNamespace(
+            filename="power_stage.kicad_sch",
+            name="Power Stage",
+            path=FakeSheetPath(["root-id", "sheet-id"]),
+            children=[],
+        )
+        root_sheet = SimpleNamespace(
+            filename="project.kicad_sch",
+            name="Project",
+            path=FakeSheetPath(["root-id"]),
+            children=[current_sheet],
+        )
+        schematic = SimpleNamespace(
+            get_selection_as_string=Mock(
+                side_effect=ValueError("KiCad returned error: the selection is empty.")
+            ),
+            get_selection=Mock(return_value=[]),
+            get_hierarchy=Mock(return_value=SimpleNamespace(root=root_sheet)),
+            document=SimpleNamespace(
+                sheet_path=FakeSheetPath(["root-id", "sheet-id"])
+            ),
+        )
+        with (
+            patch.object(
+                plugin_actions,
+                "_ask_create_block_details",
+                return_value=("Power Stage", "Active sheet fallback"),
+            ),
+            patch.object(plugin_actions, "messagebox", self.messagebox),
+            patch.object(plugin_actions, "create_block", return_value=self.block) as create,
+            patch.object(plugin_actions, "_register_block", return_value=self.block),
+        ):
+            plugin_actions._create_and_place(
+                self.library, schematic, self.kicad, self.project, self.parent
+            )
+
+        create.assert_called_once_with(
+            self.library,
+            "Power Stage",
+            source_schematic=source.resolve(),
+            source_project_name=self.project.name,
+            source_sheet_uuid="sheet-id",
+            description="Active sheet fallback",
+        )
+
+    def test_create_block_uses_selected_sheet_symbol_relative_to_active_sheet(self):
+        parent_folder = self.project / "subsystems"
+        parent_folder.mkdir()
+        active_source = parent_folder / "power_stage.kicad_sch"
+        active_source.write_text("(kicad_sch)", encoding="utf-8")
+        selected_source = parent_folder / "interfaces" / "uart.kicad_sch"
+        selected_source.parent.mkdir()
+        selected_source.write_text("(kicad_sch)", encoding="utf-8")
+        selected_uuid = "dddddddd-dddd-4ddd-8ddd-dddddddddddd"
+
+        class FakeSheetPath:
+            def __init__(self, path):
+                self.path = path
+
+        current_sheet = SimpleNamespace(
+            filename="subsystems/power_stage.kicad_sch",
+            name="Power Stage",
+            path=FakeSheetPath(["root-id", "sheet-id"]),
+            children=[],
+        )
+        root_sheet = SimpleNamespace(
+            filename="project.kicad_sch",
+            name="Project",
+            path=FakeSheetPath(["root-id"]),
+            children=[current_sheet],
+        )
+        selected_sheet = SimpleNamespace(
+            filename_field=SimpleNamespace(
+                text=SimpleNamespace(value="interfaces/uart.kicad_sch")
+            ),
+            name_field=SimpleNamespace(text=SimpleNamespace(value="UART")),
+            id=SimpleNamespace(value=selected_uuid),
+        )
+        schematic = SimpleNamespace(
+            get_selection_as_string=Mock(return_value=""),
+            get_selection=Mock(return_value=[selected_sheet]),
+            get_hierarchy=Mock(return_value=SimpleNamespace(root=root_sheet)),
+            document=SimpleNamespace(
+                sheet_path=FakeSheetPath(["root-id", "sheet-id"])
+            ),
+        )
+        with (
+            patch.object(
+                plugin_actions,
+                "_ask_create_block_details",
+                return_value=("UART Interface", "Selected child sheet"),
+            ),
+            patch.object(plugin_actions, "messagebox", self.messagebox),
+            patch.object(plugin_actions, "create_block", return_value=self.block) as create,
+            patch.object(plugin_actions, "_register_block", return_value=self.block),
+        ):
+            plugin_actions._create_and_place(
+                self.library, schematic, self.kicad, self.project, self.parent
+            )
+
+        create.assert_called_once_with(
+            self.library,
+            "UART Interface",
+            source_schematic=selected_source.resolve(),
+            source_project_name=self.project.name,
+            source_sheet_uuid=selected_uuid,
+            description="Selected child sheet",
+        )
+
+    def test_run_action_captures_kicad_window_before_creating_tk(self):
+        events = []
+        root = Mock()
+        fake_tk = SimpleNamespace(
+            Tk=Mock(side_effect=lambda: events.append("tk.Tk") or root),
+            TclError=Exception,
+        )
+        with (
+            patch.object(
+                plugin_actions,
+                "_capture_eeschema_window_id",
+                side_effect=lambda: events.append("capture") or "0x100",
+            ),
+            patch.object(
+                plugin_actions,
+                "_load_tkinter",
+                side_effect=lambda: events.append("load tkinter"),
+            ),
+            patch.object(plugin_actions, "tk", fake_tk),
+            patch.object(plugin_actions, "_configure_tk_theme"),
+            patch.object(plugin_actions, "_attach_tk_window_to_editor"),
+            patch.object(plugin_actions, "_show_action_hub"),
+        ):
+            plugin_actions.run_action("open-hub")
+
+        self.assertEqual(events[:3], ["capture", "load tkinter", "tk.Tk"])
+        self.assertEqual(
+            root._kicad_blocks_editor_window_id,
+            "0x100",
+        )
+
 if __name__ == "__main__":
     unittest.main()
