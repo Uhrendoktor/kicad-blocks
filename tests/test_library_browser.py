@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import sys
 import tempfile
 import unittest
@@ -25,6 +26,7 @@ from kicad_blocks.plugin import (
     _preferred_library_selection,
     _restore_placement_windows,
     _start_native_symbol_placement,
+    _system_prefers_dark_theme,
 )
 from kicad_blocks.repository import create_block
 
@@ -100,11 +102,15 @@ class LibraryBrowserTests(unittest.TestCase):
 
     def test_mousewheel_scrolls_without_dragging_the_scrollbar(self):
         class FakeWidget:
-            def __init__(self):
+            def __init__(self, children=()):
                 self.bindings = {}
+                self.children = list(children)
 
-            def bind(self, event, callback):
+            def bind(self, event, callback, add=None):
                 self.bindings[event] = callback
+
+            def winfo_children(self):
+                return self.children
 
         widget = FakeWidget()
         scrolls = []
@@ -115,6 +121,49 @@ class LibraryBrowserTests(unittest.TestCase):
         widget.bindings["<Button-4>"](SimpleNamespace(delta=0, num=4))
 
         self.assertEqual(scrolls, [-1, 1, -1])
+
+    def test_mousewheel_accumulates_high_resolution_trackpad_deltas(self):
+        class FakeWidget:
+            def __init__(self):
+                self.bindings = {}
+
+            def bind(self, event, callback, add=None):
+                self.bindings[event] = callback
+
+        widget = FakeWidget()
+        scrolls = []
+        with patch("kicad_blocks.plugin.sys.platform", "darwin"):
+            _bind_mousewheel(widget, scrolls.append)
+        handler = widget.bindings["<MouseWheel>"]
+        handler(SimpleNamespace(delta=0.25, num=None))
+        handler(SimpleNamespace(delta=0.25, num=None))
+        handler(SimpleNamespace(delta=0.5, num=None))
+        self.assertEqual(scrolls, [-1])
+
+    def test_mousewheel_binding_can_cover_nested_controls(self):
+        class FakeWidget:
+            def __init__(self, children=()):
+                self.bindings = {}
+                self.children = list(children)
+
+            def bind(self, event, callback, add=None):
+                self.bindings[event] = callback
+
+            def winfo_children(self):
+                return self.children
+
+        child = FakeWidget()
+        widget = FakeWidget([child])
+        scrolls = []
+        _bind_mousewheel(widget, scrolls.append, include_children=True)
+        child.bindings["<MouseWheel>"](SimpleNamespace(delta=120, num=None))
+        self.assertEqual(scrolls, [-1])
+
+    def test_dark_theme_can_be_forced_or_disabled(self):
+        with patch.dict(os.environ, {"KICAD_BLOCKS_THEME": "dark"}):
+            self.assertTrue(_system_prefers_dark_theme())
+        with patch.dict(os.environ, {"KICAD_BLOCKS_THEME": "light"}):
+            self.assertFalse(_system_prefers_dark_theme())
 
     def test_record_picker_returns_single_choice_without_opening_a_dialog(self):
         self.assertIs(_pick_record([self.block], object(), "Pick Block"), self.block)
