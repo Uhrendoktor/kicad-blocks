@@ -484,6 +484,22 @@ jobs:
           "$PY" -m pip install --upgrade pip
           "$PY" -m pip install cairosvg pillow
 
+      - name: Install project dependencies and verify unit tests, compile, and lint
+        shell: bash
+        run: |
+          set -euo pipefail
+          PY="${RUNNER_TEMP}/kicad-blocks-visual-venv/bin/python"
+          "$PY" -m pip install -r plugin/kicad-blocks/requirements.txt pytest ruff
+          "$PY" -m pytest -q
+          "$PY" -m compileall -q plugin tests
+          "$PY" -m ruff check plugin tests
+
+      - name: Validate generated reference files with KiCad CLI
+        shell: bash
+        run: |
+          set -euo pipefail
+          "${RUNNER_TEMP}/kicad-blocks-visual-venv/bin/python" tests/validate_kicad_cli.py
+
       - name: Capture production KiCad Blocks UI in light and dark themes
         shell: bash
         run: |
