@@ -1826,7 +1826,18 @@ def _create_and_place(
             raise
         selection_fragment = ""
     if selection_fragment.strip():
-        source_sheet = selected_sheet_file(selection_fragment, project_dir)
+        # A selected child sheet's Sheetfile is relative to the currently open
+        # parent sheet, not necessarily to the project's root directory.
+        try:
+            active_sheet, _active_sheet_uuid = _active_sheet_source(
+                schematic, project_dir
+            )
+            sheet_base_directory = active_sheet.parent
+        except (FileNotFoundError, ValueError, AttributeError):
+            sheet_base_directory = Path(project_dir)
+        source_sheet = selected_sheet_file(
+            selection_fragment, sheet_base_directory
+        )
         source_sheet_uuid = selected_sheet_instance_uuid(selection_fragment)
     else:
         source_sheet, source_sheet_uuid = _active_sheet_source(schematic, project_dir)
@@ -3450,8 +3461,8 @@ def _show_block_variant_editor(
     ttk.Label(
         frame,
         text=(
-            "Each value selects a complete alternative .kicad_sch implementation "
-            "through KB_VARIANT."
+            "Each selector is written to KB_VARIANT and chooses a complete alternative "
+            ".kicad_sch implementation. The default row is used when KB_VARIANT is empty."
         ),
         wraplength=900,
     ).pack(anchor="w", pady=(4, 12))
@@ -3620,22 +3631,27 @@ def _show_block_variant_editor(
 
     actions = ttk.Frame(frame)
     actions.pack(fill="x", pady=(12, 0))
-    ttk.Button(
-        actions, text="Add implementation…", command=add_variant
-    ).pack(side="left")
+    add_button = ttk.Button(actions, text="＋", width=3, command=add_variant)
+    add_button.pack(side="left")
+    _add_tooltip(add_button, "Add a new, copied or existing implementation")
     edit_button = ttk.Button(
-        actions, text="Edit selected…", command=edit_variant, state="disabled"
+        actions, text="✎", width=3, command=edit_variant, state="disabled"
     )
-    edit_button.pack(side="left", padx=(8, 0))
+    edit_button.pack(side="left", padx=(5, 0))
+    _add_tooltip(edit_button, "Edit the selected alternative implementation")
     remove_button = ttk.Button(
-        actions, text="Remove selected", command=remove_variant, state="disabled"
+        actions, text="−", width=3, command=remove_variant, state="disabled"
     )
-    remove_button.pack(side="left", padx=(8, 0))
-    ttk.Button(actions, text="Cancel", command=dialog.destroy).pack(side="right")
+    remove_button.pack(side="left", padx=(5, 0))
+    _add_tooltip(remove_button, "Remove the selected alternative implementation")
+    cancel_button = ttk.Button(actions, text="×", width=3, command=dialog.destroy)
+    cancel_button.pack(side="right")
+    _add_tooltip(cancel_button, "Cancel implementation changes")
     save_button = ttk.Button(
-        actions, text="Save changes", command=save_and_close, state="disabled"
+        actions, text="✓", width=3, command=save_and_close, state="disabled"
     )
-    save_button.pack(side="right", padx=(0, 8))
+    save_button.pack(side="right", padx=(0, 5))
+    _add_tooltip(save_button, "Save implementation changes")
 
     tree.bind("<<TreeviewSelect>>", update_actions)
     tree.bind("<Double-1>", lambda _event: edit_variant())
