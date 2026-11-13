@@ -58,7 +58,6 @@ from .repository import (
     register_project_symbol_library,
     remove_library_root,
     set_library_root,
-    set_project_symbol_defaults,
 )
 from .repository import library_roots as configured_library_roots
 
