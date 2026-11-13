@@ -17,14 +17,13 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "plugin" / "kicad-blocks"))
 
-from scripts.visual_asset_inventory import ASSET_NAMES
 from kicad_blocks import plugin as plugin_actions
 from kicad_blocks.model import parse_pins
 from kicad_blocks.repository import create_block, revision_for_hashes
+from scripts.visual_asset_inventory import ASSET_NAMES
 
 sys.path.insert(0, str(ROOT / 'examples' / 'stusb4500'))
 from generate_reference import generate_reference_schematic
-
 
 
 def find_executable(*names: str) -> str:
