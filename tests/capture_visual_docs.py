@@ -674,7 +674,7 @@ def main() -> int:
         reference_source = Path(temporary) / "stusb4500-reference.kicad_sch"
         generate_reference_schematic(reference_source)
         layout_source = Path(temporary) / "stusb4500-reference.kicad_pcb"
-        layout_source.write_text("(kicad_pcb)\\n", encoding="utf-8")
+        layout_source.write_text("(kicad_pcb)\n", encoding="utf-8")
         target = create_block(
             library, "STUSB4500 USB-PD Sink",
             parse_pins(
