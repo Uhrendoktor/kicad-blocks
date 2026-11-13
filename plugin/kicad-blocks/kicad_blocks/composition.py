@@ -7,7 +7,7 @@ import shutil
 import tempfile
 import uuid
 from pathlib import Path
-from typing import Any
+from .json_types import JsonObject
 
 from .model import (
     BlockPin,
@@ -31,7 +31,7 @@ from .repository import (
 
 
 def _child_record(
-    parent: BlockRecord, dependency: dict[str, Any], records: dict[str, BlockRecord]
+    parent: BlockRecord, dependency: JsonObject, records: dict[str, BlockRecord]
 ) -> BlockRecord:
     block_id = str(dependency.get("block_id", ""))
     child = records.get(block_id)
@@ -82,9 +82,9 @@ def _refresh_local_revision(record: BlockRecord) -> None:
 
 def _compose_direct_children(
     parent: BlockRecord,
-    dependencies: list[tuple[dict[str, Any], BlockRecord]],
+    dependencies: list[tuple[JsonObject, BlockRecord]],
     kicad_cli: str,
-) -> dict[str, Any]:
+) -> JsonObject:
     if not dependencies:
         return {"placed": [], "labels": 0}
 
@@ -211,7 +211,7 @@ def _compose_direct_children(
                 schematic.create_items(new_labels)
             except AttributeError as exc:
                 # Some KiCad development builds have returned a CreateItem
-                # result with no packed Any payload even though the object
+                # result with no packed extension payload even though the object
                 # was applied to the document. Verify document state before
                 # deciding whether this was a harmless response issue.
                 if "type_url" not in str(exc):
@@ -260,7 +260,7 @@ def compose_block_implementation(
     block: BlockRecord,
     library_root: Path,
     kicad_cli: str | Path,
-) -> dict[str, Any]:
+) -> JsonObject:
     """Recursively compose dependency facade instances into parent implementations."""
     root = Path(library_root).expanduser().resolve()
     cli = str(kicad_cli)
@@ -268,7 +268,7 @@ def compose_block_implementation(
     records[block.manifest["block_id"]] = block
     visiting: set[str] = set()
     completed: set[str] = set()
-    reports: list[dict[str, Any]] = []
+    reports: list[JsonObject] = []
 
     def compose(current: BlockRecord) -> None:
         block_id = current.manifest["block_id"]
@@ -278,7 +278,7 @@ def compose_block_implementation(
             return
         visiting.add(block_id)
         current_manifest = read_manifest(current.path)
-        direct: list[tuple[dict[str, Any], BlockRecord]] = []
+        direct: list[tuple[JsonObject, BlockRecord]] = []
         for dependency in current_manifest.get("dependencies", []):
             child = _child_record(current, dependency, records)
             pinned_revision = dependency.get("revision")
