@@ -510,6 +510,7 @@ jobs:
         run: |
           set -euo pipefail
           PY="${RUNNER_TEMP}/kicad-blocks-visual-venv/bin/python"
+          "$PY" -m pip install ruff
           "$PY" -m ruff format examples plugin scripts tests
           if ! git diff --quiet -- examples plugin scripts tests; then
             git config user.name "github-actions[bot]"
