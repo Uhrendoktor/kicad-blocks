@@ -26,7 +26,7 @@ MODULE_PURPOSES = {
     "test_pcb_layout_unit.py": "Pure PCB S-expression transformations, net mapping, rotation geometry, netclass rules, and invalid-net rejection.",
     "test_pcb_placement.py": "Persistent placement-manifest integrity, instance grouping, board identity, and refusal of partial or ambiguous moves.",
     "test_profiles.py": "Configuration-profile normalization, parameter/variant/layout resolution, local-copy synchronization, and divergent-change protection.",
-    "test_python_policy.py": "Regression coverage for syntax-aware policy violations, reviewed dynamic typing boundaries, production module docstrings, and Pyright include/exclude inventory enforcement.",
+    "test_python_policy.py": "Regression coverage for global typing policy violations, diagnostic suppression/dynamic execution bans, production module docstrings, and Pyright inventory enforcement.",
     "test_publish_ipc_wheel.py": "Transient versus permanent GitHub API failures and recovery when a wheel upload succeeded but its response was lost.",
     "test_publish_pinned_ipc_wheel.py": "Immutable revision-addressed wheel publication, digest idempotency, no-overwrite guarantees, and ABI-specific tagging.",
     "test_publish_release.py": "Versioned release asset upload, checksum verification, and immutable existing-asset behavior.",
