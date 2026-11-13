@@ -8,6 +8,7 @@ import logging
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 import time
 from pathlib import Path
@@ -81,6 +82,208 @@ def _load_tkinter() -> None:
     filedialog = filedialog_module
     messagebox = messagebox_module
     simpledialog = simpledialog_module
+
+
+def _system_prefers_dark_theme() -> bool:
+    """Detect the desktop dark appearance, with a KiCad Blocks override."""
+    override = os.environ.get("KICAD_BLOCKS_THEME", "system").strip().casefold()
+    if override in {"dark", "true", "1", "yes", "on"}:
+        return True
+    if override in {"light", "false", "0", "no", "off"}:
+        return False
+
+    if sys.platform == "win32":
+        try:
+            import winreg
+
+            key_path = r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path) as key:
+                value, _kind = winreg.QueryValueEx(key, "AppsUseLightTheme")
+            return int(value) == 0
+        except (ImportError, OSError, ValueError):
+            return False
+
+    if sys.platform == "darwin":
+        try:
+            result = subprocess.run(
+                ["defaults", "read", "-g", "AppleInterfaceStyle"],
+                capture_output=True,
+                text=True,
+                timeout=1.0,
+                check=False,
+            )
+            return result.returncode == 0 and result.stdout.strip().casefold() == "dark"
+        except (OSError, subprocess.TimeoutExpired):
+            return False
+
+    if sys.platform.startswith("linux"):
+        gtk_theme = os.environ.get("GTK_THEME", "")
+        if gtk_theme:
+            return "dark" in gtk_theme.casefold()
+
+        for schema, key in (
+            ("org.gnome.desktop.interface", "color-scheme"),
+            ("org.gnome.desktop.interface", "gtk-theme"),
+        ):
+            try:
+                result = subprocess.run(
+                    ["gsettings", "get", schema, key],
+                    capture_output=True,
+                    text=True,
+                    timeout=1.0,
+                    check=False,
+                )
+            except (OSError, subprocess.TimeoutExpired):
+                continue
+            if result.returncode == 0:
+                value = result.stdout.strip().strip("'").strip('"').casefold()
+                if key == "color-scheme" and value in {"prefer-dark", "dark"}:
+                    return True
+                if key == "color-scheme" and value in {"prefer-light", "light"}:
+                    return False
+                if key == "gtk-theme" and "dark" in value:
+                    return True
+
+        kdeglobals = Path.home() / ".config" / "kdeglobals"
+        try:
+            in_general = False
+            for line in kdeglobals.read_text(encoding="utf-8").splitlines():
+                line = line.strip()
+                if line.startswith("["):
+                    in_general = line.casefold() == "[general]"
+                elif in_general and line.casefold().startswith("colorscheme="):
+                    return "dark" in line.split("=", 1)[1].casefold()
+        except OSError:
+            pass
+
+    return False
+
+
+def _configure_tk_theme(root) -> None:
+    """Apply a consistent dark desktop palette to all Tk windows in this app."""
+    if not _system_prefers_dark_theme():
+        return
+
+    colors = {
+        "background": "#202124",
+        "surface": "#292a2d",
+        "surface_alt": "#303134",
+        "field": "#17181a",
+        "hover": "#3c4043",
+        "selected": "#394b69",
+        "foreground": "#e8eaed",
+        "muted": "#bdc1c6",
+        "border": "#5f6368",
+        "accent": "#8ab4f8",
+    }
+    style = ttk.Style(root)
+    try:
+        style.theme_use("clam")
+    except tk.TclError:
+        pass
+
+    root.configure(background=colors["background"])
+    root.option_add("*Background", colors["background"])
+    root.option_add("*Foreground", colors["foreground"])
+    root.option_add("*Text.background", colors["field"])
+    root.option_add("*Text.foreground", colors["foreground"])
+    root.option_add("*Entry.background", colors["field"])
+    root.option_add("*Entry.foreground", colors["foreground"])
+    root.option_add("*Listbox.background", colors["field"])
+    root.option_add("*Listbox.foreground", colors["foreground"])
+    root.option_add("*Canvas.background", colors["background"])
+    root.option_add("*selectBackground", colors["selected"])
+    root.option_add("*selectForeground", colors["foreground"])
+
+    style.configure("TFrame", background=colors["background"])
+    style.configure("TLabel", background=colors["background"], foreground=colors["foreground"])
+    style.configure(
+        "TLabelFrame",
+        background=colors["background"],
+        foreground=colors["foreground"],
+        bordercolor=colors["border"],
+    )
+    style.configure(
+        "TLabelFrame.Label",
+        background=colors["background"],
+        foreground=colors["foreground"],
+    )
+    style.configure(
+        "TButton",
+        background=colors["surface"],
+        foreground=colors["foreground"],
+        bordercolor=colors["border"],
+        focuscolor=colors["accent"],
+        padding=(10, 6),
+    )
+    style.map(
+        "TButton",
+        background=[
+            ("disabled", colors["surface_alt"]),
+            ("pressed", colors["selected"]),
+            ("active", colors["hover"]),
+        ],
+        foreground=[("disabled", colors["muted"]), ("!disabled", colors["foreground"])],
+    )
+    style.configure(
+        "TEntry",
+        fieldbackground=colors["field"],
+        foreground=colors["foreground"],
+        insertcolor=colors["foreground"],
+        bordercolor=colors["border"],
+    )
+    style.configure(
+        "TCombobox",
+        fieldbackground=colors["field"],
+        background=colors["surface"],
+        foreground=colors["foreground"],
+        arrowcolor=colors["foreground"],
+        bordercolor=colors["border"],
+    )
+    style.map(
+        "TCombobox",
+        fieldbackground=[("readonly", colors["field"])],
+        selectbackground=[("readonly", colors["selected"])],
+        selectforeground=[("readonly", colors["foreground"])],
+    )
+    style.configure(
+        "Treeview",
+        background=colors["surface"],
+        fieldbackground=colors["surface"],
+        foreground=colors["foreground"],
+        bordercolor=colors["border"],
+        rowheight=25,
+    )
+    style.map(
+        "Treeview",
+        background=[("selected", colors["selected"])],
+        foreground=[("selected", colors["foreground"])],
+    )
+    style.configure(
+        "Treeview.Heading",
+        background=colors["surface_alt"],
+        foreground=colors["foreground"],
+        bordercolor=colors["border"],
+        relief="flat",
+    )
+    style.map("Treeview.Heading", background=[("active", colors["hover"])])
+    style.configure("TNotebook", background=colors["background"], borderwidth=0)
+    style.configure(
+        "TNotebook.Tab",
+        background=colors["surface_alt"],
+        foreground=colors["foreground"],
+        padding=(12, 7),
+    )
+    style.map(
+        "TNotebook.Tab",
+        background=[("selected", colors["surface"])],
+        foreground=[("selected", colors["foreground"])],
+    )
+    style.configure(
+        "TScrollbar",
+        background=colors["surface_alt"],
+        troughcolor=colors["background"],
+    )
 
 
 def project_directory(schematic) -> Path:
@@ -1718,26 +1921,31 @@ def _launch_block_asset(kicad, path: Path, description: str):
 
 
 def _show_library_roots_dialog(parent) -> bool:
-    """Manage the set of shared functional-block library directories."""
+    """Manage registered library folders with explicit add/create/edit actions."""
     dialog = tk.Toplevel(parent)
     dialog.title("Manage KiCad Functional Block Libraries")
-    dialog.geometry("760x420")
-    dialog.minsize(560, 320)
+    dialog.geometry("980x540")
+    dialog.minsize(720, 420)
     dialog.transient(parent)
     dialog.grab_set()
 
-    outer = ttk.Frame(dialog, padding=12)
+    outer = ttk.Frame(dialog, padding=14)
     outer.pack(fill="both", expand=True)
     ttk.Label(
         outer,
-        text="Registered libraries",
-    ).pack(anchor="w", pady=(0, 8))
+        text="Registered block libraries",
+        font=("TkDefaultFont", 12, "bold"),
+    ).pack(anchor="w")
     ttk.Label(
         outer,
-        text="Every registered library is included in the Block Library browser. "
-        "Removing a library only unregisters its folder; it does not delete files.",
-        wraplength=700,
-    ).pack(anchor="w", pady=(0, 8))
+        text=(
+            "Add an existing folder or create a new, empty library. Select a row to change "
+            "its registered folder, choose the default destination, or unregister it. "
+            "Unregistering never deletes files. Changing a path does not move files."
+        ),
+        wraplength=900,
+        justify="left",
+    ).pack(anchor="w", pady=(4, 12))
 
     table_frame = ttk.Frame(outer)
     table_frame.pack(fill="both", expand=True)
@@ -1752,53 +1960,31 @@ def _show_library_roots_dialog(parent) -> bool:
     tree.heading("#0", text="Library")
     tree.heading("blocks", text="Blocks")
     tree.heading("role", text="Use")
-    tree.heading("path", text="Folder")
-    tree.column("#0", width=150, minwidth=110, stretch=False)
-    tree.column("blocks", width=60, minwidth=50, stretch=False, anchor="center")
-    tree.column("role", width=90, minwidth=80, stretch=False, anchor="center")
-    tree.column("path", width=380, minwidth=180, stretch=True)
-    scrollbar = ttk.Scrollbar(table_frame, orient="vertical", command=tree.yview)
-    tree.configure(yscrollcommand=scrollbar.set)
+    tree.heading("path", text="Registered folder")
+    tree.column("#0", width=180, minwidth=140, stretch=False)
+    tree.column("blocks", width=70, minwidth=55, stretch=False, anchor="center")
+    tree.column("role", width=140, minwidth=110, stretch=False, anchor="center")
+    tree.column("path", width=500, minwidth=220, stretch=True)
+    vertical_scroll = ttk.Scrollbar(table_frame, orient="vertical", command=tree.yview)
+    horizontal_scroll = ttk.Scrollbar(table_frame, orient="horizontal", command=tree.xview)
+    tree.configure(
+        yscrollcommand=vertical_scroll.set,
+        xscrollcommand=horizontal_scroll.set,
+    )
     tree.grid(row=0, column=0, sticky="nsew")
-    scrollbar.grid(row=0, column=1, sticky="ns")
+    vertical_scroll.grid(row=0, column=1, sticky="ns")
+    horizontal_scroll.grid(row=1, column=0, sticky="ew")
+    _bind_mousewheel(tree, lambda amount: tree.yview_scroll(amount, "units"))
 
-    selected_roots = [configured_library_roots()]
+    status = tk.StringVar()
+    ttk.Label(outer, textvariable=status, wraplength=900).pack(anchor="w", pady=(8, 0))
+
     changed = [False]
-
-    def render() -> None:
-        selected = tree.selection()
-        selected_path = tree.set(selected[0], "path") if selected else None
-        tree.delete(*tree.get_children())
-        roots = configured_library_roots()
-        selected_roots[0] = roots
-        default = default_library_root()
-        environment_value = os.environ.get("KICAD_BLOCKS_LIBRARY")
-        environment_root = (
-            Path(environment_value).expanduser().resolve()
-            if environment_value else None
-        )
-        for index, library_path in enumerate(roots):
-            role = (
-                "Environment override"
-                if library_path == environment_root
-                else "Default"
-                if library_path == default
-                else ""
-            )
-            tree.insert(
-                "",
-                "end",
-                iid=str(index),
-                text=library_path.name or str(library_path),
-                values=(
-                    len(list_blocks(library_path)),
-                    role,
-                    str(library_path),
-                ),
-            )
-            if selected_path == str(library_path):
-                tree.selection_set(str(index))
-                tree.focus(str(index))
+    environment_value = os.environ.get("KICAD_BLOCKS_LIBRARY")
+    environment_root = (
+        Path(environment_value).expanduser().resolve()
+        if environment_value else None
+    )
 
     def selected_path() -> Path | None:
         selection = tree.selection()
@@ -1807,74 +1993,173 @@ def _show_library_roots_dialog(parent) -> bool:
         raw = tree.set(selection[0], "path")
         return Path(raw).expanduser().resolve() if raw else None
 
+    def render(select_path: Path | None = None) -> None:
+        previous = select_path or selected_path()
+        tree.delete(*tree.get_children())
+        roots = configured_library_roots()
+        default = default_library_root()
+        for index, library_path in enumerate(roots):
+            role = (
+                "Environment override"
+                if library_path == environment_root
+                else "Default"
+                if library_path == default
+                else "Registered"
+            )
+            try:
+                block_count = len(list_blocks(library_path))
+            except (OSError, ValueError):
+                block_count = "Unavailable"
+            tree.insert(
+                "",
+                "end",
+                iid=str(index),
+                text=library_path.name or str(library_path),
+                values=(block_count, role, str(library_path)),
+            )
+            if previous == library_path:
+                tree.selection_set(str(index))
+                tree.focus(str(index))
+                tree.see(str(index))
+        status.set(
+            f"{len(roots)} registered folders. "
+            + (
+                "KICAD_BLOCKS_LIBRARY overrides the default destination."
+                if environment_root is not None
+                else "The row marked Default receives newly created blocks."
+            )
+        )
+        update_selection_actions()
+
     def add_library() -> None:
         selected = filedialog.askdirectory(
-            title="Add functional-block library folder",
+            title="Add existing block library folder",
+            mustexist=True,
             parent=dialog,
         )
         if not selected:
             return
         try:
-            add_library_root(Path(selected))
+            path = Path(selected).expanduser().resolve()
+            add_library_root(path)
             changed[0] = True
-            render()
+            render(path)
         except (OSError, ValueError) as exc:
-            messagebox.showerror("Add Block Library", str(exc), parent=dialog)
+            messagebox.showerror("Add existing library", str(exc), parent=dialog)
+
+    def create_library() -> None:
+        parent_folder = filedialog.askdirectory(
+            title="Choose where to create the new library",
+            mustexist=True,
+            parent=dialog,
+        )
+        if not parent_folder:
+            return
+        name = simpledialog.askstring(
+            "Create block library",
+            "Name for the new library folder:",
+            parent=dialog,
+        )
+        if name is None:
+            return
+        name = name.strip()
+        if (
+            not name
+            or name in {".", ".."}
+            or "/" in name
+            or "\\" in name
+            or Path(name).is_absolute()
+        ):
+            messagebox.showerror(
+                "Create block library",
+                "Enter a single folder name without a path.",
+                parent=dialog,
+            )
+            return
+        target = Path(parent_folder).expanduser().resolve() / name
+        try:
+            target.mkdir(parents=False, exist_ok=False)
+            try:
+                add_library_root(target)
+            except Exception:
+                target.rmdir()
+                raise
+            changed[0] = True
+            render(target)
+        except (OSError, ValueError) as exc:
+            messagebox.showerror("Create block library", str(exc), parent=dialog)
+
+    def change_library_folder() -> None:
+        old_path = selected_path()
+        if old_path is None or old_path == environment_root:
+            return
+        selected = filedialog.askdirectory(
+            title="Choose the replacement registered folder",
+            initialdir=str(old_path.parent),
+            mustexist=True,
+            parent=dialog,
+        )
+        if not selected:
+            return
+        new_path = Path(selected).expanduser().resolve()
+        if new_path == old_path:
+            return
+        try:
+            was_default = environment_root is None and old_path == default_library_root()
+            add_library_root(new_path)
+            if was_default:
+                set_library_root(new_path)
+            remove_library_root(old_path)
+            changed[0] = True
+            render(new_path)
+        except (OSError, ValueError) as exc:
+            messagebox.showerror("Change registered folder", str(exc), parent=dialog)
 
     def remove_library() -> None:
         path = selected_path()
-        if path is None:
+        if path is None or path == environment_root:
             return
         try:
             remove_library_root(path)
             changed[0] = True
             render()
         except (OSError, ValueError) as exc:
-            messagebox.showerror("Remove Block Library", str(exc), parent=dialog)
+            messagebox.showerror("Unregister library", str(exc), parent=dialog)
 
     def make_default() -> None:
         path = selected_path()
-        if path is None:
-            return
-        if os.environ.get("KICAD_BLOCKS_LIBRARY"):
-            messagebox.showinfo(
-                "Default Library",
-                "KICAD_BLOCKS_LIBRARY is set, so it overrides the default folder. "
-                "The selected folder can still be used for new blocks and remains registered.",
-                parent=dialog,
-            )
-            set_library_root(path)
-            changed[0] = True
-            render()
+        if path is None or environment_root is not None:
             return
         try:
             set_library_root(path)
             changed[0] = True
-            render()
+            render(path)
         except (OSError, ValueError) as exc:
-            messagebox.showerror("Set Default Block Library", str(exc), parent=dialog)
+            messagebox.showerror("Set default library", str(exc), parent=dialog)
 
-    buttons = ttk.Frame(outer)
-    buttons.pack(fill="x", pady=(10, 0))
-    ttk.Button(buttons, text="Add…", command=add_library).pack(side="left")
-    remove_button = ttk.Button(buttons, text="Remove", command=remove_library)
+    actions = ttk.LabelFrame(outer, text="Library folder actions", padding=8)
+    actions.pack(fill="x", pady=(10, 0))
+    ttk.Button(actions, text="Add existing folder…", command=add_library).pack(side="left")
+    ttk.Button(
+        actions, text="Create new library…", command=create_library
+    ).pack(side="left", padx=(6, 0))
+    change_button = ttk.Button(
+        actions, text="Change registered folder…", command=change_library_folder
+    )
+    change_button.pack(side="left", padx=(6, 0))
+    remove_button = ttk.Button(actions, text="Unregister", command=remove_library)
     remove_button.pack(side="left", padx=(6, 0))
-    default_button = ttk.Button(buttons, text="Set as default", command=make_default)
+    default_button = ttk.Button(actions, text="Set as default", command=make_default)
     default_button.pack(side="left", padx=(6, 0))
-    ttk.Button(buttons, text="Close", command=dialog.destroy).pack(side="right")
+    ttk.Button(actions, text="Close", command=dialog.destroy).pack(side="right")
 
     def update_selection_actions(_event=None) -> None:
         path = selected_path()
-        environment_value = os.environ.get("KICAD_BLOCKS_LIBRARY")
-        environment_root = (
-            Path(environment_value).expanduser().resolve()
-            if environment_value else None
-        )
-        remove_button.configure(
-            state="disabled" if path is None or path == environment_root else "normal"
-        )
+        fixed = path is None or path == environment_root
+        change_button.configure(state="disabled" if fixed else "normal")
+        remove_button.configure(state="disabled" if fixed else "normal")
         default_button.configure(
-            state="disabled" if environment_root is not None or path is None else "normal"
+            state="disabled" if path is None or environment_root is not None else "normal"
         )
 
     tree.bind("<<TreeviewSelect>>", update_selection_actions)
@@ -1884,25 +2169,42 @@ def _show_library_roots_dialog(parent) -> bool:
     return changed[0]
 
 
-def _bind_mousewheel(widget, scroll_command) -> None:
-    """Scroll a hovered library pane without requiring a scrollbar drag."""
+def _bind_mousewheel(widget, scroll_command, *, include_children: bool = False) -> None:
+    """Bind wheel and high-resolution trackpad scrolling to a scrollable pane."""
+    remainder = [0.0]
+
     def on_wheel(event):
-        if getattr(event, "num", None) == 4:
+        number = getattr(event, "num", None)
+        if number == 4:
             amount = -1
-        elif getattr(event, "num", None) == 5:
+        elif number == 5:
             amount = 1
         else:
-            delta = getattr(event, "delta", 0)
-            amount = -1 if delta > 0 else 1 if delta < 0 else 0
+            try:
+                delta = float(getattr(event, "delta", 0) or 0)
+            except (TypeError, ValueError):
+                delta = 0.0
+            if abs(delta) >= 120 or sys.platform == "win32":
+                delta /= 120.0
+            remainder[0] -= delta
+            amount = int(remainder[0])
+            remainder[0] -= amount
+
         if amount:
             scroll_command(amount)
         return "break"
 
-    widget.bind("<MouseWheel>", on_wheel)
-    widget.bind("<Button-4>", on_wheel)
-    widget.bind("<Button-5>", on_wheel)
+    def bind_tree(target) -> None:
+        for sequence in ("<MouseWheel>", "<Button-4>", "<Button-5>"):
+            target.bind(sequence, on_wheel, add="+")
+        if include_children:
+            for child in target.winfo_children():
+                bind_tree(child)
+
+    bind_tree(widget)
 
 
+def _show_library_browser(
 def _show_library_browser(
     window,
     schematic,
@@ -2239,9 +2541,9 @@ def _show_library_browser(
 
     ttk.Button(
         library_footer,
-        text="Manage libraries…",
+        text="Manage library folders…",
         command=manage_libraries,
-    ).pack(side="left")
+    ).pack(fill="x")
 
     search.trace_add("write", render_records)
 
@@ -2919,11 +3221,11 @@ def _add_nested_dependency(root, parent, parent_window) -> None:
 
 
 def _show_action_hub(root):
-
-    """Show a task-oriented command center instead of exposing a flat action list."""
+    """Show a scrollable task hub for less frequent and context-specific actions."""
+    _configure_tk_theme(root)
     root.title("KiCad Blocks — Tasks")
-    root.geometry("820x610")
-    root.minsize(720, 520)
+    root.geometry("900x660")
+    root.minsize(760, 540)
 
     outer = ttk.Frame(root, padding=18)
     outer.pack(fill="both", expand=True)
@@ -2935,10 +3237,10 @@ def _show_action_hub(root):
     ttk.Label(
         outer,
         text=(
-            "Choose a task. Each action is grouped by what you are trying to do; "
-            "the short descriptions explain the selection or project context it needs."
+            "Choose an operation. For normal block selection and placement, use the "
+            "Functional Block Library browser; the remaining actions are grouped by workflow."
         ),
-        wraplength=760,
+        wraplength=840,
         justify="left",
     ).pack(anchor="w", pady=(4, 14))
 
@@ -2951,13 +3253,8 @@ def _show_action_hub(root):
             [
                 (
                     "Browse and place blocks",
-                    "Search registered libraries, preview a facade, choose a profile, and place it.",
+                    "Search registered libraries, inspect a facade, configure it, and place it from the browser.",
                     "manage-library",
-                ),
-                (
-                    "Quick place a block",
-                    "Choose a block and place its facade at the cursor.",
-                    "place-block",
                 ),
                 (
                     "Create from selected sheet",
@@ -3042,27 +3339,61 @@ def _show_action_hub(root):
         root.destroy()
         run_action(selected_action)
 
+    canvas_background = (
+        ttk.Style(root).lookup("TFrame", "background") or root.cget("background")
+    )
     for tab_name, actions in groups:
-        tab = ttk.Frame(tabs, padding=14)
+        tab = ttk.Frame(tabs)
         tabs.add(tab, text=tab_name)
+        scroll_area = ttk.Frame(tab)
+        scroll_area.pack(fill="both", expand=True)
+        canvas = tk.Canvas(
+            scroll_area,
+            background=canvas_background,
+            highlightthickness=0,
+            borderwidth=0,
+        )
+        scrollbar = ttk.Scrollbar(
+            scroll_area, orient="vertical", command=canvas.yview
+        )
+        canvas.configure(yscrollcommand=scrollbar.set)
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+
+        content = ttk.Frame(canvas, padding=14)
+        content_id = canvas.create_window((0, 0), window=content, anchor="nw")
+
+        def update_scroll_region(_event=None, target=canvas):
+            target.configure(scrollregion=target.bbox("all"))
+
+        def fit_content_width(event, target=canvas, item=content_id):
+            target.itemconfigure(item, width=event.width)
+
+        content.bind("<Configure>", update_scroll_region)
+        canvas.bind("<Configure>", fit_content_width)
+        _bind_mousewheel(
+            canvas,
+            lambda amount, target=canvas: target.yview_scroll(amount, "units"),
+            include_children=True,
+        )
+
         for row, (title, description, action_id) in enumerate(actions):
-            cell = ttk.Frame(tab, padding=(0, 3))
+            cell = ttk.Frame(content, padding=(0, 3))
             cell.grid(row=row, column=0, sticky="ew", pady=4)
-            button = ttk.Button(
+            ttk.Button(
                 cell,
                 text=title,
                 command=lambda selected=action_id: dispatch(selected),
                 width=31,
-            )
-            button.grid(row=0, column=0, sticky="nw", padx=(0, 12))
+            ).grid(row=0, column=0, sticky="nw", padx=(0, 12))
             ttk.Label(
                 cell,
                 text=description,
-                wraplength=470,
+                wraplength=590,
                 justify="left",
             ).grid(row=0, column=1, sticky="w")
             cell.columnconfigure(1, weight=1)
-        tab.columnconfigure(0, weight=1)
+        content.columnconfigure(0, weight=1)
 
     footer = ttk.Frame(outer)
     footer.pack(fill="x", pady=(12, 0))
@@ -3070,9 +3401,9 @@ def _show_action_hub(root):
         footer,
         text=(
             "PCB Editor: use “Place Imported Block Layout” after applying a layout "
-            "from the schematic task hub."
+            "from the schematic actions."
         ),
-        wraplength=650,
+        wraplength=700,
         justify="left",
     ).pack(side="left", anchor="w")
     ttk.Button(footer, text="Close", command=root.destroy).pack(side="right")
@@ -3080,11 +3411,16 @@ def _show_action_hub(root):
 
 
 def run_action(action: str) -> None:
+def run_action(action: str) -> None:
     """Run one operation from the task hub or KiCad's PCB Editor action."""
+    # Older installations may still invoke this identifier; route it to the
+    # one library-browser selection and placement workflow.
+    if action == "place-block":
+        action = "manage-library"
+
     valid_actions = {
         "open-hub",
         "manage-library",
-        "place-block",
         "create-block",
         "open-implementation",
         "configure-instance",
@@ -3104,6 +3440,7 @@ def run_action(action: str) -> None:
 
     _load_tkinter()
     root = tk.Tk()
+    _configure_tk_theme(root)
     root.title("KiCad Blocks — Tasks" if action == "open-hub" else "KiCad Blocks")
     try:
         if action == "open-hub":
@@ -3131,31 +3468,6 @@ def run_action(action: str) -> None:
             return
 
         root.withdraw()
-        if action == "place-block":
-            choice = _pick_block_for_placement(_list_library_records(library_paths), root)
-            if choice is not None:
-                record = choice["record"]
-                _register_block(project_dir, record, kicad, library_paths)
-                defaults = {}
-                if record.manifest.get("variants"):
-                    defaults[VARIANT_FIELD_NAME] = choice["variant"]
-                if record.manifest.get("profiles"):
-                    defaults[PROFILE_FIELD_NAME] = choice["profile"]
-                defaults.update({
-                    parameter_field_name(name): value
-                    for name, value in choice["parameters"].items()
-                })
-                if _layout_choices(record):
-                    defaults[LAYOUT_FIELD_NAME] = choice["layout"]
-                if defaults:
-                    catalog = project_dir / ".kicad_blocks" / "KBlocks.kicad_sym"
-                    set_project_symbol_defaults(
-                        catalog, str(record.manifest["symbol_name"]), defaults
-                    )
-                    _reload_symbol_library(kicad, LIBRARY_NICKNAME)
-                _start_native_symbol_placement(
-                    kicad, editor_window_id, str(record.manifest["symbol_name"])
-                )
         if action == "create-block":
             _create_and_place(
                 library_root, schematic, kicad, project_dir, root, editor_window_id
