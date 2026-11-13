@@ -3825,7 +3825,7 @@ def _show_block_variant_editor(
         row_index = selected_index()
         has_selection = row_index is not None
         edit_button.configure(
-            text="Open default" if row_index == 0 else "Edit variant",
+            text="Edit default" if row_index == 0 else "Edit variant",
             state="normal" if has_selection else "disabled",
         )
         remove_button.configure(state="normal" if row_index is not None and row_index > 0 else "disabled")
