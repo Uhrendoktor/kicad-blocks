@@ -248,7 +248,7 @@ def generate_reference_schematic(destination: Path) -> Path:
         ("C1", "Device", "C", "1uF", (190.5, 96.52), {"1": ("VREG_1V2", "local", ""), "2": ("GND", "local", "")}),
         ("C2", "Device", "C", "1uF", (213.36, 96.52), {"1": ("VREG_2V7", "local", ""), "2": ("GND", "local", "")}),
         ("C3", "Device", "C", "1uF", (236.22, 96.52), {"1": ("VREG_2V7", "local", ""), "2": ("GND", "local", "")}),
-        ("C4", "Device", "C", "1uF", (119.38, 88.9), {"1": ("VBUS_FILTERED", "local", ""), "2": ("GND", "local", "")}),
+        ("C4", "Device", "C", "1uF", (78.74, 96.52), {"1": ("VBUS_FILTERED", "local", ""), "2": ("GND", "local", "")}),
         ("D4", "Device", "D", "D4 (part not specified)", (93.98, 88.9), {"1": ("VBUS_FILTERED", "local", ""), "2": ("VBUS", "local", "")}),
         ("C10", "Device", "C", "100nF", (360.68, 97.79), {"1": ("VSNK", "local", ""), "2": ("GND", "local", "")}),
         ("R1", "Device", "R", "470", (144.78, 127), {"1": ("VBUS_FILTERED", "local", ""), "2": ("VBUS_VS_DISCH", "local", "")}),
@@ -524,15 +524,13 @@ def generate_reference_schematic(destination: Path) -> Path:
     # a horizontal VSNK_GATE wire; the branch lands at R13's pin-1 node.
     fet_gate = pin_world_points[("T1", "1")]
     gate_resistor = pin_world_points[("R13", "1")]
-    gate_out = (round(fet_gate[0] - 5.08, 3), fet_gate[1])
-    gate_track_y = round(gate_resistor[1] - 7.62, 3)
-    if gate_out[0] >= gate_resistor[0] or gate_track_y <= fet_gate[1]:
+    gate_out = (round(fet_gate[0] + 15.24, 3), fet_gate[1])
+    if gate_out[0] >= gate_resistor[0]:
         raise ValueError("T1 gate route corridor no longer fits its resistor branch.")
     gate_route = [
         fet_gate,
         gate_out,
-        (gate_out[0], gate_track_y),
-        (gate_resistor[0], gate_track_y),
+        (gate_out[0], gate_resistor[1]),
         gate_resistor,
     ]
     for index, (start, end) in enumerate(zip(gate_route, gate_route[1:])):
@@ -590,22 +588,15 @@ def generate_reference_schematic(destination: Path) -> Path:
     remove_local_label("D4", "2", "VBUS")
     add_junction(d4_rail, "VBUS:D4-tap")
 
-    # Input bulk capacitance and TVS sit beside the receptacle. The feed leaves
-    # the VBUS pin below the CC stubs, then branches to C50 and D50.
+    # Input bulk capacitor and TVS sit together beside the receptacle. This
+    # short local wire joins their VBUS terminals; the named VBUS port carries
+    # the longer connection back to J1 and the top power spine.
     c50_vbus = pin_world_points[("C50", "1")]
     d50_vbus = pin_world_points[("D50", "1")]
-    input_branch_x = 95.25
-    input_branch_y = 116.84
-    input_branch_bottom = d50_vbus[1]
     add_route("VBUS", [
-        usb_vbus, (input_branch_x, input_branch_y),
-        (input_branch_x, input_branch_bottom), d50_vbus,
+        c50_vbus, (d50_vbus[0], c50_vbus[1]), d50_vbus,
     ], "input-cap-tvss-feed")
-    remove_local_label("C50", "1", "VBUS")
     remove_local_label("D50", "1", "VBUS")
-    c50_tap = (input_branch_x, c50_vbus[1])
-    add_route("VBUS", [c50_tap, c50_vbus], "c50-bulk-cap-tap")
-    add_junction(c50_tap, "VBUS:C50-tap")
 
     # A single local ground route joins the input capacitor and the TVS cathode.
     c50_gnd = pin_world_points[("C50", "2")]
@@ -630,35 +621,33 @@ def generate_reference_schematic(destination: Path) -> Path:
     remove_local_label("D1", "1", "CC1")
     remove_local_label("D1", "2", "CC2")
 
-    # VBUS filtered sense: D4 output, C4 bypass and R1 feed share one visible
-    # net. R1 then joins R4 at VBUS_VS_DISCH, which is labelled at the IC pin.
+    # D4's filtered-side terminal faces left. C4 is placed on that side so
+    # the bypass connection is a short, direct orthogonal wire; the longer
+    # R1/U1 monitor net uses one matching local label at each functional end.
     d4_filtered = pin_world_points[("D4", "1")]
     c4_filtered = pin_world_points[("C4", "1")]
-    r1_filtered = pin_world_points[("R1", "1")]
-    filter_tap = (c4_filtered[0], d4_filtered[1])
     add_route("VBUS_FILTERED", [
-        d4_filtered, filter_tap, (r1_filtered[0], filter_tap[1]), r1_filtered,
-    ], "filter-to-sense-feed")
-    add_route("VBUS_FILTERED", [filter_tap, c4_filtered], "filter-capacitor-tap")
+        d4_filtered, (c4_filtered[0], d4_filtered[1]), c4_filtered,
+    ], "filter-capacitor-connection")
     remove_local_label("D4", "1", "VBUS_FILTERED")
     remove_local_label("C4", "1", "VBUS_FILTERED")
-    add_junction(filter_tap, "VBUS_FILTERED:C4-tap")
 
-    # Protected VSNK output rail feeds J10 and C10. D11 is a shunt TVS branch
-    # below the rail, so its ground terminal cannot sit in series with VSNK.
+    # Protected VSNK runs above the switches to J10. C10 and D11 branch from
+    # the connector-side output node, keeping the power path visually distinct
+    # from the lower FET gate-control wiring.
     t1_vsnk = pin_world_points[("T1", "3")]
     j10_vsnk = pin_world_points[("J10", "1")]
     c10_vsnk = pin_world_points[("C10", "1")]
     d11_vsnk = pin_world_points[("D11", "1")]
-    output_lane_x = 345.44
-    output_rail_y = j10_vsnk[1]
-    output_tap = (d11_vsnk[0], output_rail_y)
+    output_rail_y = 66.04
     add_route("VSNK", [
-        t1_vsnk, (output_lane_x, t1_vsnk[1]),
-        (output_lane_x, output_rail_y), c10_vsnk, j10_vsnk,
-    ], "protected-output-rail")
+        t1_vsnk, (t1_vsnk[0], output_rail_y),
+        (j10_vsnk[0], output_rail_y), j10_vsnk,
+    ], "protected-output-spine")
     remove_local_label("T1", "3", "VSNK")
+    add_route("VSNK", [j10_vsnk, c10_vsnk], "output-bypass-capacitor")
     remove_local_label("C10", "1", "VSNK")
+    output_tap = (d11_vsnk[0], j10_vsnk[1])
     add_route("VSNK", [output_tap, d11_vsnk], "d11-output-tap")
     remove_local_label("D11", "1", "VSNK")
     add_junction(output_tap, "VSNK:D11-tap")
@@ -711,7 +700,7 @@ def generate_reference_schematic(destination: Path) -> Path:
             ["uuid", _Quoted(_uid("text:power-path"))],
         ],
         ["text", _Quoted("PROTECTED VSNK OUTPUT"),
-            ["at", "355.6", "63.5", "0"], ["effects", ["font", ["size", "1.4", "1.4"]]],
+            ["at", "355.6", "58.42", "0"], ["effects", ["font", ["size", "1.4", "1.4"]]],
             ["uuid", _Quoted(_uid("text:output"))],
         ],
         ["text", _Quoted("I2C ADDRESS / RESET STRAPS"),
