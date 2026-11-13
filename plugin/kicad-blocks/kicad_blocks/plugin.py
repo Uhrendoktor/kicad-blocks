@@ -776,6 +776,7 @@ def _show_selected_block_configuration(
         profile_combo.pack(fill="x")
 
     variant_var = None
+    variant_combo = None
     if variants:
         section = ttk.LabelFrame(content, text="Implementation variant", padding=10)
         section.pack(fill="x", pady=(0, 10))
@@ -786,12 +787,13 @@ def _show_selected_block_configuration(
             wraplength=620,
             justify="left",
         ).pack(anchor="w", pady=(0, 6))
-        ttk.Combobox(
+        variant_combo = ttk.Combobox(
             section,
             textvariable=variant_var,
             values=[str(item["value"]) for item in variants],
             state="normal",
-        ).pack(fill="x")
+        )
+        variant_combo.pack(fill="x")
 
     parameter_vars = {}
     if parameters:
@@ -834,6 +836,24 @@ def _show_selected_block_configuration(
             for item in layouts
         }
         current_layout = _field_value(instance, LAYOUT_FIELD_NAME)
+        selected_variant_value = variant_var.get() if variant_var is not None else ""
+        linked_variant = next(
+            (
+                item for item in variants
+                if str(item.get("value", "")).casefold()
+                == selected_variant_value.casefold()
+            ),
+            None,
+        )
+        linked_layout_id = str(
+            linked_variant.get("layout_id", "") if linked_variant else ""
+        )
+        if linked_layout_id and (
+            not current_layout
+            or current_layout.casefold()
+            == str(block.manifest.get("default_layout") or "").casefold()
+        ):
+            current_layout = linked_layout_id
         current_label = next(
             (
                 label for label, layout_id in layout_ids.items()
@@ -851,12 +871,38 @@ def _show_selected_block_configuration(
             section,
             text="The selected layout is used by the PCB apply actions.",
         ).pack(anchor="w", pady=(0, 6))
-        ttk.Combobox(
+        layout_combo = ttk.Combobox(
             section,
             textvariable=layout_var,
             values=list(layout_ids),
             state="readonly",
-        ).pack(fill="x")
+        )
+        layout_combo.pack(fill="x")
+
+        def update_layout_for_variant(_event=None):
+            if variant_var is None:
+                return
+            selected = next(
+                (
+                    item for item in variants
+                    if str(item.get("value", "")).casefold()
+                    == variant_var.get().strip().casefold()
+                ),
+                None,
+            )
+            linked_id = str(selected.get("layout_id", "") if selected else "")
+            linked_label = next(
+                (
+                    label for label, layout_id in layout_ids.items()
+                    if layout_id.casefold() == linked_id.casefold()
+                ),
+                None,
+            )
+            if linked_label is not None:
+                layout_var.set(linked_label)
+
+        if variant_combo is not None:
+            variant_combo.bind("<<ComboboxSelected>>", update_layout_for_variant)
 
     profile_application_active = [False]
 
