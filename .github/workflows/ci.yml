@@ -23,6 +23,8 @@ jobs:
     timeout-minutes: 50
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Install KiCad development CLI if missing
         shell: bash
@@ -111,9 +113,20 @@ jobs:
           python3 -m venv "${RUNNER_TEMP}/kicad-blocks-venv"
           PY="${RUNNER_TEMP}/kicad-blocks-venv/bin/python"
           "$PY" -m pip install --upgrade pip
-          "$PY" -m pip install pytest ruff cairosvg pillow
+          "$PY" -m pip install pytest ruff==0.17.2 pyright==1.1.414 cairosvg pillow
           "$PY" --version
           "$PY" -m pip --version
+
+      - name: Enforce repository Python quality contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          PY="${RUNNER_TEMP}/kicad-blocks-venv/bin/python"
+          "$PY" scripts/check_test_inventory.py
+          "$PY" scripts/check_python_contracts.py --base origin/main
+          "$PY" -m pyright --project pyrightconfig.json
+          "$PY" -m ruff check examples plugin scripts tests
+          "$PY" -m ruff format --check examples plugin scripts tests
 
       - name: Restore cached KiCad Python IPC wheels
         id: kipy-cache
@@ -187,12 +200,13 @@ jobs:
         run: |
           set -euo pipefail
           PY="${RUNNER_TEMP}/kicad-blocks-venv/bin/python"
-          "$PY" -m pytest -q
-          "$PY" -m compileall -q plugin tests
-
-      - name: Ruff lint
-        shell: bash
-        run: "${RUNNER_TEMP}/kicad-blocks-venv/bin/python -m ruff check plugin tests"
+          mapfile -t PYTEST_MODULES < <("$PY" scripts/check_test_inventory.py --list-pytest)
+          if [[ "${#PYTEST_MODULES[@]}" -eq 0 ]]; then
+            echo "::error::The test inventory contains no pytest modules."
+            exit 1
+          fi
+          "$PY" -m pytest -q "${PYTEST_MODULES[@]}"
+          "$PY" -m compileall -q examples plugin scripts tests
 
       - name: Validate generated files with KiCad
         shell: bash
