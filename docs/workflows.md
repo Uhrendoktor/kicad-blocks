@@ -99,16 +99,13 @@ Use nesting to compose a larger subsystem from blocks that remain separate libra
 3. Map the child pins to nets in the parent implementation and set the child's placement and orientation.
 4. Save the composition and validate the resulting library.
 
-The child facade is composed into the parent implementation. The child remains a separate library dependency; it is not copied into a new child hierarchical sheet. Cyclic dependencies are rejected.
+The child facade is composed into the parent implementation. The child remains a separate library dependency; it is not copied into a new child hierarchical sheet. Cyclic dependencies are rejected. See [nested block composition](reference.md#nested-block-composition) for the stored dependency data.
 
 ## Validate a library or inspect a block's contents
 
 Choose **KiCad Blocks Tasks → Checks & PCB → Validate registered libraries** to scan the registered libraries. Validation checks manifests, required files, revision hashes, profiles, dependencies and recursive ERC. It writes an aggregate `library-validation.json` report and per-block ERC reports.
 
-For one placed block instance:
-
-- **Export recursive BOM** exports the implementation and its nested dependencies.
-- **Run recursive ERC** checks the implementation and nested dependencies with KiCad CLI.
+For one placed block instance, **Export recursive BOM** exports the implementation and its nested dependencies; **Run recursive ERC** checks them with KiCad CLI. See [recursive BOM and ERC](reference.md#recursive-bom-and-erc) for how parameters and nested dependencies are handled.
 
 Native project BOM, netlist and ERC operate on the facade symbol and its external pins. They do not automatically include components in the separately stored implementation. Use the recursive actions when you need implementation-level results.
 
