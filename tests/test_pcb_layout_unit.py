@@ -1,13 +1,11 @@
 """Unit tests for KiCad PCB net-reference serialization rules."""
 
 import json
-import sys
 import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
 
-PLUGIN = Path(__file__).resolve().parents[1] / "plugin" / "kicad-blocks"
 from kicad_blocks.pcb_layout import (
     _dump,
     _merge_project_net_settings,
