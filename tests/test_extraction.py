@@ -1,11 +1,9 @@
 from __future__ import annotations
 
-import sys
 import tempfile
 import unittest
 from pathlib import Path
 
-PLUGIN = Path(__file__).resolve().parents[1] / "plugin" / "kicad-blocks"
 from kicad_blocks.extraction import selected_sheet_file, selected_sheet_instance_uuid
 from kicad_blocks.pcb_layout import _all, _direct, _dump, _head, parse_sexpr
 from kicad_blocks.repository import create_block, read_manifest, refresh_library_block
