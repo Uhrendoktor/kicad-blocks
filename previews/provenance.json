@@ -1,12 +1,32 @@
 {
   "assets": {
-    "block-picker-filtered.png": "0bf6ce5d5e6641eb947faabe71854f3dfc774b5bda05c76c80486a974af00371",
-    "block-picker-initial.png": "c3ac3b6340ba5e1aed8b66539a1c7865193299fba6377890fa5a50f531a3595d",
-    "block-picker-profile.png": "d67f423590b493a5d0336450e4b415c3c13c53aab245210dee82dc4a843070be",
-    "block-picker-workflow.gif": "54978a81b62dff542d2b8e83a15e96bce90469f17b79731f7ea0bda90824dd55",
-    "functional-block-facade.svg": "6b8f31dc158aaa832c757059aeabacb81db8d6d58a1b98dec6bf7cd94116ad27",
-    "functional-block-implementation.kicad_sch": "739d357c453e519f4dc9b4d8fb01817badf605f1b5a98dbddaa1a2871bdb53c0",
-    "functional-block-implementation.svg": "ee06b461181005160920fabf588f7b974452bfb16d3193ea9abedcb101616954"
+    "block-picker-filtered.png": "e7abeafe7f176e6fb3c9edb92b8dd09a8911a3e52e0eae664346a2d129c2387f",
+    "block-picker-initial.png": "ce72adc78a6b5acf36890c852e8158a13296281c0f935c3c1b13c8f756daa140",
+    "block-picker-profile.png": "b21d74a2633eec5b0f50f374f5d59302cd57cd60feffa9fcbffcea0be9ea557b",
+    "block-picker-workflow.gif": "337e9416e80c6329e0cdb4e6db0d8a7031f3b6ffb7f0159eede7230d1f1ec3bf",
+    "create-block-form-dark.png": "2a3e160c182dd3cb9003fea241a90ba40e4c34fc803e7acd8f11df9aaae4c4e7",
+    "create-block-form-light.png": "6d586cde1731a4d7696448ef05108b15fb9d42f2ca1068c4886d83857200dace",
+    "functional-block-facade.svg": "61e009034a05d867d011cb16880def15b056ed61735403e58232a27abbbc486d",
+    "functional-block-implementation.kicad_sch": "8979a0ab4580ee11de623442577a8e571f947457b69032dccf5983b194523b3b",
+    "functional-block-implementation.svg": "c83fa58962ebad7d268a8d69778916f676e0dbf036409ca6ac2ca45bf5afc2e1",
+    "implementation-details-dark.png": "73f171355d4f222ce4a876324d001b9cfe29cb218037438e5efe22438005862e",
+    "implementation-details-light.png": "db98c11b8bb5005897ca4c7048a2341576eaccab79e367c64e16abfae48f4d3f",
+    "implementation-variants-dark.png": "f16bf4d152f42659c8329e63499a17b51336f6a6f8d9c30ef47117ed4a3c1085",
+    "implementation-variants-light.png": "0da742b70ce554f6060190ac851f41a31f4cd5aba7c3f9f3ab773dc77f8d6a15",
+    "instance-configuration-dark.png": "20f7132125b6af9e0e66606f7026e39b688382a0d1d3ebcd8af0e2ac463224ca",
+    "instance-configuration-light.png": "3d9ab2cf2b0d5f80056a7eb213c29ca2c673cfe1ed3960f4dcf526a86f02c312",
+    "library-browser-dark.png": "41d73250003c149186223a838af434fd4caacc5676e008ff66198824b4e86b00",
+    "library-browser-details-dark.png": "ca7fed095d6c3335e403b6771114225bacbe8b83f423a1ed451ce57044226571",
+    "library-browser-details-light.png": "2980bda6ad1c2526a5991daf1810c3b0c5e4d058d8e589026767730141625307",
+    "library-browser-light.png": "8609f7dffce50afd15cff7431ac2f1d20b44075913279be7c120e80b0f499501",
+    "library-folders-dark.png": "c3599f4e52b58cbc04282e2899b6d3c681cbae137c452a0801a5e0419f04c041",
+    "library-folders-light.png": "4222fb74b0d17ef2bd60c64682c41f6337ef9001c70f2ca560bcdcb7d7188151",
+    "task-hub-checks-pcb-dark.png": "d0c4d5131549e043eea2b3386730fa4cde5157c2de00bd27e22bfd661e5e44cf",
+    "task-hub-checks-pcb-light.png": "30ba2ee05d8e4336e1903c6836db4bdfd8c7595aee24bc68d079b99d4c58d163",
+    "task-hub-dark.png": "5d06ccd07fa326efc1065ef074daa48f865453ba9120ff285f64d069df9087a4",
+    "task-hub-edit-maintain-dark.png": "fe4e9ce1120c8af4e483a4833849c448d06d8d48580dc344bfb2db4ac27ae32d",
+    "task-hub-edit-maintain-light.png": "53ff2343d5331a3c75d871c2352c1636dbbce48b958fa8ef02a5227f39dd6c9e",
+    "task-hub-light.png": "27d6ebabb795d0c62bcea8ef75609b9470868bd6f91fbee85d775b822c78b710"
   },
   "example": {
     "component": "STUSB4500QTR",
@@ -15,7 +35,7 @@
     "manufacturer": "STMicroelectronics",
     "reference": "Figure 10, page 26/42"
   },
-  "source_commit": "f1dd36d194c2f2cda8ccedca0eada797e71e0f63",
-  "workflow_run_id": "43339060802",
-  "workflow_run_number": "473"
+  "source_commit": "0c8f7696c9ff2edbb94f93080015b9648fde7577",
+  "workflow_run_id": "43436575927",
+  "workflow_run_number": "524"
 }
