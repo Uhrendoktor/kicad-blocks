@@ -2464,89 +2464,331 @@ def _save_block_variants(record, variants: list[dict]) -> None:
         (block_path / filename).unlink(missing_ok=True)
 
 
+def _pick_kicad_file(
+    parent,
+    *,
+    title: str,
+    suffix: str,
+    initial_path: str | Path = "",
+) -> str | None:
+    """Choose a KiCad file with a themed, in-app browser instead of a native dialog."""
+    dialog = tk.Toplevel(parent)
+    dialog.title(title)
+    dialog.transient(parent)
+    _set_window_geometry(dialog, 760, 560, 560, 420)
+    dialog.grab_set()
+
+    initial = Path(initial_path).expanduser() if initial_path else Path.cwd()
+    directory = initial.parent if initial.is_file() else initial
+    if not directory.is_dir():
+        directory = Path.cwd()
+    directory_var = tk.StringVar(value=str(directory))
+    filename_var = tk.StringVar(value=initial.name if initial.is_file() else "")
+    result = [None]
+    entries: dict[str, Path] = {}
+
+    frame = ttk.Frame(dialog, padding=12)
+    frame.pack(fill="both", expand=True)
+    ttk.Label(frame, text="Folder").grid(row=0, column=0, sticky="w")
+    path_entry = ttk.Entry(frame, textvariable=directory_var)
+    path_entry.grid(row=1, column=0, sticky="ew", pady=(3, 8))
+    list_frame = ttk.Frame(frame)
+    list_frame.grid(row=2, column=0, sticky="nsew")
+    list_frame.columnconfigure(0, weight=1)
+    list_frame.rowconfigure(0, weight=1)
+    tree = ttk.Treeview(
+        list_frame,
+        columns=("kind",),
+        show="tree headings",
+        selectmode="browse",
+    )
+    tree.heading("#0", text="Name")
+    tree.heading("kind", text="Type")
+    tree.column("#0", width=470, minwidth=260, stretch=True)
+    tree.column("kind", width=100, minwidth=80, stretch=False)
+    scrollbar = ttk.Scrollbar(
+        list_frame, orient="vertical", command=tree.yview, style="Vertical.TScrollbar"
+    )
+    tree.configure(yscrollcommand=scrollbar.set)
+    tree.grid(row=0, column=0, sticky="nsew")
+    scrollbar.grid(row=0, column=1, sticky="ns")
+    ttk.Label(frame, text="File name").grid(row=3, column=0, sticky="w", pady=(8, 0))
+    filename_entry = ttk.Entry(frame, textvariable=filename_var)
+    filename_entry.grid(row=4, column=0, sticky="ew", pady=(3, 10))
+    buttons = ttk.Frame(frame)
+    buttons.grid(row=5, column=0, sticky="ew")
+    frame.columnconfigure(0, weight=1)
+    frame.rowconfigure(2, weight=1)
+
+    def render(folder: Path) -> None:
+        try:
+            folder = folder.expanduser().resolve()
+            children = list(folder.iterdir())
+        except OSError as exc:
+            messagebox.showerror(title, f"Could not read this folder:\n{exc}", parent=dialog)
+            return
+        directory_var.set(str(folder))
+        tree.delete(*tree.get_children())
+        entries.clear()
+        directories = sorted(
+            (item for item in children if item.is_dir()),
+            key=lambda item: item.name.casefold(),
+        )
+        files = sorted(
+            (
+                item for item in children
+                if item.is_file() and item.suffix.casefold() == suffix.casefold()
+            ),
+            key=lambda item: item.name.casefold(),
+        )
+        for item in [*directories, *files]:
+            iid = str(len(entries))
+            entries[iid] = item
+            is_directory = item.is_dir()
+            tree.insert(
+                "",
+                "end",
+                iid=iid,
+                text=("▸ " if is_directory else "  ") + item.name,
+                values=("Folder" if is_directory else suffix.upper().lstrip("."),),
+            )
+        if not directories and not files:
+            tree.insert("", "end", iid="empty", text="No matching files", values=("",))
+        tree.selection_remove(tree.selection())
+
+    def navigate(_event=None):
+        raw = Path(directory_var.get()).expanduser()
+        if raw.is_dir():
+            render(raw)
+        else:
+            messagebox.showerror(title, "Enter an existing folder path.", parent=dialog)
+
+    def selected_entry(_event=None):
+        selection = tree.selection()
+        if not selection or selection[0] not in entries:
+            return
+        selected = entries[selection[0]]
+        if selected.is_dir():
+            filename_var.set("")
+        else:
+            filename_var.set(selected.name)
+
+    def open_selected(_event=None):
+        selection = tree.selection()
+        selected = entries.get(selection[0]) if selection else None
+        if selected is not None and selected.is_dir():
+            render(selected)
+            return "break"
+        choose()
+        return "break"
+
+    def choose():
+        raw_name = filename_var.get().strip()
+        if not raw_name:
+            messagebox.showerror(title, "Select a file.", parent=dialog)
+            return
+        selected = Path(raw_name).expanduser()
+        if not selected.is_absolute():
+            selected = Path(directory_var.get()).expanduser() / selected
+        selected = selected.resolve()
+        if (
+            not selected.is_file()
+            or selected.suffix.casefold() != suffix.casefold()
+        ):
+            messagebox.showerror(
+                title,
+                f"Choose an existing {suffix} file.",
+                parent=dialog,
+            )
+            return
+        result[0] = str(selected)
+        dialog.destroy()
+
+    ttk.Button(buttons, text="Up", command=lambda: render(Path(directory_var.get()).parent)).pack(side="left")
+    ttk.Button(buttons, text="Cancel", command=dialog.destroy).pack(side="right")
+    ttk.Button(buttons, text="Select file", command=choose).pack(side="right", padx=(0, 8))
+    path_entry.bind("<Return>", navigate)
+    filename_entry.bind("<Return>", lambda _event: choose())
+    tree.bind("<<TreeviewSelect>>", selected_entry)
+    tree.bind("<Double-1>", open_selected)
+    render(directory)
+    filename_entry.focus_set()
+    dialog.wait_window()
+    return result[0]
+
+
+def _new_blank_schematic_source() -> Path:
+    """Create a valid empty KiCad schematic as a temporary source for a new variant."""
+    import uuid as uuid_module
+
+    descriptor, filename = tempfile.mkstemp(prefix="kicad-blocks-implementation-", suffix=".kicad_sch")
+    os.close(descriptor)
+    path = Path(filename)
+    path.write_text(
+        "(kicad_sch (version 20250114) (generator \"eeschema\")\n"
+        f"  (uuid \"{uuid_module.uuid4()}\")\n"
+        '  (paper "A4")\n'
+        "  (lib_symbols)\n"
+        '  (sheet_instances (path "/" (page "1")))\n'
+        "  (embedded_fonts no)\n"
+        ")\n",
+        encoding="utf-8",
+    )
+    return path
+
+
 def _ask_implementation_details(
     parent,
     *,
     value: str = "",
     source: str = "",
+    record=None,
+    allow_create: bool = False,
 ) -> tuple[str, str] | None:
-    """Collect an implementation value and schematic path in one focused dialog."""
+    """Collect an implementation selector and its starting schematic."""
     dialog = tk.Toplevel(parent)
     dialog.title("Implementation details")
     dialog.transient(parent)
-    _set_window_geometry(dialog, 760, 290, 620, 250)
+    _set_window_geometry(dialog, 780, 390 if allow_create else 320, 640, 300 if allow_create else 260)
     frame = ttk.Frame(dialog, padding=16)
     frame.pack(fill="both", expand=True)
     ttk.Label(
         frame,
-        text="Implementation variant",
+        text="New circuit implementation",
         font=("TkDefaultFont", 12, "bold"),
     ).grid(row=0, column=0, columnspan=3, sticky="w", pady=(0, 14))
 
-    ttk.Label(frame, text="Variant value").grid(
+    ttk.Label(frame, text="Implementation selector (KB_VARIANT)").grid(
         row=1, column=0, columnspan=3, sticky="w"
     )
-    variant_value = tk.StringVar(value=value)
-    value_entry = ttk.Entry(frame, textvariable=variant_value)
-    value_entry.grid(row=2, column=0, columnspan=3, sticky="ew", pady=(4, 12))
+    selector_value = tk.StringVar(value=value)
+    selector_entry = ttk.Entry(frame, textvariable=selector_value)
+    selector_entry.grid(row=2, column=0, columnspan=3, sticky="ew", pady=(4, 12))
 
-    ttk.Label(frame, text="Implementation schematic (.kicad_sch)").grid(
-        row=3, column=0, columnspan=3, sticky="w"
-    )
+    mode_value = tk.StringVar(value="Choose a schematic file")
     source_value = tk.StringVar(value=source)
+    copy_value = tk.StringVar()
+    copy_sources: dict[str, Path] = {}
+    if allow_create:
+        ttk.Label(frame, text="Starting point").grid(
+            row=3, column=0, columnspan=3, sticky="w"
+        )
+        modes = [
+            "Choose a schematic file",
+            "Create a new empty schematic",
+            "Copy an existing implementation",
+        ]
+        mode_combo = ttk.Combobox(
+            frame, textvariable=mode_value, values=modes, state="readonly"
+        )
+        mode_combo.grid(row=4, column=0, columnspan=3, sticky="ew", pady=(4, 12))
+    else:
+        modes = ["Choose a schematic file"]
+        mode_combo = None
+
+    source_label = ttk.Label(frame, text="Source schematic (.kicad_sch)")
+    source_label.grid(row=5, column=0, columnspan=3, sticky="w")
     source_entry = ttk.Entry(frame, textvariable=source_value)
-    source_entry.grid(row=4, column=0, columnspan=2, sticky="ew", pady=(4, 14))
+    source_entry.grid(row=6, column=0, columnspan=2, sticky="ew", pady=(4, 14))
+    browse_button = ttk.Button(frame, text="Choose file…")
+    browse_button.grid(row=6, column=2, sticky="ew", padx=(8, 0), pady=(4, 14))
+    copy_combo = ttk.Combobox(
+        frame,
+        textvariable=copy_value,
+        values=(),
+        state="readonly",
+    )
+    copy_combo.grid(row=6, column=0, columnspan=3, sticky="ew", pady=(4, 14))
+    copy_combo.grid_remove()
 
     def browse():
-        initial = Path(source_value.get()).expanduser()
-        options = {
-            "title": "Choose implementation schematic",
-            "filetypes": [("KiCad schematic", "*.kicad_sch")],
-            "parent": dialog,
-        }
-        if initial.is_file():
-            options["initialdir"] = str(initial.parent)
-            options["initialfile"] = initial.name
-        elif initial.parent.is_dir():
-            options["initialdir"] = str(initial.parent)
-        selected = filedialog.askopenfilename(**options)
+        selected = _pick_kicad_file(
+            dialog,
+            title="Choose implementation schematic",
+            suffix=".kicad_sch",
+            initial_path=source_value.get(),
+        )
         if selected:
             source_value.set(selected)
             source_entry.xview_moveto(1.0)
 
-    ttk.Button(frame, text="Browse…", command=browse).grid(
-        row=4, column=2, sticky="ew", padx=(8, 0), pady=(4, 14)
-    )
-    frame.columnconfigure(0, weight=1)
-    frame.columnconfigure(1, weight=1)
+    browse_button.configure(command=browse)
 
+    def update_source_mode(_event=None):
+        mode = mode_value.get()
+        copy_combo.grid_remove()
+        source_entry.grid_remove()
+        browse_button.grid_remove()
+        if mode == "Create a new empty schematic":
+            source_label.configure(text="The new implementation starts as a blank KiCad schematic.")
+        elif mode == "Copy an existing implementation":
+            source_label.configure(text="Copy this library implementation:")
+            source_entry.grid_remove()
+            browse_button.grid_remove()
+            copy_combo.grid()
+            copy_combo.set(next(iter(copy_sources), ""))
+        else:
+            source_label.configure(text="Source schematic (.kicad_sch)")
+            source_entry.grid()
+            browse_button.grid()
+
+    if allow_create:
+        for label, path in [
+            ("Default implementation", Path(record.path) / str(record.manifest["implementation_file"]))
+        ] + [
+            (str(item["value"]), Path(record.path) / str(item["file"]))
+            for item in record.manifest.get("variants", [])
+        ]:
+            copy_sources[label] = path
+        copy_combo.configure(values=list(copy_sources))
+        mode_combo.bind("<<ComboboxSelected>>", update_source_mode)
+    else:
+        copy_sources.clear()
+
+    frame.columnconfigure(0, weight=1)
     result = [None]
 
     def accept():
-        selected_value = variant_value.get().strip()
-        selected_source = Path(source_value.get()).expanduser().resolve()
+        selected_value = selector_value.get().strip()
         if not selected_value:
             messagebox.showerror(
-                "Implementation details", "Enter a variant value.", parent=dialog
-            )
-            value_entry.focus_set()
-            return
-        if (
-            not selected_source.is_file()
-            or selected_source.suffix.casefold() != ".kicad_sch"
-        ):
-            messagebox.showerror(
                 "Implementation details",
-                "Choose an existing KiCad .kicad_sch implementation.",
+                "Enter an implementation selector.",
                 parent=dialog,
             )
-            source_entry.focus_set()
+            selector_entry.focus_set()
             return
+        mode = mode_value.get()
+        if allow_create and mode == "Create a new empty schematic":
+            selected_source = _new_blank_schematic_source()
+        elif allow_create and mode == "Copy an existing implementation":
+            selected_source = copy_sources.get(copy_value.get())
+            if selected_source is None or not selected_source.is_file():
+                messagebox.showerror(
+                    "Implementation details",
+                    "Choose an existing library implementation to copy.",
+                    parent=dialog,
+                )
+                copy_combo.focus_set()
+                return
+        else:
+            selected_source = Path(source_value.get()).expanduser().resolve()
+            if (
+                not selected_source.is_file()
+                or selected_source.suffix.casefold() != ".kicad_sch"
+            ):
+                messagebox.showerror(
+                    "Implementation details",
+                    "Choose an existing KiCad .kicad_sch implementation.",
+                    parent=dialog,
+                )
+                source_entry.focus_set()
+                return
         result[0] = (selected_value, str(selected_source))
         dialog.destroy()
 
     buttons = ttk.Frame(frame)
-    buttons.grid(row=5, column=0, columnspan=3, sticky="ew")
+    buttons.grid(row=7, column=0, columnspan=3, sticky="ew", pady=(0, 2))
     ttk.Button(buttons, text="Cancel", command=dialog.destroy).pack(side="right")
     ttk.Button(buttons, text="Use implementation", command=accept).pack(
         side="right", padx=(0, 8)
@@ -2556,9 +2798,11 @@ def _ask_implementation_details(
     dialog.grab_set()
     dialog.update_idletasks()
     source_entry.xview_moveto(1.0)
-    value_entry.focus_set()
+    selector_entry.focus_set()
     dialog.wait_window()
     return result[0]
+
+
 
 
 def _show_block_variant_editor(record, parent) -> None:
@@ -2593,8 +2837,8 @@ def _show_block_variant_editor(record, parent) -> None:
         show="headings",
         selectmode="browse",
     )
-    tree.heading("value", text="Variant value")
-    tree.heading("file", text="Implementation file")
+    tree.heading("value", text="Implementation selector")
+    tree.heading("file", text="Schematic file")
     tree.column("value", width=220, minwidth=160, stretch=False)
     tree.column("file", width=620, minwidth=300, stretch=True)
     scroll = ttk.Scrollbar(
@@ -2618,15 +2862,22 @@ def _show_block_variant_editor(record, parent) -> None:
 
     def render(selected_index: int | None = None):
         tree.delete(*tree.get_children())
-        for index, item in enumerate(variants):
+        tree.insert(
+            "",
+            "end",
+            iid="0",
+            values=("Default (no KB_VARIANT)", str(record.manifest["implementation_file"])),
+            tags=("even",),
+        )
+        for index, item in enumerate(variants, start=1):
             tree.insert(
                 "",
                 "end",
                 iid=str(index),
                 values=(item["value"], item["file"]),
-                tags=("even" if index % 2 == 0 else "odd",),
+                tags=("odd" if index % 2 else "even",),
             )
-        if selected_index is not None and 0 <= selected_index < len(variants):
+        if selected_index is not None and 0 <= selected_index <= len(variants):
             iid = str(selected_index)
             tree.selection_set(iid)
             tree.focus(iid)
@@ -2637,13 +2888,16 @@ def _show_block_variant_editor(record, parent) -> None:
         return int(selection[0]) if selection else None
 
     def update_actions(_event=None):
-        has_selection = selected_index() is not None
-        edit_button.configure(state="normal" if has_selection else "disabled")
-        remove_button.configure(state="normal" if has_selection else "disabled")
+        row_index = selected_index()
+        has_alternative = row_index is not None and row_index > 0
+        edit_button.configure(state="normal" if has_alternative else "disabled")
+        remove_button.configure(state="normal" if has_alternative else "disabled")
         save_button.configure(state="normal" if dirty[0] else "disabled")
 
     def add_variant():
-        details = _ask_implementation_details(dialog)
+        details = _ask_implementation_details(
+            dialog, record=record, allow_create=True
+        )
         if details is None:
             return
         value, source = details
@@ -2659,9 +2913,10 @@ def _show_block_variant_editor(record, parent) -> None:
         render(len(variants) - 1)
 
     def edit_variant():
-        index = selected_index()
-        if index is None:
+        row_index = selected_index()
+        if row_index is None or row_index == 0:
             return
+        index = row_index - 1
         current = variants[index]
         current_source = current.get("source") or str(
             Path(record.path) / current["file"]
@@ -2670,6 +2925,7 @@ def _show_block_variant_editor(record, parent) -> None:
             dialog,
             value=current["value"],
             source=current_source,
+            record=record,
         )
         if details is None:
             return
@@ -2690,12 +2946,13 @@ def _show_block_variant_editor(record, parent) -> None:
         render(index)
 
     def remove_variant():
-        index = selected_index()
-        if index is None:
+        row_index = selected_index()
+        if row_index is None or row_index == 0:
             return
+        index = row_index - 1
         variants.pop(index)
         dirty[0] = True
-        render(min(index, len(variants) - 1) if variants else None)
+        render(min(row_index, len(variants)) if variants else 0)
 
     def save_and_close():
         if not dirty[0]:
@@ -2732,7 +2989,7 @@ def _show_block_variant_editor(record, parent) -> None:
     tree.bind("<<TreeviewSelect>>", update_actions)
     tree.bind("<Double-1>", lambda _event: edit_variant())
     tree.bind("<Delete>", lambda _event: remove_variant())
-    render()
+    render(0)
     dialog.grab_set()
     dialog.wait_window()
 
