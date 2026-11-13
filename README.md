@@ -1,8 +1,8 @@
 # KiCad Blocks
 
-**Same circuit in another KiCad project? Place one symbol instead of copying schematic sheets and files.**
+**Use one normal library symbol for a complete circuit, and choose its internal implementation separately for each instance.**
 
-Clone or download a block library, register its folder once, then browse and place blocks from the KiCad Blocks picker. The full editable circuit stays in the library; KiCad Blocks creates the project-specific facade symbol for each project.
+Only the symbol and its pins appear in the project schematic; the full editable, nestable implementation stays in a shared block library. Register or clone the library once, then browse and place blocks in any project. Each instance can use a different circuit variant, profile, parameter set or PCB layout.
 
 [![CI](https://github.com/Uhrendoktor/kicad-blocks/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Uhrendoktor/kicad-blocks/actions/workflows/ci.yml)
 [![MIT License](https://img.shields.io/github/license/Uhrendoktor/kicad-blocks)](LICENSE)
@@ -18,7 +18,7 @@ Clone or download a block library, register its folder once, then browse and pla
 - **Project-local copies.** Make an independent copy for a project and synchronize it with the shared version later. Conflicting edits are detected rather than silently overwritten.
 - **Related design data.** Include nested block dependencies and optional pre-routed PCB layouts. Recursive ERC and BOM actions can inspect the implementation.
 
-> **How it relates to KiCad:** KiCad already has native [Design Blocks](https://docs.kicad.org/10.0/en/eeschema/eeschema.html#design-blocks) for reusing schematic fragments and optional PCB layout snippets. KiCad Blocks uses a different workflow: a facade symbol backed by a separately maintained implementation, with per-instance variants and profiles, local-copy synchronization, and recursive checks. Native Design Blocks are useful for schematic-fragment reuse; KiCad Blocks is for using a complete subsystem like a library component.
+> KiCad's native [Design Blocks](https://docs.kicad.org/10.0/en/eeschema/eeschema.html#design-blocks) already share schematic fragments and optional PCB layouts. KiCad Blocks exposes a separately stored, nestable implementation through a normal library symbol, with implementation variants selectable per instance.
 
 ## How it works
 
