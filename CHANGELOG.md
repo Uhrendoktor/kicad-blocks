@@ -3,6 +3,12 @@
 ## 1.1.0 — 2026-11-12
 
 ### Added
+- Restore standalone toolbar actions for browsing/placing blocks, creating from a selected sheet, and opening an implementation; retain the grouped task hub as a menu command.
+- Add explicit create, change-path, unregister, and default-folder controls to library management.
+- Follow desktop light/dark appearance, with a `KICAD_BLOCKS_THEME` override, and support high-resolution trackpad scrolling in the task hub and library dialogs.
+
+### Changed
+- Remove the duplicate “Quick place a block” picker; block selection now happens in the library browser.
 - Create opaque blocks from selected hierarchical sheets; facade pins and electrical types are derived from root-sheet hierarchical labels.
 - Preserve nested hierarchical-sheet trees inside a block by copying child schematics, rewriting Sheetfile references, and rebasing instance paths.
 - Edit facade symbols in KiCad Symbol Editor and reconcile catalog artwork with revisioned block assets.

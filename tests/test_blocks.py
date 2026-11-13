@@ -140,24 +140,41 @@ class BlockModelTests(unittest.TestCase):
         self.assertTrue(manifest["actions"])
         expected_scopes = {
             "open-hub": ["schematic"],
+            "manage-library": ["schematic"],
+            "create-block": ["schematic"],
+            "open-implementation": ["schematic"],
             "place-imported-layout": ["pcb"],
+        }
+        expected_entrypoints = {
+            "open-hub": "entrypoints/action_hub.py",
+            "manage-library": "entrypoints/browse_blocks.py",
+            "create-block": "entrypoints/create_block.py",
+            "open-implementation": "entrypoints/open_implementation.py",
+            "place-imported-layout": "place_imported_layout.py",
+        }
+        expected_buttons = {
+            "open-hub": False,
+            "manage-library": True,
+            "create-block": True,
+            "open-implementation": True,
+            "place-imported-layout": True,
         }
         self.assertEqual(
             {action["identifier"] for action in manifest["actions"]},
             set(expected_scopes),
         )
         for action in manifest["actions"]:
-            self.assertTrue(action["identifier"])
+            identifier = action["identifier"]
+            self.assertTrue(identifier)
             self.assertTrue(action["entrypoint"])
-            self.assertEqual(action["scopes"], expected_scopes[action["identifier"]])
-            self.assertTrue((PLUGIN / action["entrypoint"]).is_file())
-            # IPC Python action args are passed before the script entrypoint.
-            # Passing an action ID here makes Python try to execute it as a file.
+            self.assertEqual(action["scopes"], expected_scopes[identifier])
+            self.assertEqual(action["entrypoint"], expected_entrypoints[identifier])
             self.assertEqual(action.get("args", []), [])
-            if action["identifier"] == "open-hub":
-                self.assertEqual(action["entrypoint"], "entrypoints/action_hub.py")
-            else:
-                self.assertEqual(action["entrypoint"], "place_imported_layout.py")
+            self.assertEqual(action.get("show-button", False), expected_buttons[identifier])
+            self.assertTrue((PLUGIN / action["entrypoint"]).is_file())
+            if identifier in {"manage-library", "create-block", "open-implementation"}:
+                self.assertIn("icons-light", action)
+                self.assertIn("icons-dark", action)
             for key in ("icons-light", "icons-dark"):
                 for icon in action.get(key, []):
                     self.assertTrue((PLUGIN / icon).is_file(), icon)
