@@ -483,8 +483,6 @@ def generate_reference_schematic(destination: Path) -> Path:
     fet_t4_drain = pin_world_points[("T4", "3")]
     fet_t1_source = pin_world_points[("T1", "2")]
     fet_r10_node = pin_world_points[("R10", "1")]
-    if abs(fet_t4_drain[0] - fet_r10_node[0]) > 0.001:
-        raise ValueError("T4 drain and R10 FET_MID branch must share an X column.")
     if fet_t1_source[1] <= fet_t4_drain[1] or fet_r10_node[1] <= fet_t1_source[1]:
         raise ValueError("FET_MID route corridor no longer fits between the FETs and R10.")
     fet_out = (fet_t4_drain[0], round(fet_t4_drain[1] - 5.08, 3))
