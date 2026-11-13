@@ -1,0 +1,12 @@
+# Pin the reviewed Ruff baseline instead of inheriting implicit defaults.
+# New lint families require an explicit repository-wide review before adoption.
+line-length = 88
+target-version = "py312"
+
+[lint]
+select = ["E4", "E7", "E9", "F"]
+
+[format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "lf"
