@@ -7,8 +7,6 @@ import unittest
 from pathlib import Path
 
 PLUGIN = Path(__file__).resolve().parents[1] / "plugin" / "kicad-blocks"
-sys.path.insert(0, str(PLUGIN))
-
 from kicad_blocks.extraction import extract_hierarchical_pins
 from kicad_blocks.model import (
     facade_pin_connection_points,
