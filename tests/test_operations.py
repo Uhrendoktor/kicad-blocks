@@ -11,8 +11,6 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 PLUGIN = Path(__file__).resolve().parents[1] / "plugin" / "kicad-blocks"
-sys.path.insert(0, str(PLUGIN))
-
 from kicad_blocks.model import parse_parameters, parse_pins
 from kicad_blocks.operations import export_block_bom, validate_block_tree
 from kicad_blocks.repository import add_dependency, create_block
