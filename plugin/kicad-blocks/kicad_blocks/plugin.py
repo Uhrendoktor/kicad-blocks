@@ -2424,7 +2424,10 @@ def _save_block_variants(record, variants: list[dict]) -> None:
             files_to_copy.append((source, destination))
             added_files.add(filename)
         retained_files.add(filename)
-        normalized.append({"value": value, "file": filename})
+        variant_descriptor = {"value": value, "file": filename}
+        if item.get("layout_id"):
+            variant_descriptor["layout_id"] = str(item["layout_id"]).casefold()
+        normalized.append(variant_descriptor)
 
     available_values = {item["value"].casefold() for item in normalized}
     dangling_profiles = [
@@ -2819,7 +2822,9 @@ def _ask_implementation_details(
 
 
 
-def _show_block_variant_editor(record, parent) -> None:
+def _show_block_variant_editor(
+    record, parent, *, kicad=None, editor_window_id: str | None = None
+) -> Path | None:
     """Manage named implementation variants after the block has been created."""
     dialog = tk.Toplevel(parent)
     dialog.title(f"Implementations — {record.name}")
@@ -2873,6 +2878,7 @@ def _show_block_variant_editor(record, parent) -> None:
         for item in record.manifest.get("variants", [])
     ]
     dirty = [False]
+    new_implementation_to_open = [None]
 
     def render(selected_index: int | None = None):
         tree.delete(*tree.get_children())
@@ -2922,9 +2928,13 @@ def _show_block_variant_editor(record, parent) -> None:
                 parent=dialog,
             )
             return
-        variants.append({"value": value, "source": source})
+        variants.append({
+            "value": value,
+            "source": source,
+            "open_after_save": True,
+        })
         dirty[0] = True
-        render(len(variants) - 1)
+        render(len(variants))
 
     def edit_variant():
         row_index = selected_index()
@@ -2957,7 +2967,7 @@ def _show_block_variant_editor(record, parent) -> None:
             return
         variants[index] = {"value": value, "source": source}
         dirty[0] = True
-        render(index)
+        render(row_index)
 
     def remove_variant():
         row_index = selected_index()
@@ -2972,9 +2982,26 @@ def _show_block_variant_editor(record, parent) -> None:
         if not dirty[0]:
             dialog.destroy()
             return
+        open_value = next(
+            (
+                str(item["value"])
+                for item in variants
+                if item.get("open_after_save")
+            ),
+            None,
+        )
         try:
             _save_block_variants(record, variants)
-        except (OSError, RuntimeError, TypeError, ValueError, KeyError) as exc:
+            if open_value:
+                from .repository import read_manifest
+
+                saved = read_manifest(Path(record.path))
+                variant = next(
+                    item for item in saved.get("variants", [])
+                    if str(item.get("value", "")).casefold() == open_value.casefold()
+                )
+                new_implementation_to_open[0] = Path(record.path) / variant["file"]
+        except (OSError, RuntimeError, TypeError, ValueError, KeyError, StopIteration) as exc:
             messagebox.showerror(
                 "Save implementation variants", str(exc), parent=dialog
             )
@@ -3006,6 +3033,7 @@ def _show_block_variant_editor(record, parent) -> None:
     render(0)
     dialog.grab_set()
     dialog.wait_window()
+    return new_implementation_to_open[0]
 
 
 def _show_library_roots_dialog(parent) -> bool:
@@ -3633,8 +3661,20 @@ def _show_library_browser(
         if record is None:
             return
         try:
-            _show_block_variant_editor(record, window)
+            new_implementation = _show_block_variant_editor(
+                record,
+                window,
+                kicad=kicad,
+                editor_window_id=editor_window_id,
+            )
             refresh_records()
+            if new_implementation is not None:
+                _launch_block_asset(
+                    kicad,
+                    new_implementation,
+                    "implementation schematic",
+                    editor_window_id=editor_window_id,
+                )
         except Exception as exc:
             LOG.exception("Could not update implementation variants")
             messagebox.showerror("Manage implementations", str(exc), parent=window)
