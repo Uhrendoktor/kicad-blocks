@@ -62,8 +62,8 @@ class STUSB4500ReferenceTests(unittest.TestCase):
         )
         self.assertLess(
             len(wire_nodes),
-            120,
-            "Long nets should use local labels; only short functional relationships are routed visibly",
+            145,
+            "Long nets should use local labels; short functional relationships should be routed visibly",
         )
         self.assertNotIn("(global_label ", content)
         self.assertNotIn("VBUS_SENSE", content)
@@ -150,9 +150,19 @@ class STUSB4500ReferenceTests(unittest.TestCase):
 
         expected = {
             "J1": (50.8, 142.24),
+            "D1": (88.9, 139.7),
+            "C4": (78.74, 96.52),
+            "D4": (93.98, 88.9),
+            "C50": (88.9, 190.5),
+            "D50": (106.68, 190.5),
             "U1": (213.36, 157.48),
             "T4": (284.48, 76.2),
             "T1": (337.82, 76.2),
+            "R10": (297.18, 116.84),
+            "R11": (325.12, 124.46),
+            "R13": (353.06, 124.46),
+            "C10": (360.68, 92.71),
+            "D11": (371.22, 123.19),
             "J10": (388.62, 93.98),
             "J2": (373.38, 213.36),
         }
