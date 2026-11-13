@@ -2268,11 +2268,18 @@ def _draw_facade_preview(canvas, record) -> None:
 def _block_overview_text(record) -> str:
     """Summarize a block in terms useful to circuit designers."""
     manifest = record.manifest
-    lines = ["Purpose"]
     description = str(manifest.get("description", "") or "").strip()
-    lines.extend([description or "No description has been added yet.", ""])
     pins = manifest.get("pins", [])
-    lines.append(f"Connections · {len(pins)}")
+    parameters = manifest.get("parameters", [])
+    variants = manifest.get("variants", [])
+    layouts = _layout_choices(record)
+    profiles = manifest.get("profiles", [])
+    lines = [
+        "Purpose",
+        description or "No description has been added yet.",
+        "",
+        f"Connections · {len(pins)}",
+    ]
     if pins:
         lines.extend(
             f"  {pin.get('name', 'Unnamed')}  ·  {str(pin.get('electrical_type', 'passive')).replace('_', ' ').title()}"
@@ -2280,9 +2287,7 @@ def _block_overview_text(record) -> str:
         )
     else:
         lines.append("  No external connections")
-    lines.append("")
-    parameters = manifest.get("parameters", [])
-    lines.append("Configurable settings")
+    lines.extend(["", "Configurable settings"])
     if parameters:
         lines.extend(
             f"  {item.get('name')}  ·  {item.get('type', 'text')}  ·  default: {item.get('default', '')}"
@@ -2290,28 +2295,37 @@ def _block_overview_text(record) -> str:
         )
     else:
         lines.append("  No configurable settings declared")
-    lines.append("")
-    variants = manifest.get("variants", [])
-    lines.append("Circuit implementations")
-    lines.extend([f"  {item.get('value')}" for item in variants] if variants else ["  One implementation"])
-    lines.append("")
-    layouts = _layout_choices(record)
-    lines.append("PCB layout options")
-    lines.extend([f"  {item.get('name', item.get('id'))}" for item in layouts] if layouts else ["  No stored PCB layout"])
-    lines.append("")
-    profiles = manifest.get("profiles", [])
-    lines.append("Ready-made configurations")
+    lines.extend(["", f"Circuit implementations · {len(variants) + 1}"])
+    lines.append(f"  Default · {manifest.get('implementation_file', 'implementation.kicad_sch')}")
     lines.extend(
-        [
+        f"  {item.get('value')}"
+        + (f"  ·  PCB: {item['layout_id']}" if item.get("layout_id") else "")
+        for item in variants
+    )
+    lines.extend(["", f"PCB layout options · {len(layouts)}"])
+    if layouts:
+        lines.extend(
+            f"  {item.get('name', item.get('id'))}"
+            + ("  ·  default" if str(item.get("id")) == str(manifest.get("default_layout")) else "")
+            for item in layouts
+        )
+    else:
+        lines.append("  No stored PCB layout")
+    lines.extend(["", f"Ready-made configurations · {len(profiles)}"])
+    if profiles:
+        lines.extend(
             f"  {item.get('name', item.get('id'))}"
             + (f"  ·  {item.get('description')}" if item.get("description") else "")
             for item in profiles
-        ] if profiles else ["  No named configurations"]
-    )
-    lines.extend(["", f"Library folder: {record.path.parent.name}", f"Library version: {manifest.get('version', 1)}"])
+        )
+    else:
+        lines.append("  No named configurations")
+    lines.extend([
+        "",
+        f"Library · {record.path.parent.name}",
+        f"Version · {manifest.get('version', 1)}",
+    ])
     return "\n".join(lines)
-
-
 
 
 def _launch_block_asset(
