@@ -2,7 +2,7 @@
 
 This page takes you from a supported KiCad setup to placing a block in a project. For a specific task after installation, use the [workflow guides](workflows.md).
 
-## 1. Check your setup
+## Supported environment
 
 The currently validated environment is:
 
