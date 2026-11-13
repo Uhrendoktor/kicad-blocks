@@ -34,7 +34,7 @@ Pytest modules are collected explicitly from the inventory. Standalone acceptanc
 ## Standalone acceptance scripts
 
 | Entrypoint | Execution mode | Purpose |
-| --- | --- |
+| --- | --- | --- |
 | tests/test_eeschema_gui.py | standalone-gui | Real Eeschema GUI acceptance: opens an implementation for editing, saves an edit, and verifies the source file remains intact. |
 | tests/test_instance_configuration_gui.py | standalone-gui | Real Tk/X11 instance-configuration form smoke test for interactive field editing and save/undo integration. |
 | tests/test_ipc_headless.py | standalone-ipc | Headless real KiCad schematic IPC acceptance for facade placement, instance configuration, library synchronization, and conflict protection. |
