@@ -803,7 +803,12 @@ def _merge_project_net_settings(
 
 def resolve_block_layout(block: _BlockRecordLike, layout_id: str | None = None) -> JsonObject:
     """Resolve a named layout asset, retaining support for legacy single-layout blocks."""
-    layouts = block.manifest.get("layouts") or []
+    raw_layouts = block.manifest.get("layouts")
+    layouts = (
+        [item for item in raw_layouts if isinstance(item, dict)]
+        if isinstance(raw_layouts, list)
+        else []
+    )
     if layouts:
         if layout_id is None:
             default_layout = block.manifest.get("default_layout")
@@ -832,7 +837,9 @@ def resolve_block_layout(block: _BlockRecordLike, layout_id: str | None = None) 
                 None,
             )
             if selected is None:
-                available = ", ".join(str(item.get("name", item.get("id", ""))) for item in layouts)
+                available = ", ".join(
+                    str(item.get("name", item.get("id", ""))) for item in layouts
+                )
                 raise ValueError(
                     f"Unknown PCB layout {layout_id!r} for {block.name!r}. Available: {available}."
                 )
@@ -968,7 +975,7 @@ def merge_block_layouts(
 
 def merge_block_layout(
     target_board: Path,
-    block,
+    block: _BlockRecordLike,
     output_board: Path,
     *,
     instance_reference: str,
