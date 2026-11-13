@@ -25,10 +25,12 @@ from kicad_blocks.plugin import (
     _pick_record,
     _preferred_library_selection,
     _restore_placement_windows,
+    _save_block_variants,
+    _set_window_geometry,
     _start_native_symbol_placement,
     _system_prefers_dark_theme,
 )
-from kicad_blocks.repository import create_block
+from kicad_blocks.repository import create_block, read_manifest
 
 
 class LibraryBrowserTests(unittest.TestCase):
@@ -76,10 +78,81 @@ class LibraryBrowserTests(unittest.TestCase):
         overview = _block_overview_text(self.block)
         self.assertIn("VIN", overview)
         self.assertIn("input", overview)
-        self.assertIn("OUTPUT_VOLTAGE : number = 3.3", overview)
+        self.assertIn("OUTPUT_VOLTAGE  ·  number  ·  default: 3.3", overview)
         self.assertIn("1V8", overview)
         self.assertIn("3V3", overview)
         self.assertIn("Compact", overview)
+        self.assertIn("Synchronous buck regulator", overview)
+        self.assertIn("Connections · 4", overview)
+        self.assertNotIn("Block ID", overview)
+        self.assertNotIn(str(self.block.manifest["block_id"]), overview)
+
+
+    def test_variant_metadata_can_be_added_edited_and_removed_from_library(self):
+        initial_version = read_manifest(self.filter_block.path)["version"]
+
+        _save_block_variants(
+            self.filter_block,
+            [{"value": "1V8", "source": str(self.v18)}],
+        )
+        added = read_manifest(self.filter_block.path)
+        self.assertEqual(
+            added["variants"],
+            [{"value": "1V8", "file": "implementation_1v8.kicad_sch"}],
+        )
+        variant_file = self.filter_block.path / added["variants"][0]["file"]
+        self.assertTrue(variant_file.is_file())
+        self.assertGreater(added["version"], initial_version)
+
+        _save_block_variants(
+            self.filter_block,
+            [{"value": "Low voltage", "file": added["variants"][0]["file"]}],
+        )
+        edited = read_manifest(self.filter_block.path)
+        self.assertEqual(edited["variants"][0]["value"], "Low voltage")
+        self.assertEqual(edited["variants"][0]["file"], added["variants"][0]["file"])
+
+        _save_block_variants(self.filter_block, [])
+        removed = read_manifest(self.filter_block.path)
+        self.assertEqual(removed["variants"], [])
+        self.assertFalse(variant_file.exists())
+
+    def test_variant_editor_refuses_to_remove_an_implementation_used_by_a_profile(self):
+        profiled = create_block(
+            self.root,
+            "Profiled Variant Block",
+            parse_pins("VIN:input, VOUT:output"),
+            variant_files=[{"value": "1V8", "path": self.v18}],
+            profiles=[{"name": "Low voltage", "variant": "1V8"}],
+        )
+        with self.assertRaisesRegex(ValueError, "still use an implementation"):
+            _save_block_variants(profiled, [])
+
+    def test_window_geometry_respects_display_bounds(self):
+        class FakeWindow:
+            def __init__(self):
+                self.requested_geometry = None
+                self.minimum = None
+
+            def update_idletasks(self):
+                pass
+
+            def winfo_screenwidth(self):
+                return 1366
+
+            def winfo_screenheight(self):
+                return 768
+
+            def geometry(self, value):
+                self.requested_geometry = value
+
+            def minsize(self, width, height):
+                self.minimum = (width, height)
+
+        window = FakeWindow()
+        _set_window_geometry(window, 1480, 980, 1160, 740)
+        self.assertEqual(window.requested_geometry, "1286x668+40+50")
+        self.assertEqual(window.minimum, (1160, 668))
 
     def test_record_lookup_finds_a_block_in_another_registered_library(self):
         second_root = Path(self.temp.name) / "second-library"

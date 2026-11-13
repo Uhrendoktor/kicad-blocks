@@ -104,12 +104,13 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
         schematic = SimpleNamespace(
             get_selection_as_string=Mock(return_value=selection)
         )
-        dialogs = SimpleNamespace(
-            askstring=Mock(side_effect=["Power Stage", "Power stage description"])
-        )
         messagebox = SimpleNamespace(showinfo=Mock())
         with (
-            patch.object(plugin_actions, "simpledialog", dialogs),
+            patch.object(
+                plugin_actions,
+                "_ask_create_block_details",
+                return_value=("Power Stage", "Power stage description"),
+            ) as details,
             patch.object(plugin_actions, "messagebox", messagebox),
             patch.object(plugin_actions, "create_block", return_value=self.block) as create,
             patch.object(plugin_actions, "_register_block", return_value=self.block) as register,
@@ -123,15 +124,7 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
                 "0x100",
             )
 
-        self.assertEqual(dialogs.askstring.call_count, 2)
-        self.assertEqual(
-            dialogs.askstring.call_args_list[0].args[1],
-            "Block name:",
-        )
-        self.assertEqual(
-            dialogs.askstring.call_args_list[1].args[1],
-            "Description (optional):",
-        )
+        details.assert_called_once_with(self.parent, source.resolve())
         create.assert_called_once_with(
             self.library,
             "Power Stage",
@@ -142,6 +135,76 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
         )
         register.assert_called_once_with(self.project, self.block, self.kicad)
         messagebox.showinfo.assert_called_once()
+
+
+    def test_create_block_without_selection_uses_the_current_hierarchical_sheet(self):
+        source = self.project / "power_stage.kicad_sch"
+        source.write_text("(kicad_sch)", encoding="utf-8")
+
+        class FakeSheetPath:
+            def __init__(self, path):
+                self.path = path
+
+        current_sheet = SimpleNamespace(
+            filename="power_stage.kicad_sch",
+            name="Power Stage",
+            path=FakeSheetPath(["root-id", "sheet-id"]),
+            children=[],
+        )
+        root_sheet = SimpleNamespace(
+            filename="project.kicad_sch",
+            name="Project",
+            path=FakeSheetPath(["root-id"]),
+            children=[current_sheet],
+        )
+        schematic = SimpleNamespace(
+            get_selection_as_string=Mock(return_value=""),
+            get_hierarchy=Mock(return_value=SimpleNamespace(root=root_sheet)),
+            document=SimpleNamespace(
+                sheet_path=FakeSheetPath(["root-id", "sheet-id"])
+            ),
+        )
+        messagebox = SimpleNamespace(showinfo=Mock())
+
+        with (
+            patch.object(
+                plugin_actions,
+                "_ask_create_block_details",
+                return_value=("Power Stage", "Current sheet capture"),
+            ) as details,
+            patch.object(plugin_actions, "messagebox", messagebox),
+            patch.object(plugin_actions, "create_block", return_value=self.block) as create,
+            patch.object(plugin_actions, "_register_block", return_value=self.block),
+        ):
+            plugin_actions._create_and_place(
+                self.library, schematic, self.kicad, self.project, self.parent
+            )
+
+        details.assert_called_once_with(self.parent, source.resolve())
+        create.assert_called_once_with(
+            self.library,
+            "Power Stage",
+            source_schematic=source.resolve(),
+            source_project_name=self.project.name,
+            source_sheet_uuid="sheet-id",
+            description="Current sheet capture",
+        )
+
+    def test_reload_symbol_library_uses_gui_supported_reload_only(self):
+        kicad = SimpleNamespace(
+            reload_library=Mock(),
+            wait_for_libraries=Mock(
+                return_value=[SimpleNamespace(nickname="KBlocks", error_message=None)]
+            ),
+            load_all_libraries=Mock(side_effect=AssertionError("headless-only API called")),
+        )
+
+        self.assertTrue(plugin_actions._reload_symbol_library(kicad, "KBlocks"))
+        kicad.reload_library.assert_called_once_with(
+            type=1, scope=2, nicknames=["KBlocks"]
+        )
+        kicad.wait_for_libraries.assert_called_once()
+        kicad.load_all_libraries.assert_not_called()
 
     def test_edit_facade_requires_one_selected_symbol(self):
         schematic = SimpleNamespace(get_selection=Mock(return_value=[]))

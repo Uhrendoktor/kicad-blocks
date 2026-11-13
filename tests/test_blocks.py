@@ -309,6 +309,10 @@ class BlockModelTests(unittest.TestCase):
         self.assertTrue(_balanced_sexpr(text))
         self.assertIn('(generator "kicad_blocks")', text)
         self.assertIn('(property "Block ID" "block-id"', text)
+        self.assertRegex(
+            text,
+            r'\(property "Value" "Buck Converter".*?\(effects \(font \(size 1\.27 1\.27\)\).*? hide\)\)',
+        )
         self.assertIn('(pin input line', text)
         self.assertIn('(pin passive line', text)
         self.assertIn('(pin output line', text)

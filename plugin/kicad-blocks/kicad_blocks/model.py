@@ -504,7 +504,7 @@ def render_symbol_library(
         ' 0) (effects (font (size 1.27 1.27)) (justify left bottom)))',
         "    (property \"Value\" " + sexpr_quote(display_name) +
         " (at 0 " + str(round(bottom - 2.54, 4)) +
-        ' 0) (effects (font (size 1.27 1.27)) (justify left top)))',
+        ' 0) (effects (font (size 1.27 1.27)) (justify left top) hide))',
         '    (property "Footprint" "" (at 0 0 0) (effects (font (size 1.27 1.27)) hide))',
         '    (property "Datasheet" "" (at 0 0 0) (effects (font (size 1.27 1.27)) hide))',
         '    (property "Block ID" ' + sexpr_quote(block_id) +
