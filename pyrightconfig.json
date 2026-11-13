@@ -1,0 +1,28 @@
+{
+  "include": [
+    "plugin/kicad-blocks/kicad_blocks/json_types.py",
+    "plugin/kicad-blocks/kicad_blocks/model.py",
+    "plugin/kicad-blocks/kicad_blocks/extraction.py",
+    "plugin/kicad-blocks/kicad_blocks/composition.py",
+    "plugin/kicad-blocks/kicad_blocks/operations.py",
+    "plugin/kicad-blocks/kicad_blocks/pcb_layout.py",
+    "plugin/kicad-blocks/kicad_blocks/pcb_placement.py"
+  ],
+  "exclude": [
+    "**/__pycache__",
+    "**/.venv",
+    "plugin/kicad-blocks/kicad_blocks/plugin.py",
+    "plugin/kicad-blocks/entrypoints"
+  ],
+  "typeCheckingMode": "standard",
+  "pythonVersion": "3.12",
+  "pythonPlatform": "Linux",
+  "reportMissingImports": "none",
+  "reportMissingModuleSource": "none",
+  "executionEnvironments": [
+    {
+      "root": "plugin/kicad-blocks",
+      "extraPaths": ["plugin/kicad-blocks"]
+    }
+  ]
+}
