@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
 from scripts.test_inventory import (
     ROOT,
     PYTEST_GROUPS,
