@@ -520,28 +520,22 @@ def generate_reference_schematic(destination: Path) -> Path:
     if anchor_label is None or anchor_label[0] != "FET_MID":
         raise ValueError("The FET_MID label anchor at R10.1 is missing.")
 
-    # Show the short FET gate-to-divider connection. R11 and R13 already share
-    # a horizontal VSNK_GATE wire; the branch lands at R13's pin-1 node.
+    # Route the gate-control lead around the common-source FET node and the
+    # VSNK output rail. The vertical leg uses the clear corridor between the
+    # VBUS spine (ending at T4) and the FET_MID trunk.
     fet_gate = pin_world_points[("T1", "1")]
-    gate_resistor = pin_world_points[("R13", "1")]
-    gate_out = (round(fet_gate[0] + 10.16, 3), fet_gate[1])
-    if gate_out[0] >= gate_resistor[0]:
-        raise ValueError("T1 gate route corridor no longer fits its resistor branch.")
+    gate_target = pin_world_points[("R10", "2")]
+    gate_out = (292.1, fet_gate[1])
+    if gate_out[0] >= gate_target[0] or gate_target[1] <= fet_gate[1]:
+        raise ValueError("T1 gate route corridor no longer fits its divider branch.")
     gate_route = [
         fet_gate,
         gate_out,
-        (gate_out[0], gate_resistor[1]),
-        gate_resistor,
+        (gate_out[0], gate_target[1]),
+        gate_target,
     ]
     for index, (start, end) in enumerate(zip(gate_route, gate_route[1:])):
-        wires.append(_wire(start, end, f"VSNK_GATE:T1-R13:{index}"))
-    junctions.append([
-        "junction",
-        ["at", f"{gate_resistor[0]:.3f}", f"{gate_resistor[1]:.3f}"],
-        ["diameter", "0"],
-        ["color", "0", "0", "0", "0"],
-        ["uuid", _Quoted(_uid(f"junction:VSNK_GATE:{gate_resistor[0]:.3f}:{gate_resistor[1]:.3f}"))],
-    ])
+        wires.append(_wire(start, end, f"VSNK_GATE:T1-to-R10:{index}"))
     gate_label = label_points.get(fet_gate)
     if gate_label is None or gate_label[0] != "VSNK_GATE" or gate_label[1] != "local":
         raise ValueError("Expected local VSNK_GATE label is missing at T1 gate.")
