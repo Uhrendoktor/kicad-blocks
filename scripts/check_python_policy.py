@@ -15,11 +15,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 PYTHON_ROOTS = ("examples", "plugin", "scripts", "tests")
-# This input is intentionally broad: validate_parameter_value stringifies and
-# rejects/normalizes caller-supplied values before any value enters the model.
+# The caller-supplied parameter value is stringified and validated before it
+# enters the model; all other generic object annotations are prohibited.
 ALLOWED_OBJECT_ANNOTATIONS = {
     ("plugin/kicad-blocks/kicad_blocks/model.py", "validate_parameter_value.value"),
-    ("plugin/kicad-blocks/kicad_blocks/pcb_placement.py", "_is_board_item_id.value"),
 }
 DYNAMIC_HOST_EXCLUSIONS = {
     "plugin/kicad-blocks/kicad_blocks/plugin.py",
