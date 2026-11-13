@@ -30,6 +30,8 @@ ASSET_NAMES = (
     "block-picker-workflow.gif",
     "library-browser-light.png",
     "library-browser-dark.png",
+    "library-browser-details-light.png",
+    "library-browser-details-dark.png",
     "library-folders-light.png",
     "library-folders-dark.png",
     "task-hub-light.png",
@@ -59,12 +61,22 @@ def walk_widgets(widget):
 
 
 def window_id(xdotool: str, title: str = "Place Functional Block") -> str | None:
-    result = subprocess.run(
-        [xdotool, "search", "--onlyvisible", "--name", title],
-        capture_output=True, text=True, check=False, timeout=5,
-    )
-    ids = [line for line in result.stdout.splitlines() if line.strip().isdigit()]
-    return ids[-1] if ids else None
+    # X11 window managers may normalize or omit Unicode punctuation in titles.
+    # Match the distinctive suffix/prefix as a fallback.
+    candidates = [title]
+    for separator in ("—", "–", "-"):
+        parts = [part.strip() for part in title.split(separator) if part.strip()]
+        if len(parts) > 1:
+            candidates.extend((parts[-1], parts[0]))
+    for candidate in dict.fromkeys(candidates):
+        result = subprocess.run(
+            [xdotool, "search", "--onlyvisible", "--name", candidate],
+            capture_output=True, text=True, check=False, timeout=5,
+        )
+        ids = [line for line in result.stdout.splitlines() if line.strip().isdigit()]
+        if ids:
+            return ids[-1]
+    return None
 
 
 def capture_window(
@@ -334,6 +346,22 @@ def capture_ui_workflows(library_roots, record, project_dir: Path, output_dir: P
                     xdotool,
                     "Functional Block Library",
                     output_dir / f"library-browser-{theme}.png",
+                    minimum_size=(1000, 650),
+                )
+                browser_entries = [
+                    widget for widget in walk_widgets(root)
+                    if widget.winfo_class() in {"TEntry", "Entry"}
+                ]
+                if not browser_entries:
+                    raise RuntimeError("The production library browser search field is missing.")
+                browser_entries[0].delete(0, "end")
+                browser_entries[0].insert(0, "STUSB")
+                root.update_idletasks()
+                root.update()
+                _capture_visible_window(
+                    xdotool,
+                    "Functional Block Library",
+                    output_dir / f"library-browser-details-{theme}.png",
                     minimum_size=(1000, 650),
                 )
                 _capture_modal(
