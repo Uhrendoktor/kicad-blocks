@@ -242,7 +242,7 @@ class LibraryBrowserTests(unittest.TestCase):
 
         replacement_source = Path(self.temp.name) / "renamed_implementation.kicad_sch"
         replacement_source.write_text(
-            '(kicad_sch (version 20250114) (generator "replacement"))\\n',
+            '(kicad_sch (version 20250114) (generator "replacement"))\n',
             encoding="utf-8",
         )
         _save_block_variants(
