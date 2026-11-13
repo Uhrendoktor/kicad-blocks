@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Protocol, TypeGuard
+from typing import Protocol
 
 from .json_types import JsonObject
 
@@ -13,12 +13,6 @@ class _BoardItemId(Protocol):
     """Minimal KiCad KIID surface required by the native move API."""
 
     value: str
-
-
-def _is_board_item_id(value: object) -> TypeGuard[_BoardItemId]:
-    """Narrow a dynamic KiCad binding result to an object with a string KIID."""
-
-    return isinstance(getattr(value, "value", None), str)
 
 
 PLACEMENT_SCHEMA_VERSION = 1
@@ -166,9 +160,10 @@ def resolve_placement_item_ids(board, placement: JsonObject) -> list[_BoardItemI
     available: dict[str, _BoardItemId] = {}
     for item in board.get_items():
         item_id = getattr(item, "id", None)
-        if not _is_board_item_id(item_id) or not item_id.value.strip():
+        value = getattr(item_id, "value", None)
+        if not isinstance(value, str) or not value.strip():
             raise TypeError("KiCad returned a board item without a readable KIID value.")
-        available[item_id.value.casefold()] = item_id
+        available[value.casefold()] = item_id
 
     missing = [value for value in requested_ids if value.casefold() not in available]
     if missing:
