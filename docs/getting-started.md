@@ -75,7 +75,7 @@ The default shared library location is:
 ~/Documents/KiCad/Blocks/
 ```
 
-Use **Manage library folders…** in the browser to register existing folders, create a new empty library, change a registered path, unregister a folder or choose the default destination for new blocks.
+Use **Manage Libraries…** in the browser to register existing folders, create a new empty library, change a registered path, unregister a folder or choose the default destination for new blocks.
 
 Changing a registered path does not move its files. Unregistering a library never deletes it. The browser lists blocks from all registered folders.
 
@@ -136,7 +136,7 @@ Check the plugin installation directory, ensure the IPC API is enabled in the re
 
 ### The browser opens but shows no blocks
 
-Open **Manage library folders…** and confirm that at least one shared folder is registered and contains a valid `KBlocks.kicad_sym` catalog plus one or more `.kicad_block` directories. Library validation can identify malformed manifests, missing assets or broken dependencies.
+Open **Manage Libraries…** and confirm that at least one shared folder is registered and contains a valid `KBlocks.kicad_sym` catalog plus one or more `.kicad_block` directories. Library validation can identify malformed manifests, missing assets or broken dependencies.
 
 ### PCB layout placement is unavailable
 
