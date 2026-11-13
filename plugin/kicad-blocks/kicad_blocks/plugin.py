@@ -1400,26 +1400,47 @@ def _layout_choices(block) -> list[dict]:
 def _choose_block_layout(
     block, parent, title: str = "Select PCB Layout", instance=None
 ) -> dict | None:
-    """Resolve the instance's stored layout choice or prompt for one."""
+    """Resolve the instance's explicit or implementation-linked PCB layout."""
     layouts = _layout_choices(block)
     if not layouts:
         raise ValueError(f"Block {block.name!r} has no stored PCB layout.")
+
+    selected_id = ""
+    selected_variant = ""
     if instance is not None:
         for field in getattr(instance, "user_fields", ()):
-            if str(getattr(field, "name", "")) == LAYOUT_FIELD_NAME:
-                field_text = getattr(field, "text", None)
-                selected_id = str(getattr(field_text, "value", "") or "").strip()
-                if selected_id:
-                    for item in layouts:
-                        if selected_id.casefold() in {
-                            str(item.get("id", "")).casefold(),
-                            str(item.get("name", "")).casefold(),
-                        }:
-                            return item
-                    raise ValueError(
-                        f"Block {block.name!r} instance {instance.reference} selects unknown "
-                        f"layout {selected_id!r}. Choose a valid layout in Configure PCB layout."
-                    )
+            name = str(getattr(field, "name", ""))
+            field_text = getattr(field, "text", None)
+            value = str(getattr(field_text, "value", "") or "").strip()
+            if name == LAYOUT_FIELD_NAME:
+                selected_id = value
+            elif name == VARIANT_FIELD_NAME:
+                selected_variant = value
+    variant = next(
+        (
+            item for item in block.manifest.get("variants", [])
+            if str(item.get("value", "")).casefold() == selected_variant.casefold()
+        ),
+        None,
+    )
+    linked_layout = str(variant.get("layout_id", "") if variant else "").casefold()
+    default_layout = str(block.manifest.get("default_layout") or "").casefold()
+    if linked_layout and (
+        not selected_id or selected_id.casefold() == default_layout
+    ):
+        selected_id = linked_layout
+
+    if selected_id:
+        for item in layouts:
+            if selected_id.casefold() in {
+                str(item.get("id", "")).casefold(),
+                str(item.get("name", "")).casefold(),
+            }:
+                return item
+        raise ValueError(
+            f"Block {block.name!r} instance {getattr(instance, 'reference', '')} "
+            f"selects unknown layout {selected_id!r}. Choose a valid layout in Configure PCB layout."
+        )
     if len(layouts) == 1:
         return layouts[0]
     labels = [f"{item.get('name', item.get('id'))} [{item.get('id')}]" for item in layouts]
