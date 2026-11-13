@@ -27,10 +27,7 @@ def _find_kicad_cli() -> str:
     for candidate in candidates:
         if candidate and (Path(candidate).is_file() or shutil.which(candidate)):
             return candidate
-    raise RuntimeError(
-        "KiCad CLI was not found. Set KICAD_CLI or add kicad-cli(-nightly) to PATH."
-    )
-
+    raise RuntimeError("KiCad CLI was not found. Set KICAD_CLI or add kicad-cli(-nightly) to PATH.")
 
 
 def _validate_stusb4500_netlist(cli: str, output_dir: Path) -> None:
@@ -157,12 +154,8 @@ def _validate_stusb4500_netlist(cli: str, output_dir: Path) -> None:
         if actual.get(pin) != expected_name
     }
     if mismatches:
-        raise RuntimeError(
-            f"STUSB4500 KiCad netlist connectivity mismatch: {mismatches}"
-        )
-    print(
-        f"KiCad netlist validated {len(expected)} critical STUSB4500 pin-to-net assignments."
-    )
+        raise RuntimeError(f"STUSB4500 KiCad netlist connectivity mismatch: {mismatches}")
+    print(f"KiCad netlist validated {len(expected)} critical STUSB4500 pin-to-net assignments.")
 
 
 def main() -> None:
@@ -223,9 +216,7 @@ def main() -> None:
         erc_reports = validate_block_tree(
             parent, Path(temp) / "erc-reports", cli, Path(temp) / "library"
         )
-        if len(erc_reports) != 2 or not all(
-            Path(item["report"]).is_file() for item in erc_reports
-        ):
+        if len(erc_reports) != 2 or not all(Path(item["report"]).is_file() for item in erc_reports):
             raise RuntimeError("Recursive KiCad CLI ERC did not report both block implementations.")
         _validate_stusb4500_netlist(cli, Path(temp))
         print(

@@ -39,9 +39,7 @@ def find_kicad_cli() -> str:
     )
 
 
-def _ordered_block_tree(
-    block: BlockRecord, library_root: Path | None
-) -> list[BlockOccurrence]:
+def _ordered_block_tree(block: BlockRecord, library_root: Path | None) -> list[BlockOccurrence]:
     return resolve_dependency_occurrences(block, library_root)
 
 
@@ -115,9 +113,7 @@ def export_block_bom(
                     f"(exit {result.returncode}): {result.stderr or result.stdout}"
                 )
             if not block_csv.is_file():
-                raise RuntimeError(
-                    f"KiCad did not create a BOM export for block {record.name!r}."
-                )
+                raise RuntimeError(f"KiCad did not create a BOM export for block {record.name!r}.")
 
             with block_csv.open("r", encoding="utf-8-sig", newline="") as stream:
                 reader = csv.DictReader(stream)
@@ -152,7 +148,9 @@ def export_block_bom(
                         continue
                     if reference:
                         instance_prefix = "/".join(occurrence.instance_path)
-                        owner = f"{instance_prefix}/{record.name}" if instance_prefix else record.name
+                        owner = (
+                            f"{instance_prefix}/{record.name}" if instance_prefix else record.name
+                        )
                         item[reference_column] = f"{owner}::{reference}"
                     item["Block"] = (
                         "/".join(occurrence.instance_path + (record.name,))
@@ -241,8 +239,7 @@ def validate_block_library(
         undeclared_hashes = sorted(set(declared_hashes) - declared_files)
         if undeclared_hashes:
             item["errors"].append(
-                "Hash entries are not listed in manifest.files: "
-                + ", ".join(undeclared_hashes)
+                "Hash entries are not listed in manifest.files: " + ", ".join(undeclared_hashes)
             )
         untracked_files = sorted(declared_files - set(declared_hashes))
         if untracked_files:
@@ -250,13 +247,9 @@ def validate_block_library(
                 "Manifest files have no corresponding hash: " + ", ".join(untracked_files)
             )
         if item["missing_assets"]:
-            item["errors"].append(
-                "Missing block assets: " + ", ".join(item["missing_assets"])
-            )
+            item["errors"].append("Missing block assets: " + ", ".join(item["missing_assets"]))
         if item["hash_mismatches"]:
-            item["errors"].append(
-                "Asset checksum mismatch: " + ", ".join(item["hash_mismatches"])
-            )
+            item["errors"].append("Asset checksum mismatch: " + ", ".join(item["hash_mismatches"]))
         if (
             not item["missing_assets"]
             and not item["hash_mismatches"]
@@ -276,9 +269,7 @@ def validate_block_library(
             except (KeyError, TypeError, ValueError) as exc:
                 profile_errors.append(f"{profile.get('name', profile.get('id'))}: {exc}")
         if profile_errors:
-            item["errors"].append(
-                "Invalid configuration profile(s): " + "; ".join(profile_errors)
-            )
+            item["errors"].append("Invalid configuration profile(s): " + "; ".join(profile_errors))
 
         try:
             occurrences = resolve_dependency_occurrences(record, library_root)
@@ -295,9 +286,7 @@ def validate_block_library(
                     library_root,
                 )
                 item["erc"] = erc_reports
-                violations = [
-                    result["block"] for result in erc_reports if result["violations"]
-                ]
+                violations = [result["block"] for result in erc_reports if result["violations"]]
                 if violations:
                     item["warnings"].append(
                         "ERC violations reported by KiCad for: " + ", ".join(violations)
@@ -377,9 +366,7 @@ def validate_block_tree(
                     f"(exit {result.returncode}): {result.stderr or result.stdout}"
                 )
             if not report_path.is_file():
-                raise RuntimeError(
-                    f"KiCad did not create an ERC report for block {record.name!r}."
-                )
+                raise RuntimeError(f"KiCad did not create an ERC report for block {record.name!r}.")
             reports.append(
                 {
                     "block": record.name,

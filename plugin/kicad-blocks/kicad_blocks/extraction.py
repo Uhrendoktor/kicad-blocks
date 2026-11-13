@@ -4,6 +4,7 @@ The selected sheet's hierarchical labels define the external block interface.
 Its nested hierarchical sheets remain internal and are copied into the block
 asset tree with their relative references and hierarchy paths rebased.
 """
+
 from __future__ import annotations
 
 import re
@@ -27,9 +28,7 @@ def _parse_selection(selection_fragment: str) -> list:
     """Parse the clipboard-format fragment returned by Schematic.get_selection_as_string."""
     fragment = str(selection_fragment or "").strip()
     if not fragment:
-        raise ValueError(
-            "Select exactly one hierarchical sheet symbol in the parent schematic."
-        )
+        raise ValueError("Select exactly one hierarchical sheet symbol in the parent schematic.")
     try:
         wrapper = parse_sexpr(f"(selection {fragment})")
     except ValueError as exc:
@@ -150,16 +149,14 @@ def _join_hierarchy_path(parent: str, child_uuid: str) -> str:
 
 def _path_matches(path_value: str, prefix: str) -> bool:
     prefix = prefix.rstrip("/") or "/"
-    return path_value == prefix or (
-        prefix != "/" and path_value.startswith(prefix + "/")
-    )
+    return path_value == prefix or (prefix != "/" and path_value.startswith(prefix + "/"))
 
 
 def _rebase_path_value(path_value: str, old_prefix: str, new_prefix: str) -> str:
     if not _path_matches(path_value, old_prefix):
         return new_prefix
     normalized_old = old_prefix.rstrip("/") or "/"
-    suffix = path_value[len(normalized_old):]
+    suffix = path_value[len(normalized_old) :]
     if new_prefix == "/":
         return "/" + suffix.lstrip("/")
     return new_prefix.rstrip("/") + suffix
@@ -190,11 +187,21 @@ def _normalize_instance_node(
             return
         unit_node = _direct(node, "unit")
         unit = str(unit_node[1]) if unit_node is not None and len(unit_node) >= 2 else "1"
-        node.append([
-            "instances",
-            ["project", _Quoted(project_name),
-             ["path", _Quoted(new_prefix), ["reference", _Quoted(reference)], ["unit", unit]]],
-        ])
+        node.append(
+            [
+                "instances",
+                [
+                    "project",
+                    _Quoted(project_name),
+                    [
+                        "path",
+                        _Quoted(new_prefix),
+                        ["reference", _Quoted(reference)],
+                        ["unit", unit],
+                    ],
+                ],
+            ]
+        )
         return
 
     projects = [item for item in instances[1:] if _head(item) == "project"]
@@ -204,26 +211,23 @@ def _normalize_instance_node(
         paths = _path_nodes(project)
         if paths:
             matching = [
-                path for path in paths
-                if len(path) >= 2 and _path_matches(str(path[1]), old_prefix)
+                path for path in paths if len(path) >= 2 and _path_matches(str(path[1]), old_prefix)
             ]
             kept = matching or paths[:1]
             kept_ids = {id(path) for path in kept}
             project[1:] = [
-                child for child in project[1:]
-                if _head(child) != "path" or id(child) in kept_ids
+                child for child in project[1:] if _head(child) != "path" or id(child) in kept_ids
             ]
             for path in kept:
                 if len(path) >= 2:
-                    path[1] = _Quoted(
-                        _rebase_path_value(str(path[1]), old_prefix, new_prefix)
-                    )
+                    path[1] = _Quoted(_rebase_path_value(str(path[1]), old_prefix, new_prefix))
     if fallback_reference and not projects:
-        node.append([
-            "instances",
-            ["project", _Quoted(project_name),
-             ["path", _Quoted(new_prefix)]],
-        ])
+        node.append(
+            [
+                "instances",
+                ["project", _Quoted(project_name), ["path", _Quoted(new_prefix)]],
+            ]
+        )
 
 
 def _sheet_instance_paths(tree: list) -> list[list]:
@@ -259,15 +263,13 @@ def _normalize_sheet_instances(
         tree.append(instances)
     paths = _path_nodes(instances)
     matching = [
-        path for path in paths
-        if len(path) >= 2 and _path_matches(str(path[1]), old_prefix)
+        path for path in paths if len(path) >= 2 and _path_matches(str(path[1]), old_prefix)
     ]
     kept = matching or paths[:1]
     if paths:
         kept_ids = {id(path) for path in kept}
         instances[1:] = [
-            child for child in instances[1:]
-            if _head(child) != "path" or id(child) in kept_ids
+            child for child in instances[1:] if _head(child) != "path" or id(child) in kept_ids
         ]
     else:
         kept = [["path", _Quoted(new_prefix), ["page", _Quoted("1" if is_root else "2")]]]
@@ -339,9 +341,9 @@ def _prepare_sheet_tree(
                 title[1] = _Quoted(display_name)
             comment = next(
                 (
-                    item for item in title_block[1:]
-                    if _head(item) == "comment" and len(item) >= 3
-                    and str(item[1]) == "1"
+                    item
+                    for item in title_block[1:]
+                    if _head(item) == "comment" and len(item) >= 3 and str(item[1]) == "1"
                 ),
                 None,
             )

@@ -63,9 +63,7 @@ class PluginInstallerTests(unittest.TestCase):
                 json.dumps({"identifier": "kicad-blocks"}), encoding="utf-8"
             )
             subprocess.run(command, check=True, capture_output=True, text=True)
-            destination = (
-                user_data / "kicad" / "11.0" / "plugins" / PLUGIN_IDENTIFIER
-            )
+            destination = user_data / "kicad" / "11.0" / "plugins" / PLUGIN_IDENTIFIER
             self.assertFalse(legacy_destination.exists())
             self.assertTrue((destination / "plugin.json").is_file())
             self.assertTrue((destination / "main.py").is_file())
@@ -77,9 +75,7 @@ class PluginInstallerTests(unittest.TestCase):
             self.assertTrue((destination / "icons" / "create-light-24.png").is_file())
             self.assertTrue((destination / "icons" / "create-dark-24.png").is_file())
             self.assertEqual(
-                json.loads((destination / "plugin.json").read_text(encoding="utf-8"))[
-                    "identifier"
-                ],
+                json.loads((destination / "plugin.json").read_text(encoding="utf-8"))["identifier"],
                 PLUGIN_IDENTIFIER,
             )
 
@@ -105,7 +101,9 @@ class PluginInstallerTests(unittest.TestCase):
                 capture_output=True,
                 text=True,
             )
-            self.assertIn(str(user_data / "kicad" / "11.0" / "plugins" / PLUGIN_IDENTIFIER), result.stdout)
+            self.assertIn(
+                str(user_data / "kicad" / "11.0" / "plugins" / PLUGIN_IDENTIFIER), result.stdout
+            )
             self.assertFalse(user_data.exists())
 
     def test_plugin_runtime_minimum_matches_published_wheel_python_abi(self):

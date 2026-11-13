@@ -12,7 +12,9 @@ ROOT = Path(__file__).resolve().parents[1]
 PLUGIN_ROOT = ROOT / "plugin" / "kicad-blocks"
 ENTRYPOINTS = PLUGIN_ROOT / "entrypoints"
 BOOTSTRAP_PATH = ENTRYPOINTS / "_bootstrap.py"
-SPEC = importlib.util.spec_from_file_location("kicad_blocks_entrypoint_bootstrap_test", BOOTSTRAP_PATH)
+SPEC = importlib.util.spec_from_file_location(
+    "kicad_blocks_entrypoint_bootstrap_test", BOOTSTRAP_PATH
+)
 if SPEC is None or SPEC.loader is None:
     raise RuntimeError("Could not load the shared entrypoint bootstrap.")
 bootstrap = importlib.util.module_from_spec(SPEC)
@@ -32,9 +34,7 @@ class TestEntrypointBootstrap(unittest.TestCase):
                 second = bootstrap.load_plugin()
                 self.assertIs(first, second)
                 self.assertEqual(sys.path.count(str(PLUGIN_ROOT)), 1)
-                import_module.assert_has_calls(
-                    [unittest.mock.call("kicad_blocks.plugin")] * 2
-                )
+                import_module.assert_has_calls([unittest.mock.call("kicad_blocks.plugin")] * 2)
         finally:
             sys.path[:] = original_path
 
@@ -46,7 +46,12 @@ class TestEntrypointBootstrap(unittest.TestCase):
         plugin.run_action.assert_called_once_with("create-block")
 
     def test_manifest_entrypoints_import_the_single_shared_bootstrap(self):
-        expected = {"action_hub.py", "browse_blocks.py", "create_block.py", "open_implementation.py"}
+        expected = {
+            "action_hub.py",
+            "browse_blocks.py",
+            "create_block.py",
+            "open_implementation.py",
+        }
         for filename in expected:
             source = (ENTRYPOINTS / filename).read_text(encoding="utf-8")
             with self.subTest(entrypoint=filename):

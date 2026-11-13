@@ -106,7 +106,10 @@ def read_pcb_placement_manifest(board_path: Path) -> dict[str, Any]:
             f"Unsupported PCB placement manifest schema: {payload.get('schema_version')!r}."
         )
     recorded_path = payload.get("board_path")
-    if not isinstance(recorded_path, str) or Path(recorded_path).expanduser().resolve() != board_path:
+    if (
+        not isinstance(recorded_path, str)
+        or Path(recorded_path).expanduser().resolve() != board_path
+    ):
         raise ValueError(
             "PCB placement manifest belongs to a different board path; refusing to move items."
         )

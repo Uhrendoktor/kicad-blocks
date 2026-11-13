@@ -38,21 +38,65 @@ MODULE_PURPOSES = {
 }
 
 SCRIPTED_ACCEPTANCE = [
-    ("test_eeschema_gui.py", "xvfb-run -a python tests/test_eeschema_gui.py", "Launches the real Eeschema editor, edits/publishes an implementation, synchronizes an existing local instance, saves, and verifies KiCad can re-parse the result."),
-    ("test_instance_configuration_gui.py", "python tests/test_instance_configuration_gui.py [--screenshot PATH]", "Drives the actual Tk instance-configuration form and checks saved schematic fields and the IPC transaction; also used to capture a documentation screenshot."),
-    ("test_ipc_headless.py", "python tests/test_ipc_headless.py", "Exercises real schematic IPC placement, instance configuration, facade identity, local-copy binding, nested composition, and saved-project invariants without an interactive window."),
-    ("test_library_picker_gui.py", "xvfb-run -a python tests/test_library_picker_gui.py", "Opens the real library picker, inspects native preview rendering and selection behavior, and validates the user-facing placement handoff."),
-    ("test_pcb_ipc.py", "python tests/test_pcb_ipc.py", "Uses real PCB IPC to create a board, assign/import nets and footprints, save, and reload native board objects."),
-    ("test_pcb_layout.py", "python tests/test_pcb_layout.py", "Runs end-to-end KiCad CLI/IPC board-layout merges and checks transformed footprints, tracks, vias, zones, graphics, namespaced nets/references, netclass mappings, and output safety."),
-    ("test_plugin_registration.py", "xvfb-run -a python tests/test_plugin_registration.py", "Starts KiCad, verifies plugin discovery and action registration, managed Python environment setup, and runs the configuration-form probe."),
+    (
+        "test_eeschema_gui.py",
+        "xvfb-run -a python tests/test_eeschema_gui.py",
+        "Launches the real Eeschema editor, edits/publishes an implementation, synchronizes an existing local instance, saves, and verifies KiCad can re-parse the result.",
+    ),
+    (
+        "test_instance_configuration_gui.py",
+        "python tests/test_instance_configuration_gui.py [--screenshot PATH]",
+        "Drives the actual Tk instance-configuration form and checks saved schematic fields and the IPC transaction; also used to capture a documentation screenshot.",
+    ),
+    (
+        "test_ipc_headless.py",
+        "python tests/test_ipc_headless.py",
+        "Exercises real schematic IPC placement, instance configuration, facade identity, local-copy binding, nested composition, and saved-project invariants without an interactive window.",
+    ),
+    (
+        "test_library_picker_gui.py",
+        "xvfb-run -a python tests/test_library_picker_gui.py",
+        "Opens the real library picker, inspects native preview rendering and selection behavior, and validates the user-facing placement handoff.",
+    ),
+    (
+        "test_pcb_ipc.py",
+        "python tests/test_pcb_ipc.py",
+        "Uses real PCB IPC to create a board, assign/import nets and footprints, save, and reload native board objects.",
+    ),
+    (
+        "test_pcb_layout.py",
+        "python tests/test_pcb_layout.py",
+        "Runs end-to-end KiCad CLI/IPC board-layout merges and checks transformed footprints, tracks, vias, zones, graphics, namespaced nets/references, netclass mappings, and output safety.",
+    ),
+    (
+        "test_plugin_registration.py",
+        "xvfb-run -a python tests/test_plugin_registration.py",
+        "Starts KiCad, verifies plugin discovery and action registration, managed Python environment setup, and runs the configuration-form probe.",
+    ),
 ]
 
 SUPPORT_SCRIPTS = [
-    ("validate_kicad_cli.py", "python tests/validate_kicad_cli.py", "Exports and validates generated schematic/PCB reference assets with the real KiCad CLI and checks structural/netlist expectations."),
-    ("capture_visual_docs.py", "xvfb-run -a python tests/capture_visual_docs.py --output-dir OUT", "Captures real light/dark KiCad plugin UI states, previews, modal workflows, and GIF/source evidence used by documentation and release publication."),
+    (
+        "validate_kicad_cli.py",
+        "python tests/validate_kicad_cli.py",
+        "Exports and validates generated schematic/PCB reference assets with the real KiCad CLI and checks structural/netlist expectations.",
+    ),
+    (
+        "capture_visual_docs.py",
+        "xvfb-run -a python tests/capture_visual_docs.py --output-dir OUT",
+        "Captures real light/dark KiCad plugin UI states, previews, modal workflows, and GIF/source evidence used by documentation and release publication.",
+    ),
 ]
 
-ACRONYMS = {"kicad": "KiCad", "kiCad": "KiCad", "ipc": "IPC", "pcb": "PCB", "erc": "ERC", "bom": "BOM", "sha": "SHA"}
+ACRONYMS = {
+    "kicad": "KiCad",
+    "kiCad": "KiCad",
+    "ipc": "IPC",
+    "pcb": "PCB",
+    "erc": "ERC",
+    "bom": "BOM",
+    "sha": "SHA",
+}
 
 
 def _purpose(name: str) -> str:
@@ -67,14 +111,15 @@ def _cases(path: Path) -> list[tuple[int, str, str]]:
     tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
     found: list[tuple[int, str, str]] = []
     for node in tree.body:
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name.startswith("test_"):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name.startswith(
+            "test_"
+        ):
             found.append((node.lineno, node.name, _purpose(node.name)))
         elif isinstance(node, ast.ClassDef):
             for member in node.body:
-                if (
-                    isinstance(member, (ast.FunctionDef, ast.AsyncFunctionDef))
-                    and member.name.startswith("test_")
-                ):
+                if isinstance(
+                    member, (ast.FunctionDef, ast.AsyncFunctionDef)
+                ) and member.name.startswith("test_"):
                     found.append((member.lineno, member.name, _purpose(member.name)))
     return sorted(found)
 
@@ -156,7 +201,9 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--write", action="store_true", help="write docs/testing-inventory.md")
-    mode.add_argument("--check", action="store_true", help="verify the committed inventory is current")
+    mode.add_argument(
+        "--check", action="store_true", help="verify the committed inventory is current"
+    )
     args = parser.parse_args()
     expected = render()
     if args.write:
@@ -166,7 +213,9 @@ def main() -> int:
     if args.check:
         actual = OUTPUT.read_text(encoding="utf-8") if OUTPUT.exists() else ""
         if actual != expected:
-            print(f"{OUTPUT.relative_to(ROOT)} is stale; run: python scripts/generate_test_inventory.py --write")
+            print(
+                f"{OUTPUT.relative_to(ROOT)} is stale; run: python scripts/generate_test_inventory.py --write"
+            )
             return 1
         print("test-inventory=passed")
         return 0

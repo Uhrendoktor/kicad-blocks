@@ -15,9 +15,16 @@ from urllib.request import Request, urlopen
 API_VERSION = "2022-11-28"
 
 
-def _request(method: str, url: str, token: str, *, payload: dict | None = None,
-             body: bytes | None = None, content_type: str = "application/vnd.github+json",
-             allow_not_found: bool = False) -> dict | None:
+def _request(
+    method: str,
+    url: str,
+    token: str,
+    *,
+    payload: dict | None = None,
+    body: bytes | None = None,
+    content_type: str = "application/vnd.github+json",
+    allow_not_found: bool = False,
+) -> dict | None:
     headers = {
         "Accept": "application/vnd.github+json",
         "Authorization": f"Bearer {token}",
@@ -30,7 +37,9 @@ def _request(method: str, url: str, token: str, *, payload: dict | None = None,
     elif body is not None:
         headers["Content-Type"] = content_type
     try:
-        with urlopen(Request(url, data=data, headers=headers, method=method), timeout=60) as response:
+        with urlopen(
+            Request(url, data=data, headers=headers, method=method), timeout=60
+        ) as response:
             raw = response.read()
     except HTTPError as exc:
         if allow_not_found and exc.code == 404:
@@ -96,7 +105,9 @@ def publish_release(
             None,
         )
         if existing is not None:
-            if existing.get("size") != path.stat().st_size or existing.get("digest") != _digest(path):
+            if existing.get("size") != path.stat().st_size or existing.get("digest") != _digest(
+                path
+            ):
                 raise RuntimeError(
                     f"Release asset {path.name!r} already exists with different bytes; refusing overwrite."
                 )

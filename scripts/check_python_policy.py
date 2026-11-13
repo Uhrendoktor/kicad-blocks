@@ -72,7 +72,10 @@ def _check_file(path: Path) -> list[str]:
     except SyntaxError as exc:
         return [f"{relative}:{exc.lineno}: syntax error: {exc.msg}"]
 
-    if relative.startswith(("plugin/", "scripts/", "examples/")) and ast.get_docstring(tree) is None:
+    if (
+        relative.startswith(("plugin/", "scripts/", "examples/"))
+        and ast.get_docstring(tree) is None
+    ):
         errors.append(f"{relative}: missing module docstring")
 
     for token in tokenize.generate_tokens(io.StringIO(source).readline):

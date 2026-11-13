@@ -61,7 +61,9 @@ class BlockVariantTests(unittest.TestCase):
 
     def test_variant_value_maps_to_copied_schematic(self):
         block = self.create_variant_block()
-        self.assertEqual(resolve_variant_implementation(block.manifest, "3v3"), "implementation_3v3.kicad_sch")
+        self.assertEqual(
+            resolve_variant_implementation(block.manifest, "3v3"), "implementation_3v3.kicad_sch"
+        )
         self.assertTrue((block.path / "implementation_3v3.kicad_sch").is_file())
         self.assertEqual({item["value"] for item in block.manifest["variants"]}, {"1V8", "3V3"})
         facade = (block.path / block.manifest["symbol_file"]).read_text(encoding="utf-8")
@@ -75,8 +77,12 @@ class BlockVariantTests(unittest.TestCase):
             resolve_variant_implementation(block.manifest, "")
 
     def test_non_variant_block_keeps_single_implementation(self):
-        block = create_block(self.root, "Single Implementation", parse_pins("VIN:input, GND:passive"))
-        self.assertEqual(resolve_variant_implementation(block.manifest, ""), "implementation.kicad_sch")
+        block = create_block(
+            self.root, "Single Implementation", parse_pins("VIN:input, GND:passive")
+        )
+        self.assertEqual(
+            resolve_variant_implementation(block.manifest, ""), "implementation.kicad_sch"
+        )
 
     def test_duplicate_values_are_rejected(self):
         with self.assertRaisesRegex(ValueError, "Duplicate block variant value"):
@@ -122,7 +128,9 @@ class BlockVariantTests(unittest.TestCase):
             {"value": "1V8", "file": "implementation_1v8.kicad_sch"},
             {"value": "3V3", "file": "implementation_3v3.kicad_sch"},
         ]
-        (local.path / "manifest.json").write_text(json.dumps(synced, indent=2) + "\n", encoding="utf-8")
+        (local.path / "manifest.json").write_text(
+            json.dumps(synced, indent=2) + "\n", encoding="utf-8"
+        )
         result = publish_local_copy(local)
         self.assertIn("manifest.variants", result["published"])
         latest = json.loads(manifest_path.read_text(encoding="utf-8"))
