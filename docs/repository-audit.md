@@ -9,8 +9,8 @@ classification, static-analysis boundaries, and the distinct runtime layers exer
 the acceptance harnesses.
 
 The generated [test inventory](testing-inventory.md) is the authoritative list of test
-functions/methods and their purpose. At this revision it records **199 pytest test
-functions/methods across 22 modules**, **7 direct KiCad GUI/IPC acceptance runners**, and
+functions/methods and their purpose, including documentation link/accessibility regression tests. At this revision it records **202 pytest test
+functions/methods across 23 modules**, **7 direct KiCad GUI/IPC acceptance runners**, and
 **2 test-support/evidence scripts**. The pytest count is a count of discovered test
 functions and methods, not a multiplication of parameterized cases.
 
