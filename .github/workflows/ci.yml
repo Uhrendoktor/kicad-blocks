@@ -510,6 +510,8 @@ jobs:
         run: |
           set -euo pipefail
           PY="${RUNNER_TEMP}/kicad-blocks-visual-venv/bin/python"
+          git fetch origin "$FORMAT_BRANCH"
+          git checkout -B "$FORMAT_BRANCH" "origin/$FORMAT_BRANCH"
           "$PY" -m pip install ruff
           "$PY" -m ruff format examples plugin scripts tests
           if ! git diff --quiet -- examples plugin scripts tests; then
