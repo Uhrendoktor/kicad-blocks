@@ -3,6 +3,7 @@
     "plugin/kicad-blocks"
   ],
   "include": [
+    "plugin/kicad-blocks/entrypoints/_bootstrap.py",
     "plugin/kicad-blocks/kicad_blocks",
     "plugin/kicad-blocks/place_imported_layout.py",
     "scripts"
