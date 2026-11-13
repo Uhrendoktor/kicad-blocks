@@ -3,12 +3,10 @@
 from __future__ import annotations
 
 import re
-import sys
 import tempfile
 import unittest
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
 from generate_reference import generate_reference_schematic
 from kicad_blocks.pcb_layout import _all, _direct, parse_sexpr
 
