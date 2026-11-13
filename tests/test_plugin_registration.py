@@ -16,8 +16,6 @@ ROOT = Path(__file__).resolve().parents[1]
 PLUGIN_SOURCE = ROOT / "plugin" / "kicad-blocks"
 PLUGIN_IDENTIFIER = "org.uhrendoktor.kicadblocks"
 INSTALLER = ROOT / "scripts" / "install_plugin.py"
-sys.path.insert(0, str(PLUGIN_SOURCE))
-
 from kicad_blocks.model import parse_pins
 from kicad_blocks.repository import create_block, register_project_symbol_library
 
