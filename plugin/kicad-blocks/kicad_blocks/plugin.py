@@ -3053,7 +3053,8 @@ def _ask_layout_details(parent, record) -> dict | None:
         frame,
         text=(
             "The selected implementation uses this PCB layout when you apply "
-            "the block to a board."
+            "the block to a board. Named variant options appear after you add "
+            "them under Implementations."
         ),
         wraplength=620,
         justify="left",
