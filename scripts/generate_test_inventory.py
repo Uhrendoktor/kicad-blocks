@@ -131,7 +131,11 @@ def render() -> str:
     unclassified: list[str] = []
     for path in discovered:
         cases = _cases(path)
-        if cases and path.name not in MODULE_PURPOSES:
+        if cases and path.parent != TEST_ROOT:
+            unclassified.append(
+                f"{path.relative_to(ROOT).as_posix()}: nested test modules need path-specific purpose entries"
+            )
+        elif cases and path.name not in MODULE_PURPOSES:
             unclassified.append(f"{path.relative_to(ROOT).as_posix()}: missing module purpose")
         elif not cases and (path.parent != TEST_ROOT or path.name not in runner_names):
             unclassified.append(
