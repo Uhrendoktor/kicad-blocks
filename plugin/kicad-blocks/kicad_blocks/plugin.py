@@ -2882,9 +2882,7 @@ def _save_block_layouts(
         )
     for filename in removed_files:
         (block_path / filename).unlink(missing_ok=True)
-    # Callers may still hold this BlockRecord until the browser refreshes;
-    # keep it coherent with the manifest just written.
-    record.manifest = read_manifest(block_path)
+    return _record(block_path)
 
 
 def _new_blank_pcb_source() -> Path:
