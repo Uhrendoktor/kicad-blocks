@@ -7,6 +7,7 @@ import shutil
 import tempfile
 import uuid
 from pathlib import Path
+
 from .json_types import JsonObject
 
 from .model import (
@@ -218,7 +219,7 @@ def _compose_direct_children(
                 schematic.create_items(new_labels)
             except AttributeError as exc:
                 # Some KiCad development builds have returned a CreateItem
-                # result with no packed Any payload even though the object
+                # result with no packed extension payload even though the object
                 # was applied to the document. Verify document state before
                 # deciding whether this was a harmless response issue.
                 if "type_url" not in str(exc):
