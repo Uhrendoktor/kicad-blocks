@@ -146,7 +146,7 @@ class LibraryBrowserTests(unittest.TestCase):
 
     def test_layout_linked_to_implementation_is_used_when_instance_has_default(self):
         original_layouts = [dict(item) for item in self.block.manifest["layouts"]]
-        _save_block_layouts(
+        updated_block = _save_block_layouts(
             self.block,
             original_layouts,
             default_layout_id="compact",
@@ -171,7 +171,7 @@ class LibraryBrowserTests(unittest.TestCase):
                 ),
             ],
         )
-        resolved = _choose_block_layout(self.block, object(), instance=instance)
+        resolved = _choose_block_layout(updated_block, object(), instance=instance)
         self.assertEqual(resolved["id"], "compact")
 
     def test_implementation_link_supersedes_implicit_default_layout(self):
@@ -183,7 +183,7 @@ class LibraryBrowserTests(unittest.TestCase):
             "name": "Standard",
             "source": str(second_board),
         })
-        _save_block_layouts(
+        updated_block = _save_block_layouts(
             self.block,
             original_layouts,
             default_layout_id="compact",
@@ -202,7 +202,7 @@ class LibraryBrowserTests(unittest.TestCase):
                 ),
             ],
         )
-        resolved = _choose_block_layout(self.block, object(), instance=instance)
+        resolved = _choose_block_layout(updated_block, object(), instance=instance)
         self.assertEqual(resolved["id"], "standard")
 
     def test_manifest_rejects_variant_link_to_unknown_layout(self):
