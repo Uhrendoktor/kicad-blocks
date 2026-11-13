@@ -1810,6 +1810,58 @@ def _ask_create_block_details(parent, source_sheet: Path) -> tuple[str, str] | N
     return result[0]
 
 
+def _selected_sheet_symbol_source(
+    schematic, project_dir: Path
+) -> tuple[Path, str] | None:
+    """Resolve one selected KiCad SheetSymbol through its IPC fields."""
+    if not hasattr(schematic, "get_selection"):
+        return None
+    try:
+        selection = list(schematic.get_selection())
+    except Exception as exc:
+        error_text = str(exc).casefold()
+        if "selection is empty" in error_text or "empty selection" in error_text:
+            return None
+        raise
+    if len(selection) != 1:
+        return None
+    item = selection[0]
+    filename_field = getattr(item, "filename_field", None)
+    name_field = getattr(item, "name_field", None)
+    if filename_field is None or name_field is None:
+        return None
+    filename_text = getattr(getattr(filename_field, "text", None), "value", "")
+    filename = str(filename_text or "").strip()
+    if not filename:
+        raise ValueError("The selected hierarchical sheet has no Sheetfile property.")
+    try:
+        active_sheet, _active_uuid = _active_sheet_source(schematic, project_dir)
+        base_directory = active_sheet.parent
+    except (FileNotFoundError, ValueError, AttributeError):
+        base_directory = Path(project_dir)
+    source = Path(filename).expanduser()
+    if not source.is_absolute():
+        source = base_directory / source
+    source = source.resolve()
+    if source.suffix.casefold() != ".kicad_sch" or not source.is_file():
+        raise FileNotFoundError(
+            "The selected hierarchical sheet does not resolve to an existing "
+            f".kicad_sch file: {source}"
+        )
+    raw_id = getattr(item, "id", None)
+    source_uuid = (
+        getattr(raw_id, "value", None)
+        or getattr(raw_id, "uuid", None)
+        or raw_id
+    )
+    if source_uuid is None:
+        raise ValueError("The selected hierarchical sheet has no UUID.")
+    source_uuid = str(source_uuid).strip().strip("{}")
+    if not source_uuid:
+        raise ValueError("The selected hierarchical sheet has no UUID.")
+    return source, source_uuid
+
+
 def _create_and_place(
     root, schematic, kicad, project_dir, parent,
     editor_window_id: str | None = None,
@@ -1835,12 +1887,22 @@ def _create_and_place(
             sheet_base_directory = active_sheet.parent
         except (FileNotFoundError, ValueError, AttributeError):
             sheet_base_directory = Path(project_dir)
-        source_sheet = selected_sheet_file(
-            selection_fragment, sheet_base_directory
-        )
-        source_sheet_uuid = selected_sheet_instance_uuid(selection_fragment)
+        try:
+            source_sheet = selected_sheet_file(
+                selection_fragment, sheet_base_directory
+            )
+            source_sheet_uuid = selected_sheet_instance_uuid(selection_fragment)
+        except ValueError:
+            selected_sheet = _selected_sheet_symbol_source(schematic, project_dir)
+            if selected_sheet is None:
+                raise
+            source_sheet, source_sheet_uuid = selected_sheet
     else:
-        source_sheet, source_sheet_uuid = _active_sheet_source(schematic, project_dir)
+        selected_sheet = _selected_sheet_symbol_source(schematic, project_dir)
+        if selected_sheet is None:
+            source_sheet, source_sheet_uuid = _active_sheet_source(schematic, project_dir)
+        else:
+            source_sheet, source_sheet_uuid = selected_sheet
 
     details = _ask_create_block_details(parent, source_sheet)
     if details is None:
