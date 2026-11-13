@@ -1,7 +1,5 @@
 """KiCad IPC entrypoint for the functional block library browser."""
 
-from __future__ import annotations
-
 from _bootstrap import run_action
 
 

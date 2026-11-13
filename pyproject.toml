@@ -18,8 +18,7 @@ select = ["E4", "E7", "E9", "F", "I", "B", "C4", "DTZ", "PIE", "RET", "SIM", "UP
 ignore = ["E402", "E501", "SIM105"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["kicad_blocks"]
-known-local-folder = ["_bootstrap"]
+known-first-party = ["kicad_blocks", "scripts", "_bootstrap", "generate_reference"]
 
 [tool.ruff.format]
 docstring-code-format = true

@@ -1,7 +1,5 @@
 """KiCad IPC entrypoint for opening the selected block implementation."""
 
-from __future__ import annotations
-
 from _bootstrap import run_action
 
 

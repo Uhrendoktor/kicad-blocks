@@ -35,6 +35,7 @@ from kicad_blocks.repository import (
     local_copy_for_instance,
     register_project_symbol_library,
 )
+
 from kipy import KiCad
 from kipy.geometry import Vector2
 
