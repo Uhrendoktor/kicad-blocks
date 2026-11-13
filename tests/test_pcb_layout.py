@@ -16,8 +16,6 @@ from kipy import KiCad
 
 ROOT = Path(__file__).resolve().parents[1]
 PLUGIN = ROOT / "plugin" / "kicad-blocks"
-sys.path.insert(0, str(PLUGIN))
-
 from kicad_blocks.pcb_layout import (
     BlockLayoutPlacement,
     merge_block_layout,
