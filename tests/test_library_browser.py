@@ -174,7 +174,7 @@ class LibraryBrowserTests(unittest.TestCase):
         resolved = _choose_block_layout(self.block, object(), instance=instance)
         self.assertEqual(resolved["id"], "compact")
 
-    def test_instance_layout_override_beats_implementation_link(self):
+    def test_implementation_link_supersedes_implicit_default_layout(self):
         original_layouts = [dict(item) for item in self.block.manifest["layouts"]]
         second_board = Path(self.temp.name) / "standard.kicad_pcb"
         second_board.write_text("(kicad_pcb)", encoding="utf-8")
