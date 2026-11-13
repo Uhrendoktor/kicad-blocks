@@ -77,6 +77,17 @@ Publishing updates the shared block revision and refreshes its facade from the r
 
 A changed external pin interface may require migration in projects that already use the block. Review the pin list before publishing an interface change.
 
+### Edit the facade symbol
+
+The facade is the symbol users see and place in their project schematics. To change its drawing or pin arrangement:
+
+1. Select one placed block instance in Eeschema.
+2. Choose **Edit facade** in the library browser, or **Edit facade symbol** in the task hub.
+3. KiCad opens the library symbol in Symbol Editor. Edit the artwork or pin positions and save.
+4. Publish the implementation so KiCad Blocks reconciles the facade pins with the root hierarchical labels.
+
+The plugin preserves the edited body graphics when it refreshes the pin interface. Changing the external pin names or electrical interface can affect projects that already use the block; review those changes before publishing.
+
 ## Customize a block in one project
 
 Use a local copy when a project needs a different implementation but the shared library should stay unchanged.
