@@ -4,9 +4,9 @@
     "block-picker-initial.png": "c3ac3b6340ba5e1aed8b66539a1c7865193299fba6377890fa5a50f531a3595d",
     "block-picker-profile.png": "d67f423590b493a5d0336450e4b415c3c13c53aab245210dee82dc4a843070be",
     "block-picker-workflow.gif": "54978a81b62dff542d2b8e83a15e96bce90469f17b79731f7ea0bda90824dd55",
-    "functional-block-facade.svg": "9cf456ed281688a0d2cfec9d6dac49a981fda2d80034206d265e1464b7427138",
+    "functional-block-facade.svg": "6b8f31dc158aaa832c757059aeabacb81db8d6d58a1b98dec6bf7cd94116ad27",
     "functional-block-implementation.kicad_sch": "739d357c453e519f4dc9b4d8fb01817badf605f1b5a98dbddaa1a2871bdb53c0",
-    "functional-block-implementation.svg": "6f8f0093823f053c8489c32b62ddf2a73fe7ea6f4a411d05435d07224fe19ee6"
+    "functional-block-implementation.svg": "ee06b461181005160920fabf588f7b974452bfb16d3193ea9abedcb101616954"
   },
   "example": {
     "component": "STUSB4500QTR",
@@ -15,7 +15,7 @@
     "manufacturer": "STMicroelectronics",
     "reference": "Figure 10, page 26/42"
   },
-  "source_commit": "426af14fdbd6a66bc8a6dc66a598f9954c9dab41",
-  "workflow_run_id": "43331898485",
-  "workflow_run_number": "466"
+  "source_commit": "f1dd36d194c2f2cda8ccedca0eada797e71e0f63",
+  "workflow_run_id": "43339060802",
+  "workflow_run_number": "473"
 }
