@@ -9,9 +9,6 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "plugin" / "kicad-blocks"))
-sys.path.insert(0, str(ROOT / "examples" / "stusb4500"))
-
 from generate_reference import generate_reference_schematic
 from kicad_blocks.pcb_layout import _all, _direct, parse_sexpr
 
