@@ -240,6 +240,33 @@ class LibraryBrowserTests(unittest.TestCase):
         )
         self.assertEqual(variant_1v8["layout_id"], "compact")
 
+        replacement_source = Path(self.temp.name) / "renamed_implementation.kicad_sch"
+        replacement_source.write_text(
+            '(kicad_sch (version 20250114) (generator "replacement"))\\n',
+            encoding="utf-8",
+        )
+        _save_block_variants(
+            linked_block,
+            [
+                {
+                    "value": "1V8 low-noise",
+                    "source": str(replacement_source),
+                    "layout_id": "compact",
+                },
+                *[
+                    {"value": item["value"], "file": item["file"]}
+                    for item in before["variants"]
+                    if item["value"] != "1V8"
+                ],
+            ],
+        )
+        renamed = read_manifest(self.block.path)
+        renamed_implementation = next(
+            item for item in renamed["variants"]
+            if item["value"] == "1V8 low-noise"
+        )
+        self.assertEqual(renamed_implementation["layout_id"], "compact")
+
     def test_variant_metadata_can_be_added_edited_and_removed_from_library(self):
         initial_version = read_manifest(self.filter_block.path)["version"]
 
