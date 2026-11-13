@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 MARKDOWN_ROOTS = (ROOT / "docs", ROOT / "examples")
 ROOT_MARKDOWN = (ROOT / "README.md", ROOT / "CHANGELOG.md")
 
-LINK_RE = re.compile(r"(?<!)\[[^\]]+\]\(([^)]+)\)")
+LINK_RE = re.compile(r"(?<!!)\[[^\]]+\]\(([^)]+)\)")
 IMAGE_RE = re.compile(r"!\[([^\]]*)\]\(([^)]+)\)")
 HTML_LINK_RE = re.compile(
     r"""<a\b[^>]*?\bhref\s*=\s*(?:"([^"]+)"|'([^']+)')""",
