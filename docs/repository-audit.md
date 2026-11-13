@@ -55,7 +55,7 @@ another test at the same or a stronger runtime boundary.
   The dynamic KiCad/Qt plugin adapter remains an explicit host-API exclusion.
 - The Python policy check bans explicit `Any`, unreviewed `object` annotations,
   diagnostic suppressions, dynamic `eval`/`exec`, and `os.system`. Recursive JSON and
-  S-expression aliases and a KIID Protocol/TypeGuard replace the previous five-file
+  S-expression aliases and a KIID Protocol with runtime value validation replace the previous five-file
   blanket `Any` exemption.
 - The annotation ratchet prevents changed files in Pyright's reviewed scope from adding
   missing function annotations or generic `object` annotations.
