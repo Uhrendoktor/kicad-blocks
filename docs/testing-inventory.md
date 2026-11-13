@@ -322,6 +322,16 @@ Generated STUSB4500 reference design structure, electrical pin shapes, grid alig
 | `test_external_ports_use_standard_kicad_electrical_shapes` | external ports use standard KiCad electrical shapes. |
 | `test_layout_is_grid_aligned_and_functionally_zoned` | layout is grid aligned and functionally zoned. |
 
+### `tests/test_validate_docs.py`
+
+Checks Markdown and HTML links, heading anchors, image alt text, and ignores fenced code blocks while validating documentation.
+
+| Test | Purpose |
+| --- | --- |
+| `test_checks_markdown_and_html_local_links_and_heading_anchors` | checks markdown and html local links and heading anchors. |
+| `test_requires_alt_text_for_markdown_and_html_images` | requires alt text for markdown and html images. |
+| `test_ignores_links_and_images_inside_fenced_code` | ignores links and images inside fenced code. |
+
 ### `tests/test_variants.py`
 
 Exact variant resolution, invalid/default behavior, text-variable expansion, and variant synchronization.
@@ -359,7 +369,7 @@ Visual documentation inventory completeness, source-commit freshness, asset hash
 | `test_rejects_modified_generated_asset` | rejects modified generated asset. |
 | `test_rejects_incomplete_asset_inventory` | rejects incomplete asset inventory. |
 
-**Pytest inventory total: 199 test cases across 22 modules.**
+**Pytest inventory total: 202 test cases across 23 modules.**
 
 ## Host-driven KiCad acceptance scripts
 
