@@ -126,6 +126,26 @@ def _cases(path: Path) -> list[tuple[int, str, str]]:
 
 def render() -> str:
     """Render the full pytest and host-driven acceptance inventory."""
+    discovered = sorted(TEST_ROOT.rglob("test_*.py"))
+    runner_names = {filename for filename, _command, _purpose in SCRIPTED_ACCEPTANCE}
+    unclassified: list[str] = []
+    discovered_names = {path.name for path in discovered}
+    for path in discovered:
+        cases = _cases(path)
+        if cases and path.name not in MODULE_PURPOSES:
+            unclassified.append(f"{path.relative_to(ROOT).as_posix()}: missing module purpose")
+        elif not cases and path.name not in runner_names:
+            unclassified.append(
+                f"{path.relative_to(ROOT).as_posix()}: neither pytest tests nor a declared runner"
+            )
+    for filename in sorted(runner_names - discovered_names):
+        unclassified.append(f"tests/{filename}: declared runner does not exist")
+    for filename, _command, _purpose in SUPPORT_SCRIPTS:
+        if not (TEST_ROOT / filename).is_file():
+            unclassified.append(f"tests/{filename}: declared support script does not exist")
+    if unclassified:
+        raise ValueError("Incomplete test inventory:\n" + "\n".join(unclassified))
+
     lines = [
         "# Test inventory",
         "",
@@ -138,7 +158,7 @@ def render() -> str:
     ]
     total = 0
     modules = 0
-    for path in sorted(TEST_ROOT.glob("test_*.py")):
+    for path in discovered:
         cases = _cases(path)
         if not cases:
             continue
