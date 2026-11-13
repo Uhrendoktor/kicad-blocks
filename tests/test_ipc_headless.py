@@ -13,8 +13,6 @@ from types import SimpleNamespace
 
 ROOT = Path(__file__).resolve().parents[1]
 PLUGIN = ROOT / "plugin" / "kicad-blocks"
-sys.path.insert(0, str(PLUGIN))
-
 from kicad_blocks.model import (
     facade_pin_connection_points,
     parse_parameters,
