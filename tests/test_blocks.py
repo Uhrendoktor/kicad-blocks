@@ -117,6 +117,25 @@ class BlockModelTests(unittest.TestCase):
         self.assertEqual(points["VIN"][2], 1)   # SLSS_LEFT, extending outward
         self.assertEqual(points["VOUT"][2], 3)  # SLSS_RIGHT, extending outward
 
+    def test_facade_body_widens_for_long_opposing_pin_names(self):
+        pins = parse_pins(
+            "VBUS:input, GND:passive, CC1:bidirectional, "
+            "CC2:bidirectional, VSNK:output, SCL:input, SDA:bidirectional, "
+            "ALERT#:output, RESET:input, VMCU:input"
+        )
+        points = facade_pin_connection_points(pins)
+        self.assertLess(points["CC1"][0], -7.62)
+        self.assertGreater(points["ALERT#"][0], 7.62)
+
+        symbol = render_symbol_library(
+            "UsbPdFacade", "USB PD Sink", "test-block", pins
+        )
+        self.assertIn(
+            f"(start {round(points['CC1'][0] + 2.54, 4)} ",
+            symbol,
+        )
+        self.assertNotIn("CC1ALERT#", symbol)
+
     def test_multi_selection_extracts_all_symbol_instances(self):
         from types import SimpleNamespace
 

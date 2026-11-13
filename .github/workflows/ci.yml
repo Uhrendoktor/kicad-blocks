@@ -418,3 +418,104 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git tag -a v1 "$TAG_TARGET_SHA" -m "KiCad Blocks v1"
           git push origin refs/tags/v1
+
+
+  visual-ui-audit:
+    # Render the UI evidence on a hosted runner as well as the full self-hosted
+    # KiCad integration job. This keeps visual review available when the local
+    # KiCad runner is offline or queued.
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch pinned official KiCad symbol definitions
+        shell: bash
+        run: |
+          set -euo pipefail
+          SYMBOLS_DIR="${RUNNER_TEMP}/kicad-symbols"
+          SYMBOLS_REF="$(tr -d '[:space:]' < examples/stusb4500/kicad-symbols.lock)"
+          mkdir -p "$SYMBOLS_DIR"
+          git -C "$SYMBOLS_DIR" init
+          git -C "$SYMBOLS_DIR" remote add origin https://gitlab.com/kicad/libraries/kicad-symbols.git
+          git -C "$SYMBOLS_DIR" config core.sparseCheckout true
+          cat > "$SYMBOLS_DIR/.git/info/sparse-checkout" <<'EOF'
+          /Interface_USB.kicad_symdir/STUSB4500QTR.kicad_sym
+          /Connector.kicad_symdir/USB_C_Receptacle.kicad_sym
+          /Connector_Generic.kicad_symdir/Conn_01x02.kicad_sym
+          /Connector_Generic.kicad_symdir/Conn_01x06.kicad_sym
+          /Device.kicad_symdir/C.kicad_sym
+          /Device.kicad_symdir/R.kicad_sym
+          /Device.kicad_symdir/D.kicad_sym
+          /Device.kicad_symdir/D_TVS.kicad_sym
+          /Transistor_FET.kicad_symdir/Q_PMOS_GSD.kicad_sym
+          EOF
+          git -C "$SYMBOLS_DIR" fetch --depth 1 origin "$SYMBOLS_REF"
+          git -C "$SYMBOLS_DIR" checkout --detach FETCH_HEAD
+          test -f "$SYMBOLS_DIR/Interface_USB.kicad_symdir/STUSB4500QTR.kicad_sym"
+          echo "KICAD_SYMBOL_DIR=$SYMBOLS_DIR" >> "$GITHUB_ENV"
+
+      - name: Install KiCad nightly and virtual display
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends software-properties-common xvfb xdotool python3-tk
+          sudo add-apt-repository --yes ppa:kicad/kicad-dev-nightly
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends kicad-nightly
+          CLI="$(command -v kicad-cli-nightly || command -v kicad-cli || true)"
+          if [[ -z "$CLI" ]]; then
+            echo "::error::KiCad CLI was not installed."
+            exit 1
+          fi
+          echo "KICAD_CLI=$CLI" >> "$GITHUB_ENV"
+          "$CLI" version
+          command -v xdotool
+          python3 -c "import tkinter; print('Tkinter available')"
+
+      - name: Install visual capture dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m venv "${RUNNER_TEMP}/kicad-blocks-visual-venv"
+          PY="${RUNNER_TEMP}/kicad-blocks-visual-venv/bin/python"
+          "$PY" -m pip install --upgrade pip
+          "$PY" -m pip install cairosvg pillow
+
+      - name: Install project dependencies and verify unit tests, compile, and lint
+        shell: bash
+        run: |
+          set -euo pipefail
+          PY="${RUNNER_TEMP}/kicad-blocks-visual-venv/bin/python"
+          "$PY" -m pip install -r plugin/kicad-blocks/requirements.txt pytest ruff
+          "$PY" -m pytest -q
+          "$PY" -m compileall -q plugin tests
+          "$PY" -m ruff check plugin tests
+
+      - name: Validate generated reference files with KiCad CLI
+        shell: bash
+        run: |
+          set -euo pipefail
+          "${RUNNER_TEMP}/kicad-blocks-visual-venv/bin/python" tests/validate_kicad_cli.py
+
+      - name: Capture production KiCad Blocks UI in light and dark themes
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT="${RUNNER_TEMP}/kicad-blocks-visual-ui-audit"
+          rm -rf "$OUT"
+          mkdir -p "$OUT"
+          xvfb-run -a -s "-screen 0 1600x1000x24" \
+            "${RUNNER_TEMP}/kicad-blocks-visual-venv/bin/python" tests/capture_visual_docs.py \
+            --output-dir "$OUT"
+
+      - name: Upload visual UI audit
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: kicad-blocks-visual-ui-audit
+          path: ${{ runner.temp }}/kicad-blocks-visual-ui-audit
+          if-no-files-found: error
+          compression-level: 1

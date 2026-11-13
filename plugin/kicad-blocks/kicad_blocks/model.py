@@ -394,6 +394,28 @@ def _pin_y(row: int, row_count: int, pitch: float = 2.54) -> float:
     return round(((row_count - 1) / 2.0 - row) * pitch, 4)
 
 
+def _facade_body_half_width(pins: Iterable[BlockPin]) -> float:
+    """Size the facade so opposing pin labels have a readable gap."""
+    pins = list(pins)
+    if not pins:
+        raise ValueError("A block symbol must have at least one pin.")
+
+    left_count = (len(pins) + 1) // 2
+    right_count = len(pins) - left_count
+    rows = max(left_count, right_count)
+    maximum_width = 0.0
+    for row in range(rows):
+        left_name = pins[row].name if row < left_count else ""
+        right_index = left_count + row
+        right_name = pins[right_index].name if row < right_count else ""
+        label_width = 0.9 * (len(left_name) + len(right_name))
+        # Keep 2.0 mm between opposing labels, in addition to each 0.762 mm
+        # KiCad pin-name offset from the body edge.
+        required_half_width = (label_width + 2.0 + 2 * 0.762) / 2
+        maximum_width = max(maximum_width, required_half_width)
+    return round(max(5.08, maximum_width), 4)
+
+
 def facade_pin_connection_points(
     pins: Iterable[BlockPin],
 ) -> dict[str, tuple[float, float, int]]:
@@ -404,10 +426,11 @@ def facade_pin_connection_points(
     pins = list(pins)
     if not pins:
         raise ValueError("A block symbol must have at least one pin.")
+    half_width = _facade_body_half_width(pins)
     left_count = (len(pins) + 1) // 2
     right_count = len(pins) - left_count
     rows = max(left_count, right_count)
-    connection_x = 5.08 + 2.54
+    connection_x = half_width + 2.54
     points: dict[str, tuple[float, float, int]] = {}
     for index, pin in enumerate(pins):
         if index < left_count:
@@ -488,7 +511,7 @@ def render_symbol_library(
     half_height = max(5.08, ((rows - 1) * 2.54) / 2.0 + 2.54)
     top = round(half_height, 4)
     bottom = round(-half_height, 4)
-    half_width = 5.08
+    half_width = _facade_body_half_width(pins)
     pin_x = half_width + 2.54
     lines = [
         "(kicad_symbol_lib",
