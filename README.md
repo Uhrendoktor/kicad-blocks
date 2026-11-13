@@ -1,8 +1,8 @@
 # KiCad Blocks
 
-**Turn hierarchical KiCad sheets into reusable, library-backed functional blocks.**
+**Share complete KiCad circuit setups as reusable library components.**
 
-Keep complex circuits out of the top-level schematic without losing their engineering detail. A placed block is a normal KiCad symbol; its complete implementation remains a native, editable schematic in a shared library.
+Package a proven subsystem once, share the library, and place it in project after project as a normal symbol. No manually copying schematic sheets, rebuilding facade symbols or keeping related circuit files together by hand.
 
 [![CI](https://github.com/Uhrendoktor/kicad-blocks/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Uhrendoktor/kicad-blocks/actions/workflows/ci.yml)
 [![MIT License](https://img.shields.io/github/license/Uhrendoktor/kicad-blocks)](LICENSE)
@@ -10,6 +10,19 @@ Keep complex circuits out of the top-level schematic without losing their engine
 ![Python 3.12–3.14](https://img.shields.io/badge/Python-3.12%E2%80%933.14-blue?logo=python)
 
 **[Get started](docs/getting-started.md)** · **[Feature workflows](docs/workflows.md)** · **[Visual gallery](docs/visual-evidence.md)** · **[STUSB4500 example](examples/stusb4500/README.md)**
+
+## Why use KiCad Blocks?
+
+**Build it once. Share it. Reuse it without rebuilding the circuit in every project.**
+
+Download or clone a shared block library, register its folder once, and browse its contents from your KiCad projects. Select a block, choose its setup and place it. KiCad Blocks takes care of making the facade available in the project; you do not have to copy the implementation sheets, symbol files and related assets into each design.
+
+- **One symbol, complete circuit behind it.** Your top-level schematic stays clean. The block looks and places like a normal KiCad symbol, while its full editable implementation stays packaged in the library.
+- **Ready-made setups.** Publish alternative circuit implementations and named configurations—for example, different output voltages, component parameters or PCB layouts. Choose the setup independently for each placed instance.
+- **Shared library, project-specific freedom.** Reuse the same source library across projects, or make an independent local copy for one design. Synchronize it with the shared version later, with conflicting edits detected instead of silently overwritten.
+- **Keep the engineering with the block.** Package nested functional dependencies and optional pre-routed PCB layouts alongside the implementation. Run recursive ERC and BOM checks when you need to inspect what is inside.
+
+> **How it relates to KiCad:** KiCad already has native Design Blocks for reusing schematic fragments and optional PCB layout snippets. KiCad Blocks is aimed at a more component-like workflow: a single facade symbol backed by a separately maintained implementation, with per-instance circuit variants and profiles, local-copy synchronization, and recursive checks. Use native Design Blocks for quick schematic-fragment reuse; use KiCad Blocks when you want a subsystem to behave like a packaged library component.
 
 ## How it works
 
