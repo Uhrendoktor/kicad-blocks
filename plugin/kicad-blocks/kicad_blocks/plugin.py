@@ -4687,9 +4687,6 @@ def _show_library_browser(
     refresh_records()
     search_entry.focus_set()
 
-def run_library_browser() -> None:
-    """Launch the all-libraries functional-block browser."""
-    run_action("manage-library")
 
 
 

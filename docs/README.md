@@ -21,6 +21,11 @@ Use the [workflow guides](workflows.md) when you know the result you want:
 - **[Visual guide](visual-evidence.md)** — real KiCad renders and screenshots of the plugin.
 - **[Feature reference](reference.md)** — exact action names, folder contents, instance fields, parameter rules and current limitations.
 
+## Develop and verify
+
+- **[Test inventory](testing-inventory.md)** — every pytest case, the purpose of each test, and the standalone KiCad GUI/IPC acceptance scripts.
+- **[Quality gates](quality-gates.md)** — strict test/lint/type/dead-code checks and the reviewed static-analysis boundaries.
+
 ## A note about the examples
 
 The STUSB4500 page documents the editable reference schematic. Some UI screenshots are generated from an automated library fixture built around that schematic; the page labels those captures so they are not mistaken for proof that the schematic changes electrically when a profile is selected.

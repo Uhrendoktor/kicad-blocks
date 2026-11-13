@@ -1,0 +1,42 @@
+# Python quality and testing contract
+
+The quality gates are deliberately explicit. They are intended to catch correctness defects and prevent new maintenance debt without applying a blanket style policy to KiCad's dynamic host adapter.
+
+## Blocking checks
+
+| Gate | Scope | What it protects |
+| --- | --- | --- |
+| Pytest strict mode | All pytest-collected tests under `tests/` | Rejects unknown configuration/markers and non-strict expected failures; the complete suite runs on every CI PR. |
+| Ruff lint | All Python under `examples/`, `plugin/`, `scripts/`, and `tests/` | Applies the reviewed correctness, import, bugbear, comprehension, datetime, return, simplification, and modernization rules in `pyproject.toml`. |
+| Ruff format | Same complete Python inventory | Ensures the repository-wide formatter contract without rewriting files in CI. |
+| Python policy | All tracked Python source roots | AST/tokenizer checks reject explicit `Any` outside reviewed dynamic boundaries, unreviewed generic `object` argument annotations, inline diagnostic suppressions, dynamic `eval`/`exec`, and `os.system`. Production modules must have module documentation. |
+| Pyright | Reviewed core package modules and release/tooling scripts | Standard-mode type checking; `pyrightconfig.json` is the maintained include/exclude inventory. The large KiCad/Qt host adapter is excluded until its native boundary has usable stubs. |
+| Vulture | Pure deterministic core modules | Reports only high-confidence (100%) unused code; dynamic GUI registration and host callbacks are intentionally outside this pass. |
+| Test inventory | Every pytest test function/method plus host acceptance scripts | CI fails when `docs/testing-inventory.md` no longer matches test source. |
+
+The rule selection is curated rather than `ALL`/preview. The type-checking boundary is explicit: new modules in `kicad_blocks/` must be added to the Pyright inventory or have a narrow, documented host exclusion. The reviewed `Any` boundary is limited to S-expression/IPC data structures and integration adapters whose types are supplied dynamically by KiCad. The one generic `object` argument is the untrusted input to `validate_parameter_value`, which converts it to text and validates it at the model boundary.
+
+No inline `noqa`, type-ignore, or pyright-ignore comments are accepted. Fix findings in code or update the central policy only when the exception is architectural, exact, and documented. CI checks are read-only; use local formatting/lint commands to apply changes.
+
+## Local commands
+
+```sh
+python -m pytest -q
+python -m ruff check examples plugin scripts tests
+python -m ruff format --check examples plugin scripts tests
+python scripts/check_python_policy.py
+python scripts/generate_test_inventory.py --check
+python -m pyright --project pyrightconfig.json
+python scripts/check_dead_code.py
+python -m compileall -q examples plugin scripts tests
+```
+
+Run `python scripts/generate_test_inventory.py --write` after changing pytest tests. The inventory includes standalone KiCad GUI/IPC tests separately; they require the same system dependencies and display/native KiCad setup as CI and cannot be validated by pytest alone.
+
+## Repository audit decisions
+
+The test suite deliberately combines distinct validation layers. In particular, `test_pcb_layout_unit.py` validates deterministic transformations without KiCad, while `test_pcb_layout.py` validates the real KiCad/IPC integration. Likewise, schematic/editor unit contracts complement real GUI and IPC acceptance. Release dispatch, wheel publication, immutable asset checks, and release packaging exercise different failure boundaries; the small HTTP response doubles are local to those different protocols and were not merged merely to reduce line count.
+
+The audit removed only two unreferenced compatibility wrappers: `plugin/kicad-blocks/actions.py` and `plugin/kicad-blocks/browse_library.py`. The latter delegated to the already-registered `manage-library` action; neither file is named by `plugin.json` or current user documentation. The three action scripts now share `entrypoints/_bootstrap.py`, replacing repeated `sys.path` mutation and plugin-module loading. The installer test verifies that the shared helper is included in installed packages.
+
+No behavioral test, geometry assertion, KiCad compatibility check, collision/placement constraint, release integrity check, or visual evidence gate was removed or weakened.

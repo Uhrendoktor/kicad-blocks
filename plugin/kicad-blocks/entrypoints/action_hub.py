@@ -3,17 +3,10 @@
 from __future__ import annotations
 
 import sys
-from importlib import import_module
-from pathlib import Path
 
-# KiCad runs this file from the entrypoints directory. Add the plugin root so
-# the package import is stable for both the managed runtime and direct tests.
-PLUGIN_ROOT = Path(__file__).resolve().parents[1]
-if str(PLUGIN_ROOT) not in sys.path:
-    sys.path.insert(0, str(PLUGIN_ROOT))
+from _bootstrap import load_plugin, run_action
 
-plugin_module = import_module("kicad_blocks.plugin")
-run_action = plugin_module.run_action
+plugin_module = load_plugin()
 
 
 def _smoke_test() -> None:
@@ -23,10 +16,7 @@ def _smoke_test() -> None:
     try:
         notebook = plugin_module._show_action_hub(root)
         root.update()
-        tab_names = [
-            notebook.tab(tab_id, "text")
-            for tab_id in notebook.tabs()
-        ]
+        tab_names = [notebook.tab(tab_id, "text") for tab_id in notebook.tabs()]
 
         def descendants(widget):
             for child in widget.winfo_children():

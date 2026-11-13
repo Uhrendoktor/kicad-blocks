@@ -1,0 +1,19 @@
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["plugin/kicad-blocks"]
+strict_config = true
+strict_markers = true
+xfail_strict = true
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+respect-gitignore = true
+
+[tool.ruff.lint]
+# Explicit correctness/maintainability rules; avoid blanket ALL/preview expansion.
+select = ["E4", "E7", "E9", "F", "I", "B", "C4", "DTZ", "PIE", "RET", "SIM", "UP"]
+ignore = ["E501"]
+
+[tool.ruff.format]
+docstring-code-format = true

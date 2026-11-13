@@ -188,11 +188,28 @@ jobs:
           set -euo pipefail
           PY="${RUNNER_TEMP}/kicad-blocks-venv/bin/python"
           "$PY" -m pytest -q
-          "$PY" -m compileall -q plugin tests
+          "$PY" -m compileall -q examples plugin scripts tests
 
-      - name: Ruff lint
+      - name: Ruff lint and format verification
         shell: bash
-        run: "${RUNNER_TEMP}/kicad-blocks-venv/bin/python -m ruff check plugin tests"
+        run: |
+          set -euo pipefail
+          PY="${RUNNER_TEMP}/kicad-blocks-venv/bin/python"
+          "$PY" -m ruff check examples plugin scripts tests
+          "$PY" -m ruff format --check examples plugin scripts tests
+
+      - name: Python policy and reviewed type inventory
+        shell: bash
+        run: |
+          set -euo pipefail
+          PY="${RUNNER_TEMP}/kicad-blocks-venv/bin/python"
+          "$PY" scripts/check_python_policy.py
+          "$PY" scripts/generate_test_inventory.py --check
+          "$PY" -m pyright --project pyrightconfig.json
+
+      - name: High-confidence dead-code scan
+        shell: bash
+        run: "${RUNNER_TEMP}/kicad-blocks-venv/bin/python scripts/check_dead_code.py"
 
       - name: Validate generated files with KiCad
         shell: bash
@@ -492,7 +509,8 @@ jobs:
           "$PY" -m pip install -r plugin/kicad-blocks/requirements.txt pytest ruff
           "$PY" -m pytest -q
           "$PY" -m compileall -q plugin tests
-          "$PY" -m ruff check plugin tests
+          "$PY" -m ruff check examples plugin scripts tests
+          "$PY" -m ruff format --check examples plugin scripts tests
 
       - name: Validate generated reference files with KiCad CLI
         shell: bash

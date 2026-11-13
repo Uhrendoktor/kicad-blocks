@@ -1,0 +1,20 @@
+{
+  "extraPaths": [
+    "plugin/kicad-blocks"
+  ],
+  "include": [
+    "plugin/kicad-blocks/kicad_blocks",
+    "plugin/kicad-blocks/place_imported_layout.py",
+    "scripts"
+  ],
+  "exclude": [
+    "plugin/kicad-blocks/kicad_blocks/plugin.py",
+    "plugin/kicad-blocks/entrypoints/**",
+    "examples/**",
+    "tests/**"
+  ],
+  "typeCheckingMode": "standard",
+  "reportMissingImports": "none",
+  "reportMissingModuleSource": "none",
+  "pythonVersion": "3.12"
+}
