@@ -2707,7 +2707,7 @@ def _save_block_layouts(
     *,
     default_layout_id: str | None,
     variant_layouts: dict[str, str] | None = None,
-) -> None:
+):
     """Copy stored PCB assets and atomically publish layout/implementation links."""
     import json
     import shutil
