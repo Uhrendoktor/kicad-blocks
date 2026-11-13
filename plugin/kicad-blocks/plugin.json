@@ -10,7 +10,35 @@
     {
       "identifier": "open-hub",
       "name": "KiCad Blocks Tasks",
-      "description": "Open the grouped task hub for creating, using, editing, checking, and laying out functional blocks.",
+      "description": "Open the grouped task hub for less frequent and context-specific operations.",
+      "show-button": false,
+      "scopes": [
+        "schematic"
+      ],
+      "entrypoint": "entrypoints/action_hub.py",
+      "args": []
+    },
+    {
+      "identifier": "manage-library",
+      "name": "Browse and Place Functional Blocks",
+      "description": "Search registered libraries, preview a block, configure it, and place it with KiCad's native chooser.",
+      "show-button": true,
+      "icons-light": [
+        "icons/manage-light-24.png"
+      ],
+      "icons-dark": [
+        "icons/manage-dark-24.png"
+      ],
+      "scopes": [
+        "schematic"
+      ],
+      "entrypoint": "entrypoints/browse_blocks.py",
+      "args": []
+    },
+    {
+      "identifier": "create-block",
+      "name": "Create Block from Selected Sheet",
+      "description": "Create and place a reusable block from the selected hierarchical sheet.",
       "show-button": true,
       "icons-light": [
         "icons/create-light-24.png"
@@ -21,7 +49,24 @@
       "scopes": [
         "schematic"
       ],
-      "entrypoint": "entrypoints/action_hub.py",
+      "entrypoint": "entrypoints/create_block.py",
+      "args": []
+    },
+    {
+      "identifier": "open-implementation",
+      "name": "Open Block Implementation",
+      "description": "Open the selected block's implementation for its configured variant.",
+      "show-button": true,
+      "icons-light": [
+        "icons/open-light-24.png"
+      ],
+      "icons-dark": [
+        "icons/open-dark-24.png"
+      ],
+      "scopes": [
+        "schematic"
+      ],
+      "entrypoint": "entrypoints/open_implementation.py",
       "args": []
     },
     {
