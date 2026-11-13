@@ -38,13 +38,13 @@ Create a block from a hierarchical sheet. Its root-sheet hierarchical labels bec
 
 ## A real circuit example
 
-The repository includes a reusable **STUSB4500QTR USB-C Power Delivery sink** reference block, based on ST's application circuit. It demonstrates multiple implementation variants and named PDO configuration profiles.
+The repository includes an editable KiCad reconstruction of the **STUSB4500QTR USB-C Power Delivery sink** application circuit, based on ST's DS12499 Rev. 8, Figure 10. It provides a concrete example of a complete circuit implementation and its external interface.
 
-See the [STUSB4500 example guide](examples/stusb4500/README.md) for the circuit, profiles and source schematic.
+See the [STUSB4500 example guide](examples/stusb4500/README.md) for connectivity, components and source schematic.
 
 ## Get started
 
-**Validated target:** KiCad **10.99.0 development nightly**, Linux **x86_64**, CPython **3.12–3.14** with Tkinter. Stable KiCad releases, Windows, macOS and ARM are not validated yet.
+**Validated target:** KiCad **10.99.0 development nightly**, Linux **x86_64**, CPython **3.12–3.14** with Tkinter. Stable KiCad 10.x, KiCad 11 stable, Windows, macOS and ARM are not validated.
 
 1. Check the [full compatibility and prerequisites](docs/getting-started.md#supported-environment).
 2. Follow the [installation and first-run guide](docs/getting-started.md). The V1.1.0 plugin ZIP is not yet published; check [Releases](https://github.com/Uhrendoktor/kicad-blocks/releases) for an installable package before using the archive instructions.
