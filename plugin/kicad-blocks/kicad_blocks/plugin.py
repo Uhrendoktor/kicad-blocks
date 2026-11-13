@@ -356,7 +356,10 @@ def _attach_tk_window_to_editor(window, editor_window_id: str | None) -> bool:
 
 
 def _attach_process_window_to_editor(
-    process: subprocess.Popen, editor_window_id: str | None
+    process: subprocess.Popen,
+    editor_window_id: str | None,
+    *,
+    target_name: str | None = None,
 ) -> bool:
     """Group a separately opened KiCad document window with its owning editor."""
     xdotool = shutil.which("xdotool")
@@ -381,6 +384,38 @@ def _attach_process_window_to_editor(
         if result.returncode == 0 and window_ids:
             if _set_x11_transient_owner(window_ids[-1], editor_window_id):
                 return True
+
+        # Eeschema can forward a document-open request to an already-running
+        # process; that window will not belong to the short-lived launcher PID.
+        if target_name:
+            try:
+                candidates = subprocess.run(
+                    [xdotool, "search", "--onlyvisible", "--class", "eeschema"],
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                    timeout=2,
+                )
+            except (OSError, subprocess.TimeoutExpired):
+                candidates = None
+            if candidates is not None:
+                for candidate_id in candidates.stdout.splitlines():
+                    candidate_id = candidate_id.strip()
+                    if not candidate_id:
+                        continue
+                    try:
+                        title = subprocess.run(
+                            [xdotool, "getwindowname", candidate_id],
+                            capture_output=True,
+                            text=True,
+                            check=False,
+                            timeout=2,
+                        )
+                    except (OSError, subprocess.TimeoutExpired):
+                        continue
+                    if target_name.casefold() in title.stdout.casefold():
+                        if _set_x11_transient_owner(candidate_id, editor_window_id):
+                            return True
         if process.poll() is not None:
             return False
         time.sleep(0.1)
@@ -2493,7 +2528,11 @@ def _launch_block_asset(
         raise RuntimeError(f"KiCad did not provide an executable path for {description}.")
     process = subprocess.Popen([executable, str(path)], close_fds=True)
     if description != "PCB layout" and editor_window_id:
-        _attach_process_window_to_editor(process, editor_window_id)
+        _attach_process_window_to_editor(
+            process,
+            editor_window_id,
+            target_name=path.name,
+        )
     return process
 
 
@@ -3008,7 +3047,7 @@ def _show_block_layout_editor(
 
     def assigned_to(layout_id: str) -> str:
         names = []
-        if default_layout_id == layout_id:
+        if default_layout_id_holder[0] == layout_id:
             names.append("Default implementation")
         names.extend(
             value for value, linked in variant_layouts.items()
