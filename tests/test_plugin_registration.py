@@ -346,6 +346,7 @@ def main() -> None:
             raise FileNotFoundError(
                 f"Installed PCB Editor action entrypoint is missing: {pcb_entrypoint}"
             )
+        hub_entrypoint = installed_plugin / expected_schematic_actions["open-hub"][0]
         installed_requirements = (installed_plugin / "requirements.txt").read_text(encoding="utf-8")
         abi = f"cp{sys.version_info.major}{sys.version_info.minor}"
         expected_wheel_url = (
