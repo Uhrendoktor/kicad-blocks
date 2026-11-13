@@ -22,3 +22,13 @@ known-first-party = ["kicad_blocks", "scripts", "_bootstrap", "generate_referenc
 
 [tool.ruff.format]
 docstring-code-format = true
+
+[tool.ruff.lint.per-file-ignores]
+# These executable KiCad entrypoints and acceptance scripts must resolve modules
+# from runtime-injected sys.path roots; keep their import grouping explicit.
+"plugin/kicad-blocks/entrypoints/*.py" = ["I001"]
+"scripts/install_plugin.py" = ["I001"]
+"tests/capture_visual_docs.py" = ["I001"]
+"tests/test_ipc_headless.py" = ["I001"]
+"tests/test_stusb4500_reference.py" = ["I001"]
+"tests/validate_kicad_cli.py" = ["I001"]
