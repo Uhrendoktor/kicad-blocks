@@ -795,8 +795,9 @@ def main() -> int:
         "source_sha": os.environ.get("GITHUB_SHA", "local"),
         "generator": "tests/capture_visual_docs.py",
         "renderer": (
-            "KiCad CLI and production Tk windows: all three task-hub tabs, functional-block browser, "
-            "Manage Libraries window, instance configuration, variant editor, creation form, and placement chooser"
+            "KiCad CLI and production Tk windows: all task-hub tabs, functional-block browser, "
+            "Manage Libraries, instance configuration, implementation and PCB layout dialogs, "
+            "creation form, and placement chooser"
         ),
         "example": {
             "component": "STUSB4500QTR",
