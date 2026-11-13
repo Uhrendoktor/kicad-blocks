@@ -304,33 +304,30 @@ def main() -> None:
             raise AssertionError(
                 "Plugin metadata must retain the CPython 3.12 minimum; the requirements select the matching supported ABI wheel."
             )
-        if {item["identifier"] for item in manifest["actions"]} != {
-            "open-hub",
-            "place-imported-layout",
-        }:
+        expected_schematic_actions = {
+            "open-hub": ("entrypoints/action_hub.py", False),
+            "manage-library": ("entrypoints/browse_blocks.py", True),
+            "create-block": ("entrypoints/create_block.py", True),
+            "open-implementation": ("entrypoints/open_implementation.py", True),
+        }
+        expected_action_ids = set(expected_schematic_actions) | {"place-imported-layout"}
+        if {item["identifier"] for item in manifest["actions"]} != expected_action_ids:
             raise AssertionError(
-                "KiCad Blocks should expose one schematic task hub and one PCB placement action, "
-                f"not a flat list of {len(manifest['actions'])} commands."
+                "The plugin must expose the task-hub menu command, three standalone "
+                "schematic actions, and the PCB placement action."
             )
-        action = next(
-            item
-            for item in manifest["actions"]
-            if item["identifier"] == "open-hub"
-        )
-        if action.get("scopes") != ["schematic"] or not action.get("show-button"):
-            raise AssertionError(
-                f"Task hub is not enabled for the Schematic Editor: {action!r}"
+        for identifier, (entrypoint, show_button) in expected_schematic_actions.items():
+            action = next(
+                item for item in manifest["actions"] if item["identifier"] == identifier
             )
-        if action.get("args") != []:
-            raise AssertionError(
-                "Python IPC action arguments precede the script entrypoint; the task hub must "
-                "pass no CLI args so KiCad executes the registered entrypoint as the script."
-            )
-        hub_entrypoint = installed_plugin / action["entrypoint"]
-        if not hub_entrypoint.is_file():
-            raise FileNotFoundError(
-                f"Installed task hub entrypoint is missing: {hub_entrypoint}"
-            )
+            if action.get("scopes") != ["schematic"]:
+                raise AssertionError(f"{identifier} is not scoped to Eeschema: {action!r}")
+            if action.get("show-button", False) is not show_button:
+                raise AssertionError(f"Unexpected toolbar visibility for {identifier}: {action!r}")
+            if action.get("entrypoint") != entrypoint or action.get("args", []) != []:
+                raise AssertionError(f"Invalid no-argument entrypoint for {identifier}: {action!r}")
+            if not (installed_plugin / entrypoint).is_file():
+                raise FileNotFoundError(f"Installed action entrypoint is missing: {entrypoint}")
         pcb_action = next(
             item
             for item in manifest["actions"]
