@@ -345,15 +345,16 @@ def _attach_tk_window_to_editor(window, editor_window_id: str | None) -> bool:
     if not editor_window_id:
         return False
     try:
-        window.update_idletasks()
-        window_id = str(window.winfo_id())
+        # Apply WM hints before mapping: GNOME reads the transient owner and
+        # application class as it creates the taskbar entry.
         with contextlib.suppress(tk.TclError):
-            # Use the same X11 application class as Eeschema so GNOME groups
-            # the manager in the editor's taskbar entry instead of a new Tk app.
             window.wm_class("eeschema", "eeschema")
         with contextlib.suppress(tk.TclError):
             window.wm_attributes("-type", "dialog")
-        return _set_x11_transient_owner(window_id, editor_window_id)
+        window_id = str(window.winfo_id())
+        attached = _set_x11_transient_owner(window_id, editor_window_id)
+        window.update_idletasks()
+        return attached
     except (AttributeError, tk.TclError, OSError):
         LOG.debug("Could not associate the Tk window with KiCad", exc_info=True)
         return False
