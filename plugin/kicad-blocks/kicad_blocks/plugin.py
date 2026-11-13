@@ -3758,7 +3758,10 @@ def _show_block_variant_editor(
                 parent=dialog,
             )
             return
-        variants[index] = {"value": value, "source": source}
+        updated_variant = {"value": value, "source": source}
+        if current.get("layout_id"):
+            updated_variant["layout_id"] = current["layout_id"]
+        variants[index] = updated_variant
         dirty[0] = True
         render(row_index)
 
