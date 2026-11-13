@@ -6,18 +6,17 @@
 - Rework the project landing page and add separate getting-started, feature-workflow, feature-reference, and visual-evidence guides.
 - Extend generated UI evidence to include all task-hub tabs and the instance-configuration dialog in light and dark themes.
 
+- Create from either a selected hierarchical sheet symbol in its parent, or the currently displayed hierarchical sheet with no selection.
+- Replace consecutive creation prompts with one name-and-description form.
+- Add library-browser actions for editing the implementation, opening the facade in KiCad Symbol Editor, and managing implementation variants after creation.
+- Show a designer-oriented block overview instead of internal IDs and file metadata.
+
 ### Fixed
 - Size and center the library browser and folder manager to the usable display area; keep action buttons visible and replace Treeview's implicit tree column with explicit heading columns so the first row is no longer clipped.
 - Extend the light/dark palette to classic Tk controls, table headers, borders, selection colors, and arrow-free scrollbars; add more breathing room and alternating table rows.
 - Hide the generated facade Value field by default and remove it from native SVG previews so the symbol graphic is the focus.
 - Avoid GUI-only calls to KiCad's headless `LoadAllLibraries` API; report a reload warning only when GUI reload fails after the block has been saved.
 - Keep the generated visual-capture and publishing inventories in one shared module so newly added UI screenshots do not make the provenance publisher reject the bundle.
-
-### Added
-- Create from either a selected hierarchical sheet symbol in its parent, or the currently displayed hierarchical sheet with no selection.
-- Replace consecutive creation prompts with one name-and-description form.
-- Add library-browser actions for editing the implementation, opening the facade in KiCad Symbol Editor, and managing implementation variants after creation.
-- Show a designer-oriented block overview instead of internal IDs and file metadata.
 
 ## 1.1.0 — 2026-11-12
 
