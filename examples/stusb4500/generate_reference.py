@@ -267,7 +267,7 @@ def generate_reference_schematic(destination: Path) -> Path:
         ("R55", "Device", "R", "10k", (261.62, 228.6), {"1": ("RESET", "local", ""), "2": ("GND", "local", "")}),
         ("D1", "STUSB4500_Custom", "ESDA25W", "ESDA25W", (88.9, 139.7), {"1": ("CC1", "local", ""), "2": ("CC2", "local", ""), "3": ("GND", "local", "")}),
         ("D50", "Device", "D_TVS", "ESDA25P35-1U1M", (106.68, 190.5), {"1": ("VBUS", "local", ""), "2": ("GND", "local", "")}),
-        ("D11", "Device", "D_TVS", "ESDA25P35-1U1M", (371.22, 124.46), {"1": ("VSNK", "local", ""), "2": ("GND", "local", "")}),
+        ("D11", "Device", "D_TVS", "ESDA25P35-1U1M", (373.38, 124.46), {"1": ("VSNK", "local", ""), "2": ("GND", "local", "")}),
         ("T4", "Transistor_FET", "Q_PMOS_GSD", "STL6P3LLH6", (284.48, 76.2), {"1": ("VBUS_EN_SNK", "local", ""), "2": ("VBUS", "local", ""), "3": ("FET_MID", "local", "")}),
         ("T1", "Transistor_FET", "Q_PMOS_GSD", "STL6P3LLH6", (337.82, 76.2), {"1": ("VSNK_GATE", "local", ""), "2": ("FET_MID", "local", ""), "3": ("VSNK", "local", "")}),
     ]
