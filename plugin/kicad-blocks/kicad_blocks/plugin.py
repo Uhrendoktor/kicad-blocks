@@ -873,8 +873,7 @@ def _pick_block_for_placement(records, parent):
 
     dialog = tk.Toplevel(parent)
     dialog.title("Place Functional Block")
-    dialog.geometry("1040x680")
-    dialog.minsize(820, 560)
+    _set_window_geometry(dialog, 1200, 800, 980, 640)
     dialog.transient(parent)
     dialog.grab_set()
 
@@ -889,18 +888,21 @@ def _pick_block_for_placement(records, parent):
     panes.pack(fill="both", expand=True)
     left = ttk.Frame(panes, padding=(0, 0, 8, 0))
     right = ttk.Frame(panes, padding=(8, 0, 0, 0))
-    panes.add(left, weight=1)
-    panes.add(right, weight=2)
+    panes.add(left, weight=2)
+    panes.add(right, weight=3)
     left.rowconfigure(0, weight=1)
     left.columnconfigure(0, weight=1)
 
-    tree = ttk.Treeview(left, columns=("library",), show="tree headings", selectmode="browse")
-    tree.heading("#0", text="Functional block")
+    tree = ttk.Treeview(left, columns=("block", "library"), show="headings", selectmode="browse")
+    tree.heading("block", text="Functional block")
     tree.heading("library", text="Library")
-    tree.column("#0", width=250, minwidth=150, stretch=True)
-    tree.column("library", width=120, minwidth=90, stretch=False)
-    scroll = ttk.Scrollbar(left, orient="vertical", command=tree.yview)
+    tree.column("block", width=220, minwidth=160, stretch=True)
+    tree.column("library", width=130, minwidth=100, stretch=False)
+    scroll = ttk.Scrollbar(left, orient="vertical", command=tree.yview, style="Vertical.TScrollbar")
     tree.configure(yscrollcommand=scroll.set)
+    palette = getattr(parent, "_kicad_blocks_palette", {})
+    tree.tag_configure("even", background=palette.get("surface", "#f4f5f6"))
+    tree.tag_configure("odd", background=palette.get("surface_alt", "#e8eaed"))
     tree.grid(row=0, column=0, sticky="nsew")
     scroll.grid(row=0, column=1, sticky="ns")
     _bind_mousewheel(tree, lambda amount: tree.yview_scroll(amount, "units"))
@@ -993,7 +995,11 @@ def _pick_block_for_placement(records, parent):
         for index, record in enumerate(visible_records):
             iid = f"{record.manifest['block_id']}:{index}"
             records_by_id[iid] = record
-            tree.insert("", "end", iid=iid, text=record.name, values=(record.path.parent.name,))
+            tree.insert(
+                "", "end", iid=iid,
+                values=(record.name, record.path.parent.name),
+                tags=("even" if index % 2 == 0 else "odd",),
+            )
         preferred = _preferred_library_selection(visible_records, selected_record[0])
         if preferred is None:
             selected_record[0] = None
@@ -1092,8 +1098,7 @@ def _pick_record(records, parent, title: str):
 
     dialog = tk.Toplevel(parent)
     dialog.title(title)
-    dialog.geometry("760x500")
-    dialog.minsize(600, 360)
+    _set_window_geometry(dialog, 920, 640, 760, 480)
     dialog.transient(parent)
     dialog.grab_set()
 
@@ -1114,22 +1119,25 @@ def _pick_record(records, parent, title: str):
     results_frame.rowconfigure(0, weight=1)
     tree = ttk.Treeview(
         results_frame,
-        columns=("library", "pins", "variants", "layouts"),
-        show="tree headings",
+        columns=("block", "library", "pins", "variants", "layouts"),
+        show="headings",
         selectmode="browse",
     )
-    tree.heading("#0", text="Block")
+    tree.heading("block", text="Block")
     tree.heading("library", text="Library")
     tree.heading("pins", text="Pins")
     tree.heading("variants", text="Variants")
     tree.heading("layouts", text="Layouts")
-    tree.column("#0", width=300, minwidth=180, stretch=True)
-    tree.column("library", width=100, minwidth=80, stretch=False)
+    tree.column("block", width=260, minwidth=180, stretch=True)
+    tree.column("library", width=135, minwidth=100, stretch=False)
     tree.column("pins", width=55, minwidth=45, stretch=False, anchor="center")
     tree.column("variants", width=75, minwidth=60, stretch=False, anchor="center")
     tree.column("layouts", width=65, minwidth=55, stretch=False, anchor="center")
-    scrollbar = ttk.Scrollbar(results_frame, orient="vertical", command=tree.yview)
+    scrollbar = ttk.Scrollbar(results_frame, orient="vertical", command=tree.yview, style="Vertical.TScrollbar")
     tree.configure(yscrollcommand=scrollbar.set)
+    palette = getattr(parent, "_kicad_blocks_palette", {})
+    tree.tag_configure("even", background=palette.get("surface", "#f4f5f6"))
+    tree.tag_configure("odd", background=palette.get("surface_alt", "#e8eaed"))
     tree.grid(row=0, column=0, sticky="nsew")
     scrollbar.grid(row=0, column=1, sticky="ns")
 
@@ -1165,13 +1173,15 @@ def _pick_record(records, parent, title: str):
             row_id = f"{record.manifest['block_id']}:{index}"
             records_by_id[row_id] = record
             tree.insert(
-                "", "end", iid=row_id, text=record.name,
+                "", "end", iid=row_id,
                 values=(
+                    record.name,
                     record.path.parent.name,
                     len(record.manifest.get("pins", [])),
                     len(record.manifest.get("variants", [])),
                     len(_layout_choices(record)),
                 ),
+                tags=("even" if index % 2 == 0 else "odd",),
             )
         count_label.configure(text=f"{len(visible)} of {len(records)} blocks")
         if preferred is None:
@@ -2677,8 +2687,8 @@ def _show_library_browser(
     panes.pack(fill="both", expand=True)
     left = ttk.Frame(panes, padding=(0, 0, 8, 0))
     right = ttk.Frame(panes, padding=(8, 0, 0, 0))
-    panes.add(left, weight=1)
-    panes.add(right, weight=3)
+    panes.add(left, weight=3)
+    panes.add(right, weight=4)
 
     ttk.Label(left, text="Search blocks").pack(anchor="w")
     search = tk.StringVar()
@@ -2703,8 +2713,8 @@ def _show_library_browser(
     tree.heading("pins", text="Pins")
     tree.heading("variants", text="Variants")
     tree.heading("layouts", text="Layouts")
-    tree.column("block", width=230, minwidth=170, stretch=True)
-    tree.column("library", width=140, minwidth=100, stretch=False)
+    tree.column("block", width=210, minwidth=160, stretch=True)
+    tree.column("library", width=115, minwidth=90, stretch=False)
     tree.column("pins", width=42, minwidth=35, stretch=False, anchor="center")
     tree.column("variants", width=60, minwidth=48, stretch=False, anchor="center")
     tree.column("layouts", width=55, minwidth=45, stretch=False, anchor="center")
@@ -3750,8 +3760,8 @@ def _show_action_hub(root):
                     "manage-library",
                 ),
                 (
-                    "Create from selected sheet",
-                    "Select one hierarchical sheet symbol first; its implementation becomes a reusable block.",
+                    "Create block from sheet",
+                    "Select a hierarchical sheet symbol in its parent, or run this from the open sheet with nothing selected.",
                     "create-block",
                 ),
                 (
@@ -3847,7 +3857,7 @@ def _show_action_hub(root):
             borderwidth=0,
         )
         scrollbar = ttk.Scrollbar(
-            scroll_area, orient="vertical", command=canvas.yview
+            scroll_area, orient="vertical", command=canvas.yview, style="Vertical.TScrollbar"
         )
         canvas.configure(yscrollcommand=scrollbar.set)
         canvas.pack(side="left", fill="both", expand=True)
