@@ -4514,7 +4514,7 @@ def _show_library_browser(
                         instance_record.manifest.get("block_id")
                         == record.manifest.get("block_id")
                     )
-                except Exception:
+                except (OSError, RuntimeError, ValueError, LookupError, TypeError, KeyError):
                     can_edit_facade = False
         if facade_button[0] is not None:
             facade_button[0].configure(
