@@ -18,6 +18,7 @@ from kicad_blocks.model import parse_parameters, parse_pins
 from kicad_blocks.plugin import (
     _bind_mousewheel,
     _block_overview_text,
+    _clean_facade_preview_svg,
     _filter_library_records,
     _library_record_for_instance,
     _library_record_for_tree_row,
@@ -73,6 +74,37 @@ class LibraryBrowserTests(unittest.TestCase):
         self.assertEqual(_filter_library_records(records, "1v8")[0].name, "Buck Converter")
         self.assertEqual(_filter_library_records(records, "vout")[0].name, "Buck Converter")
         self.assertEqual(_filter_library_records(records, ""), records)
+
+    def test_native_facade_preview_removes_reference_and_component_name(self):
+        from xml.etree import ElementTree as ET
+
+        svg = self.root / "preview-source.svg"
+        svg.write_text(
+            """<svg xmlns="http://www.w3.org/2000/svg">
+              <g id="reference"><text>X?</text><desc>X?</desc><path d="M0 0"/></g>
+              <g id="component-name"><text>Buck Converter</text></g>
+              <g id="pins"><text>VIN</text><desc>VIN</desc></g>
+            </svg>""",
+            encoding="utf-8",
+        )
+        record = SimpleNamespace(
+            manifest={
+                "name": "Buck Converter",
+                "symbol_name": "buck_converter",
+                "reference_prefix": "X",
+            }
+        )
+
+        cleaned = _clean_facade_preview_svg(svg, record, self.root)
+        root = ET.parse(cleaned).getroot()
+        labels = {
+            (node.text or "").strip()
+            for node in root.iter()
+            if node.tag.rsplit("}", 1)[-1] in {"text", "desc"}
+        }
+        self.assertNotIn("X?", labels)
+        self.assertNotIn("Buck Converter", labels)
+        self.assertIn("VIN", labels)
 
     def test_overview_contains_pin_types_parameters_variants_and_layouts(self):
         overview = _block_overview_text(self.block)
