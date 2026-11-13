@@ -374,7 +374,12 @@ def _select_existing_pcb_file(dialog) -> None:
         ),
         None,
     )
-    if not fields or not fields[0].winfo_ismapped() or choose_button is None or not choose_button.winfo_ismapped():
+    if (
+        len(fields) < 2
+        or not fields[1].winfo_ismapped()
+        or choose_button is None
+        or not choose_button.winfo_ismapped()
+    ):
         raise RuntimeError("Selecting an existing PCB file did not reveal its file picker.")
 
 
@@ -388,6 +393,25 @@ def _assert_layout_manager_footer(dialog) -> None:
     missing = sorted(labels - visible)
     if missing:
         raise RuntimeError("PCB layout manager footer buttons are not visible: " + ", ".join(missing))
+
+
+def _assert_blank_pcb_file_picker_hidden(dialog) -> None:
+    fields = [
+        widget for widget in walk_widgets(dialog)
+        if widget.winfo_class() in {"TEntry", "Entry"}
+    ]
+    choose_button = next(
+        (
+            widget for widget in walk_widgets(dialog)
+            if widget.winfo_class() == "TButton" and widget.cget("text") == "Choose file…"
+        ),
+        None,
+    )
+    if len(fields) < 2 or fields[1].winfo_ismapped() or (
+        choose_button is not None and choose_button.winfo_ismapped()
+    ):
+        raise RuntimeError("The blank-board mode should hide its PCB file entry and Choose file button.")
+    _assert_add_layout_footer(dialog)
 
 
 def _assert_add_layout_footer(dialog) -> None:
@@ -544,7 +568,7 @@ def capture_ui_workflows(library_roots, record, project_dir: Path, output_dir: P
                     output_dir / f"add-pcb-layout-blank-{theme}.png",
                     xdotool,
                     minimum_size=(640, 460),
-                    prepare=_assert_add_layout_footer,
+                    prepare=_assert_blank_pcb_file_picker_hidden,
                 )
                 _capture_modal(
                     root,
