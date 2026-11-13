@@ -317,17 +317,40 @@ def _make_themed_root(theme: str, title: str):
 
 
 def _select_default_implementation(dialog) -> None:
-    _select_first_table_row(dialog)
-    edit_button = next(
+    tree = next(
         (
             widget for widget in walk_widgets(dialog)
-            if widget.winfo_class() == "TButton"
-            and widget.cget("text") == "Edit default"
+            if widget.winfo_class() == "Treeview"
         ),
         None,
     )
+    if tree is None or "0" not in tree.get_children():
+        raise RuntimeError("The implementations dialog does not contain its Default row.")
+    tree.selection_set("0")
+    tree.focus("0")
+    tree.event_generate("<<TreeviewSelect>>")
+    dialog.update_idletasks()
+    dialog.update()
+
+    buttons = [
+        widget for widget in walk_widgets(dialog)
+        if widget.winfo_class() == "TButton"
+        and widget.cget("text") in {"Edit default", "Edit variant"}
+    ]
+    edit_button = next(
+        (widget for widget in buttons if widget.cget("text") == "Edit default"),
+        None,
+    )
     if edit_button is None or edit_button.cget("state") != "normal":
-        raise RuntimeError("The Default implementation cannot be edited from the implementations dialog.")
+        selection = tree.selection()
+        state = [
+            (widget.cget("text"), widget.cget("state"))
+            for widget in buttons
+        ]
+        raise RuntimeError(
+            "The Default row edit action is unavailable: "
+            f"rows={tree.get_children()!r}, selection={selection!r}, buttons={state!r}."
+        )
 
 
 def _select_existing_pcb_file(dialog) -> None:
