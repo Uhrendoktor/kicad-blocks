@@ -23,6 +23,8 @@ jobs:
     timeout-minutes: 50
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Install KiCad development CLI if missing
         shell: bash
@@ -203,7 +205,7 @@ jobs:
         run: |
           set -euo pipefail
           PY="${RUNNER_TEMP}/kicad-blocks-venv/bin/python"
-          "$PY" scripts/check_python_policy.py
+          "$PY" scripts/check_python_policy.py --base origin/main
           "$PY" scripts/generate_test_inventory.py --check
           "$PY" -m pyright --project pyrightconfig.json
 
@@ -500,27 +502,6 @@ jobs:
           PY="${RUNNER_TEMP}/kicad-blocks-visual-venv/bin/python"
           "$PY" -m pip install --upgrade pip
           "$PY" -m pip install cairosvg pillow
-
-      # TEMPORARY: establish a formatted baseline for the repository-wide strict check.
-      - name: Apply Ruff formatting baseline
-        if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'agents/strict-tests-and-inventory' }}
-        shell: bash
-        env:
-          FORMAT_BRANCH: ${{ github.head_ref }}
-        run: |
-          set -euo pipefail
-          PY="${RUNNER_TEMP}/kicad-blocks-visual-venv/bin/python"
-          git fetch origin "$FORMAT_BRANCH"
-          git checkout -B "$FORMAT_BRANCH" "origin/$FORMAT_BRANCH"
-          "$PY" -m pip install ruff
-          "$PY" -m ruff format examples plugin scripts tests
-          if ! git diff --quiet -- examples plugin scripts tests; then
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add -u -- examples plugin scripts tests
-            git commit -m "Apply Ruff formatting baseline"
-            git push origin "HEAD:${FORMAT_BRANCH}"
-          fi
 
       - name: Install project dependencies and verify unit tests, compile, and lint
         shell: bash
