@@ -16,12 +16,6 @@ from pathlib import Path
 
 # The core block model and IPC helpers must remain importable in headless
 # environments. Load Tkinter only when the interactive manager is invoked.
-tk = None
-ttk = None
-filedialog = None
-messagebox = None
-simpledialog = None
-
 from .composition import compose_block_implementation
 from .extraction import selected_sheet_file, selected_sheet_instance_uuid
 from .model import (
@@ -61,6 +55,12 @@ from .repository import (
     set_library_root,
 )
 from .repository import library_roots as configured_library_roots
+
+tk = None
+ttk = None
+filedialog = None
+messagebox = None
+simpledialog = None
 
 LOG = logging.getLogger("kicad_blocks")
 
