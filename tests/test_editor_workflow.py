@@ -1,13 +1,11 @@
 """Exercise the plugin's library editor launch and publish workflow."""
 
-import sys
 import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
-PLUGIN = Path(__file__).resolve().parents[1] / "plugin" / "kicad-blocks"
 from kicad_blocks import plugin as plugin_actions
 from kicad_blocks.model import parse_parameters, parse_pins
 from kicad_blocks.repository import create_block, read_manifest
