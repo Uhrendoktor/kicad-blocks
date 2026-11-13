@@ -477,6 +477,76 @@ def generate_reference_schematic(destination: Path) -> Path:
             if point != anchor_point:
                 label_points.pop(point, None)
 
+    # The FET common node is a meaningful part of the power path. Route it as
+    # one visible, orthogonal trunk with a branch to R10 rather than three
+    # unrelated text labels.
+    fet_t4_drain = pin_world_points[("T4", "3")]
+    fet_t1_source = pin_world_points[("T1", "2")]
+    fet_r10_node = pin_world_points[("R10", "1")]
+    if abs(fet_t4_drain[0] - fet_r10_node[0]) > 0.001:
+        raise ValueError("T4 drain and R10 FET_MID branch must share an X column.")
+    if fet_t1_source[1] <= fet_t4_drain[1] or fet_r10_node[1] <= fet_t1_source[1]:
+        raise ValueError("FET_MID route corridor no longer fits between the FETs and R10.")
+    fet_out = (fet_t4_drain[0], round(fet_t4_drain[1] - 5.08, 3))
+    fet_lane_x = round(min(fet_t4_drain[0], fet_r10_node[0]) - 15.24, 3)
+    fet_track_y = round(fet_t1_source[1] + 10.16, 3)
+    fet_tee = (fet_r10_node[0], fet_track_y)
+    fet_end_track = (fet_t1_source[0], fet_track_y)
+    fet_route = [
+        fet_t4_drain,
+        fet_out,
+        (fet_lane_x, fet_out[1]),
+        (fet_lane_x, fet_track_y),
+        fet_tee,
+        fet_end_track,
+        fet_t1_source,
+    ]
+    for index, (start, end) in enumerate(zip(fet_route, fet_route[1:])):
+        wires.append(_wire(start, end, f"FET_MID:power-trunk:{index}"))
+    wires.append(_wire(fet_tee, fet_r10_node, "FET_MID:R10-branch"))
+    junctions.append([
+        "junction",
+        ["at", f"{fet_tee[0]:.3f}", f"{fet_tee[1]:.3f}"],
+        ["diameter", "0"],
+        ["color", "0", "0", "0", "0"],
+        ["uuid", _Quoted(_uid(f"junction:FET_MID:{fet_tee[0]:.3f}:{fet_tee[1]:.3f}"))],
+    ])
+    for ref, pin_number in (("T4", "3"), ("T1", "2"), ("R10", "1")):
+        point = pin_world_points[(ref, pin_number)]
+        label = label_points.get(point)
+        if label is None or label[0] != "FET_MID" or label[1] != "local":
+            raise ValueError(f"Expected local FET_MID label is missing at {ref}.{pin_number}.")
+        label_points.pop(point)
+
+    # Show the short FET gate-to-divider connection. R11 and R13 already share
+    # a horizontal VSNK_GATE wire; the branch lands at R13's pin-1 node.
+    fet_gate = pin_world_points[("T1", "1")]
+    gate_resistor = pin_world_points[("R13", "1")]
+    gate_out = (round(fet_gate[0] - 5.08, 3), fet_gate[1])
+    gate_track_y = round(gate_resistor[1] - 7.62, 3)
+    if gate_out[0] >= gate_resistor[0] or gate_track_y <= fet_gate[1]:
+        raise ValueError("T1 gate route corridor no longer fits its resistor branch.")
+    gate_route = [
+        fet_gate,
+        gate_out,
+        (gate_out[0], gate_track_y),
+        (gate_resistor[0], gate_track_y),
+        gate_resistor,
+    ]
+    for index, (start, end) in enumerate(zip(gate_route, gate_route[1:])):
+        wires.append(_wire(start, end, f"VSNK_GATE:T1-R13:{index}"))
+    junctions.append([
+        "junction",
+        ["at", f"{gate_resistor[0]:.3f}", f"{gate_resistor[1]:.3f}"],
+        ["diameter", "0"],
+        ["color", "0", "0", "0", "0"],
+        ["uuid", _Quoted(_uid(f"junction:VSNK_GATE:{gate_resistor[0]:.3f}:{gate_resistor[1]:.3f}"))],
+    ])
+    gate_label = label_points.get(fet_gate)
+    if gate_label is None or gate_label[0] != "VSNK_GATE" or gate_label[1] != "local":
+        raise ValueError("Expected local VSNK_GATE label is missing at T1 gate.")
+    label_points.pop(fet_gate)
+
     # Functional-zone separator; avoid decorative boxes around the circuitry.
     rules = [
         ["polyline",
