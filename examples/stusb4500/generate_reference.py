@@ -164,6 +164,23 @@ def _pin_data(symbol: list) -> list[dict]:
     return result
 
 
+def _wire(start: tuple[float, float], end: tuple[float, float], key: str) -> list:
+    """Create one orthogonal two-point KiCad wire segment."""
+    if start == end:
+        raise ValueError(f"Zero-length wire segment for {key}.")
+    if abs(start[0] - end[0]) > 0.001 and abs(start[1] - end[1]) > 0.001:
+        raise ValueError(f"Non-orthogonal wire segment for {key}: {start} -> {end}.")
+    return [
+        "wire",
+        ["pts",
+            ["xy", f"{start[0]:.3f}", f"{start[1]:.3f}"],
+            ["xy", f"{end[0]:.3f}", f"{end[1]:.3f}"],
+        ],
+        ["stroke", ["width", "0"], ["type", "default"]],
+        ["uuid", _Quoted(_uid(f"wire:{key}:{start[0]:.3f}:{start[1]:.3f}:{end[0]:.3f}:{end[1]:.3f}"))],
+    ]
+
+
 def _prop(name: str, value: str, number: int, x: float, y: float, hidden: bool = False) -> list:
     effects = ["effects", ["font", ["size", "1.27", "1.27"]]]
     if hidden:
@@ -270,6 +287,7 @@ def generate_reference_schematic(destination: Path) -> Path:
         tuple[float, float],
         tuple[str, str, str | None, float, float, str, int],
     ] = {}
+    pin_world_points: dict[tuple[str, str], tuple[float, float]] = {}
     no_connect_points: set[tuple[float, float]] = set()
     for reference, library, symbol_name, value, (sx, sy), pin_map in specs:
         definition = loaded[(library, symbol_name)]
@@ -324,6 +342,7 @@ def generate_reference_schematic(destination: Path) -> Path:
                 px = sx + pin["x"]
                 py = sy - pin["y"]
                 point = (round(px, 3), round(py, 3))
+                pin_world_points[(reference, pin["number"])] = point
                 if kind in {"hier", "local"}:
                     existing = label_points.get(point)
                     shape_name = shape[0] if shape else None
@@ -406,10 +425,59 @@ def generate_reference_schematic(destination: Path) -> Path:
             ["uuid", _Quoted(_uid(f"nc:{x:.3f}:{y:.3f}"))],
         ])
 
-    # Long connections use matching local net labels. The drawing is organized
-    # into functional zones with grid-aligned placements; labels intentionally
-    # avoid false wire crossings on the USB-C and power nets.
+    # Draw short, local relationships as real wires. Long connections remain
+    # named labels so the sheet reads like a circuit rather than a cable map.
+    # These groups are deliberately collinear; generation fails if a later
+    # placement change breaks the intended geometry.
+    wire_groups = [
+        ("VREG_2V7", [("C2", "1"), ("C3", "1")], ("C2", "1")),
+        ("GND", [("C1", "2"), ("C2", "2"), ("C3", "2")], ("C1", "2")),
+        ("VBUS_VS_DISCH", [("R1", "2"), ("R4", "2")], ("R1", "2")),
+        ("VREG_2V7", [("R51", "1"), ("R52", "1")], ("R51", "1")),
+        ("GND", [("R53", "2"), ("R54", "2")], ("R53", "2")),
+        ("VMCU", [("R3", "1"), ("R5", "1"), ("R6", "1")], ("R3", "1")),
+        ("VSNK_GATE", [("R11", "1"), ("R13", "1")], ("R11", "1")),
+    ]
     wires = []
+    junctions = []
+    for net_name, pin_keys, label_anchor in wire_groups:
+        missing = [key for key in pin_keys if key not in pin_world_points]
+        if missing:
+            raise ValueError(f"{net_name} wire group references unmapped pins: {missing}")
+        points = [(key, pin_world_points[key]) for key in pin_keys]
+        x_values = {point[0] for _, point in points}
+        y_values = {point[1] for _, point in points}
+        if len(y_values) == 1:
+            ordered = sorted(points, key=lambda item: item[1][0])
+        elif len(x_values) == 1:
+            ordered = sorted(points, key=lambda item: item[1][1])
+        else:
+            raise ValueError(f"{net_name} wire group is not collinear: {points}")
+        for key, point in ordered:
+            label = label_points.get(point)
+            if label is None or label[0] != net_name or label[1] != "local":
+                raise ValueError(
+                    f"{net_name} wire endpoint {key} at {point} does not have the expected local label."
+                )
+        anchors = [point for key, point in ordered if key == label_anchor]
+        if len(anchors) != 1:
+            raise ValueError(f"{net_name} wire group must contain one label anchor: {label_anchor}")
+        anchor_point = anchors[0]
+        for (key_a, point_a), (key_b, point_b) in zip(ordered, ordered[1:]):
+            wires.append(_wire(point_a, point_b, f"{net_name}:{key_a[0]}.{key_a[1]}-{key_b[0]}.{key_b[1]}"))
+        for _, point in ordered[1:-1]:
+            junctions.append([
+                "junction",
+                ["at", f"{point[0]:.3f}", f"{point[1]:.3f}"],
+                ["diameter", "0"],
+                ["color", "0", "0", "0", "0"],
+                ["uuid", _Quoted(_uid(f"junction:{net_name}:{point[0]:.3f}:{point[1]:.3f}"))],
+            ])
+        for key, point in ordered:
+            if point != anchor_point:
+                label_points.pop(point, None)
+
+    # Functional-zone separator; avoid decorative boxes around the circuitry.
     rules = [
         ["polyline",
             ["pts", ["xy", "44.45", "38.1"], ["xy", "398.78", "38.1"]],
@@ -431,7 +499,7 @@ def generate_reference_schematic(destination: Path) -> Path:
             ["comment", "2", _Quoted("Reference only: verify component ratings, footprints and thermal design before production.")],
         ],
         ["lib_symbols", *library_symbols],
-        *instances, *wires, *label_stubs, *labels, *no_connects, *rules,
+        *instances, *wires, *label_stubs, *labels, *no_connects, *junctions, *rules,
         ["text", _Quoted("STUSB4500QTR — USB Type-C / USB PD sink controller"),
             ["at", "50.8", "30.48", "0"], ["effects", ["font", ["size", "2.0", "2.0"]]],
             ["uuid", _Quoted(_uid("text:title"))],
