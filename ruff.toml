@@ -6,6 +6,32 @@ target-version = "py312"
 [lint]
 select = ["E4", "E7", "E9", "F"]
 
+# A narrow exception for files that deliberately add KiCad/plugin roots to sys.path
+# before importing the runtime modules they need. Keep the rest of the tree strict.
+[lint.per-file-ignores]
+"examples/stusb4500/generate_reference.py" = ["E402"]
+"plugin/kicad-blocks/kicad_blocks/plugin.py" = ["E402"]
+"tests/capture_visual_docs.py" = ["E402"]
+"tests/conftest.py" = ["E402"]
+"tests/test_blocks.py" = ["E402"]
+"tests/test_editor_workflow.py" = ["E402"]
+"tests/test_eeschema_gui.py" = ["E402"]
+"tests/test_extraction.py" = ["E402"]
+"tests/test_instance_configuration_gui.py" = ["E402"]
+"tests/test_ipc_headless.py" = ["E402"]
+"tests/test_library_browser.py" = ["E402"]
+"tests/test_library_picker_gui.py" = ["E402"]
+"tests/test_library_validation.py" = ["E402"]
+"tests/test_operations.py" = ["E402"]
+"tests/test_pcb_layout.py" = ["E402"]
+"tests/test_pcb_layout_unit.py" = ["E402"]
+"tests/test_pcb_placement.py" = ["E402"]
+"tests/test_plugin_registration.py" = ["E402"]
+"tests/test_profiles.py" = ["E402"]
+"tests/test_stusb4500_reference.py" = ["E402"]
+"tests/test_variants.py" = ["E402"]
+"tests/validate_kicad_cli.py" = ["E402"]
+
 [format]
 quote-style = "double"
 indent-style = "space"
