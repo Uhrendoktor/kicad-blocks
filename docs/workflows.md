@@ -1,202 +1,135 @@
-# Feature workflows
+# Workflow guides
 
-This guide explains each KiCad Blocks capability from the editor UI. The [visual evidence page](visual-evidence.md) contains real application captures.
+Use these guides when you know what you want to do. Each section describes the task, the steps in KiCad and what changes as a result. Exact filenames, field names and implementation rules are in the [feature reference](reference.md).
 
-## Where to find commands
+## Where to find the commands
 
-### Eeschema toolbar
+The three common Eeschema actions are available as toolbar buttons:
 
-The three frequent actions are standalone toolbar buttons:
+- **Browse and Place Functional Blocks**
+- **Create Block from Selected Sheet**
+- **Open Block Implementation**
 
-- **Browse and Place Functional Blocks** — search, inspect, configure and place a block.
-- **Create Block from Selected Sheet** — extract a reusable block from a hierarchical sheet.
-- **Open Block Implementation** — open the implementation or the variant selected on one placed instance.
+Other commands are grouped in **Tools → External Plugins → KiCad Blocks Tasks**:
 
-### KiCad Blocks Tasks
-
-Open **Tools → External Plugins → KiCad Blocks Tasks** for less-frequent actions. The task hub groups actions by workflow:
-
-| Tab | Actions |
+| Tab | Use it for |
 | --- | --- |
-| **Use & build** | Browse and place blocks; create a block from a sheet; open an implementation. |
-| **Edit & maintain** | Configure an instance; edit its facade symbol; publish an implementation; make an instance local; synchronize a local copy; nest a block. |
-| **Checks & PCB** | Validate registered libraries; export recursive BOM; run recursive ERC; apply one PCB layout; apply multiple PCB layouts. |
+| **Use & build** | Browse, place and create blocks. |
+| **Edit & maintain** | Configure an instance, edit or publish a block, create a local copy, synchronize it or nest another block. |
+| **Checks & PCB** | Validate libraries, export a recursive BOM, run recursive ERC and apply stored PCB layouts. |
 
-PCB Editor also has **Place Imported Block Layout**. KiCad's IPC action manifest does not expose arbitrary custom submenus, so KiCad Blocks uses individual toolbar actions plus the task hub.
+PCB Editor has a separate **Place Imported Block Layout** action for moving a previously imported layout group.
 
-## 1. Create a functional block from a hierarchical sheet
+## Create a block from a hierarchical sheet
 
-1. In Eeschema, either select one hierarchical sheet symbol in its parent or open the target hierarchical sheet itself with nothing selected.
-2. Click **Create Block from Selected Sheet** (or use **Use & build → Create block from sheet**).
-3. Enter the block name and optional description in the single form.
-4. Choose the shared library destination if needed.
+Use this when you have a working circuit in a project and want to make it available from a shared library.
 
-The plugin copies the full subschematic tree into a new `.kicad_block` folder. The source project sheet is left untouched. Each distinct hierarchical-label name on the root sheet becomes one facade pin. Label shapes map to KiCad electrical pin types: input, output, bidirectional, tri-state or passive. Pin numbers follow the order in which labels are encountered.
+1. Open the parent schematic and select the hierarchical sheet symbol you want to package. Alternatively, open that sheet itself and run the command with nothing selected.
+2. Choose **Create Block from Selected Sheet**.
+3. Enter the block name and an optional description.
+4. Choose the shared library folder.
 
-Nested child sheets are copied recursively as implementation files. Their `Sheetfile` links and hierarchy instance paths are rewritten so the block no longer depends on the original project paths. Labels on nested child sheets do not become facade pins.
+KiCad Blocks copies the selected sheet and its child sheets into a new `.kicad_block` folder. The original project is not modified.
 
-Open **Edit implementation** in the library browser to work on the internal schematic with normal KiCad symbols, wires and labels.
-
-<p align="center">
-  <img src="https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/create-block-form-light.png" alt="Single-form Create Functional Block dialog" width="660">
-</p>
-
-## 2. Find and place a block
-
-1. Click **Browse and Place Functional Blocks**.
-2. Search by block name, description, pin name, parameter or declared variant.
-3. Select a block to inspect its facade preview, connections, parameters, implementation choices and PCB layouts.
-4. Choose any required variant or named profile.
-5. Double-click a result or choose **Place at cursor**.
-6. KiCad's native Add Symbol chooser opens. Confirm the selected facade and place it like an ordinary symbol.
-
-The project receives a combined catalog at `.kicad_blocks/KBlocks.kicad_sym` and one stable `KBlocks` row in its `sym-lib-table`. Shared library folders remain separate and reusable across projects.
+The root sheet's hierarchical labels define the block's external pins. Child-sheet labels stay inside the implementation. Open **Edit implementation** in the browser to continue editing the copied circuit with normal KiCad schematic tools.
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/library-browser-light.png" alt="Searchable Functional Block Library browser with facade preview and block overview" width="900">
+  <img src="https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/create-block-form-light.png" alt="Create Functional Block form for naming a new block and choosing its library destination" width="700">
 </p>
 
-### Manage shared library folders
+## Find and place a block
 
-Open **Manage library folders…** from the browser. The manager can add an existing folder, create a new empty library, change a registered folder path, unregister a folder or choose the default destination.
+1. Open a project in Eeschema and choose **Browse and Place Functional Blocks**.
+2. Search by block name, description, pin name, parameter or variant.
+3. Select a result. The details pane shows its interface, implementation choices, parameters and available PCB layouts.
+4. Select the required variant or named profile.
+5. Choose **Place at cursor** or double-click the result.
+6. Confirm the selected facade in KiCad's native **Choose Symbol** dialog and place it.
 
-Changing a registered path does not move files. Unregistering a library does not delete it.
+The placed facade is a normal schematic symbol. KiCad Blocks creates or updates the project's combined `KBlocks` symbol catalog under `.kicad_blocks/`; the shared library stays in its registered folder.
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/library-folders-light.png" alt="Registered library folders and folder-management controls" width="900">
+  <img src="https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/library-browser-details-light.png" alt="Library browser showing the STUSB4500 block, its ten-pin facade and available implementation choices" width="900">
 </p>
 
-## 3. Configure variants, profiles and parameters
+## Configure one placed instance
 
-### Implementation variants
+Use a configuration profile when you want a known set of values. Use custom values when this instance needs something different.
 
-A variant maps an exact `KB_VARIANT` value to an alternative implementation schematic.
+**Before placement:** choose the variant or profile in the placement chooser.
 
-1. In the browser, select a block and open **Manage variants**.
-2. Add, replace, rename or remove an implementation schematic and its value.
-3. Select a placed facade instance in Eeschema.
-4. Use **Open Block Implementation** to open the implementation that matches the selected instance.
+**After placement:** select one facade symbol and choose **Configure selected instance** in the task hub. Select a profile or edit its variant, parameters and PCB layout, then save.
 
-Matching is case-insensitive but otherwise exact. If a block declares variants, an empty, unresolved or unknown value is an error; the plugin does not silently choose a default implementation. Blocks without variants open their single `implementation.kicad_sch`.
+The values belong to the selected symbol instance. Changing one placed block does not change the shared library or other instances in the project.
 
-<p align="center">
-  <img src="https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/implementation-variants-light.png" alt="Implementation variant editor with 5 V, 9 V and 12 V entries" width="900">
-</p>
+For exact field names and parameter behavior, see [Per-instance fields](reference.md#per-instance-fields), [Parameters](reference.md#parameters-and-token-expansion) and [Variants and profiles](reference.md#variants-and-profiles).
 
-### Typed parameters
+## Edit a shared block and publish the changes
 
-Parameter declarations are comma-separated. For example:
+Use this when the implementation should be updated for everyone who uses the shared library.
 
-```text
-OUTPUT_VOLTAGE:number=3.3, CHANNELS:integer=4, ENABLE:boolean=true, PART=STM32
-```
+1. Open the block from the browser, or select a placed instance and choose **Open Block Implementation**.
+2. Edit the implementation in Eeschema and save it.
+3. Choose **KiCad Blocks Tasks → Edit & maintain → Publish implementation**.
+4. Select the block when prompted.
 
-The placed facade stores overrides as `KB_PARAM_<NAME>` symbol fields. To use a parameter in recursive BOM/ERC output, add a token such as `{{OUTPUT_VOLTAGE}}` to a quoted text field in the implementation schematic (for example a component Value field).
+Publishing updates the shared block revision and refreshes its facade from the root hierarchical labels. Existing pin artwork is retained for labels that keep the same names; new labels become new facade pins.
 
-The selected root instance's overrides are used for that implementation. Nested dependency instances currently use their declared defaults. Parameters do not evaluate arbitrary formulas, change wires or pins, or reconfigure the parent schematic dynamically.
+A changed external pin interface may require migration in projects that already use the block. Review the pin list before publishing an interface change.
 
-### Named configuration profiles
+### Edit the facade symbol
 
-A profile applies a related set of values together:
+The facade is the symbol users see and place in their project schematics. To change its drawing or pin arrangement:
 
-- an exact implementation variant (`KB_VARIANT`);
-- a partial typed parameter map (`KB_PARAM_<NAME>`);
-- a PCB layout choice (`KB_LAYOUT`).
+1. Select one placed block instance in Eeschema.
+2. Choose **Edit facade** in the library browser, or **Edit facade symbol** in the task hub.
+3. KiCad opens the library symbol in Symbol Editor. Edit the artwork or pin positions and save.
+4. Publish the implementation so KiCad Blocks reconciles the facade pins with the root hierarchical labels.
 
-Select a profile in the placement chooser or use **Configure selected instance** to edit an existing instance. Parameters omitted by a profile inherit the block defaults. The selected profile ID is stored in `KB_PROFILE`. Editing one linked value turns the instance into a custom configuration and clears `KB_PROFILE`.
+The plugin preserves the edited body graphics when it refreshes the pin interface. Changing the external pin names or electrical interface can affect projects that already use the block; review those changes before publishing.
 
-<p align="center">
-  <img src="https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/instance-configuration-light.png" alt="Instance configuration form applying a profile, variant, parameter and PCB layout" width="850">
-</p>
+## Customize a block in one project
 
-## 4. Edit and publish an implementation
+Use a local copy when a project needs a different implementation but the shared library should stay unchanged.
 
-The implementation is a native KiCad schematic in the shared block folder. Select **Edit implementation** in the browser or use **Open Block Implementation** on a placed instance.
+1. Select one placed, library-linked block instance.
+2. Choose **Make selected instance local**.
+3. Open and edit that project's local implementation.
+4. Choose **Synchronize local copy** when you want to compare it with the shared version.
 
-To publish changes:
+The local implementation is stored under the project's `.kicad_blocks/local/` directory. The facade symbol, instance identity, position and wiring remain in place.
 
-1. Save the implementation schematic in Eeschema.
-2. Open **KiCad Blocks Tasks → Edit & maintain → Publish implementation**.
-3. Select the block from the searchable picker if prompted.
-4. The plugin refreshes the block revision and reconciles facade pins from root hierarchical labels.
-5. The updated shared symbol catalog is registered in the current project.
+Synchronization can publish local-only changes or pull library-only changes. When both sides changed the same file in different ways, synchronization stops before overwriting either copy. Resolve that conflict deliberately. An external pin/interface change needs an explicit migration.
 
-When a hierarchical-label name is unchanged, the matching facade pin's number, location and graphics are retained. New names receive generated initial locations.
+## Nest one block inside another
 
-### Edit facade artwork
+Use nesting to compose a larger subsystem from blocks that remain separate library assets.
 
-Select the placed block instance in Eeschema, then choose **Edit facade** in the browser or **Edit facade symbol** in the task hub. The plugin invokes KiCad's native **Edit Library Symbol** command to open the library symbol in Symbol Editor. Save the artwork/pin placement there, then publish the implementation so the facade pins are reconciled against hierarchical labels while preserving edited body graphics.
+1. Open **KiCad Blocks Tasks → Edit & maintain → Nest a block**.
+2. Choose the parent block and the child block.
+3. Map the child pins to nets in the parent implementation and set the child's placement and orientation.
+4. Save the composition and validate the resulting library.
 
-## 5. Make an instance local and synchronize it
+The child facade is composed into the parent implementation. The child remains a separate library dependency; it is not copied into a new child hierarchical sheet. Cyclic dependencies are rejected. See [nested block composition](reference.md#nested-block-composition) for the stored dependency data.
 
-Use this when one project needs a customized implementation without changing the shared library block.
+## Validate a library or inspect a block's contents
 
-1. Select exactly one library-linked facade instance in Eeschema.
-2. Run **Make selected instance local**.
-3. The plugin creates an independent implementation copy under `.kicad_blocks/local/` and records the instance-to-copy mapping in `.kicad_blocks/instances.json`.
-4. Edit the local implementation in Eeschema.
-5. Run **Synchronize local copy** on that selected instance.
+Choose **KiCad Blocks Tasks → Checks & PCB → Validate registered libraries** to scan the registered libraries. Validation checks manifests, required files, revision hashes, profiles, dependencies and recursive ERC. It writes an aggregate `library-validation.json` report and per-block ERC reports.
 
-The facade symbol ID, instance KIID, coordinates and wiring remain unchanged when the copy is created. Local-only changes can be published to the library; library-only changes can be pulled into the project. Identical concurrent edits converge. Divergent edits to the same file are rejected before either side is modified, so the conflict can be resolved deliberately. External pin/interface changes require an explicit migration.
+For one placed block instance, **Export recursive BOM** exports the implementation and its nested dependencies; **Run recursive ERC** checks them with KiCad CLI. See [recursive BOM and ERC](reference.md#recursive-bom-and-erc) for how parameters and nested dependencies are handled.
 
-Local links are stored relative to the project directory to keep project copies portable when moved.
+Native project BOM, netlist and ERC operate on the facade symbol and its external pins. They do not automatically include components in the separately stored implementation. Use the recursive actions when you need implementation-level results.
 
-## 6. Compose a nested block
+## Apply a stored PCB layout
 
-Use **KiCad Blocks Tasks → Edit & maintain → Nest a block** to select a parent block and a child block.
+A block can include one or more pre-routed `.kicad_pcb` layouts.
 
-Each dependency occurrence records a unique instance ID, reference, placement, orientation (0°, 90°, 180° or 270°) and child-pin-to-parent-net mapping. KiCad Blocks composes the rotated child facade symbol and global labels at the transformed pin endpoints in the parent implementation schematic.
+1. In Eeschema, select one block instance and choose **Apply selected PCB layout**. To apply several at once, select multiple eligible block instances and choose **Apply multiple PCB layouts**.
+2. KiCad Blocks creates a **separate copy** of the project board and merges the selected layouts into it.
+3. Open that generated board copy in PCB Editor.
+4. Choose **Place Imported Block Layout** and select the imported instance group.
+5. Move the group with KiCad's native tool and click to place it. Press **Esc** to cancel.
 
-The child remains a separate reusable library asset. Cyclic dependencies are rejected. The plugin does not create a child hierarchical sheet or flatten the child implementation into an untraceable copy.
+The merge does not modify a board already open in PCB Editor. The destination board must contain the layers used by the stored layout. Review the copied board and project settings before adopting them.
 
-## 7. Validate libraries and run recursive checks
-
-### Validate registered libraries
-
-Choose **Checks & PCB → Validate registered libraries**. The validator scans every registered shared block and checks:
-
-- manifest and profile consistency;
-- required assets and SHA-256 revision hashes;
-- dependency references and dependency cycles;
-- recursive ERC for implementation schematics.
-
-It writes a `library-validation.json` summary and per-block ERC reports. Broken manifests are reported rather than silently omitted.
-
-### Export recursive BOM
-
-Select one placed block instance and run **Export recursive BOM**. KiCad CLI processes the block implementation and nested dependencies; exported rows are aggregated for the selected block tree. Tokens in implementation value fields are rendered using root-instance parameter overrides and nested defaults.
-
-### Run recursive ERC
-
-Select one placed block instance and run **Run recursive ERC**. The implementation and its nested dependencies are checked recursively using KiCad CLI. This is separate from native project ERC, which sees the facade symbol only.
-
-## 8. Reuse pre-routed PCB layouts
-
-A block may include one or more named `.kicad_pcb` layout alternatives. Each layout can have an optional matching `.kicad_pro` project-settings sidecar and an explicit map from facade pins to layout nets.
-
-### Apply one or several layouts
-
-- Select one block instance and use **Apply selected PCB layout**.
-- Select multiple block instances and use **Apply multiple PCB layouts**.
-
-The plugin merges footprints, routed tracks, vias, zones and graphics into a **separate copy** of the project board. It maps external pins to existing or new board nets, namespaces internal nets and footprint references, transforms around the block's declared anchor and supports counter-clockwise rotation. It regenerates object UUIDs and writes a sibling `.kicad-blocks-placement.json` sidecar that records imported top-level objects for each schematic instance.
-
-The optional project-settings sidecar merges named netclass definitions and relevant mapped net assignments into a matching copied project file. Pattern-based rules are resolved only against nets present in the stored block layout and converted to exact assignments in the output. Supported bus vectors are expanded; unsupported or unmatched patterns are reported. PCB net-chain topology and class associations are mapped too. Unrelated board design setup is not imported.
-
-The plugin does not overwrite a board open in PCB Editor. The project board must already contain all layers used by the block layout. Review the copied board and project settings before replacing project files.
-
-### Place the imported group in PCB Editor
-
-1. Open the generated board copy in PCB Editor.
-2. Run the PCB-scoped **Place Imported Block Layout** action.
-3. The plugin resolves the recorded UUIDs for one imported block instance and hands those objects to KiCad's native interactive move tool.
-4. Move the complete imported group with the cursor/grid and click to commit; press **Esc** to cancel.
-5. For a multi-instance merge, repeat the action for each recorded instance.
-
-Only the recorded objects for that instance are moved; unrelated board objects are not selected.
-
-## Important functional boundary
-
-The facade is the project-level schematic object. Native project BOM/netlist/ERC therefore sees only that symbol and its external pins. It does not automatically include components inside the separate implementation. Use **Export recursive BOM** and **Run recursive ERC** for implementation-aware results.
-
-PCB layout merge is a file-generation workflow, not live in-place editing of a board already open in PCB Editor. Inspect generated files before using them in the project.
+For merge mapping, net handling and supported PCB objects, see [PCB layout descriptors and merge behavior](reference.md#pcb-layout-descriptors-and-merge-behavior).

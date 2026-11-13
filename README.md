@@ -9,7 +9,7 @@ A block is placed as one library symbol, while its full editable schematic stays
 ![KiCad 10.99 nightly](https://img.shields.io/badge/KiCad-10.99%20nightly-blue?logo=kicad)
 ![Python 3.12–3.14](https://img.shields.io/badge/Python-3.12%E2%80%933.14-blue?logo=python)
 
-**[Get started](docs/getting-started.md)** · **[Feature workflows](docs/workflows.md)** · **[Visual gallery](docs/visual-evidence.md)** · **[STUSB4500 example](examples/stusb4500/README.md)**
+**[Documentation map](docs/README.md)** · **[Get started](docs/getting-started.md)** · **[How-to guides](docs/workflows.md)** · **[Visual guide](docs/visual-evidence.md)** · **[STUSB4500 example](examples/stusb4500/README.md)**
 
 ## What stays in the library
 
@@ -56,17 +56,18 @@ See the [STUSB4500 example guide](examples/stusb4500/README.md) for connectivity
 **Validated target:** KiCad **10.99.0 development nightly**, Linux **x86_64**, CPython **3.12–3.14** with Tkinter. Stable KiCad 10.x, KiCad 11 stable, Windows, macOS and ARM are not validated.
 
 1. Check the [full compatibility and prerequisites](docs/getting-started.md#supported-environment).
-2. Follow the [installation and first-run guide](docs/getting-started.md). The V1.1.0 plugin ZIP is not yet published; check [Releases](https://github.com/Uhrendoktor/kicad-blocks/releases) for an installable package before using the archive instructions.
+2. Follow the [installation and first-run guide](docs/getting-started.md). Until a packaged plugin release is published, install from the repository as described there.
 3. In Eeschema, choose **Browse and Place Functional Blocks** to use a library, or **Create Block from Selected Sheet** to make your first block.
 
 ## Documentation
 
 | Guide | Contents |
 | --- | --- |
-| [Getting started](docs/getting-started.md) | Supported environment, installation, KiCad setup and troubleshooting. |
-| [Feature workflows](docs/workflows.md) | Creating, placing, configuring, editing, nesting, validating and PCB reuse. |
+| [Documentation map](docs/README.md) | Choose a guide based on what you want to do or learn. |
+| [Getting started](docs/getting-started.md) | Supported setup, installation from source and first use. |
+| [How-to guides](docs/workflows.md) | Create, place, configure, maintain, validate and reuse blocks. |
 | [Feature reference](docs/reference.md) | Actions, block storage, instance fields, parameters and technical boundaries. |
-| [Visual evidence](docs/visual-evidence.md) | Full light/dark UI gallery, native KiCad renders and test coverage. |
+| [Visual guide](docs/visual-evidence.md) | Generated plugin screenshots, facade symbol and schematic renders. |
 | [Changelog](CHANGELOG.md) | Version history and known coverage limits. |
 
 ## Support and contributions
