@@ -11,7 +11,6 @@ import subprocess
 import sys
 import tempfile
 import time
-import uuid
 from pathlib import Path
 
 # The core block model and IPC helpers must remain importable in headless
