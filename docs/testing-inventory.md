@@ -288,7 +288,7 @@ Versioned release asset upload, checksum verification, and immutable existing-as
 
 ### `tests/test_python_policy.py`
 
-Regression coverage for syntax-aware policy violations, reviewed dynamic typing boundaries, production module docstrings, and Pyright include/exclude inventory enforcement.
+Regression coverage for global typing policy violations, diagnostic suppression/dynamic execution bans, production module docstrings, and Pyright inventory enforcement.
 
 | Test | Purpose |
 | --- | --- |
