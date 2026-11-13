@@ -6,11 +6,11 @@
     "block-picker-workflow.gif": "337e9416e80c6329e0cdb4e6db0d8a7031f3b6ffb7f0159eede7230d1f1ec3bf",
     "create-block-form-dark.png": "2a3e160c182dd3cb9003fea241a90ba40e4c34fc803e7acd8f11df9aaae4c4e7",
     "create-block-form-light.png": "6d586cde1731a4d7696448ef05108b15fb9d42f2ca1068c4886d83857200dace",
-    "functional-block-facade.svg": "22dc9da7239f7d6349588ffb6693e197e9edfc36405b4cff276d88b3307561f9",
+    "functional-block-facade.svg": "6337e17f0006920d8518fe63ae2d2d2342863fbc63b0b14fefd6d0d6d8ec1f6d",
     "functional-block-implementation.kicad_sch": "8979a0ab4580ee11de623442577a8e571f947457b69032dccf5983b194523b3b",
-    "functional-block-implementation.svg": "c72c5975510570a5aa75bdd196d2ca6f71c7d46159817089248eb7ae95186d7b",
-    "implementation-details-dark.png": "b499eadafd8cd969532be57c89e454b2b674d7bd008a4c53767042e2a536736a",
-    "implementation-details-light.png": "8056e8929da0eb2d90122eb6bf6227cbd399cab83771d063f232b41099f5254d",
+    "functional-block-implementation.svg": "324d24bc6ced793216dfb52c46cc3ae2e29b8be7fbbdbb22db1f8e9279714f2d",
+    "implementation-details-dark.png": "7cb3755bc1d17add893a83035d49bd34a44e43c34e32d1da36c25471c57ddfac",
+    "implementation-details-light.png": "707caffc5936dbf8f8c2abfe06acb9303f237cd45e92ddf29be8459faf546ba5",
     "implementation-variants-dark.png": "f16bf4d152f42659c8329e63499a17b51336f6a6f8d9c30ef47117ed4a3c1085",
     "implementation-variants-light.png": "0da742b70ce554f6060190ac851f41a31f4cd5aba7c3f9f3ab773dc77f8d6a15",
     "instance-configuration-dark.png": "20f7132125b6af9e0e66606f7026e39b688382a0d1d3ebcd8af0e2ac463224ca",
@@ -19,8 +19,8 @@
     "library-browser-details-dark.png": "ca7fed095d6c3335e403b6771114225bacbe8b83f423a1ed451ce57044226571",
     "library-browser-details-light.png": "2980bda6ad1c2526a5991daf1810c3b0c5e4d058d8e589026767730141625307",
     "library-browser-light.png": "8609f7dffce50afd15cff7431ac2f1d20b44075913279be7c120e80b0f499501",
-    "library-folders-dark.png": "bce7e79934113a5f38bd3a52f0ad0448697d0b763cb35c1fe2af1a5a80ed86d6",
-    "library-folders-light.png": "68d52e965b337d91eece467ff8f9c691439a9df5114fef3d407334cf649c0524",
+    "library-folders-dark.png": "a0052605f91c301c22e5c2e073147c72c9430599f1b5b845f39c4d6e94777802",
+    "library-folders-light.png": "a95ecb8282bb94771dea77709bb915189ca53276ceecffd8fb177e4f3c32e63d",
     "task-hub-checks-pcb-dark.png": "d0c4d5131549e043eea2b3386730fa4cde5157c2de00bd27e22bfd661e5e44cf",
     "task-hub-checks-pcb-light.png": "30ba2ee05d8e4336e1903c6836db4bdfd8c7595aee24bc68d079b99d4c58d163",
     "task-hub-dark.png": "5d06ccd07fa326efc1065ef074daa48f865453ba9120ff285f64d069df9087a4",
@@ -35,7 +35,7 @@
     "manufacturer": "STMicroelectronics",
     "reference": "Figure 10, page 26/42"
   },
-  "source_commit": "0ddfb384fe686a481c487b9174b078fdaf4f8dcb",
-  "workflow_run_id": "43447920714",
-  "workflow_run_number": "544"
+  "source_commit": "34f9217aa9b9cb71a774b06a225766a23d3eb59c",
+  "workflow_run_id": "43452101454",
+  "workflow_run_number": "560"
 }
