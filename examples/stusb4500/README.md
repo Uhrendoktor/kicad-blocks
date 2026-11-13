@@ -18,7 +18,7 @@ The full A3 schematic is rendered by KiCad CLI from the editable `.kicad_sch` fi
 
 ## See how it appears as a block
 
-The project schematic uses the facade symbol below. Its ten pins are the external interface; the full circuit remains in the separate implementation schematic.
+When you place this block in a project, the schematic uses the facade symbol below. Its ten pins are the external interface; the full circuit remains in the separate implementation schematic.
 
 <p align="center">
   <a href="https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/functional-block-facade.svg">
