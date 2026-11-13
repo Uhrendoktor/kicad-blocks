@@ -6,13 +6,10 @@ import json
 import os
 import shutil
 import subprocess
-import sys
 import tempfile
 from pathlib import Path
 from types import SimpleNamespace
 
-ROOT = Path(__file__).resolve().parents[1]
-PLUGIN = ROOT / "plugin" / "kicad-blocks"
 from kicad_blocks.model import (
     facade_pin_connection_points,
     parse_parameters,
