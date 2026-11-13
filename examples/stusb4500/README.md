@@ -1,60 +1,90 @@
-# STUSB4500 USB-PD sink reference block
+# STUSB4500 USB-C / USB Power Delivery sink
 
-This example is an editable KiCad reconstruction of STMicroelectronics'
-**STUSB4500QTR** USB Type-C / USB Power Delivery sink controller application
-from **DS12499 Rev. 8, Figure 10, “Typical schematic with MCU” (page 26/42)**.
+An editable KiCad reconstruction of STMicroelectronics' **STUSB4500QTR** USB Type-C / USB Power Delivery sink application circuit. The circuit is based on **DS12499 Rev. 8, Figure 10, “Typical schematic with MCU” (page 26/42)**.
 
-## Layout and connectivity
+This example shows both sides of a functional block: the complete implementation schematic and the compact symbol/interface presented to a project.
+
+## See the circuit
+
+The full A3 schematic is rendered by KiCad CLI from the editable `.kicad_sch` file. Open the image at full size to inspect component values, pin connections and the labelled circuit sections.
+
+<p align="center">
+  <a href="https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/functional-block-implementation.svg">
+    <img src="https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/functional-block-implementation.svg" alt="Complete KiCad-rendered STUSB4500 reference schematic showing USB-C input and CC protection, VBUS filtering, the controller, power switches, protected output and optional MCU interface" width="1100">
+  </a>
+</p>
+
+[Open the editable KiCad schematic](https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/functional-block-implementation.kicad_sch) · [Open the full-size SVG render](https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/functional-block-implementation.svg)
+
+## See how it appears as a block
+
+The project schematic uses the facade symbol below. Its ten pins are the external interface; the full circuit remains in the separate implementation schematic.
+
+<p align="center">
+  <a href="https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/functional-block-facade.svg">
+    <img src="https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/functional-block-facade.svg" alt="KiCad-rendered STUSB4500 facade symbol with VBUS, GND, CC1, CC2, VSNK and optional MCU interface pins" width="520">
+  </a>
+</p>
+
+The block browser shows the same entry as a searchable library item, including the symbol preview, external pins, parameter and implementation choices.
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/library-browser-details-light.png" alt="KiCad Blocks browser showing the STUSB4500 USB-PD Sink entry, its ten-pin interface, PDO current parameter and implementation choices" width="1000">
+</p>
+
+The placement chooser can also present an implementation and a named configuration profile before the facade is placed:
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/block-picker-profile.png" alt="STUSB4500 block in the placement chooser with the 5 V implementation and 5 V / 2.4 A PDO1 profile selected" width="1000">
+</p>
+
+**About the chooser capture:** CI builds this UI example from the generated STUSB4500 reference schematic. It registers 5 V, 9 V and 12 V variant names and PDO profiles to test the selection controls. In this visual fixture, those variant entries all point to the same static schematic. The profile selection demonstrates the UI metadata; it does not dynamically alter the electrical circuit.
+
+## External interface
+
+The facade exposes these ten pins:
+
+| Pin | Electrical type | Purpose |
+| --- | --- | --- |
+| VBUS | Input | USB-C input supply |
+| GND | Passive | Ground return |
+| CC1 | Bidirectional | USB Type-C configuration channel 1 |
+| CC2 | Bidirectional | USB Type-C configuration channel 2 |
+| VSNK | Output | Protected sink output |
+| SCL | Input | Optional host I²C clock |
+| SDA | Bidirectional | Optional host I²C data |
+| ALERT# | Output | Optional host alert |
+| RESET | Input | Optional host reset control |
+| VMCU | Input | Optional host-interface supply |
+
+## Circuit sections
 
 The schematic follows the signal flow of ST's reference drawing:
 
-- USB Type-C receptacle and CC-line protection at the left.
-- VBUS input capacitance, transient protection and the VBUS_VS_DISCH
-  filter/monitor network beside the receptacle.
-- STUSB4500, regulator decoupling and I²C address straps in the center.
-- Back-to-back P-channel VBUS switches, discharge/control network and
-  protected VSNK output at the upper right.
-- Optional MCU I²C, ALERT# and RESET interface at the lower right.
+| Section | What is included |
+| --- | --- |
+| USB-C input | Type-C receptacle and CC-line protection. |
+| VBUS filter and monitor | Input capacitance, transient protection, VBUS filtering and the VBUS_VS_DISCH network. |
+| PD controller | STUSB4500QTR, regulator decoupling and I²C address straps. |
+| Power path | Back-to-back P-channel VBUS switches, discharge/control network and protected VSNK output. |
+| Optional host | MCU I²C, ALERT# and RESET signals, plus VMCU and GND. |
 
-The sheet uses A3 landscape and a 2.54 mm placement grid. Functional zones
-read left-to-right from the receptacle and CC ESD network, through VBUS
-filtering/sensing and the STUSB4500 with local bypass capacitors, to the
-back-to-back P-channel switch and protected VSNK output. The optional host
-interface and address/reset straps form a separate lower band. Consistent
-zone captions, aligned passive rows, and a restrained header rule establish
-the visual hierarchy without decorative boxes or ambiguous crossing wires.
+The sheet uses A3 landscape and a 2.54 mm placement grid. Functional sections read left to right, from the receptacle and CC protection to VBUS sensing, the controller, the power switches and the protected output. The optional host interface and address/reset straps form a separate lower band.
 
-Local electrical relationships are drawn as orthogonal KiCad wires:
-the receptacle CC1/CC2 paths run through the ESD array, the VBUS input spine
-feeds the back-to-back switch, and the input/output capacitors and TVS parts
-branch from their respective rails. The VBUS monitor filter, FET midpoint,
-gate divider, regulator bypass and MCU pull-up rows use short local wiring.
-Longer control and supply nets retain matching labels or hierarchical ports
-rather than sprawling across the sheet.
-
-The controller symbol follows the QFN-24 EP pinout: pins 1–24 use ST's QFN
-assignments and pin 25 is the exposed ground pad. Pin 22 (VSYS) is grounded for the VDD-only supply
-arrangement shown by ST; pin 24 (VDD) is on VBUS; pin 23 is VREG_2V7; and
-pin 21 is VREG_1V2. Unused controller pins have explicit no-connect markers.
-
-CI exports a KiCad netlist and checks the controller supply pins, CC pins,
-USB-C receptacle contacts, CC protection array, VBUS monitor/discharge
-branch, both power MOSFETs, VSNK connector, address straps and MCU pull-ups.
-A generator regression also checks the A3 functional-zone headings and
-grid-aligned component placements.
+Electrical relationships use orthogonal KiCad wires for local connections. Longer control and supply nets use matching labels or hierarchical ports rather than long wires across the sheet.
 
 ## Component set
 
-| Reference(s) | Value / part | Datasheet role |
+| Reference(s) | Value / part | Role |
 |---|---|---|
-| U1 | STUSB4500QTR | Standalone USB-PD sink controller |
+| U1 | STUSB4500QTR | USB Power Delivery sink controller |
 | J1 | USB Type-C receptacle | USB-C input |
 | C1 | 1 µF | VREG_1V2 decoupling |
 | C2, C3 | 1 µF | VREG_2V7 regulator/reference decoupling |
 | C4 | 1 µF | VBUS_VS_DISCH filter capacitor |
 | C10 | 100 nF | VSNK output bypass capacitor |
 | C50 | 4.7 µF | VBUS input capacitance |
-| D4 | Generic diode symbol; ST does not specify a part number | Fast-charge path for C4; select a suitably rated part |
+| D4 | Generic diode symbol; no part specified by ST | Fast-charge path for C4; select a suitably rated part |
 | D1 | ESDA25W | Dual CC-line protection array |
 | D50, D11 | ESDA25P35-1U1M | VBUS / VSNK transient protection |
 | R1 | 470 Ω | VBUS_VS_DISCH filter path |
@@ -71,29 +101,23 @@ grid-aligned component placements.
 | J10 | MPT_0.5_2-2.54 | VSNK output connector |
 | J2 | 6-pin connector | Optional MCU SCL/SDA/ALERT#/RESET/VMCU/GND interface |
 
-## Reproduce
+## Rebuild the schematic
 
-With KiCad CLI and its standard symbol libraries installed:
+With KiCad CLI and the standard symbol libraries installed, run:
 
 ```bash
 python examples/stusb4500/generate_reference.py
 ```
 
-The CI pipeline generates the editable `.kicad_sch`, exports the native KiCad
-SVG preview, and checks the exported electrical netlist. Standard symbols
-come from the official [KiCad symbol library repository](https://gitlab.com/kicad/libraries/kicad-symbols),
-pinned to the 10.0.5 release in `kicad-symbols.lock`. The three-pin ESDA25W
-symbol is a local functional representation based on ST's device datasheet.
+The script writes `examples/stusb4500/implementation.kicad_sch` by default. Pass `--output PATH` to write it elsewhere.
 
-## Design limitations
+CI exports the generated schematic to SVG and validates its netlist. The standard symbols come from the official [KiCad symbol library repository](https://gitlab.com/kicad/libraries/kicad-symbols), pinned to the revision recorded in `kicad-symbols.lock`. The three-pin ESDA25W symbol is a local functional representation based on ST's datasheet.
 
-This is a **datasheet-derived reference reconstruction**, not a production
-design or a claim of electrical-rule-check sign-off. The datasheet does not
-specify a D4 order code. Verify the selected diode, protection ratings,
-component footprints, thermal/current capability, USB Type-C/PD compliance,
-and configured NVM PDO profile for the target application before
-manufacturing. Confirm all power-path component ratings and PCB layout for
-the expected operating conditions.
+## Electrical scope and safety
+
+This is a **datasheet-derived reference reconstruction**, not a production design or a claim of electrical-rule-check sign-off.
+
+ST does not specify an order code for D4. Before using this circuit, verify the selected diode, protection ratings, component footprints, thermal/current capability, USB Type-C/PD compliance and configured NVM PDO profile for the target application. Confirm all power-path component ratings and the PCB layout for the expected operating conditions.
 
 **Primary source:** [STUSB4500 datasheet DS12499, Rev. 8](https://www.st.com/resource/en/datasheet/stusb4500.pdf), Figure 10 and Table 1.
 
