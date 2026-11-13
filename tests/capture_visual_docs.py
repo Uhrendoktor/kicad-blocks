@@ -14,38 +14,17 @@ import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "plugin" / "kicad-blocks"))
 
 from kicad_blocks import plugin as plugin_actions
 from kicad_blocks.model import parse_pins
 from kicad_blocks.repository import create_block, revision_for_hashes
 
+from scripts.visual_asset_inventory import ASSET_NAMES
+
 sys.path.insert(0, str(ROOT / 'examples' / 'stusb4500'))
 from generate_reference import generate_reference_schematic
-
-ASSET_NAMES = (
-    "block-picker-initial.png",
-    "block-picker-filtered.png",
-    "block-picker-profile.png",
-    "block-picker-workflow.gif",
-    "library-browser-light.png",
-    "library-browser-dark.png",
-    "library-browser-details-light.png",
-    "library-browser-details-dark.png",
-    "library-folders-light.png",
-    "library-folders-dark.png",
-    "task-hub-light.png",
-    "task-hub-dark.png",
-    "implementation-variants-light.png",
-    "implementation-variants-dark.png",
-    "implementation-details-light.png",
-    "implementation-details-dark.png",
-    "create-block-form-light.png",
-    "create-block-form-dark.png",
-    "functional-block-facade.svg",
-    "functional-block-implementation.svg",
-    "functional-block-implementation.kicad_sch",
-)
 
 
 def find_executable(*names: str) -> str:
@@ -380,7 +359,7 @@ def capture_ui_workflows(library_roots, record, project_dir: Path, output_dir: P
 
             root = _make_themed_root(theme, "KiCad Blocks — Tasks")
             try:
-                plugin_actions._show_action_hub(root)
+                notebook = plugin_actions._show_action_hub(root)
                 root.update_idletasks()
                 root.update()
                 _capture_visible_window(
@@ -389,8 +368,48 @@ def capture_ui_workflows(library_roots, record, project_dir: Path, output_dir: P
                     output_dir / f"task-hub-{theme}.png",
                     minimum_size=(700, 500),
                 )
+                tabs = notebook.tabs()
+                if len(tabs) != 3:
+                    raise RuntimeError(
+                        f"Expected all three task-hub tabs, found {len(tabs)}."
+                    )
+                for index, suffix in ((1, "edit-maintain"), (2, "checks-pcb")):
+                    notebook.select(tabs[index])
+                    root.update_idletasks()
+                    root.update()
+                    _capture_visible_window(
+                        xdotool,
+                        "KiCad Blocks — Tasks",
+                        output_dir / f"task-hub-{suffix}-{theme}.png",
+                        minimum_size=(700, 500),
+                    )
             finally:
                 root.destroy()
+
+            # This dedicated GUI smoke test drives the production configuration
+            # form, changes a named profile, and captures the rendered dialog
+            # before submitting the single undoable schematic update.
+            configuration_screenshot = output_dir / f"instance-configuration-{theme}.png"
+            capture_environment = os.environ.copy()
+            capture_environment["KICAD_BLOCKS_THEME"] = theme
+            configuration_run = subprocess.run(
+                [
+                    sys.executable,
+                    str(ROOT / "tests" / "test_instance_configuration_gui.py"),
+                    "--screenshot",
+                    str(configuration_screenshot),
+                ],
+                env=capture_environment,
+                capture_output=True,
+                text=True,
+                check=True,
+                timeout=30,
+            )
+            if "configuration gui passed" not in configuration_run.stdout.casefold():
+                raise RuntimeError(
+                    "Instance-configuration GUI capture did not report success: "
+                    f"{configuration_run.stdout}\n{configuration_run.stderr}"
+                )
 
             root = _make_themed_root(theme, "KiCad Blocks dialog fixture")
             try:
@@ -606,7 +625,7 @@ def main() -> int:
         build_gif(output_dir)
 
     assets = {}
-    for name in ASSET_NAMES:
+    for name in sorted(ASSET_NAMES):
         path = output_dir / name
         if not path.is_file() or not path.stat().st_size:
             raise FileNotFoundError(f"Expected generated asset is missing: {name}")
@@ -616,8 +635,8 @@ def main() -> int:
         "source_sha": os.environ.get("GITHUB_SHA", "local"),
         "generator": "tests/capture_visual_docs.py",
         "renderer": (
-            "KiCad CLI and production Tk windows: task hub, functional-block browser, "
-            "library-folder manager, variant editor, creation form, and placement chooser"
+            "KiCad CLI and production Tk windows: all three task-hub tabs, functional-block browser, "
+            "library-folder manager, instance configuration, variant editor, creation form, and placement chooser"
         ),
         "example": {
             "component": "STUSB4500QTR",

@@ -37,6 +37,19 @@ class VerifyVisualBundleTests(unittest.TestCase):
         manifest = verify_bundle(self.root, self.source_sha)
         self.assertEqual(set(manifest["assets"]), ASSET_NAMES)
 
+    def test_inventory_covers_all_primary_documented_ui_surfaces(self) -> None:
+        expected = {
+            "task-hub-light.png",
+            "task-hub-edit-maintain-light.png",
+            "task-hub-checks-pcb-light.png",
+            "instance-configuration-light.png",
+            "library-browser-light.png",
+            "library-folders-light.png",
+            "implementation-variants-light.png",
+            "create-block-form-light.png",
+        }
+        self.assertTrue(expected.issubset(ASSET_NAMES))
+
     def test_rejects_stale_source_commit(self) -> None:
         with self.assertRaisesRegex(ValueError, "not checked-out source"):
             verify_bundle(self.root, "b" * 40)

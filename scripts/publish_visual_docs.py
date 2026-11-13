@@ -12,15 +12,10 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-ASSET_NAMES = {
-    "block-picker-initial.png",
-    "block-picker-filtered.png",
-    "block-picker-profile.png",
-    "block-picker-workflow.gif",
-    "functional-block-facade.svg",
-    "functional-block-implementation.svg",
-    "functional-block-implementation.kicad_sch",
-}
+try:  # Package import for tests; direct import when executed as a script.
+    from .visual_asset_inventory import ASSET_NAMES
+except ImportError:  # pragma: no cover - exercised by the release CLI.
+    from visual_asset_inventory import ASSET_NAMES
 BRANCH = "docs/previews"
 
 
