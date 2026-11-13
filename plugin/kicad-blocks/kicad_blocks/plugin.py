@@ -2592,6 +2592,16 @@ def _save_block_variants(record, variants: list[dict]) -> None:
     manifest = read_manifest(block_path)
     previous = list(manifest.get("variants", []))
     previous_files = {str(item["file"]) for item in previous}
+    previous_layout_by_value = {
+        str(item.get("value", "")).casefold(): str(item.get("layout_id", "")).casefold()
+        for item in previous
+        if item.get("layout_id")
+    }
+    previous_layout_by_file = {
+        str(item.get("file", "")).casefold(): str(item.get("layout_id", "")).casefold()
+        for item in previous
+        if item.get("layout_id")
+    }
     normalized = []
     retained_files = set()
     files_to_copy = []
@@ -2650,8 +2660,15 @@ def _save_block_variants(record, variants: list[dict]) -> None:
             added_files.add(filename)
         retained_files.add(filename)
         variant_descriptor = {"value": value, "file": filename}
-        if item.get("layout_id"):
-            variant_descriptor["layout_id"] = str(item["layout_id"]).casefold()
+        # The implementation editor does not manage PCB links. Preserve those
+        # associations when it renames or edits a variant's schematic file.
+        linked_layout = (
+            item.get("layout_id")
+            or previous_layout_by_file.get(filename.casefold())
+            or previous_layout_by_value.get(value.casefold())
+        )
+        if linked_layout:
+            variant_descriptor["layout_id"] = str(linked_layout).casefold()
         normalized.append(variant_descriptor)
 
     available_values = {item["value"].casefold() for item in normalized}
@@ -3643,7 +3660,14 @@ def _show_block_variant_editor(
     tree.tag_configure("even", background=palette.get("surface", "#f4f5f6"))
     tree.tag_configure("odd", background=palette.get("surface_alt", "#e8eaed"))
     variants = [
-        {"value": str(item["value"]), "file": str(item["file"])}
+        {
+            "value": str(item["value"]),
+            "file": str(item["file"]),
+            **(
+                {"layout_id": str(item["layout_id"]).casefold()}
+                if item.get("layout_id") else {}
+            ),
+        }
         for item in record.manifest.get("variants", [])
     ]
     dirty = [False]
