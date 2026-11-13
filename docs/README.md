@@ -25,6 +25,7 @@ Use the [workflow guides](workflows.md) when you know the result you want:
 
 - **[Test inventory](testing-inventory.md)** — every pytest case, the purpose of each test, and the standalone KiCad GUI/IPC acceptance scripts.
 - **[Quality gates](quality-gates.md)** — strict test/lint/type/dead-code checks and the reviewed static-analysis boundaries.
+- **[Repository audit](repository-audit.md)** — findings on test overlap, duplicated entrypoint logic, compatibility wrappers, and cleanup decisions.
 
 ## A note about the examples
 
