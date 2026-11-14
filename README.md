@@ -41,7 +41,7 @@ Applying a PCB layout creates a **separate board copy**. It does not modify a bo
 
 ## Compatibility at a glance
 
-The current full integration target is **KiCad 10.99.0 development nightly on Linux x86_64 with CPython 3.12**. CI also checks plugin discovery and managed-environment creation with CPython 3.13 and 3.14; it does not yet run the full KiCad integration matrix on those interpreters. Stable KiCad 10.x, KiCad 11 stable, Windows, macOS, ARM, and other combinations are not yet validated.
+The current full integration target is **KiCad 10.99.0 development nightly on Linux x86_64 with CPython 3.12**. CI also checks plugin discovery and managed-environment creation with CPython 3.13 and 3.14, but not the full KiCad integration matrix. Windows, macOS, ARM, and other combinations remain unvalidated.
 
 Stable KiCad 10.x does not expose the Schematic Editor IPC plugin surface that this project requires. The current 10.99.0 nightly target is a development build; stable KiCad 11 is not yet validated by this repository's integration suite. See the [KiCad IPC API support matrix](https://dev-docs.kicad.org/en/apis-and-binding/ipc-api/for-addon-developers/).
 
