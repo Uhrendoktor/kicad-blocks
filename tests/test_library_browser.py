@@ -23,7 +23,6 @@ from kicad_blocks.model import (
     parse_pins,
     resolve_variant_implementation,
 )
-
 from kicad_blocks.repository import BlockRecord, create_block, read_manifest
 
 plugin_actions = import_module("kicad_blocks.plugin")
