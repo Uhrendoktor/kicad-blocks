@@ -1085,10 +1085,10 @@ def generate_reference_schematic(destination: Path) -> Path:
                             justify = "right"
                             label_angle = 0
                         if reference in {"R1", "R4"} and net in {"VBUS_FILTERED", "VREG_2V7"}:
-                            # These two VBUS monitor net names are adjacent;
-                            # rotate them along the vertical resistor axis.
-                            label_x = px - 10.16
-                            label_y = py - 5.08
+                            # Rotate the two crowded monitor labels and stagger
+                            # their vertical stubs so the routes stay disjoint.
+                            label_x = px - (15.24 if net == "VBUS_FILTERED" else 10.16)
+                            label_y = py - (5.08 if net == "VBUS_FILTERED" else 7.62)
                             justify = "left"
                             label_angle = 90
                         if reference == "U1":
