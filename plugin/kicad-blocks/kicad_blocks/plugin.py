@@ -60,6 +60,7 @@ from .repository import (
     register_project_symbol_library,
     remove_library_root,
     set_library_root,
+    synchronize_project_symbol_catalog,
 )
 from .repository import library_roots as configured_library_roots
 
@@ -2033,32 +2034,21 @@ def _ensure_project_facade_catalog(
     record,
     kicad,
 ) -> Path:
-    """Ensure the highlighted symbol exists in the already-registered KBlocks project catalog.
+    """Keep this block's project facade current without replacing local edits.
 
-    Do not rebuild an existing catalog here: a user may have unsaved or
-    unpublished edits to another facade in that same project library.
+    Only symbols that still match their last synchronized source digest are
+    refreshed. Other entries in the combined project catalog remain untouched.
     """
-    from .pcb_layout import parse_sexpr
-    from .repository import _named_symbol_node, merge_symbol_catalog
-
     project_dir = Path(project_dir).expanduser().resolve()
     catalog = project_dir / ".kicad_blocks" / LIBRARY_CATALOG_NAME
     catalog.parent.mkdir(parents=True, exist_ok=True)
     symbol_name = str(record.manifest.get("symbol_name") or "")
-    catalog_changed = False
-
-    if not catalog.is_file():
-        merge_symbol_catalog(catalog.parent, record.path / record.manifest["symbol_file"])
-        catalog_changed = True
-    else:
-        tree = parse_sexpr(catalog.read_text(encoding="utf-8"))
-        try:
-            _named_symbol_node(tree, symbol_name, catalog)
-        except ValueError:
-            # Merge only the missing symbol. Never rebuild the whole project
-            # catalog here, because that would discard edits to other symbols.
-            merge_symbol_catalog(catalog.parent, record.path / record.manifest["symbol_file"])
-            catalog_changed = True
+    catalog_changed = synchronize_project_symbol_catalog(
+        catalog,
+        record.path / record.manifest["symbol_file"],
+        symbol_name,
+        baseline_digest=record.manifest.get("catalog_symbol_hash"),
+    )
 
     table_path = project_dir / "sym-lib-table"
     previous_table = table_path.read_bytes() if table_path.is_file() else None
