@@ -194,11 +194,12 @@ class LibraryBrowserTests(unittest.TestCase):
             calls.append(arguments)
             output_dir = Path(arguments[arguments.index("--output") + 1])
             output_dir.mkdir(parents=True, exist_ok=True)
-            (output_dir / "implementation_1v8.svg").write_text(
+            schematic_stem = Path(arguments[-1]).stem
+            (output_dir / f"{schematic_stem}.svg").write_text(
                 '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 60"></svg>',
                 encoding="utf-8",
             )
-            (output_dir / "implementation_1v8-sheet1.svg").write_text(
+            (output_dir / f"{schematic_stem}-sheet1.svg").write_text(
                 '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 60"></svg>',
                 encoding="utf-8",
             )
@@ -224,13 +225,13 @@ class LibraryBrowserTests(unittest.TestCase):
         self.assertEqual(len(calls), 1)
         self.assertEqual(
             calls[0][-1],
-            str(self.v18.resolve()),
+            str((self.block.path / resolve_variant_implementation(self.block.manifest, "1V8")).resolve()),
         )
         self.assertEqual(
             calls[0][1:5],
             ["sch", "export", "svg", "--no-background-color"],
         )
-        self.assertEqual(calls[0][calls[0].index("--output") + 1], calls[0][calls[0].index("--output") + 1])
+        self.assertTrue(calls[0][calls[0].index("--output") + 1])
         self.assertEqual([label for label, _png in pages], ["Root sheet", "Sheet 2 · sheet1"])
         self.assertEqual(pages, cached_pages)
         self.assertTrue(all(png == b"schematic-png" for _label, png in pages))
