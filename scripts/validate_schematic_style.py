@@ -13,17 +13,17 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "plugin" / "kicad-blocks"))
 sys.path.insert(0, str(ROOT / "examples" / "stusb4500"))
 
-from kicad_blocks.pcb_layout import _all, _direct, _head, parse_sexpr
 from generate_reference import (
     ADJACENT_COMPONENT_PAIRS,
     COMPONENT_PROPERTY_LIMITS_MM,
     DIRECT_DECOUPLERS,
     FORBIDDEN_LOCAL_LABELS,
-    GROUP_GAP_MM,
     GROUND_PINS_DOWN,
+    GROUP_GAP_MM,
     SCHEMATIC_GROUPS,
     _uid,
 )
+from kicad_blocks.pcb_layout import _all, _direct, _head, parse_sexpr
 
 STYLE_RULES = {
     "SCH001": {
