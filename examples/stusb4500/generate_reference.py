@@ -850,10 +850,14 @@ def generate_reference_schematic(destination: Path) -> Path:
         256.540, 109.220, "left", 0,
     )
 
-    # U1.23 is physically connected to C2/C3 and the address/sense network.
-    # The other repeated VREG_2V7 labels carry the net identity without a
-    # crowded top-side label over the capacitor bank.
+    # U1.23 is directly wired to C2 and C3. Put the reused VREG_2V7 label
+    # on the vertical pin-to-branch wire, in the clear gap above the capacitors.
     remove_local_label("U1", "23", "VREG_2V7")
+    vreg_2v7_label_tap = (254.000, 95.250)
+    label_points[vreg_2v7_label_tap] = (
+        "VREG_2V7", "local", None,
+        254.000, 95.250, "left", 0,
+    )
 
     # R55.1 is physically wired to U1.6; RESET remains a hierarchical parent port.
     reset_pin = pin_world_points[("U1", "6")]
