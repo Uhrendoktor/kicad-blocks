@@ -44,7 +44,7 @@ from kicad_blocks.plugin import (
     _start_native_symbol_placement,
     _system_prefers_dark_theme,
 )
-from kicad_blocks.repository import create_block, read_manifest
+from kicad_blocks.repository import LIBRARY_NICKNAME, create_block, read_manifest
 
 
 class LibraryBrowserTests(unittest.TestCase):
