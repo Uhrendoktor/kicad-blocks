@@ -210,9 +210,7 @@ def _check_pyright_inventory() -> list[str]:
 
     for relative, rationale in REVIEWED_PYRIGHT_EXCLUSIONS.items():
         if relative not in discovered:
-            errors.append(
-                f"python policy: stale Pyright exclusion for missing module {relative}"
-            )
+            errors.append(f"python policy: stale Pyright exclusion for missing module {relative}")
         if relative not in excluded:
             errors.append(
                 f"pyrightconfig.json: reviewed exclusion {relative} is not in the exclude list"
