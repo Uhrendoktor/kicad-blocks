@@ -218,7 +218,9 @@ def _check_pyright_inventory() -> list[str]:
                 f"pyrightconfig.json: reviewed exclusion {relative} is not in the exclude list"
             )
         if not rationale.strip():
-            errors.append(f"python policy: Pyright exclusion {relative} has no rationale")
+            errors.append(
+                f"python policy: Pyright exclusion {relative} has no rationale"
+            )
     for relative in excluded:
         if (
             relative.startswith("plugin/kicad-blocks/kicad_blocks/")
