@@ -155,6 +155,7 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
         )
         self.assertIn(["/usr/bin/xdotool", "key", "--clearmodifiers", "Return"], calls)
         self.assertNotIn(["/usr/bin/xdotool", "key", "--clearmodifiers", "s"], calls)
+        self.assertIn(["/usr/bin/xdotool", "key", "--clearmodifiers", "ctrl+l"], calls)
         self.assertIn(
             ["/usr/bin/xdotool", "type", "--clearmodifiers", "--delay", "12", self.block.manifest["symbol_name"]],
             calls,
@@ -217,6 +218,7 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
         )
         self.assertIn(["/usr/bin/xdotool", "key", "--clearmodifiers", "Return"], calls)
         self.assertNotIn(["/usr/bin/xdotool", "key", "--clearmodifiers", "s"], calls)
+        self.assertIn(["/usr/bin/xdotool", "key", "--clearmodifiers", "ctrl+l"], calls)
         self.assertIn(
             ["/usr/bin/xdotool", "type", "--clearmodifiers", "--delay", "12", self.block.manifest["symbol_name"]],
             calls,

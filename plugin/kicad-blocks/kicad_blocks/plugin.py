@@ -2536,9 +2536,10 @@ def _edit_facade_symbol(
         )
         return False
 
-    # KiCad focuses the library-tree search field when a new Symbol Editor
-    # window opens. Type directly into that verified initial focus; Ctrl+L is
-    # the Project Manager's Symbol Editor shortcut, not a tree-search command.
+    # Ctrl+L invokes common.Control.libraryTreeSearch in Symbol Editor.
+    # KiCad's action reveals the library tree if needed and focuses its query field.
+    send("key", "--clearmodifiers", "ctrl+l")
+    pause(0.12)
     send("type", "--clearmodifiers", "--delay", "12", symbol_name)
     pause(0.2)
     send("key", "--clearmodifiers", "Return")
