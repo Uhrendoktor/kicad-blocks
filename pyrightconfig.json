@@ -15,5 +15,6 @@
   ],
   "typeCheckingMode": "strict",
   "reportMissingImports": "error",
-  "pythonVersion": "3.12"
+  "pythonVersion": "3.12",
+  "stubPath": "typings"
 }
