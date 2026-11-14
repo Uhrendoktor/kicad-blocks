@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import copy
 import hashlib
 import json
@@ -80,10 +81,8 @@ def atomic_write(path: Path, content: str) -> None:
             os.fsync(stream.fileno())
         os.replace(temp_name, path)
     except Exception:
-        try:
+        with contextlib.suppress(OSError):
             os.unlink(temp_name)
-        except OSError:
-            pass
         raise
 
 

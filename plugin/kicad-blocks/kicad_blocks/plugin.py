@@ -173,10 +173,8 @@ def _configure_tk_theme(root) -> None:
         "accent": "#4c789f", "scroll_thumb": "#c0c7ce", "scroll_trough": "#e4e7ea",
     })
     style = ttk.Style(root)
-    try:
+    with contextlib.suppress(tk.TclError):
         style.theme_use("clam")
-    except tk.TclError:
-        pass
     root.configure(background=colors["background"], highlightthickness=0)
     for option, value in {
         "*Background": colors["background"], "*Foreground": colors["foreground"],

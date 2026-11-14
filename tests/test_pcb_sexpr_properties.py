@@ -8,8 +8,7 @@ from pathlib import Path
 PLUGIN = Path(__file__).resolve().parents[1] / "plugin" / "kicad-blocks"
 sys.path.insert(0, str(PLUGIN))
 
-from hypothesis import given, settings
-from hypothesis import strategies as st
+from hypothesis import given, settings, strategies as st
 
 from kicad_blocks.model import sexpr_quote
 from kicad_blocks.pcb_layout import _dump, _Quoted, parse_sexpr
