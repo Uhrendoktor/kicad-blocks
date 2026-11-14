@@ -435,6 +435,7 @@ class STUSB4500ReferenceTests(unittest.TestCase):
             content, tree, instances = self._generate(temporary)
 
         self.assertEqual(float(_direct(instances["D1"], "at")[3]), 270.0)
+        self.assertEqual(float(_direct(instances["C1"], "at")[3]), 180.0)
         label_names = [str(node[1]) for node in _all(tree, "label")]
         self.assertGreaterEqual(label_names.count("CC1"), 2)
         self.assertGreaterEqual(label_names.count("CC2"), 2)

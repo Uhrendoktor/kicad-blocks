@@ -1613,8 +1613,14 @@ def label_kind_consistency_issues(tree: list) -> list[str]:
         for node in _all(tree, kind):
             if len(node) > 1:
                 kinds_by_name.setdefault(str(node[1]), set()).add(kind)
+    names = {
+        "label": "local",
+        "hierarchical_label": "hierarchical",
+        "global_label": "global",
+    }
     return [
-        f"label {name!r} is mixed across {', '.join(sorted(kinds))}; use one label type"
+        f"label {name!r} is mixed across "
+        f"{', '.join(names[kind] for kind in sorted(kinds))}; use one label type"
         for name, kinds in sorted(kinds_by_name.items())
         if len(kinds) > 1
     ]

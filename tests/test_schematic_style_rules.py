@@ -134,7 +134,7 @@ assert "generate_reference" not in sys.modules
         self.assertEqual(len(issues), 1)
         self.assertIn("VSNK", issues[0])
         self.assertIn("local", issues[0])
-        self.assertIn("hierarchical_label", issues[0])
+        self.assertIn("hierarchical", issues[0])
 
     def test_symbol_obstacles_use_real_outlines_not_rectangular_bounds(self) -> None:
         tree = [
@@ -247,7 +247,8 @@ assert "generate_reference" not in sys.modules
         # U1.3 is already a hidden no_connect pin in its embedded symbol.
         self.assertNotIn(pins[("U1", "3")]["point"], markers)
         for key in ("U1.11", "U1.14", "U1.15", "U1.17", "U1.20"):
-            self.assertIn(pins[key]["point"], markers)
+            reference, number = key.split(".", 1)
+            self.assertIn(pins[(reference, number)]["point"], markers)
         marker_point = pins[("U1", "11")]["point"]
         marker = next(
             node for node in _all(tree, "no_connect")

@@ -1260,7 +1260,7 @@ def generate_reference_schematic(destination: Path) -> Path:
     )
     label_points[shared_ground_port] = (
         "GND", "hier", "passive",
-        shared_ground_port[0], shared_ground_port[1], "left", 90,
+        shared_ground_port[0], shared_ground_port[1], "right", 90,
     )
 
     # R1.2 and R4.2 share one physical wire network. Keep one local label on
