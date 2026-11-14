@@ -12,7 +12,7 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from kicad_blocks.model import sexpr_quote
-from kicad_blocks.pcb_layout import _Quoted, _dump, parse_sexpr
+from kicad_blocks.pcb_layout import _dump, _Quoted, parse_sexpr
 
 SAFE_TEXT = st.text(
     alphabet=st.characters(blacklist_categories=("Cs",)),
