@@ -89,77 +89,14 @@ def _load_tkinter() -> None:
 
 
 def _system_prefers_dark_theme() -> bool:
-    """Detect the desktop dark appearance, with a KiCad Blocks override."""
+    """Read an explicit application theme preference without OS-specific probes."""
     override = os.environ.get("KICAD_BLOCKS_THEME", "system").strip().casefold()
     if override in {"dark", "true", "1", "yes", "on"}:
         return True
     if override in {"light", "false", "0", "no", "off"}:
         return False
-
-    if sys.platform == "win32":
-        try:
-            import winreg
-
-            key_path = r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"
-            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path) as key:
-                value, _kind = winreg.QueryValueEx(key, "AppsUseLightTheme")
-            return int(value) == 0
-        except (ImportError, OSError, ValueError):
-            return False
-
-    if sys.platform == "darwin":
-        try:
-            result = subprocess.run(
-                ["defaults", "read", "-g", "AppleInterfaceStyle"],
-                capture_output=True,
-                text=True,
-                timeout=1.0,
-                check=False,
-            )
-            return result.returncode == 0 and result.stdout.strip().casefold() == "dark"
-        except (OSError, subprocess.TimeoutExpired):
-            return False
-
-    if sys.platform.startswith("linux"):
-        gtk_theme = os.environ.get("GTK_THEME", "")
-        if gtk_theme:
-            return "dark" in gtk_theme.casefold()
-
-        for schema, key in (
-            ("org.gnome.desktop.interface", "color-scheme"),
-            ("org.gnome.desktop.interface", "gtk-theme"),
-        ):
-            try:
-                result = subprocess.run(
-                    ["gsettings", "get", schema, key],
-                    capture_output=True,
-                    text=True,
-                    timeout=1.0,
-                    check=False,
-                )
-            except (OSError, subprocess.TimeoutExpired):
-                continue
-            if result.returncode == 0:
-                value = result.stdout.strip().strip("'").strip('"').casefold()
-                if key == "color-scheme" and value in {"prefer-dark", "dark"}:
-                    return True
-                if key == "color-scheme" and value in {"prefer-light", "light"}:
-                    return False
-                if key == "gtk-theme" and "dark" in value:
-                    return True
-
-        kdeglobals = Path.home() / ".config" / "kdeglobals"
-        try:
-            in_general = False
-            for line in kdeglobals.read_text(encoding="utf-8").splitlines():
-                line = line.strip()
-                if line.startswith("["):
-                    in_general = line.casefold() == "[general]"
-                elif in_general and line.casefold().startswith("colorscheme="):
-                    return "dark" in line.split("=", 1)[1].casefold()
-        except OSError:
-            pass
-
+    # Tk has no portable API for querying the host OS dark-mode preference.
+    # Use a consistent default and keep native file dialogs under the host OS.
     return False
 
 
@@ -323,19 +260,6 @@ def _configure_tk_theme(root) -> None:
     root._kicad_blocks_palette = colors
 
 
-def _editor_window_id_for_widget(window) -> str | None:
-    """Find the invoking KiCad editor XID stored on a Tk parent chain."""
-    current = window
-    seen = set()
-    while current is not None and id(current) not in seen:
-        seen.add(id(current))
-        owner = getattr(current, "_kicad_blocks_editor_window_id", None)
-        if owner:
-            return str(owner)
-        current = getattr(current, "master", None)
-    return None
-
-
 def _set_window_geometry(window, width: int, height: int, min_width: int, min_height: int) -> None:
     """Size a completed dialog to its content and keep every action visible."""
     window.update_idletasks()
@@ -360,132 +284,25 @@ def _set_window_geometry(window, width: int, height: int, min_width: int, min_he
     if master is not None:
         with contextlib.suppress(tk.TclError):
             window.transient(master)
-    owner = _editor_window_id_for_widget(window)
-    if owner:
-        _attach_tk_window_to_editor(window, owner)
 
 
-def _set_x11_transient_owner(window_id: str, owner_window_id: str) -> bool:
-    """Set an X11 window's transient owner so GNOME groups it with KiCad."""
-    xprop = shutil.which("xprop")
-    if not xprop or not window_id or not owner_window_id:
+
+def _attach_tk_window_to_editor(window, _editor_window_id: str | None = None) -> bool:
+    """Associate a Tk dialog with its parent inside this plugin process.
+
+    KiCad IPC does not expose a portable cross-process native window handle or
+    transient-owner API. Tk's portable transient relationship is limited to
+    windows managed by this Tk interpreter; do not mutate foreign window IDs.
+    """
+    master = getattr(window, "master", None)
+    if master is None:
         return False
     try:
-        result = subprocess.run(
-            [
-                xprop,
-                "-id",
-                str(window_id),
-                "-f",
-                "WM_TRANSIENT_FOR",
-                "32x",
-                "-set",
-                "WM_TRANSIENT_FOR",
-                str(owner_window_id),
-            ],
-            capture_output=True,
-            text=True,
-            check=False,
-            timeout=2,
-        )
-    except (OSError, subprocess.TimeoutExpired):
-        LOG.debug("Could not set the X11 transient owner for %s", window_id, exc_info=True)
+        window.transient(master)
+        return True
+    except (AttributeError, tk.TclError):
+        LOG.debug("Could not associate the Tk dialog with its in-process parent", exc_info=True)
         return False
-    return result.returncode == 0
-
-
-def _attach_tk_window_to_editor(window, editor_window_id: str | None) -> bool:
-    """Make a Tk top-level a transient dialog of the invoking KiCad editor."""
-    if not editor_window_id:
-        return False
-    try:
-        with contextlib.suppress(tk.TclError):
-            window.wm_class("eeschema", "eeschema")
-        with contextlib.suppress(tk.TclError):
-            window.wm_attributes("-type", "dialog")
-        window.update_idletasks()
-        # WM_TRANSIENT_FOR is a property of the client top-level window.
-        # Do not set it on the reparenting window manager's decoration frame:
-        # ICCCM window managers read the hint from the client window itself.
-        window_id = str(window.winfo_id())
-        attached = _set_x11_transient_owner(window_id, str(editor_window_id))
-        return attached
-    except (AttributeError, tk.TclError, OSError):
-        LOG.debug("Could not associate the Tk window with KiCad", exc_info=True)
-        return False
-
-
-def _attach_process_window_to_editor(
-    process: subprocess.Popen,
-    editor_window_id: str | None,
-    *,
-    target_name: str | None = None,
-) -> bool:
-    """Group a separately opened KiCad document window with its owning editor."""
-    xdotool = shutil.which("xdotool")
-    if not xdotool or not editor_window_id or not getattr(process, "pid", None):
-        return False
-    for _attempt in range(25):
-        try:
-            result = subprocess.run(
-                [xdotool, "search", "--onlyvisible", "--pid", str(process.pid)],
-                capture_output=True,
-                text=True,
-                check=False,
-                timeout=2,
-            )
-        except (OSError, subprocess.TimeoutExpired):
-            return False
-        window_ids = [
-            item.strip()
-            for item in result.stdout.splitlines()
-            if item.strip() and item.strip().isdigit()
-        ]
-        if (
-            result.returncode == 0
-            and window_ids
-            and _set_x11_transient_owner(window_ids[-1], editor_window_id)
-        ):
-            return True
-
-        # Eeschema can forward a document-open request to an already-running
-        # process; that window will not belong to the short-lived launcher PID.
-        if target_name:
-            try:
-                candidates = subprocess.run(
-                    [xdotool, "search", "--onlyvisible", "--class", ("pcbnew" if target_name.casefold().endswith(".kicad_pcb") else "eeschema")],
-                    capture_output=True,
-                    text=True,
-                    check=False,
-                    timeout=2,
-                )
-            except (OSError, subprocess.TimeoutExpired):
-                candidates = None
-            if candidates is not None:
-                for candidate_id in candidates.stdout.splitlines():
-                    candidate_id = candidate_id.strip()
-                    if not candidate_id:
-                        continue
-                    try:
-                        title = subprocess.run(
-                            [xdotool, "getwindowname", candidate_id],
-                            capture_output=True,
-                            text=True,
-                            check=False,
-                            timeout=2,
-                        )
-                    except (OSError, subprocess.TimeoutExpired):
-                        continue
-                    if (
-                        target_name.casefold() in title.stdout.casefold()
-                        and _set_x11_transient_owner(candidate_id, editor_window_id)
-                    ):
-                        return True
-        if process.poll() is not None:
-            return False
-        time.sleep(0.1)
-    return False
-
 
 def _add_tooltip(widget, text: str) -> None:
     """Attach a small themed tooltip to a compact icon button."""
@@ -2264,48 +2081,21 @@ def _ensure_project_facade_catalog(
     return catalog
 
 
-def _symbol_editor_menu_down_count(editor_pid: str) -> int | None:
-    """Return the KiCad Tools-menu offset to Symbol Editor for this frame mode.
-
-    KiCad's Eeschema menu puts the Symbol Editor after:
-    - standalone Eeschema: Switch to PCB Editor, Calculator Tools;
-    - manager-hosted Eeschema: Update PCB, Switch to PCB Editor,
-      Switch to Project Manager, Calculator Tools.
-    The native menu action itself is not exposed by every KiCad IPC build.
-    """
-    if not editor_pid.isdigit():
-        return None
-    try:
-        executable = Path(os.readlink(f"/proc/{editor_pid}/exe")).name.casefold()
-    except (OSError, ValueError):
-        return None
-    if "eeschema" in executable:
-        return 2
-    if executable.startswith("kicad"):
-        return 4
-    return None
-
-
 def _edit_facade_symbol(
     record,
     kicad,
-    editor_window_id: str | None,
+    editor_window_id: str | None = None,
     *,
     project_catalog: Path | None = None,
-    xdotool: str | None = None,
-    wtype: str | None = None,
     close_browser=None,
-    command_runner=subprocess.run,
-    pause=time.sleep,
 ) -> bool:
-    """Open the highlighted KBlocks library symbol in KiCad's native Symbol Editor.
+    """Open KiCad Symbol Editor through the native, cross-platform IPC action.
 
-    Prefer KiCad's global show-Symbol-Editor tool action when the connected
-    Eeschema build exposes it. Use the X11 menu route only if KiCad rejects
-    that action. On Wayland, do not send global key events unless KiCad has
-    confirmed that it opened the target editor.
+    IPC currently has no portable library-tree row-selection API. The plugin
+    therefore leaves the last selection in KiCad's own editor UI and supplies
+    the exact generated library ID through its existing handoff message.
     """
-    nickname = LIBRARY_NICKNAME
+    del editor_window_id  # IPC targets the KiCad instance that launched the action.
     symbol_name = str(record.manifest.get("symbol_name") or "").strip()
     catalog_path = (
         Path(project_catalog).expanduser().resolve()
@@ -2319,291 +2109,30 @@ def _edit_facade_symbol(
 
     from .pcb_layout import parse_sexpr
     from .repository import _named_symbol_node
-
     catalog = parse_sexpr(catalog_path.read_text(encoding="utf-8"))
     _named_symbol_node(catalog, symbol_name, catalog_path)
-    lib_id = f"{nickname}:{symbol_name}"
+    lib_id = f"{LIBRARY_NICKNAME}:{symbol_name}"
 
-    wayland = bool(os.environ.get("WAYLAND_DISPLAY")) or (
-        os.environ.get("XDG_SESSION_TYPE", "").casefold() == "wayland"
-    )
-    executable = None if wayland else (xdotool or shutil.which("xdotool"))
-    initial_symbol_editor = None
-    if executable:
-        # Snapshot the editor state before invoking an action. An already-open
-        # Symbol Editor may not have its tree filter focused; never type into it
-        # or disturb unsaved edits just because its title contains our symbol.
-        existing = command_runner(
-            [executable, "search", "--onlyvisible", "--name", "Symbol Editor"],
-            capture_output=True,
-            text=True,
-            check=False,
-            timeout=5,
-        )
-        for candidate in reversed(
-            [
-                item.strip()
-                for item in str(getattr(existing, "stdout", "") or "").splitlines()
-                if item.strip()
-            ]
-        ):
-            title = command_runner(
-                [executable, "getwindowname", candidate],
-                capture_output=True,
-                text=True,
-                check=False,
-                timeout=5,
-            )
-            if "symbol editor" in str(getattr(title, "stdout", "") or "").casefold():
-                initial_symbol_editor = candidate
-                break
-    if initial_symbol_editor is not None:
-        LOG.info(
-            "Symbol Editor is already open; leaving its current edit state untouched for %s",
-            lib_id,
-        )
-        return False
-
-    action_started = False
-    action_error = None
     run_action = getattr(kicad, "run_action", None)
-    if callable(run_action):
-        try:
-            response = run_action("common.Control.showSymbolEditor")
-            action_status = _native_run_action_status(response)
-            action_started = action_status == 1
-            if not action_started:
-                action_error = (
-                    "KiCad rejected the native Symbol Editor action"
-                    if action_status is not None
-                    else "KiCad returned an unknown status for the native Symbol Editor action"
-                )
-                LOG.info("%s; checking the desktop menu fallback", action_error)
-        except Exception as exc:
-            action_error = f"KiCad's native Symbol Editor action failed: {exc}"
-            LOG.debug("%s", action_error, exc_info=True)
-
-    if wayland:
-        if not action_started:
-            detail = f"{action_error}. " if action_error else ""
-            raise RuntimeError(
-                detail
-                + "KiCad did not open Symbol Editor through IPC. On Wayland, the plugin "
-                + "cannot safely send global menu keys to an unverified window. Open "
-                + "Tools → Symbol Editor in Eeschema, then search for "
-                + f"{lib_id}. A placed schematic instance is not required."
-            )
-        if close_browser is not None:
-            close_browser()
-        LOG.info(
-            "KiCad opened Symbol Editor for %s; leaving its existing editor state untouched",
-            lib_id,
+    if not callable(run_action):
+        raise RuntimeError("This KiCad IPC binding does not expose native editor actions. Update KiCad and kicad-python.")
+    try:
+        response = run_action("common.Control.showSymbolEditor")
+    except Exception as exc:
+        raise RuntimeError(f"KiCad could not open Symbol Editor through IPC: {exc}") from exc
+    status = _native_run_action_status(response)
+    if status != 1:
+        detail = (
+            "KiCad rejected the native Symbol Editor action"
+            if status is not None
+            else "KiCad returned no successful status for the native Symbol Editor action"
         )
-        # Wayland does not expose a portable way to verify whether this is a
-        # newly created editor or an already-open editor whose canvas has focus.
-        # Do not inject global keys or risk overwriting an unsaved symbol.
-        return False
-
-    if not executable:
-        if action_started:
-            return False
-        raise RuntimeError(
-            (f"{action_error}. " if action_error else "")
-            + "KiCad could not open Symbol Editor automatically. Open Tools → Symbol Editor "
-            + f"and search for {lib_id}."
-        )
-
-    def send(*arguments: str, check: bool = True) -> str:
-        result = command_runner(
-            [executable, *arguments],
-            capture_output=True,
-            text=True,
-            check=check,
-            timeout=5,
-        )
-        return str(getattr(result, "stdout", "") or "").strip()
-
-    if not editor_window_id:
-        editor_window_id = _capture_eeschema_window_id()
-    if not editor_window_id:
-        raise RuntimeError(
-            "Could not identify the active Eeschema window. Open Symbol Editor "
-            f"manually and search for {lib_id}."
-        )
-
-    def visible_symbol_editor() -> str | None:
-        result = send("search", "--onlyvisible", "--name", "Symbol Editor", check=False)
-        candidates = [item.strip() for item in result.splitlines() if item.strip()]
-        for window_id in reversed(candidates):
-            title = send("getwindowname", window_id, check=False).casefold()
-            if "symbol editor" in title:
-                return window_id
-        return None
-
-    symbol_editor_id = None
-    for _attempt in range(20):
-        symbol_editor_id = visible_symbol_editor()
-        if symbol_editor_id is not None or not action_started:
-            break
-        pause(0.1)
-
-    if symbol_editor_id is None:
-        # KiCad can acknowledge a RunAction request without creating the target
-        # frame on some builds. The fallback is safe only after identifying and
-        # focusing the invoking Eeschema window below.
-        # The standalone Symbol Editor is a Tools-menu command, not the
-        # selection-bound "Edit Library Symbol" action. Raise the exact
-        # invoking Eeschema client before sending the menu accelerator; a
-        # focused-but-covered X11 window is not sufficient when another KiCad
-        # frame (notably PCB Editor) is active.
-        editor_title = send(
-            "getwindowname", str(editor_window_id), check=False
-        ).casefold()
-        editor_class = send(
-            "getwindowclassname", str(editor_window_id), check=False
-        ).casefold()
-        if "schematic editor" not in editor_title and "eeschema" not in editor_class:
-            raise RuntimeError(
-                "Edit Facade was given a window that is not Eeschema "
-                f"(title={editor_title!r}, class={editor_class!r}). "
-                "Activate the Schematic Editor and retry."
-            )
-
-        send("windowraise", str(editor_window_id), check=False)
-        send("windowactivate", "--sync", str(editor_window_id), check=False)
-        send("windowfocus", "--sync", str(editor_window_id))
-        pause(0.15)
-        focused_id = send("getwindowfocus", check=False)
-        if focused_id != str(editor_window_id):
-            focused_title = (
-                send("getwindowname", focused_id, check=False)
-                if focused_id else "<no focused window>"
-            )
-            raise RuntimeError(
-                "Could not activate the invoking Eeschema window for Edit Facade. "
-                f"Focus remains on {focused_title!r}. Close the blocking dialog or "
-                "bring the Schematic Editor to the foreground, then retry."
-            )
-
-        editor_pid = send("getwindowpid", str(editor_window_id), check=False)
-        menu_down_count = _symbol_editor_menu_down_count(editor_pid)
-        if menu_down_count is None:
-            raise RuntimeError(
-                "Could not determine whether this Eeschema frame is standalone or "
-                "manager-hosted, so Edit Facade did not guess a Tools-menu shortcut. "
-                f"Open Tools → Symbol Editor manually, then search for {lib_id}."
-            )
-
-        # Do not use the "S" mnemonic: it also matches Switch to PCB Editor.
-        # Walk the documented Tools-menu order to the exact Symbol Editor item.
-        send("key", "--clearmodifiers", "alt+t")
-        pause(0.12)
-        send("key", "--clearmodifiers", "Home")
-        for _ in range(menu_down_count):
-            send("key", "--clearmodifiers", "Down")
-        send("key", "--clearmodifiers", "Return")
-        for _attempt in range(50):
-            symbol_editor_id = visible_symbol_editor()
-            if symbol_editor_id is not None:
-                break
-            pause(0.1)
-
-    if symbol_editor_id is None:
-        visible = send("search", "--onlyvisible", "--name", ".*", check=False)
-        visible_titles = [
-            send("getwindowname", item, check=False)
-            for item in visible.splitlines()
-            if item.strip()
-        ]
-        detail = f"{action_error}. " if action_error else ""
-        raise RuntimeError(
-            detail
-            + "Eeschema did not open Symbol Editor. "
-            + f"Visible window titles: {visible_titles!r}. "
-            + f"Open Tools → Symbol Editor manually, then search for {lib_id}."
-        )
+        raise RuntimeError(f"{detail} (RunActionStatus={status}). Update KiCad or its IPC binding.")
 
     if close_browser is not None:
         close_browser()
-
-    # The new editor can be visible before the window manager has activated it.
-    # Raise and activate it before using the global library-tree search shortcut.
-    send("windowraise", symbol_editor_id, check=False)
-    send("windowactivate", "--sync", symbol_editor_id, check=False)
-    send("windowfocus", "--sync", symbol_editor_id)
-    pause(0.15)
-    focused_id = send("getwindowfocus", check=False)
-    if focused_id != str(symbol_editor_id):
-        focused_title = (
-            send("getwindowname", focused_id, check=False)
-            if focused_id else "<no focused window>"
-        )
-        raise RuntimeError(
-            "Could not activate the new Symbol Editor window for Edit Facade. "
-            f"Focus remains on {focused_title!r}; expected {symbol_editor_id!r}. "
-            f"Open Tools → Symbol Editor manually, then search for {lib_id}."
-        )
-
-    if initial_symbol_editor is not None:
-        # An already-open editor may have the drawing canvas, not its filter,
-        # focused. Do not type into an unknown widget or disturb unsaved edits.
-        LOG.info(
-            "Symbol Editor was already open; manual library-tree search required for %s",
-            lib_id,
-        )
-        return False
-
-    # Ctrl+L invokes common.Control.libraryTreeSearch in Symbol Editor.
-    # KiCad's action reveals the library tree if needed and focuses its query field.
-    send("key", "--clearmodifiers", "ctrl+l")
-    pause(0.12)
-    send("type", "--clearmodifiers", "--delay", "12", symbol_name)
-    # KiCad regenerates and selects matching tree rows after a 200 ms text debounce.
-    pause(0.35)
-    send("key", "--clearmodifiers", "Return")
-
-    # KiCad's Symbol Editor frame title is always the generic "Symbol Editor".
-    # Verify the current library symbol through the native IPC document API instead.
-    get_open_documents = getattr(kicad, "get_open_documents", None)
-    if not callable(get_open_documents):
-        raise TypeError(
-            "The connected KiCad Python IPC binding cannot verify the active Symbol Editor "
-            f"symbol {lib_id!r}. Update kicad-python or open Tools → Symbol Editor manually."
-        )
-
-    from kipy.proto.common.types import DocumentType
-
-    deadline = time.monotonic() + 5.0
-    observed_lib_ids: list[str] = []
-    while time.monotonic() < deadline:
-        try:
-            open_documents = get_open_documents(DocumentType.DOCTYPE_SYMBOL)
-        except Exception as exc:
-            raise RuntimeError(
-                f"KiCad IPC could not query the active Symbol Editor symbol {lib_id!r}: {exc}"
-            ) from exc
-
-        observed_lib_ids = []
-        for document in open_documents:
-            identifier = getattr(document, "lib_id", None)
-            if identifier is None:
-                continue
-            library_nickname = str(getattr(identifier, "library_nickname", "") or "")
-            entry_name = str(getattr(identifier, "entry_name", "") or "")
-            if library_nickname and entry_name:
-                observed_lib_ids.append(f"{library_nickname}:{entry_name}")
-
-        if lib_id in observed_lib_ids:
-            LOG.info("Opened library facade %s in KiCad Symbol Editor", lib_id)
-            return True
-        pause(0.1)
-
-    raise RuntimeError(
-        f"Symbol Editor opened, but KiCad IPC did not report {lib_id!r} as the current symbol. "
-        f"Open symbol documents: {observed_lib_ids!r}. "
-        "Check the library-tree filter and select the highlighted symbol."
-    )
-
+    LOG.info("KiCad opened Symbol Editor; select %s in its library tree.", lib_id)
+    return False
 
 
 def _place_existing(root, schematic, kicad, project_dir, parent) -> None:
@@ -2646,84 +2175,6 @@ def _edit_block_implementation(root, schematic, kicad, project_dir, parent) -> N
 
 
 
-def _capture_eeschema_window_id() -> str | None:
-    """Find the visible Eeschema main window, not the plugin top-level."""
-    xdotool = shutil.which("xdotool")
-    if not xdotool:
-        return None
-
-    candidates: list[str] = []
-    try:
-        focused = subprocess.run(
-            [xdotool, "getwindowfocus"],
-            capture_output=True, text=True, check=False, timeout=3,
-        )
-        if focused.returncode == 0 and focused.stdout.strip():
-            candidates.append(focused.stdout.strip())
-    except (OSError, subprocess.TimeoutExpired):
-        LOG.debug("Could not read the focused X11 window", exc_info=True)
-
-    for search_args in (
-        [xdotool, "search", "--onlyvisible", "--class", "eeschema"],
-        [xdotool, "search", "--onlyvisible", "--name", "[Ss]chematic [Ee]ditor"],
-    ):
-        try:
-            found = subprocess.run(
-                search_args, capture_output=True, text=True, check=False, timeout=3,
-            )
-        except (OSError, subprocess.TimeoutExpired):
-            continue
-        if found.returncode == 0:
-            candidates.extend(
-                line.strip() for line in found.stdout.splitlines() if line.strip()
-            )
-
-    seen: set[str] = set()
-    plugin_pid = str(os.getpid())
-    for window_id in candidates:
-        if window_id in seen:
-            continue
-        seen.add(window_id)
-        try:
-            window_class = subprocess.run(
-                [xdotool, "getwindowclassname", window_id],
-                capture_output=True, text=True, check=False, timeout=3,
-            ).stdout.strip().casefold()
-            window_title = subprocess.run(
-                [xdotool, "getwindowname", window_id],
-                capture_output=True, text=True, check=False, timeout=3,
-            ).stdout.strip().casefold()
-        except (OSError, subprocess.TimeoutExpired):
-            continue
-
-        if "eeschema" not in window_class and "schematic editor" not in window_title:
-            continue
-        if any(
-            marker in window_title
-            for marker in (
-                "kicad blocks", "functional block library", "manage libraries",
-                "pcb layouts", "implementation details", "implementations",
-                "add pcb layout",
-            )
-        ):
-            continue
-        # The plugin runs in its own process; its Tk windows deliberately share
-        # KiCad WM_CLASS for taskbar grouping and must not be mistaken for Eeschema.
-        try:
-            pid = subprocess.run(
-                [xdotool, "getwindowpid", window_id],
-                capture_output=True, text=True, check=False, timeout=3,
-            ).stdout.strip()
-        except (OSError, subprocess.TimeoutExpired):
-            pid = ""
-        if pid and pid == plugin_pid:
-            continue
-        # Do not reject a main editor merely because it has WM_TRANSIENT_FOR:
-        # some window managers attach legitimate KiCad editor windows to a manager.
-        return window_id
-    return None
-
-
 def _native_run_action_status(response) -> int | None:
     """Return KiCad's RunActionStatus value without assuming a truthy response means success."""
     status = getattr(response, "status", None)
@@ -2743,144 +2194,34 @@ def _native_run_action_status(response) -> int | None:
 
 
 def _start_native_symbol_placement(
-    _kicad,
-    editor_window_id: str | None,
+    kicad,
+    _editor_window_id: str | None,
     symbol_name: str,
-    *,
-    xdotool: str | None = None,
-    command_runner=subprocess.run,
-    pause=time.sleep,
 ) -> None:
-    """Start Eeschema's Add Symbol tool and, on X11, choose the requested facade."""
+    """Open KiCad’s native Add Symbol chooser using cross-platform IPC.
+
+    The IPC action does not accept a symbol ID or expose a portable API for
+    entering text into the chooser. The user completes the normal library
+    selection in KiCad's chooser; the plugin does not synthesize global input.
+    """
     if not symbol_name or any(char.isspace() for char in symbol_name):
         raise ValueError("The selected block has an invalid KiCad symbol name.")
-
-    executable = xdotool or shutil.which("xdotool")
-    run_action = getattr(_kicad, "run_action", None)
-    action_started = False
-    action_status = None
-    action_error = None
-    if callable(run_action):
-        try:
-            response = run_action("eeschema.InteractiveDrawing.placeSymbol")
-            action_status = _native_run_action_status(response)
-            action_started = action_status == 1
-            if not action_started:
-                action_error = (
-                    "KiCad did not accept the Place Symbol action"
-                    if action_status is None
-                    else f"KiCad rejected the Place Symbol action (RunActionStatus={action_status})"
-                )
-                LOG.warning("%s", action_error)
-        except Exception as exc:
-            action_error = f"KiCad IPC Place Symbol action failed: {exc}"
-            LOG.debug("KiCad IPC run_action failed; trying the desktop input fallback", exc_info=True)
-
-    def send(*arguments: str) -> str:
-        result = command_runner(
-            [executable, *arguments],
-            capture_output=True, text=True, check=True, timeout=5,
+    run_action = getattr(kicad, "run_action", None)
+    if not callable(run_action):
+        raise RuntimeError("This KiCad IPC binding does not expose native editor actions. Update KiCad and kicad-python.")
+    try:
+        response = run_action("eeschema.InteractiveDrawing.placeSymbol")
+    except Exception as exc:
+        raise RuntimeError(f"KiCad could not start native symbol placement through IPC: {exc}") from exc
+    status = _native_run_action_status(response)
+    if status != 1:
+        detail = (
+            "KiCad rejected the native Place Symbol action"
+            if status is not None
+            else "KiCad returned no successful status for the native Place Symbol action"
         )
-        return str(getattr(result, "stdout", "") or "").strip()
-
-    if action_started and not executable:
-        # The IPC action has already opened KiCad's own chooser. Do not require
-        # an optional desktop automation utility merely to complete the handoff.
-        LOG.info("KiCad accepted Place Symbol; choose %s in the native chooser", symbol_name)
-        return
-
-    if not executable and not action_started:
-        wayland = bool(os.environ.get("WAYLAND_DISPLAY")) or (
-            os.environ.get("XDG_SESSION_TYPE", "").casefold() == "wayland"
-        )
-        detail = f"{action_error}. " if action_error else ""
-        if wayland:
-            raise RuntimeError(
-                detail
-                + "No supported Wayland input helper is available. In Eeschema, press A "
-                + f"and choose KBlocks:{symbol_name}; no files have been changed yet."
-            )
-        raise RuntimeError(
-            detail
-            + "Automatic placement needs KiCad's Place Symbol IPC action or xdotool. "
-            + f"As a manual fallback, activate Eeschema, press A, and choose KBlocks:{symbol_name}."
-        )
-
-    editor_pid = ""
-    if editor_window_id:
-        try:
-            editor_pid = send("getwindowpid", str(editor_window_id))
-        except (OSError, subprocess.SubprocessError):
-            editor_pid = ""
-
-    if not action_started:
-        if not editor_window_id:
-            editor_window_id = _capture_eeschema_window_id()
-        if not editor_window_id:
-            wayland = bool(os.environ.get("WAYLAND_DISPLAY")) or (
-                os.environ.get("XDG_SESSION_TYPE", "").casefold() == "wayland"
-            )
-            raise RuntimeError(
-                (f"{action_error}. " if action_error else "")
-                + "Could not identify the active Schematic Editor. "
-                + (
-                    "On Wayland, activate Eeschema and press A, then choose the block from KBlocks. "
-                    "Automatic key injection was not attempted because the target window could not "
-                    "be verified."
-                    if wayland
-                    else "Keep the project schematic open and launch the library from Eeschema."
-                )
-            )
-        editor_pid = send("getwindowpid", str(editor_window_id))
-        if not editor_pid:
-            raise RuntimeError("Could not determine the active Eeschema process for cursor placement.")
-        send("windowfocus", "--sync", str(editor_window_id))
-        pause(0.1)
-        send("key", "--clearmodifiers", "a")
-
-    chooser_id = ""
-    chooser_pid = editor_pid
-    for _ in range(50):
-        focused_id = send("getwindowfocus")
-        if focused_id and focused_id != str(editor_window_id or ""):
-            focused_pid = send("getwindowpid", focused_id)
-            focused_name = send("getwindowname", focused_id).casefold()
-            same_process = bool(editor_pid and focused_pid == editor_pid)
-            chooser_title = "choose symbol" in focused_name or "select symbol" in focused_name
-            if same_process or chooser_title:
-                chooser_id = focused_id
-                chooser_pid = focused_pid or editor_pid
-                break
-        pause(0.1)
-
-    if not chooser_id:
-        if not action_started and editor_window_id and send("getwindowfocus") == str(editor_window_id):
-            with contextlib.suppress(Exception):
-                send("key", "--clearmodifiers", "Escape")
-        raise RuntimeError(
-            "KiCad did not open its native symbol chooser. Confirm that the schematic "
-            "editor is active and that Add Symbol is available in Eeschema."
-        )
-
-    send("windowfocus", "--sync", chooser_id)
-    send("type", "--clearmodifiers", "--delay", "12", symbol_name)
-    pause(0.15)
-    send("key", "--clearmodifiers", "Return")
-
-    for _ in range(30):
-        focused_id = send("getwindowfocus")
-        if editor_window_id and focused_id == str(editor_window_id):
-            return
-        focused_pid = send("getwindowpid", focused_id) if focused_id else ""
-        if chooser_pid and focused_pid == chooser_pid:
-            focused_name = send("getwindowname", focused_id).casefold()
-            if "choose symbol" not in focused_name and "select symbol" not in focused_name:
-                return
-        pause(0.1)
-    raise RuntimeError(
-        "KiCad accepted the symbol chooser selection but did not return focus "
-        "to Eeschema. Check the native chooser and try placing the block again."
-    )
+        raise RuntimeError(f"{detail} (RunActionStatus={status}). Update KiCad or its IPC binding.")
+    LOG.info("KiCad opened the native symbol chooser. Select KBlocks:%s.", symbol_name)
 
 
 def _library_record_search_text(record) -> str:
@@ -3206,7 +2547,8 @@ def _launch_block_asset(
     *,
     editor_window_id: str | None = None,
 ):
-    """Open a stored KiCad asset and group its window under the invoking editor."""
+    """Open a stored KiCad asset with the executable resolved by KiCad."""
+    del editor_window_id  # No portable cross-process transient-owner API is exposed by KiCad IPC.
     path = Path(path).expanduser().resolve()
     if not path.is_file():
         raise FileNotFoundError(f"The selected {description} is missing: {path}")
@@ -3214,14 +2556,7 @@ def _launch_block_asset(
     executable = kicad.get_kicad_binary_path(executable_name)
     if not executable:
         raise RuntimeError(f"KiCad did not provide an executable path for {description}.")
-    process = subprocess.Popen([executable, str(path)], close_fds=True)
-    if editor_window_id:
-        _attach_process_window_to_editor(
-            process,
-            editor_window_id,
-            target_name=path.name,
-        )
-    return process
+    return subprocess.Popen([executable, str(path)], close_fds=True)
 
 
 def _save_block_variants(
@@ -4936,7 +4271,7 @@ def _bind_mousewheel(widget, scroll_command, *, include_children: bool = False) 
                 delta = float(getattr(event, "delta", 0) or 0)
             except (TypeError, ValueError):
                 delta = 0.0
-            if abs(delta) >= 120 or sys.platform == "win32":
+            if abs(delta) >= 120:
                 delta /= 120.0
             remainder[0] -= delta
             amount = int(remainder[0])
@@ -5225,19 +4560,10 @@ def _show_library_browser(
             )
 
     def place_selected(_event=None):
-        nonlocal editor_window_id
         record = selected_record[0]
         if record is None:
             return
         try:
-            if not editor_window_id:
-                editor_window_id = _capture_eeschema_window_id()
-            if not editor_window_id and not callable(getattr(kicad, "run_action", None)):
-                raise RuntimeError(
-                    "Could not identify Eeschema and this KiCad version does not expose "
-                    "the native Place Symbol IPC action. Keep the Schematic Editor open "
-                    "and launch the Functional Block Library from that editor."
-                )
             _register_block(project_dir, record, kicad, current_roots[0])
             if not _LAST_LIBRARY_RELOAD_OK:
                 messagebox.showwarning(
@@ -5249,7 +4575,7 @@ def _show_library_browser(
             minimized_windows = _minimize_placement_windows(window)
             try:
                 _start_native_symbol_placement(
-                    kicad, editor_window_id, str(record.manifest["symbol_name"])
+                    kicad, None, str(record.manifest["symbol_name"])
                 )
             except Exception:
                 _restore_placement_windows(minimized_windows)
@@ -6252,9 +5578,8 @@ def _show_action_hub(root):
     ]
 
     def dispatch(selected_action: str) -> None:
-        editor_window_id = getattr(root, "_kicad_blocks_editor_window_id", None)
         root.destroy()
-        run_action(selected_action, editor_window_id=editor_window_id)
+        run_action(selected_action)
 
     for tab_name, actions in groups:
         tab = ttk.Frame(tabs, padding=(12, 10))
@@ -6305,13 +5630,11 @@ def run_action(action: str, *, editor_window_id: str | None = None) -> None:
     if action not in valid_actions:
         raise ValueError(f"Unknown KiCad Blocks action: {action!r}")
 
-    # Capture the KiCad window while it is still the focused window. Creating
-    # the Tk root first changes focus and can otherwise capture the browser itself.
-    if editor_window_id is None:
-        editor_window_id = _capture_eeschema_window_id()
+    # KiCad IPC is bound to the editor instance that launched this action.
+    # No native cross-process window handle is needed for these operations.
+    editor_window_id = None
     _load_tkinter()
     root = tk.Tk()
-    root._kicad_blocks_editor_window_id = editor_window_id
     _configure_tk_theme(root)
     root.title("KiCad Blocks — Tasks" if action == "open-hub" else "KiCad Blocks")
     _attach_tk_window_to_editor(root, editor_window_id)
