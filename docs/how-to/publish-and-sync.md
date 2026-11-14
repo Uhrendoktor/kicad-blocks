@@ -16,15 +16,9 @@ To add a named implementation, choose **Add variant** in the Implementations dia
 
 ## Edit the facade symbol
 
-The facade is the symbol that projects place in their schematics. To edit its artwork or pin arrangement:
+The facade is the symbol that projects place in their schematics. The current tested KiCad IPC build does not expose a supported cross-platform operation to open Symbol Editor and load the exact selected library symbol from Eeschema. The plugin validates the generated catalog entry and reports this capability gap; it does not call an unstable action, inject desktop input, or instruct the user to finish the core workflow manually.
 
-1. Select exactly one placed instance of the block in Eeschema.
-2. Open the library browser for that schematic.
-3. Choose **Edit selected facade**, or choose **Edit facade symbol** from the task hub.
-4. Edit the symbol in KiCad Symbol Editor and save it.
-5. Publish the implementation so KiCad Blocks can reconcile the facade pins with the root hierarchical labels.
-
-The current KiCad IPC build does not expose a supported cross-platform operation to open Symbol Editor and load the selected library symbol from Eeschema. The plugin reports this capability gap rather than calling an unstable action or injecting desktop input. The edit workflow remains incomplete until KiCad exposes the required API.
+This edit workflow remains unavailable until KiCad exposes the required API. The [compatibility guide](../explanation/compatibility.md#kicad-editor-action-api-boundary) records the API limitations.
 
 ## Publish a shared implementation
 
