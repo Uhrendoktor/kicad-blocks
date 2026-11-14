@@ -445,7 +445,7 @@ def main() -> None:
             # CairoSVG and the other declared plugin dependencies are available.
             # The managed interpreter shares the system Tk installation.
             picker_probe = subprocess.run(
-                [str(env_python), str(ROOT / "tests" / "test_library_picker_gui.py")],
+                [str(env_python), str(ROOT / "tests" / "acceptance_library_picker_gui.py")],
                 env=env,
                 capture_output=True,
                 text=True,
@@ -461,7 +461,7 @@ def main() -> None:
             configuration_probe = subprocess.run(
                 [
                     python_interpreter,
-                    str(ROOT / "tests" / "test_instance_configuration_gui.py"),
+                    str(ROOT / "tests" / "acceptance_instance_configuration_gui.py"),
                 ],
                 env=env,
                 capture_output=True,
