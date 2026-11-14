@@ -10,7 +10,8 @@
     ".venv"
   ],
   "extraPaths": [
-    "plugin/kicad-blocks"
+    "plugin/kicad-blocks",
+    "examples/stusb4500"
   ],
   "typeCheckingMode": "strict",
   "reportMissingImports": "error",
