@@ -2341,14 +2341,15 @@ def _edit_facade_symbol(
         if not editor_window_id:
             editor_window_id = _capture_eeschema_window_id()
         if editor_window_id:
-            editor_pid = send("getwindowpid", str(editor_window_id))
             focused_id = send("getwindowfocus")
-            focused_pid = send("getwindowpid", focused_id) if focused_id else ""
+            focused_name = (
+                send("getwindowname", focused_id).casefold()
+                if focused_id else ""
+            )
             if (
                 focused_id
                 and focused_id != str(editor_window_id)
-                and editor_pid
-                and focused_pid == editor_pid
+                and "symbol editor" in focused_name
             ):
                 send("key", "--clearmodifiers", "ctrl+a")
                 send("type", "--clearmodifiers", "--delay", "12", symbol_name)
