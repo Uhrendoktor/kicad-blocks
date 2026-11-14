@@ -6058,7 +6058,7 @@ def _show_action_hub(root):
                 ),
                 (
                     "Edit facade symbol",
-                    "Edit the library facade for one selected block instance.",
+                    "Edit the generated library facade for the highlighted block.",
                     "edit-facade",
                     "facade",
                 ),
