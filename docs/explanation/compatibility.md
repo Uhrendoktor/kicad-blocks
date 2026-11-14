@@ -10,7 +10,7 @@ This page separates the product's current test evidence from targets that the in
 | Operating system | Linux |
 | CPU architecture | x86_64 |
 | Python | CPython 3.12 |
-| GUI dependencies | Tkinter, Xvfb/xdotool in CI |
+| GUI dependencies | Tkinter and native `filedialog`; Xvfb/xdotool are test-harness-only in Linux CI |
 | KiCad interfaces | Eeschema IPC, PCB IPC, KiCad CLI |
 
 The post-merge main-branch CI run [#43521663508](https://github.com/Uhrendoktor/kicad-blocks/actions/runs/43521663508) passed both `python-and-kicad` and `visual-ui-audit` on merge commit `d75f0b1f0ef59e14868a84e7730cbc517089e0b7`. It exercised unit tests, lint, KiCad CLI validation, Eeschema GUI editing and publishing, plugin discovery, schematic and PCB IPC, layout merging, and rendered UI evidence.
@@ -50,7 +50,11 @@ Primary references:
 | Linux ARM or other architectures | Not validated; no matching published wheel |
 | Non-CPython interpreters or other Python minor versions | Rejected by the installer |
 
-The plugin UI requires Tkinter. The Linux native Add Symbol handoff also uses `xdotool` and assumes KiCad's Add Symbol shortcut remains bound to `A`. Custom hotkey remapping is not automatically detected.
+The production plugin uses Tkinter and its standard file-selection dialogs, and invokes Symbol Editor and Place Symbol through KiCad IPC. Final symbol selection is performed in KiCad's native UI. `xdotool` is confined to the Linux/X11 GUI test harness; it is not a production dependency or runtime fallback. The plugin no longer probes `/proc`, Windows registry, macOS defaults, GNOME settings, KDE configuration files, X11, or Wayland to implement product behavior.
+
+### Cross-process window ownership
+
+Tk's portable transient relationship is used only between windows created by the same plugin process. KiCad IPC does not currently expose a portable native window handle or foreign-window ownership API, so the plugin does not attempt to force its separate top-level window into KiCad's taskbar/dock group. Cross-process ownership, stacking, and parent activation remain unverified requirements; X11-specific parenting is not an acceptable substitute.
 
 ## Packaging state
 
