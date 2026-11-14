@@ -64,7 +64,7 @@ class SchematicStyleRuleTests(unittest.TestCase):
         tree = [
             "kicad_sch",
             [
-                "text_box", "BLOCK TITLE\\nWRAPPED",
+                "text_box", "BLOCK TITLE\nWRAPPED",
                 ["at", "10", "10", "0"], ["size", "40", "8"],
                 ["stroke", ["width", "-1"]],
                 ["uuid", "future-schematic-title"],
