@@ -59,20 +59,20 @@ Current boundary: page-level block packing and frame geometry are automatic, whi
 
 The machine-enforced rules now include:
 
-- [ ] A label's visible glyph rectangle must not be penetrated by a wire. The label's own connection at its anchor is allowed.
-- [ ] Every member pin, visible Reference/Value field, generated label glyph, wire segment and text box must remain inside its owning frame. A wire crossing a frame boundary is an error.
-- [ ] Declared ground pins face down where symbol orientation permits it. D1.3 is currently an explicit down-facing ground-pin rule.
-- [ ] U1.21-C1.1, U1.23-C2.1 and U1.23-C3.1 must belong to physical wire networks. A label cannot satisfy this rule; those supply pins must remain label-free.
-- [ ] C2/C3 decouplers are placed as a contiguous pair. Their common pin network is a physical branch, not a pair of pin labels.
-- [ ] R1/R4 are aligned with no more than one resistor-body width of clear gap.
-- [ ] T4.3, T1.2 and R10.1 form one continuous physical common-source network. The FET_MID label is forbidden.
-- [ ] Resistor references are within 4.0 mm of their symbol origin; capacitor reference and value fields are within 6.0 mm.
-- [ ] Every declared group emits both a title and a description/source panel. Frames are derived from pin extents and have a fixed 2.54 mm horizontal gap along the primary flow.
+- [ ] `SCH003`: a label's visible glyph rectangle must not be penetrated by a wire. The label's own connection at its anchor is allowed.
+- [ ] `SCH009`: every member pin, visible Reference/Value field, generated label glyph, wire segment and text box must remain inside its owning frame. A wire crossing a frame boundary is an error; each label must belong to exactly one frame and remain inside that frame.
+- [ ] `SCH005`: declared ground pins face down where symbol orientation permits it. D1.3 is currently an explicit down-facing ground-pin rule.
+- [ ] `SCH004`: U1.21-C1.1, U1.23-C2.1 and U1.23-C3.1 must belong to physical wire networks. A label cannot satisfy this rule; those supply pins must remain label-free.
+- [ ] `SCH006`: C2/C3 decouplers are placed as a contiguous pair. Their common pin network is a physical branch, not a pair of pin labels.
+- [ ] `SCH006`: R1/R4 are aligned with no more than one resistor-body width of clear gap.
+- [ ] `SCH004`: T4.3, T1.2 and R10.1 form one continuous physical common-source network. The FET_MID label is forbidden.
+- [ ] `SCH006`: resistor references are within 4.0 mm of their symbol origin; capacitor reference and value fields are within 6.0 mm.
+- [ ] `SCH007` / `SCH009`: every declared group emits both a title and a description/source panel. Frames are derived from pin extents and have a fixed 2.54 mm horizontal gap along the primary flow.
 
 ## Automated and visual validation gate
 
 - [ ] Run unit tests, Ruff, and compileall, including the schematic style checker.
-- [ ] Run scripts/validate_schematic_style.py PATH_TO_SCHEMATIC. It must reject wire crossings/overlaps, unmarked T-junctions, multiple same-name local labels on one wire island, single-use local labels, non-terminal hierarchical labels, free-standing annotation text, insufficient/non-uniform text-box padding, overlapping text boxes, frame overlap, non-uniform stage gaps, and wires/text boxes that penetrate frame borders.
+- [ ] Run `scripts/validate_schematic_style.py --list-rules` to inspect rule IDs/severities, then run `scripts/validate_schematic_style.py PATH_TO_SCHEMATIC`. The nine stable diagnostics are SCH001–SCH009.
 - [ ] Export the schematic netlist with KiCad CLI and verify all critical pin-to-net assignments against the datasheet-derived map.
 - [ ] Run KiCad ERC with the standalone child-block validation profile. Suppress only expected root-sheet hierarchical ports, externally driven input/power pins, isolated hierarchical port labels, and absent project library tables. Internal shorts, pin conflicts, dangling wires/local labels, and all other ERC rules remain enabled; require zero unignored violations.
 - [ ] Export a fresh SVG from the exact tested commit and inspect the full page and dense regions. Confirm the boxes fit the text and remain close to the circuits they describe.
