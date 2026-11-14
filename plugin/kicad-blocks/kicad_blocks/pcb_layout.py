@@ -52,7 +52,22 @@ def _lex(source: str):
             while i < len(source):
                 cur = source[i]
                 if escaped:
-                    out.append("\\" + cur)
+                    if cur == "x":
+                        digits = source[i + 1 : i + 3]
+                        if len(digits) != 2 or any(
+                            digit not in "0123456789abcdefABCDEF" for digit in digits
+                        ):
+                            raise ValueError("Invalid hexadecimal escape in KiCad S-expression.")
+                        out.append(f"\\u00{digits}")
+                        i += 2
+                    elif cur in "01234567":
+                        digits = source[i : i + 3]
+                        if len(digits) != 3 or any(digit not in "01234567" for digit in digits):
+                            raise ValueError("Invalid octal escape in KiCad S-expression.")
+                        out.append(f"\\u{int(digits, 8):04x}")
+                        i += 2
+                    else:
+                        out.append("\\" + cur)
                     escaped = False
                 elif cur == "\\":
                     escaped = True
@@ -81,11 +96,11 @@ def parse_sexpr(source: str) -> SExpr:
     root: list = []
     stack = [root]
     for token in _lex(source):
-        if token == "(":
+        if token == "(" and not isinstance(token, _Quoted):
             node: list = []
             stack[-1].append(node)
             stack.append(node)
-        elif token == ")":
+        elif token == ")" and not isinstance(token, _Quoted):
             if len(stack) == 1:
                 raise ValueError("Unexpected ')' in KiCad S-expression.")
             stack.pop()

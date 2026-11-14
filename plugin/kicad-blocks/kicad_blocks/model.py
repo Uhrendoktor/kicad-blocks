@@ -345,8 +345,7 @@ def substitute_parameter_templates(
             in_string = True
 
     def escape(match: re.Match[str]) -> str:
-        value = values[match.group(1)]
-        return value.replace("\\", "\\\\").replace('"', '\\"')
+        return sexpr_quote(values[match.group(1)])[1:-1]
 
     return _PARAMETER_TOKEN.sub(escape, content)
 
@@ -399,8 +398,23 @@ def parse_pins(spec: str) -> list[BlockPin]:
 
 
 def sexpr_quote(value: str) -> str:
-    """Quote a string using KiCad's S-expression string conventions."""
-    return json.dumps(str(value), ensure_ascii=False)
+    """Quote text using KiCad's UTF-8 and C-style S-expression escapes."""
+    escaped: list[str] = []
+    for character in str(value):
+        codepoint = ord(character)
+        if character == "\\":
+            escaped.append("\\\\")
+        elif character == '"':
+            escaped.append('\\\"')
+        elif character == "\n":
+            escaped.append("\\n")
+        elif character == "\r":
+            escaped.append("\\r")
+        elif codepoint < 0x20 or codepoint == 0x7F:
+            escaped.append(f"\\x{codepoint:02x}")
+        else:
+            escaped.append(character)
+    return '"' + "".join(escaped) + '"'
 
 
 def _pin_y(row: int, row_count: int, pitch: float = 2.54) -> float:

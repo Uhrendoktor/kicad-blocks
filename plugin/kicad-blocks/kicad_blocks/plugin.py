@@ -560,7 +560,6 @@ def _register_block(
     register_project_symbol_library(
         project_dir,
         LIBRARY_NICKNAME,
-    BlockRecord,
         catalog,
         description="KiCad Blocks — all registered functional-block libraries",
         replace_existing=True,
