@@ -124,10 +124,7 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
         self.assertIn(["/usr/bin/xdotool", "windowfocus", "--sync", "0x100"], calls)
         self.assertIn(["/usr/bin/xdotool", "key", "--clearmodifiers", "alt+t"], calls)
         self.assertIn(
-            [
-                "/usr/bin/xdotool", "type", "--clearmodifiers", "--delay",
-                "35", "Symbol Editor",
-            ],
+            ["/usr/bin/xdotool", "key", "--clearmodifiers", "s"],
             calls,
         )
         self.assertGreaterEqual(search_count[0], 2)
@@ -163,7 +160,7 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
             calls,
             [
                 ["/usr/bin/wtype", "-M", "alt", "-k", "t", "-m", "alt"],
-                ["/usr/bin/wtype", "-d", "120", "Symbol Editor"],
+                ["/usr/bin/wtype", "-k", "s"],
                 ["/usr/bin/wtype", "-k", "Return"],
                 ["/usr/bin/wtype", "-M", "ctrl", "-k", "l", "-m", "ctrl"],
                 ["/usr/bin/wtype", "-M", "ctrl", "-k", "a", "-m", "ctrl"],
