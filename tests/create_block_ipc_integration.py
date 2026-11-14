@@ -490,8 +490,15 @@ def main() -> None:
                     "Could not reload the generated facade before the live Edit Facade test: "
                     + str(plugin_actions._LAST_LIBRARY_RELOAD_WARNING)
                 )
+            edit_nickname = plugin_actions._register_facade_edit_library(
+                project_dir, refreshed_record, kicad
+            )
             if not plugin_actions._edit_facade_symbol(
-                refreshed_record, kicad, window_id, xdotool=xdotool
+                refreshed_record,
+                kicad,
+                window_id,
+                edit_library_nickname=edit_nickname,
+                xdotool=xdotool,
             ):
                 raise AssertionError(
                     "Edit Facade opened Symbol Editor but could not select the generated symbol."
@@ -500,7 +507,7 @@ def main() -> None:
                 raise AssertionError(
                     "Edit Facade unexpectedly created a schematic instance while opening the library symbol."
                 )
-            target_title = f"{target_nickname}:{target_symbol_name}".casefold()
+            target_title = f"{edit_nickname}:{target_symbol_name}".casefold()
             title_deadline = time.monotonic() + 5.0
             symbol_editor_open = False
             while time.monotonic() < title_deadline:
