@@ -112,8 +112,7 @@ def test_pyright_inventory_requires_each_core_module_to_be_included_or_reviewed(
     errors = policy._check_pyright_inventory()
     assert any("model.py" in error for error in errors)
     assert any(
-        "plugin.py" in error and "must remain explicitly excluded" in error
-        for error in errors
+        "plugin.py" in error and "must remain explicitly excluded" in error for error in errors
     )
 
     config.write_text(
