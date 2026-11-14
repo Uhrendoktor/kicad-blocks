@@ -531,6 +531,47 @@ class STUSB4500ReferenceTests(unittest.TestCase):
         self.assertEqual(delta("C10", "D11"), (0.0, 25.40))
         self.assertEqual(delta("C10", "R2"), (0.0, 46.99))
 
+    def test_component_origins_are_derived_from_group_constraints(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="stusb4500-group-layout-") as temporary:
+            _content, _tree, instances = self._generate(temporary)
+
+        for group in SCHEMATIC_GROUPS:
+            layout = group["layout"]
+            members = set(group["members"])
+            targets = {str(rule["component"]) for rule in layout["constraints"]}
+            self.assertIn(layout["anchor"], members)
+            self.assertEqual(
+                {layout["anchor"]} | targets, members,
+                f"Every component in {group['id']} must be constrained from its group anchor.",
+            )
+
+        def origin(reference: str) -> tuple[float, float]:
+            at = _direct(instances[reference], "at")
+            return float(at[1]), float(at[2])
+
+        def delta(first: str, second: str) -> tuple[float, float]:
+            a, b = origin(first), origin(second)
+            return round(b[0] - a[0], 3), round(b[1] - a[1], 3)
+
+        self.assertEqual(delta("J1", "D1"), (33.02, 0.0))
+        self.assertEqual(delta("C50", "D50"), (20.32, 0.0))
+        self.assertEqual(delta("D4", "C4"), (12.70, 3.81))
+        self.assertEqual(delta("C4", "R1"), (12.70, 0.0))
+        self.assertEqual(delta("R1", "R4"), (5.08, 0.0))
+        self.assertEqual(delta("U1", "C1"), (-20.32, -35.56))
+        self.assertEqual(delta("U1", "C2"), (0.0, -35.56))
+        self.assertEqual(delta("C2", "C3"), (5.08, 0.0))
+        self.assertEqual(delta("R51", "R52"), (0.0, 12.70))
+        self.assertEqual(delta("R51", "R53"), (20.32, 0.0))
+        self.assertEqual(delta("T4", "T1"), (40.64, 0.0))
+        t4, t1, r10 = origin("T4"), origin("T1"), origin("R10")
+        self.assertAlmostEqual(r10[0], (t4[0] + t1[0]) / 2, places=3)
+        self.assertAlmostEqual(r10[1] - t4[1], 27.94, places=3)
+        self.assertEqual(delta("R10", "R11"), (7.62, 7.62))
+        self.assertEqual(delta("R11", "R13"), (20.32, 0.0))
+        self.assertEqual(delta("C10", "D11"), (0.0, 25.40))
+        self.assertEqual(delta("C10", "R2"), (0.0, 46.99))
+
     def test_functional_frames_are_derived_and_packed_with_constant_spacing(self) -> None:
         with tempfile.TemporaryDirectory(prefix="stusb4500-frame-overlap-") as temporary:
             _content, tree, _instances = self._generate(temporary)
