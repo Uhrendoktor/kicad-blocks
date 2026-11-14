@@ -238,7 +238,7 @@ def _validate_stusb4500_netlist(cli: str, output_dir: Path) -> None:
             if ref_node is not None and pin_node is not None:
                 actual[(str(ref_node[1]), str(pin_node[1]))] = net_name
 
-    expected = {
+    expected: dict[tuple[str, str], str | None] = {
         # STUSB4500 functional pins and explicit parent-level interfaces.
         ("U1", "1"): "CC1",
         ("U1", "2"): "CC1",
