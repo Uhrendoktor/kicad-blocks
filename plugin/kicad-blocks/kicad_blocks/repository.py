@@ -14,6 +14,8 @@ import tempfile
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
+
+from platformdirs import user_config_path
 from typing import cast
 
 from .extraction import extract_hierarchical_pins, prepare_block_implementation
@@ -2245,7 +2247,7 @@ def resolve_dependency_graph(
 
 def settings_file() -> Path:
     """Return the per-user settings file path, independent of the project."""
-    return Path.home() / ".config" / "kicad-blocks" / "settings.json"
+    return user_config_path("kicad-blocks", appauthor=False) / "settings.json"
 
 
 def _read_library_settings() -> LibrarySettings:
