@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import base64
 import contextlib
-import hashlib
 import logging
 import os
 import re
@@ -52,6 +51,7 @@ from .repository import (
     create_block,
     default_library_root,
     ensure_stable_block_identity,
+    import_project_catalog_facade_edit,
     link_instance_to_local_copy,
     list_blocks,
     local_copy_for_instance,
@@ -662,31 +662,6 @@ def _reload_symbol_library(kicad, nickname: str) -> bool:
         return False
 
 
-
-
-def _facade_edit_library_nickname(record) -> str:
-    """Return a stable project-library alias for editing the source catalog directly."""
-    source_catalog = Path(record.symbol_library).expanduser().resolve()
-    root_key = hashlib.sha256(str(source_catalog.parent).encode("utf-8")).hexdigest()[:10]
-    return f"KBEdit_{root_key}"
-
-
-def _register_facade_edit_library(project_dir: Path, record, kicad) -> str:
-    """Register the shared source catalog separately from the project's placement snapshot."""
-    nickname = _facade_edit_library_nickname(record)
-    register_project_symbol_library(
-        project_dir,
-        nickname,
-        Path(record.symbol_library),
-        description=f"KiCad Blocks source facade library — {Path(record.symbol_library).parent.name}",
-        replace_existing=True,
-    )
-    if not _reload_symbol_library(kicad, nickname):
-        raise RuntimeError(
-            _LAST_LIBRARY_RELOAD_WARNING
-            or f"KiCad could not load the source facade library {nickname!r}."
-        )
-    return nickname
 
 
 def _register_block(
@@ -2241,7 +2216,6 @@ def _edit_facade_symbol(
     *,
     xdotool: str | None = None,
     wtype: str | None = None,
-    edit_library_nickname: str | None = None,
     command_runner=subprocess.run,
     pause=time.sleep,
 ) -> bool:
@@ -2268,7 +2242,7 @@ def _edit_facade_symbol(
 
     catalog = parse_sexpr(catalog_path.read_text(encoding="utf-8"))
     _named_symbol_node(catalog, symbol_name, catalog_path)
-    lib_id = f"{edit_library_nickname or nickname}:{symbol_name}"
+    lib_id = f"{nickname}:{symbol_name}"
 
     run_action = getattr(kicad, "run_action", None)
     if not callable(run_action):
@@ -5212,21 +5186,28 @@ def _show_library_browser(
         if record is None:
             return
         try:
-            edit_nickname = _register_facade_edit_library(
-                project_dir, record, kicad
+            refreshed_record = _register_block(
+                project_dir, record, kicad, current_roots[0]
             )
+            if not _LAST_LIBRARY_RELOAD_OK:
+                messagebox.showwarning(
+                    "Edit facade",
+                    _LAST_LIBRARY_RELOAD_WARNING
+                    or "KiCad could not reload the generated facade catalog. Restart Eeschema and retry.",
+                    parent=window,
+                )
+                return
             opened = _edit_facade_symbol(
-                record,
+                refreshed_record,
                 kicad,
                 editor_window_id,
-                edit_library_nickname=edit_nickname,
             )
             if not opened:
                 messagebox.showinfo(
                     "Edit facade",
                     "Symbol Editor is open. Search its library tree for "
-                    + f"{edit_nickname}:"
-                    + str(record.manifest["symbol_name"])
+                    + f"{refreshed_record.manifest['library_nickname']}:"
+                    + str(refreshed_record.manifest["symbol_name"])
                     + " and press Enter.",
                     parent=window,
                 )
@@ -5685,6 +5666,8 @@ def _publish_block(root, kicad, project_dir, parent) -> None:
     record = _pick_record(_list_library_records(library_paths), parent, "Publish Library Block")
     if record is None:
         return
+    project_catalog = Path(project_dir).expanduser().resolve() / ".kicad_blocks" / LIBRARY_CATALOG_NAME
+    import_project_catalog_facade_edit(record, project_catalog)
     dependency_result = synchronize_block_dependencies(
         record, library_paths, find_kicad_cli()
     )
