@@ -940,7 +940,7 @@ class LibraryBrowserTests(unittest.TestCase):
                 "wtype": "/usr/bin/wtype",
             }.get(name)),
             patch.dict(os.environ, {"WAYLAND_DISPLAY": "wayland-0", "XDG_SESSION_TYPE": "wayland"}),
-            self.assertRaisesRegex(RuntimeError, "automatic key injection was not attempted"),
+            self.assertRaisesRegex(RuntimeError, "No supported Wayland input helper is available"),
         ):
             _start_native_symbol_placement(
                 SimpleNamespace(),
@@ -967,7 +967,7 @@ class LibraryBrowserTests(unittest.TestCase):
                 os.environ,
                 {"WAYLAND_DISPLAY": "wayland-0", "XDG_SESSION_TYPE": "wayland"},
             ),
-            self.assertRaisesRegex(RuntimeError, "automatic key injection was not attempted"),
+            self.assertRaisesRegex(RuntimeError, "(?i)automatic key injection was not attempted"),
         ):
             _start_native_symbol_placement(
                 SimpleNamespace(),
