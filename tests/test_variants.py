@@ -67,12 +67,28 @@ class BlockVariantTests(unittest.TestCase):
         facade = (block.path / block.manifest["symbol_file"]).read_text(encoding="utf-8")
         self.assertIn('property "KB_VARIANT" ""', facade)
 
-    def test_unknown_or_empty_variant_never_falls_back(self):
+    def test_empty_selector_uses_configured_default_and_explicit_selector_wins(self):
         block = self.create_variant_block()
+        self.assertEqual(
+            resolve_variant_implementation(block.manifest, ""),
+            "implementation.kicad_sch",
+        )
+
+        block.manifest["default_variant"] = "3V3"
+        self.assertEqual(
+            resolve_variant_implementation(block.manifest, ""),
+            "implementation_3v3.kicad_sch",
+        )
+        self.assertEqual(
+            block.implementation.name,
+            "implementation_3v3.kicad_sch",
+        )
+        self.assertEqual(
+            resolve_variant_implementation(block.manifest, "1v8"),
+            "implementation_1v8.kicad_sch",
+        )
         with self.assertRaisesRegex(ValueError, "Unknown KB_VARIANT"):
             resolve_variant_implementation(block.manifest, "5V")
-        with self.assertRaisesRegex(ValueError, "KB_VARIANT is empty"):
-            resolve_variant_implementation(block.manifest, "")
 
     def test_non_variant_block_keeps_single_implementation(self):
         block = create_block(self.root, "Single Implementation", parse_pins("VIN:input, GND:passive"))

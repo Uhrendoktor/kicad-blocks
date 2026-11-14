@@ -2,6 +2,7 @@
 
 import sys
 import tempfile
+import types
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
@@ -34,8 +35,22 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
             wait_for_libraries=Mock(),
         )
         self.messagebox = SimpleNamespace(showinfo=Mock())
+        self._dependency_patch = patch.object(
+            plugin_actions,
+            "synchronize_block_dependencies",
+            side_effect=lambda record, *_args, **_kwargs: {
+                "block": record, "changed": False, "count": 0
+            },
+        )
+        self._dependency_patch.start()
+        self._cli_patch = patch.object(
+            plugin_actions, "find_kicad_cli", return_value="/usr/bin/kicad-cli"
+        )
+        self._cli_patch.start()
 
     def tearDown(self):
+        self._cli_patch.stop()
+        self._dependency_patch.stop()
         self.temp.cleanup()
 
     def test_edit_facade_uses_native_eeschema_library_symbol_hotkey(self):
@@ -113,12 +128,6 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
             ) as details,
             patch.object(plugin_actions, "messagebox", messagebox),
             patch.object(plugin_actions, "create_block", return_value=self.block) as create,
-            patch.object(
-                plugin_actions,
-                "synchronize_block_dependencies",
-                return_value={"block": self.block, "changed": False, "count": 0},
-            ),
-            patch.object(plugin_actions, "find_kicad_cli", return_value="/usr/bin/kicad-cli"),
             patch.object(plugin_actions, "_register_block", return_value=self.block) as register,
         ):
             plugin_actions._create_and_place(
@@ -144,6 +153,266 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
         )
         messagebox.showinfo.assert_called_once()
 
+
+    def test_create_block_rolls_back_new_block_when_project_registration_fails(self):
+        source = self.project / "power_stage.kicad_sch"
+        source.write_text("(kicad_sch)", encoding="utf-8")
+        selected_sheet = SimpleNamespace(
+            filename_field=SimpleNamespace(
+                text=SimpleNamespace(value=source.name)
+            ),
+            id=SimpleNamespace(
+                value="dddddddd-dddd-4ddd-8ddd-dddddddddddd"
+            ),
+        )
+        schematic = SimpleNamespace(get_selection=Mock(return_value=[selected_sheet]))
+        created = create_block(
+            self.library,
+            "Registration Failure Block",
+            parse_pins("VIN:input, GND:passive"),
+        )
+        catalog = self.project / ".kicad_blocks" / "KBlocks.kicad_sym"
+        symbol_table = self.project / "sym-lib-table"
+        catalog.parent.mkdir(parents=True, exist_ok=True)
+        catalog.write_text("original catalog", encoding="utf-8")
+        symbol_table.write_text("original table", encoding="utf-8")
+
+        with (
+            patch.object(
+                plugin_actions,
+                "_ask_create_block_details",
+                return_value=("Registration Failure Block", "Rollback test"),
+            ),
+            patch.object(plugin_actions, "messagebox", self.messagebox),
+            patch.object(plugin_actions, "create_block", return_value=created),
+            patch.object(
+                plugin_actions,
+                "_register_block",
+                side_effect=ValueError("invalid project symbol table"),
+            ),
+            self.assertRaisesRegex(ValueError, "invalid project symbol table"),
+        ):
+            plugin_actions._create_and_place(
+                self.library, schematic, self.kicad, self.project, self.parent
+            )
+
+        self.assertFalse(created.path.exists())
+        self.assertTrue(self.block.path.is_dir())
+        self.assertEqual(catalog.read_text(encoding="utf-8"), "original catalog")
+        self.assertEqual(symbol_table.read_text(encoding="utf-8"), "original table")
+        self.messagebox.showinfo.assert_not_called()
+
+    def test_create_block_prefers_typed_sheet_symbol_over_serialized_selection(self):
+        source = self.project / "power_stage.kicad_sch"
+        source.write_text("(kicad_sch)", encoding="utf-8")
+        selected_uuid = "dddddddd-dddd-4ddd-8ddd-dddddddddddd"
+        selected_sheet = SimpleNamespace(
+            filename_field=SimpleNamespace(
+                text=SimpleNamespace(value="power_stage.kicad_sch")
+            ),
+            name_field=SimpleNamespace(text=SimpleNamespace(value="Power Stage")),
+            id=SimpleNamespace(value=selected_uuid),
+        )
+        schematic = SimpleNamespace(
+            get_selection=Mock(return_value=[selected_sheet]),
+            get_selection_as_string=Mock(
+                side_effect=RuntimeError(
+                    "Serialized selection is unavailable in this editor build."
+                )
+            ),
+        )
+        with (
+            patch.object(
+                plugin_actions,
+                "_ask_create_block_details",
+                return_value=("Power Stage", "Typed IPC selection"),
+            ) as details,
+            patch.object(plugin_actions, "messagebox", self.messagebox),
+            patch.object(plugin_actions, "create_block", return_value=self.block) as create,
+            patch.object(plugin_actions, "_register_block", return_value=self.block),
+        ):
+            plugin_actions._create_and_place(
+                self.library, schematic, self.kicad, self.project, self.parent
+            )
+
+        details.assert_called_once_with(self.parent, source.resolve())
+        create.assert_called_once_with(
+            self.library,
+            "Power Stage",
+            source_schematic=source.resolve(),
+            source_project_name=self.project.name,
+            source_sheet_uuid=selected_uuid,
+            description="Typed IPC selection",
+        )
+        schematic.get_selection_as_string.assert_not_called()
+
+    def test_create_block_rejects_multiple_selected_items_without_falling_back(self):
+        schematic = SimpleNamespace(
+            get_selection=Mock(return_value=[object(), object()]),
+            get_selection_as_string=Mock(return_value=""),
+            get_hierarchy=Mock(),
+        )
+        with (
+            patch.object(plugin_actions, "_ask_create_block_details") as details,
+            patch.object(plugin_actions, "create_block") as create,
+            self.assertRaisesRegex(ValueError, "exactly one hierarchical sheet symbol"),
+        ):
+            plugin_actions._create_and_place(
+                self.library, schematic, self.kicad, self.project, self.parent
+            )
+        details.assert_not_called()
+        create.assert_not_called()
+        schematic.get_hierarchy.assert_not_called()
+
+    def test_create_block_rejects_non_sheet_selection_instead_of_using_open_sheet(self):
+        current_sheet = self.project / "power_stage.kicad_sch"
+        current_sheet.write_text("(kicad_sch)", encoding="utf-8")
+        schematic = SimpleNamespace(
+            get_selection=Mock(return_value=[SimpleNamespace(reference="R1")]),
+            get_selection_as_string=Mock(return_value=""),
+            get_hierarchy=Mock(),
+        )
+        with (
+            patch.object(plugin_actions, "_ask_create_block_details") as details,
+            patch.object(plugin_actions, "create_block") as create,
+            self.assertRaisesRegex(ValueError, "current selection is not a hierarchical sheet symbol"),
+        ):
+            plugin_actions._create_and_place(
+                self.library, schematic, self.kicad, self.project, self.parent
+            )
+        details.assert_not_called()
+        create.assert_not_called()
+        schematic.get_hierarchy.assert_not_called()
+
+    def test_create_block_normalizes_no_items_selected_ipc_error(self):
+        source = self.project / "power_stage.kicad_sch"
+        source.write_text("(kicad_sch)", encoding="utf-8")
+
+        class FakeSheetPath:
+            def __init__(self, path):
+                self.path = path
+
+        current_sheet = SimpleNamespace(
+            filename="power_stage.kicad_sch",
+            name="Power Stage",
+            path=FakeSheetPath(["root-id", "sheet-id"]),
+            children=[],
+        )
+        root_sheet = SimpleNamespace(
+            filename="project.kicad_sch",
+            name="Project",
+            path=FakeSheetPath(["root-id"]),
+            children=[current_sheet],
+        )
+        schematic = SimpleNamespace(
+            get_selection=Mock(side_effect=RuntimeError("No items are selected.")),
+            get_selection_as_string=Mock(
+                side_effect=RuntimeError("No items are selected.")
+            ),
+            get_hierarchy=Mock(return_value=SimpleNamespace(root=root_sheet)),
+            document=SimpleNamespace(
+                sheet_path=FakeSheetPath(["root-id", "sheet-id"])
+            ),
+        )
+        with (
+            patch.object(
+                plugin_actions,
+                "_ask_create_block_details",
+                return_value=("Power Stage", "Empty selection"),
+            ),
+            patch.object(plugin_actions, "messagebox", self.messagebox),
+            patch.object(plugin_actions, "create_block", return_value=self.block) as create,
+            patch.object(plugin_actions, "_register_block", return_value=self.block),
+        ):
+            plugin_actions._create_and_place(
+                self.library, schematic, self.kicad, self.project, self.parent
+            )
+        create.assert_called_once_with(
+            self.library,
+            "Power Stage",
+            source_schematic=source.resolve(),
+            source_project_name=self.project.name,
+            source_sheet_uuid="sheet-id",
+            description="Empty selection",
+        )
+
+    def test_create_block_rejects_empty_sheetfile_before_creating_anything(self):
+        selected_sheet = SimpleNamespace(
+            filename_field=SimpleNamespace(text=SimpleNamespace(value="")),
+            id=SimpleNamespace(value="dddddddd-dddd-4ddd-8ddd-dddddddddddd"),
+        )
+        schematic = SimpleNamespace(get_selection=Mock(return_value=[selected_sheet]))
+        with (
+            patch.object(plugin_actions, "_ask_create_block_details") as details,
+            patch.object(plugin_actions, "create_block") as create,
+            self.assertRaisesRegex(ValueError, "no Sheetfile property"),
+        ):
+            plugin_actions._create_and_place(
+                self.library, schematic, self.kicad, self.project, self.parent
+            )
+        details.assert_not_called()
+        create.assert_not_called()
+
+    def test_create_block_rejects_selected_sheet_without_uuid(self):
+        source = self.project / "power_stage.kicad_sch"
+        source.write_text("(kicad_sch)", encoding="utf-8")
+        selected_sheet = SimpleNamespace(
+            filename_field=SimpleNamespace(
+                text=SimpleNamespace(value=source.name)
+            ),
+            id=None,
+        )
+        schematic = SimpleNamespace(get_selection=Mock(return_value=[selected_sheet]))
+        with (
+            patch.object(plugin_actions, "_ask_create_block_details") as details,
+            patch.object(plugin_actions, "create_block") as create,
+            self.assertRaisesRegex(ValueError, "no UUID"),
+        ):
+            plugin_actions._create_and_place(
+                self.library, schematic, self.kicad, self.project, self.parent
+            )
+        details.assert_not_called()
+        create.assert_not_called()
+
+    def test_create_block_does_not_fallback_when_typed_selection_ipc_fails(self):
+        source = self.project / "power_stage.kicad_sch"
+        source.write_text("(kicad_sch)", encoding="utf-8")
+        schematic = SimpleNamespace(
+            get_selection=Mock(
+                side_effect=RuntimeError("KiCad selection API is unavailable")
+            ),
+            get_selection_as_string=Mock(return_value=""),
+            get_hierarchy=Mock(),
+        )
+        with (
+            patch.object(plugin_actions, "_ask_create_block_details") as details,
+            patch.object(plugin_actions, "create_block") as create,
+            self.assertRaisesRegex(RuntimeError, "selection API is unavailable"),
+        ):
+            plugin_actions._create_and_place(
+                self.library, schematic, self.kicad, self.project, self.parent
+            )
+        details.assert_not_called()
+        create.assert_not_called()
+        schematic.get_selection_as_string.assert_not_called()
+        schematic.get_hierarchy.assert_not_called()
+
+    def test_create_block_fails_before_dialog_when_selected_sheetfile_is_missing(self):
+        selected_sheet = SimpleNamespace(
+            filename_field=SimpleNamespace(text=SimpleNamespace(value="missing.kicad_sch")),
+            id=SimpleNamespace(value="dddddddd-dddd-4ddd-8ddd-dddddddddddd"),
+        )
+        schematic = SimpleNamespace(get_selection=Mock(return_value=[selected_sheet]))
+        with (
+            patch.object(plugin_actions, "_ask_create_block_details") as details,
+            patch.object(plugin_actions, "create_block") as create,
+            self.assertRaisesRegex(FileNotFoundError, "active parent sheet"),
+        ):
+            plugin_actions._create_and_place(
+                self.library, schematic, self.kicad, self.project, self.parent
+            )
+        details.assert_not_called()
+        create.assert_not_called()
 
     def test_create_block_without_selection_uses_the_current_hierarchical_sheet(self):
         source = self.project / "power_stage.kicad_sch"
@@ -182,12 +451,6 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
             ) as details,
             patch.object(plugin_actions, "messagebox", messagebox),
             patch.object(plugin_actions, "create_block", return_value=self.block) as create,
-            patch.object(
-                plugin_actions,
-                "synchronize_block_dependencies",
-                return_value={"block": self.block, "changed": False, "count": 0},
-            ),
-            patch.object(plugin_actions, "find_kicad_cli", return_value="/usr/bin/kicad-cli"),
             patch.object(plugin_actions, "_register_block", return_value=self.block),
         ):
             plugin_actions._create_and_place(
@@ -261,15 +524,7 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
             encoding="utf-8",
         )
 
-        with (
-            patch.object(plugin_actions, "messagebox", self.messagebox),
-            patch.object(
-                plugin_actions,
-                "synchronize_block_dependencies",
-                return_value={"block": self.block, "changed": False, "count": 0},
-            ),
-            patch.object(plugin_actions, "find_kicad_cli", return_value="/usr/bin/kicad-cli"),
-        ):
+        with patch.object(plugin_actions, "messagebox", self.messagebox):
             plugin_actions._publish_block(
                 self.library,
                 self.kicad,
@@ -535,12 +790,6 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
             ),
             patch.object(plugin_actions, "messagebox", self.messagebox),
             patch.object(plugin_actions, "create_block", return_value=self.block) as create,
-            patch.object(
-                plugin_actions,
-                "synchronize_block_dependencies",
-                return_value={"block": self.block, "changed": False, "count": 0},
-            ),
-            patch.object(plugin_actions, "find_kicad_cli", return_value="/usr/bin/kicad-cli"),
             patch.object(plugin_actions, "_register_block", return_value=self.block),
         ):
             plugin_actions._create_and_place(
@@ -605,12 +854,6 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
             ),
             patch.object(plugin_actions, "messagebox", self.messagebox),
             patch.object(plugin_actions, "create_block", return_value=self.block) as create,
-            patch.object(
-                plugin_actions,
-                "synchronize_block_dependencies",
-                return_value={"block": self.block, "changed": False, "count": 0},
-            ),
-            patch.object(plugin_actions, "find_kicad_cli", return_value="/usr/bin/kicad-cli"),
             patch.object(plugin_actions, "_register_block", return_value=self.block),
         ):
             plugin_actions._create_and_place(
@@ -625,6 +868,56 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
             source_sheet_uuid=selected_uuid,
             description="Selected child sheet",
         )
+
+    def test_run_action_dispatches_create_block_to_sheet_creation_workflow(self):
+        root = SimpleNamespace(
+            title=Mock(),
+            withdraw=Mock(),
+            destroy=Mock(),
+        )
+        fake_tk = SimpleNamespace(
+            Tk=Mock(return_value=root),
+            TclError=RuntimeError,
+        )
+        kicad = SimpleNamespace(
+            get_schematic=Mock(return_value=self.schematic),
+        )
+        kicad_module = types.ModuleType("kipy")
+        kicad_module.KiCad = Mock(return_value=kicad)
+
+        with (
+            patch.object(plugin_actions, "tk", fake_tk),
+            patch.object(plugin_actions, "messagebox", self.messagebox),
+            patch.object(plugin_actions, "_load_tkinter"),
+            patch.object(
+                plugin_actions, "_capture_eeschema_window_id", return_value="0x100"
+            ) as capture_editor,
+            patch.object(plugin_actions, "_configure_tk_theme"),
+            patch.object(plugin_actions, "_attach_tk_window_to_editor") as attach_window,
+            patch.object(plugin_actions, "project_directory", return_value=self.project),
+            patch.object(
+                plugin_actions, "configured_library_roots", return_value=[self.library]
+            ),
+            patch.object(plugin_actions, "default_library_root", return_value=self.library),
+            patch.object(plugin_actions, "_create_and_place") as create_from_sheet,
+            patch.dict(sys.modules, {"kipy": kicad_module}),
+        ):
+            plugin_actions.run_action("create-block")
+
+        capture_editor.assert_called_once_with()
+        attach_window.assert_called_once_with(root, "0x100")
+        kicad_module.KiCad.assert_called_once_with()
+        kicad.get_schematic.assert_called_once_with()
+        create_from_sheet.assert_called_once_with(
+            self.library,
+            self.schematic,
+            kicad,
+            self.project,
+            root,
+            "0x100",
+        )
+        root.withdraw.assert_called_once_with()
+        root.destroy.assert_called_once_with()
 
     def test_run_action_captures_kicad_window_before_creating_tk(self):
         events = []
