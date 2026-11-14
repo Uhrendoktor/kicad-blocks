@@ -5,9 +5,9 @@ This file is the durable design contract for UI changes. It consolidates the rev
 ## Functional behavior comes first
 
 - Block placement is the primary workflow. The Functional Block Library must register and reload the selected facade in the active project, invoke KiCad's native Place Symbol action, and leave the facade attached to the editor cursor.
-- Do not make placement depend solely on an optional desktop utility when KiCad IPC exposes the native action. If a fallback is used, verify that the native symbol chooser actually opened before sending input.
+- Place Block and Edit Facade must call the corresponding native KiCad IPC actions. Do not synthesize global keyboard input or add an X11/Wayland-specific runtime fallback. The final symbol choice must remain in KiCad's native UI unless KiCad exposes a portable selection API.
 - A test that mocks window discovery and keypresses independently is not an end-to-end placement test. Exercise the hand-off against a real Eeschema process in the GUI test environment.
-- Plugin windows and child document windows must be owned by their invoking KiCad editor. Verify the window-manager transient owner on the actual top-level frame, not only the Tk client child.
+- Tk child dialogs must use the portable Tk parent/transient relationship. Do not mutate foreign native window IDs or use X11/Wayland/OS-specific helpers from production code. KiCad IPC currently exposes no portable cross-process window-owner handle; therefore KiCad taskbar/dock grouping and foreign-window activation remain an explicit unresolved requirement until a dependency/API with documented support on Windows, macOS, and Linux is selected and validated. Do not claim this is solved by an X11-only test.
 
 ## One shared UI system
 
