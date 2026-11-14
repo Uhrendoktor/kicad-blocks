@@ -2388,10 +2388,10 @@ def _edit_facade_symbol(
     if symbol_editor_id is None:
         send("windowfocus", "--sync", str(editor_window_id))
         send("key", "--clearmodifiers", "alt+t")
-        pause(0.15)
-        # In KiCad's Tools menu the Symbol Editor item is addressable by its
-        # underlined S accelerator. The following window check is authoritative.
-        send("key", "--clearmodifiers", "s")
+        pause(0.25)
+        # Use wxWidgets' menu type-to-select rather than assuming a mnemonic
+        # letter: translations and user menu customizations can change it.
+        send("type", "--clearmodifiers", "--delay", "35", "Symbol Editor")
         send("key", "--clearmodifiers", "Return")
         deadline = time.monotonic() + 5.0
         while time.monotonic() < deadline:
@@ -2401,9 +2401,16 @@ def _edit_facade_symbol(
             pause(0.1)
 
     if symbol_editor_id is None:
+        visible = send("search", "--onlyvisible", "--name", ".*", check=False)
+        visible_titles = [
+            send("getwindowname", item, check=False)
+            for item in visible.splitlines()
+            if item.strip()
+        ]
         raise RuntimeError(
-            "Eeschema did not open Symbol Editor from Tools. Open Tools → Symbol Editor "
-            f"manually, then search for {lib_id}."
+            "Eeschema did not open Symbol Editor from Tools. "
+            f"Visible window titles: {visible_titles!r}. "
+            f"Open Tools → Symbol Editor manually, then search for {lib_id}."
         )
 
     send("windowfocus", "--sync", symbol_editor_id)
