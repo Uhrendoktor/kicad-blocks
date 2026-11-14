@@ -54,13 +54,18 @@ def parameter_field_name(name: str) -> str:
 
 
 def resolve_variant_implementation(manifest: dict, value: str) -> str:
-    """Return the implementation filename for an exact variant value."""
+    """Resolve an explicit selector or the configured default implementation.
+
+    An empty KB_VARIANT selects default_variant when one is configured,
+    otherwise the base implementation. An unknown explicit selector remains
+    an error and never silently falls back.
+    """
     variants = manifest.get("variants") or []
-    if not variants:
-        return str(manifest["implementation_file"])
     requested = str(value or "").strip()
     if not requested:
-        raise ValueError("KB_VARIANT is empty. Set it to a KiCad text variable or a literal value.")
+        requested = str(manifest.get("default_variant") or "").strip()
+        if not requested:
+            return str(manifest["implementation_file"])
     matches = [
         item for item in variants
         if str(item.get("value", "")).casefold() == requested.casefold()

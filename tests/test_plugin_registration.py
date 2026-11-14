@@ -11,6 +11,7 @@ import sys
 import tempfile
 import time
 from pathlib import Path
+from types import SimpleNamespace
 
 ROOT = Path(__file__).resolve().parents[1]
 PLUGIN_SOURCE = ROOT / "plugin" / "kicad-blocks"
@@ -18,6 +19,7 @@ PLUGIN_IDENTIFIER = "org.uhrendoktor.kicadblocks"
 INSTALLER = ROOT / "scripts" / "install_plugin.py"
 sys.path.insert(0, str(PLUGIN_SOURCE))
 
+from kicad_blocks import plugin as plugin_actions
 from kicad_blocks.model import parse_pins
 from kicad_blocks.repository import create_block, register_project_symbol_library
 
@@ -482,85 +484,20 @@ def main() -> None:
                 )
             print(picker_probe.stdout.strip())
 
-            # Verify the browser's native placement handoff. The supported
-            # Eeschema interface uses the default Add Symbol hotkey (A);
-            # the generic RunAction IPC request is not registered by this build.
-            editor_pid = subprocess.run(
-                [xdotool, "getwindowpid", window_id],
-                capture_output=True,
-                text=True,
-                check=True,
-            ).stdout.strip()
-            if not editor_pid:
-                raise AssertionError("Could not determine the Eeschema window process ID.")
-            subprocess.run(
-                [xdotool, "windowfocus", "--sync", window_id],
-                check=True,
-                capture_output=True,
-                text=True,
+            # Run the same native placement helper used by the Functional
+            # Block Library. This is deliberately a real Eeschema process:
+            # no mocked window IDs, chooser, or keyboard events.
+            plugin_actions._start_native_symbol_placement(
+                SimpleNamespace(),
+                window_id,
+                placement_symbol_name,
+                xdotool=xdotool,
             )
-            subprocess.run(
-                [xdotool, "key", "--clearmodifiers", "a"],
-                check=True,
-                capture_output=True,
-                text=True,
-            )
-            chooser_id = None
-            chooser_title = ""
-            chooser_deadline = time.monotonic() + 6.0
-            while time.monotonic() < chooser_deadline:
-                focus = subprocess.run(
-                    [xdotool, "getwindowfocus"],
-                    capture_output=True,
-                    text=True,
-                    check=False,
-                ).stdout.strip()
-                if focus and focus != window_id:
-                    focused_pid = subprocess.run(
-                        [xdotool, "getwindowpid", focus],
-                        capture_output=True,
-                        text=True,
-                        check=False,
-                    ).stdout.strip()
-                    chooser_title = subprocess.run(
-                        [xdotool, "getwindowname", focus],
-                        capture_output=True,
-                        text=True,
-                        check=False,
-                    ).stdout.strip()
-                    # The chooser title is translated by KiCad. Same-process
-                    # window identity is stable across UI languages.
-                    if focused_pid == editor_pid:
-                        chooser_id = focus
-                        break
-                time.sleep(0.1)
-            if chooser_id is None:
-                raise AssertionError(
-                    "Eeschema Add Symbol hotkey did not open a modal window in its process; "
-                    f"focused_window={focus!r}; title={chooser_title!r}; "
-                    f"visible_windows={_windows(xdotool)!r}"
-                )
-            # Search for the block symbol registered in this project's
-            # KBlocks catalog and choose it. Eeschema should then return to the
-            # editor with the selected facade attached to the cursor.
-            subprocess.run(
-                [xdotool, "type", "--clearmodifiers", "--delay", "15", placement_symbol_name],
-                check=True,
-                capture_output=True,
-                text=True,
-            )
-            subprocess.run(
-                [xdotool, "key", "--clearmodifiers", "Return"],
-                check=True,
-                capture_output=True,
-                text=True,
-            )
-            time.sleep(0.6)
             placement_focus = subprocess.run(
                 [xdotool, "getwindowfocus"],
                 capture_output=True,
                 text=True,
-                check=False,
+                check=True,
             ).stdout.strip()
             if placement_focus != window_id:
                 raise AssertionError(
@@ -568,15 +505,114 @@ def main() -> None:
                     f"interactive placement tool; focused={placement_focus!r}; "
                     f"visible_windows={_windows(xdotool)!r}"
                 )
+
+            # Commit the facade to the active sheet, leave the placement tool,
+            # and save the real schematic so the test proves a block was placed
+            # rather than merely proving that the symbol chooser opened.
+            geometry_result = subprocess.run(
+                [xdotool, "getwindowgeometry", "--shell", window_id],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            geometry = {
+                key: value
+                for key, value in (
+                    line.split("=", 1)
+                    for line in geometry_result.stdout.splitlines()
+                    if "=" in line
+                )
+            }
+            editor_width = int(geometry["WIDTH"])
+            editor_height = int(geometry["HEIGHT"])
+            # Use a point relative to the actual editor window, inside the
+            # drawing canvas. A fixed root-screen coordinate can land outside
+            # Eeschema when Python-version-specific GTK window sizes differ.
+            placement_x = str(editor_width // 2)
+            placement_y = str((editor_height * 2) // 3)
+            subprocess.run(
+                [
+                    xdotool,
+                    "mousemove",
+                    "--sync",
+                    "--window",
+                    window_id,
+                    placement_x,
+                    placement_y,
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            subprocess.run(
+                [xdotool, "click", "1"],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            time.sleep(0.5)
             subprocess.run(
                 [xdotool, "key", "--clearmodifiers", "Escape"],
                 check=True,
                 capture_output=True,
                 text=True,
             )
+            subprocess.run(
+                [xdotool, "key", "--clearmodifiers", "ctrl+s"],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            expected_lib_id = (
+                f'{block.manifest["library_nickname"]}:{placement_symbol_name}'
+            )
+            save_deadline = time.monotonic() + 8.0
+            saved_schematic = ""
+            while time.monotonic() < save_deadline:
+                saved_schematic = schematic.read_text(encoding="utf-8")
+                if expected_lib_id in saved_schematic:
+                    break
+                time.sleep(0.25)
+            if expected_lib_id not in saved_schematic:
+                focus = subprocess.run(
+                    [xdotool, "getwindowfocus"],
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                ).stdout.strip()
+                mouse = subprocess.run(
+                    [xdotool, "getmouselocation", "--shell"],
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                ).stdout.strip()
+                raise AssertionError(
+                    f"Saved Eeschema file does not contain the placed block facade "
+                    f"{expected_lib_id!r}. editor_geometry={geometry_result.stdout!r}; "
+                    f"focus={focus!r}; mouse={mouse!r}; "
+                    f"saved_tail={saved_schematic[-2500:]!r}."
+                )
+            placement_svg = root / "placed-block-svg"
+            placement_svg.mkdir()
+            subprocess.run(
+                [
+                    cli,
+                    "sch",
+                    "export",
+                    "svg",
+                    "--output",
+                    str(placement_svg),
+                    str(schematic),
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            if not list(placement_svg.glob("*.svg")):
+                raise AssertionError("KiCad CLI could not parse the schematic containing the placed block.")
             print(
-                "Native symbol chooser opened with the Add Symbol hotkey; selecting Device:R "
-                "returned to cursor-placement mode and Escape cancelled cleanly."
+                f"Functional Block Library placement helper selected and placed "
+                f"{expected_lib_id}; the saved schematic passed KiCad CLI export."
             )
 
             print(

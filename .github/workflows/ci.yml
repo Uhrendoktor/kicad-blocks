@@ -227,6 +227,12 @@ jobs:
           xvfb-run --help >/dev/null
           command -v xdotool
 
+      - name: Verify Create Block from Sheet against real KiCad IPC
+        shell: bash
+        run: |
+          xvfb-run -a -s "-screen 0 1280x800x24" \
+            "${RUNNER_TEMP}/kicad-blocks-venv/bin/python" tests/create_block_ipc_integration.py
+
       - name: Verify Eeschema GUI editor launch and save
         shell: bash
         run: |

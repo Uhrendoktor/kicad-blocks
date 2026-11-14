@@ -14,8 +14,13 @@ ROOT = Path(__file__).resolve().parents[1]
 PLUGIN = ROOT / "plugin" / "kicad-blocks"
 sys.path.insert(0, str(PLUGIN))
 
-from kicad_blocks.model import parse_parameters, parse_pins
+from kicad_blocks.model import (
+    parse_parameters,
+    parse_pins,
+    resolve_variant_implementation,
+)
 from kicad_blocks.plugin import (
+    _attach_tk_window_to_editor,
     _bind_mousewheel,
     _block_overview_text,
     _capture_eeschema_window_id,
@@ -27,6 +32,8 @@ from kicad_blocks.plugin import (
     _library_record_for_tree_row,
     _minimize_placement_windows,
     _new_blank_pcb_source,
+    _pick_directory,
+    _pick_kicad_file,
     _pick_record,
     _preferred_library_selection,
     _restore_placement_windows,
@@ -145,6 +152,74 @@ class LibraryBrowserTests(unittest.TestCase):
         self.assertTrue(
             (self.filter_block.path / manifest["layouts"][0]["file"]).is_file()
         )
+        self.assertEqual(manifest["layouts"][0]["implementations"], ["Default"])
+
+    def test_each_pcb_layout_keeps_multiple_implementation_associations(self):
+        layouts = [dict(item) for item in self.block.manifest["layouts"]]
+        updated = _save_block_layouts(
+            self.block,
+            layouts,
+            default_layout_id="compact",
+            variant_layouts={"1V8": "compact"},
+            layout_implementations={"compact": ["Default", "1V8"]},
+        )
+        manifest = read_manifest(updated.path)
+        self.assertEqual(
+            manifest["layouts"][0]["implementations"],
+            ["Default", "1V8"],
+        )
+        self.assertEqual(
+            next(item for item in manifest["variants"] if item["value"] == "1V8")["layout_id"],
+            "compact",
+        )
+
+    def test_removing_all_pcb_layouts_clears_obsolete_variant_layout_ids(self):
+        _save_block_layouts(
+            self.block,
+            _layout_choices(self.block),
+            default_layout_id="compact",
+            variant_layouts={"1V8": "compact"},
+        )
+        updated = _save_block_layouts(
+            self.block,
+            [],
+            default_layout_id=None,
+        )
+        manifest = read_manifest(updated.path)
+        self.assertEqual(manifest.get("layouts"), [])
+        self.assertIsNone(manifest.get("default_layout"))
+        self.assertTrue(
+            all("layout_id" not in item for item in manifest.get("variants", []))
+        )
+
+    def test_native_file_and_directory_choosers_use_system_filedialog(self):
+        open_dialog = Mock(return_value="/tmp/block.kicad_sch")
+        directory_dialog = Mock(return_value="/tmp/library")
+        with patch(
+            "kicad_blocks.plugin.filedialog",
+            SimpleNamespace(
+                askopenfilename=open_dialog,
+                askdirectory=directory_dialog,
+            ),
+        ):
+            selected_file = _pick_kicad_file(
+                object(),
+                title="Choose implementation schematic",
+                suffix=".kicad_sch",
+                initial_path=str(self.v18),
+            )
+            selected_directory = _pick_directory(
+                object(),
+                title="Choose block library",
+                initial_path=str(self.root),
+            )
+        self.assertEqual(selected_file, "/tmp/block.kicad_sch")
+        self.assertEqual(selected_directory, "/tmp/library")
+        self.assertEqual(open_dialog.call_args.kwargs["initialdir"], str(self.v18.parent))
+        self.assertEqual(open_dialog.call_args.kwargs["initialfile"], self.v18.name)
+        self.assertEqual(open_dialog.call_args.kwargs["parent"].__class__, object)
+        self.assertTrue(directory_dialog.call_args.kwargs["mustexist"])
+        self.assertEqual(directory_dialog.call_args.kwargs["initialdir"], str(self.root))
 
     def test_layout_linked_to_implementation_is_used_when_instance_has_default(self):
         original_layouts = [dict(item) for item in self.block.manifest["layouts"]]
@@ -269,6 +344,26 @@ class LibraryBrowserTests(unittest.TestCase):
         )
         self.assertEqual(renamed_implementation["layout_id"], "compact")
 
+    def test_default_implementation_is_persisted_and_used_for_empty_selector(self):
+        _save_block_variants(
+            self.block,
+            [
+                {"value": item["value"], "file": item["file"]}
+                for item in self.block.manifest["variants"]
+            ],
+            default_variant="3V3",
+        )
+        manifest = read_manifest(self.block.path)
+        self.assertEqual(manifest["default_variant"], "3V3")
+        self.assertEqual(
+            resolve_variant_implementation(manifest, ""),
+            "implementation_3v3.kicad_sch",
+        )
+        self.assertEqual(
+            resolve_variant_implementation(manifest, "1V8"),
+            "implementation_1v8.kicad_sch",
+        )
+
     def test_variant_metadata_can_be_added_edited_and_removed_from_library(self):
         initial_version = read_manifest(self.filter_block.path)["version"]
 
@@ -375,6 +470,35 @@ class LibraryBrowserTests(unittest.TestCase):
         _set_window_geometry(window, 1480, 980, 1160, 740)
         self.assertEqual(window.requested_geometry, "1286x668+40+50")
         self.assertEqual(window.minimum, (1160, 668))
+
+    def test_tk_transient_uses_client_window_and_editor_owner(self):
+        class FakeWindow:
+            def __init__(self):
+                self.classes = None
+                self.attributes = None
+
+            def wm_class(self, *arguments):
+                self.classes = arguments
+
+            def wm_attributes(self, *arguments):
+                self.attributes = arguments
+
+            def update_idletasks(self):
+                pass
+
+            def winfo_id(self):
+                return "0x222"
+
+        window = FakeWindow()
+        with (
+            patch("kicad_blocks.plugin.tk", SimpleNamespace(TclError=RuntimeError)),
+            patch("kicad_blocks.plugin._set_x11_transient_owner", return_value=True) as set_owner,
+        ):
+            self.assertTrue(_attach_tk_window_to_editor(window, "0x111"))
+        set_owner.assert_called_once_with("0x222", "0x111")
+        self.assertEqual(window.classes, ("eeschema", "eeschema"))
+        self.assertEqual(window.attributes, ("-type", "dialog"))
+
 
     def test_record_lookup_finds_a_block_in_another_registered_library(self):
         second_root = Path(self.temp.name) / "second-library"
@@ -617,7 +741,7 @@ class LibraryBrowserTests(unittest.TestCase):
             if arguments[1] == "getwindowpid":
                 return SimpleNamespace(stdout="4242")
             if arguments[1] == "getwindowname":
-                return SimpleNamespace(stdout="Choose Symbol")
+                return SimpleNamespace(stdout="Choose Symbol" if arguments[2] == "0x222" else "Schematic Editor")
             return SimpleNamespace(stdout="")
 
         pauses = []
@@ -654,7 +778,7 @@ class LibraryBrowserTests(unittest.TestCase):
                 return SimpleNamespace(stdout="Schematic Editor")
             return SimpleNamespace(stdout="")
 
-        with self.assertRaisesRegex(RuntimeError, "native symbol chooser did not open"):
+        with self.assertRaisesRegex(RuntimeError, "did not open its native symbol chooser"):
             _start_native_symbol_placement(
                 SimpleNamespace(),
                 "0x111",
@@ -666,21 +790,34 @@ class LibraryBrowserTests(unittest.TestCase):
         self.assertFalse(any(command[1] == "type" for command in calls))
         self.assertIn(["key", "--clearmodifiers", "Escape"], [command[1:] for command in calls])
 
-    def test_native_placement_requires_xdotool_and_editor_window(self):
+    def test_native_placement_uses_kicad_ipc_without_xdotool_or_captured_xid(self):
+        kicad = SimpleNamespace(run_action=Mock())
+        with patch("kicad_blocks.plugin.shutil.which", return_value=None):
+            _start_native_symbol_placement(
+                kicad,
+                None,
+                "buck_converter_ab12cd34",
+                xdotool=None,
+                command_runner=Mock(),
+                pause=lambda _seconds: None,
+            )
+        kicad.run_action.assert_called_once_with("eeschema.InteractiveDrawing.placeSymbol")
+
+    def test_native_placement_requires_editor_when_ipc_is_unavailable(self):
         with (
-            patch("kicad_blocks.plugin.shutil.which", return_value=None),
-            self.assertRaisesRegex(RuntimeError, "needs xdotool"),
+            patch("kicad_blocks.plugin.shutil.which", return_value="/usr/bin/xdotool"),
+            patch("kicad_blocks.plugin._capture_eeschema_window_id", return_value=None),
+            self.assertRaisesRegex(
+                RuntimeError, "could not identify the active Schematic Editor"
+            ),
         ):
             _start_native_symbol_placement(
                 SimpleNamespace(),
-                "0x111", "buck_converter_ab12cd34",
-                xdotool=None, command_runner=Mock(), pause=lambda _seconds: None,
-            )
-        with self.assertRaisesRegex(RuntimeError, "identify the active Eeschema window"):
-            _start_native_symbol_placement(
-                SimpleNamespace(),
-                None, "buck_converter_ab12cd34",
-                xdotool="/usr/bin/xdotool", command_runner=Mock(), pause=lambda _seconds: None,
+                None,
+                "buck_converter_ab12cd34",
+                xdotool="/usr/bin/xdotool",
+                command_runner=Mock(),
+                pause=lambda _seconds: None,
             )
 
 if __name__ == "__main__":
