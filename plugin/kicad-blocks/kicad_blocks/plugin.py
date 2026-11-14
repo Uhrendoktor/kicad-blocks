@@ -556,6 +556,12 @@ def _create_action_icon(parent, name: str):
         "validate": '<path d="m5 12 4 4L19 6"/><path d="M12 2a10 10 0 1 0 10 10"/>',
         "bom": '<path d="M6 3h12v18H6z"/><path d="M9 8h6M9 12h6M9 16h6"/>',
         "erc": '<path d="M12 2 20 5v6c0 5-3.5 8.5-8 11-4.5-2.5-8-6-8-11V5z"/><path d="m8 12 2.5 2.5L16 9"/>',
+        "save": '<path d="M4 3h14l3 3v15H3V3z"/><path d="M7 3v6h10V3M7 21v-8h10v8"/>',
+        "cancel": '<circle cx="12" cy="12" r="9"/><path d="m8 8 8 8M16 8l-8 8"/>',
+        "open": '<path d="M3 12 12 3l9 9M12 3v18"/>',
+        "select": '<path d="M4 3v18l5-5 3 6 3-1-3-6 7-1z"/>',
+        "edit": '<path d="m4 16 11-11 4 4L8 20H4z"/><path d="m13 7 4 4"/>',
+        "file": '<path d="M6 2h8l5 5v15H6z"/><path d="M14 2v6h5M9 13h7M9 17h7"/>',
     }
     path_data = drawings.get(name)
     if not path_data:
@@ -587,10 +593,18 @@ def _create_action_icon(parent, name: str):
     return image
 
 
-def _action_button(parent, text: str, command, icon: str, tooltip: str):
+def _action_button(
+    parent,
+    text: str,
+    command,
+    icon: str,
+    tooltip: str,
+    **button_options,
+):
     """Create a consistently padded, semantic icon-and-label action button."""
     image = _create_action_icon(parent, icon)
     options = {"text": text, "command": command, "padding": (9, 6)}
+    options.update(button_options)
     if image is not None:
         options.update({"image": image, "compound": "left"})
     button = ttk.Button(parent, **options)
@@ -1237,8 +1251,8 @@ def _show_selected_block_configuration(
         )
         dialog.destroy()
 
-    ttk.Button(footer, text="Cancel", command=dialog.destroy).pack(side="right", padx=(8, 0))
-    ttk.Button(footer, text="Save instance", command=save_configuration).pack(side="right")
+    _action_button(footer, "Cancel", dialog.destroy, "cancel", "Discard instance edits").pack(side="right", padx=(8, 0))
+    _action_button(footer, "Save instance", save_configuration, "save", "Save configuration on the selected instance").pack(side="right")
     dialog.bind("<Escape>", lambda _event: dialog.destroy())
     dialog.protocol("WM_DELETE_WINDOW", dialog.destroy)
     dialog.wait_window()
@@ -1476,8 +1490,8 @@ def _pick_block_for_placement(records, parent):
 
     buttons = ttk.Frame(outer)
     buttons.pack(fill="x", pady=(10, 0))
-    ttk.Button(buttons, text="Cancel", command=dialog.destroy).pack(side="right")
-    ttk.Button(buttons, text="Place Block", command=choose).pack(side="right", padx=(0, 8))
+    _action_button(buttons, "Cancel", dialog.destroy, "cancel", "Cancel and close this dialog").pack(side="right")
+    _action_button(buttons, "Place Block", choose, "place", "Start native symbol placement with this block").pack(side="right", padx=(0, 8))
     search_entry.focus_set()
     render_results()
     dialog.wait_window()
@@ -1549,12 +1563,13 @@ def _pick_record(records, parent, title: str):
     records_by_id: dict[str, object] = {}
     selected_record = [None]
     chosen_record = [None]
-    select_button = ttk.Button(outer, text="Select block", state="disabled")
+    select_button = _action_button(
+        outer, "Select block", lambda: None, "select",
+        "Use the highlighted block", state="disabled",
+    )
     select_button.pack(side="right", pady=(10, 0))
-    ttk.Button(
-        outer,
-        text="Cancel",
-        command=dialog.destroy,
+    _action_button(
+        outer, "Cancel", dialog.destroy, "cancel", "Close without selecting a block",
     ).pack(side="right", padx=(0, 8), pady=(10, 0))
 
     def render_results(*_args):
@@ -2028,7 +2043,7 @@ def _ask_create_block_details(parent, source_sheet: Path) -> tuple[str, str] | N
     buttons = ttk.Frame(frame)
     buttons.pack(fill="x")
     ttk.Button(buttons, text="Cancel", command=dialog.destroy).pack(side="right")
-    ttk.Button(buttons, text="Create Block", command=accept).pack(side="right", padx=(0, 8))
+    _action_button(buttons, "Create Block", accept, "create", "Create the reusable block from this sheet").pack(side="right", padx=(0, 8))
     dialog.bind("<Return>", lambda _event: accept())
     dialog.bind("<Escape>", lambda _event: dialog.destroy())
     dialog.grab_set()
@@ -3453,7 +3468,7 @@ def _ask_layout_details(parent, record) -> dict | None:
     source_value = tk.StringVar()
     source_entry = ttk.Entry(frame, textvariable=source_value)
     source_entry.grid(row=4, column=0, columnspan=2, sticky="ew", pady=(4, 12))
-    browse_button = ttk.Button(frame, text="Choose file…")
+    browse_button = _action_button(frame, "Choose file…", lambda: None, "file", "Choose an existing KiCad PCB file")
     browse_button.grid(row=4, column=2, sticky="ew", padx=(8, 0), pady=(4, 12))
     implementation_values = ["Default"] + [
         str(item["value"]) for item in record.manifest.get("variants", [])
@@ -3532,7 +3547,7 @@ def _ask_layout_details(parent, record) -> dict | None:
     buttons = ttk.Frame(frame)
     buttons.grid(row=8, column=0, columnspan=3, sticky="ew", pady=(4, 0))
     ttk.Button(buttons, text="Cancel", command=dialog.destroy).pack(side="right")
-    ttk.Button(buttons, text="Add layout", command=accept).pack(side="right", padx=(0, 8))
+    _action_button(buttons, "Add layout", accept, "create", "Add this PCB layout to the block").pack(side="right", padx=(0, 8))
     dialog.bind("<Return>", lambda _event: accept())
     dialog.bind("<Escape>", lambda _event: dialog.destroy())
     _set_window_geometry(dialog, 860, 620, 760, 560)
@@ -3755,11 +3770,11 @@ def _show_block_layout_editor(
     )
     actions = ttk.Frame(frame)
     actions.grid(row=3, column=0, sticky="ew", pady=(8, 0))
-    ttk.Button(actions, text="Add layout", command=add_layout).pack(side="left")
-    remove_button = ttk.Button(actions, text="Remove", command=remove_layout, state="disabled")
+    _action_button(actions, "Add layout", add_layout, "add", "Add a PCB layout").pack(side="left")
+    remove_button = _action_button(actions, "Remove", remove_layout, "remove", "Remove the selected PCB layout", state="disabled")
     remove_button.pack(side="left", padx=(8, 0))
     default_button = ttk.Button(
-        actions, text="Set default", command=make_default, state="disabled"
+        actions, "Set default", make_default, "default", "Use this layout as the default", state="disabled"
     )
     default_button.pack(side="left", padx=(8, 0))
 
@@ -4087,7 +4102,7 @@ def _ask_implementation_details(
     source_label.grid(row=6, column=0, columnspan=3, sticky="w")
     source_entry = ttk.Entry(frame, textvariable=source_value)
     source_entry.grid(row=7, column=0, columnspan=2, sticky="ew", pady=(4, 14))
-    browse_button = ttk.Button(frame, text="Choose file…")
+    browse_button = _action_button(frame, "Choose file…", lambda: None, "file", "Choose an implementation schematic")
     browse_button.grid(row=7, column=2, sticky="ew", padx=(8, 0), pady=(4, 14))
     copy_combo = ttk.Combobox(
         frame,
@@ -4187,9 +4202,9 @@ def _ask_implementation_details(
     buttons = ttk.Frame(frame)
     buttons.grid(row=8, column=0, columnspan=3, sticky="ew", pady=(16, 8))
     ttk.Button(buttons, text="Cancel", command=dialog.destroy).pack(side="right")
-    ttk.Button(buttons, text="Use implementation", command=accept).pack(
-        side="right", padx=(0, 8)
-    )
+    _action_button(
+        buttons, "Use implementation", accept, "select", "Use the selected implementation",
+    ).pack(side="right", padx=(0, 8))
     dialog.bind("<Return>", lambda _event: accept())
     dialog.bind("<Escape>", lambda _event: dialog.destroy())
     _set_window_geometry(dialog, 860, 540, 740, 460)
@@ -4430,20 +4445,20 @@ def _show_block_variant_editor(
 
     actions = ttk.Frame(frame)
     actions.grid(row=3, column=0, sticky="ew", pady=(12, 0))
-    ttk.Button(actions, text="Add variant", command=add_variant).pack(side="left")
-    edit_button = ttk.Button(actions, text="Edit variant", command=edit_variant, state="disabled")
+    _action_button(actions, "Add variant", add_variant, "add", "Add a named implementation variant").pack(side="left")
+    edit_button = _action_button(actions, "Edit variant", edit_variant, "edit", "Edit the selected implementation", state="disabled")
     edit_button.pack(side="left", padx=(8, 0))
     default_button = ttk.Button(
-        actions, text="Set as default", command=make_default, state="disabled"
+        actions, "Set as default", make_default, "default", "Set the selected implementation as default", state="disabled"
     )
     default_button.pack(side="left", padx=(8, 0))
     remove_button = ttk.Button(
-        actions, text="Remove", command=remove_variant, state="disabled"
+        actions, "Remove", remove_variant, "remove", "Remove the selected variant", state="disabled"
     )
     remove_button.pack(side="left", padx=(8, 0))
-    ttk.Button(actions, text="Cancel", command=dialog.destroy).pack(side="right")
+    _action_button(actions, "Cancel", dialog.destroy, "cancel", "Close without saving changes").pack(side="right")
     save_button = ttk.Button(
-        actions, text="Save changes", command=save_and_close, state="disabled"
+        actions, "Save changes", save_and_close, "save", "Save implementation changes", state="disabled"
     )
     save_button.pack(side="right", padx=(0, 8))
 
@@ -5101,8 +5116,8 @@ def _show_library_browser(
 
         buttons = ttk.Frame(frame)
         buttons.pack(fill="x")
-        ttk.Button(buttons, text="Open", command=launch_variant).pack(side="right")
-        ttk.Button(buttons, text="Cancel", command=chooser.destroy).pack(
+        _action_button(buttons, "Open", launch_variant, "open", "Open the selected implementation").pack(side="right")
+        _action_button(buttons, "Cancel", chooser.destroy, "cancel", "Close without opening an implementation").pack(
             side="right", padx=(0, 6)
         )
         _set_window_geometry(chooser, 500, 190, 440, 160)
@@ -5264,8 +5279,8 @@ def _show_library_browser(
 
         buttons = ttk.Frame(frame)
         buttons.pack(fill="x")
-        ttk.Button(buttons, text="Manage layouts…", command=manage_layouts).pack(side="left")
-        ttk.Button(buttons, text="Open", command=launch_layout).pack(side="right")
+        _action_button(buttons, "Manage layouts…", manage_layouts, "layouts", "Manage stored PCB layouts").pack(side="left")
+        _action_button(buttons, "Open", launch_layout, "open", "Open the selected PCB layout").pack(side="right")
         ttk.Button(buttons, text="Cancel", command=chooser.destroy).pack(
             side="right", padx=(0, 6)
         )
@@ -6063,7 +6078,7 @@ def _show_action_hub(root):
 
     footer = ttk.Frame(outer)
     footer.pack(fill="x", pady=(10, 0))
-    ttk.Button(footer, text="Close", command=root.destroy).pack(side="right")
+    _action_button(footer, "Close", root.destroy, "close", "Close the task hub").pack(side="right")
     return tabs
 
 
