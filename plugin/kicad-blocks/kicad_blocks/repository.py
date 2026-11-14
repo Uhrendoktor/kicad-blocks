@@ -16,6 +16,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 
+from .report_types import BlockRevisionReport, LocalCopyPublishReport, LocalCopySyncReport
+from .settings_types import InstanceLink, InstanceLinks, LibrarySettings
+
 from .extraction import extract_hierarchical_pins, prepare_block_implementation
 from .manifest_types import (
     BlockDependencyManifest,
@@ -1029,6 +1032,46 @@ def _instance_links_path(project_dir: Path) -> Path:
     return Path(project_dir).expanduser().resolve() / ".kicad_blocks" / INSTANCE_LINKS_NAME
 
 
+def _read_instance_links(path: Path) -> InstanceLinks:
+    """Read and validate the project-local KIID-to-block lookup document."""
+    try:
+        raw: object = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return {"schema_version": 1, "instances": {}}
+    except json.JSONDecodeError as error:
+        raise ValueError(f"Invalid project block-link metadata: {path}") from error
+
+    if not isinstance(raw, dict):
+        raise ValueError(f"Invalid project block-link metadata: {path}")
+    raw_instances = raw.get("instances", {})
+    if not isinstance(raw_instances, dict):
+        raise ValueError(f"Invalid project block-link instance map: {path}")
+
+    instances: dict[str, InstanceLink] = {}
+    for instance_id, raw_entry in raw_instances.items():
+        if not isinstance(instance_id, str) or not isinstance(raw_entry, dict):
+            raise ValueError(f"Invalid project block-link entry in {path}")
+        local_path = raw_entry.get("local_path")
+        source_block_id = raw_entry.get("source_block_id")
+        updated_at = raw_entry.get("updated_at", "")
+        if (
+            not isinstance(local_path, str)
+            or not isinstance(updated_at, str)
+            or (source_block_id is not None and not isinstance(source_block_id, str))
+        ):
+            raise ValueError(f"Invalid project block-link entry for {instance_id!r} in {path}")
+        instances[instance_id] = {
+            "local_path": local_path,
+            "source_block_id": source_block_id,
+            "updated_at": updated_at,
+        }
+
+    schema_version = raw.get("schema_version", 1)
+    if not isinstance(schema_version, int):
+        raise ValueError(f"Invalid project block-link schema version in {path}")
+    return {"schema_version": schema_version, "instances": instances}
+
+
 def link_instance_to_local_copy(
     project_dir: Path, instance_id: str, local_block: BlockRecord
 ) -> Path:
@@ -1039,20 +1082,15 @@ def link_instance_to_local_copy(
     if not instance_id:
         raise ValueError("A schematic instance KIID is required.")
     path = _instance_links_path(project_dir)
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except FileNotFoundError:
-        data = {"schema_version": 1, "instances": {}}
-    except json.JSONDecodeError as exc:
-        raise ValueError(f"Invalid project block-link metadata: {path}") from exc
-    entries = data.setdefault("instances", {})
-    entries[instance_id] = {
+    data = _read_instance_links(path)
+    entry: InstanceLink = {
         "local_path": Path(
             os.path.relpath(local_block.path, Path(project_dir).resolve())
         ).as_posix(),
         "source_block_id": local_block.manifest.get("source_block_id"),
         "updated_at": __import__("datetime").datetime.now().astimezone().isoformat(),
     }
+    data["instances"][instance_id] = entry
     atomic_write(path, json.dumps(data, indent=2, ensure_ascii=False) + "\n")
     return path
 
@@ -1060,13 +1098,8 @@ def link_instance_to_local_copy(
 def local_copy_for_instance(project_dir: Path, instance_id: str) -> BlockRecord | None:
     """Return the local block bound to a symbol KIID, if any."""
     path = _instance_links_path(project_dir)
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except FileNotFoundError:
-        return None
-    except json.JSONDecodeError as exc:
-        raise ValueError(f"Invalid project block-link metadata: {path}") from exc
-    entry = data.get("instances", {}).get(str(instance_id).strip())
+    data = _read_instance_links(path)
+    entry = data["instances"].get(str(instance_id).strip())
     if entry is None:
         return None
     local_path = (Path(project_dir).expanduser().resolve() / entry["local_path"]).resolve()
@@ -1091,12 +1124,12 @@ def unlink_instance_local_copy(project_dir: Path, instance_id: str) -> None:
     path = _instance_links_path(project_dir)
     if not path.is_file():
         return
-    data = json.loads(path.read_text(encoding="utf-8"))
-    data.get("instances", {}).pop(str(instance_id), None)
+    data = _read_instance_links(path)
+    data["instances"].pop(str(instance_id), None)
     atomic_write(path, json.dumps(data, indent=2, ensure_ascii=False) + "\n")
 
 
-def synchronize_local_copy(local_block: BlockRecord) -> dict:
+def synchronize_local_copy(local_block: BlockRecord) -> LocalCopySyncReport:
     """Pull upstream changes unless the same file has conflicting local edits.
 
     A locally modified file is preserved when upstream has not changed it. If
@@ -1398,7 +1431,7 @@ def synchronize_facade_pins_from_implementation(block: BlockRecord) -> list[str]
     ]
 
 
-def refresh_library_block(block: BlockRecord) -> dict:
+def refresh_library_block(block: BlockRecord) -> BlockRevisionReport:
     """Recompute asset hashes and publish a new library revision when files changed."""
     manifest = read_manifest(block.path)
     if manifest.get("local_copy"):
@@ -1433,7 +1466,7 @@ def refresh_library_block(block: BlockRecord) -> dict:
     return {"changed": changed, "version": manifest["version"], "revision": manifest["revision"]}
 
 
-def publish_local_copy(local_block: BlockRecord) -> dict:
+def publish_local_copy(local_block: BlockRecord) -> LocalCopyPublishReport:
     """Synchronize edits in both directions using the saved three-way baseline.
 
     Local-only edits are published to the library, upstream-only edits are
@@ -1896,13 +1929,13 @@ def synchronize_dependencies(
         for item in manifest.get("dependencies", [])
         if item.get("reference")
     }
-    dependencies: list[dict] = []
+    dependencies: list[BlockDependencyManifest] = []
     used_references: set[str] = set()
     anchor = _dependency_anchor(parent.path, manifest)
 
     for occurrence in occurrences:
         child = occurrence["child"]
-        reference = str(occurrence.get("reference", "")).strip()
+        reference = occurrence["reference"].strip()
         if not re.fullmatch(r"[A-Za-z][A-Za-z0-9]*", reference):
             raise ValueError(
                 f"Detected child reference {reference!r} is invalid; annotate the schematic."
@@ -1919,21 +1952,19 @@ def synchronize_dependencies(
                 f"Adding {child.name!r} to {parent.name!r} would create a dependency cycle."
             )
 
-        orientation = int(occurrence.get("orientation", 0))
+        orientation = occurrence["orientation"]
         if orientation not in (0, 90, 180, 270):
             raise ValueError("Nested block orientation must be 0, 90, 180 or 270 degrees.")
-        raw_position = occurrence.get("position_mm")
-        if not isinstance(raw_position, (tuple, list)) or len(raw_position) != 2:
-            raise ValueError(f"Invalid placement coordinates for nested block {reference!r}.")
+        raw_position = occurrence["position_mm"]
         position = (float(raw_position[0]), float(raw_position[1]))
         if not all(math.isfinite(value) for value in position):
             raise ValueError(f"Placement for nested block {reference!r} must be finite.")
 
         pin_names = {str(pin["name"]) for pin in child.manifest.get("pins", [])}
-        raw_mapping = occurrence.get("pin_map", {})
-        if not isinstance(raw_mapping, dict) or set(raw_mapping) != pin_names:
-            missing = sorted(pin_names - set(raw_mapping or {}))
-            extra = sorted(set(raw_mapping or {}) - pin_names)
+        raw_mapping = occurrence["pin_map"]
+        if set(raw_mapping) != pin_names:
+            missing = sorted(pin_names - set(raw_mapping))
+            extra = sorted(set(raw_mapping) - pin_names)
             raise ValueError(
                 f"Detected pin map for {reference!r} must include every child pin. "
                 f"Missing: {missing}; unknown: {extra}."
@@ -1951,10 +1982,11 @@ def synchronize_dependencies(
                 )
             mapping[str(pin_name)] = net_name
 
-        previous = existing_by_reference.get(key, {})
-        same_occurrence = previous.get("block_id") == child.manifest["block_id"]
-        dependencies.append(
-            {
+        previous = existing_by_reference.get(key)
+        same_occurrence = (
+            previous is not None and previous["block_id"] == child.manifest["block_id"]
+        )
+        dependency: BlockDependencyManifest = {
                 "instance_id": (
                     str(previous.get("instance_id") or uuid.uuid4())
                     if same_occurrence
@@ -1968,8 +2000,8 @@ def synchronize_dependencies(
                 "name": child.manifest["name"],
                 "path": os.path.relpath(child.path.resolve(), anchor),
                 "revision": child.manifest.get("revision"),
-            }
-        )
+        }
+        dependencies.append(dependency)
 
     dependencies.sort(key=lambda item: item["reference"].casefold())
     if dependencies != manifest.get("dependencies", []):
@@ -2098,25 +2130,39 @@ def settings_file() -> Path:
     return Path.home() / ".config" / "kicad-blocks" / "settings.json"
 
 
-def _read_library_settings() -> dict:
-    settings = settings_file()
-    if not settings.is_file():
+def _read_library_settings() -> LibrarySettings:
+    """Load known library settings and validate each field at the JSON boundary."""
+    settings_path = settings_file()
+    if not settings_path.is_file():
         return {}
     try:
-        value = json.loads(settings.read_text(encoding="utf-8"))
+        raw: object = json.loads(settings_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return {}
-    return value if isinstance(value, dict) else {}
+    if not isinstance(raw, dict):
+        return {}
+
+    settings: LibrarySettings = {}
+    library_root = raw.get("library_root")
+    if isinstance(library_root, str):
+        settings["library_root"] = library_root
+    library_roots = raw.get("library_roots")
+    if isinstance(library_roots, list):
+        settings["library_roots"] = [
+            item for item in library_roots if isinstance(item, str)
+        ]
+    return settings
 
 
-def _write_library_settings(value: dict) -> None:
+def _write_library_settings(value: LibrarySettings) -> None:
+    """Persist only validated library-root settings."""
     atomic_write(settings_file(), json.dumps(value, indent=2, ensure_ascii=False) + "\n")
 
 
 def library_roots() -> list[Path]:
     """Return every registered functional-block library, with the default first."""
     settings = _read_library_settings()
-    candidates = []
+    candidates: list[Path] = []
     configured = os.environ.get("KICAD_BLOCKS_LIBRARY")
     if configured:
         candidates.append(Path(configured).expanduser())
@@ -2126,14 +2172,11 @@ def library_roots() -> list[Path]:
         candidates.append(Path(default).expanduser())
 
     registered = settings.get("library_roots", [])
-    if isinstance(registered, list):
-        candidates.extend(
-            Path(item).expanduser() for item in registered if isinstance(item, str) and item.strip()
-        )
+    candidates.extend(Path(item).expanduser() for item in registered if item.strip())
 
     candidates.append(Path.home() / "Documents" / "KiCad" / "Blocks")
-    result = []
-    seen = set()
+    result: list[Path] = []
+    seen: set[str] = set()
     for candidate in candidates:
         resolved = candidate.resolve()
         key = os.path.normcase(str(resolved))
@@ -2156,13 +2199,11 @@ def default_library_root() -> Path:
     return registered[0]
 
 
-def _normalized_library_settings_roots(settings: dict) -> list[Path]:
+def _normalized_library_settings_roots(settings: LibrarySettings) -> list[Path]:
     """Read the optional library-roots setting without trusting malformed JSON data."""
     raw_roots = settings.get("library_roots", [])
-    if not isinstance(raw_roots, list):
-        return []
-    roots = []
-    seen = set()
+    roots: list[Path] = []
+    seen: set[str] = set()
     for item in raw_roots:
         if not isinstance(item, str) or not item.strip():
             continue

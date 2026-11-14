@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Literal, TypedDict
+from typing import Literal, NotRequired, TypedDict
 
 
 class BlockCompositionStepResult(TypedDict):
@@ -72,3 +72,39 @@ class LibraryValidationReport(TypedDict):
     failed_count: int
     status: Literal["passed", "failed", "warnings"]
     blocks: list[BlockValidationItem]
+
+
+class BlockRevisionReport(TypedDict):
+    """Asset changes committed as a new shared-library revision."""
+
+    changed: list[str]
+    version: int
+    revision: str | None
+
+
+class LocalCopySyncReport(TypedDict):
+    """Upstream asset and manifest fields copied into a project-local block."""
+
+    copied: list[str]
+    preserved: list[str]
+    dependencies_updated: bool
+    parameters_updated: bool
+    variants_updated: bool
+    profiles_updated: bool
+    layouts_updated: bool
+    conflicts: list[str]
+
+
+class LocalCopyPublishReport(TypedDict):
+    """Three-way synchronization summary for a project-local block."""
+
+    published: list[str]
+    pulled: list[str]
+    version: int
+    revision: str | None
+    dependencies_updated: bool
+    converged: list[str]
+    parameters_updated: NotRequired[bool]
+    variants_updated: NotRequired[bool]
+    profiles_updated: NotRequired[bool]
+    layouts_updated: NotRequired[bool]
