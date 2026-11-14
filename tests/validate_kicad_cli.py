@@ -15,9 +15,9 @@ sys.path.insert(0, str(ROOT / "examples" / "stusb4500"))
 from generate_reference import generate_reference_schematic
 from kicad_blocks.model import parse_pins
 from kicad_blocks.operations import export_block_bom, validate_block_tree
-from kicad_blocks.pcb_layout import _all, _direct, parse_sexpr
 from kicad_blocks.plugin import _new_blank_pcb_source
 from kicad_blocks.repository import add_dependency, create_block
+from kicad_blocks.sexpr import parse_sexpr, sexpr_all, sexpr_direct
 
 
 def _find_kicad_cli() -> str:
@@ -50,19 +50,19 @@ def _validate_stusb4500_netlist(cli: str, output_dir: Path) -> None:
     )
     tree = parse_sexpr(netlist_path.read_text(encoding="utf-8"))
     actual: dict[tuple[str, str], str] = {}
-    nets_container = _direct(tree, "nets")
+    nets_container = sexpr_direct(tree, "nets")
     if nets_container is None:
         raise RuntimeError("KiCad netlist export has no nets section.")
-    for net in _all(nets_container, "net"):
-        name_node = _direct(net, "name")
+    for net in sexpr_all(nets_container, "net"):
+        name_node = sexpr_direct(net, "name")
         if name_node is None:
             continue
         # KiCad may qualify local labels with their sheet path. Compare the
         # actual electrical name while retaining the pin's true net identity.
         net_name = str(name_node[1]).rsplit("/", 1)[-1]
-        for node in _all(net, "node"):
-            ref_node = _direct(node, "ref")
-            pin_node = _direct(node, "pin")
+        for node in sexpr_all(net, "node"):
+            ref_node = sexpr_direct(node, "ref")
+            pin_node = sexpr_direct(node, "pin")
             if ref_node is not None and pin_node is not None:
                 actual[(str(ref_node[1]), str(pin_node[1]))] = net_name
 

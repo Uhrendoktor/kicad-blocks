@@ -11,14 +11,13 @@ PLUGIN = Path(__file__).resolve().parents[1] / "plugin" / "kicad-blocks"
 sys.path.insert(0, str(PLUGIN))
 
 from kicad_blocks.pcb_layout import (
-    _dump,
     _merge_project_net_settings,
-    _Quoted,
     _rewrite_nets,
     _transform_item,
     parse_sexpr,
     resolve_block_layout,
 )
+from kicad_blocks.sexpr import QuotedSExpr, dump_sexpr
 
 
 class PCBNetRewriteTests(unittest.TestCase):
@@ -79,14 +78,14 @@ class PCBNetRewriteTests(unittest.TestCase):
     def test_named_pad_net_keeps_mapped_code_and_net_name(self):
         pad = parse_sexpr('(pad "1" smd rect (net 7 "SW"))')
         _rewrite_nets(pad, {7: (2, "VIN_BOARD")}, include_net_name=True)
-        self.assertEqual(_dump(pad), '(pad "1" smd rect (net 2 "VIN_BOARD"))')
-        self.assertIsInstance(pad[4][2], _Quoted)
+        self.assertEqual(dump_sexpr(pad), '(pad "1" smd rect (net 2 "VIN_BOARD"))')
+        self.assertIsInstance(pad[4][2], QuotedSExpr)
 
     def test_track_net_remains_numeric_only(self):
         segment = parse_sexpr('(segment (start 1 2) (end 3 4) (net 7))')
         _rewrite_nets(segment, {7: (9, "X1_SW")}, include_net_name=False)
         self.assertEqual(
-            _dump(segment),
+            dump_sexpr(segment),
             '(segment (start 1 2) (end 3 4) (net 9))',
         )
 
@@ -104,9 +103,9 @@ class PCBNetRewriteTests(unittest.TestCase):
             rotation_deg=90.0,
         )
 
-        self.assertIn('(at 120 130 90)', _dump(footprint))
-        self.assertIn('(at 118 130 90)', _dump(footprint))
-        self.assertIn('(at -0.75 0 0)', _dump(footprint))
+        self.assertIn('(at 120 130 90)', dump_sexpr(footprint))
+        self.assertIn('(at 118 130 90)', dump_sexpr(footprint))
+        self.assertIn('(at -0.75 0 0)', dump_sexpr(footprint))
 
     def test_rotation_transforms_track_endpoints_about_layout_anchor(self):
         segment = parse_sexpr(
@@ -119,8 +118,8 @@ class PCBNetRewriteTests(unittest.TestCase):
             position_mm=(120.0, 130.0),
             rotation_deg=90.0,
         )
-        self.assertIn('(start 120 130)', _dump(segment))
-        self.assertIn('(end 120 125)', _dump(segment))
+        self.assertIn('(start 120 130)', dump_sexpr(segment))
+        self.assertIn('(end 120 125)', dump_sexpr(segment))
 
     def test_project_netclasses_merge_namespaced_and_external_assignments(self):
         with tempfile.TemporaryDirectory() as temp:

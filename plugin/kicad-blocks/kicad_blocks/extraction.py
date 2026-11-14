@@ -11,7 +11,12 @@ import uuid
 from pathlib import Path
 
 from .model import BlockPin
-from .pcb_layout import _all, _direct, _dump, _head, _Quoted, parse_sexpr
+from .sexpr import QuotedSExpr as _Quoted
+from .sexpr import SExpr, SExprList, parse_sexpr
+from .sexpr import dump_sexpr as _dump
+from .sexpr import sexpr_all as _all
+from .sexpr import sexpr_direct as _direct
+from .sexpr import sexpr_head as _head
 
 _LABEL_SHAPES = {
     "input": "input",
@@ -23,7 +28,7 @@ _LABEL_SHAPES = {
 _PIN_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_./+#-]*\Z")
 
 
-def _parse_selection(selection_fragment: str) -> list:
+def _parse_selection(selection_fragment: str) -> list[SExpr]:
     """Parse the clipboard-format fragment returned by Schematic.get_selection_as_string."""
     fragment = str(selection_fragment or "").strip()
     if not fragment:
@@ -39,9 +44,13 @@ def _parse_selection(selection_fragment: str) -> list:
     return wrapper[1:]
 
 
-def _selected_sheet_node(selection_fragment: str) -> list:
+def _selected_sheet_node(selection_fragment: str) -> SExprList:
     nodes = _parse_selection(selection_fragment)
-    if len(nodes) != 1 or _head(nodes[0]) != "sheet":
+    if (
+        len(nodes) != 1
+        or not isinstance(nodes[0], list)
+        or _head(nodes[0]) != "sheet"
+    ):
         raise ValueError(
             "Select exactly one hierarchical sheet symbol. The block will be built from "
             "that sheet's complete subschematic."
@@ -80,7 +89,7 @@ def selected_sheet_instance_uuid(selection_fragment: str) -> str:
     return str(node[1])
 
 
-def extract_hierarchical_pins(schematic_tree: list) -> list[BlockPin]:
+def extract_hierarchical_pins(schematic_tree: SExprList) -> list[BlockPin]:
     """Derive facade pins from labels on the selected block's root sheet only.
 
     Identically named root-level hierarchical labels represent one interface signal.
@@ -165,12 +174,12 @@ def _rebase_path_value(path_value: str, old_prefix: str, new_prefix: str) -> str
     return new_prefix.rstrip("/") + suffix
 
 
-def _path_nodes(node: list) -> list[list]:
+def _path_nodes(node: SExprList) -> list[SExprList]:
     return [child for child in node[1:] if _head(child) == "path"]
 
 
 def _normalize_instance_node(
-    node: list,
+    node: SExprList,
     project_name: str,
     old_prefix: str,
     new_prefix: str,
@@ -226,14 +235,14 @@ def _normalize_instance_node(
         ])
 
 
-def _sheet_instance_paths(tree: list) -> list[list]:
+def _sheet_instance_paths(tree: SExprList) -> list[SExprList]:
     instances = _direct(tree, "sheet_instances")
     if instances is None:
         return []
     return _path_nodes(instances)
 
 
-def _select_root_source_prefix(tree: list, selected_sheet_uuid: str | None) -> str:
+def _select_root_source_prefix(tree: SExprList, selected_sheet_uuid: str | None) -> str:
     paths = _sheet_instance_paths(tree)
     if not paths:
         return "/"
@@ -247,7 +256,7 @@ def _select_root_source_prefix(tree: list, selected_sheet_uuid: str | None) -> s
 
 
 def _normalize_sheet_instances(
-    tree: list,
+    tree: SExprList,
     old_prefix: str,
     new_prefix: str,
     *,
@@ -283,7 +292,7 @@ def _normalize_sheet_instances(
                 page[1] = _Quoted("1")
 
 
-def _sheet_file_property(sheet: list) -> list:
+def _sheet_file_property(sheet: SExprList) -> SExprList:
     for prop in _all(sheet, "property"):
         if len(prop) >= 3 and str(prop[1]) == "Sheetfile":
             return prop

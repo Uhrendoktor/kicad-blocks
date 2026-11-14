@@ -13,7 +13,7 @@ sys.path.insert(0, str(ROOT / "plugin" / "kicad-blocks"))
 sys.path.insert(0, str(ROOT / "examples" / "stusb4500"))
 
 from generate_reference import generate_reference_schematic
-from kicad_blocks.pcb_layout import _all, _direct, parse_sexpr
+from kicad_blocks.sexpr import parse_sexpr, sexpr_all, sexpr_direct
 
 
 class STUSB4500ReferenceTests(unittest.TestCase):
@@ -123,18 +123,18 @@ class STUSB4500ReferenceTests(unittest.TestCase):
 
         tree = parse_sexpr(content)
         placements = {}
-        for instance in _all(tree, "symbol"):
-            if _direct(instance, "lib_id") is None:
+        for instance in sexpr_all(tree, "symbol"):
+            if sexpr_direct(instance, "lib_id") is None:
                 continue
             reference = next(
                 (
                     str(prop[2])
-                    for prop in _all(instance, "property")
+                    for prop in sexpr_all(instance, "property")
                     if len(prop) >= 3 and str(prop[1]) == "Reference"
                 ),
                 None,
             )
-            at = _direct(instance, "at")
+            at = sexpr_direct(instance, "at")
             if reference is None or at is None:
                 continue
             x, y = float(at[1]), float(at[2])
