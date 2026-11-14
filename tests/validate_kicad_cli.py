@@ -31,10 +31,7 @@ def _find_kicad_cli() -> str:
     for candidate in candidates:
         if candidate and (Path(candidate).is_file() or shutil.which(candidate)):
             return candidate
-    raise RuntimeError(
-        "KiCad CLI was not found. Set KICAD_CLI or add kicad-cli(-nightly) to PATH."
-    )
-
+    raise RuntimeError("KiCad CLI was not found. Set KICAD_CLI or add kicad-cli(-nightly) to PATH.")
 
 
 def _validate_stusb4500_netlist(cli: str, output_dir: Path) -> None:
@@ -222,19 +219,19 @@ def _validate_stusb4500_netlist(cli: str, output_dir: Path) -> None:
         )
     tree = parse_sexpr(netlist_path.read_text(encoding="utf-8"))
     actual: dict[tuple[str, str], str] = {}
-    nets_container = _direct(tree, "nets")
+    nets_container = sexpr_direct(tree, "nets")
     if nets_container is None:
         raise RuntimeError("KiCad netlist export has no nets section.")
-    for net in _all(nets_container, "net"):
-        name_node = _direct(net, "name")
+    for net in sexpr_all(nets_container, "net"):
+        name_node = sexpr_direct(net, "name")
         if name_node is None:
             continue
         # KiCad may qualify local labels with their sheet path. Compare the
         # actual electrical name while retaining the pin's true net identity.
         net_name = str(name_node[1]).rsplit("/", 1)[-1]
-        for node in _all(net, "node"):
-            ref_node = _direct(node, "ref")
-            pin_node = _direct(node, "pin")
+        for node in sexpr_all(net, "node"):
+            ref_node = sexpr_direct(node, "ref")
+            pin_node = sexpr_direct(node, "pin")
             if ref_node is not None and pin_node is not None:
                 actual[(str(ref_node[1]), str(pin_node[1]))] = net_name
 
@@ -500,9 +497,7 @@ def main() -> None:
         erc_reports = validate_block_tree(
             parent, Path(temp) / "erc-reports", cli, Path(temp) / "library"
         )
-        if len(erc_reports) != 2 or not all(
-            Path(item["report"]).is_file() for item in erc_reports
-        ):
+        if len(erc_reports) != 2 or not all(Path(item["report"]).is_file() for item in erc_reports):
             raise RuntimeError("Recursive KiCad CLI ERC did not report both block implementations.")
         # Validate the exact empty-board document used by Add PCB Layout.
         # A file-copy/unit assertion alone cannot prove that PCBNEW can open it.

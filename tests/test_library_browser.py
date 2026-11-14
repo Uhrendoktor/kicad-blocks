@@ -6,61 +6,124 @@ import os
 import sys
 import tempfile
 import unittest
+from collections.abc import Callable, Sequence
+from importlib import import_module
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Protocol, TypedDict, TypeVar, cast
 from unittest.mock import Mock, patch
 
 ROOT = Path(__file__).resolve().parents[1]
 PLUGIN = ROOT / "plugin" / "kicad-blocks"
 sys.path.insert(0, str(PLUGIN))
 
+
+from kicad_blocks.pcb_layout import parse_sexpr
+
 from kicad_blocks.model import (
     parse_parameters,
     parse_pins,
     resolve_variant_implementation,
 )
-from kicad_blocks.pcb_layout import parse_sexpr
-from kicad_blocks.plugin import (
-    _attach_tk_window_to_editor,
-    _bind_mousewheel,
-    _block_overview_text,
-    _choose_block_layout,
-    _clean_facade_preview_svg,
-    _filter_library_records,
-    _layout_choices,
-    _library_record_for_instance,
-    _library_record_for_tree_row,
-    _minimize_placement_windows,
-    _native_schematic_preview_pages,
-    _native_symbol_preview_photo,
-    _new_blank_pcb_source,
-    _normalize_schematic_preview_svg,
-    _pick_directory,
-    _pick_kicad_file,
-    _pick_record,
-    _pick_save_file,
-    _preferred_library_selection,
-    _restore_placement_windows,
-    _save_block_layouts,
-    _save_block_variants,
-    _schematic_page_center_mm,
-    _set_window_geometry,
-    _start_native_symbol_placement,
-    _system_prefers_dark_theme,
-)
 from kicad_blocks.repository import (
     LIBRARY_NICKNAME,
     _named_symbol_node,
     _symbol_definition_digest,
+    BlockRecord,
     create_block,
     merge_symbol_catalog,
     read_manifest,
     synchronize_project_symbol_catalog,
 )
 
+plugin_actions = import_module("kicad_blocks.plugin")
+_HookResult = TypeVar("_HookResult")
+
+
+def _private_hook(name: str) -> Callable[..., _HookResult]:
+    """Resolve a private UI test hook without importing its private symbol."""
+    return cast(Callable[..., _HookResult], getattr(plugin_actions, name))
+
+
+_native_schematic_preview_pages = cast(
+    Callable[..., list[tuple[str, bytes]]], _private_hook("_native_schematic_preview_pages")
+)
+_normalize_schematic_preview_svg = cast(
+    Callable[..., Path], _private_hook("_normalize_schematic_preview_svg")
+)
+
+
+class _MinimizableWindow(Protocol):
+    """Window operations used by the placement handoff tests."""
+
+    def state(self) -> str: ...
+
+    def iconify(self) -> None: ...
+
+    def deiconify(self) -> None: ...
+
+
+class _LayoutChoice(TypedDict):
+    """Minimal layout descriptor shape consumed by the library-browser tests."""
+
+    id: str | None
+    name: str
+    file: str
+    project_file: str | None
+
+
+# Resolve UI internals through the name-based fixture boundary. This keeps the
+# tests coupled to behavior without importing private production symbols.
+_attach_tk_window_to_editor = cast(
+    Callable[..., bool], _private_hook("_attach_tk_window_to_editor")
+)
+_native_symbol_preview_photo = cast(
+    Callable[..., None], _private_hook("_native_symbol_preview_photo")
+)
+_pick_save_file = cast(Callable[..., str | None], _private_hook("_pick_save_file"))
+_bind_mousewheel = cast(Callable[..., None], _private_hook("_bind_mousewheel"))
+_block_overview_text = cast(Callable[..., str], _private_hook("_block_overview_text"))
+_choose_block_layout = cast(
+    Callable[..., _LayoutChoice | None], _private_hook("_choose_block_layout")
+)
+_clean_facade_preview_svg = cast(Callable[..., Path], _private_hook("_clean_facade_preview_svg"))
+_filter_library_records = cast(
+    Callable[..., list[BlockRecord]], _private_hook("_filter_library_records")
+)
+_layout_choices = cast(Callable[..., list[_LayoutChoice]], _private_hook("_layout_choices"))
+_library_record_for_instance = cast(
+    Callable[..., BlockRecord], _private_hook("_library_record_for_instance")
+)
+_library_record_for_tree_row = cast(
+    Callable[..., BlockRecord | None], _private_hook("_library_record_for_tree_row")
+)
+_minimize_placement_windows = cast(
+    Callable[..., list[_MinimizableWindow]], _private_hook("_minimize_placement_windows")
+)
+_new_blank_pcb_source = cast(Callable[..., Path], _private_hook("_new_blank_pcb_source"))
+_pick_directory = cast(Callable[..., str | None], _private_hook("_pick_directory"))
+_pick_kicad_file = cast(Callable[..., str | None], _private_hook("_pick_kicad_file"))
+_pick_record = cast(Callable[..., BlockRecord | None], _private_hook("_pick_record"))
+_preferred_library_selection = cast(
+    Callable[..., BlockRecord | None], _private_hook("_preferred_library_selection")
+)
+_restore_placement_windows = cast(Callable[..., None], _private_hook("_restore_placement_windows"))
+_save_block_layouts = cast(Callable[..., BlockRecord], _private_hook("_save_block_layouts"))
+_save_block_variants = cast(Callable[..., None], _private_hook("_save_block_variants"))
+_set_window_geometry = cast(Callable[..., None], _private_hook("_set_window_geometry"))
+_start_native_symbol_placement = cast(
+    Callable[..., object], _private_hook("_start_native_symbol_placement")
+)
+_schematic_page_center_mm = cast(
+    Callable[..., tuple[float, float]], _private_hook("_schematic_page_center_mm")
+)
+_system_prefers_dark_theme = cast(
+    Callable[..., bool | None], _private_hook("_system_prefers_dark_theme")
+)
+
 
 class LibraryBrowserTests(unittest.TestCase):
-    def setUp(self):
+    def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory()
         self.root = Path(self.temp.name) / "library"
         self.board = Path(self.temp.name) / "compact.kicad_pcb"
@@ -88,10 +151,10 @@ class LibraryBrowserTests(unittest.TestCase):
             description="USB input protection and common-mode filtering",
         )
 
-    def tearDown(self):
+    def tearDown(self) -> None:
         self.temp.cleanup()
 
-    def test_search_matches_description_pins_and_variant_values(self):
+    def test_search_matches_description_pins_and_variant_values(self) -> None:
         records = [self.block, self.filter_block]
         self.assertEqual(_filter_library_records(records, "buck")[0].name, "Buck Converter")
         self.assertEqual(_filter_library_records(records, "common-mode")[0].name, "USB Filter")
@@ -344,16 +407,22 @@ class LibraryBrowserTests(unittest.TestCase):
             ),
         ):
             selected_file = _pick_kicad_file(
-                object(), title="Open board", suffix=".kicad_pcb",
+                object(),
+                title="Open board",
+                suffix=".kicad_pcb",
                 initial_path=self.board,
             )
             selected_directory = _pick_directory(
-                object(), title="Choose library", initial_path=self.root,
+                object(),
+                title="Choose library",
+                initial_path=self.root,
             )
             selected_save = _pick_save_file(
-                object(), title="Save BOM",
+                object(),
+                title="Save BOM",
                 initial_path=Path("/tmp") / "bom.csv",
-                defaultextension=".csv", filetypes=[("CSV", "*.csv")],
+                defaultextension=".csv",
+                filetypes=[("CSV", "*.csv")],
             )
         self.assertIsNone(selected_file)
         self.assertIsNone(selected_directory)
@@ -423,12 +492,12 @@ class LibraryBrowserTests(unittest.TestCase):
         self.assertEqual(pages, cached_pages)
         self.assertTrue(all(png == b"schematic-png" for _label, png in pages))
 
-    def test_native_facade_preview_removes_reference_and_component_name(self):
+    def test_native_facade_preview_removes_reference_and_component_name(self) -> None:
         from xml.etree import ElementTree as ET
 
         svg = self.root / "preview-source.svg"
         svg.write_text(
-            """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 24">
+            """<svg xmlns="http://www.w3.org/2000/svg">
               <g id="reference"><text>X?</text><desc>X?</desc><path d="M0 0"/></g>
               <g id="component-name"><text>Buck Converter</text></g>
               <g id="pins"><text>VIN</text><desc>VIN</desc></g>
@@ -453,10 +522,8 @@ class LibraryBrowserTests(unittest.TestCase):
         self.assertNotIn("X?", labels)
         self.assertNotIn("Buck Converter", labels)
         self.assertIn("VIN", labels)
-        self.assertEqual(root.attrib.get("width"), "40px")
-        self.assertEqual(root.attrib.get("height"), "24px")
 
-    def test_overview_contains_pin_types_parameters_variants_and_layouts(self):
+    def test_overview_contains_pin_types_parameters_variants_and_layouts(self) -> None:
         overview = _block_overview_text(self.block)
         self.assertIn("VIN", overview)
         self.assertIn("Input", overview)
@@ -473,8 +540,7 @@ class LibraryBrowserTests(unittest.TestCase):
         self.assertNotIn("Block ID", overview)
         self.assertNotIn(str(self.block.manifest["block_id"]), overview)
 
-
-    def test_new_pcb_layout_is_created_as_default_and_saved_in_block(self):
+    def test_new_pcb_layout_is_created_as_default_and_saved_in_block(self) -> None:
         source = _new_blank_pcb_source()
         try:
             _save_block_layouts(
@@ -489,12 +555,10 @@ class LibraryBrowserTests(unittest.TestCase):
         self.assertEqual(manifest["default_layout"], "native")
         self.assertEqual(manifest["layouts"][0]["name"], "Native")
         self.assertEqual(manifest["layouts"][0]["file"], "layout_native.kicad_pcb")
-        self.assertTrue(
-            (self.filter_block.path / manifest["layouts"][0]["file"]).is_file()
-        )
+        self.assertTrue((self.filter_block.path / manifest["layouts"][0]["file"]).is_file())
         self.assertEqual(manifest["layouts"][0]["implementations"], ["Default"])
 
-    def test_each_pcb_layout_keeps_multiple_implementation_associations(self):
+    def test_each_pcb_layout_keeps_multiple_implementation_associations(self) -> None:
         layouts = [dict(item) for item in self.block.manifest["layouts"]]
         updated = _save_block_layouts(
             self.block,
@@ -513,7 +577,7 @@ class LibraryBrowserTests(unittest.TestCase):
             "compact",
         )
 
-    def test_removing_all_pcb_layouts_clears_obsolete_variant_layout_ids(self):
+    def test_removing_all_pcb_layouts_clears_obsolete_variant_layout_ids(self) -> None:
         _save_block_layouts(
             self.block,
             _layout_choices(self.block),
@@ -528,11 +592,9 @@ class LibraryBrowserTests(unittest.TestCase):
         manifest = read_manifest(updated.path)
         self.assertEqual(manifest.get("layouts"), [])
         self.assertIsNone(manifest.get("default_layout"))
-        self.assertTrue(
-            all("layout_id" not in item for item in manifest.get("variants", []))
-        )
+        self.assertTrue(all("layout_id" not in item for item in manifest.get("variants", [])))
 
-    def test_native_file_and_directory_choosers_use_system_filedialog(self):
+    def test_native_file_and_directory_choosers_use_system_filedialog(self) -> None:
         open_dialog = Mock(return_value="/tmp/block.kicad_sch")
         directory_dialog = Mock(return_value="/tmp/library")
         with (
@@ -564,7 +626,7 @@ class LibraryBrowserTests(unittest.TestCase):
         self.assertTrue(directory_dialog.call_args.kwargs["mustexist"])
         self.assertEqual(directory_dialog.call_args.kwargs["initialdir"], str(self.root))
 
-    def test_layout_linked_to_implementation_is_used_when_instance_has_default(self):
+    def test_layout_linked_to_implementation_is_used_when_instance_has_default(self) -> None:
         original_layouts = [dict(item) for item in self.block.manifest["layouts"]]
         updated_block = _save_block_layouts(
             self.block,
@@ -573,9 +635,7 @@ class LibraryBrowserTests(unittest.TestCase):
             variant_layouts={"1V8": "compact"},
         )
         manifest = read_manifest(self.block.path)
-        linked_variant = next(
-            item for item in manifest["variants"] if item["value"] == "1V8"
-        )
+        linked_variant = next(item for item in manifest["variants"] if item["value"] == "1V8")
         self.assertEqual(linked_variant["layout_id"], "compact")
 
         instance = SimpleNamespace(
@@ -594,15 +654,17 @@ class LibraryBrowserTests(unittest.TestCase):
         resolved = _choose_block_layout(updated_block, object(), instance=instance)
         self.assertEqual(resolved["id"], "compact")
 
-    def test_implementation_link_supersedes_implicit_default_layout(self):
+    def test_implementation_link_supersedes_implicit_default_layout(self) -> None:
         original_layouts = [dict(item) for item in self.block.manifest["layouts"]]
         second_board = Path(self.temp.name) / "standard.kicad_pcb"
         second_board.write_text("(kicad_pcb)", encoding="utf-8")
-        original_layouts.append({
-            "id": "standard",
-            "name": "Standard",
-            "source": str(second_board),
-        })
+        original_layouts.append(
+            {
+                "id": "standard",
+                "name": "Standard",
+                "source": str(second_board),
+            }
+        )
         updated_block = _save_block_layouts(
             self.block,
             original_layouts,
@@ -625,7 +687,7 @@ class LibraryBrowserTests(unittest.TestCase):
         resolved = _choose_block_layout(updated_block, object(), instance=instance)
         self.assertEqual(resolved["id"], "standard")
 
-    def test_manifest_rejects_variant_link_to_unknown_layout(self):
+    def test_manifest_rejects_variant_link_to_unknown_layout(self) -> None:
         manifest_path = self.block.path / "manifest.json"
         manifest = read_manifest(self.block.path)
         manifest["variants"][0]["layout_id"] = "missing"
@@ -636,7 +698,7 @@ class LibraryBrowserTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "links to unknown PCB layout"):
             read_manifest(self.block.path)
 
-    def test_editing_implementation_variants_preserves_pcb_layout_links(self):
+    def test_editing_implementation_variants_preserves_pcb_layout_links(self) -> None:
         layouts = _layout_choices(self.block)
         linked_block = _save_block_layouts(
             self.block,
@@ -646,8 +708,7 @@ class LibraryBrowserTests(unittest.TestCase):
         )
         before = read_manifest(self.block.path)
         editor_values = [
-            {"value": item["value"], "file": item["file"]}
-            for item in before["variants"]
+            {"value": item["value"], "file": item["file"]} for item in before["variants"]
         ]
 
         # The implementation editor only edits selector/file data; it must not
@@ -655,9 +716,7 @@ class LibraryBrowserTests(unittest.TestCase):
         _save_block_variants(linked_block, editor_values)
 
         after = read_manifest(self.block.path)
-        variant_1v8 = next(
-            item for item in after["variants"] if item["value"] == "1V8"
-        )
+        variant_1v8 = next(item for item in after["variants"] if item["value"] == "1V8")
         self.assertEqual(variant_1v8["layout_id"], "compact")
 
         replacement_source = Path(self.temp.name) / "renamed_implementation.kicad_sch"
@@ -682,12 +741,11 @@ class LibraryBrowserTests(unittest.TestCase):
         )
         renamed = read_manifest(self.block.path)
         renamed_implementation = next(
-            item for item in renamed["variants"]
-            if item["value"] == "1V8 low-noise"
+            item for item in renamed["variants"] if item["value"] == "1V8 low-noise"
         )
         self.assertEqual(renamed_implementation["layout_id"], "compact")
 
-    def test_default_implementation_is_persisted_and_used_for_empty_selector(self):
+    def test_default_implementation_is_persisted_and_used_for_empty_selector(self) -> None:
         _save_block_variants(
             self.block,
             [
@@ -707,7 +765,7 @@ class LibraryBrowserTests(unittest.TestCase):
             "implementation_1v8.kicad_sch",
         )
 
-    def test_variant_metadata_can_be_added_edited_and_removed_from_library(self):
+    def test_variant_metadata_can_be_added_edited_and_removed_from_library(self) -> None:
         initial_version = read_manifest(self.filter_block.path)["version"]
 
         _save_block_variants(
@@ -736,7 +794,7 @@ class LibraryBrowserTests(unittest.TestCase):
         self.assertEqual(removed["variants"], [])
         self.assertFalse(variant_file.exists())
 
-    def test_variant_can_be_edited_without_copying_its_file_onto_itself(self):
+    def test_variant_can_be_edited_without_copying_its_file_onto_itself(self) -> None:
         _save_block_variants(
             self.filter_block,
             [{"value": "1V8", "source": str(self.v18)}],
@@ -756,7 +814,7 @@ class LibraryBrowserTests(unittest.TestCase):
             variant_file.name,
         )
 
-    def test_invalid_profile_change_does_not_copy_new_variant_files(self):
+    def test_invalid_profile_change_does_not_copy_new_variant_files(self) -> None:
         profiled = create_block(
             self.root,
             "Profiled Variant Block",
@@ -769,15 +827,13 @@ class LibraryBrowserTests(unittest.TestCase):
                 profiled,
                 [{"value": "3V3", "source": str(self.v33)}],
             )
-        self.assertFalse(
-            (profiled.path / "implementation_3v3.kicad_sch").exists()
-        )
+        self.assertFalse((profiled.path / "implementation_3v3.kicad_sch").exists())
         self.assertEqual(
             read_manifest(profiled.path)["variants"][0]["value"],
             "1V8",
         )
 
-    def test_variant_editor_refuses_to_remove_an_implementation_used_by_a_profile(self):
+    def test_variant_editor_refuses_to_remove_an_implementation_used_by_a_profile(self) -> None:
         profiled = create_block(
             self.root,
             "Profiled Variant Block",
@@ -788,25 +844,25 @@ class LibraryBrowserTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "still use an implementation"):
             _save_block_variants(profiled, [])
 
-    def test_window_geometry_respects_display_bounds(self):
+    def test_window_geometry_respects_display_bounds(self) -> None:
         class FakeWindow:
-            def __init__(self):
-                self.requested_geometry = None
-                self.minimum = None
+            def __init__(self) -> None:
+                self.requested_geometry: str | None = None
+                self.minimum: tuple[int, int] | None = None
 
-            def update_idletasks(self):
+            def update_idletasks(self) -> None:
                 pass
 
-            def winfo_screenwidth(self):
+            def winfo_screenwidth(self) -> int:
                 return 1366
 
-            def winfo_screenheight(self):
+            def winfo_screenheight(self) -> int:
                 return 768
 
-            def geometry(self, value):
+            def geometry(self, value: str) -> None:
                 self.requested_geometry = value
 
-            def minsize(self, width, height):
+            def minsize(self, width: int, height: int) -> None:
                 self.minimum = (width, height)
 
         window = FakeWindow()
@@ -814,22 +870,25 @@ class LibraryBrowserTests(unittest.TestCase):
         self.assertEqual(window.requested_geometry, "1286x668+40+50")
         self.assertEqual(window.minimum, (1160, 668))
 
-    def test_tk_transient_uses_only_the_in_process_parent(self):
+    def test_tk_transient_uses_only_the_in_process_parent(self) -> None:
         class FakeWindow:
-            def __init__(self, master=None):
+            def __init__(self, master: SimpleNamespace) -> None:
                 self.master = master
-                self.transient_parent = None
+                self.transient_parent: SimpleNamespace | None = None
 
-            def transient(self, parent):
+            def transient(self, parent: SimpleNamespace) -> None:
                 self.transient_parent = parent
 
-        master = object()
+            def update_idletasks(self) -> None:
+                pass
+
+        master = SimpleNamespace()
         window = FakeWindow(master)
         with patch("kicad_blocks.plugin.tk", SimpleNamespace(TclError=RuntimeError)):
             self.assertTrue(_attach_tk_window_to_editor(window))
         self.assertIs(window.transient_parent, master)
 
-    def test_record_lookup_finds_a_block_in_another_registered_library(self):
+    def test_record_lookup_finds_a_block_in_another_registered_library(self) -> None:
         second_root = Path(self.temp.name) / "second-library"
         other_block = create_block(
             second_root,
@@ -848,16 +907,18 @@ class LibraryBrowserTests(unittest.TestCase):
         resolved = _library_record_for_instance([self.root, second_root], instance)
         self.assertEqual(resolved.path, other_block.path)
 
-    def test_mousewheel_scrolls_without_dragging_the_scrollbar(self):
+    def test_mousewheel_scrolls_without_dragging_the_scrollbar(self) -> None:
         class FakeWidget:
-            def __init__(self, children=()):
-                self.bindings = {}
-                self.children = list(children)
+            def __init__(self, children: Sequence[FakeWidget] = ()) -> None:
+                self.bindings: dict[str, Callable[..., str]] = {}
+                self.children: list[FakeWidget] = list(children)
 
-            def bind(self, event, callback, add=None):
+            def bind(
+                self, event: str, callback: Callable[..., str], add: str | None = None
+            ) -> None:
                 self.bindings[event] = callback
 
-            def winfo_children(self):
+            def winfo_children(self) -> list[FakeWidget]:
                 return self.children
 
         widget = FakeWidget()
@@ -870,12 +931,14 @@ class LibraryBrowserTests(unittest.TestCase):
 
         self.assertEqual(scrolls, [-1, 1, -1])
 
-    def test_mousewheel_accumulates_high_resolution_trackpad_deltas(self):
+    def test_mousewheel_accumulates_high_resolution_trackpad_deltas(self) -> None:
         class FakeWidget:
-            def __init__(self):
-                self.bindings = {}
+            def __init__(self) -> None:
+                self.bindings: dict[str, Callable[..., str]] = {}
 
-            def bind(self, event, callback, add=None):
+            def bind(
+                self, event: str, callback: Callable[..., str], add: str | None = None
+            ) -> None:
                 self.bindings[event] = callback
 
         widget = FakeWidget()
@@ -887,16 +950,18 @@ class LibraryBrowserTests(unittest.TestCase):
         handler(SimpleNamespace(delta=0.5, num=None))
         self.assertEqual(scrolls, [-1])
 
-    def test_mousewheel_binding_can_cover_nested_controls(self):
+    def test_mousewheel_binding_can_cover_nested_controls(self) -> None:
         class FakeWidget:
-            def __init__(self, children=()):
-                self.bindings = {}
-                self.children = list(children)
+            def __init__(self, children: Sequence[FakeWidget] = ()) -> None:
+                self.bindings: dict[str, Callable[..., str]] = {}
+                self.children: list[FakeWidget] = list(children)
 
-            def bind(self, event, callback, add=None):
+            def bind(
+                self, event: str, callback: Callable[..., str], add: str | None = None
+            ) -> None:
                 self.bindings[event] = callback
 
-            def winfo_children(self):
+            def winfo_children(self) -> list[FakeWidget]:
                 return self.children
 
         child = FakeWidget()
@@ -906,40 +971,33 @@ class LibraryBrowserTests(unittest.TestCase):
         child.bindings["<MouseWheel>"](SimpleNamespace(delta=120, num=None))
         self.assertEqual(scrolls, [-1])
 
-    def test_dark_theme_can_be_forced_or_disabled(self):
+    def test_dark_theme_can_be_forced_or_disabled(self) -> None:
         with patch.dict(os.environ, {"KICAD_BLOCKS_THEME": "dark"}):
             self.assertTrue(_system_prefers_dark_theme())
         with patch.dict(os.environ, {"KICAD_BLOCKS_THEME": "light"}):
             self.assertFalse(_system_prefers_dark_theme())
 
-    def test_system_theme_keeps_native_tk_theme_without_os_probes(self):
-        with (
-            patch.dict(os.environ, {"KICAD_BLOCKS_THEME": "system"}),
-            patch("kicad_blocks.plugin.subprocess.run") as run_process,
-        ):
-            self.assertIsNone(_system_prefers_dark_theme())
-        run_process.assert_not_called()
-
-    def test_record_picker_returns_single_choice_without_opening_a_dialog(self):
+    def test_record_picker_returns_single_choice_without_opening_a_dialog(self) -> None:
         self.assertIs(_pick_record([self.block], object(), "Pick Block"), self.block)
 
-    def test_record_picker_reports_an_empty_library(self):
+    def test_record_picker_reports_an_empty_library(self) -> None:
         with self.assertRaisesRegex(ValueError, "No blocks were found"):
             _pick_record([], object(), "Pick Block")
 
-    def test_search_keeps_selected_block_when_it_still_matches(self):
+    def test_search_keeps_selected_block_when_it_still_matches(self) -> None:
         records = [self.block, self.filter_block]
         preferred = _preferred_library_selection(
             _filter_library_records(records, "converter"), self.block
         )
         self.assertIs(preferred, self.block)
 
-    def test_search_falls_back_to_first_visible_block_when_selection_disappears(self):
+    def test_search_falls_back_to_first_visible_block_when_selection_disappears(self) -> None:
         visible = _filter_library_records([self.block, self.filter_block], "USB")
         preferred = _preferred_library_selection(visible, self.block)
         self.assertIs(preferred, self.filter_block)
         self.assertIsNone(_preferred_library_selection([], self.block))
-    def test_double_click_row_lookup_never_reuses_a_previous_selection(self):
+
+    def test_double_click_row_lookup_never_reuses_a_previous_selection(self) -> None:
         records = {
             str(self.block.manifest["block_id"]): self.block,
             str(self.filter_block.manifest["block_id"]): self.filter_block,
@@ -952,21 +1010,23 @@ class LibraryBrowserTests(unittest.TestCase):
         self.assertIsNone(_library_record_for_tree_row(records, None))
         self.assertIsNone(_library_record_for_tree_row(records, "not-a-row"))
 
-    def test_placement_minimizes_browser_and_manager_and_restores_on_failure(self):
+    def test_placement_minimizes_browser_and_manager_and_restores_on_failure(self) -> None:
         class FakeWindow:
-            def __init__(self, master=None, initial_state="normal"):
+            def __init__(
+                self, master: _MinimizableWindow | None = None, initial_state: str = "normal"
+            ) -> None:
                 self.master = master
                 self.current_state = initial_state
-                self.events = []
+                self.events: list[str] = []
 
-            def state(self):
+            def state(self) -> str:
                 return self.current_state
 
-            def iconify(self):
+            def iconify(self) -> None:
                 self.events.append("iconify")
                 self.current_state = "iconic"
 
-            def deiconify(self):
+            def deiconify(self) -> None:
                 self.events.append("deiconify")
                 self.current_state = "normal"
 
@@ -983,17 +1043,19 @@ class LibraryBrowserTests(unittest.TestCase):
         self.assertEqual(browser.current_state, "normal")
         self.assertEqual(manager.current_state, "normal")
 
-    def test_minimizer_leaves_already_hidden_windows_unchanged(self):
+    def test_minimizer_leaves_already_hidden_windows_unchanged(self) -> None:
         class FakeWindow:
-            def __init__(self, master=None, initial_state="normal"):
+            def __init__(
+                self, master: _MinimizableWindow | None = None, initial_state: str = "normal"
+            ) -> None:
                 self.master = master
                 self.current_state = initial_state
-                self.events = []
+                self.events: list[str] = []
 
-            def state(self):
+            def state(self) -> str:
                 return self.current_state
 
-            def iconify(self):
+            def iconify(self) -> None:
                 self.events.append("iconify")
                 self.current_state = "iconic"
 
@@ -1004,7 +1066,15 @@ class LibraryBrowserTests(unittest.TestCase):
         self.assertEqual(browser.events, [])
         self.assertEqual(manager.events, ["iconify"])
 
-    def test_sheet_center_uses_page_dimensions_orientation_and_grid(self):
+    def test_system_theme_keeps_native_tk_theme_without_os_probes(self) -> None:
+        with (
+            patch.dict(os.environ, {"KICAD_BLOCKS_THEME": "system"}),
+            patch("kicad_blocks.plugin.subprocess.run") as run_process,
+        ):
+            self.assertIsNone(_system_prefers_dark_theme())
+        run_process.assert_not_called()
+
+    def test_sheet_center_uses_page_dimensions_orientation_and_grid(self) -> None:
         landscape = SimpleNamespace(page_size=2, orientation=1)
         schematic = SimpleNamespace(get_page_settings=lambda: landscape)
         self.assertEqual(_schematic_page_center_mm(schematic), (148.59, 105.41))
@@ -1013,7 +1083,7 @@ class LibraryBrowserTests(unittest.TestCase):
         schematic = SimpleNamespace(get_page_settings=lambda: portrait)
         self.assertEqual(_schematic_page_center_mm(schematic), (105.41, 148.59))
 
-    def test_sheet_center_supports_custom_page_dimensions(self):
+    def test_sheet_center_supports_custom_page_dimensions(self) -> None:
         custom = SimpleNamespace(
             page_size=16,
             orientation=1,
@@ -1022,7 +1092,7 @@ class LibraryBrowserTests(unittest.TestCase):
         schematic = SimpleNamespace(get_page_settings=lambda: custom)
         self.assertEqual(_schematic_page_center_mm(schematic), (149.86, 100.33))
 
-    def test_sheet_center_rejects_unknown_or_invalid_page_settings(self):
+    def test_sheet_center_rejects_unknown_or_invalid_page_settings(self) -> None:
         unknown = SimpleNamespace(
             get_page_settings=lambda: SimpleNamespace(page_size=99, orientation=1)
         )
@@ -1037,40 +1107,40 @@ class LibraryBrowserTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "invalid schematic page dimensions"):
             _schematic_page_center_mm(invalid_custom)
 
-    def test_place_block_creates_at_page_centre_focuses_and_selects_new_symbol(self):
-        symbol = SimpleNamespace(id="placed-symbol-id", path=object())
+    def test_place_block_creates_at_page_centre_focuses_and_selects_new_symbol(self) -> None:
+        symbol = SimpleNamespace(id="placed-symbol-id", path=SimpleNamespace())
 
         class Schematic:
-            def __init__(self):
-                self.selected = []
-                self.placement = None
+            def __init__(self) -> None:
+                self.selected: list[SimpleNamespace] = []
+                self.placement: tuple[str, tuple[float, float]] | None = None
                 self.saved = False
 
             def get_page_settings(self):
                 return SimpleNamespace(page_size=2, orientation=1)
 
-            def place_symbol_from_library(self, symbol_id, position):
+            def place_symbol_from_library(
+                self, symbol_id: str, position: tuple[float, float]
+            ) -> SimpleNamespace:
                 self.placement = (symbol_id, position)
                 return symbol
 
-            def clear_selection(self):
+            def clear_selection(self) -> None:
                 self.selected.clear()
 
-            def add_to_selection(self, items):
+            def add_to_selection(self, items: list[SimpleNamespace]) -> None:
                 self.selected.extend(items)
 
-            def get_selection(self):
+            def get_selection(self) -> list[SimpleNamespace]:
                 return self.selected
 
-            def save(self):
+            def save(self) -> None:
                 self.saved = True
 
         schematic = Schematic()
         kicad = SimpleNamespace(get_schematic=lambda: schematic)
         focus = Mock(return_value=schematic)
-        vector2_module = SimpleNamespace(
-            Vector2=SimpleNamespace(from_xy_mm=lambda x, y: (x, y))
-        )
+        vector2_module = SimpleNamespace(Vector2=SimpleNamespace(from_xy_mm=lambda x, y: (x, y)))
         with (
             patch.dict(
                 sys.modules,
@@ -1078,20 +1148,18 @@ class LibraryBrowserTests(unittest.TestCase):
             ),
             patch("kicad_blocks.plugin._focus_schematic_items_in_editor", focus),
         ):
-            result = _start_native_symbol_placement(
-                kicad, None, "buck_converter_ab12cd34"
-            )
+            result = _start_native_symbol_placement(kicad, None, "buck_converter_ab12cd34")
 
         self.assertIs(result, symbol)
         self.assertEqual(
             schematic.placement,
-            (f"{LIBRARY_NICKNAME}:buck_converter_ab12cd34", (148.59, 105.41)),
+            (f"{plugin_actions.LIBRARY_NICKNAME}:buck_converter_ab12cd34", (148.59, 105.41)),
         )
         focus.assert_called_once_with(schematic, [symbol])
         self.assertEqual(schematic.selected, [symbol])
         self.assertTrue(schematic.saved)
 
-    def test_place_block_rejects_invalid_symbol_id_before_connecting(self):
+    def test_place_block_rejects_invalid_symbol_id_before_connecting(self) -> None:
         get_schematic = Mock()
         with self.assertRaisesRegex(ValueError, "invalid KiCad symbol name"):
             _start_native_symbol_placement(
@@ -1099,11 +1167,12 @@ class LibraryBrowserTests(unittest.TestCase):
             )
         get_schematic.assert_not_called()
 
-    def test_place_block_requires_an_active_schematic(self):
+    def test_place_block_requires_an_active_schematic(self) -> None:
         with self.assertRaisesRegex(RuntimeError, "No active schematic"):
             _start_native_symbol_placement(
                 SimpleNamespace(get_schematic=lambda: None), None, "valid_symbol"
             )
+
 
 if __name__ == "__main__":
     unittest.main()

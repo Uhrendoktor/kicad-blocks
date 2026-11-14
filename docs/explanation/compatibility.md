@@ -10,26 +10,10 @@ This page separates the product's current test evidence from targets that the in
 | Operating system | Linux |
 | CPU architecture | x86_64 |
 | Python | CPython 3.12 |
-| GUI dependencies | Tkinter and native `filedialog`; Xvfb/xdotool are test-harness-only in Linux CI |
+| GUI dependencies | Tkinter, Xvfb/xdotool in CI |
 | KiCad interfaces | Eeschema IPC, PCB IPC, KiCad CLI |
 
 The post-merge main-branch CI run [#43521663508](https://github.com/Uhrendoktor/kicad-blocks/actions/runs/43521663508) passed both `python-and-kicad` and `visual-ui-audit` on merge commit `d75f0b1f0ef59e14868a84e7730cbc517089e0b7`. It exercised unit tests, lint, KiCad CLI validation, Eeschema GUI editing and publishing, plugin discovery, schematic and PCB IPC, layout merging, and rendered UI evidence.
-
-## Runtime dependency portability
-
-The production runtime now uses cross-platform libraries and APIs for these shared feature paths:
-
-| Dependency/API | Upstream platform support | Integration note |
-| --- | --- | --- |
-| Python Tkinter / ttk / `filedialog` | Windows, macOS, and Unix-like systems | The same toolkit API is used on all OS families. Native appearance and Linux portal integration still require real desktop verification. |
-| `platformdirs` | Windows, macOS, Linux and other Unix-like systems | Resolves the host's standard user configuration directory; Linux keeps the existing XDG location. |
-| `resvg_py` | Windows, macOS, Linux, Android | Prebuilt wheels for the supported project Python versions; Rust renderer is bundled in the wheel, with no system Cairo dependency. |
-| Pillow | Windows, macOS, Linux | Cross-platform image API; actual wheel availability depends on the Python ABI and architecture. |
-| KiCad Python IPC API | KiCad supports Windows, macOS, Linux | The IPC transport is cross-platform. This repository's current published Python IPC wheels are still Linux x86_64 only, as an explicit temporary packaging exception. |
-
-Upstream references: [Python Tkinter](https://docs.python.org/3/library/tkinter.html), [platformdirs supported platforms](https://platformdirs.readthedocs.io/en/latest/index.html), [resvg_py supported OS/architecture and Python wheel matrix](https://resvg-py.readthedocs.io/en/latest/installation.html), [Pillow platform support](https://pillow.readthedocs.io/en/stable/), and [KiCad IPC API](https://dev-docs.kicad.org/en/apis-and-binding/ipc-api/).
-
-This table documents upstream library capability, not validated KiCad Blocks compatibility. Windows/macOS integration remains untested. The Linux-only IPC wheel packaging limitation is separate from the current KiCad editor-action API gap.
 
 ## Interpreter coverage
 
@@ -66,34 +50,15 @@ Primary references:
 | Linux ARM or other architectures | Not validated; no matching published wheel |
 | Non-CPython interpreters or other Python minor versions | Rejected by the installer |
 
-The production plugin uses Tkinter and its standard file-selection dialogs. It does not use `/proc`, Windows registry, macOS defaults, GNOME settings, KDE configuration files, X11, or Wayland to implement product behavior. `xdotool` is confined to the Linux/X11 GUI test harness; it is not a production dependency or runtime fallback.
-
-### KiCad editor-action API boundary
-
-The current supported KiCad schematic API does not provide the editor operations needed for full Place Block and Edit Facade workflows:
-
-| API | Documented behavior | Why it is insufficient |
-| --- | --- | --- |
-| `Schematic.place_symbol_from_library(lib_id, position, ...)` | Creates a symbol at explicit schematic coordinates | Does not start the interactive placement cursor. |
-| `EditorCommandsHandler.add_to_selection(items)` | Adds the specified items to the active editor selection; Eeschema implements this request | Selects the symbol but does not initiate movement or attach it to the pointer. |
-| `Board.interactive_move(items)` | Selects board items and starts the native interactive move tool | This API exists for PCB only; there is no corresponding `Schematic.interactive_move(items)` API or Eeschema `InteractiveMoveItems` handler. |
-| `KiCad.open_document(path, type)` | Opens a document in headless mode | Explicitly unsupported in GUI mode. |
-| `KiCad.open_library_item(library, name, type)` | Loads a library item into its editor | Currently supports footprints only, not symbols. |
-| `KiCad.run_action(action)` | Runs an arbitrary KiCad tool action | Explicitly unstable and not guaranteed; the tested Eeschema returns `no handler available for request of type kiapi.common.commands.RunAction`. It is not used by the production plugin. |
-
-The supported API is documented in the [KiCad Python KiCad class](https://docs.kicad.org/kicad-python/kicad.html) and [Schematic class](https://docs.kicad.org/kicad-python/schematic.html). KiCad's API docs describe IPC as cross-platform, but that transport guarantee does not imply every editor operation exists on the server. An upstream feature proposal for interactive symbol placement ([KiCad MR !2332](https://gitlab.com/kicad/code/kicad/-/merge_requests/2332)) is closed without merge and is not available as an upstream contract.
-
-Accordingly, Place Block currently performs supported fixed-coordinate placement at the active sheet center, focuses the new symbol in the viewport, and selects it. It does not attach the symbol to the mouse cursor; that still requires a schematic equivalent of `Board.interactive_move(items)`. Edit Facade reports an explicit capability error because KiCad exposes no supported Symbol Editor open/select API. Neither workflow uses platform-specific input injection or a manual-only fallback. Full feature acceptance remains open pending the missing upstream APIs and their GUI validation.
-
-### Cross-process window ownership
-
-Tk's portable transient relationship is used only between windows created by the same plugin process. KiCad IPC does not currently expose a portable native window handle or foreign-window ownership API, so the plugin does not attempt to force its separate top-level window into KiCad's taskbar/dock group. Cross-process ownership, stacking, and parent activation remain unverified requirements; X11-specific parenting is not an acceptable substitute.
+The plugin UI requires Tkinter. The Linux native Add Symbol handoff also uses `xdotool` and assumes KiCad's Add Symbol shortcut remains bound to `A`. Custom hotkey remapping is not automatically detected.
 
 ## Packaging state
 
 The repository `VERSION` file currently contains `1.1.0`. A packaged KiCad Blocks 1.1.0 application ZIP is not yet published in GitHub Releases. The published release assets currently provide the pinned KiCad Python IPC dependency wheels, not a complete user-installable KiCad Blocks release archive.
 
 Use the source installation procedure in [Install and enable KiCad Blocks](../getting-started.md). The immutable historical `v1` tag is not a substitute for a current 1.1.0 application package.
+
+The exact per-test and per-acceptance-runner coverage is listed in the [test inventory](../developers/TEST_INVENTORY.md). The repository's quality-policy and overlap decisions are summarized in the [repository audit](../developers/REPOSITORY_AUDIT.md).
 
 ## What CI does not prove
 
