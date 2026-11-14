@@ -99,7 +99,9 @@ def _check_file(path: Path) -> list[str]:
                 f"{relative}:{token.start[0]}: inline diagnostic suppression is not allowed"
             )
 
-    errors.extend(f"{relative}:{line}: explicit Any is prohibited" for line in _explicit_any_lines(tree))
+    errors.extend(
+        f"{relative}:{line}: explicit Any is prohibited" for line in _explicit_any_lines(tree)
+    )
 
     for node in ast.walk(tree):
         if isinstance(node, ast.Call):
