@@ -2336,6 +2336,25 @@ def _clean_facade_preview_svg(svg_file: Path, record, output_dir: Path) -> Path:
             if contained_labels(child_node) & display_labels:
                 parent_node.remove(child_node)
 
+    # resvg requires a concrete intrinsic viewport. KiCad exports commonly
+    # include a viewBox but may omit usable width/height attributes; CairoSVG
+    # tolerated that ambiguity while resvg correctly rejects an undefined size.
+    view_box = root.attrib.get("viewBox") or root.attrib.get("viewbox") or ""
+    view_box_values = re.findall(
+        r"[-+]?(?:\d*\.\d+|\d+\.?\d*)(?:[eE][-+]?\d+)?", view_box
+    )
+    if len(view_box_values) == 4:
+        try:
+            view_width, view_height = float(view_box_values[2]), float(view_box_values[3])
+        except ValueError:
+            view_width = view_height = 0.0
+        if view_width > 0 and view_height > 0:
+            root.set("width", f"{view_width:g}px")
+            root.set("height", f"{view_height:g}px")
+    if not root.attrib.get("width") or not root.attrib.get("height"):
+        root.set("width", "300px")
+        root.set("height", "150px")
+
     cleaned_svg = output_dir / "facade-preview.svg"
     ET.ElementTree(root).write(
         cleaned_svg, encoding="utf-8", xml_declaration=True
@@ -2407,7 +2426,9 @@ def _native_symbol_preview_photo(
 
             svg_file = _clean_facade_preview_svg(svg_file, record, output_dir)
             png_data = resvg_py.svg_to_bytes(
-                svg_path=str(svg_file), width=int(width)
+                svg_path=str(svg_file),
+                width=int(width),
+                height=int(max_height),
             )
             try:
                 from io import BytesIO
