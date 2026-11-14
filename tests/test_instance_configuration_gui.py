@@ -36,15 +36,11 @@ def _capture_dialog(dialog, destination: Path) -> None:
     x, y = dialog.winfo_rootx(), dialog.winfo_rooty()
     width, height = dialog.winfo_width(), dialog.winfo_height()
     if width < 500 or height < 260:
-        raise AssertionError(
-            f"Configuration dialog is unexpectedly small: {width}x{height}."
-        )
+        raise AssertionError(f"Configuration dialog is unexpectedly small: {width}x{height}.")
     destination.parent.mkdir(parents=True, exist_ok=True)
     image = ImageGrab.grab(bbox=(x, y, x + width, y + height))
     if image.width < 500 or image.height < 260:
-        raise AssertionError(
-            f"Captured configuration image is unexpectedly small: {image.size!r}."
-        )
+        raise AssertionError(f"Captured configuration image is unexpectedly small: {image.size!r}.")
     sample = image.convert("RGB").resize((48, 32))
     if max(ImageStat.Stat(sample).stddev) < 2.0:
         raise AssertionError("Configuration dialog screenshot appears blank.")
@@ -64,8 +60,12 @@ def main(screenshot_path: Path | None = None) -> None:
         variant_33 = root_dir / "implementation_3v3.kicad_sch"
         standard.write_text("(kicad_pcb)\\n", encoding="utf-8")
         compact.write_text("(kicad_pcb)\\n", encoding="utf-8")
-        variant_18.write_text('(kicad_sch (version 20250114) (generator "test"))\\n', encoding="utf-8")
-        variant_33.write_text('(kicad_sch (version 20250114) (generator "test"))\\n', encoding="utf-8")
+        variant_18.write_text(
+            '(kicad_sch (version 20250114) (generator "test"))\\n', encoding="utf-8"
+        )
+        variant_33.write_text(
+            '(kicad_sch (version 20250114) (generator "test"))\\n', encoding="utf-8"
+        )
         block = create_block(
             library,
             "Configuration GUI Block",
@@ -120,9 +120,7 @@ def main(screenshot_path: Path | None = None) -> None:
         commit = object()
         schematic = SimpleNamespace(
             get_selection=lambda: [instance],
-            get_project=lambda: SimpleNamespace(
-                expand_text_variables=lambda value: value
-            ),
+            get_project=lambda: SimpleNamespace(expand_text_variables=lambda value: value),
             begin_commit=Mock(return_value=commit),
             push_commit=Mock(),
             drop_commit=Mock(),
@@ -138,7 +136,9 @@ def main(screenshot_path: Path | None = None) -> None:
         original_showinfo = plugin_actions.messagebox.showinfo
         original_showerror = plugin_actions.messagebox.showerror
         plugin_actions.messagebox.showinfo = lambda *_args, **_kwargs: None
-        plugin_actions.messagebox.showerror = lambda _title, message, **_kwargs: interaction_errors.append(str(message))
+        plugin_actions.messagebox.showerror = lambda _title, message, **_kwargs: (
+            interaction_errors.append(str(message))
+        )
         deadline = time.monotonic() + 8.0
 
         def drive_form() -> None:
@@ -157,17 +157,16 @@ def main(screenshot_path: Path | None = None) -> None:
                 dialog = dialogs[-1]
                 widgets = list(_walk(dialog))
                 combos = [
-                    widget for widget in widgets
-                    if isinstance(widget, plugin_actions.ttk.Combobox)
+                    widget for widget in widgets if isinstance(widget, plugin_actions.ttk.Combobox)
                 ]
                 entries = [
-                    widget for widget in widgets
+                    widget
+                    for widget in widgets
                     if isinstance(widget, plugin_actions.ttk.Entry)
                     and not isinstance(widget, plugin_actions.ttk.Combobox)
                 ]
                 buttons = [
-                    widget for widget in widgets
-                    if isinstance(widget, plugin_actions.ttk.Button)
+                    widget for widget in widgets if isinstance(widget, plugin_actions.ttk.Button)
                 ]
                 save_button = next(
                     (button for button in buttons if button.cget("text") == "Save instance"),
@@ -182,9 +181,13 @@ def main(screenshot_path: Path | None = None) -> None:
                 combos[0].event_generate("<<ComboboxSelected>>")
                 dialog.update()
                 if entries[0].get() != "1.8":
-                    raise AssertionError("Selecting the profile did not apply its typed parameter preset.")
+                    raise AssertionError(
+                        "Selecting the profile did not apply its typed parameter preset."
+                    )
                 if combos[1].get() != "1V8":
-                    raise AssertionError("Selecting the profile did not choose its schematic variant.")
+                    raise AssertionError(
+                        "Selecting the profile did not choose its schematic variant."
+                    )
                 if combos[2].get() != "Compact  [compact]":
                     raise AssertionError("Selecting the profile did not choose its PCB layout.")
                 if screenshot_path is not None:
@@ -205,14 +208,12 @@ def main(screenshot_path: Path | None = None) -> None:
 
         update_calls: list[str] = []
         original_update = plugin_actions._update_schematic_item_checked
-        plugin_actions._update_schematic_item_checked = (
-            lambda _schematic, target: update_calls.append(str(target.reference))
+        plugin_actions._update_schematic_item_checked = lambda _schematic, target: (
+            update_calls.append(str(target.reference))
         )
         parent.after(200, drive_form)
         try:
-            plugin_actions._show_selected_block_configuration(
-                schematic, project, library, parent
-            )
+            plugin_actions._show_selected_block_configuration(schematic, project, library, parent)
         finally:
             plugin_actions._update_schematic_item_checked = original_update
             plugin_actions.messagebox.showinfo = original_showinfo
@@ -237,9 +238,7 @@ def main(screenshot_path: Path | None = None) -> None:
         }:
             raise AssertionError(f"Configuration form did not save the edited fields: {values!r}")
         schematic.begin_commit.assert_called_once_with()
-        schematic.push_commit.assert_called_once_with(
-            commit, "Configure KiCad block instance"
-        )
+        schematic.push_commit.assert_called_once_with(commit, "Configure KiCad block instance")
         schematic.save.assert_called_once_with()
         print(
             "Editable block instance configuration GUI passed: "

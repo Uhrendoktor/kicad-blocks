@@ -88,9 +88,7 @@ def main() -> None:
 
         parent.after(250, drive_picker)
         try:
-            selected = plugin_actions._pick_record(
-                [first, target], parent, picker_title
-            )
+            selected = plugin_actions._pick_record([first, target], parent, picker_title)
         finally:
             parent.destroy()
         if interaction_errors:
