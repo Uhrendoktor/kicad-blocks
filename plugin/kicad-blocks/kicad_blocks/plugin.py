@@ -3949,129 +3949,6 @@ def _show_block_layout_editor(
     dialog.wait_window()
     return created_layout_to_open[0]
 
-_DESKTOP_CHOOSER_UNAVAILABLE = object()
-
-
-def _desktop_file_dialog(
-    *,
-    parent=None,
-    mode: str,
-    title: str,
-    initial_path: str | Path = "",
-    suffix: str = "",
-    filetypes: list[tuple[str, str]] | None = None,
-):
-    """Prefer the desktop's GTK/Qt chooser on Linux; return a sentinel if unavailable."""
-    if not sys.platform.startswith("linux"):
-        return _DESKTOP_CHOOSER_UNAVAILABLE
-
-    desktop = os.environ.get("XDG_CURRENT_DESKTOP", "").casefold()
-    candidates = (
-        ("kdialog", "kdialog"),
-        ("zenity", "zenity"),
-    ) if "kde" in desktop or "plasma" in desktop else (
-        ("zenity", "zenity"),
-        ("kdialog", "kdialog"),
-    )
-    backend = None
-    for name, executable_name in candidates:
-        executable = shutil.which(executable_name)
-        if executable:
-            backend = (name, executable)
-            break
-    if backend is None:
-        return _DESKTOP_CHOOSER_UNAVAILABLE
-
-    name, executable = backend
-    initial = Path(initial_path).expanduser() if initial_path else Path.cwd()
-    if initial.is_dir():
-        initial_file = None
-        initial_directory = initial
-    else:
-        initial_file = initial
-        initial_directory = initial.parent
-    if not initial_directory.is_dir():
-        initial_directory = Path.cwd()
-        if initial_file is not None:
-            initial_file = initial_directory / initial_file.name
-
-    if name == "zenity":
-        command = [executable, "--file-selection", "--title", title]
-        if mode == "directory":
-            command.extend(["--directory", "--filename", str(initial_directory) + os.sep])
-        else:
-            command.extend(["--filename", str(initial_file or initial_directory)])
-            if mode == "save":
-                command.extend(["--save", "--confirm-overwrite"])
-            filters = filetypes or (
-                [(f"KiCad files (*{suffix})", f"*{suffix}")] if suffix else []
-            )
-            command.extend(
-                f"--file-filter={label} | {pattern}"
-                for label, pattern in filters
-            )
-        env = os.environ.copy()
-        if os.environ.get("WAYLAND_DISPLAY"):
-            # GTK will use the XDG file-chooser portal when the desktop provides it.
-            env["GTK_USE_PORTAL"] = "1"
-    else:
-        env = None
-        if mode == "directory":
-            command = [
-                executable, "--getexistingdirectory", str(initial_directory),
-                "--title", title,
-            ]
-        else:
-            pattern = next(
-                (item[1] for item in (filetypes or []) if item[1]),
-                f"*{suffix}" if suffix else "*",
-            )
-            command = [
-                executable,
-                "--getsavefilename" if mode == "save" else "--getopenfilename",
-                str(initial_file or initial_directory),
-                pattern,
-                "--title", title,
-            ]
-        # KDialog supports embedding in an X11 parent. Its --embed option
-        # cannot express the Wayland xdg-foreign surface handle, so do not
-        # pass an XID while running under a Wayland compositor.
-        if (
-            parent is not None
-            and not os.environ.get("WAYLAND_DISPLAY")
-            and os.environ.get("XDG_SESSION_TYPE", "").casefold() != "wayland"
-        ):
-            try:
-                parent_id = str(parent.winfo_id())
-            except (AttributeError, tk.TclError):
-                parent_id = ""
-            if parent_id:
-                command.extend(["--embed", parent_id])
-
-    try:
-        result = subprocess.run(
-            command,
-            capture_output=True,
-            text=True,
-            check=False,
-            timeout=300,
-            env=env,
-        )
-    except (OSError, subprocess.TimeoutExpired) as exc:
-        LOG.warning("Desktop file chooser %s could not start: %s", name, exc)
-        return _DESKTOP_CHOOSER_UNAVAILABLE
-    if result.returncode == 1:
-        return None
-    if result.returncode != 0:
-        detail = (result.stderr or result.stdout or "").strip()
-        raise RuntimeError(
-            f"The {name} file chooser failed"
-            + (f": {detail}" if detail else f" (exit status {result.returncode})")
-        )
-    selected = (result.stdout or "").strip()
-    return selected or None
-
-
 def _pick_save_file(
     parent,
     *,
@@ -4080,27 +3957,16 @@ def _pick_save_file(
     defaultextension: str,
     filetypes: list[tuple[str, str]],
 ) -> str | None:
-    """Save-file dialog using the same desktop chooser preference as open dialogs."""
-    selected = _desktop_file_dialog(
-        parent=parent,
-        mode="save",
-        title=title,
-        initial_path=initial_path,
-        suffix=defaultextension,
-        filetypes=filetypes,
-    )
-    if selected is not _DESKTOP_CHOOSER_UNAVAILABLE:
-        if selected:
-            output = Path(selected).expanduser()
-            if not output.suffix and defaultextension:
-                output = output.with_suffix(defaultextension)
-            return str(output)
-        return None
+    """Open Tk's native save-file dialog with the block's suggested filename."""
     initial = Path(initial_path).expanduser()
+    directory = initial.parent if initial.suffix else initial
+    if not directory.is_dir():
+        directory = Path.cwd()
+    initialfile = initial.name if initial.suffix else ""
     return filedialog.asksaveasfilename(
         title=title,
-        initialdir=str(initial.parent),
-        initialfile=initial.name,
+        initialdir=str(directory),
+        initialfile=initialfile,
         defaultextension=defaultextension,
         filetypes=filetypes,
         parent=parent,
@@ -4114,7 +3980,7 @@ def _pick_kicad_file(
     suffix: str,
     initial_path: str | Path = "",
 ) -> str | None:
-    """Use the operating system file chooser for a KiCad document."""
+    """Open Tk's native file chooser for a KiCad document."""
     initial = Path(initial_path).expanduser() if initial_path else Path.cwd()
     directory = initial.parent if initial.is_file() else initial
     if not directory.is_dir():
@@ -4123,13 +3989,6 @@ def _pick_kicad_file(
         (f"KiCad {suffix.upper().lstrip('.')} files", f"*{suffix}"),
         ("All files", "*.*"),
     ]
-    selected = _desktop_file_dialog(
-        parent=parent,
-        mode="open", title=title, initial_path=initial,
-        suffix=suffix, filetypes=filetypes,
-    )
-    if selected is not _DESKTOP_CHOOSER_UNAVAILABLE:
-        return selected
     return filedialog.askopenfilename(
         title=title,
         initialdir=str(directory),
@@ -4142,18 +4001,12 @@ def _pick_kicad_file(
 def _pick_directory(
     parent, *, title: str, initial_path: str | Path | None = None
 ) -> str | None:
-    """Use the operating system directory chooser with a shared parent policy."""
+    """Open Tk's native directory chooser with a shared initial-directory policy."""
     initial = Path(initial_path).expanduser() if initial_path else Path.cwd()
     if initial.is_file():
         initial = initial.parent
     if not initial.is_dir():
         initial = Path.cwd()
-    selected = _desktop_file_dialog(
-        parent=parent,
-        mode="directory", title=title, initial_path=initial,
-    )
-    if selected is not _DESKTOP_CHOOSER_UNAVAILABLE:
-        return selected
     return filedialog.askdirectory(
         title=title,
         initialdir=str(initial),
