@@ -639,7 +639,7 @@ class STUSB4500ReferenceTests(unittest.TestCase):
         for reference, body_center_x in (("T4", 1.651), ("T1", -1.651)):
             origin = _direct(instances[reference], "at")
             expected = {
-                "Reference": (body_center_x - 4.00, -6.35),
+                "Reference": (body_center_x - 3.50, -6.35),
                 "Value": (body_center_x + 2.00, -6.35),
             }
             for field_name, (dx, dy) in expected.items():
@@ -662,6 +662,7 @@ class STUSB4500ReferenceTests(unittest.TestCase):
             node for node in _all(tree, "hierarchical_label")
             if str(node[1]) == "GND"
             and abs(float(_direct(node, "at")[1]) - (float(origin[1]) - 5.08)) < 0.001
+            and abs(float(_direct(node, "at")[2]) - (float(origin[2]) - 3.81)) < 0.001
         )
         at = _direct(label, "at")
         self.assertAlmostEqual(float(at[1]), float(origin[1]) - 5.08, places=3)
