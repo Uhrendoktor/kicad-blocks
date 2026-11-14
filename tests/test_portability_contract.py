@@ -1,7 +1,7 @@
 """Static guards that keep production feature paths free of OS-specific desktop APIs."""
 
-from pathlib import Path
 import unittest
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 PLUGIN_PACKAGE = ROOT / "plugin" / "kicad-blocks" / "kicad_blocks"
