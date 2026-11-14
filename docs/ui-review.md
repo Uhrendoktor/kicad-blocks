@@ -39,7 +39,7 @@ The statuses below describe the current implementation checkpoint, not final acc
 
 | User requirement | Implementation / tests | Current status |
 |---|---|---|
-| Place Block must not fail only because xdotool is absent | `plugin.py::_native_run_action_status`, `_start_native_symbol_placement`; `tests/test_library_browser.py` covers accepted/rejected IPC, no-xdotool and wtype; existing `tests/test_plugin_registration.py` exercises X11 handoff with real Eeschema | Improved; actual Wayland cursor handoff remains unverified |
+| Place Block must not fail only because xdotool is absent | `plugin.py::_native_run_action_status`, `_start_native_symbol_placement`; `tests/test_library_browser.py` covers accepted/rejected IPC, no-xdotool native chooser, and refusal to inject keys without a verified Wayland target; existing `tests/test_plugin_registration.py` exercises X11 handoff with real Eeschema | Improved; native chooser path and X11 handoff tested, actual Wayland cursor handoff remains unverified |
 | Edit Facade must act on the highlighted block and correct instance | `plugin.py::_edit_facade_symbol`, `selected_facade_instance`; `tests/test_editor_workflow.py` covers native action and stale/mismatched selection | Improved; live Symbol Editor action against current KiCad still required |
 | All actions use appropriate icons and accessible labels | Shared `_action_button`, `_create_action_icon`, `_add_tooltip`; primary/secondary dialog buttons use the shared helper | Implemented in current Tk dialog source; rendered icon/theme inspection and widget-level coverage still required |
 | Plugin windows belong to KiCad on Ubuntu Wayland | `_set_window_geometry`, `_attach_tk_window_to_editor`; existing X11 transient-owner tests | X11 behavior covered; Ubuntu 26 Wayland taskbar ownership/focus/stacking not yet proven |
@@ -51,7 +51,7 @@ The statuses below describe the current implementation checkpoint, not final acc
 
 The supported KiCad CI GUI tests use a virtual display. They can prove production widget behavior and X11/Xvfb interactions, but they cannot establish Wayland compositor behavior.
 
-The current Linux file chooser preference is GTK/Zenity on GNOME-like desktops and KDialog on KDE/Plasma. GTK's file chooser can delegate to the XDG file chooser portal when the portal backend is installed and enabled. That is a capability preference, not proof that this machine's portal is active or that the returned dialog is grouped under KiCad. The actual Ubuntu Wayland session, compositor, portal backend, theme, parent handling, and returned path must be recorded in a desktop test.
+The current Linux file chooser preference is GTK/Zenity on GNOME-like desktops and KDialog on KDE/Plasma. GTK's file chooser can delegate to the XDG file chooser portal when the portal backend is installed and enabled. That is a capability preference, not proof that this machine's portal is active or that the returned dialog is grouped under KiCad. On Wayland, a portal parent requires a surface handle exported via xdg-foreign; a Tk X11 window ID is not a valid Wayland parent identifier. The current helper therefore does not claim native portal ownership. The actual Ubuntu Wayland session, compositor, portal backend, theme, parent handling, and returned path must be recorded in a desktop test.
 
 ## Completion gate
 
