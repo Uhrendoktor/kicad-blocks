@@ -8,9 +8,9 @@ programs rather than pytest modules are listed separately and must remain explic
 registered in STANDALONE_TESTS in scripts/test_inventory.py.
 
 - Pytest modules: **23**
-- Individually inventoried pytest cases: **208**
+- Individually inventoried pytest cases: **224**
 - Standalone acceptance runners: **7**
-- Additional CI validation runners: **2**
+- Additional CI validation runners: **3**
 
 ## Pytest cases
 
@@ -133,6 +133,17 @@ Schematic editor action routing, selected-sheet behavior, facade editing, transa
 | test_create_block_uses_selected_sheet_symbol_relative_to_active_sheet | Creates block uses selected sheet symbol relative to active sheet. |
 | test_run_action_captures_kicad_window_before_creating_tk | Exercises run action captures kicad window before creating tk. |
 
+| test_create_block_rolls_back_new_block_when_project_registration_fails | Creates block rolls back new block when project registration fails. |
+| test_create_block_prefers_typed_sheet_symbol_over_serialized_selection | Creates block prefers typed sheet symbol over serialized selection. |
+| test_create_block_rejects_multiple_selected_items_without_falling_back | Creates block rejects multiple selected items without falling back. |
+| test_create_block_rejects_non_sheet_selection_instead_of_using_open_sheet | Creates block rejects non sheet selection instead of using open sheet. |
+| test_create_block_normalizes_no_items_selected_ipc_error | Creates block normalizes no items selected ipc error. |
+| test_create_block_rejects_empty_sheetfile_before_creating_anything | Creates block rejects empty sheetfile before creating anything. |
+| test_create_block_rejects_selected_sheet_without_uuid | Creates block rejects selected sheet without uuid. |
+| test_create_block_does_not_fallback_when_typed_selection_ipc_fails | Creates block does not fallback when typed selection ipc fails. |
+| test_create_block_fails_before_dialog_when_selected_sheetfile_is_missing | Creates block fails before dialog when selected sheetfile is missing. |
+| test_run_action_dispatches_create_block_to_sheet_creation_workflow | Exercises run action dispatches create block to sheet creation workflow. |
+
 ### tests/test_extraction.py
 
 Hierarchical-sheet selection and extraction, interface pin/electrical-shape syncing, facade-artwork preservation, concurrent-edit rejection, and nested sheet copying.
@@ -200,7 +211,15 @@ Library search and selection, native previews, variants/profiles/layouts, cross-
 | test_editor_capture_does_not_treat_plugin_browser_as_eeschema | Exercises editor capture does not treat plugin browser as eeschema. |
 | test_native_placement_handoff_uses_add_symbol_hotkey_and_exact_library_name | Exercises native placement handoff uses add symbol hotkey and exact library name. |
 | test_native_placement_refuses_to_type_when_choose_symbol_dialog_is_absent | Exercises native placement refuses to type when choose symbol dialog is absent. |
-| test_native_placement_requires_xdotool_and_editor_window | Exercises native placement requires xdotool and editor window. |
+
+
+| test_each_pcb_layout_keeps_multiple_implementation_associations | Exercises each pcb layout keeps multiple implementation associations. |
+| test_removing_all_pcb_layouts_clears_obsolete_variant_layout_ids | Exercises removing all pcb layouts clears obsolete variant layout ids. |
+| test_native_file_and_directory_choosers_use_system_filedialog | Exercises native file and directory choosers use system filedialog. |
+| test_default_implementation_is_persisted_and_used_for_empty_selector | Exercises default implementation is persisted and used for empty selector. |
+| test_tk_transient_uses_client_window_and_editor_owner | Exercises tk transient uses client window and editor owner. |
+| test_native_placement_uses_kicad_ipc_without_xdotool_or_captured_xid | Exercises native placement uses kicad ipc without xdotool or captured xid. |
+| test_native_placement_requires_editor_when_ipc_is_unavailable | Exercises native placement requires editor when ipc is unavailable. |
 
 ### tests/test_library_validation.py
 
@@ -313,7 +332,7 @@ Regression tests for the AST-based Any/object policy, annotation-debt ratchet, a
 | test_annotation_debt_counts_parameters_and_returns_separately | Exercises annotation debt counts parameters and returns separately. |
 | test_quoted_sexpr_values_round_trip | Exercises quoted sexpr values round trip. |
 | test_parameter_values_remain_one_quoted_sexpr_field | Exercises parameter values remain one quoted sexpr field. |
-| `test_changed_file_ratchet_rejects_increased_annotation_debt` | Exercises changed file ratchet rejects increased annotation debt. |
+| test_changed_file_ratchet_rejects_increased_annotation_debt | Exercises changed file ratchet rejects increased annotation debt. |
 
 
 ### tests/test_release_package.py
@@ -354,7 +373,7 @@ Exact implementation-variant selection, invalid and duplicate variant handling, 
 | Test | Purpose |
 | --- | --- |
 | test_variant_value_maps_to_copied_schematic | Exercises variant value maps to copied schematic. |
-| test_unknown_or_empty_variant_never_falls_back | Exercises unknown or empty variant never falls back. |
+| test_empty_selector_uses_configured_default_and_explicit_selector_wins | Exercises empty selector uses configured default and explicit selector wins. |
 | test_non_variant_block_keeps_single_implementation | Exercises non variant block keeps single implementation. |
 | test_duplicate_values_are_rejected | Exercises duplicate values are rejected. |
 | test_project_and_sheet_text_variables_are_expanded | Exercises project and sheet text variables are expanded. |
@@ -409,4 +428,5 @@ not collect them as modules.
 | Runner | Purpose |
 | --- | --- |
 | tests/capture_visual_docs.py | Captures real KiCad/Tk production UI states and native-rendered schematic evidence, then writes the visual bundle and SHA-256 provenance manifest consumed by CI. |
+| tests/create_block_ipc_integration.py | Drives the registered Create Block action against live KiCad schematic IPC; verifies typed SheetSymbol and active-sheet behavior, extracted pins, project-library registration, rollback on registration failure, and preservation of source project sheets. |
 | tests/validate_kicad_cli.py | Generates the STUSB4500 reference block, exports its KiCad netlist/BOM/ERC artifacts, and validates the generated files with KiCad CLI. |

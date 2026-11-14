@@ -6,6 +6,8 @@
 
 The audit covered the complete tracked repository tree at the starting revision, including the plugin package, action entry points, release/install scripts, examples, documentation, both CI jobs, and every file under tests/. Test functions were enumerated individually for the generated test inventory. Searches also covered explicit Any imports, generic object annotations, and the production type boundaries.
 
+The audit was subsequently rebased onto current main commit `17f2fd4422c38d6bcdd2ccdac3ec81508bbde42c`, retaining the newer Create Block from Sheet and automatic child-dependency work. The refreshed inventory covers **224 pytest cases across 23 modules**, seven standalone KiCad acceptance runners, and three additional CI validation runners. The new Create Block IPC integration runner is catalogued separately because it is not named `test_*.py`.
+
 ## Confirmed findings and changes
 
 1. **Test collection hid acceptance runners.** Seven files named test_*.py are executable main()-based acceptance programs and intentionally contain no pytest test functions. CI invokes them explicitly for live Eeschema, schematic IPC, PCB IPC/layout, the plugin-managed environment, or Tk/X11 behavior. They are now explicitly registered in scripts/test_inventory.py, listed separately in TEST_INVENTORY.md, and exempted by the pytest collection guard only when they retain their main() entry point. All other test_*.py modules must collect at least one test.

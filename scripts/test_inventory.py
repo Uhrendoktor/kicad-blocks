@@ -149,6 +149,11 @@ AUXILIARY_RUNNERS: dict[str, str] = {
         "Captures real KiCad/Tk production UI states and native-rendered schematic evidence, "
         "then writes the visual bundle and SHA-256 provenance manifest consumed by CI."
     ),
+    "tests/create_block_ipc_integration.py": (
+        "Drives the registered Create Block action against live KiCad schematic IPC; verifies "
+        "typed SheetSymbol and active-sheet behavior, extracted pins, project-library registration, "
+        "rollback on registration failure, and preservation of source project sheets."
+    ),
     "tests/validate_kicad_cli.py": (
         "Generates the STUSB4500 reference block, exports its KiCad netlist/BOM/ERC artifacts, "
         "and validates the generated files with KiCad CLI."
