@@ -387,8 +387,9 @@ class STUSB4500ReferenceTests(unittest.TestCase):
             content, _, _ = self._generate(temporary)
 
         for name in (
-            "VBUS", "CC1", "CC2", "VBUS_VS_DISCH",
-            "VBUS_EN_SNK", "DISCH", "VREG_2V7", "ADDR0", "ADDR1",
+            "VBUS", "CC1", "CC2", "VBUS_FILTERED", "VBUS_VS_DISCH",
+            "VBUS_EN_SNK", "FET_MID", "VSNK_GATE", "DISCH",
+            "VREG_1V2", "VREG_2V7", "ADDR0", "ADDR1",
         ):
             self.assertIn(f'(label "{name}"', content)
         self.assertNotIn('(global_label "', content)
@@ -402,8 +403,8 @@ class STUSB4500ReferenceTests(unittest.TestCase):
             if len(node) > 1 and str(node[1]) == "VBUS_FILTERED"
         ]
         self.assertEqual(
-            filtered_labels, [],
-            "D4.1, C4.1 and R1.1 are connected by one explicit physical wire rail",
+            len(filtered_labels), 2,
+            "C4.1 and R1.1 are separate wire islands joined by one local-label pair",
         )
         self.assertEqual(float(_direct(instances["D4"], "at")[3]), 180.0)
         sense_labels = [
