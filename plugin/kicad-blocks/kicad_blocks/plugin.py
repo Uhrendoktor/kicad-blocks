@@ -2182,12 +2182,13 @@ def _start_native_symbol_placement(
         raise ValueError("The selected block has an invalid KiCad symbol name.")
     raise RuntimeError(
         "Place Block is not available through the supported KiCad IPC API yet. "
-        f"KiCad can place {LIBRARY_NICKNAME}:{symbol_name} only at explicit "
-        "coordinates; it does not expose a supported IPC operation to start the "
-        "interactive placement cursor for that exact symbol. The unstable "
-        "RunAction request has no handler in the tested Eeschema build. "
+        f"KiCad can create {LIBRARY_NICKNAME}:{symbol_name} at an explicit coordinate "
+        "and Eeschema can add that new item to the selection. However, unlike PCB, "
+        "Eeschema has no supported interactive_move(items) IPC operation to start "
+        "the native move cursor and attach the selected symbol to the pointer. "
+        "The unstable RunAction request has no handler in the tested Eeschema build. "
         "No manual-only or OS-specific input fallback is provided. "
-        "This requires an upstream KiCad API."
+        "This requires the schematic equivalent of Board.interactive_move()."
     )
 
 
