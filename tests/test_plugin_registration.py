@@ -538,7 +538,7 @@ def main() -> None:
                         f"visible_windows={editor_windows!r}"
                     )
                 print(
-                    "Edit Facade opened the generated shared library symbol "
+                    "Edit Facade opened the generated project library symbol "
                     f"{refreshed_record.manifest['library_nickname']}:{placement_symbol_name} with no placed schematic instance."
                 )
             finally:
