@@ -14,11 +14,11 @@ import os
 import re
 import tempfile
 import uuid
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
-from .manifest_types import BlockManifest
 from .pcb_types import (
     AppliedNetclassPattern,
     BatchBlockLayoutMergeResult,

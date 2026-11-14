@@ -9,7 +9,6 @@ import uuid
 from pathlib import Path
 
 from .manifest_types import BlockDependencyManifest
-from .report_types import BlockCompositionItem, BlockCompositionReport, BlockCompositionStepResult
 from .model import (
     BlockPin,
     facade_pin_connection_points,
@@ -19,6 +18,7 @@ from .model import (
     sha256_file,
     transform_symbol_point_to_schematic,
 )
+from .report_types import BlockCompositionItem, BlockCompositionReport, BlockCompositionStepResult
 from .repository import (
     BlockRecord,
     _dependency_path,

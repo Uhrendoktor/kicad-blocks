@@ -10,18 +10,18 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-from .report_types import (
-    BlockErcReport,
-    BlockValidationItem,
-    BomExportReport,
-    LibraryValidationReport,
-)
 from .model import (
     resolve_profile_configuration,
     revision_for_hashes,
     sha256_file,
     slugify,
     substitute_parameter_templates,
+)
+from .report_types import (
+    BlockErcReport,
+    BlockValidationItem,
+    BomExportReport,
+    LibraryValidationReport,
 )
 from .repository import (
     BlockOccurrence,
