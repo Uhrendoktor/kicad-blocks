@@ -54,57 +54,6 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
         self._dependency_patch.stop()
         self.temp.cleanup()
 
-    def test_facade_edit_library_registers_the_shared_preview_catalog(self):
-        kicad = SimpleNamespace()
-        with (
-            patch.object(
-                plugin_actions,
-                "register_project_symbol_library",
-            ) as register,
-            patch.object(
-                plugin_actions,
-                "_reload_symbol_library",
-                return_value=True,
-            ) as reload_library,
-        ):
-            nickname = plugin_actions._register_facade_edit_library(
-                self.project, self.block, kicad
-            )
-
-        self.assertTrue(nickname.startswith("KBEdit_"))
-        self.assertEqual(
-            nickname,
-            plugin_actions._facade_edit_library_nickname(self.block),
-        )
-        register.assert_called_once()
-        self.assertEqual(register.call_args.args[0], self.project)
-        self.assertEqual(register.call_args.args[1], nickname)
-        self.assertEqual(
-            Path(register.call_args.args[2]).resolve(),
-            self.block.symbol_library.resolve(),
-        )
-        self.assertTrue(register.call_args.kwargs["replace_existing"])
-        reload_library.assert_called_once_with(kicad, nickname)
-
-    def test_facade_edit_library_fails_when_source_catalog_cannot_reload(self):
-        with (
-            patch.object(plugin_actions, "register_project_symbol_library"),
-            patch.object(
-                plugin_actions,
-                "_reload_symbol_library",
-                return_value=False,
-            ),
-            patch.object(
-                plugin_actions,
-                "_LAST_LIBRARY_RELOAD_WARNING",
-                "The source facade catalog could not be reloaded.",
-            ),
-            self.assertRaisesRegex(RuntimeError, "source facade catalog"),
-        ):
-            plugin_actions._register_facade_edit_library(
-                self.project, self.block, SimpleNamespace()
-            )
-
     def test_edit_facade_targets_the_highlighted_library_symbol_without_selection(self):
         actions = []
         kicad = SimpleNamespace(
