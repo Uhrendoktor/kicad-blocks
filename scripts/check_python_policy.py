@@ -19,9 +19,36 @@ PYTHON_ROOTS = ("examples", "plugin", "scripts", "tests")
 ALLOWED_OBJECT_ANNOTATIONS = {
     ("plugin/kicad-blocks/kicad_blocks/model.py", "validate_parameter_value.value"),
 }
-DYNAMIC_HOST_EXCLUSIONS = {
-    "plugin/kicad-blocks/kicad_blocks/plugin.py",
+# Every Pyright exclusion is exact and carries its migration/host-boundary reason.
+# These files remain under repository-wide AST checks, Ruff/Vulture, and the
+# changed-file annotation ratchet; they are not invisible to quality gates.
+REVIEWED_PYRIGHT_EXCLUSIONS = {
+    "plugin/kicad-blocks/kicad_blocks/plugin.py": (
+        "KiCad/Qt GUI adapter depends on dynamically registered host objects and native "
+        "bindings that are not represented by usable stubs."
+    ),
+    "plugin/kicad-blocks/kicad_blocks/composition.py": (
+        "Nested composition still needs validated TypedDict contracts for dependency "
+        "position/pin-map JSON and a typed boundary for dynamically supplied KiCad IPC objects."
+    ),
+    "plugin/kicad-blocks/kicad_blocks/extraction.py": (
+        "The recursive S-expression parser and sheet-path mutation helpers need a typed "
+        "node abstraction before standard-mode checking can be enabled."
+    ),
+    "plugin/kicad-blocks/kicad_blocks/operations.py": (
+        "Recursive BOM/validation report assembly needs explicit report TypedDicts and "
+        "validated manifest collection schemas before standard-mode checking can be enabled."
+    ),
+    "plugin/kicad-blocks/kicad_blocks/pcb_layout.py": (
+        "The recursive S-expression tree and imported KiCad project JSON need validated "
+        "node/project-setting schemas before standard-mode checking can be enabled."
+    ),
+    "plugin/kicad-blocks/kicad_blocks/pcb_placement.py": (
+        "The sidecar JSON and KiCad IPC KIID adapter need fully typed validated records "
+        "and a native KIID stub before standard-mode checking can be enabled."
+    ),
 }
+ANNOTATION_RATCHET_ROOTS = ("examples", "plugin", "scripts")
 SUPPRESSION_PATTERN = re.compile(
     r"#\s*(?:noqa\b|type:\s*ignore\b|pyright:\s*ignore\b|mypy:\s*ignore\b)",
     re.IGNORECASE,
@@ -152,7 +179,7 @@ def _check_file(path: Path) -> list[str]:
 
 
 def _check_pyright_inventory() -> list[str]:
-    """Ensure every core module is typed or explicitly excluded as host glue."""
+    """Require each core module to be typed or have an exact reviewed migration boundary."""
     config_path = ROOT / "pyrightconfig.json"
     try:
         config = json.loads(config_path.read_text(encoding="utf-8"))
@@ -161,20 +188,45 @@ def _check_pyright_inventory() -> list[str]:
 
     included = [ROOT / entry for entry in config.get("include", [])]
     excluded = set(config.get("exclude", []))
-    errors = []
+    errors: list[str] = []
     core = ROOT / "plugin/kicad-blocks/kicad_blocks"
-    for path in sorted(core.glob("*.py")):
-        relative = path.relative_to(ROOT).as_posix()
-        if relative in DYNAMIC_HOST_EXCLUSIONS:
+    discovered = {
+        path.relative_to(ROOT).as_posix(): path for path in sorted(core.glob("*.py"))
+    }
+    for relative, path in discovered.items():
+        if relative in REVIEWED_PYRIGHT_EXCLUSIONS:
             if relative not in excluded:
                 errors.append(
-                    f"pyrightconfig.json: dynamic host adapter {relative} must remain explicitly excluded"
+                    f"pyrightconfig.json: staged module {relative} must remain explicitly excluded"
                 )
+            continue
+        if relative in excluded:
+            errors.append(
+                f"pyrightconfig.json: excluded module {relative} has no reviewed migration rationale"
+            )
             continue
         if not any(path == entry or entry in path.parents for entry in included):
             errors.append(
                 f"pyrightconfig.json: production module {relative} is absent from the reviewed include inventory"
             )
+
+    for relative, rationale in REVIEWED_PYRIGHT_EXCLUSIONS.items():
+        if relative not in discovered:
+            errors.append(
+                f"python policy: stale Pyright exclusion for missing module {relative}"
+            )
+        if relative not in excluded:
+            errors.append(
+                f"pyrightconfig.json: reviewed exclusion {relative} is not in the exclude list"
+            )
+        if not rationale.strip():
+            errors.append(f"python policy: Pyright exclusion {relative} has no rationale")
+    for relative in excluded:
+        if relative.startswith("plugin/kicad-blocks/kicad_blocks/") and relative.endswith(".py"):
+            if relative not in REVIEWED_PYRIGHT_EXCLUSIONS:
+                errors.append(
+                    f"python policy: unreviewed exact Pyright exclusion {relative}"
+                )
     return errors
 
 
@@ -199,11 +251,10 @@ def _annotation_metrics(source: str, path: str) -> tuple[int, int]:
 
     annotations: list[ast.expr] = []
     for node in ast.walk(tree):
-        if (
-            isinstance(node, ast.arg)
-            and node.annotation is not None
-            or isinstance(node, ast.AnnAssign)
-        ):
+        if isinstance(node, ast.arg):
+            if node.annotation is not None:
+                annotations.append(node.annotation)
+        elif isinstance(node, ast.AnnAssign):
             annotations.append(node.annotation)
         elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.returns:
             annotations.append(node.returns)
@@ -230,10 +281,7 @@ def _git(*arguments: str) -> str:
 
 
 def _check_annotation_ratchet(base_ref: str) -> list[str]:
-    """Block new annotation debt per changed file in the Pyright-reviewed inventory."""
-    config = json.loads((ROOT / "pyrightconfig.json").read_text(encoding="utf-8"))
-    includes = [ROOT / item for item in config.get("include", [])]
-    excludes = set(config.get("exclude", []))
+    """Block new annotation debt in every changed production Python file."""
     try:
         merge_base = _git("merge-base", base_ref, "HEAD").strip()
         changed = _git(
@@ -251,12 +299,10 @@ def _check_annotation_ratchet(base_ref: str) -> list[str]:
     errors: list[str] = []
     for relative in (line for line in changed.splitlines() if line):
         path = ROOT / relative
-        if any(
-            relative == pattern or (pattern.endswith("/**") and relative.startswith(pattern[:-3]))
-            for pattern in excludes
+        if not any(
+            relative == root or relative.startswith(f"{root}/")
+            for root in ANNOTATION_RATCHET_ROOTS
         ):
-            continue
-        if not any(path == item or item in path.parents for item in includes):
             continue
         if not path.is_file():
             continue
