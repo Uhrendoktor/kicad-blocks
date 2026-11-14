@@ -23,33 +23,60 @@ from kicad_blocks.model import (
     parse_pins,
     resolve_variant_implementation,
 )
-from kicad_blocks.plugin import (
-    _attach_tk_window_to_editor,
-    _bind_mousewheel,
-    _block_overview_text,
-    _capture_eeschema_window_id,
-    _choose_block_layout,
-    _clean_facade_preview_svg,
-    _filter_library_records,
-    _layout_choices,
-    _library_record_for_instance,
-    _library_record_for_tree_row,
-    _minimize_placement_windows,
-    _native_run_action_status,
-    _native_symbol_preview_photo,
-    _new_blank_pcb_source,
-    _pick_directory,
-    _pick_kicad_file,
-    _pick_record,
-    _pick_save_file,
-    _preferred_library_selection,
-    _restore_placement_windows,
-    _save_block_layouts,
-    _save_block_variants,
-    _set_window_geometry,
-    _start_native_symbol_placement,
-    _system_prefers_dark_theme,
+
+from kicad_blocks.repository import BlockRecord, create_block, read_manifest
+
+plugin_actions = import_module("kicad_blocks.plugin")
+_HookResult = TypeVar("_HookResult")
+
+
+def _private_hook(name: str) -> Callable[..., _HookResult]:
+    """Resolve a private UI test hook without importing its private symbol."""
+    return cast(Callable[..., _HookResult], getattr(plugin_actions, name))
+
+
+class _MinimizableWindow(Protocol):
+    """Window operations used by the placement handoff tests."""
+
+    def state(self) -> str: ...
+
+    def iconify(self) -> None: ...
+
+    def deiconify(self) -> None: ...
+
+
+class _CommandOutput(Protocol):
+    """Subprocess response fixture consumed by the editor-window helpers."""
+
+    stdout: str
+    returncode: int
+
+
+class _LayoutChoice(TypedDict):
+    """Minimal layout descriptor shape consumed by the library-browser tests."""
+
+    id: str | None
+    name: str
+    file: str
+    project_file: str | None
+
+
+def _command_output(stdout: str = "", returncode: int = 0) -> _CommandOutput:
+    return cast(_CommandOutput, SimpleNamespace(stdout=stdout, returncode=returncode))
+
+
+# Resolve UI internals through the name-based fixture boundary. This keeps the
+# tests coupled to behavior without importing private production symbols.
+_attach_tk_window_to_editor = cast(
+    Callable[..., bool], _private_hook("_attach_tk_window_to_editor")
 )
+_native_run_action_status = cast(
+    Callable[..., int | None], _private_hook("_native_run_action_status")
+)
+_native_symbol_preview_photo = cast(
+    Callable[..., None], _private_hook("_native_symbol_preview_photo")
+)
+_pick_save_file = cast(Callable[..., str | None], _private_hook("_pick_save_file"))
 _bind_mousewheel = cast(Callable[..., None], _private_hook("_bind_mousewheel"))
 _block_overview_text = cast(Callable[..., str], _private_hook("_block_overview_text"))
 _capture_eeschema_window_id = cast(
