@@ -58,7 +58,7 @@ The Functional Block Library browser presents these primary actions:
 
 - **Place block** — starts KiCad's native symbol chooser and placement tool. Select the displayed `KBlocks:<symbol>` entry in KiCad's chooser, then place it on the schematic.
 - **Open implementation** — opens the default or selected implementation schematic.
-- **Edit facade** — validates the generated library symbol shown in the preview, opens KiCad's native Symbol Editor, and displays its exact `KBlocks:<symbol>` identifier for selection in the library tree. No placed schematic instance is required. KiCad edits the project's existing **KBlocks** catalog, which is refreshed from the registered shared libraries before the editor opens. Save the symbol, then use **Publish implementation** to import the project-catalog edit into the block's revisioned facade asset and update the shared catalog. Conflicting project/shared edits are rejected rather than overwritten.
+- **Edit facade** — currently reports an unsupported-operation error. The tested Eeschema IPC API has no supported operation to open Symbol Editor and select a particular library symbol. Do not treat the action as a working editor handoff. Until KiCad exposes that API, open Symbol Editor manually and select the project's `KBlocks:<symbol>` library entry.
 - **Implementations** — opens the default and named implementation list.
 - **Open PCB layout** — opens a stored board file for inspection.
 - **Manage PCB layouts** — edits stored boards, implementation links, and the default layout.
