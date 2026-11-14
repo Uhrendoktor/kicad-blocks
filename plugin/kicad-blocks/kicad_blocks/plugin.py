@@ -11,18 +11,41 @@ import re
 import shutil
 import subprocess
 import tempfile
+from collections.abc import Callable, Iterator, Sequence
+from importlib import import_module
 from pathlib import Path
+from typing import TYPE_CHECKING, Protocol, TypedDict, cast
 
 # The core block model and IPC helpers must remain importable in headless
 # environments. Load Tkinter only when the interactive manager is invoked.
-tk = None
-ttk = None
-filedialog = None
-messagebox = None
-simpledialog = None
+if TYPE_CHECKING:
+    import tkinter as tk
+    import tkinter as tkinter_types
+    import tkinter.ttk as ttk_types
+    from tkinter import filedialog, messagebox, simpledialog, ttk
+
+    from google.protobuf.message import Message
+    from kipy.common_types import Commit
+    from kipy.geometry import Vector2
+    from kipy.proto.common.types import DocumentSpecifier
+    from kipy.proto.common.types.base_types_pb2 import KIID
+else:
+    tk = None
+    ttk = None
+    filedialog = None
+    messagebox = None
+    simpledialog = None
 
 from .auto_dependencies import synchronize_block_dependencies
 from .extraction import selected_sheet_file, selected_sheet_instance_uuid
+from .manifest_types import (
+    BlockLayoutEditInput,
+    BlockParameter,
+    BlockProfileInput,
+    BlockProfileManifest,
+    BlockVariantEditInput,
+    BlockVariantManifest,
+)
 from .model import (
     LAYOUT_FIELD_NAME,
     PARAMETER_FIELD_PREFIX,
@@ -41,9 +64,11 @@ from .operations import (
 )
 from .pcb_layout import BlockLayoutPlacement, merge_block_layout, merge_block_layouts
 from .pcb_placement import placement_manifest_path, write_pcb_placement_manifest
+from .pcb_types import ResolvedBlockLayout
 from .repository import (
     LIBRARY_CATALOG_NAME,
     LIBRARY_NICKNAME,
+    BlockRecord,
     add_library_root,
     atomic_write,
     build_project_symbol_catalog,
@@ -65,10 +90,310 @@ from .repository import library_roots as configured_library_roots
 
 LOG = logging.getLogger("kicad_blocks")
 
-_KEEP_DEFAULT_VARIANT = object()
+
+class _KeepDefaultVariant:
+    """Sentinel distinguishing an omitted default variant from an explicit None."""
 
 
-def _load_tkinter() -> None:
+class _LayoutDialogChoice(TypedDict):
+    """Result returned by the add-layout dialog before the board is copied."""
+
+    name: str
+    source: str
+    linked_implementation: str
+
+
+class _TkMinimizableWindow(Protocol):
+    """Window operations required for the native symbol-placement handoff."""
+
+    master: _TkMinimizableWindow | None
+
+    def state(self) -> str: ...
+
+    def iconify(self) -> None: ...
+
+    def deiconify(self) -> None: ...
+
+
+_KEEP_DEFAULT_VARIANT = _KeepDefaultVariant()
+
+
+class _ProtoBackedSchematicItem(Protocol):
+    """Minimal protobuf surface required for an atomic schematic item update."""
+
+    @property
+    def proto(self) -> Message:
+        """Return the native KiCad protobuf payload for this item."""
+        ...
+
+
+class _SchematicIpcClient(Protocol):
+    """Minimal schematic IPC client surface used by checked item updates."""
+
+    def send(self, command: Message, response_type: type[Message]) -> Message:
+        """Send one protobuf request and deserialize the expected response type."""
+        ...
+
+
+class _SchematicForItemUpdate(Protocol):
+    """Schematic document/client pair consumed by checked item and commit updates."""
+
+    @property
+    def document(self) -> DocumentSpecifier: ...
+
+    @property
+    def client(self) -> _SchematicIpcClient: ...
+
+    def begin_commit(self) -> Commit: ...
+
+    def push_commit(self, commit: Commit, description: str) -> None: ...
+
+    def drop_commit(self, commit: Commit) -> None: ...
+
+    def save(self) -> None: ...
+
+
+class _SchematicProject(Protocol):
+    """Project text-variable expansion used by variant resolution."""
+
+    def expand_text_variables(self, text: str) -> str: ...
+
+
+class _SheetPageSettings(Protocol):
+    """Page properties used to choose a deterministic placement location."""
+
+    page_size: int
+    orientation: int
+    user_page_size: _SymbolPosition | None
+
+
+class _SchematicProjectPath(Protocol):
+    """Project path consumed when locating a saved schematic's project folder."""
+
+    path: str | Path
+
+
+class _SymbolTextValue(Protocol):
+    @property
+    def value(self) -> str: ...
+
+
+class _SymbolTextField(Protocol):
+    @property
+    def text(self) -> _SymbolTextValue: ...
+
+
+class _SymbolIdentifier(Protocol):
+    @property
+    def library(self) -> str: ...
+
+    @property
+    def name(self) -> str: ...
+
+
+class _SymbolPin(Protocol):
+    @property
+    def number(self) -> str: ...
+
+
+class _SymbolDefinition(Protocol):
+    @property
+    def id(self) -> _SymbolIdentifier | None: ...
+
+    @property
+    def pins(self) -> Sequence[_SymbolPin]: ...
+
+
+class _SymbolTransform(Protocol):
+    @property
+    def orientation(self) -> int: ...
+
+
+class _SymbolPosition(Protocol):
+    @property
+    def x(self) -> float: ...
+
+    @property
+    def y(self) -> float: ...
+
+
+class _UserField(Protocol):
+    @property
+    def name(self) -> str: ...
+
+    @property
+    def text(self) -> _SymbolTextValue: ...
+
+
+class _SheetPath(Protocol):
+    @property
+    def path(self) -> Sequence[KIID]: ...
+
+    @property
+    def proto(self) -> Message: ...
+
+
+class _SheetInstance(Protocol):
+    @property
+    def filename(self) -> str: ...
+
+    @property
+    def name(self) -> str: ...
+
+    @property
+    def path(self) -> _SheetPath: ...
+
+    @property
+    def children(self) -> Sequence[_SheetInstance]: ...
+
+
+class _SheetHierarchy(Protocol):
+    @property
+    def root(self) -> _SheetInstance | None: ...
+
+
+class _SheetSymbol(Protocol):
+    @property
+    def id(self) -> KIID: ...
+
+    @property
+    def user_fields(self) -> Sequence[_UserField]: ...
+
+
+class _SchematicSymbol(_ProtoBackedSchematicItem, Protocol):
+    """Placed schematic symbol fields consumed by block configuration actions."""
+
+    @property
+    def id(self) -> KIID: ...
+
+    @property
+    def reference(self) -> str: ...
+
+    @property
+    def definition(self) -> _SymbolDefinition | None: ...
+
+    @property
+    def user_fields(self) -> Sequence[_UserField]: ...
+
+    @property
+    def path(self) -> _SheetPath: ...
+
+    @property
+    def reference_field(self) -> _SymbolTextField | None: ...
+
+    @property
+    def transform(self) -> _SymbolTransform | None: ...
+
+    @property
+    def position(self) -> _SymbolPosition | None: ...
+
+
+class _Schematic(_SchematicForItemUpdate, Protocol):
+    """Editor operations used by block management and placement actions."""
+
+    def get_project(self) -> _SchematicProject: ...
+
+    def get_selection(self) -> Sequence[_SchematicSymbol]: ...
+
+    def get_symbols(self) -> Sequence[_SchematicSymbol]: ...
+
+    def get_sheet_symbols(self) -> Sequence[_SheetSymbol]: ...
+
+    def get_hierarchy(self) -> _SheetHierarchy: ...
+
+    def get_page_settings(self) -> _SheetPageSettings: ...
+
+    def for_sheet(self, sheet_path: _SheetPath) -> _Schematic: ...
+
+    def clear_selection(self) -> None: ...
+
+    def add_to_selection(self, items: Sequence[_SchematicSymbol]) -> None: ...
+
+    def place_symbol_from_library(self, symbol_id: str, position: Vector2) -> _SchematicSymbol: ...
+
+
+class _LibraryLoadStatus(Protocol):
+    nickname: str
+    error_message: str | None
+
+
+class _KiCadApp(Protocol):
+    """Small KiCad application surface used by interactive plugin actions."""
+
+    def get_schematic(self) -> _Schematic | None: ...
+
+    def reload_library(self, *, type: int, scope: int, nicknames: list[str]) -> None: ...
+
+    def wait_for_libraries(
+        self, *, types: list[int], scope: int, timeout_s: float
+    ) -> Sequence[_LibraryLoadStatus]: ...
+
+    def get_kicad_binary_path(self, editor: str) -> str | None: ...
+
+    def run_action(self, action: str) -> None: ...
+
+    def close(self) -> None: ...
+
+
+class _TkLayoutOptions(TypedDict, total=False):
+    """Subset of Tk layout options used to remove legacy scrollbar arrows."""
+
+    sticky: str
+    expand: str
+    children: list[tuple[str, _TkLayoutOptions]]
+
+
+class _TkStyleLayout(Protocol):
+    """Callable layout operation with the recursive ttk layout schema."""
+
+    def layout(
+        self, style: str, layoutspec: list[tuple[str, _TkLayoutOptions]]
+    ) -> list[tuple[str, _TkLayoutOptions]]: ...
+
+
+class _ResvgPy(Protocol):
+    """Narrow SVG-to-PNG renderer interface used by toolbar icon generation."""
+
+    def svg_to_bytes(self, *, svg_string: str, width: int, height: int) -> bytes: ...
+
+
+class _TkPaletteOwner(Protocol):
+    """Tk window carrying the selected KiCad Blocks palette."""
+
+    kicad_blocks_palette: dict[str, str]
+
+
+class _TkActionIconOwner(Protocol):
+    """Tk window retaining PhotoImage references used by action buttons."""
+
+    kicad_blocks_action_icons: dict[str, tkinter_types.PhotoImage]
+
+
+class _TkGeometryWindow(Protocol):
+    """Geometry and transient operations shared by Tk windows and test adapters."""
+
+    def update_idletasks(self) -> None: ...
+
+    def transient(self, master: tkinter_types.Misc) -> None: ...
+
+    def winfo_screenwidth(self) -> int: ...
+
+    def winfo_screenheight(self) -> int: ...
+
+    def geometry(self, value: str) -> str: ...
+
+    def minsize(self, width: int, height: int) -> None: ...
+
+
+class _TkTransientWindow(Protocol):
+    """Portable parent/child window operations used by related dialogs."""
+
+    master: tkinter_types.Misc | None
+
+    def update_idletasks(self) -> None: ...
+
+
+def load_tkinter() -> None:
     """Load the optional desktop UI toolkit when the manager is run."""
     global tk, ttk, filedialog, messagebox, simpledialog
     if tk is not None:
@@ -87,60 +412,98 @@ def _load_tkinter() -> None:
     simpledialog = simpledialog_module
 
 
+_load_tkinter = load_tkinter
+
+
 def _system_prefers_dark_theme() -> bool | None:
-    """Return an explicit theme override, or None to keep Tk’s native theme."""
+    """Return an explicit KiCad Blocks theme override, or keep the host theme."""
     override = os.environ.get("KICAD_BLOCKS_THEME", "system").strip().casefold()
     if override in {"dark", "true", "1", "yes", "on"}:
         return True
     if override in {"light", "false", "0", "no", "off"}:
         return False
-    # Tk does not expose a portable query for the host OS dark-mode preference.
-    # Preserve the toolkit's native theme rather than probing OS-specific settings.
     return None
 
 
-def _configure_tk_theme(root) -> None:
+def _configure_tk_theme(root: tkinter_types.Tk) -> None:
     """Apply a compact KiCad-compatible palette to themed and classic Tk widgets."""
     dark = _system_prefers_dark_theme()
     if dark is None:
-        # Keep the toolkit/host native appearance for the system setting.
-        root._kicad_blocks_palette = {}
+        cast(_TkPaletteOwner, root).kicad_blocks_palette = {}
         return
-    colors = ({
-        "background": "#202326", "surface": "#292d31", "surface_alt": "#33383d",
-        "field": "#191c1f", "hover": "#3b4249", "selected": "#344b62",
-        "foreground": "#e6e9ec", "muted": "#aab2ba", "border": "#48515a",
-        "accent": "#78a9d4", "scroll_thumb": "#505a64", "scroll_trough": "#24282c",
-    } if dark else {
-        "background": "#e8eaed", "surface": "#f4f5f6", "surface_alt": "#e1e4e7",
-        "field": "#ffffff", "hover": "#e8edf2", "selected": "#c9d8e6",
-        "foreground": "#20252a", "muted": "#5f6871", "border": "#b8c0c8",
-        "accent": "#4c789f", "scroll_thumb": "#c0c7ce", "scroll_trough": "#e4e7ea",
-    })
+    colors = (
+        {
+            "background": "#202326",
+            "surface": "#292d31",
+            "surface_alt": "#33383d",
+            "field": "#191c1f",
+            "hover": "#3b4249",
+            "selected": "#344b62",
+            "foreground": "#e6e9ec",
+            "muted": "#aab2ba",
+            "border": "#48515a",
+            "accent": "#78a9d4",
+            "scroll_thumb": "#505a64",
+            "scroll_trough": "#24282c",
+        }
+        if dark
+        else {
+            "background": "#e8eaed",
+            "surface": "#f4f5f6",
+            "surface_alt": "#e1e4e7",
+            "field": "#ffffff",
+            "hover": "#e8edf2",
+            "selected": "#c9d8e6",
+            "foreground": "#20252a",
+            "muted": "#5f6871",
+            "border": "#b8c0c8",
+            "accent": "#4c789f",
+            "scroll_thumb": "#c0c7ce",
+            "scroll_trough": "#e4e7ea",
+        }
+    )
     style = ttk.Style(root)
-    try:
+    with contextlib.suppress(tk.TclError):
         style.theme_use("clam")
-    except tk.TclError:
-        pass
-    root.configure(background=colors["background"], highlightthickness=0)
+    root.configure({"background": colors["background"], "highlightthickness": 0})
     for option, value in {
-        "*Background": colors["background"], "*Foreground": colors["foreground"],
-        "*Text.background": colors["field"], "*Text.foreground": colors["foreground"],
-        "*Text.insertBackground": colors["foreground"], "*Entry.background": colors["field"],
-        "*Entry.foreground": colors["foreground"], "*Entry.insertBackground": colors["foreground"],
-        "*Listbox.background": colors["field"], "*Listbox.foreground": colors["foreground"],
-        "*Canvas.background": colors["background"], "*selectBackground": colors["selected"],
-        "*selectForeground": colors["foreground"], "*highlightBackground": colors["border"],
-        "*highlightColor": colors["accent"], "*troughColor": colors["scroll_trough"],
+        "*Background": colors["background"],
+        "*Foreground": colors["foreground"],
+        "*Text.background": colors["field"],
+        "*Text.foreground": colors["foreground"],
+        "*Text.insertBackground": colors["foreground"],
+        "*Entry.background": colors["field"],
+        "*Entry.foreground": colors["foreground"],
+        "*Entry.insertBackground": colors["foreground"],
+        "*Listbox.background": colors["field"],
+        "*Listbox.foreground": colors["foreground"],
+        "*Canvas.background": colors["background"],
+        "*selectBackground": colors["selected"],
+        "*selectForeground": colors["foreground"],
+        "*highlightBackground": colors["border"],
+        "*highlightColor": colors["accent"],
+        "*troughColor": colors["scroll_trough"],
     }.items():
         root.option_add(option, value)
     style.configure("TFrame", background=colors["background"])
     style.configure("TPanedwindow", background=colors["background"])
     style.configure("TLabel", background=colors["background"], foreground=colors["foreground"])
-    style.configure("TLabelframe", background=colors["background"], foreground=colors["foreground"],
-                    bordercolor=colors["border"], lightcolor=colors["border"],
-                    darkcolor=colors["border"], relief="solid", borderwidth=1)
-    style.configure("TLabelframe.Label", background=colors["background"], foreground=colors["muted"], padding=(4, 0))
+    style.configure(
+        "TLabelframe",
+        background=colors["background"],
+        foreground=colors["foreground"],
+        bordercolor=colors["border"],
+        lightcolor=colors["border"],
+        darkcolor=colors["border"],
+        relief="solid",
+        borderwidth=1,
+    )
+    style.configure(
+        "TLabelframe.Label",
+        background=colors["background"],
+        foreground=colors["muted"],
+        padding=(4, 0),
+    )
     style.configure(
         "TButton",
         background=colors["surface_alt"],
@@ -169,40 +532,95 @@ def _configure_tk_theme(root) -> None:
         lightcolor=[("focus", colors["accent"]), ("!focus", colors["surface_alt"])],
         darkcolor=[("focus", colors["accent"]), ("!focus", colors["surface_alt"])],
     )
-    style.configure("TEntry", fieldbackground=colors["field"], foreground=colors["foreground"],
-                    insertcolor=colors["foreground"], bordercolor=colors["border"],
-                    lightcolor=colors["border"], darkcolor=colors["border"], padding=(7, 5))
-    style.map("TEntry", bordercolor=[("focus", colors["accent"])],
-              lightcolor=[("focus", colors["accent"])], darkcolor=[("focus", colors["accent"])])
-    style.configure("TCombobox", fieldbackground=colors["field"], background=colors["surface_alt"],
-                    foreground=colors["foreground"], arrowcolor=colors["foreground"],
-                    bordercolor=colors["border"], lightcolor=colors["border"],
-                    darkcolor=colors["border"], padding=(7, 5))
-    style.map("TCombobox", fieldbackground=[("readonly", colors["field"])],
-              selectbackground=[("readonly", colors["selected"])],
-              selectforeground=[("readonly", colors["foreground"])],
-              bordercolor=[("focus", colors["accent"])])
-    style.configure("Treeview", background=colors["surface"], fieldbackground=colors["surface"],
-                    foreground=colors["foreground"], bordercolor=colors["border"],
-                    lightcolor=colors["border"], darkcolor=colors["border"],
-                    rowheight=36, relief="flat", borderwidth=0, padding=(4, 3))
-    style.map("Treeview", background=[("selected", colors["selected"])],
-              foreground=[("selected", colors["foreground"])])
-    style.configure("Treeview.Heading", background=colors["surface_alt"], foreground=colors["muted"],
-                    bordercolor=colors["border"], lightcolor=colors["surface_alt"],
-                    darkcolor=colors["border"], relief="flat", padding=(8, 8),
-                    font=("TkDefaultFont", 9, "bold"))
-    style.map("Treeview.Heading", background=[("active", colors["hover"])],
-              foreground=[("active", colors["foreground"])])
     style.configure(
-        "TNotebook", background=colors["background"], borderwidth=0,
-        bordercolor=colors["border"], lightcolor=colors["border"],
-        darkcolor=colors["border"], tabmargins=(2, 4, 2, 0)
+        "TEntry",
+        fieldbackground=colors["field"],
+        foreground=colors["foreground"],
+        insertcolor=colors["foreground"],
+        bordercolor=colors["border"],
+        lightcolor=colors["border"],
+        darkcolor=colors["border"],
+        padding=(7, 5),
     )
-    style.configure("TNotebook.Tab", background=colors["surface_alt"], foreground=colors["muted"],
-                    bordercolor=colors["border"], padding=(13, 8))
-    style.map("TNotebook.Tab", background=[("selected", colors["surface"]), ("active", colors["hover"])],
-              foreground=[("selected", colors["foreground"]), ("active", colors["foreground"])])
+    style.map(
+        "TEntry",
+        bordercolor=[("focus", colors["accent"])],
+        lightcolor=[("focus", colors["accent"])],
+        darkcolor=[("focus", colors["accent"])],
+    )
+    style.configure(
+        "TCombobox",
+        fieldbackground=colors["field"],
+        background=colors["surface_alt"],
+        foreground=colors["foreground"],
+        arrowcolor=colors["foreground"],
+        bordercolor=colors["border"],
+        lightcolor=colors["border"],
+        darkcolor=colors["border"],
+        padding=(7, 5),
+    )
+    style.map(
+        "TCombobox",
+        fieldbackground=[("readonly", colors["field"])],
+        selectbackground=[("readonly", colors["selected"])],
+        selectforeground=[("readonly", colors["foreground"])],
+        bordercolor=[("focus", colors["accent"])],
+    )
+    style.configure(
+        "Treeview",
+        background=colors["surface"],
+        fieldbackground=colors["surface"],
+        foreground=colors["foreground"],
+        bordercolor=colors["border"],
+        lightcolor=colors["border"],
+        darkcolor=colors["border"],
+        rowheight=36,
+        relief="flat",
+        borderwidth=0,
+        padding=(4, 3),
+    )
+    style.map(
+        "Treeview",
+        background=[("selected", colors["selected"])],
+        foreground=[("selected", colors["foreground"])],
+    )
+    style.configure(
+        "Treeview.Heading",
+        background=colors["surface_alt"],
+        foreground=colors["muted"],
+        bordercolor=colors["border"],
+        lightcolor=colors["surface_alt"],
+        darkcolor=colors["border"],
+        relief="flat",
+        padding=(8, 8),
+        font=("TkDefaultFont", 9, "bold"),
+    )
+    style.map(
+        "Treeview.Heading",
+        background=[("active", colors["hover"])],
+        foreground=[("active", colors["foreground"])],
+    )
+    style.configure(
+        "TNotebook",
+        background=colors["background"],
+        borderwidth=0,
+        bordercolor=colors["border"],
+        lightcolor=colors["border"],
+        darkcolor=colors["border"],
+        tabmargins=(2, 4, 2, 0),
+    )
+    style.configure(
+        "TNotebook.Tab",
+        background=colors["surface_alt"],
+        foreground=colors["muted"],
+        bordercolor=colors["border"],
+        padding=(13, 8),
+    )
+    style.map(
+        "TNotebook.Tab",
+        background=[("selected", colors["surface"]), ("active", colors["hover"])],
+        foreground=[("selected", colors["foreground"]), ("active", colors["foreground"])],
+    )
     style.configure(
         "Vertical.TScrollbar",
         background=colors["scroll_thumb"],
@@ -226,19 +644,30 @@ def _configure_tk_theme(root) -> None:
         width=12,
     )
     # Remove legacy arrow buttons; keep a single, low-contrast draggable thumb.
-    style.layout(
+    _style_layout = cast(_TkStyleLayout, style).layout
+    _style_layout(
         "Vertical.TScrollbar",
-        [("Vertical.Scrollbar.trough", {
-            "sticky": "ns",
-            "children": [("Vertical.Scrollbar.thumb", {"expand": "1", "sticky": "nswe"})],
-        })],
+        [
+            (
+                "Vertical.Scrollbar.trough",
+                {
+                    "sticky": "ns",
+                    "children": [("Vertical.Scrollbar.thumb", {"expand": "1", "sticky": "nswe"})],
+                },
+            )
+        ],
     )
-    style.layout(
+    _style_layout(
         "Horizontal.TScrollbar",
-        [("Horizontal.Scrollbar.trough", {
-            "sticky": "we",
-            "children": [("Horizontal.Scrollbar.thumb", {"expand": "1", "sticky": "nswe"})],
-        })],
+        [
+            (
+                "Horizontal.Scrollbar.trough",
+                {
+                    "sticky": "we",
+                    "children": [("Horizontal.Scrollbar.thumb", {"expand": "1", "sticky": "nswe"})],
+                },
+            )
+        ],
     )
     style.configure(
         "TScrollbar",
@@ -260,10 +689,12 @@ def _configure_tk_theme(root) -> None:
         background=[("active", colors["accent"]), ("pressed", colors["accent"])],
     )
     style.configure("TSeparator", background=colors["border"])
-    root._kicad_blocks_palette = colors
+    cast(_TkPaletteOwner, root).kicad_blocks_palette = colors
 
 
-def _set_window_geometry(window, width: int, height: int, min_width: int, min_height: int) -> None:
+def _set_window_geometry(
+    window: _TkGeometryWindow, width: int, height: int, min_width: int, min_height: int
+) -> None:
     """Size a completed dialog to its content and keep every action visible."""
     window.update_idletasks()
     sw = max(int(window.winfo_screenwidth()), 640)
@@ -271,8 +702,12 @@ def _set_window_geometry(window, width: int, height: int, min_width: int, min_he
     usable_width = max(640, sw - 80)
     usable_height = max(480, sh - 100)
     try:
-        requested_width = int(window.winfo_reqwidth())
-        requested_height = int(window.winfo_reqheight())
+        requested_width_getter = getattr(window, "winfo_reqwidth", None)
+        requested_height_getter = getattr(window, "winfo_reqheight", None)
+        if not callable(requested_width_getter) or not callable(requested_height_getter):
+            raise AttributeError("Window does not expose requested content dimensions.")
+        requested_width = cast(Callable[[], int], requested_width_getter)()
+        requested_height = cast(Callable[[], int], requested_height_getter)()
     except Exception:
         # Tests and non-GUI callers can provide lightweight window adapters
         # without Tk's measurement methods; actual Tk sizing failures should
@@ -281,7 +716,7 @@ def _set_window_geometry(window, width: int, height: int, min_width: int, min_he
         requested_width, requested_height = width, height
     w = min(max(width, requested_width), usable_width)
     h = min(max(height, requested_height), usable_height)
-    window.geometry(f"{w}x{h}+{max(0, (sw-w)//2)}+{max(0, (sh-h)//2)}")
+    window.geometry(f"{w}x{h}+{max(0, (sw - w) // 2)}+{max(0, (sh - h) // 2)}")
     window.minsize(min(min_width, w), min(min_height, h))
     master = getattr(window, "master", None)
     if master is not None:
@@ -289,32 +724,31 @@ def _set_window_geometry(window, width: int, height: int, min_width: int, min_he
             window.transient(master)
 
 
-
-def _attach_tk_window_to_editor(window, _editor_window_id: str | None = None) -> bool:
-    """Associate a Tk dialog with its parent inside this plugin process.
-
-    KiCad IPC does not expose a portable cross-process native window handle or
-    transient-owner API. Tk's portable transient relationship is limited to
-    windows managed by this Tk interpreter; do not mutate foreign window IDs.
-    """
+def _attach_tk_window_to_editor(
+    window: _TkTransientWindow, _editor_window_id: str | None = None
+) -> bool:
+    """Keep related dialogs within the same Tk window hierarchy."""
     master = getattr(window, "master", None)
-    if master is None:
+    transient = getattr(window, "transient", None)
+    if master is None or not callable(transient):
         return False
     try:
-        window.transient(master)
+        cast(Callable[[object], None], transient)(master)
+        window.update_idletasks()
         return True
     except (AttributeError, tk.TclError):
-        LOG.debug("Could not associate the Tk dialog with its in-process parent", exc_info=True)
+        LOG.debug("Could not associate the dialog with its Tk parent", exc_info=True)
         return False
 
-def _add_tooltip(widget, text: str) -> None:
-    """Attach a small themed tooltip to a compact icon button."""
-    tooltip = [None]
 
-    def show(_event=None):
+def _add_tooltip(widget: tkinter_types.Misc, text: str) -> None:
+    """Attach a small themed tooltip to a compact icon button."""
+    tooltip: list[tkinter_types.Toplevel | None] = [None]
+
+    def show(_event: tkinter_types.Event[tkinter_types.Misc] | None = None) -> None:
         if tooltip[0] is not None or not widget.winfo_exists():
             return
-        palette = getattr(widget.winfo_toplevel(), "_kicad_blocks_palette", {})
+        palette = getattr(widget.winfo_toplevel(), "kicad_blocks_palette", {})
         background = palette.get("surface_alt", "#e8eaed")
         foreground = palette.get("foreground", "#20252a")
         popup = tk.Toplevel(widget)
@@ -339,7 +773,7 @@ def _add_tooltip(widget, text: str) -> None:
         popup.geometry(f"+{x}+{y}")
         tooltip[0] = popup
 
-    def hide(_event=None):
+    def hide(_event: tkinter_types.Event[tkinter_types.Misc] | None = None) -> None:
         popup = tooltip[0]
         tooltip[0] = None
         if popup is not None:
@@ -353,7 +787,7 @@ def _add_tooltip(widget, text: str) -> None:
     widget.bind("<ButtonPress>", hide, add="+")
 
 
-def _create_action_icon(parent, name: str):
+def _create_action_icon(parent: tkinter_types.Misc, name: str) -> tkinter_types.PhotoImage | None:
     """Render one semantic 20px toolbar icon using the current KiCad palette."""
     drawings = {
         "place": '<rect x="4" y="4" width="12" height="12" rx="2"/><path d="M16 16l4 4M10 7v6M7 10h6"/>',
@@ -387,30 +821,28 @@ def _create_action_icon(parent, name: str):
     path_data = drawings.get(name)
     if not path_data:
         return None
-    palette = getattr(parent.winfo_toplevel(), "_kicad_blocks_palette", {})
+    palette = getattr(parent.winfo_toplevel(), "kicad_blocks_palette", {})
     accent = palette.get("accent", "#4c789f")
     svg = (
         '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">'
         f'<g fill="none" stroke="{accent}" stroke-width="1.7" stroke-linecap="round" '
         f'stroke-linejoin="round">{path_data}</g>'
-        '</svg>'
+        "</svg>"
     )
     try:
-        import resvg_py
-
-        png = resvg_py.svg_to_bytes(
-            svg_string=svg, width=20, height=20
-        )
-        image = tk.PhotoImage(
-            data=base64.b64encode(png).decode("ascii"), master=parent
-        )
+        renderer = cast(_ResvgPy, import_module("resvg_py"))
+        png = renderer.svg_to_bytes(svg_string=svg, width=20, height=20)
+        image = tk.PhotoImage(data=base64.b64encode(png).decode("ascii"), master=parent)
     except (ImportError, OSError, tk.TclError, ValueError):
         LOG.debug("Could not render toolbar icon %s", name, exc_info=True)
         return None
     owner = parent.winfo_toplevel()
-    images = getattr(owner, "_kicad_blocks_action_icons", {})
+    image_owner = cast(_TkActionIconOwner, owner)
+    images: dict[str, tkinter_types.PhotoImage] = getattr(
+        image_owner, "kicad_blocks_action_icons", {}
+    )
     images[name] = image
-    owner._kicad_blocks_action_icons = images
+    image_owner.kicad_blocks_action_icons = images
     return image
 
 
@@ -433,8 +865,8 @@ def _action_button(
     return button
 
 
-def project_directory(schematic) -> Path:
-    project = schematic.get_project()
+def project_directory(schematic: _Schematic) -> Path:
+    project = cast(_SchematicProjectPath, schematic.get_project())
     raw = Path(project.path).expanduser()
     if raw.is_file() or raw.suffix.lower() == ".kicad_pro":
         raw = raw.parent
@@ -447,51 +879,53 @@ def project_directory(schematic) -> Path:
     return resolved
 
 
-_LAST_LIBRARY_RELOAD_WARNING: str | None = None
-_LAST_LIBRARY_RELOAD_OK = True
+_last_library_reload_warning: str | None = None
+_last_library_reload_ok = True
 
 
-def _reload_symbol_library(kicad, nickname: str) -> bool:
+def _reload_symbol_library(kicad: _KiCadApp, nickname: str) -> bool:
     """Reload a project library using GUI-supported commands only."""
-    global _LAST_LIBRARY_RELOAD_WARNING, _LAST_LIBRARY_RELOAD_OK
+    global _last_library_reload_warning, _last_library_reload_ok
     from kipy.errors import LibraryCommandError
 
-    _LAST_LIBRARY_RELOAD_WARNING = None
-    _LAST_LIBRARY_RELOAD_OK = True
+    _last_library_reload_warning = None
+    _last_library_reload_ok = True
     try:
         # LT_SYMBOL=1; LTS_PROJECT=2. LoadAllLibraries is headless-only.
         kicad.reload_library(type=1, scope=2, nicknames=[nickname])
         statuses = kicad.wait_for_libraries(types=[1], scope=2, timeout_s=60.0)
         status_items = statuses if isinstance(statuses, (list, tuple)) else ()
         errors = [
-            item.error_message for item in status_items
-            if getattr(item, "nickname", None) == nickname
-            and getattr(item, "error_message", None)
+            item.error_message
+            for item in status_items
+            if getattr(item, "nickname", None) == nickname and getattr(item, "error_message", None)
         ]
         if errors:
             raise RuntimeError("; ".join(str(error) for error in errors))
         return True
     except (LibraryCommandError, RuntimeError, TimeoutError) as exc:
-        _LAST_LIBRARY_RELOAD_OK = False
-        _LAST_LIBRARY_RELOAD_WARNING = (
+        _last_library_reload_ok = False
+        _last_library_reload_warning = (
             f"The block and project library table were saved, but Eeschema could not "
             f"reload {nickname!r}: {exc}. Save the project and restart Eeschema to "
             "load the updated block library."
         )
-        LOG.warning(_LAST_LIBRARY_RELOAD_WARNING)
+        LOG.warning(_last_library_reload_warning)
         return False
 
 
-
-
 def _register_block(
-    project_dir: Path, record, kicad, library_paths: list[Path] | None = None
-):
+    project_dir: Path,
+    record: BlockRecord,
+    kicad: _KiCadApp,
+    library_paths: list[Path] | None = None,
+) -> BlockRecord:
     """Refresh the project's unified catalog from every registered block library."""
     record = ensure_stable_block_identity(record)
-    roots = [Path(item).expanduser().resolve() for item in (
-        library_paths if library_paths is not None else configured_library_roots()
-    )]
+    roots = [
+        Path(item).expanduser().resolve()
+        for item in (library_paths if library_paths is not None else configured_library_roots())
+    ]
     catalog = build_project_symbol_catalog(project_dir, roots)
     register_project_symbol_library(
         project_dir,
@@ -503,13 +937,13 @@ def _register_block(
     _reload_symbol_library(kicad, LIBRARY_NICKNAME)
     return record
 
-def place_block(schematic, record, x_mm: float, y_mm: float):
-    from kipy.geometry import Vector2
+
+def place_block(
+    schematic: _Schematic, record: BlockRecord, x_mm: float, y_mm: float
+) -> _SchematicSymbol:
 
     symbol_id = f"{record.manifest['library_nickname']}:{record.manifest['symbol_name']}"
-    instance = schematic.place_symbol_from_library(
-        symbol_id, Vector2.from_xy_mm(x_mm, y_mm)
-    )
+    instance = schematic.place_symbol_from_library(symbol_id, Vector2.from_xy_mm(x_mm, y_mm))
     schematic.save()
     return instance
 
@@ -533,7 +967,7 @@ def _is_empty_selection_error(error: BaseException) -> bool:
     )
 
 
-def _safe_schematic_selection(schematic) -> list:
+def _safe_schematic_selection(schematic: _Schematic | None) -> list[_SchematicSymbol]:
     """Return the current typed IPC selection, normalizing empty-selection errors."""
     if schematic is None or not hasattr(schematic, "get_selection"):
         return []
@@ -545,7 +979,7 @@ def _safe_schematic_selection(schematic) -> list:
         raise
 
 
-def _selection_fragment(schematic) -> str:
+def _selection_fragment(schematic: _Schematic) -> str:
     """Read the legacy serialized selection only when typed IPC cannot resolve it."""
     getter = getattr(schematic, "get_selection_as_string", None)
     if not callable(getter):
@@ -561,38 +995,40 @@ def _selection_fragment(schematic) -> str:
         ) from exc
 
 
-def _selected_symbols(schematic) -> list:
+def _selected_symbols(schematic: _Schematic) -> list[_SchematicSymbol]:
     selection = _safe_schematic_selection(schematic)
     symbols = [
-        item for item in selection
-        if hasattr(item, "definition") and hasattr(item.definition, "id")
+        item for item in selection if hasattr(item, "definition") and hasattr(item.definition, "id")
     ]
     if not symbols:
         raise ValueError("Select one or more block symbol instances in the schematic.")
     return symbols
 
 
-def _selected_symbol(schematic):
+def _selected_symbol(schematic: _Schematic) -> _SchematicSymbol:
     symbols = _selected_symbols(schematic)
     if len(symbols) != 1:
         raise ValueError("Select exactly one block symbol instance in the schematic.")
     return symbols[0]
 
 
-def _symbol_identifier(instance) -> tuple[str, str]:
-    identifier = instance.definition.id
+def _symbol_identifier(instance: _SchematicSymbol) -> tuple[str, str]:
+    definition = instance.definition
+    identifier = definition.id if definition is not None else None
+    if identifier is None:
+        raise ValueError("The selected symbol has no library identifier.")
     return identifier.library, identifier.name
 
 
-def _library_roots_for(value=None) -> list[Path]:
+def _library_roots_for(value: str | Path | Sequence[str | Path] | None = None) -> list[Path]:
     if value is None:
         values = configured_library_roots()
     elif isinstance(value, (str, Path)):
         values = [Path(value)]
     else:
         values = [Path(item) for item in value]
-    roots = []
-    seen = set()
+    roots: list[Path] = []
+    seen: set[str] = set()
     for item in values:
         path = Path(item).expanduser().resolve()
         key = str(path)
@@ -602,7 +1038,7 @@ def _library_roots_for(value=None) -> list[Path]:
     return roots
 
 
-def _list_library_records(library_paths=None) -> list:
+def _list_library_records(library_paths: Path | Sequence[Path] | None = None) -> list[BlockRecord]:
     records = []
     for library_path in _library_roots_for(library_paths):
         records.extend(list_blocks(library_path))
@@ -612,7 +1048,9 @@ def _list_library_records(library_paths=None) -> list:
     )
 
 
-def _library_record_for_instance(library_root: Path | list[Path], instance):
+def _library_record_for_instance(
+    library_root: Path | list[Path], instance: _SchematicSymbol
+) -> BlockRecord:
     library_nickname, symbol_name = _symbol_identifier(instance)
     matches = [
         record
@@ -626,8 +1064,7 @@ def _library_record_for_instance(library_root: Path | list[Path], instance):
             "in any registered functional-block library."
         )
     identities = {
-        (record.manifest.get("block_id"), record.manifest.get("revision"))
-        for record in matches
+        (record.manifest.get("block_id"), record.manifest.get("revision")) for record in matches
     }
     if len(identities) > 1:
         locations = "\n".join(str(record.path) for record in matches)
@@ -639,19 +1076,22 @@ def _library_record_for_instance(library_root: Path | list[Path], instance):
     return matches[0]
 
 
-def make_selected_local(schematic, kicad, project_dir: Path, library_root: Path) -> Path:
+def make_selected_local(
+    schematic: _Schematic, kicad: _KiCadApp, project_dir: Path, library_root: Path | list[Path]
+) -> Path:
     """Create an independent implementation copy bound to this symbol KIID."""
     instance = _selected_symbol(schematic)
     library_roots = _library_roots_for(library_root)
     source = _library_record_for_instance(library_roots, instance)
-    source = synchronize_block_dependencies(
-        source, library_roots, find_kicad_cli()
-    )["block"]
+    source = synchronize_block_dependencies(source, library_roots, find_kicad_cli())["block"]
     local = make_local_copy(source, project_dir)
     link_instance_to_local_copy(project_dir, str(instance.id), local)
     return local.path
 
-def _parameter_values_for_instance(instance, block) -> dict[str, str]:
+
+def _parameter_values_for_instance(
+    instance: _SchematicSymbol, block: BlockRecord
+) -> dict[str, str]:
     """Read editable KB_PARAM_* user fields from one placed facade symbol."""
     parameters = block.manifest.get("parameters", [])
     overrides = {}
@@ -659,13 +1099,16 @@ def _parameter_values_for_instance(instance, block) -> dict[str, str]:
         field_name = str(getattr(field, "name", ""))
         if not field_name.startswith(PARAMETER_FIELD_PREFIX):
             continue
-        parameter_name = field_name[len(PARAMETER_FIELD_PREFIX):]
+        parameter_name = field_name[len(PARAMETER_FIELD_PREFIX) :]
         field_text = getattr(field, "text", None)
         overrides[parameter_name] = getattr(field_text, "value", "")
     return resolve_parameter_values(parameters, overrides)
 
 
-def _update_schematic_item_checked(schematic, instance) -> None:
+def _update_schematic_item_checked(
+    schematic: _SchematicForItemUpdate,
+    instance: _ProtoBackedSchematicItem,
+) -> None:
     """Update one schematic item and inspect KiCad's per-item IPC status.
 
     The current kipy update_items() wrapper unconditionally unwraps the
@@ -673,13 +1116,14 @@ def _update_schematic_item_checked(schematic, instance) -> None:
     Any, so inspect the documented status fields directly instead.
     """
     from kipy.proto.common.commands import editor_commands_pb2
-    from kipy.util import pack_any
+    from kipy.util.proto import pack_any
 
     command = editor_commands_pb2.UpdateItems()
     command.header.document.CopyFrom(schematic.document)
     command.items.append(pack_any(instance.proto))
-    response = schematic.client.send(
-        command, editor_commands_pb2.UpdateItemsResponse
+    response = cast(
+        editor_commands_pb2.UpdateItemsResponse,
+        schematic.client.send(command, editor_commands_pb2.UpdateItemsResponse),
     )
 
     if int(response.status) != 1:
@@ -697,19 +1141,18 @@ def _update_schematic_item_checked(schematic, instance) -> None:
     status = item_result.status
     if int(status.code) != 1:
         detail = str(getattr(status, "error_message", "") or "").strip()
-        message = (
-            f"KiCad rejected the block instance update (item status {int(status.code)})."
-        )
+        message = f"KiCad rejected the block instance update (item status {int(status.code)})."
         if detail:
             message += f" {detail}"
         raise RuntimeError(message)
 
 
-def _write_instance_configuration(schematic, instance, values: dict[str, str]) -> None:
+def _write_instance_configuration(
+    schematic: _Schematic, instance: _SchematicSymbol, values: dict[str, str]
+) -> None:
     """Write validated facade fields through KiCad IPC as one undoable edit."""
     fields = {
-        str(getattr(field, "name", "")): field
-        for field in getattr(instance, "user_fields", ())
+        str(getattr(field, "name", "")): field for field in getattr(instance, "user_fields", ())
     }
     missing = sorted(set(values) - set(fields))
     if missing:
@@ -740,10 +1183,13 @@ def _write_instance_configuration(schematic, instance, values: dict[str, str]) -
 
 
 def _show_selected_block_configuration(
-    schematic, project_dir: Path, library_root: Path, parent
+    schematic: _Schematic,
+    project_dir: Path,
+    library_root: Path | list[Path],
+    parent: tkinter_types.Misc,
 ) -> None:
     """Edit instance-local profile, variant, parameters and PCB layout."""
-    _load_tkinter()
+    load_tkinter()
     instance = _selected_symbol(schematic)
     block = _block_record_for_instance(library_root, project_dir, instance)
     parameters = block.manifest.get("parameters", [])
@@ -752,8 +1198,7 @@ def _show_selected_block_configuration(
     profiles = block.manifest.get("profiles", [])
     current_values = _parameter_values_for_instance(instance, block)
     fields = {
-        str(getattr(field, "name", "")): field
-        for field in getattr(instance, "user_fields", ())
+        str(getattr(field, "name", "")): field for field in getattr(instance, "user_fields", ())
     }
 
     required = [parameter_field_name(item["name"]) for item in parameters]
@@ -785,19 +1230,17 @@ def _show_selected_block_configuration(
     content.pack(fill="both", expand=True)
 
     profile_var = None
-    profile_labels: dict[str, dict] = {}
+    profile_labels: dict[str, BlockProfileManifest | None] = {}
     if profiles:
         section = ttk.LabelFrame(content, text="Configuration profile", padding=10)
         section.pack(fill="x", pady=(0, 10))
-        profile_labels = {
-            f"{item['name']}  [{item['id']}]": item
-            for item in profiles
-        }
+        profile_labels = {f"{item['name']}  [{item['id']}]": item for item in profiles}
         profile_labels["Custom (manual settings)"] = None
         current_profile_id = _field_value(instance, PROFILE_FIELD_NAME)
         current_profile_label = next(
             (
-                label for label, item in profile_labels.items()
+                label
+                for label, item in profile_labels.items()
                 if item is not None and str(item["id"]).casefold() == current_profile_id.casefold()
             ),
             "Custom (manual settings)",
@@ -810,7 +1253,9 @@ def _show_selected_block_configuration(
             state="readonly",
         )
         profile_combo.pack(fill="x")
-        _add_tooltip(profile_combo, "A profile fills the linked variant, parameters and PCB layout.")
+        _add_tooltip(
+            profile_combo, "A profile fills the linked variant, parameters and PCB layout."
+        )
 
     variant_var = None
     variant_combo = None
@@ -825,7 +1270,9 @@ def _show_selected_block_configuration(
             state="normal",
         )
         variant_combo.pack(fill="x")
-        _add_tooltip(variant_combo, "Choose a declared variant or enter a KiCad text-variable reference.")
+        _add_tooltip(
+            variant_combo, "Choose a declared variant or enter a KiCad text-variable reference."
+        )
 
     parameter_vars = {}
     if parameters:
@@ -866,15 +1313,13 @@ def _show_selected_block_configuration(
         selected_variant_value = variant_var.get() if variant_var is not None else ""
         linked_variant = next(
             (
-                item for item in variants
-                if str(item.get("value", "")).casefold()
-                == selected_variant_value.casefold()
+                item
+                for item in variants
+                if str(item.get("value", "")).casefold() == selected_variant_value.casefold()
             ),
             None,
         )
-        linked_layout_id = str(
-            linked_variant.get("layout_id", "") if linked_variant else ""
-        )
+        linked_layout_id = str(linked_variant.get("layout_id", "") if linked_variant else "")
         if linked_layout_id and (
             not current_layout
             or current_layout.casefold()
@@ -883,7 +1328,8 @@ def _show_selected_block_configuration(
             current_layout = linked_layout_id
         current_label = next(
             (
-                label for label, layout_id in layout_ids.items()
+                label
+                for label, layout_id in layout_ids.items()
                 if layout_id.casefold() == current_layout.casefold()
             ),
             None,
@@ -903,21 +1349,24 @@ def _show_selected_block_configuration(
         layout_combo.pack(fill="x")
         _add_tooltip(layout_combo, "PCB layout used when applying this block to a board.")
 
-        def update_layout_for_variant(_event=None):
+        def update_layout_for_variant(
+            _event: tkinter_types.Event[tkinter_types.Misc] | None = None,
+        ):
             if variant_var is None:
                 return
             selected = next(
                 (
-                    item for item in variants
-                    if str(item.get("value", "")).casefold()
-                    == variant_var.get().strip().casefold()
+                    item
+                    for item in variants
+                    if str(item.get("value", "")).casefold() == variant_var.get().strip().casefold()
                 ),
                 None,
             )
             linked_id = str(selected.get("layout_id", "") if selected else "")
             linked_label = next(
                 (
-                    label for label, layout_id in layout_ids.items()
+                    label
+                    for label, layout_id in layout_ids.items()
                     if layout_id.casefold() == linked_id.casefold()
                 ),
                 None,
@@ -931,7 +1380,7 @@ def _show_selected_block_configuration(
 
     profile_application_active = [False]
 
-    def apply_profile(_event=None) -> None:
+    def apply_profile(_event: tkinter_types.Event[tkinter_types.Misc] | None = None) -> None:
         if profile_var is None:
             return
         profile = profile_labels.get(profile_var.get())
@@ -948,7 +1397,8 @@ def _show_selected_block_configuration(
             if layout_var is not None:
                 matching_label = next(
                     (
-                        label for label, layout_id in layout_ids.items()
+                        label
+                        for label, layout_id in layout_ids.items()
                         if layout_id.casefold() == resolved["layout"].casefold()
                     ),
                     None,
@@ -999,10 +1449,12 @@ def _show_selected_block_configuration(
                     parameters,
                     {name: variable.get() for name, variable in parameter_vars.items()},
                 )
-                updates.update({
-                    parameter_field_name(name): value
-                    for name, value in normalized_parameters.items()
-                })
+                updates.update(
+                    {
+                        parameter_field_name(name): value
+                        for name, value in normalized_parameters.items()
+                    }
+                )
 
             selected_layout_id = ""
             if layout_var is not None:
@@ -1016,13 +1468,17 @@ def _show_selected_block_configuration(
                 selected_profile = profile_labels.get(profile_var.get())
                 selected_profile_id = ""
                 if selected_profile is not None:
-                    expected = resolve_profile_configuration(
-                        block.manifest, selected_profile["id"]
-                    )
+                    expected = resolve_profile_configuration(block.manifest, selected_profile["id"])
                     current_matches = (
-                        (variant_var is None or resolved_variant.casefold() == expected["variant"].casefold())
+                        (
+                            variant_var is None
+                            or resolved_variant.casefold() == expected["variant"].casefold()
+                        )
                         and normalized_parameters == expected["parameters"]
-                        and (layout_var is None or selected_layout_id.casefold() == expected["layout"].casefold())
+                        and (
+                            layout_var is None
+                            or selected_layout_id.casefold() == expected["layout"].casefold()
+                        )
                     )
                     if current_matches:
                         selected_profile_id = str(selected_profile["id"])
@@ -1043,8 +1499,16 @@ def _show_selected_block_configuration(
         )
         dialog.destroy()
 
-    _action_button(footer, "Cancel", dialog.destroy, "cancel", "Discard instance edits").pack(side="right", padx=(8, 0))
-    _action_button(footer, "Save instance", save_configuration, "save", "Save configuration on the selected instance").pack(side="right")
+    _action_button(footer, "Cancel", dialog.destroy, "cancel", "Discard instance edits").pack(
+        side="right", padx=(8, 0)
+    )
+    _action_button(
+        footer,
+        "Save instance",
+        save_configuration,
+        "save",
+        "Save configuration on the selected instance",
+    ).pack(side="right")
     dialog.bind("<Escape>", lambda _event: dialog.destroy())
     dialog.protocol("WM_DELETE_WINDOW", dialog.destroy)
     _set_window_geometry(dialog, 700, 720, 580, 500)
@@ -1052,7 +1516,7 @@ def _show_selected_block_configuration(
     dialog.wait_window()
 
 
-def sync_selected_local(schematic, kicad, project_dir: Path) -> dict:
+def sync_selected_local(schematic: _Schematic, kicad: _KiCadApp, project_dir: Path) -> dict:
     """Synchronize the local implementation linked to the selected symbol KIID."""
     instance = _selected_symbol(schematic)
     local_record = local_copy_for_instance(project_dir, str(instance.id))
@@ -1062,14 +1526,17 @@ def sync_selected_local(schematic, kicad, project_dir: Path) -> dict:
             "Use the Local action first."
         )
     library_roots = _library_roots_for()
-    local_record = synchronize_block_dependencies(
-        local_record, library_roots, find_kicad_cli()
-    )["block"]
+    local_record = synchronize_block_dependencies(local_record, library_roots, find_kicad_cli())[
+        "block"
+    ]
     result = publish_local_copy(local_record)
     _reload_symbol_library(kicad, LIBRARY_NICKNAME)
     return result
 
-def _pick_block_for_placement(records, parent):
+
+def _pick_block_for_placement(
+    records: list[BlockRecord], parent: tkinter_types.Misc
+) -> BlockRecord | None:
     """Choose, inspect and configure a functional block before native placement."""
     if not records:
         raise ValueError("No blocks were found in the registered functional-block libraries.")
@@ -1101,7 +1568,7 @@ def _pick_block_for_placement(records, parent):
     tree.column("library", width=130, minwidth=100, stretch=False)
     scroll = ttk.Scrollbar(left, orient="vertical", command=tree.yview, style="Vertical.TScrollbar")
     tree.configure(yscrollcommand=scroll.set)
-    palette = getattr(parent, "_kicad_blocks_palette", {})
+    palette = getattr(parent, "kicad_blocks_palette", {})
     tree.tag_configure("even", background=palette.get("surface", "#f4f5f6"))
     tree.tag_configure("odd", background=palette.get("surface_alt", "#e8eaed"))
     tree.grid(row=0, column=0, sticky="nsew")
@@ -1136,12 +1603,12 @@ def _pick_block_for_placement(records, parent):
 
     records_by_id = {}
     visible_records = []
-    selected_record = [None]
+    selected_record: list[BlockRecord | None] = [None]
     chosen = [None]
     updating_config = [False]
     preview_size = [None]
 
-    def preview_resized(event) -> None:
+    def preview_resized(event: tkinter_types.Event[tkinter_types.Misc]) -> None:
         # The chooser builds its widgets before the window is mapped. The first
         # preview render can therefore see a 1 px canvas and be permanently
         # clipped until the user changes the search or selection. Re-render only
@@ -1156,7 +1623,7 @@ def _pick_block_for_placement(records, parent):
 
     preview.bind("<Configure>", preview_resized)
 
-    def update_metadata(record):
+    def update_metadata(record: BlockRecord) -> None:
         if record is None:
             name.configure(text="No matching functional blocks")
             description.configure(text="")
@@ -1167,10 +1634,15 @@ def _pick_block_for_placement(records, parent):
             return
         manifest = record.manifest
         name.configure(text=record.name)
-        description.configure(text=str(manifest.get("description", "") or "No description provided."))
+        description.configure(
+            text=str(manifest.get("description", "") or "No description provided.")
+        )
         variants = [str(item["value"]) for item in manifest.get("variants", [])]
         profiles = manifest.get("profiles", [])
-        variant_combo.configure(values=variants or ("(single implementation)",), state="readonly" if variants else "disabled")
+        variant_combo.configure(
+            values=variants or ("(single implementation)",),
+            state="readonly" if variants else "disabled",
+        )
         profile_names = ["Custom"] + [
             str(item.get("name", item.get("id", ""))) for item in profiles
         ]
@@ -1197,7 +1669,9 @@ def _pick_block_for_placement(records, parent):
             iid = f"{record.manifest['block_id']}:{index}"
             records_by_id[iid] = record
             tree.insert(
-                "", "end", iid=iid,
+                "",
+                "end",
+                iid=iid,
                 values=(record.name, record.path.parent.name),
                 tags=("even" if index % 2 == 0 else "odd",),
             )
@@ -1212,13 +1686,13 @@ def _pick_block_for_placement(records, parent):
         selected_record[0] = preferred
         update_metadata(preferred)
 
-    def selection_changed(_event=None):
+    def selection_changed(_event: tkinter_types.Event[tkinter_types.Misc] | None = None):
         selection = tree.selection()
         record = records_by_id.get(selection[0]) if selection else None
         selected_record[0] = record
         update_metadata(record)
 
-    def variant_changed(_event=None):
+    def variant_changed(_event: tkinter_types.Event[tkinter_types.Misc] | None = None):
         if updating_config[0]:
             return
         if selected_record[0] is not None and profile_value.get() != "Custom":
@@ -1226,19 +1700,22 @@ def _pick_block_for_placement(records, parent):
             profile_value.set("Custom" if selected_record[0].manifest.get("profiles") else "")
             updating_config[0] = False
 
-    def profile_changed(_event=None):
+    def profile_changed(_event: tkinter_types.Event[tkinter_types.Misc] | None = None):
         record = selected_record[0]
         if record is None or profile_value.get() in ("", "Custom"):
             return
         profile = next(
-            (item for item in record.manifest.get("profiles", [])
-             if str(item.get("name", item.get("id", ""))) == profile_value.get()),
+            (
+                item
+                for item in record.manifest.get("profiles", [])
+                if str(item.get("name", item.get("id", ""))) == profile_value.get()
+            ),
             None,
         )
         if profile is not None:
             variant_value.set(str(profile.get("variant") or "(single implementation)"))
 
-    def choose(_event=None):
+    def choose(_event: tkinter_types.Event[tkinter_types.Misc] | None = None):
         record = selected_record[0]
         if record is None:
             return "break"
@@ -1246,8 +1723,11 @@ def _pick_block_for_placement(records, parent):
         profile = None
         if profile_value.get() not in ("", "Custom"):
             profile = next(
-                (item for item in manifest.get("profiles", [])
-                 if str(item.get("name", item.get("id", ""))) == profile_value.get()),
+                (
+                    item
+                    for item in manifest.get("profiles", [])
+                    if str(item.get("name", item.get("id", ""))) == profile_value.get()
+                ),
                 None,
             )
         if profile is not None:
@@ -1257,7 +1737,9 @@ def _pick_block_for_placement(records, parent):
             layout = resolved["layout"]
             profile_id = str(profile["id"])
         else:
-            selected_variant = "" if variant_value.get() == "(single implementation)" else variant_value.get()
+            selected_variant = (
+                "" if variant_value.get() == "(single implementation)" else variant_value.get()
+            )
             values = resolve_parameter_values(manifest.get("parameters", []))
             layout = str(manifest.get("default_layout") or "")
             profile_id = ""
@@ -1282,8 +1764,12 @@ def _pick_block_for_placement(records, parent):
 
     buttons = ttk.Frame(outer)
     buttons.pack(fill="x", pady=(10, 0))
-    _action_button(buttons, "Cancel", dialog.destroy, "cancel", "Cancel and close this dialog").pack(side="right")
-    _action_button(buttons, "Place Block", choose, "place", "Start native symbol placement with this block").pack(side="right", padx=(0, 8))
+    _action_button(
+        buttons, "Cancel", dialog.destroy, "cancel", "Cancel and close this dialog"
+    ).pack(side="right")
+    _action_button(
+        buttons, "Place Block", choose, "place", "Start native symbol placement with this block"
+    ).pack(side="right", padx=(0, 8))
     render_results()
     _set_window_geometry(dialog, 1200, 800, 980, 640)
     dialog.grab_set()
@@ -1292,7 +1778,9 @@ def _pick_block_for_placement(records, parent):
     return chosen[0]
 
 
-def _pick_record(records, parent, title: str):
+def _pick_record(
+    records: list[BlockRecord], parent: tkinter_types.Misc, title: str
+) -> BlockRecord | None:
     """Show a searchable modal picker for manager actions that need a library block."""
     if not records:
         raise ValueError("No blocks were found in the configured library.")
@@ -1329,9 +1817,11 @@ def _pick_record(records, parent, title: str):
     tree.column("pins", width=55, minwidth=45, stretch=False, anchor="center")
     tree.column("variants", width=75, minwidth=60, stretch=False, anchor="center")
     tree.column("layouts", width=65, minwidth=55, stretch=False, anchor="center")
-    scrollbar = ttk.Scrollbar(results_frame, orient="vertical", command=tree.yview, style="Vertical.TScrollbar")
+    scrollbar = ttk.Scrollbar(
+        results_frame, orient="vertical", command=tree.yview, style="Vertical.TScrollbar"
+    )
     tree.configure(yscrollcommand=scrollbar.set)
-    palette = getattr(parent, "_kicad_blocks_palette", {})
+    palette = getattr(parent, "kicad_blocks_palette", {})
     tree.tag_configure("even", background=palette.get("surface", "#f4f5f6"))
     tree.tag_configure("odd", background=palette.get("surface_alt", "#e8eaed"))
     tree.grid(row=0, column=0, sticky="nsew")
@@ -1356,16 +1846,24 @@ def _pick_record(records, parent, title: str):
         value = " ".join(str(record.manifest.get("description", "") or "").split())
         return value[:177].rstrip() + "…" if len(value) > 180 else value
 
-    records_by_id: dict[str, object] = {}
-    selected_record = [None]
+    records_by_id: dict[str, BlockRecord] = {}
+    selected_record: list[BlockRecord | None] = [None]
     chosen_record = [None]
     select_button = _action_button(
-        outer, "Select block", lambda: None, "select",
-        "Use the highlighted block", state="disabled",
+        outer,
+        "Select block",
+        lambda: None,
+        "select",
+        "Use the highlighted block",
+        state="disabled",
     )
     select_button.pack(side="right", pady=(10, 0))
     _action_button(
-        outer, "Cancel", dialog.destroy, "cancel", "Close without selecting a block",
+        outer,
+        "Cancel",
+        dialog.destroy,
+        "cancel",
+        "Close without selecting a block",
     ).pack(side="right", padx=(0, 8), pady=(10, 0))
 
     def render_results(*_args):
@@ -1379,7 +1877,9 @@ def _pick_record(records, parent, title: str):
             row_id = f"{record.manifest['block_id']}:{index}"
             records_by_id[row_id] = record
             tree.insert(
-                "", "end", iid=row_id,
+                "",
+                "end",
+                iid=row_id,
                 values=(
                     record.name,
                     record.path.parent.name,
@@ -1395,16 +1895,14 @@ def _pick_record(records, parent, title: str):
             description.configure(text="No matching blocks.")
             select_button.configure(state="disabled")
             return
-        preferred_id = next(
-            key for key, value in records_by_id.items() if value is preferred
-        )
+        preferred_id = next(key for key, value in records_by_id.items() if value is preferred)
         tree.selection_set(preferred_id)
         tree.focus(preferred_id)
         selected_record[0] = preferred
         description.configure(text=short_description(preferred))
         select_button.configure(state="normal")
 
-    def selection_changed(_event=None):
+    def selection_changed(_event: tkinter_types.Event[tkinter_types.Misc] | None = None):
         selection = tree.selection()
         record = records_by_id.get(selection[0]) if selection else None
         selected_record[0] = record
@@ -1415,14 +1913,14 @@ def _pick_record(records, parent, title: str):
             description.configure(text=short_description(record))
             select_button.configure(state="normal")
 
-    def choose_selected(_event=None):
+    def choose_selected(_event: tkinter_types.Event[tkinter_types.Misc] | None = None):
         record = selected_record[0]
         if record is not None:
             chosen_record[0] = record
             dialog.destroy()
         return "break"
 
-    def focus_results(_event=None):
+    def focus_results(_event: tkinter_types.Event[tkinter_types.Misc] | None = None):
         children = tree.get_children()
         if children:
             selection = tree.selection()
@@ -1432,7 +1930,7 @@ def _pick_record(records, parent, title: str):
             tree.focus_set()
         return "break"
 
-    def choose_double_clicked(event):
+    def choose_double_clicked(event: tkinter_types.Event[tkinter_types.Misc]):
         row_id = tree.identify_row(event.y)
         record = records_by_id.get(row_id) if row_id else None
         if record is None:
@@ -1459,25 +1957,30 @@ def _pick_record(records, parent, title: str):
     return chosen_record[0]
 
 
-def _layout_choices(block) -> list[dict]:
+def _layout_choices(block: BlockRecord) -> list[ResolvedBlockLayout]:
     """Return all stored PCB layouts while adapting legacy one-layout blocks."""
-    layouts = list(block.manifest.get("layouts") or [])
+    layouts = [cast(ResolvedBlockLayout, item) for item in block.manifest.get("layouts", [])]
     if layouts:
         return layouts
     legacy_file = block.manifest.get("layout_file")
     if legacy_file:
-        return [{
-            "id": None,
-            "name": Path(str(legacy_file)).stem,
-            "file": str(legacy_file),
-            "project_file": block.manifest.get("layout_project_file", "layout.kicad_pro"),
-        }]
+        return [
+            {
+                "id": None,
+                "name": Path(str(legacy_file)).stem,
+                "file": str(legacy_file),
+                "project_file": block.manifest.get("layout_project_file", "layout.kicad_pro"),
+            }
+        ]
     return []
 
 
 def _choose_block_layout(
-    block, parent, title: str = "Select PCB Layout", instance=None
-) -> dict | None:
+    block: BlockRecord,
+    parent: tkinter_types.Misc,
+    title: str = "Select PCB Layout",
+    instance: _SchematicSymbol | None = None,
+) -> ResolvedBlockLayout | None:
     """Resolve the instance's explicit or implementation-linked PCB layout."""
     layouts = _layout_choices(block)
     if not layouts:
@@ -1500,16 +2003,15 @@ def _choose_block_layout(
         selected_variant = str(block.manifest.get("default_variant") or "")
     variant = next(
         (
-            item for item in block.manifest.get("variants", [])
+            item
+            for item in block.manifest.get("variants", [])
             if str(item.get("value", "")).casefold() == selected_variant.casefold()
         ),
         None,
     )
     linked_layout = str(variant.get("layout_id", "") if variant else "").casefold()
     default_layout = str(block.manifest.get("default_layout") or "").casefold()
-    if linked_layout and (
-        not selected_id or selected_id.casefold() == default_layout
-    ):
+    if linked_layout and (not selected_id or selected_id.casefold() == default_layout):
         selected_id = linked_layout
 
     if selected_id:
@@ -1534,7 +2036,7 @@ def _choose_block_layout(
     )
     if selected is None:
         return None
-    for item, label in zip(layouts, labels):
+    for item, label in zip(layouts, labels, strict=True):
         if selected.strip().casefold() in {
             label.casefold(),
             str(item.get("name", "")).casefold(),
@@ -1544,7 +2046,7 @@ def _choose_block_layout(
     raise ValueError(f"No PCB layout {selected!r} is defined for block {block.name!r}.")
 
 
-def _choose_library_root(parent) -> Path:
+def _choose_library_root(parent: tkinter_types.Misc) -> Path:
     default = default_library_root()
     default.mkdir(parents=True, exist_ok=True)
     selected = _pick_directory(
@@ -1557,7 +2059,9 @@ def _choose_library_root(parent) -> Path:
     return set_library_root(Path(selected))
 
 
-def _parse_profile_parameter_overrides(text: str, parameters: list[dict]) -> dict[str, str]:
+def _parse_profile_parameter_overrides(
+    text: str, parameters: list[BlockParameter]
+) -> dict[str, str]:
     """Parse typed NAME=VALUE overrides entered for one configuration profile."""
     declarations = {item["name"]: item for item in parameters}
     raw_values = {}
@@ -1577,7 +2081,12 @@ def _parse_profile_parameter_overrides(text: str, parameters: list[dict]) -> dic
     return {name: normalized[name] for name in raw_values}
 
 
-def _collect_block_profiles(parent, parameters, variants, layouts) -> list[dict] | None:
+def _collect_block_profiles(
+    parent: tkinter_types.Misc,
+    parameters: list[BlockParameter],
+    variants: list[BlockVariantManifest],
+    layouts: list[ResolvedBlockLayout],
+) -> list[BlockProfileInput] | None:
     """Collect optional linked variant/parameter/layout presets during block creation."""
     if not (parameters or variants or layouts):
         return []
@@ -1648,16 +2157,11 @@ def _collect_block_profiles(parent, parameters, variants, layouts) -> list[dict]
             )
             if parameter_text is None:
                 return None
-            parameter_values = _parse_profile_parameter_overrides(
-                parameter_text, parameters
-            )
+            parameter_values = _parse_profile_parameter_overrides(parameter_text, parameters)
 
         layout_id = None
         if layouts:
-            labels = {
-                f"{item['name']}  [{item['id']}]": str(item["id"])
-                for item in layouts
-            }
+            labels = {f"{item['name']}  [{item['id']}]": str(item["id"]) for item in layouts}
             selected_layout = simpledialog.askstring(
                 "Profile PCB Layout",
                 "Choose a PCB layout:\n\n" + "\n".join(labels),
@@ -1679,13 +2183,15 @@ def _collect_block_profiles(parent, parameters, variants, layouts) -> list[dict]
                     + ", ".join(labels)
                 )
 
-        profiles.append({
-            "name": name.strip(),
-            "description": description.strip(),
-            "variant": variant,
-            "parameters": parameter_values,
-            "layout": layout_id,
-        })
+        profiles.append(
+            {
+                "name": name.strip(),
+                "description": description.strip(),
+                "variant": variant,
+                "parameters": parameter_values,
+                "layout": layout_id,
+            }
+        )
         if not messagebox.askyesno(
             "Configuration Profiles",
             f"Added profile {name.strip()!r}. Add another profile?",
@@ -1695,7 +2201,7 @@ def _collect_block_profiles(parent, parameters, variants, layouts) -> list[dict]
     return profiles
 
 
-def _sheet_path_ids(value) -> tuple[str, ...]:
+def _sheet_path_ids(value: _SheetPath | Sequence[str] | None) -> tuple[str, ...]:
     """Normalize a KiCad SheetPath or a sequence of KIID values."""
     if value is None:
         return ()
@@ -1713,13 +2219,13 @@ def _sheet_path_ids(value) -> tuple[str, ...]:
     return tuple(result)
 
 
-def _walk_sheet_instances(instance):
+def _walk_sheet_instances(instance: _SheetInstance) -> Iterator[_SheetInstance]:
     yield instance
     for child in getattr(instance, "children", ()) or ():
         yield from _walk_sheet_instances(child)
 
 
-def _active_sheet_instance(schematic):
+def _active_sheet_instance(schematic: _Schematic) -> _SheetInstance:
     """Resolve the currently displayed Eeschema sheet from its IPC sheet path."""
     hierarchy = schematic.get_hierarchy()
     root = getattr(hierarchy, "root", None)
@@ -1733,9 +2239,10 @@ def _active_sheet_instance(schematic):
             if _sheet_path_ids(getattr(instance, "path", None)) == document_path:
                 return instance
         suffix_matches = [
-            item for item in instances
+            item
+            for item in instances
             if _sheet_path_ids(getattr(item, "path", None))
-            and _sheet_path_ids(getattr(item, "path", None))[-len(document_path):] == document_path
+            and _sheet_path_ids(getattr(item, "path", None))[-len(document_path) :] == document_path
         ]
         if len(suffix_matches) == 1:
             return suffix_matches[0]
@@ -1770,7 +2277,7 @@ def _active_sheet_instance(schematic):
     )
 
 
-def _active_sheet_source(schematic, project_dir: Path) -> tuple[Path, str | None]:
+def _active_sheet_source(schematic: _Schematic, project_dir: Path) -> tuple[Path, str | None]:
     instance = _active_sheet_instance(schematic)
     filename = str(getattr(instance, "filename", "") or "").strip()
     if not filename:
@@ -1788,7 +2295,9 @@ def _active_sheet_source(schematic, project_dir: Path) -> tuple[Path, str | None
     return source, sheet_uuid
 
 
-def _ask_create_block_details(parent, source_sheet: Path) -> tuple[str, str] | None:
+def _ask_create_block_details(
+    parent: tkinter_types.Misc, source_sheet: Path
+) -> tuple[str, str] | None:
     """Collect the block name and description in one creation dialog."""
     dialog = tk.Toplevel(parent)
     dialog.title("Create Functional Block")
@@ -1800,16 +2309,14 @@ def _ask_create_block_details(parent, source_sheet: Path) -> tuple[str, str] | N
         text="Create a reusable block from this sheet",
         font=("TkDefaultFont", 12, "bold"),
     ).pack(anchor="w")
-    palette = getattr(parent, "_kicad_blocks_palette", {})
+    palette = getattr(parent, "kicad_blocks_palette", {})
     ttk.Label(
         frame,
         text=f"Source sheet: {source_sheet.name}",
         foreground=palette.get("muted", ""),
     ).pack(anchor="w", pady=(4, 16))
     ttk.Label(frame, text="Block name").pack(anchor="w")
-    name = tk.StringVar(
-        value=source_sheet.stem.replace("_", " ").replace("-", " ").title()
-    )
+    name = tk.StringVar(value=source_sheet.stem.replace("_", " ").replace("-", " ").title())
     name_entry = ttk.Entry(frame, textvariable=name)
     name_entry.pack(fill="x", pady=(4, 12))
     ttk.Label(frame, text="Description (optional)").pack(anchor="w")
@@ -1835,8 +2342,13 @@ def _ask_create_block_details(parent, source_sheet: Path) -> tuple[str, str] | N
 
     buttons = ttk.Frame(frame)
     buttons.pack(fill="x")
-    _action_button(buttons, "Cancel", dialog.destroy, "cancel", "Cancel block creation").pack(side="right")
-    _action_button(buttons, "Create Block", accept, "create", "Create the reusable block from this sheet").pack(side="right", padx=(0, 8))
+    _action_button(buttons, "Cancel", dialog.destroy, "cancel", "Cancel block creation").pack(
+        side="right"
+    )
+    _action_button(
+        buttons, "Create Block", accept, "create", "Create the reusable block from this sheet"
+    ).pack(side="right", padx=(0, 8))
+
     def cancel():
         dialog.destroy()
 
@@ -1851,7 +2363,7 @@ def _ask_create_block_details(parent, source_sheet: Path) -> tuple[str, str] | N
 
 
 def _selected_sheet_symbol_source(
-    schematic, project_dir: Path, *, selection: list | None = None
+    schematic: _Schematic, project_dir: Path, *, selection: list[_SchematicSymbol] | None = None
 ) -> tuple[Path, str] | None:
     """Resolve one typed KiCad SheetSymbol using the active parent's directory."""
     if selection is None:
@@ -1881,11 +2393,7 @@ def _selected_sheet_symbol_source(
             f".kicad_sch file relative to the active parent sheet: {source}"
         )
     raw_id = getattr(item, "id", None)
-    source_uuid = (
-        getattr(raw_id, "value", None)
-        or getattr(raw_id, "uuid", None)
-        or raw_id
-    )
+    source_uuid = getattr(raw_id, "value", None) or getattr(raw_id, "uuid", None) or raw_id
     if source_uuid is None:
         raise ValueError("The selected hierarchical sheet has no UUID.")
     source_uuid = str(source_uuid).strip().strip("{}")
@@ -1895,7 +2403,11 @@ def _selected_sheet_symbol_source(
 
 
 def _create_and_place(
-    root, schematic, kicad, project_dir, parent,
+    root: Path | list[Path],
+    schematic: _Schematic,
+    kicad: _KiCadApp,
+    project_dir: Path,
+    parent: tkinter_types.Misc,
     editor_window_id: str | None = None,
 ) -> None:
     """Create a block from one selected SheetSymbol or the currently open sheet."""
@@ -1906,10 +2418,9 @@ def _create_and_place(
         )
 
     selected_sheet = (
-        _selected_sheet_symbol_source(
-            schematic, project_dir, selection=selection
-        )
-        if selection else None
+        _selected_sheet_symbol_source(schematic, project_dir, selection=selection)
+        if selection
+        else None
     )
     if selected_sheet is not None:
         # Prefer the typed SheetSymbol returned by KiCad's IPC API. It avoids
@@ -1921,9 +2432,7 @@ def _create_and_place(
             # Compatibility fallback for IPC versions/adapters which expose
             # the serialized selection but not a typed SheetSymbol object.
             try:
-                active_sheet, _active_sheet_uuid = _active_sheet_source(
-                    schematic, project_dir
-                )
+                active_sheet, _active_sheet_uuid = _active_sheet_source(schematic, project_dir)
                 sheet_base_directory = active_sheet.parent
             except (FileNotFoundError, ValueError, AttributeError):
                 sheet_base_directory = Path(project_dir)
@@ -1942,9 +2451,7 @@ def _create_and_place(
                 "Select exactly one sheet symbol, or clear the selection to use the open sheet."
             )
         else:
-            source_sheet, source_sheet_uuid = _active_sheet_source(
-                schematic, project_dir
-            )
+            source_sheet, source_sheet_uuid = _active_sheet_source(schematic, project_dir)
 
     details = _ask_create_block_details(parent, source_sheet)
     if details is None:
@@ -1960,8 +2467,7 @@ def _create_and_place(
         Path(project_dir) / "sym-lib-table",
     )
     previous_registration_files = {
-        path: path.read_bytes() if path.is_file() else None
-        for path in project_registration_files
+        path: path.read_bytes() if path.is_file() else None for path in project_registration_files
     }
     record = create_block(
         root,
@@ -1973,9 +2479,7 @@ def _create_and_place(
     )
     try:
         library_roots = _library_roots_for(root)
-        record = synchronize_block_dependencies(
-            record, library_roots, find_kicad_cli()
-        )["block"]
+        record = synchronize_block_dependencies(record, library_roots, find_kicad_cli())["block"]
         record = _register_block(project_dir, record, kicad, library_roots)
     except Exception as registration_error:
         cleanup_errors = []
@@ -2008,8 +2512,7 @@ def _create_and_place(
             ) from registration_error
         raise
     pins_summary = "\\n".join(
-        f"  • {pin['name']} — {pin['electrical_type']}"
-        for pin in record.manifest.get("pins", [])
+        f"  • {pin['name']} — {pin['electrical_type']}" for pin in record.manifest.get("pins", [])
     )
     messagebox.showinfo(
         "Block Created",
@@ -2022,10 +2525,13 @@ def _create_and_place(
         "normal Symbol Editor, then use Publish Library Block. When the "
         "implementation's hierarchical labels change, Publish synchronizes "
         "facade pin names and electrical types automatically."
-        + (f"\\n\\nLibrary reload note: {_LAST_LIBRARY_RELOAD_WARNING}" if _LAST_LIBRARY_RELOAD_WARNING else ""),
+        + (
+            f"\\n\\nLibrary reload note: {_last_library_reload_warning}"
+            if _last_library_reload_warning
+            else ""
+        ),
         parent=parent,
     )
-
 
 
 def _ensure_project_facade_catalog(
@@ -2069,15 +2575,10 @@ def _ensure_project_facade_catalog(
         description="KiCad Blocks — all registered functional-block libraries",
         replace_existing=True,
     )
-    table_changed = (
-        not table_path.is_file()
-        or table_path.read_bytes() != previous_table
-    )
-    if (catalog_changed or table_changed) and not _reload_symbol_library(
-        kicad, LIBRARY_NICKNAME
-    ):
+    table_changed = not table_path.is_file() or table_path.read_bytes() != previous_table
+    if (catalog_changed or table_changed) and not _reload_symbol_library(kicad, LIBRARY_NICKNAME):
         raise RuntimeError(
-            _LAST_LIBRARY_RELOAD_WARNING
+            _last_library_reload_warning
             or "Eeschema could not reload the project KBlocks symbol catalog."
         )
 
@@ -2085,20 +2586,14 @@ def _ensure_project_facade_catalog(
 
 
 def _edit_facade_symbol(
-    record,
-    kicad,
+    record: BlockRecord,
+    kicad: _KiCadApp,
     editor_window_id: str | None = None,
     *,
     project_catalog: Path | None = None,
-    close_browser=None,
+    close_browser: Callable[[], None] | None = None,
 ) -> bool:
-    """Validate the facade entry, then report the missing supported editor API.
-
-    KiCad's documented IPC surface cannot open or select a specific symbol in
-    Symbol Editor. KiCad.run_action is explicitly unstable, and the current
-    Eeschema server has no handler for its RunAction protobuf. No desktop-specific
-    input fallback or manual-only handoff is allowed.
-    """
+    """Validate a facade and explain the currently unsupported editor handoff."""
     del kicad, editor_window_id, close_browser
     symbol_name = str(record.manifest.get("symbol_name") or "").strip()
     catalog_path = (
@@ -2126,19 +2621,34 @@ def _edit_facade_symbol(
     )
 
 
-def _place_existing(root, schematic, kicad, project_dir, parent) -> None:
+def _place_existing(
+    root: Path | list[Path],
+    schematic: _Schematic,
+    kicad: _KiCadApp,
+    project_dir: Path,
+    parent: tkinter_types.Misc,
+) -> None:
     """Open the searchable browser; placement is handed to KiCad's native cursor tool."""
     editor_window_id = getattr(parent, "_kicad_blocks_editor_window_id", None)
     browser = tk.Toplevel(parent)
     _attach_tk_window_to_editor(browser, editor_window_id)
     _show_library_browser(
-        browser, schematic, kicad, project_dir,
-        default_library_root(), editor_window_id,
+        browser,
+        schematic,
+        kicad,
+        project_dir,
+        default_library_root(),
+        editor_window_id,
     )
 
 
-
-def _edit_block_implementation(root, schematic, kicad, project_dir, parent) -> None:
+def _edit_block_implementation(
+    root: Path | list[Path],
+    schematic: _Schematic,
+    kicad: _KiCadApp,
+    project_dir: Path,
+    parent: tkinter_types.Misc,
+) -> None:
     """Compatibility helper for opening a library implementation from the manager."""
     selected = _safe_schematic_selection(schematic)
     if len(selected) == 1 and hasattr(selected[0], "definition"):
@@ -2164,54 +2674,46 @@ def _edit_block_implementation(root, schematic, kicad, project_dir, parent) -> N
     return process
 
 
-
-
 _SCHEMATIC_PAGE_SIZES_MM: dict[int, tuple[float, float]] = {
-    # KiCad PageSize enum values; dimensions are default landscape sizes.
-    1: (210.0, 148.0),       # A5
-    2: (297.0, 210.0),       # A4
-    3: (420.0, 297.0),       # A3
-    4: (594.0, 420.0),       # A2
-    5: (841.0, 594.0),       # A1
-    6: (1189.0, 841.0),      # A0
-    7: (279.4, 215.9),       # ANSI A
-    8: (431.8, 279.4),       # ANSI B
-    9: (558.8, 431.8),       # ANSI C
-    10: (863.6, 558.8),      # ANSI D
-    11: (1117.6, 863.6),     # ANSI E
-    12: (812.8, 812.8),      # Gerber
-    13: (279.4, 215.9),      # US Letter
-    14: (355.6, 215.9),      # US Legal
-    15: (431.8, 279.4),      # US Ledger
+    1: (210.0, 148.0),
+    2: (297.0, 210.0),
+    3: (420.0, 297.0),
+    4: (594.0, 420.0),
+    5: (841.0, 594.0),
+    6: (1189.0, 841.0),
+    7: (279.4, 215.9),
+    8: (431.8, 279.4),
+    9: (558.8, 431.8),
+    10: (863.6, 558.8),
+    11: (1117.6, 863.6),
+    12: (812.8, 812.8),
+    13: (279.4, 215.9),
+    14: (355.6, 215.9),
+    15: (431.8, 279.4),
 }
 _SCHEMATIC_GRID_MM = 1.27
 
 
-def _schematic_page_center_mm(schematic) -> tuple[float, float]:
+def _schematic_page_center_mm(schematic: _Schematic) -> tuple[float, float]:
     """Return the active sheet's page center, snapped to KiCad's 50 mil grid."""
     settings_getter = getattr(schematic, "get_page_settings", None)
     if not callable(settings_getter):
         raise TypeError("The active schematic does not expose page settings.")
     settings = settings_getter()
     page_size = int(getattr(settings, "page_size", 0) or 0)
-
-    if page_size == 16:  # PS_USER
+    if page_size == 16:
         custom = getattr(settings, "user_page_size", None)
         if custom is None:
             raise RuntimeError("The custom schematic page size is unavailable.")
-        # KiCad IPC Vector2 coordinates are expressed in nanometres.
         width_mm = float(custom.x) / 1_000_000
         height_mm = float(custom.y) / 1_000_000
     else:
         try:
             width_mm, height_mm = _SCHEMATIC_PAGE_SIZES_MM[page_size]
         except KeyError as exc:
-            raise RuntimeError(
-                f"Unsupported KiCad schematic page-size enum: {page_size}."
-            ) from exc
-        if int(getattr(settings, "orientation", 0) or 0) == 2:  # PO_PORTRAIT
+            raise RuntimeError(f"Unsupported KiCad schematic page-size enum: {page_size}.") from exc
+        if int(getattr(settings, "orientation", 0) or 0) == 2:
             width_mm, height_mm = height_mm, width_mm
-
     if (
         not math.isfinite(width_mm)
         or not math.isfinite(height_mm)
@@ -2226,7 +2728,9 @@ def _schematic_page_center_mm(schematic) -> tuple[float, float]:
     return snap(width_mm / 2), snap(height_mm / 2)
 
 
-def _focus_schematic_items_in_editor(schematic, items):
+def _focus_schematic_items_in_editor(
+    schematic: _Schematic, items: Sequence[_SchematicSymbol]
+) -> _Schematic:
     """Navigate to the owning sheet and center the supplied items in Eeschema."""
     if not items:
         return schematic
@@ -2240,7 +2744,6 @@ def _focus_schematic_items_in_editor(schematic, items):
             "The KiCad Python binding did not expose the sheet-path protobuf "
             "required by FocusOnItems."
         )
-
     from google.protobuf.empty_pb2 import Empty
     from kipy.proto.common.commands import editor_commands_pb2
 
@@ -2259,29 +2762,21 @@ def _focus_schematic_items_in_editor(schematic, items):
 
 
 def _start_native_symbol_placement(
-    kicad,
+    kicad: _KiCadApp,
     _editor_window_id: str | None,
     symbol_name: str,
-):
-    """Place a block at the actual sheet center, focus it, and select it.
-
-    Page dimensions and orientation come from Eeschema's page settings. The
-    coordinate is snapped to the schematic grid. FocusOnItems then brings the
-    placed symbol into the viewport before it is selected.
-    """
+) -> _SchematicSymbol:
+    """Place a block at the actual sheet center, focus it, and select it."""
     if not symbol_name or any(char.isspace() for char in symbol_name):
         raise ValueError("The selected block has an invalid KiCad symbol name.")
-
     schematic = kicad.get_schematic()
     if schematic is None:
         raise RuntimeError("No active schematic was found in Eeschema.")
-
     from kipy.geometry import Vector2
 
     x_mm, y_mm = _schematic_page_center_mm(schematic)
-    symbol_id = f"{LIBRARY_NICKNAME}:{symbol_name}"
     instance = schematic.place_symbol_from_library(
-        symbol_id, Vector2.from_xy_mm(x_mm, y_mm)
+        f"{LIBRARY_NICKNAME}:{symbol_name}", Vector2.from_xy_mm(x_mm, y_mm)
     )
     target_schematic = _focus_schematic_items_in_editor(schematic, [instance])
     target_schematic.clear_selection()
@@ -2289,8 +2784,7 @@ def _start_native_symbol_placement(
     selected = _safe_schematic_selection(target_schematic)
     instance_id = str(getattr(getattr(instance, "id", None), "value", None) or instance.id)
     if not any(
-        str(getattr(getattr(item, "id", None), "value", None) or item.id)
-        == instance_id
+        str(getattr(getattr(item, "id", None), "value", None) or item.id) == instance_id
         for item in selected
     ):
         raise RuntimeError("KiCad did not confirm selection of the newly placed block.")
@@ -2298,7 +2792,7 @@ def _start_native_symbol_placement(
     return instance
 
 
-def _library_record_search_text(record) -> str:
+def _library_record_search_text(record: BlockRecord) -> str:
     manifest = record.manifest
     parts = [
         str(manifest.get("name", "")),
@@ -2313,26 +2807,22 @@ def _library_record_search_text(record) -> str:
         f"{parameter.get('name', '')} {parameter.get('type', '')}"
         for parameter in manifest.get("parameters", [])
     )
-    parts.extend(
-        str(variant.get("value", ""))
-        for variant in manifest.get("variants", [])
-    )
+    parts.extend(str(variant.get("value", "")) for variant in manifest.get("variants", []))
     parts.extend(str(layout.get("name", "")) for layout in _layout_choices(record))
     return " ".join(parts).casefold()
 
 
-def _filter_library_records(records: list, query: str) -> list:
+def _filter_library_records(records: list[BlockRecord], query: str) -> list[BlockRecord]:
     """Filter blocks by name, description, pins, parameters, variants or layouts."""
     needle = str(query or "").strip().casefold()
     if not needle:
         return list(records)
-    return [
-        record for record in records
-        if needle in _library_record_search_text(record)
-    ]
+    return [record for record in records if needle in _library_record_search_text(record)]
 
 
-def _preferred_library_selection(visible_records: list, selected_record):
+def _preferred_library_selection(
+    visible_records: list[BlockRecord], selected_record: BlockRecord | None
+) -> BlockRecord | None:
     """Keep the current block selected while it remains visible after filtering."""
     if not visible_records:
         return None
@@ -2351,10 +2841,10 @@ def _library_record_for_tree_row(records_by_id: dict, row_id: str | None):
     return records_by_id.get(str(row_id))
 
 
-def _minimize_placement_windows(window) -> list:
+def _minimize_placement_windows(window: _TkMinimizableWindow) -> list[_TkMinimizableWindow]:
     """Minimize the browser and its manager parent so Eeschema's canvas is visible."""
-    minimized = []
-    current = window
+    minimized: list[_TkMinimizableWindow] = []
+    current: _TkMinimizableWindow | None = cast(_TkMinimizableWindow, window)
     while current is not None:
         state = None
         with contextlib.suppress(Exception):
@@ -2370,14 +2860,14 @@ def _minimize_placement_windows(window) -> list:
     return minimized
 
 
-def _restore_placement_windows(windows: list) -> None:
+def _restore_placement_windows(windows: list[_TkMinimizableWindow]) -> None:
     """Restore windows minimized before a placement handoff failed."""
     for window in reversed(windows):
         with contextlib.suppress(Exception):
             window.deiconify()
 
 
-def _clean_facade_preview_svg(svg_file: Path, record, output_dir: Path) -> Path:
+def _clean_facade_preview_svg(svg_file: Path, record: BlockRecord, output_dir: Path) -> Path:
     """Remove component-name and reference placeholder artwork from the SVG."""
     import xml.etree.ElementTree as ET
 
@@ -2391,7 +2881,7 @@ def _clean_facade_preview_svg(svg_file: Path, record, output_dir: Path) -> Path:
         display_labels.add(f"{reference_prefix}?")
     display_labels.discard("")
 
-    def contained_labels(node) -> set[str]:
+    def contained_labels(node: ET.Element) -> set[str]:
         labels = set()
         for child in node.iter():
             if child.tag.rsplit("}", 1)[-1] not in {"text", "desc"}:
@@ -2408,57 +2898,21 @@ def _clean_facade_preview_svg(svg_file: Path, record, output_dir: Path) -> Path:
             if contained_labels(child_node) & display_labels:
                 parent_node.remove(child_node)
 
-    # resvg requires a concrete intrinsic viewport. KiCad exports commonly
-    # include a viewBox but may omit usable width/height attributes; CairoSVG
-    # tolerated that ambiguity while resvg correctly rejects an undefined size.
-    view_box = root.attrib.get("viewBox") or root.attrib.get("viewbox") or ""
-    view_box_values = re.findall(
-        r"[-+]?(?:\d*\.\d+|\d+\.?\d*)(?:[eE][-+]?\d+)?", view_box
-    )
-    if len(view_box_values) == 4:
-        try:
-            view_width, view_height = float(view_box_values[2]), float(view_box_values[3])
-        except ValueError:
-            view_width = view_height = 0.0
-        if view_width > 0 and view_height > 0:
-            root.set("width", f"{view_width:g}px")
-            root.set("height", f"{view_height:g}px")
-    else:
-        def valid_dimension(value: str | None) -> bool:
-            if not value:
-                return False
-            match = re.fullmatch(
-                r"\s*([+]?(?:\d+(?:\.\d*)?|\.\d+))(?:px|pt|pc|mm|cm|in)?\s*",
-                value,
-                flags=re.IGNORECASE,
-            )
-            return bool(match and float(match.group(1)) > 0)
-
-        if not valid_dimension(root.attrib.get("width")) or not valid_dimension(
-            root.attrib.get("height")
-        ):
-            root.set("width", "300px")
-            root.set("height", "150px")
-
     cleaned_svg = output_dir / "facade-preview.svg"
-    ET.ElementTree(root).write(
-        cleaned_svg, encoding="utf-8", xml_declaration=True
-    )
+    ET.ElementTree(root).write(cleaned_svg, encoding="utf-8", xml_declaration=True)
     return cleaned_svg
 
 
 def _native_symbol_preview_photo(
-    record,
+    record: BlockRecord,
     width: int = 680,
     max_height: int = 260,
     *,
     library_file: str | Path | None = None,
-):
+) -> tkinter_types.PhotoImage | None:
     """Render the exact catalog symbol used by the current preview/editor workflow."""
     symbol_name = str(record.manifest["symbol_name"])
-    library_file = Path(
-        library_file or record.symbol_library
-    ).expanduser().resolve()
+    library_file = Path(library_file or record.symbol_library).expanduser().resolve()
     if not library_file.is_file():
         raise FileNotFoundError(f"Facade symbol library is missing: {library_file}")
 
@@ -2476,9 +2930,14 @@ def _native_symbol_preview_photo(
             output_dir = Path(temporary)
             result = subprocess.run(
                 [
-                    cli, "sym", "export", "svg",
-                    "--symbol", symbol_name,
-                    "--output", str(output_dir),
+                    cli,
+                    "sym",
+                    "export",
+                    "svg",
+                    "--symbol",
+                    symbol_name,
+                    "--output",
+                    str(output_dir),
                     str(library_file),
                 ],
                 capture_output=True,
@@ -2489,8 +2948,7 @@ def _native_symbol_preview_photo(
             if result.returncode != 0:
                 detail = (result.stderr or result.stdout).strip()
                 raise RuntimeError(
-                    "KiCad could not render the facade symbol"
-                    + (f": {detail}" if detail else ".")
+                    "KiCad could not render the facade symbol" + (f": {detail}" if detail else ".")
                 )
             svg_file = output_dir / f"{symbol_name}.svg"
             if not svg_file.is_file():
@@ -2501,17 +2959,10 @@ def _native_symbol_preview_photo(
                     )
                 svg_file = candidates[0]
 
-            try:
-                import resvg_py
-            except ImportError as exc:
-                raise RuntimeError(
-                    "The native KiCad preview rasterizer is missing. Reinstall KiCad Blocks "
-                    "so its resvg_py dependency is installed."
-                ) from exc
-
             svg_file = _clean_facade_preview_svg(svg_file, record, output_dir)
-            png_data = resvg_py.svg_to_bytes(
-                svg_path=str(svg_file),
+            renderer = cast(_ResvgPy, import_module("resvg_py"))
+            png_data = renderer.svg_to_bytes(
+                svg_string=svg_file.read_text(encoding="utf-8"),
                 width=int(width),
                 height=int(max_height),
             )
@@ -2550,7 +3001,8 @@ def _native_symbol_preview_photo(
     # Tk images belong to a particular Tcl interpreter, so cache only PNG bytes.
     return tk.PhotoImage(data=base64.b64encode(png_data).decode("ascii"))
 
-_NATIVE_PREVIEW_CACHE: dict[tuple, object] = {}
+
+_NATIVE_PREVIEW_CACHE: dict[tuple[str, int, str, int, int], bytes] = {}
 
 
 def _draw_facade_preview(
@@ -2581,19 +3033,24 @@ def _draw_facade_preview(
             justify="center",
             width=max(int(canvas.winfo_width()), 480) - 32,
         )
-        canvas.configure(scrollregion=(0, 0, max(int(canvas.winfo_width()), 480), max(int(canvas.winfo_height()), 250)))
+        canvas.configure(
+            scrollregion=(
+                0,
+                0,
+                max(int(canvas.winfo_width()), 480),
+                max(int(canvas.winfo_height()), 250),
+            )
+        )
         return
 
     canvas._native_preview_photo = photo
     width = max(int(canvas.winfo_width()), 480)
     height = max(int(canvas.winfo_height()), 250)
     canvas.create_image(width / 2, height / 2, image=photo, anchor="center")
-    canvas.configure(
-        scrollregion=(0, 0, max(width, photo.width()), max(height, photo.height()))
-    )
+    canvas.configure(scrollregion=(0, 0, max(width, photo.width()), max(height, photo.height())))
 
 
-def _block_overview_text(record) -> str:
+def _block_overview_text(record: BlockRecord) -> str:
     """Summarize the block's interface and available circuit choices."""
     manifest = record.manifest
     pins = manifest.get("pins", [])
@@ -2629,14 +3086,11 @@ def _block_overview_text(record) -> str:
         )
     if profiles:
         lines.extend(["", f"Profiles · {len(profiles)}"])
-        lines.extend(
-            f"  {item.get('name', item.get('id'))}"
-            for item in profiles
-        )
+        lines.extend(f"  {item.get('name', item.get('id'))}" for item in profiles)
     return "\n".join(lines)
 
 
-def _register_implementation_catalog(record, library_roots: list[Path]) -> Path:
+def _register_implementation_catalog(record: BlockRecord, library_roots: list[Path]) -> Path:
     """Register every shared facade so implementation editors can use Add Symbol."""
     catalog = build_project_symbol_catalog(record.path, library_roots)
     return register_project_symbol_library(
@@ -2649,14 +3103,14 @@ def _register_implementation_catalog(record, library_roots: list[Path]) -> Path:
 
 
 def _launch_block_asset(
-    kicad,
+    kicad: _KiCadApp,
     path: Path,
     description: str,
     *,
     editor_window_id: str | None = None,
-):
-    """Open a stored KiCad asset with the executable resolved by KiCad."""
-    del editor_window_id  # No portable cross-process transient-owner API is exposed by KiCad IPC.
+) -> subprocess.Popen[bytes]:
+    """Open a stored KiCad asset using its native application."""
+    del editor_window_id
     path = Path(path).expanduser().resolve()
     if not path.is_file():
         raise FileNotFoundError(f"The selected {description} is missing: {path}")
@@ -2668,7 +3122,10 @@ def _launch_block_asset(
 
 
 def _save_block_variants(
-    record, variants: list[dict], *, default_variant=_KEEP_DEFAULT_VARIANT
+    record: BlockRecord,
+    variants: list[BlockVariantEditInput],
+    *,
+    default_variant: str | None | _KeepDefaultVariant = _KEEP_DEFAULT_VARIANT,
 ) -> None:
     """Publish implementation variants and the explicitly selected default."""
     import json
@@ -2689,11 +3146,13 @@ def _save_block_variants(
     previous_files = {str(item["file"]) for item in previous}
     previous_layout_by_value = {
         str(item.get("value", "")).casefold(): str(item.get("layout_id", "")).casefold()
-        for item in previous if item.get("layout_id")
+        for item in previous
+        if item.get("layout_id")
     }
     previous_layout_by_file = {
         str(item.get("file", "")).casefold(): str(item.get("layout_id", "")).casefold()
-        for item in previous if item.get("layout_id")
+        for item in previous
+        if item.get("layout_id")
     }
     normalized = []
     retained_files = set()
@@ -2714,14 +3173,15 @@ def _save_block_variants(
         else:
             source = Path(item.get("source", "")).expanduser().resolve()
             if not source.is_file() or source.suffix.casefold() != ".kicad_sch":
-                raise ValueError("Implementation variant must be an existing .kicad_sch file: " + str(source))
+                raise ValueError(
+                    "Implementation variant must be an existing .kicad_sch file: " + str(source)
+                )
             stem = slugify(value)
             filename = f"implementation_{stem}.kicad_sch"
             suffix = 2
             while (
-                ((block_path / filename).exists() and filename not in previous_files)
-                or filename.casefold() in seen_files
-            ):
+                (block_path / filename).exists() and filename not in previous_files
+            ) or filename.casefold() in seen_files:
                 filename = f"implementation_{stem}_{suffix}.kicad_sch"
                 suffix += 1
 
@@ -2767,16 +3227,25 @@ def _save_block_variants(
     if default_variant is _KEEP_DEFAULT_VARIANT:
         previous_default = str(manifest.get("default_variant") or "").casefold()
         selected_default = old_value_to_new.get(previous_default) if previous_default else None
-    elif default_variant is None or str(default_variant).strip().casefold() in {"", "default", "base"}:
+    elif default_variant is None or str(default_variant).strip().casefold() in {
+        "",
+        "default",
+        "base",
+    }:
         selected_default = None
     else:
         selected_default = next(
-            (item["value"] for item in normalized
-             if item["value"].casefold() == str(default_variant).strip().casefold()),
+            (
+                item["value"]
+                for item in normalized
+                if item["value"].casefold() == str(default_variant).strip().casefold()
+            ),
             None,
         )
         if selected_default is None:
-            raise ValueError(f"Default implementation {default_variant!r} is not in the saved variant list.")
+            raise ValueError(
+                f"Default implementation {default_variant!r} is not in the saved variant list."
+            )
 
     copied_paths = []
     try:
@@ -2839,13 +3308,13 @@ def _save_block_variants(
 
 
 def _save_block_layouts(
-    record,
-    layouts: list[dict],
+    record: BlockRecord,
+    layouts: list[BlockLayoutEditInput],
     *,
     default_layout_id: str | None,
     variant_layouts: dict[str, str] | None = None,
     layout_implementations: dict[str, list[str]] | None = None,
-):
+) -> BlockRecord:
     """Copy PCB assets and atomically save non-empty implementation associations."""
     import json
     import shutil
@@ -2886,8 +3355,7 @@ def _save_block_layouts(
         },
     }
     requested_implementation_links = {
-        str(key).casefold(): list(values)
-        for key, values in (layout_implementations or {}).items()
+        str(key).casefold(): list(values) for key, values in (layout_implementations or {}).items()
     }
 
     normalized = []
@@ -2917,9 +3385,8 @@ def _save_block_layouts(
             filename = f"layout_{layout_id}.kicad_pcb"
             counter = 2
             while (
-                ((block_path / filename).exists() and filename not in previous_files)
-                or filename.casefold() in seen_files
-            ):
+                (block_path / filename).exists() and filename not in previous_files
+            ) or filename.casefold() in seen_files:
                 filename = f"layout_{layout_id}_{counter}.kicad_pcb"
                 counter += 1
             destination = block_path / filename
@@ -2962,9 +3429,7 @@ def _save_block_layouts(
                     f"Stored project-settings file is missing or unsafe: {project_filename!r}"
                 )
 
-        raw_links = requested_implementation_links.get(
-            layout_id, item.get("implementations")
-        )
+        raw_links = requested_implementation_links.get(layout_id, item.get("implementations"))
         if raw_links is None:
             raw_links = []
             if layout_id == raw_default:
@@ -3054,9 +3519,7 @@ def _save_block_layouts(
     )
     manifest["layout_file"] = default_layout.get("file")
     manifest["layout_project_file"] = default_layout.get("project_file")
-    manifest["files"] = [
-        name for name in manifest.get("files", []) if name not in removed_files
-    ]
+    manifest["files"] = [name for name in manifest.get("files", []) if name not in removed_files]
     for name in sorted(added_files):
         if name not in manifest["files"]:
             manifest["files"].append(name)
@@ -3084,12 +3547,12 @@ def _new_blank_pcb_source() -> Path:
     os.close(descriptor)
     path = Path(filename)
     path.write_text(
-        '(kicad_pcb\n'
-        '  (version 20250114)\n'
+        "(kicad_pcb\n"
+        "  (version 20250114)\n"
         '  (generator "pcbnew")\n'
-        '  (general (thickness 1.6))\n'
+        "  (general (thickness 1.6))\n"
         '  (paper "A4")\n'
-        '  (layers\n'
+        "  (layers\n"
         '    (0 "F.Cu" signal)\n'
         '    (31 "B.Cu" signal)\n'
         '    (32 "B.Adhes" user "B.Adhesive")\n'
@@ -3110,16 +3573,18 @@ def _new_blank_pcb_source() -> Path:
         '    (47 "F.CrtYd" user)\n'
         '    (48 "B.Fab" user)\n'
         '    (49 "F.Fab" user)\n'
-        '  )\n'
-        '  (setup)\n'
+        "  )\n"
+        "  (setup)\n"
         '  (net 0 "")\n'
-        ')\n',
+        ")\n",
         encoding="utf-8",
     )
     return path
 
 
-def _ask_layout_details(parent, record) -> dict | None:
+def _ask_layout_details(
+    parent: tkinter_types.Misc, record: BlockRecord
+) -> _LayoutDialogChoice | None:
     """Choose an existing board or create a blank starting point for a named layout."""
     dialog = tk.Toplevel(parent)
     dialog.title("Add PCB layout")
@@ -3142,7 +3607,9 @@ def _ask_layout_details(parent, record) -> dict | None:
     source_value = tk.StringVar()
     source_entry = ttk.Entry(frame, textvariable=source_value)
     source_entry.grid(row=4, column=0, columnspan=2, sticky="ew", pady=(4, 12))
-    browse_button = _action_button(frame, "Choose file…", lambda: None, "file", "Choose an existing KiCad PCB file")
+    browse_button = _action_button(
+        frame, "Choose file…", lambda: None, "file", "Choose an existing KiCad PCB file"
+    )
     browse_button.grid(row=4, column=2, sticky="ew", padx=(8, 0), pady=(4, 12))
     implementation_values = ["Default"] + [
         str(item["value"]) for item in record.manifest.get("variants", [])
@@ -3156,7 +3623,9 @@ def _ask_layout_details(parent, record) -> dict | None:
         state="readonly",
     )
     link_combo.grid(row=6, column=0, columnspan=3, sticky="ew", pady=(4, 4))
-    _add_tooltip(link_combo, "This layout is available when applying the selected implementation to a board.")
+    _add_tooltip(
+        link_combo, "This layout is available when applying the selected implementation to a board."
+    )
     frame.columnconfigure(0, weight=1)
     result = [None]
 
@@ -3172,7 +3641,7 @@ def _ask_layout_details(parent, record) -> dict | None:
 
     browse_button.configure(command=browse)
 
-    def update_mode(_event=None):
+    def update_mode(_event: tkinter_types.Event[tkinter_types.Misc] | None = None):
         use_existing = mode_value.get() == "Choose an existing PCB file"
         if use_existing:
             source_entry.grid()
@@ -3189,7 +3658,9 @@ def _ask_layout_details(parent, record) -> dict | None:
     def accept():
         name = name_value.get().strip()
         if not name or len(name) > 80:
-            messagebox.showerror("Add PCB layout", "Enter a layout name of 1 to 80 characters.", parent=dialog)
+            messagebox.showerror(
+                "Add PCB layout", "Enter a layout name of 1 to 80 characters.", parent=dialog
+            )
             name_entry.focus_set()
             return
         if mode_value.get() == "Create a new empty board":
@@ -3211,8 +3682,12 @@ def _ask_layout_details(parent, record) -> dict | None:
 
     buttons = ttk.Frame(frame)
     buttons.grid(row=7, column=0, columnspan=3, sticky="ew", pady=(8, 0))
-    _action_button(buttons, "Cancel", dialog.destroy, "cancel", "Cancel layout creation").pack(side="right")
-    _action_button(buttons, "Add layout", accept, "create", "Add this PCB layout to the block").pack(side="right", padx=(0, 8))
+    _action_button(buttons, "Cancel", dialog.destroy, "cancel", "Cancel layout creation").pack(
+        side="right"
+    )
+    _action_button(
+        buttons, "Add layout", accept, "create", "Add this PCB layout to the block"
+    ).pack(side="right", padx=(0, 8))
     dialog.bind("<Return>", lambda _event: accept())
     dialog.bind("<Escape>", lambda _event: dialog.destroy())
     _set_window_geometry(dialog, 860, 620, 760, 560)
@@ -3223,7 +3698,10 @@ def _ask_layout_details(parent, record) -> dict | None:
 
 
 def _show_block_layout_editor(
-    record, parent, kicad=None, editor_window_id: str | None = None
+    record: BlockRecord,
+    parent: tkinter_types.Misc,
+    kicad: _KiCadApp | None = None,
+    editor_window_id: str | None = None,
 ) -> Path | None:
     """Manage stored PCB boards and keep every board linked to an implementation."""
     from .model import slugify
@@ -3265,8 +3743,7 @@ def _show_block_layout_editor(
     layouts = [dict(item) for item in _layout_choices(record)]
     for item in layouts:
         item["id"] = str(
-            item.get("id")
-            or slugify(str(item.get("name") or Path(item["file"]).stem))
+            item.get("id") or slugify(str(item.get("name") or Path(item["file"]).stem))
         ).casefold()
     default_layout_id = str(record.manifest.get("default_layout") or "").casefold()
     if not default_layout_id and layouts:
@@ -3284,9 +3761,7 @@ def _show_block_layout_editor(
             links = ["Default"]
         if not links:
             links = [
-                str(value)
-                for value, linked in variant_layouts.items()
-                if linked == item["id"]
+                str(value) for value, linked in variant_layouts.items() if linked == item["id"]
             ]
         if not links:
             links = ["Default"]
@@ -3306,7 +3781,9 @@ def _show_block_layout_editor(
         for index, item in enumerate(layouts):
             iid = str(index)
             tree.insert(
-                "", "end", iid=iid,
+                "",
+                "end",
+                iid=iid,
                 values=(item.get("name", item["id"]), assigned_to(item["id"]), item["file"]),
                 tags=("even" if index % 2 == 0 else "odd",),
             )
@@ -3355,9 +3832,7 @@ def _show_block_layout_editor(
         else:
             variant_layouts[linked_implementation] = layout_id
         changed[0] = True
-        status_value.set(
-            f"Added {name}."
-        )
+        status_value.set(f"Added {name}.")
         render(layout_id)
 
     def remove_layout():
@@ -3399,9 +3874,7 @@ def _show_block_layout_editor(
                 else:
                     variant_layouts.pop(value)
         changed[0] = True
-        status_value.set(
-            f"Removed {item['name']}."
-        )
+        status_value.set(f"Removed {item['name']}.")
         render(replacement_id)
 
     def make_default():
@@ -3437,7 +3910,7 @@ def _show_block_layout_editor(
         status_value.set(f"Assigned {item['name']} to {selected}.")
         render(item["id"])
 
-    def update_actions(_event=None):
+    def update_actions(_event: tkinter_types.Event[tkinter_types.Misc] | None = None):
         has_selection = selected_layout() is not None
         remove_button.configure(state="normal" if has_selection else "disabled")
         default_button.configure(state="normal" if has_selection else "disabled")
@@ -3456,10 +3929,22 @@ def _show_block_layout_editor(
     actions = ttk.Frame(frame)
     actions.grid(row=3, column=0, sticky="ew", pady=(8, 0))
     _action_button(actions, "Add layout", add_layout, "add", "Add a PCB layout").pack(side="left")
-    remove_button = _action_button(actions, "Remove", remove_layout, "remove", "Remove the selected PCB layout", state="disabled")
+    remove_button = _action_button(
+        actions,
+        "Remove",
+        remove_layout,
+        "remove",
+        "Remove the selected PCB layout",
+        state="disabled",
+    )
     remove_button.pack(side="left", padx=(8, 0))
     default_button = _action_button(
-        actions, "Set default", make_default, "default", "Use this layout as the default", state="disabled"
+        actions,
+        "Set default",
+        make_default,
+        "default",
+        "Use this layout as the default",
+        state="disabled",
     )
     default_button.pack(side="left", padx=(8, 0))
 
@@ -3467,16 +3952,22 @@ def _show_block_layout_editor(
     link_actions.grid(row=4, column=0, sticky="ew", pady=(8, 0))
     ttk.Label(link_actions, text="Make selected layout available to").pack(side="left")
     implementation_combo = ttk.Combobox(
-        link_actions, textvariable=implementation_value,
-        values=implementation_values, state="readonly", width=22,
+        link_actions,
+        textvariable=implementation_value,
+        values=implementation_values,
+        state="readonly",
+        width=22,
     )
     implementation_combo.pack(side="left", padx=(8, 0))
     link_button = _action_button(
-        link_actions, "Assign", link_selected, "select",
-        "Associate the selected layout with this implementation", state="disabled"
+        link_actions,
+        "Assign",
+        link_selected,
+        "select",
+        "Associate the selected layout with this implementation",
+        state="disabled",
     )
     link_button.pack(side="left", padx=(8, 0))
-
 
     def cancel_layout_edits():
         if changed[0] and not messagebox.askyesno(
@@ -3490,7 +3981,10 @@ def _show_block_layout_editor(
     footer = ttk.Frame(frame)
     footer.grid(row=5, column=0, sticky="ew", pady=(12, 0))
     _action_button(
-        footer, "Cancel", cancel_layout_edits, "cancel",
+        footer,
+        "Cancel",
+        cancel_layout_edits,
+        "cancel",
         "Close without saving layout changes",
     ).pack(side="right")
     save_button = _action_button(
@@ -3505,7 +3999,8 @@ def _show_block_layout_editor(
             return
         try:
             _save_block_layouts(
-                record, layouts,
+                record,
+                layouts,
                 default_layout_id=default_layout_id_holder[0],
                 variant_layouts=variant_layouts,
                 layout_implementations=layout_implementations,
@@ -3513,8 +4008,7 @@ def _show_block_layout_editor(
             if added_ids:
                 updated = read_manifest(Path(record.path))
                 new_item = next(
-                    item for item in updated.get("layouts", [])
-                    if item["id"] == added_ids[-1]
+                    item for item in updated.get("layouts", []) if item["id"] == added_ids[-1]
                 )
                 created_layout_to_open[0] = Path(record.path) / new_item["file"]
         except (OSError, RuntimeError, TypeError, ValueError, KeyError, StopIteration) as exc:
@@ -3532,6 +4026,7 @@ def _show_block_layout_editor(
     dialog.wait_window()
     return created_layout_to_open[0]
 
+
 def _pick_save_file(
     parent,
     *,
@@ -3546,18 +4041,21 @@ def _pick_save_file(
     if not directory.is_dir():
         directory = Path.cwd()
     initialfile = initial.name if initial.suffix else ""
-    return filedialog.asksaveasfilename(
-        title=title,
-        initialdir=str(directory),
-        initialfile=initialfile,
-        defaultextension=defaultextension,
-        filetypes=filetypes,
-        parent=parent,
-    ) or None
+    return (
+        filedialog.asksaveasfilename(
+            title=title,
+            initialdir=str(directory),
+            initialfile=initialfile,
+            defaultextension=defaultextension,
+            filetypes=filetypes,
+            parent=parent,
+        )
+        or None
+    )
 
 
 def _pick_kicad_file(
-    parent,
+    parent: tkinter_types.Misc,
     *,
     title: str,
     suffix: str,
@@ -3572,17 +4070,20 @@ def _pick_kicad_file(
         (f"KiCad {suffix.upper().lstrip('.')} files", f"*{suffix}"),
         ("All files", "*.*"),
     ]
-    return filedialog.askopenfilename(
-        title=title,
-        initialdir=str(directory),
-        initialfile=initial.name if initial.is_file() else "",
-        filetypes=filetypes,
-        parent=parent,
-    ) or None
+    return (
+        filedialog.askopenfilename(
+            title=title,
+            initialdir=str(directory),
+            initialfile=initial.name if initial.is_file() else "",
+            filetypes=filetypes,
+            parent=parent,
+        )
+        or None
+    )
 
 
 def _pick_directory(
-    parent, *, title: str, initial_path: str | Path | None = None
+    parent: tkinter_types.Misc, *, title: str, initial_path: str | Path | None = None
 ) -> str | None:
     """Open Tk's native directory chooser with a shared initial-directory policy."""
     initial = Path(initial_path).expanduser() if initial_path else Path.cwd()
@@ -3590,24 +4091,29 @@ def _pick_directory(
         initial = initial.parent
     if not initial.is_dir():
         initial = Path.cwd()
-    return filedialog.askdirectory(
-        title=title,
-        initialdir=str(initial),
-        mustexist=True,
-        parent=parent,
-    ) or None
+    return (
+        filedialog.askdirectory(
+            title=title,
+            initialdir=str(initial),
+            mustexist=True,
+            parent=parent,
+        )
+        or None
+    )
 
 
 def _new_blank_schematic_source() -> Path:
     """Create a valid empty KiCad schematic as a temporary source for a new variant."""
     import uuid as uuid_module
 
-    descriptor, filename = tempfile.mkstemp(prefix="kicad-blocks-implementation-", suffix=".kicad_sch")
+    descriptor, filename = tempfile.mkstemp(
+        prefix="kicad-blocks-implementation-", suffix=".kicad_sch"
+    )
     os.close(descriptor)
     path = Path(filename)
     path.write_text(
-        "(kicad_sch (version 20250114) (generator \"eeschema\")\n"
-        f"  (uuid \"{uuid_module.uuid4()}\")\n"
+        '(kicad_sch (version 20250114) (generator "eeschema")\n'
+        f'  (uuid "{uuid_module.uuid4()}")\n'
         '  (paper "A4")\n'
         "  (lib_symbols)\n"
         '  (sheet_instances (path "/" (page "1")))\n'
@@ -3619,14 +4125,16 @@ def _new_blank_schematic_source() -> Path:
 
 
 def _ask_implementation_details(
-    parent,
+    parent: tkinter_types.Misc,
     *,
     value: str = "",
     source: str = "",
-    record=None,
+    record: BlockRecord | None = None,
     allow_create: bool = False,
 ) -> tuple[str, str] | None:
     """Collect an implementation selector and its starting schematic."""
+    if allow_create and record is None:
+        raise ValueError("An existing block record is required to copy an implementation.")
     dialog = tk.Toplevel(parent)
     dialog.title("Implementation details")
     dialog.transient(parent)
@@ -3638,9 +4146,7 @@ def _ask_implementation_details(
         font=("TkDefaultFont", 12, "bold"),
     ).grid(row=0, column=0, columnspan=3, sticky="w", pady=(0, 14))
 
-    ttk.Label(frame, text="Variant value").grid(
-        row=1, column=0, columnspan=3, sticky="w"
-    )
+    ttk.Label(frame, text="Variant value").grid(row=1, column=0, columnspan=3, sticky="w")
     selector_value = tk.StringVar(value=value)
     selector_entry = ttk.Entry(frame, textvariable=selector_value)
     selector_entry.grid(row=2, column=0, columnspan=3, sticky="ew", pady=(2, 12))
@@ -3651,17 +4157,13 @@ def _ask_implementation_details(
     copy_value = tk.StringVar()
     copy_sources: dict[str, Path] = {}
     if allow_create:
-        ttk.Label(frame, text="Starting point").grid(
-            row=3, column=0, columnspan=3, sticky="w"
-        )
+        ttk.Label(frame, text="Starting point").grid(row=3, column=0, columnspan=3, sticky="w")
         modes = [
             "Choose a schematic file",
             "Create a new empty schematic",
             "Copy an existing implementation",
         ]
-        mode_combo = ttk.Combobox(
-            frame, textvariable=mode_value, values=modes, state="readonly"
-        )
+        mode_combo = ttk.Combobox(frame, textvariable=mode_value, values=modes, state="readonly")
         mode_combo.grid(row=4, column=0, columnspan=3, sticky="ew", pady=(4, 12))
     else:
         modes = ["Choose a schematic file"]
@@ -3682,9 +4184,7 @@ def _ask_implementation_details(
         values=(),
         state="readonly",
     )
-    copy_combo.grid(
-        row=source_row + 1, column=0, columnspan=3, sticky="ew", pady=(4, 14)
-    )
+    copy_combo.grid(row=source_row + 1, column=0, columnspan=3, sticky="ew", pady=(4, 14))
     copy_combo.grid_remove()
 
     def browse():
@@ -3700,7 +4200,7 @@ def _ask_implementation_details(
 
     browse_button.configure(command=browse)
 
-    def update_source_mode(_event=None):
+    def update_source_mode(_event: tkinter_types.Event[tkinter_types.Misc] | None = None):
         mode = mode_value.get()
         copy_combo.grid_remove()
         source_entry.grid_remove()
@@ -3719,15 +4219,24 @@ def _ask_implementation_details(
             browse_button.grid()
 
     if allow_create:
-        for label, path in [
-            ("Default", Path(record.path) / resolve_variant_implementation(record.manifest, ""))
-        ] + [
-            (str(item["value"]), Path(record.path) / str(item["file"]))
-            for item in record.manifest.get("variants", [])
-        ]:
-            copy_sources[label] = path
+        copy_sources.update(
+            {
+                label: path
+                for label, path in [
+                    (
+                        "Default",
+                        Path(record.path) / resolve_variant_implementation(record.manifest, ""),
+                    )
+                ]
+                + [
+                    (str(item["value"]), Path(record.path) / str(item["file"]))
+                    for item in record.manifest.get("variants", [])
+                ]
+            }
+        )
         copy_combo.configure(values=list(copy_sources))
-        mode_combo.bind("<<ComboboxSelected>>", update_source_mode)
+        if mode_combo is not None:
+            mode_combo.bind("<<ComboboxSelected>>", update_source_mode)
     else:
         copy_sources.clear()
 
@@ -3759,10 +4268,7 @@ def _ask_implementation_details(
                 return
         else:
             selected_source = Path(source_value.get()).expanduser().resolve()
-            if (
-                not selected_source.is_file()
-                or selected_source.suffix.casefold() != ".kicad_sch"
-            ):
+            if not selected_source.is_file() or selected_source.suffix.casefold() != ".kicad_sch":
                 messagebox.showerror(
                     "Implementation details",
                     "Choose an existing KiCad .kicad_sch implementation.",
@@ -3775,9 +4281,15 @@ def _ask_implementation_details(
 
     buttons = ttk.Frame(frame)
     buttons.grid(row=source_row + 2, column=0, columnspan=3, sticky="ew", pady=(12, 4))
-    _action_button(buttons, "Cancel", dialog.destroy, "cancel", "Cancel implementation setup").pack(side="right")
+    _action_button(buttons, "Cancel", dialog.destroy, "cancel", "Cancel implementation setup").pack(
+        side="right"
+    )
     _action_button(
-        buttons, "Use implementation", accept, "select", "Use the selected implementation",
+        buttons,
+        "Use implementation",
+        accept,
+        "select",
+        "Use the selected implementation",
     ).pack(side="right", padx=(0, 8))
     dialog.bind("<Return>", lambda _event: accept())
     dialog.bind("<Escape>", lambda _event: dialog.destroy())
@@ -3789,10 +4301,12 @@ def _ask_implementation_details(
     return result[0]
 
 
-
-
 def _show_block_variant_editor(
-    record, parent, *, kicad=None, editor_window_id: str | None = None
+    record: BlockRecord,
+    parent: tkinter_types.Misc,
+    *,
+    kicad: _KiCadApp | None = None,
+    editor_window_id: str | None = None,
 ) -> Path | None:
     """Manage named implementations and select which one empty KB_VARIANT uses."""
     dialog = tk.Toplevel(parent)
@@ -3804,9 +4318,9 @@ def _show_block_variant_editor(
     palette = getattr(parent, "_kicad_blocks_palette", {})
     frame.columnconfigure(0, weight=1)
     frame.rowconfigure(2, weight=1)
-    ttk.Label(
-        frame, text="Circuit implementations", font=("TkDefaultFont", 12, "bold")
-    ).grid(row=0, column=0, sticky="w")
+    ttk.Label(frame, text="Circuit implementations", font=("TkDefaultFont", 12, "bold")).grid(
+        row=0, column=0, sticky="w"
+    )
     ttk.Label(
         frame,
         text="Empty KB_VARIANT uses the default implementation.",
@@ -3837,7 +4351,7 @@ def _show_block_variant_editor(
     tree.grid(row=0, column=0, sticky="nsew")
     scroll.grid(row=0, column=1, sticky="ns")
 
-    palette = getattr(parent, "_kicad_blocks_palette", {})
+    palette = getattr(parent, "kicad_blocks_palette", {})
     tree.tag_configure("even", background=palette.get("surface", "#f4f5f6"))
     tree.tag_configure("odd", background=palette.get("surface_alt", "#e8eaed"))
     variants = [
@@ -3856,7 +4370,9 @@ def _show_block_variant_editor(
         tree.delete(*tree.get_children())
         base_role = "Current default" if not default_variant[0] else "Base fallback"
         tree.insert(
-            "", "end", iid="0",
+            "",
+            "end",
+            iid="0",
             values=("Base implementation", str(record.manifest["implementation_file"]), base_role),
             tags=("even",),
         )
@@ -3867,7 +4383,9 @@ def _show_block_variant_editor(
                 else "Alternative"
             )
             tree.insert(
-                "", "end", iid=str(index),
+                "",
+                "end",
+                iid=str(index),
                 values=(item["value"], item["file"], role),
                 tags=("odd" if index % 2 else "even",),
             )
@@ -3881,7 +4399,7 @@ def _show_block_variant_editor(
         selection = tree.selection()
         return int(selection[0]) if selection else None
 
-    def update_actions(_event=None):
+    def update_actions(_event: tkinter_types.Event[tkinter_types.Misc] | None = None):
         row_index = selected_index()
         has_selection = row_index is not None
         edit_button.configure(state="normal" if has_selection else "disabled")
@@ -3896,8 +4414,7 @@ def _show_block_variant_editor(
             )
         elif row_index is not None:
             is_default = (
-                variants[row_index - 1]["value"].casefold()
-                == default_variant[0].casefold()
+                variants[row_index - 1]["value"].casefold() == default_variant[0].casefold()
             )
             default_button.configure(
                 text="Default selected" if is_default else "Set as default",
@@ -3950,10 +4467,7 @@ def _show_block_variant_editor(
             updated["layout_id"] = current["layout_id"]
         if current.get("open_after_save"):
             updated["open_after_save"] = True
-        if (
-            default_variant[0]
-            and current["value"].casefold() == default_variant[0].casefold()
-        ):
+        if default_variant[0] and current["value"].casefold() == default_variant[0].casefold():
             default_variant[0] = value
         variants[index] = updated
         dirty[0] = True
@@ -3968,8 +4482,7 @@ def _show_block_variant_editor(
         referenced_profiles = [
             str(item.get("name", item.get("id", "Unnamed profile")))
             for item in record.manifest.get("profiles", [])
-            if str(item.get("variant", "")).casefold()
-            == candidate["value"].casefold()
+            if str(item.get("variant", "")).casefold() == candidate["value"].casefold()
         ]
         if referenced_profiles:
             messagebox.showinfo(
@@ -3981,12 +4494,12 @@ def _show_block_variant_editor(
             )
             return
         is_default = (
-            default_variant[0]
-            and candidate["value"].casefold() == default_variant[0].casefold()
+            default_variant[0] and candidate["value"].casefold() == default_variant[0].casefold()
         )
         consequence = (
             " It is the default, so new instances with an empty KB_VARIANT will use the base implementation."
-            if is_default else ""
+            if is_default
+            else ""
         )
         if not messagebox.askyesno(
             "Remove implementation",
@@ -4022,15 +4535,14 @@ def _show_block_variant_editor(
             None,
         )
         try:
-            _save_block_variants(
-                record, variants, default_variant=default_variant[0] or None
-            )
+            _save_block_variants(record, variants, default_variant=default_variant[0] or None)
             if open_value:
                 from .repository import read_manifest
 
                 saved = read_manifest(Path(record.path))
                 selected = next(
-                    item for item in saved.get("variants", [])
+                    item
+                    for item in saved.get("variants", [])
                     if str(item["value"]).casefold() == open_value.casefold()
                 )
                 new_implementation_to_open[0] = Path(record.path) / selected["file"]
@@ -4043,19 +4555,32 @@ def _show_block_variant_editor(
 
     actions = ttk.Frame(frame)
     actions.grid(row=3, column=0, sticky="ew", pady=(12, 0))
-    _action_button(actions, "Add variant", add_variant, "add", "Add a named implementation variant").pack(side="left")
-    edit_button = _action_button(actions, "Edit variant", edit_variant, "edit", "Edit the selected implementation", state="disabled")
+    _action_button(
+        actions, "Add variant", add_variant, "add", "Add a named implementation variant"
+    ).pack(side="left")
+    edit_button = _action_button(
+        actions,
+        "Edit variant",
+        edit_variant,
+        "edit",
+        "Edit the selected implementation",
+        state="disabled",
+    )
     edit_button.pack(side="left", padx=(8, 0))
     default_button = _action_button(
-        actions, "Set as default", make_default, "default",
-        "Set the selected implementation as default", state="disabled"
+        actions,
+        "Set as default",
+        make_default,
+        "default",
+        "Set the selected implementation as default",
+        state="disabled",
     )
     default_button.pack(side="left", padx=(8, 0))
     remove_button = _action_button(
-        actions, "Remove", remove_variant, "remove",
-        "Remove the selected variant", state="disabled"
+        actions, "Remove", remove_variant, "remove", "Remove the selected variant", state="disabled"
     )
     remove_button.pack(side="left", padx=(8, 0))
+
     def cancel_variant_edits():
         if dirty[0] and not messagebox.askyesno(
             "Discard implementation changes",
@@ -4066,12 +4591,19 @@ def _show_block_variant_editor(
         dialog.destroy()
 
     _action_button(
-        actions, "Cancel", cancel_variant_edits, "cancel",
+        actions,
+        "Cancel",
+        cancel_variant_edits,
+        "cancel",
         "Close without saving implementation changes",
     ).pack(side="right")
     save_button = _action_button(
-        actions, "Save changes", save_and_close, "save",
-        "Save implementation changes", state="disabled"
+        actions,
+        "Save changes",
+        save_and_close,
+        "save",
+        "Save implementation changes",
+        state="disabled",
     )
     save_button.pack(side="right", padx=(0, 8))
 
@@ -4087,7 +4619,7 @@ def _show_block_variant_editor(
     return new_implementation_to_open[0]
 
 
-def _show_library_roots_dialog(parent) -> bool:
+def _show_library_roots_dialog(parent: tkinter_types.Misc) -> bool:
     """Manage registered library folders with explicit add/create/edit actions."""
     dialog = tk.Toplevel(parent)
     dialog.title("Manage Libraries")
@@ -4121,13 +4653,17 @@ def _show_library_roots_dialog(parent) -> bool:
     tree.column("blocks", width=70, minwidth=55, stretch=False, anchor="center")
     tree.column("role", width=140, minwidth=110, stretch=False, anchor="center")
     tree.column("path", width=500, minwidth=220, stretch=True)
-    vertical_scroll = ttk.Scrollbar(table_frame, orient="vertical", command=tree.yview, style="Vertical.TScrollbar")
-    horizontal_scroll = ttk.Scrollbar(table_frame, orient="horizontal", command=tree.xview, style="Horizontal.TScrollbar")
+    vertical_scroll = ttk.Scrollbar(
+        table_frame, orient="vertical", command=tree.yview, style="Vertical.TScrollbar"
+    )
+    horizontal_scroll = ttk.Scrollbar(
+        table_frame, orient="horizontal", command=tree.xview, style="Horizontal.TScrollbar"
+    )
     tree.configure(
         yscrollcommand=vertical_scroll.set,
         xscrollcommand=horizontal_scroll.set,
     )
-    palette = getattr(parent, "_kicad_blocks_palette", {})
+    palette = getattr(parent, "kicad_blocks_palette", {})
     tree.tag_configure("even", background=palette.get("surface", "#f4f5f6"))
     tree.tag_configure("odd", background=palette.get("surface_alt", "#e8eaed"))
     tree.grid(row=0, column=0, sticky="nsew")
@@ -4144,10 +4680,7 @@ def _show_library_roots_dialog(parent) -> bool:
 
     changed = [False]
     environment_value = os.environ.get("KICAD_BLOCKS_LIBRARY")
-    environment_root = (
-        Path(environment_value).expanduser().resolve()
-        if environment_value else None
-    )
+    environment_root = Path(environment_value).expanduser().resolve() if environment_value else None
 
     def selected_path() -> Path | None:
         selection = tree.selection()
@@ -4177,7 +4710,12 @@ def _show_library_roots_dialog(parent) -> bool:
                 "",
                 "end",
                 iid=str(index),
-                values=(library_path.name or str(library_path), block_count, role, str(library_path)),
+                values=(
+                    library_path.name or str(library_path),
+                    block_count,
+                    role,
+                    str(library_path),
+                ),
                 tags=("even" if index % 2 == 0 else "odd",),
             )
             if previous == library_path:
@@ -4188,9 +4726,7 @@ def _show_library_roots_dialog(parent) -> bool:
         update_selection_actions()
 
     def add_library() -> None:
-        selected = _pick_directory(
-            dialog, title="Add existing block library folder"
-        )
+        selected = _pick_directory(dialog, title="Add existing block library folder")
         if not selected:
             return
         try:
@@ -4202,9 +4738,7 @@ def _show_library_roots_dialog(parent) -> bool:
             messagebox.showerror("Add existing library", str(exc), parent=dialog)
 
     def create_library() -> None:
-        parent_folder = _pick_directory(
-            dialog, title="Choose where to create the new library"
-        )
+        parent_folder = _pick_directory(dialog, title="Choose where to create the new library")
         if not parent_folder:
             return
         name = simpledialog.askstring(
@@ -4308,40 +4842,58 @@ def _show_library_roots_dialog(parent) -> bool:
     library_actions = ttk.Frame(outer, padding=(0, 9, 0, 6))
     library_actions.grid(row=3, column=0, sticky="ew")
     _action_button(
-        library_actions, "Add library", add_library, "add",
+        library_actions,
+        "Add library",
+        add_library,
+        "add",
         "Register an existing block-library folder",
     ).pack(side="left")
     _action_button(
-        library_actions, "Create library", create_library, "create",
+        library_actions,
+        "Create library",
+        create_library,
+        "create",
         "Create and register a new block-library folder",
     ).pack(side="left", padx=(8, 0))
 
-    ttk.Separator(outer, orient="horizontal").grid(
-        row=4, column=0, sticky="ew", pady=(2, 2)
-    )
+    ttk.Separator(outer, orient="horizontal").grid(row=4, column=0, sticky="ew", pady=(2, 2))
     selected_actions = ttk.Frame(outer, padding=(0, 6, 0, 0))
     selected_actions.grid(row=5, column=0, sticky="ew")
     change_button = _action_button(
-        selected_actions, "Change folder", change_library_folder, "change",
+        selected_actions,
+        "Change folder",
+        change_library_folder,
+        "change",
         "Replace the selected registered folder without moving its files",
     )
     change_button.pack(side="left")
     remove_button = _action_button(
-        selected_actions, "Unregister", remove_library, "remove",
+        selected_actions,
+        "Unregister",
+        remove_library,
+        "remove",
         "Remove the selected folder from the registered list; files remain on disk",
     )
     remove_button.pack(side="left", padx=(8, 0))
     default_button = _action_button(
-        selected_actions, "Set default", make_default, "default",
+        selected_actions,
+        "Set default",
+        make_default,
+        "default",
         "Use the selected library for newly created blocks",
     )
     default_button.pack(side="left", padx=(8, 0))
     _action_button(
-        selected_actions, "Close", dialog.destroy, "close",
+        selected_actions,
+        "Close",
+        dialog.destroy,
+        "close",
         "Close Manage Libraries",
     ).pack(side="right")
 
-    def update_selection_actions(_event=None) -> None:
+    def update_selection_actions(
+        _event: tkinter_types.Event[tkinter_types.Misc] | None = None,
+    ) -> None:
         path = selected_path()
         fixed = path is None or path == environment_root
         change_button.configure(state="disabled" if fixed else "normal")
@@ -4364,11 +4916,16 @@ def _show_library_roots_dialog(parent) -> bool:
     return changed[0]
 
 
-def _bind_mousewheel(widget, scroll_command, *, include_children: bool = False) -> None:
+def _bind_mousewheel(
+    widget: tkinter_types.Misc,
+    scroll_command: Callable[[int], None],
+    *,
+    include_children: bool = False,
+) -> None:
     """Bind wheel and high-resolution trackpad scrolling to a scrollable pane."""
     remainder = [0.0]
 
-    def on_wheel(event):
+    def on_wheel(event: tkinter_types.Event[tkinter_types.Misc]) -> str:
         number = getattr(event, "num", None)
         if number == 4:
             amount = -1
@@ -4389,7 +4946,7 @@ def _bind_mousewheel(widget, scroll_command, *, include_children: bool = False) 
             scroll_command(amount)
         return "break"
 
-    def bind_tree(target) -> None:
+    def bind_tree(target: tkinter_types.Misc) -> None:
         for sequence in ("<MouseWheel>", "<Button-4>", "<Button-5>"):
             target.bind(sequence, on_wheel, add="+")
         if include_children:
@@ -4400,9 +4957,9 @@ def _bind_mousewheel(widget, scroll_command, *, include_children: bool = False) 
 
 
 def _show_library_browser(
-    window,
-    schematic,
-    kicad,
+    window: tkinter_types.Tk,
+    schematic: _Schematic,
+    kicad: _KiCadApp,
     project_dir: Path,
     library_root: Path | list[Path],
     editor_window_id: str | None,
@@ -4410,12 +4967,16 @@ def _show_library_browser(
     """Show every registered block library in one KiCad-themed browser."""
     window.title("Functional Block Library")
     current_roots = [_library_roots_for(library_root)]
-    records: list = []
-    records_by_id: dict[str, object] = {}
+    records: list[BlockRecord] = []
+    records_by_id: dict[str, BlockRecord] = {}
 
     style = ttk.Style(window)
-    palette = getattr(window, "_kicad_blocks_palette", {})
-    theme_background = palette.get("background") or style.lookup("TFrame", "background") or window.cget("background")
+    palette = getattr(window, "kicad_blocks_palette", {})
+    theme_background = (
+        palette.get("background")
+        or style.lookup("TFrame", "background")
+        or window.cget("background")
+    )
     theme_foreground = palette.get("foreground") or style.lookup("TLabel", "foreground") or ""
     outer = ttk.Frame(window, padding=10)
     outer.pack(fill="both", expand=True)
@@ -4459,8 +5020,12 @@ def _show_library_browser(
     tree.column("pins", width=44, minwidth=40, stretch=False, anchor="center")
     tree.column("variants", width=78, minwidth=72, stretch=False, anchor="center")
     tree.column("layouts", width=52, minwidth=48, stretch=False, anchor="center")
-    tree_y_scroll = ttk.Scrollbar(tree_frame, orient="vertical", command=tree.yview, style="Vertical.TScrollbar")
-    tree_x_scroll = ttk.Scrollbar(tree_frame, orient="horizontal", command=tree.xview, style="Horizontal.TScrollbar")
+    tree_y_scroll = ttk.Scrollbar(
+        tree_frame, orient="vertical", command=tree.yview, style="Vertical.TScrollbar"
+    )
+    tree_x_scroll = ttk.Scrollbar(
+        tree_frame, orient="horizontal", command=tree.xview, style="Horizontal.TScrollbar"
+    )
     tree.configure(
         yscrollcommand=tree_y_scroll.set,
         xscrollcommand=tree_x_scroll.set,
@@ -4474,9 +5039,7 @@ def _show_library_browser(
     right.rowconfigure(3, weight=1)
     name_label = ttk.Label(right, text="Select a block")
     name_label.grid(row=0, column=0, sticky="ew")
-    description_label = ttk.Label(
-        right, text="", wraplength=560, justify="left"
-    )
+    description_label = ttk.Label(right, text="", wraplength=560, justify="left")
     description_label.grid(row=1, column=0, sticky="ew", pady=(4, 8))
     preview_box = ttk.LabelFrame(right, text="Facade preview", padding=5)
     preview_box.grid(row=2, column=0, sticky="ew")
@@ -4519,17 +5082,19 @@ def _show_library_browser(
     details_scroll.pack(side="right", fill="y")
     details.configure(state="disabled")
     _bind_mousewheel(details, lambda amount: details.yview_scroll(amount, "units"))
-    selected_record = [None]
+    selected_record: list[BlockRecord | None] = [None]
     selected_project_catalog = [None]
     facade_button = [None]
     open_layout_button = [None]
 
-    def set_details(record):
+    def set_details(record: BlockRecord | None) -> None:
         selected_record[0] = record
         selected_project_catalog[0] = None
         if record is None:
             name_label.configure(
-                text="No matching blocks" if search.get().strip() else "No blocks in registered libraries"
+                text="No matching blocks"
+                if search.get().strip()
+                else "No blocks in registered libraries"
             )
             description_label.configure(text="")
             details.configure(state="normal")
@@ -4543,9 +5108,7 @@ def _show_library_browser(
         )
         if len(description) > 150:
             description = description[:147].rstrip() + "…"
-        description_label.configure(
-            text=f"{description}  ·  {record.path.parent.name}"
-        )
+        description_label.configure(text=f"{description}  ·  {record.path.parent.name}")
         details.configure(state="normal")
         details.delete("1.0", "end")
         details.tag_configure(
@@ -4558,19 +5121,19 @@ def _show_library_browser(
         overview = _block_overview_text(record)
         details.insert("1.0", overview)
         for line_number, line in enumerate(overview.splitlines(), start=1):
-            if line.startswith((
-                "Connections",
-                "Parameters",
-                "Circuit implementations",
-                "PCB layouts",
-                "Profiles",
-            )):
+            if line.startswith(
+                (
+                    "Connections",
+                    "Parameters",
+                    "Circuit implementations",
+                    "PCB layouts",
+                    "Profiles",
+                )
+            ):
                 details.tag_add("section", f"{line_number}.0", f"{line_number}.end")
         details.configure(state="disabled")
         try:
-            project_catalog = _ensure_project_facade_catalog(
-                project_dir, record, kicad
-            )
+            project_catalog = _ensure_project_facade_catalog(project_dir, record, kicad)
             selected_project_catalog[0] = project_catalog
             _draw_facade_preview(
                 preview,
@@ -4650,7 +5213,7 @@ def _show_library_browser(
         _show_library_roots_dialog(window)
         refresh_records()
 
-    def selection_changed(_event=None):
+    def selection_changed(_event: tkinter_types.Event[tkinter_types.Misc] | None = None) -> None:
         selection = tree.selection()
         record = records_by_id.get(selection[0]) if selection else None
         set_details(record)
@@ -4667,23 +5230,25 @@ def _show_library_browser(
                 )
             )
 
-    def place_selected(_event=None):
+    def place_selected(_event: tkinter_types.Event[tkinter_types.Misc] | None = None):
+        nonlocal editor_window_id
         record = selected_record[0]
         if record is None:
             return
         try:
             _register_block(project_dir, record, kicad, current_roots[0])
-            if not _LAST_LIBRARY_RELOAD_OK:
+            if not _last_library_reload_ok:
                 messagebox.showwarning(
                     "Block library saved",
-                    _LAST_LIBRARY_RELOAD_WARNING or "Restart Eeschema to refresh the project library table.",
+                    _last_library_reload_warning
+                    or "Restart Eeschema to refresh the project library table.",
                     parent=window,
                 )
                 return
             minimized_windows = _minimize_placement_windows(window)
             try:
                 _start_native_symbol_placement(
-                    kicad, None, str(record.manifest["symbol_name"])
+                    kicad, editor_window_id, str(record.manifest["symbol_name"])
                 )
             except Exception:
                 _restore_placement_windows(minimized_windows)
@@ -4692,7 +5257,7 @@ def _show_library_browser(
             LOG.exception("Native block placement handoff failed")
             messagebox.showerror("Place Block", str(exc), parent=window)
 
-    def open_implementation(_event=None):
+    def open_implementation(_event: tkinter_types.Event[tkinter_types.Misc] | None = None):
         record = selected_record[0]
         if record is None:
             return
@@ -4759,14 +5324,16 @@ def _show_library_browser(
 
         buttons = ttk.Frame(frame)
         buttons.pack(fill="x")
-        _action_button(buttons, "Open", launch_variant, "open", "Open the selected implementation").pack(side="right")
-        _action_button(buttons, "Cancel", chooser.destroy, "cancel", "Close without opening an implementation").pack(
-            side="right", padx=(0, 6)
-        )
+        _action_button(
+            buttons, "Open", launch_variant, "open", "Open the selected implementation"
+        ).pack(side="right")
+        _action_button(
+            buttons, "Cancel", chooser.destroy, "cancel", "Close without opening an implementation"
+        ).pack(side="right", padx=(0, 6))
         _set_window_geometry(chooser, 500, 190, 440, 160)
         combo.focus_set()
 
-    def edit_facade(_event=None):
+    def edit_facade(_event: tkinter_types.Event[tkinter_types.Misc] | None = None):
         record = selected_record[0]
         if record is None:
             return
@@ -4776,36 +5343,44 @@ def _show_library_browser(
                 raise RuntimeError(
                     "The project facade preview is unavailable. Refresh the library and retry Edit Facade."
                 )
-            _edit_facade_symbol(
+            opened = _edit_facade_symbol(
                 record,
                 kicad,
                 editor_window_id,
                 project_catalog=project_catalog,
                 close_browser=window.destroy,
             )
+            if not opened:
+                messagebox.showinfo(
+                    "Edit facade",
+                    "Symbol Editor handoff requested. In its library tree, search for "
+                    + f"{LIBRARY_NICKNAME}:{record.manifest['symbol_name']}"
+                    + " and select the result. Saved facade edits are imported by Publish implementation.",
+                    parent=window.master,
+                )
         except (OSError, RuntimeError, ValueError, LookupError, subprocess.SubprocessError) as exc:
             LOG.exception("Could not open generated library facade")
             messagebox.showerror("Edit facade", str(exc), parent=window)
 
-    def manage_layouts(_event=None):
+    def manage_layouts(_event: tkinter_types.Event[tkinter_types.Misc] | None = None):
         record = selected_record[0]
         if record is None:
             return
         try:
-            created_layout = _show_block_layout_editor(
-                record, window, kicad, editor_window_id
-            )
+            created_layout = _show_block_layout_editor(record, window, kicad, editor_window_id)
             refresh_records()
             if created_layout is not None:
                 _launch_block_asset(
-                    kicad, created_layout, "PCB layout",
+                    kicad,
+                    created_layout,
+                    "PCB layout",
                     editor_window_id=editor_window_id,
                 )
         except Exception as exc:
             LOG.exception("Could not update PCB layouts")
             messagebox.showerror("Manage PCB layouts", str(exc), parent=window)
 
-    def edit_variants(_event=None):
+    def edit_variants(_event: tkinter_types.Event[tkinter_types.Misc] | None = None):
         record = selected_record[0]
         if record is None:
             return
@@ -4828,7 +5403,7 @@ def _show_library_browser(
             LOG.exception("Could not update implementation variants")
             messagebox.showerror("Manage implementations", str(exc), parent=window)
 
-    def open_layout(_event=None):
+    def open_layout(_event: tkinter_types.Event[tkinter_types.Misc] | None = None):
         record = selected_record[0]
         if record is None:
             return
@@ -4843,13 +5418,13 @@ def _show_library_browser(
         frame.pack(fill="both", expand=True)
         ttk.Label(frame, text="Select PCB layout:").pack(anchor="w")
         labels = [
-            f"{item.get('name', item.get('id'))} [{item.get('id', 'legacy')}]"
-            for item in layouts
+            f"{item.get('name', item.get('id'))} [{item.get('id', 'legacy')}]" for item in layouts
         ]
         selected_variant = str(record.manifest.get("default_variant") or "").casefold()
         selected_variant_record = next(
             (
-                item for item in record.manifest.get("variants", [])
+                item
+                for item in record.manifest.get("variants", [])
                 if str(item.get("value", "")).casefold() == selected_variant
             ),
             None,
@@ -4868,9 +5443,7 @@ def _show_library_browser(
             labels[0],
         )
         choice = tk.StringVar(value=default_label)
-        combo = ttk.Combobox(
-            frame, textvariable=choice, values=labels, state="readonly", width=36
-        )
+        combo = ttk.Combobox(frame, textvariable=choice, values=labels, state="readonly", width=36)
         combo.pack(fill="x", pady=8)
 
         def launch_layout():
@@ -4881,7 +5454,9 @@ def _show_library_browser(
             chooser.destroy()
             try:
                 _launch_block_asset(
-                    kicad, target, "PCB layout",
+                    kicad,
+                    target,
+                    "PCB layout",
                     editor_window_id=editor_window_id,
                 )
             except (OSError, RuntimeError, ValueError) as exc:
@@ -4889,29 +5464,37 @@ def _show_library_browser(
 
         def manage_layouts():
             chooser.destroy()
-            created_layout = _show_block_layout_editor(
-                record, window, kicad, editor_window_id
-            )
+            created_layout = _show_block_layout_editor(record, window, kicad, editor_window_id)
             refresh_records()
             if created_layout is not None:
                 _launch_block_asset(
-                    kicad, created_layout, "PCB layout",
+                    kicad,
+                    created_layout,
+                    "PCB layout",
                     editor_window_id=editor_window_id,
                 )
 
         buttons = ttk.Frame(frame)
         buttons.pack(fill="x")
-        _action_button(buttons, "Manage layouts…", manage_layouts, "layouts", "Manage stored PCB layouts").pack(side="left")
-        _action_button(buttons, "Open", launch_layout, "open", "Open the selected PCB layout").pack(side="right")
         _action_button(
-            buttons, "Cancel", chooser.destroy, "cancel", "Close without opening a PCB layout",
+            buttons, "Manage layouts…", manage_layouts, "layouts", "Manage stored PCB layouts"
+        ).pack(side="left")
+        _action_button(buttons, "Open", launch_layout, "open", "Open the selected PCB layout").pack(
+            side="right"
+        )
+        _action_button(
+            buttons,
+            "Cancel",
+            chooser.destroy,
+            "cancel",
+            "Close without opening a PCB layout",
         ).pack(side="right", padx=(0, 6))
         _set_window_geometry(chooser, 500, 200, 440, 170)
         combo.focus_set()
 
     search.trace_add("write", render_records)
 
-    def focus_results(_event=None):
+    def focus_results(_event: tkinter_types.Event[tkinter_types.Misc] | None = None):
         children = tree.get_children()
         if children:
             selection = tree.selection()
@@ -4921,12 +5504,12 @@ def _show_library_browser(
             tree.focus_set()
         return "break"
 
-    def focus_search(_event=None):
+    def focus_search(_event: tkinter_types.Event[tkinter_types.Misc] | None = None):
         search_entry.focus_set()
         search_entry.icursor("end")
         return "break"
 
-    def place_double_clicked(event):
+    def place_double_clicked(event: tkinter_types.Event[tkinter_types.Misc]):
         row_id = tree.identify_row(event.y)
         record = _library_record_for_tree_row(records_by_id, row_id)
         if record is None:
@@ -4946,49 +5529,74 @@ def _show_library_browser(
         "<Configure>",
         lambda _event: (
             _draw_facade_preview(preview, selected_record[0])
-            if selected_record[0] is not None else None
+            if selected_record[0] is not None
+            else None
         ),
     )
 
     action_toolbar = ttk.Frame(outer, padding=(0, 10, 0, 0))
     action_toolbar.pack(fill="x")
     place_button = _action_button(
-        action_toolbar, "Place block", place_selected, "place",
+        action_toolbar,
+        "Place block",
+        place_selected,
+        "place",
         "Register the selected facade and start KiCad native symbol placement",
     )
     place_button.pack(side="left")
     implementation_button = _action_button(
-        action_toolbar, "Implementation", open_implementation, "implementation",
+        action_toolbar,
+        "Implementation",
+        open_implementation,
+        "implementation",
         "Open the base or a named circuit implementation",
     )
     implementation_button.pack(side="left", padx=(6, 0))
     facade_button[0] = _action_button(
-        action_toolbar, "Edit facade", edit_facade, "facade",
+        action_toolbar,
+        "Edit facade",
+        edit_facade,
+        "facade",
         "Open the generated library facade in KiCad Symbol Editor",
     )
     facade_button[0].pack(side="left", padx=(6, 0))
     variants_button = _action_button(
-        action_toolbar, "Variants", edit_variants, "variants",
+        action_toolbar,
+        "Variants",
+        edit_variants,
+        "variants",
         "Add, edit, remove, or set the default circuit implementation",
     )
     variants_button.pack(side="left", padx=(6, 0))
     open_layout_button[0] = _action_button(
-        action_toolbar, "Open PCB", open_layout, "pcb",
+        action_toolbar,
+        "Open PCB",
+        open_layout,
+        "pcb",
         "Open one of the block's stored PCB layouts",
     )
     open_layout_button[0].pack(side="left", padx=(6, 0))
     manage_layout_button = _action_button(
-        action_toolbar, "PCB layouts", manage_layouts, "layouts",
+        action_toolbar,
+        "PCB layouts",
+        manage_layouts,
+        "layouts",
         "Add and associate PCB layouts with implementations",
     )
     manage_layout_button.pack(side="left", padx=(6, 0))
     refresh_button = _action_button(
-        action_toolbar, "Refresh", refresh_records, "refresh",
+        action_toolbar,
+        "Refresh",
+        refresh_records,
+        "refresh",
         "Reload registered libraries and block details",
     )
     refresh_button.pack(side="left", padx=(6, 0))
     libraries_button = _action_button(
-        action_toolbar, "Libraries", manage_libraries, "libraries",
+        action_toolbar,
+        "Libraries",
+        manage_libraries,
+        "libraries",
         "Register, create, change, or unregister block libraries",
     )
     libraries_button.pack(side="left", padx=(6, 0))
@@ -4998,20 +5606,22 @@ def _show_library_browser(
     window.bind("<FocusIn>", lambda _event: selection_changed(), add="+")
     search_entry.focus_set()
 
+
 def run_library_browser() -> None:
     """Launch the all-libraries functional-block browser."""
     run_action("manage-library")
 
 
-
-def _field_value(instance, field_name: str) -> str:
+def _field_value(instance: _SchematicSymbol, field_name: str) -> str:
     for field in getattr(instance, "user_fields", ()):
         if str(getattr(field, "name", "")) == field_name:
             return str(getattr(getattr(field, "text", None), "value", "") or "").strip()
     return ""
 
 
-def _sheet_variables_for_symbol(schematic, instance) -> dict[str, str]:
+def _sheet_variables_for_symbol(
+    schematic: _Schematic, instance: _SchematicSymbol
+) -> dict[str, str]:
     """Collect custom fields on hierarchical sheet symbols containing this occurrence."""
     sheet_path = list(getattr(getattr(instance, "path", None), "path", ()))
     if not sheet_path:
@@ -5039,7 +5649,9 @@ def _sheet_variables_for_symbol(schematic, instance) -> dict[str, str]:
     return variables
 
 
-def _resolve_variant_text(raw_value: str, project, sheet_variables: dict[str, str]) -> str:
+def _resolve_variant_text(
+    raw_value: str, project: _SchematicProject, sheet_variables: dict[str, str]
+) -> str:
     """Expand sheet custom fields and normal KiCad project text variables."""
     import re
 
@@ -5050,7 +5662,7 @@ def _resolve_variant_text(raw_value: str, project, sheet_variables: dict[str, st
     for _ in range(12):
         previous = value
 
-        def replace_sheet(match):
+        def replace_sheet(match: re.Match[str]) -> str:
             return sheet_variables.get(match.group(1), match.group(0))
 
         value = token.sub(replace_sheet, value)
@@ -5068,7 +5680,13 @@ def _resolve_variant_text(raw_value: str, project, sheet_variables: dict[str, st
     return value.strip()
 
 
-def _open_selected_block_implementation(root, schematic, kicad, project_dir, parent):
+def _open_selected_block_implementation(
+    root: Path | list[Path],
+    schematic: _Schematic,
+    kicad: _KiCadApp,
+    project_dir: Path,
+    parent: tkinter_types.Misc,
+) -> subprocess.Popen[bytes]:
     """Open the selected facade's exact variant implementation; never guess a fallback."""
     instance = _selected_symbol(schematic)
     record = _block_record_for_instance(root, project_dir, instance)
@@ -5104,12 +5722,16 @@ def open_selected_implementation_action() -> None:
     run_action("open-implementation")
 
 
-def _export_recursive_bom(root: Path | list[Path], parent, schematic=None, project_dir: Path | None = None) -> None:
+def _export_recursive_bom(
+    root: Path | list[Path],
+    parent: tkinter_types.Misc,
+    schematic: _Schematic | None = None,
+    project_dir: Path | None = None,
+) -> None:
     parameter_values = None
     selection = _safe_schematic_selection(schematic)
     selected = [
-        item for item in selection
-        if hasattr(item, "definition") and hasattr(item.definition, "id")
+        item for item in selection if hasattr(item, "definition") and hasattr(item.definition, "id")
     ]
     if len(selected) == 1:
         record = _block_record_for_instance(root, project_dir, selected[0])
@@ -5143,11 +5765,9 @@ def _export_recursive_bom(root: Path | list[Path], parent, schematic=None, proje
     )
 
 
-def _validate_shared_library(root: Path | list[Path], parent) -> None:
+def _validate_shared_library(root: Path | list[Path], parent: tkinter_types.Misc) -> None:
     """Validate every registered library, keeping each report in its own folder."""
-    output = _pick_directory(
-        parent, title="Select a folder for the library validation reports"
-    )
+    output = _pick_directory(parent, title="Select a folder for the library validation reports")
     if not output:
         return
     results = []
@@ -5182,7 +5802,11 @@ def _validate_shared_library(root: Path | list[Path], parent) -> None:
     message = (
         f"Validated {len(blocks)} block(s) across {len(results)} library/libraries.\\n"
         f"Passed: {passed}  |  Warnings: {warnings}  |  Failed: {failed}\\n\\n"
-        + ("\\n\\n".join(details) if details else "The registered libraries contain no block assets.")
+        + (
+            "\\n\\n".join(details)
+            if details
+            else "The registered libraries contain no block assets."
+        )
         + f"\\n\\nReports: {output}"
     )
     if failed:
@@ -5193,12 +5817,16 @@ def _validate_shared_library(root: Path | list[Path], parent) -> None:
         messagebox.showinfo("Block Library Validation Passed", message, parent=parent)
 
 
-def _validate_recursive_erc(root: Path | list[Path], parent, schematic=None, project_dir: Path | None = None) -> None:
+def _validate_recursive_erc(
+    root: Path | list[Path],
+    parent: tkinter_types.Misc,
+    schematic: _Schematic | None = None,
+    project_dir: Path | None = None,
+) -> None:
     parameter_values = None
     selection = _safe_schematic_selection(schematic)
     selected = [
-        item for item in selection
-        if hasattr(item, "definition") and hasattr(item.definition, "id")
+        item for item in selection if hasattr(item, "definition") and hasattr(item.definition, "id")
     ]
     if len(selected) == 1:
         record = _block_record_for_instance(root, project_dir, selected[0])
@@ -5212,9 +5840,7 @@ def _validate_recursive_erc(root: Path | list[Path], parent, schematic=None, pro
     )
     record = dependency_result["block"]
     library_root = record.path.parent
-    output = _pick_directory(
-        parent, title="Select a folder for recursive ERC reports"
-    )
+    output = _pick_directory(parent, title="Select a folder for recursive ERC reports")
     if not output:
         return
     reports = validate_block_tree(
@@ -5233,16 +5859,18 @@ def _validate_recursive_erc(root: Path | list[Path], parent, schematic=None, pro
     )
 
 
-def _publish_block(root, kicad, project_dir, parent) -> None:
+def _publish_block(
+    root: Path | list[Path], kicad: _KiCadApp, project_dir: Path, parent: tkinter_types.Misc
+) -> None:
     library_paths = _library_roots_for(root)
     record = _pick_record(_list_library_records(library_paths), parent, "Publish Library Block")
     if record is None:
         return
-    project_catalog = Path(project_dir).expanduser().resolve() / ".kicad_blocks" / LIBRARY_CATALOG_NAME
-    import_project_catalog_facade_edit(record, project_catalog)
-    dependency_result = synchronize_block_dependencies(
-        record, library_paths, find_kicad_cli()
+    project_catalog = (
+        Path(project_dir).expanduser().resolve() / ".kicad_blocks" / LIBRARY_CATALOG_NAME
     )
+    import_project_catalog_facade_edit(record, project_catalog)
+    dependency_result = synchronize_block_dependencies(record, library_paths, find_kicad_cli())
     record = dependency_result["block"]
     result = refresh_library_block(record)
     if result["changed"]:
@@ -5258,12 +5886,15 @@ def _publish_block(root, kicad, project_dir, parent) -> None:
     )
 
 
-def _block_record_for_instance(library_root: Path | list[Path], project_dir: Path, instance):
+def _block_record_for_instance(
+    library_root: Path | list[Path], project_dir: Path, instance: _SchematicSymbol
+) -> BlockRecord:
     """Resolve the selected instance to its local copy or any registered shared library."""
     local_record = local_copy_for_instance(project_dir, str(instance.id))
     if local_record is not None:
         return local_record
     return _library_record_for_instance(library_root, instance)
+
 
 def _parse_pin_net_map(value: str, pins: list[str]) -> dict[str, str]:
     mapping: dict[str, str] = {}
@@ -5280,14 +5911,11 @@ def _parse_pin_net_map(value: str, pins: list[str]) -> dict[str, str]:
     if set(mapping) != set(pins):
         missing = sorted(set(pins) - set(mapping))
         extra = sorted(set(mapping) - set(pins))
-        raise ValueError(
-            "Map each facade pin exactly once. "
-            f"Missing: {missing}; unknown: {extra}."
-        )
+        raise ValueError(f"Map each facade pin exactly once. Missing: {missing}; unknown: {extra}.")
     return mapping
 
 
-def _open_generated_pcb_copy(kicad, board_path: Path):
+def _open_generated_pcb_copy(kicad: _KiCadApp, board_path: Path) -> subprocess.Popen[bytes]:
     """Open only the newly generated board copy in a separate PCB Editor process."""
     board_path = Path(board_path).expanduser().resolve()
     if not board_path.is_file():
@@ -5299,7 +5927,11 @@ def _open_generated_pcb_copy(kicad, board_path: Path):
 
 
 def _apply_block_pcb_layout(
-    schematic, kicad, project_dir: Path, library_root: Path, parent
+    schematic: _Schematic,
+    kicad: _KiCadApp,
+    project_dir: Path,
+    library_root: Path | list[Path],
+    parent: tkinter_types.Misc,
 ) -> None:
     """Create a new project-board copy with the selected block's stored PCB layout."""
     instance = _selected_symbol(schematic)
@@ -5320,8 +5952,7 @@ def _apply_block_pcb_layout(
     default_map = ", ".join(f"{pin}:{pin}" for pin in pins)
     map_text = simpledialog.askstring(
         "Map block facade pins to board nets",
-        "Enter one mapping for every facade pin.\n"
-        "Format: FACADE_PIN:BOARD_NET, comma-separated.",
+        "Enter one mapping for every facade pin.\nFormat: FACADE_PIN:BOARD_NET, comma-separated.",
         initialvalue=default_map,
         parent=parent,
     )
@@ -5364,8 +5995,8 @@ def _apply_block_pcb_layout(
         raise ValueError("Block rotation must be a numeric degree value.") from exc
 
     source_board = Path(board_path)
-    default_output = (
-        source_board.with_name(f"{source_board.stem}_{instance.reference}_blocks.kicad_pcb")
+    default_output = source_board.with_name(
+        f"{source_board.stem}_{instance.reference}_blocks.kicad_pcb"
     )
     output_path = _pick_save_file(
         parent,
@@ -5436,14 +6067,17 @@ def _apply_block_pcb_layout(
     if result["ignored_project_chain_classes"]:
         message += (
             "\n\nSome project net-chain settings could not be mapped to an actual chain "
-            "in the stored PCB: "
-            + (", ".join(result["unmatched_project_chains"]) or "unknown")
+            "in the stored PCB: " + (", ".join(result["unmatched_project_chains"]) or "unknown")
         )
     messagebox.showinfo("PCB Block Layout Applied", message, parent=parent)
 
 
 def _apply_selected_block_pcb_layouts(
-    schematic, kicad, project_dir: Path, library_root: Path, parent
+    schematic: _Schematic,
+    kicad: _KiCadApp,
+    project_dir: Path,
+    library_root: Path | list[Path],
+    parent: tkinter_types.Misc,
 ) -> None:
     """Batch-apply the layouts for all selected block facade instances."""
     instances = _selected_symbols(schematic)
@@ -5565,7 +6199,7 @@ def _apply_selected_block_pcb_layouts(
     )
 
 
-def _show_action_hub(root):
+def _show_action_hub(root: tkinter_types.Misc) -> ttk_types.Notebook:
     """Show compact, icon-led task actions with secondary guidance in tooltips."""
     _configure_tk_theme(root)
     root.title("KiCad Blocks — Tasks")
@@ -5678,8 +6312,9 @@ def _show_action_hub(root):
     ]
 
     def dispatch(selected_action: str) -> None:
+        editor_window_id = getattr(root, "_kicad_blocks_editor_window_id", None)
         root.destroy()
-        run_action(selected_action)
+        run_action(selected_action, editor_window_id=editor_window_id)
 
     for tab_name, actions in groups:
         tab = ttk.Frame(tabs, padding=(12, 10))
@@ -5732,6 +6367,7 @@ def run_action(action: str, *, editor_window_id: str | None = None) -> None:
 
     # KiCad IPC is bound to the editor instance that launched this action.
     # No native cross-process window handle is needed for these operations.
+    del editor_window_id
     editor_window_id = None
     _load_tkinter()
     root = tk.Tk()
@@ -5764,21 +6400,13 @@ def run_action(action: str, *, editor_window_id: str | None = None) -> None:
 
         root.withdraw()
         if action == "create-block":
-            _create_and_place(
-                library_root, schematic, kicad, project_dir, root, editor_window_id
-            )
+            _create_and_place(library_root, schematic, kicad, project_dir, root, editor_window_id)
         elif action == "open-implementation":
-            _open_selected_block_implementation(
-                library_paths, schematic, kicad, project_dir, root
-            )
+            _open_selected_block_implementation(library_paths, schematic, kicad, project_dir, root)
         elif action == "configure-instance":
-            _show_selected_block_configuration(
-                schematic, project_dir, library_paths, root
-            )
+            _show_selected_block_configuration(schematic, project_dir, library_paths, root)
         elif action == "make-local-copy":
-            path = make_selected_local(
-                schematic, kicad, project_dir, library_paths
-            )
+            path = make_selected_local(schematic, kicad, project_dir, library_paths)
             messagebox.showinfo(
                 "Local Copy Created",
                 f"The selected instance now uses an independent project-local block:\n{path}",
@@ -5788,19 +6416,18 @@ def run_action(action: str, *, editor_window_id: str | None = None) -> None:
             result = sync_selected_local(schematic, kicad, project_dir)
             messagebox.showinfo(
                 "Local Block Synchronized",
-                "Published local edits: " + (", ".join(result["published"]) or "none") +
-                "\\nPulled library edits: " + (", ".join(result["pulled"]) or "none") +
-                "\\nConverged edits: " + (", ".join(result["converged"]) or "none"),
+                "Published local edits: "
+                + (", ".join(result["published"]) or "none")
+                + "\\nPulled library edits: "
+                + (", ".join(result["pulled"]) or "none")
+                + "\\nConverged edits: "
+                + (", ".join(result["converged"]) or "none"),
                 parent=root,
             )
         elif action == "edit-facade":
-            record = _pick_record(
-                _list_library_records(library_paths), root, "Edit Facade"
-            )
+            record = _pick_record(_list_library_records(library_paths), root, "Edit Facade")
             if record is not None:
-                project_catalog = _ensure_project_facade_catalog(
-                    project_dir, record, kicad
-                )
+                project_catalog = _ensure_project_facade_catalog(project_dir, record, kicad)
                 _edit_facade_symbol(
                     record,
                     kicad,
@@ -5812,6 +6439,7 @@ def run_action(action: str, *, editor_window_id: str | None = None) -> None:
                     "Symbol Editor handoff requested. In its library tree, search for "
                     + f"{LIBRARY_NICKNAME}:{record.manifest['symbol_name']}"
                     + " and select the result. Saved facade edits are imported by Publish implementation.",
+                    parent=root,
                 )
         elif action == "publish-block":
             _publish_block(library_paths, kicad, project_dir, root)
@@ -5822,13 +6450,9 @@ def run_action(action: str, *, editor_window_id: str | None = None) -> None:
         elif action == "validate-libraries":
             _validate_shared_library(library_paths, root)
         elif action == "apply-pcb-layout":
-            _apply_block_pcb_layout(
-                schematic, kicad, project_dir, library_paths, root
-            )
+            _apply_block_pcb_layout(schematic, kicad, project_dir, library_paths, root)
         elif action == "apply-multiple-pcb-layouts":
-            _apply_selected_block_pcb_layouts(
-                schematic, kicad, project_dir, library_paths, root
-            )
+            _apply_selected_block_pcb_layouts(schematic, kicad, project_dir, library_paths, root)
     except (ValueError, LookupError, FileNotFoundError, PermissionError) as exc:
         LOG.info("KiCad Blocks action needs user input or context (%s): %s", action, exc)
         messagebox.showwarning(
