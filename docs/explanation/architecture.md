@@ -41,11 +41,15 @@ A project can also convert one placed shared-library instance into a local copy.
 
 Synchronization compares local and shared assets against a common baseline. One-sided changes can be published or pulled. Identical changes converge. Different changes to the same tracked file stop for deliberate resolution; the plugin does not attempt a graphical three-way schematic merge.
 
-## Nested composition
+## Automatic block composition
 
-A parent implementation can depend on one or more child blocks. Each child occurrence records its reference, position, orientation, and mapping from child facade pins to parent nets.
+Child blocks are ordinary facade symbols inside a parent's editable implementation. When opening an implementation, KiCad Blocks registers the facade catalog from all configured shared libraries so the designer can use Eeschema's normal **Add Symbol** command. The designer places a child facade and connects its pins with ordinary schematic wires and labels.
 
-KiCad Blocks composes child facade symbols and the associated internal labels into the parent implementation. It preserves the child as a separately managed library dependency and rejects dependency cycles. It does not create native hierarchical sheet symbols inside the parent implementation.
+The saved schematic is the source of truth. On publish—and before recursive BOM/ERC export or registered-library validation—KiCad Blocks exports the implementation's KiCad XML netlist, recognizes each placed `KBlocks` facade by library symbol ID, and maps its manifest pin numbers to the actual net names. It derives reference, position, orientation, and connectivity from the schematic, then rebuilds the parent's dependency metadata. A pin with no net remains unconnected; pin names are never used to guess connectivity.
+
+Removing a child facade removes its dependency the next time the parent is reconciled. Existing child occurrences retain their IDs when the child and reference remain the same. Missing or unresolved facades, reference or pin-interface mismatches, and dependency cycles are reported as errors. This mechanism does not add global labels, alter the designer's wiring, or create native hierarchical sheet symbols. The child implementation stays a separate, reusable library asset.
+
+The library-wide dependency graph currently follows the default implementation. Named variants remain separate implementation files.
 
 ## PCB layouts
 

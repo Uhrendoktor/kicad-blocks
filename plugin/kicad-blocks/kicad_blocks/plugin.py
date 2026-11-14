@@ -22,7 +22,7 @@ filedialog = None
 messagebox = None
 simpledialog = None
 
-from .composition import compose_block_implementation
+from .auto_dependencies import synchronize_block_dependencies
 from .extraction import selected_sheet_file, selected_sheet_instance_uuid
 from .model import (
     LAYOUT_FIELD_NAME,
@@ -44,7 +44,6 @@ from .pcb_layout import BlockLayoutPlacement, merge_block_layout, merge_block_la
 from .pcb_placement import placement_manifest_path, write_pcb_placement_manifest
 from .repository import (
     LIBRARY_NICKNAME,
-    add_dependency,
     add_library_root,
     build_project_symbol_catalog,
     create_block,
@@ -2097,6 +2096,14 @@ def _edit_block_implementation(root, schematic, kicad, project_dir, parent) -> N
         record = _pick_record(list_blocks(root), parent, "Edit Block Implementation")
     if record is None:
         return None
+    catalog = build_project_symbol_catalog(record.path, _library_roots_for(root))
+    register_project_symbol_library(
+        record.path,
+        LIBRARY_NICKNAME,
+        catalog,
+        description="KiCad Blocks — registered child facades",
+        replace_existing=True,
+    )
     process = _launch_block_asset(
         kicad,
         record.implementation,
@@ -4940,6 +4947,16 @@ def _open_selected_block_implementation(root, schematic, kicad, project_dir, par
         raise FileNotFoundError(
             f"The implementation for KB_VARIANT={resolved_variant!r} is missing: {implementation_path}"
         )
+    # Make every registered block facade available in the implementation editor.
+    # Users place child facades with KiCad's ordinary Add Symbol workflow.
+    catalog = build_project_symbol_catalog(record.path, _library_roots_for(root))
+    register_project_symbol_library(
+        record.path,
+        LIBRARY_NICKNAME,
+        catalog,
+        description="KiCad Blocks — registered child facades",
+        replace_existing=True,
+    )
     process = _launch_block_asset(
         kicad,
         implementation_path,
@@ -4975,6 +4992,10 @@ def _export_recursive_bom(root: Path | list[Path], parent, schematic=None, proje
         record = _pick_record(_list_library_records(root), parent, "Export Recursive Block BOM")
     if record is None:
         return
+    dependency_result = synchronize_block_dependencies(
+        record, _library_roots_for(root), find_kicad_cli()
+    )
+    record = dependency_result["block"]
     library_root = record.path.parent
     output = filedialog.asksaveasfilename(
         title="Save recursive block BOM",
@@ -5005,12 +5026,16 @@ def _validate_shared_library(root: Path | list[Path], parent) -> None:
     if not output:
         return
     results = []
-    for library_path in _library_roots_for(root):
+    library_roots = _library_roots_for(root)
+    cli = find_kicad_cli()
+    for library_path in library_roots:
+        for block in list_blocks(library_path):
+            synchronize_block_dependencies(block, library_roots, cli)
         report_dir = Path(output) / library_path.name
         result = validate_block_library(
             library_path,
             report_dir,
-            find_kicad_cli(),
+            cli,
             run_erc=True,
         )
         results.append((library_path, result))
@@ -5057,6 +5082,10 @@ def _validate_recursive_erc(root: Path | list[Path], parent, schematic=None, pro
         record = _pick_record(_list_library_records(root), parent, "Validate Block Tree (ERC)")
     if record is None:
         return
+    dependency_result = synchronize_block_dependencies(
+        record, _library_roots_for(root), find_kicad_cli()
+    )
+    record = dependency_result["block"]
     library_root = record.path.parent
     output = filedialog.askdirectory(
         title="Select a folder for recursive ERC reports",
@@ -5085,6 +5114,10 @@ def _publish_block(root, kicad, project_dir, parent) -> None:
     record = _pick_record(_list_library_records(library_paths), parent, "Publish Library Block")
     if record is None:
         return
+    dependency_result = synchronize_block_dependencies(
+        record, library_paths, find_kicad_cli()
+    )
+    record = dependency_result["block"]
     result = refresh_library_block(record)
     if result["changed"]:
         _register_block(project_dir, record, kicad, library_paths)
@@ -5092,7 +5125,9 @@ def _publish_block(root, kicad, project_dir, parent) -> None:
         "Library Block Published",
         f"Version: {result['version']}\n"
         f"Changed files: {', '.join(result['changed']) or 'none'}\n"
-        "Local copies can now synchronize from this revision.",
+        f"Automatically detected {dependency_result['count']} child block(s)"
+        + ("; dependency manifest updated.\n" if dependency_result["changed"] else ".\n")
+        + "Local copies can now synchronize from this revision.",
         parent=parent,
     )
 
@@ -5406,79 +5441,6 @@ def _apply_selected_block_pcb_layouts(
     )
 
 
-def _add_nested_dependency(root, parent, parent_window) -> None:
-    library_paths = _library_roots_for(root)
-    records = _list_library_records(library_paths)
-    parent_record = _pick_record(records, parent_window, "Select Parent Block")
-    if parent_record is None:
-        return
-    child_records = [record for record in records if record.path != parent_record.path]
-    child_record = _pick_record(child_records, parent_window, "Select Nested Block")
-    if child_record is None:
-        return
-
-    default_map = ", ".join(
-        f"{pin['name']}:{pin['name']}" for pin in child_record.manifest.get("pins", [])
-    )
-    mapping_text = simpledialog.askstring(
-        "Nested Block Pin Map",
-        "Map each child pin to a net in the parent implementation.\n"
-        "Format: CHILD_PIN:PARENT_NET, comma-separated.",
-        initialvalue=default_map,
-        parent=parent_window,
-    )
-    if mapping_text is None:
-        return
-    orientation_deg = simpledialog.askinteger(
-        "Nested Block Orientation",
-        "Rotate the child facade counter-clockwise by 0, 90, 180 or 270 degrees:",
-        initialvalue=0,
-        minvalue=0,
-        maxvalue=270,
-        parent=parent_window,
-    )
-    if orientation_deg is None:
-        return
-    if orientation_deg not in (0, 90, 180, 270):
-        raise ValueError("Nested block rotation must be 0, 90, 180 or 270 degrees.")
-    pin_map = {}
-    for entry in mapping_text.split(","):
-        token = entry.strip()
-        if not token:
-            continue
-        if ":" not in token:
-            raise ValueError(f"Invalid pin-map entry {token!r}; use CHILD_PIN:PARENT_NET.")
-        child_pin, parent_net = (part.strip() for part in token.split(":", 1))
-        if child_pin in pin_map:
-            raise ValueError(f"Pin {child_pin!r} appears more than once in the pin map.")
-        pin_map[child_pin] = parent_net
-
-    manifest_path = parent_record.path / "manifest.json"
-    original_manifest = manifest_path.read_bytes()
-    try:
-        updated = add_dependency(
-            parent_record, child_record, pin_map=pin_map, orientation=orientation_deg
-        )
-        result = compose_block_implementation(
-            updated, parent_record.path.parent, find_kicad_cli()
-        )
-    except Exception:
-        manifest_path.write_bytes(original_manifest)
-        raise
-    outcome = next(
-        (item for item in result["composed"] if item["block"] == parent_record.name),
-        {"placed": [], "labels": 0},
-    )
-    messagebox.showinfo(
-        "Nested Block Composed",
-        f"Added {child_record.name} to {parent_record.name} as "
-        f"{updated.manifest['dependencies'][-1]['reference']} at {orientation_deg}°.\n"
-        f"New facade symbols: {len(outcome['placed'])}; new net labels: {outcome['labels']}.\n"
-        "The implementation is composed inline with no hierarchical sheet.",
-        parent=parent_window,
-    )
-
-
 def _show_action_hub(root):
     """Show a scrollable task hub for less frequent and context-specific actions."""
     _configure_tk_theme(root)
@@ -5554,11 +5516,6 @@ def _show_action_hub(root):
                     "Synchronize local copy",
                     "Select one local block instance to reconcile it with its shared-library source.",
                     "synchronize-local-copy",
-                ),
-                (
-                    "Nest a block",
-                    "Choose a parent and child block to compose the child into the parent implementation.",
-                    "nest-block",
                 ),
             ],
         ),
@@ -5698,7 +5655,6 @@ def run_action(action: str, *, editor_window_id: str | None = None) -> None:
         "validate-libraries",
         "apply-pcb-layout",
         "apply-multiple-pcb-layouts",
-        "nest-block",
     }
     if action not in valid_actions:
         raise ValueError(f"Unknown KiCad Blocks action: {action!r}")
@@ -5788,8 +5744,6 @@ def run_action(action: str, *, editor_window_id: str | None = None) -> None:
             _apply_selected_block_pcb_layouts(
                 schematic, kicad, project_dir, library_paths, root
             )
-        elif action == "nest-block":
-            _add_nested_dependency(library_paths, root, root)
     except (ValueError, LookupError, FileNotFoundError, PermissionError) as exc:
         LOG.info("KiCad Blocks action needs user input or context (%s): %s", action, exc)
         messagebox.showwarning(

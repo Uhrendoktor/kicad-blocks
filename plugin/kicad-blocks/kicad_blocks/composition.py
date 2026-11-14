@@ -185,7 +185,10 @@ def _compose_direct_children(
             position = dependency.get("position_mm", [100.0, 160.0])
             origin_x, origin_y = float(position[0]), float(position[1])
             for pin_name, (offset_x, offset_y, spin_style) in pin_points.items():
-                net_name = str(pin_map[pin_name])
+                mapped_net = pin_map[pin_name]
+                if mapped_net is None:
+                    continue
+                net_name = str(mapped_net)
                 delta_x, delta_y = transform_symbol_point_to_schematic(
                     offset_x, offset_y, rotation_deg
                 )

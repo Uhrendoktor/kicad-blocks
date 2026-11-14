@@ -246,7 +246,15 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
             encoding="utf-8",
         )
 
-        with patch.object(plugin_actions, "messagebox", self.messagebox):
+        with (
+            patch.object(plugin_actions, "messagebox", self.messagebox),
+            patch.object(
+                plugin_actions,
+                "synchronize_block_dependencies",
+                return_value={"block": self.block, "changed": False, "count": 0},
+            ),
+            patch.object(plugin_actions, "find_kicad_cli", return_value="/usr/bin/kicad-cli"),
+        ):
             plugin_actions._publish_block(
                 self.library,
                 self.kicad,

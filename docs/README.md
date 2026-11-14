@@ -14,7 +14,7 @@ Use a task guide when you already know the outcome you want.
 - [Create, find, and place blocks](how-to/create-and-place.md)
 - [Configure an instance](how-to/configure.md)
 - [Edit, publish, and synchronize implementations](how-to/publish-and-sync.md)
-- [Nest blocks and validate libraries](how-to/nesting-and-validation.md)
+- [Compose block dependencies and validate libraries](how-to/nesting-and-validation.md)
 - [Manage and apply PCB layouts](how-to/pcb-layouts.md)
 
 The [how-to index](workflows.md) groups these tasks by workflow.
@@ -23,7 +23,7 @@ The [how-to index](workflows.md) groups these tasks by workflow.
 
 Read these pages to understand why KiCad Blocks behaves as it does.
 
-- [Architecture and design model](explanation/architecture.md) — facade symbols, stored implementations, variants, parameters, local copies, nesting, and the native KiCad boundary.
+- [Architecture and design model](explanation/architecture.md) — facade symbols, stored implementations, variants, parameters, local copies, automatic child-block dependencies and the native KiCad boundary.
 - [Compatibility and test coverage](explanation/compatibility.md) — tested environment, interpreter coverage, unvalidated targets, and known gaps.
 
 ## Reference
