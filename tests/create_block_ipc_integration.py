@@ -503,6 +503,20 @@ def main() -> None:
                     except (OSError, subprocess.SubprocessError, RuntimeError) as exc:
                         ui_driver_errors.append(exc)
 
+                ask_create_block_details = plugin_actions._ask_create_block_details
+
+                def ask_with_watchdog(parent, source_sheet):
+                    """Keep a failed external GUI driver from deadlocking the live IPC test."""
+                    def cancel_if_still_open():
+                        try:
+                            if parent.winfo_exists():
+                                parent.event_generate("<Escape>")
+                        except (AttributeError, plugin_actions.tk.TclError):
+                            pass
+
+                    parent.after(20000, cancel_if_still_open)
+                    return ask_create_block_details(parent, source_sheet)
+
                 driver = threading.Thread(target=complete_visible_dialog, daemon=True)
                 driver.start()
                 with (
@@ -518,6 +532,11 @@ def main() -> None:
                     ),
                     patch.object(
                         plugin_actions, "_reload_symbol_library", return_value=True
+                    ),
+                    patch.object(
+                        plugin_actions,
+                        "_ask_create_block_details",
+                        side_effect=ask_with_watchdog,
                     ),
                     patch.object(plugin_actions, "messagebox", messages),
                     patch.object(kicad, "get_schematic", return_value=parent_schematic),
