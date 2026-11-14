@@ -45,10 +45,13 @@ def _explicit_any_lines(tree: ast.AST) -> list[int]:
         if (
             isinstance(node, ast.Name) and node.id == "Any"
             or isinstance(node, ast.Attribute) and node.attr == "Any"
-        ):
-            lines.add(node.lineno)
-        elif isinstance(node, (ast.ImportFrom, ast.Import)) and any(
-            alias.name == "Any" or alias.name.endswith(".Any") for alias in node.names
+            or (
+                isinstance(node, (ast.ImportFrom, ast.Import))
+                and any(
+                    alias.name == "Any" or alias.name.endswith(".Any")
+                    for alias in node.names
+                )
+            )
         ):
             lines.add(node.lineno)
     return sorted(lines)
