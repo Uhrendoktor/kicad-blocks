@@ -772,7 +772,7 @@ class LibraryBrowserTests(unittest.TestCase):
             patch("kicad_blocks.plugin.subprocess.run") as run_process,
             patch("kicad_blocks.plugin.shutil.which") as find_command,
         ):
-            with self.assertRaisesRegex(RuntimeError, "supported KiCad IPC API yet"):
+            with self.assertRaisesRegex(RuntimeError, "schematic equivalent of Board.interactive_move"):
                 _start_native_symbol_placement(
                     SimpleNamespace(run_action=run_action), None, "buck_converter_ab12cd34"
                 )
