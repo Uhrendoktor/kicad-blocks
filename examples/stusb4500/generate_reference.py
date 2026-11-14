@@ -811,8 +811,9 @@ def generate_reference_schematic(destination: Path) -> Path:
 
     # R1.2 and R4.2 share one physical wire network. Keep one local label on
     # that island; U1.18 carries the matching label on a disconnected island.
-    # The two PMOS devices face one another so their common FET_MID node is
-    # an actual continuous wire, not two detached same-name flags.
+    # The two PMOS devices face one another. Keep their common-source trunk
+    # physical, but label the short branch twig and R10.1 separately. This
+    # preserves one FET_MID label per disconnected wire island.
     t4_fet_mid = pin_world_points[("T4", "3")]
     t1_fet_mid = pin_world_points[("T1", "2")]
     r10_fet_mid = pin_world_points[("R10", "1")]
@@ -823,24 +824,21 @@ def generate_reference_schematic(destination: Path) -> Path:
         raise ValueError(f"PMOS common-node pins are not aligned: {t4_fet_mid}, {t1_fet_mid}")
     add_route("FET_MID", [t4_fet_mid, t1_fet_mid], "back-to-back-pmos-common-node")
     fet_mid_branch = (round((t4_fet_mid[0] + t1_fet_mid[0]) / 2, 3), t4_fet_mid[1])
-    add_junction(fet_mid_branch, "FET_MID:R10-branch")
-    add_route("FET_MID", [fet_mid_branch, r10_fet_mid], "common-node-to-r10")
-    # FET_MID is one continuous physical network and needs no local labels.
-    # T1's gate is on its outer right side. Drop it straight into the middle
-    # of the VSNK_GATE resistor bus, between R11 and R13.
-    t1_gate = pin_world_points[("T1", "1")]
-    gate_bus_y = pin_world_points[("R10", "2")][1]
-    gate_lane_x = 365.76
-    add_route("VSNK_GATE", [
-        t1_gate, (gate_lane_x, t1_gate[1]), (gate_lane_x, gate_bus_y),
-    ], "t1-gate-to-bias-bus")
-    gate_bus_tap = (gate_lane_x, gate_bus_y)
-    add_junction(gate_bus_tap, "VSNK_GATE:T1-gate-tap")
-    # T1.1 and R11.1 now sit on the same physical wire island as the other
-    # gate-bus pins. Remove the two endpoint labels instead of duplicating
-    # their net name along one connected network.
-    remove_local_label("T1", "1", "VSNK_GATE")
-    remove_local_label("R11", "1", "VSNK_GATE")
+    add_junction(fet_mid_branch, "FET_MID:label-twig-branch")
+    fet_mid_label_point = (fet_mid_branch[0], 111.76)
+    add_route("FET_MID", [fet_mid_branch, fet_mid_label_point], "common-node-label-twig")
+    label_points[fet_mid_label_point] = (
+        "FET_MID", "local", None,
+        fet_mid_label_point[0] + 2.54, fet_mid_label_point[1], "left", 0,
+    )
+    label_points[r10_fet_mid] = (
+        "FET_MID", "local", None,
+        r10_fet_mid[0] + 2.54, r10_fet_mid[1], "left", 0,
+    )
+
+    # The VSNK_GATE control bus is physically wired across R10/R11/R13.
+    # Keep its one label at R11.1; T1.1 is a separate, matching label island.
+    # Do not bridge the two wire islands with another routed segment.
 
     # CC1 and CC2 use repeated local labels at the receptacle, ESD array,
     # and controller. Avoid physical traces across the dense USB-C pin field;
@@ -896,14 +894,10 @@ def generate_reference_schematic(destination: Path) -> Path:
     d4_filtered = pin_world_points[("D4", "1")]
     c4_filtered = pin_world_points[("C4", "1")]
     r1_filtered = pin_world_points[("R1", "1")]
-    add_route("VBUS_FILTERED", [
-        d4_filtered, c4_filtered, r1_filtered,
-    ], "d4-c4-r1-filtered-rail")
-    # D4.1, C4.1 and R1.1 are one physical network. Remove duplicate labels
-    # from the connected island; the exported netlist proves continuity.
+    add_route("VBUS_FILTERED", [d4_filtered, c4_filtered], "d4-to-c4-filtered-rail")
+    # The C4.1 wire island and R1.1 terminal island retain one matching
+    # local label each. They are electrically joined by the label pair.
     remove_local_label("D4", "1", "VBUS_FILTERED")
-    remove_local_label("C4", "1", "VBUS_FILTERED")
-    remove_local_label("R1", "1", "VBUS_FILTERED")
 
     # Each address strap is a left-to-right resistor chain: VREG_2V7,
     # pull-up, ADDR node, pull-down, GND. Put the ADDR label above the wire
