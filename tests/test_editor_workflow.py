@@ -74,6 +74,8 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
                     stdout="0x200" if search_count[0] > 1 else "",
                     returncode=0,
                 )
+            if arguments[1:2] == ["getwindowfocus"]:
+                return SimpleNamespace(stdout="0x200", returncode=0)
             if arguments[1:3] == ["getwindowname", "0x200"]:
                 return SimpleNamespace(
                     stdout=f"Symbol Editor — {self.block.manifest['symbol_name']}",
@@ -93,6 +95,9 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
 
         self.assertTrue(opened)
         self.assertEqual(actions, ["common.Control.showSymbolEditor"])
+        self.assertIn(["/usr/bin/xdotool", "windowraise", "0x200"], calls)
+        self.assertIn(["/usr/bin/xdotool", "windowactivate", "--sync", "0x200"], calls)
+        self.assertIn(["/usr/bin/xdotool", "windowfocus", "--sync", "0x200"], calls)
         self.assertNotIn(["/usr/bin/xdotool", "key", "--clearmodifiers", "alt+t"], calls)
         self.assertIn(
             ["/usr/bin/xdotool", "type", "--clearmodifiers", "--delay", "12", self.block.manifest["symbol_name"]],
@@ -342,6 +347,7 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
 
         project_catalog = build_project_symbol_catalog(self.project, [self.library])
         calls = []
+        focus_reads = [0]
         search_count = [0]
         run_action = Mock(return_value=SimpleNamespace(status=1))
 
@@ -361,7 +367,11 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
             if arguments[1:3] == ["getwindowclassname", "0x100"]:
                 return SimpleNamespace(stdout="eeschema", returncode=0)
             if arguments[1:2] == ["getwindowfocus"]:
-                return SimpleNamespace(stdout="0x100", returncode=0)
+                focus_reads[0] += 1
+                return SimpleNamespace(
+                    stdout="0x100" if focus_reads[0] == 1 else "0x200",
+                    returncode=0,
+                )
             if arguments[1:3] == ["getwindowpid", "0x100"]:
                 return SimpleNamespace(stdout="1001", returncode=0)
             if arguments[1:3] == ["getwindowname", "0x200"]:
@@ -384,6 +394,9 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
 
         self.assertTrue(opened)
         run_action.assert_called_once_with("common.Control.showSymbolEditor")
+        self.assertIn(["/usr/bin/xdotool", "windowraise", "0x200"], calls)
+        self.assertIn(["/usr/bin/xdotool", "windowactivate", "--sync", "0x200"], calls)
+        self.assertIn(["/usr/bin/xdotool", "windowfocus", "--sync", "0x200"], calls)
         self.assertIn(["/usr/bin/xdotool", "key", "--clearmodifiers", "alt+t"], calls)
         self.assertIn(["/usr/bin/xdotool", "key", "--clearmodifiers", "Home"], calls)
         self.assertEqual(
