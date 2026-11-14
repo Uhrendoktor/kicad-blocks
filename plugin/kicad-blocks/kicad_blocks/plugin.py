@@ -2577,7 +2577,7 @@ def _launch_block_asset(
 
 def _save_block_variants(
     record, variants: list[dict], *, default_variant=_KEEP_DEFAULT_VARIANT
-) -> object:
+) -> None:
     """Publish implementation variants and the explicitly selected default."""
     import json
     import shutil
@@ -2744,7 +2744,6 @@ def _save_block_variants(
         )
     for filename in removed_files:
         (block_path / filename).unlink(missing_ok=True)
-    return _record(block_path)
 
 
 def _save_block_layouts(
