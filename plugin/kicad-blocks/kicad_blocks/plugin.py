@@ -1042,13 +1042,9 @@ def _show_selected_block_configuration(
             messagebox.showerror("Invalid Block Configuration", str(exc), parent=dialog)
             return
 
-        messagebox.showinfo(
-            "Block Instance Updated",
-            f"Saved configuration for {instance.reference}.\n\n"
+        LOG.info("%s: %s", "Block Instance Updated", f"Saved configuration for {instance.reference}.\n\n"
             "The schematic was updated through KiCad IPC as one undoable change. "
-            "The shared library block was not modified.",
-            parent=dialog,
-        )
+            "The shared library block was not modified.")
         dialog.destroy()
 
     _action_button(footer, "Cancel", dialog.destroy, "cancel", "Discard instance edits").pack(side="right", padx=(8, 0))
@@ -2034,9 +2030,7 @@ def _create_and_place(
         f"  • {pin['name']} — {pin['electrical_type']}"
         for pin in record.manifest.get("pins", [])
     )
-    messagebox.showinfo(
-        "Block Created",
-        f"Created {name} from hierarchical sheet {source_sheet.name}.\\n\\n"
+    LOG.info("%s: %s", "Block Created", f"Created {name} from hierarchical sheet {source_sheet.name}.\\n\\n"
         f"Facade pins were generated from hierarchical labels and their shapes:\\n"
         f"{pins_summary}\\n\\n"
         f"Implementation: {record.implementation}\\n"
@@ -2045,9 +2039,7 @@ def _create_and_place(
         "normal Symbol Editor, then use Publish Library Block. When the "
         "implementation's hierarchical labels change, Publish synchronizes "
         "facade pin names and electrical types automatically."
-        + (f"\\n\\nLibrary reload note: {_LAST_LIBRARY_RELOAD_WARNING}" if _LAST_LIBRARY_RELOAD_WARNING else ""),
-        parent=parent,
-    )
+        + (f"\\n\\nLibrary reload note: {_LAST_LIBRARY_RELOAD_WARNING}" if _LAST_LIBRARY_RELOAD_WARNING else ""))
 
 
 
@@ -2167,13 +2159,9 @@ def _edit_block_implementation(root, schematic, kicad, project_dir, parent) -> N
         "implementation schematic",
         editor_window_id=getattr(parent, "_kicad_blocks_editor_window_id", None),
     )
-    messagebox.showinfo(
-        "Block Implementation",
-        f"Opened {record.name} implementation in Eeschema.\n\n"
+    LOG.info("%s: %s", "Block Implementation", f"Opened {record.name} implementation in Eeschema.\n\n"
         "After editing a shared library block, run Publish. "
-        "A project-local implementation remains independent until explicitly synchronized.",
-        parent=parent,
-    )
+        "A project-local implementation remains independent until explicitly synchronized.")
     return process
 
 
@@ -5549,7 +5537,7 @@ def _open_selected_block_implementation(root, schematic, kicad, project_dir, par
             if record.manifest.get("variants")
             else f"Opened {record.name} implementation."
         )
-        messagebox.showinfo("Block Implementation", detail, parent=parent)
+        LOG.info("%s: %s", "Block Implementation", detail)
     return process
 
 
@@ -5589,12 +5577,8 @@ def _export_recursive_bom(root: Path | list[Path], parent, schematic=None, proje
     result = export_block_bom(
         record, Path(output), find_kicad_cli(), library_root, parameter_values=parameter_values
     )
-    messagebox.showinfo(
-        "Block BOM Exported",
-        f"Exported {result['row_count']} rows from {result['block_count']} block(s):\n"
-        f"{result['output']}",
-        parent=parent,
-    )
+    LOG.info("%s: %s", "Block BOM Exported", f"Exported {result['row_count']} rows from {result['block_count']} block(s):\n"
+        f"{result['output']}")
 
 
 def _validate_shared_library(root: Path | list[Path], parent) -> None:
@@ -5644,7 +5628,7 @@ def _validate_shared_library(root: Path | list[Path], parent) -> None:
     elif warnings:
         messagebox.showwarning("Block Library Validation — ERC warnings", message, parent=parent)
     else:
-        messagebox.showinfo("Block Library Validation Passed", message, parent=parent)
+        LOG.info("%s: %s", "Block Library Validation Passed", message)
 
 
 def _validate_recursive_erc(root: Path | list[Path], parent, schematic=None, project_dir: Path | None = None) -> None:
@@ -5679,12 +5663,8 @@ def _validate_recursive_erc(root: Path | list[Path], parent, schematic=None, pro
         f"{item['block']}: {'violations found' if item['violations'] else 'no violations'}"
         for item in reports
     )
-    messagebox.showinfo(
-        "Recursive Block ERC",
-        f"Checked {len(reports)} block implementation(s); "
-        f"{len(failed)} reported violations.\n\n{details}\n\nReports: {output}",
-        parent=parent,
-    )
+    LOG.info("%s: %s", "Recursive Block ERC", f"Checked {len(reports)} block implementation(s); "
+        f"{len(failed)} reported violations.\n\n{details}\n\nReports: {output}")
 
 
 def _publish_block(root, kicad, project_dir, parent) -> None:
@@ -5701,15 +5681,11 @@ def _publish_block(root, kicad, project_dir, parent) -> None:
     result = refresh_library_block(record)
     if result["changed"]:
         _register_block(project_dir, record, kicad, library_paths)
-    messagebox.showinfo(
-        "Library Block Published",
-        f"Version: {result['version']}\n"
+    LOG.info("%s: %s", "Library Block Published", f"Version: {result['version']}\n"
         f"Changed files: {', '.join(result['changed']) or 'none'}\n"
         f"Automatically detected {dependency_result['count']} child block(s)"
         + ("; dependency manifest updated.\n" if dependency_result["changed"] else ".\n")
-        + "Local copies can now synchronize from this revision.",
-        parent=parent,
-    )
+        + "Local copies can now synchronize from this revision.")
 
 
 def _block_record_for_instance(library_root: Path | list[Path], project_dir: Path, instance):
@@ -5893,7 +5869,7 @@ def _apply_block_pcb_layout(
             "in the stored PCB: "
             + (", ".join(result["unmatched_project_chains"]) or "unknown")
         )
-    messagebox.showinfo("PCB Block Layout Applied", message, parent=parent)
+    LOG.info("%s: %s", "PCB Block Layout Applied", message)
 
 
 def _apply_selected_block_pcb_layouts(
@@ -6004,9 +5980,7 @@ def _apply_selected_block_pcb_layouts(
     ):
         _open_generated_pcb_copy(kicad, Path(result["output"]))
 
-    messagebox.showinfo(
-        "PCB Block Layouts Applied",
-        f"Created board copy: {result['output']}\n"
+    LOG.info("%s: %s", "PCB Block Layouts Applied", f"Created board copy: {result['output']}\n"
         f"Block instances: {result['block_count']}\n"
         f"Footprints added: {result['footprint_count']}\n"
         f"Board objects added: {result['object_count']}\n"
@@ -6014,9 +5988,7 @@ def _apply_selected_block_pcb_layouts(
         f"PCB net chains added: {', '.join(result['merged_board_chains']) or 'none'}\n"
         f"Interactive placement manifest: {placement_sidecar}\n"
         "Open the output in PCB Editor and choose Place Imported Block Layout once for each block instance. "
-        "The original board and project settings were not modified.",
-        parent=parent,
-    )
+        "The original board and project settings were not modified.")
 
 
 def _show_action_hub(root):
@@ -6238,20 +6210,12 @@ def run_action(action: str, *, editor_window_id: str | None = None) -> None:
             path = make_selected_local(
                 schematic, kicad, project_dir, library_paths
             )
-            messagebox.showinfo(
-                "Local Copy Created",
-                f"The selected instance now uses an independent project-local block:\n{path}",
-                parent=root,
-            )
+            LOG.info("%s: %s", "Local Copy Created", f"The selected instance now uses an independent project-local block:\n{path}")
         elif action == "synchronize-local-copy":
             result = sync_selected_local(schematic, kicad, project_dir)
-            messagebox.showinfo(
-                "Local Block Synchronized",
-                "Published local edits: " + (", ".join(result["published"]) or "none") +
+            LOG.info("%s: %s", "Local Block Synchronized", "Published local edits: " + (", ".join(result["published"]) or "none") +
                 "\\nPulled library edits: " + (", ".join(result["pulled"]) or "none") +
-                "\\nConverged edits: " + (", ".join(result["converged"]) or "none"),
-                parent=root,
-            )
+                "\\nConverged edits: " + (", ".join(result["converged"]) or "none"))
         elif action == "edit-facade":
             record = _pick_record(
                 _list_library_records(library_paths), root, "Edit Facade"
@@ -6266,12 +6230,9 @@ def run_action(action: str, *, editor_window_id: str | None = None) -> None:
                     project_catalog=project_catalog,
                     close_browser=root.destroy,
                 )
-                messagebox.showinfo(
-                    "Edit facade",
-                    "Symbol Editor handoff requested. In its library tree, search for "
+                LOG.info("%s: %s", "Edit facade", "Symbol Editor handoff requested. In its library tree, search for "
                     + f"{LIBRARY_NICKNAME}:{record.manifest['symbol_name']}"
-                    + " and select the result. Saved facade edits are imported by Publish implementation.",
-                )
+                    + " and select the result. Saved facade edits are imported by Publish implementation.")
         elif action == "publish-block":
             _publish_block(library_paths, kicad, project_dir, root)
         elif action == "recursive-bom":
