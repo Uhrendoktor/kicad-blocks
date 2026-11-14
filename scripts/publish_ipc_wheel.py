@@ -6,10 +6,10 @@ from __future__ import annotations
 import argparse
 import json
 import os
-from pathlib import Path
 import socket
 import ssl
 import time
+from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote
 from urllib.request import Request, urlopen
@@ -82,7 +82,7 @@ def _api_request(
             raise RuntimeError(
                 f"GitHub API {method} {url} failed with HTTP {exc.code}: {details}"
             ) from exc
-        except (TimeoutError, socket.timeout, ssl.SSLError, URLError, ConnectionError) as exc:
+        except (TimeoutError, ssl.SSLError, URLError, ConnectionError) as exc:
             if attempt >= max_retries:
                 raise RuntimeError(
                     f"GitHub API {method} {url} failed after {attempt + 1} attempts: {exc}"
