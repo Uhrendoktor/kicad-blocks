@@ -191,7 +191,7 @@ class LibraryBrowserTests(unittest.TestCase):
 
         svg = self.root / "preview-source.svg"
         svg.write_text(
-            """<svg xmlns="http://www.w3.org/2000/svg">
+            """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 24">
               <g id="reference"><text>X?</text><desc>X?</desc><path d="M0 0"/></g>
               <g id="component-name"><text>Buck Converter</text></g>
               <g id="pins"><text>VIN</text><desc>VIN</desc></g>
@@ -216,6 +216,8 @@ class LibraryBrowserTests(unittest.TestCase):
         self.assertNotIn("X?", labels)
         self.assertNotIn("Buck Converter", labels)
         self.assertIn("VIN", labels)
+        self.assertEqual(root.attrib.get("width"), "40px")
+        self.assertEqual(root.attrib.get("height"), "24px")
 
     def test_overview_contains_pin_types_parameters_variants_and_layouts(self):
         overview = _block_overview_text(self.block)
