@@ -260,14 +260,59 @@ def _graphic_tab(x: float, y: float, width: float, key: str) -> list:
     ]
 
 
+def _glyph_advance(character: str) -> float:
+    """Estimate the relative advance of KiCad's stroke font."""
+    if character in "ilI.,:;!|'":
+        return 0.30
+    if character in "MW@%&":
+        return 0.90
+    if character.isspace():
+        return 0.34
+    if character.isupper() or character.isdigit():
+        return 0.64
+    return 0.55
+
+
+def _measure_text_box(
+    value: str, size: float, padding: float = 1.27,
+) -> tuple[float, float]:
+    """Measure text conservatively and add equal physical padding on every side."""
+    if size <= 0 or padding < 0:
+        raise ValueError("Text size must be positive and padding cannot be negative.")
+    lines = value.splitlines() or [""]
+    line_width = max(
+        (sum(_glyph_advance(character) for character in line) for line in lines),
+        default=0.0,
+    )
+    width = 2 * padding + max(line_width * size * 1.12, size)
+    height = 2 * padding + len(lines) * size * 1.55
+    return round(width, 3), round(height, 3)
+
+
 def _graphic_text(
     value: str, x: float, y: float, size: float, key: str,
+    *, padding: float = 1.27, border: bool = True,
 ) -> list:
-    """Add a compact label or explanatory line to the sheet."""
+    """Create a native KiCad text_box with measured size and uniform margins.
+
+    Coordinates identify the top-left box corner. KiCad lays out/reflows text
+    inside the native text_box; this helper supplies conservative dimensions
+    and identical physical padding on all four sides.
+    """
+    width, height = _measure_text_box(value, size, padding)
+    stroke = (
+        ["stroke", ["width", "0.1524"], ["type", "default"]]
+        if border else ["stroke", ["width", "0"], ["type", "default"]]
+    )
     return [
-        "text", _Quoted(value),
+        "text_box", _Quoted(value),
         ["at", f"{x:.3f}", f"{y:.3f}", "0"],
-        ["effects", ["font", ["size", f"{size:.3f}", f"{size:.3f}"]], ["justify", "left"]],
+        ["size", f"{width:.3f}", f"{height:.3f}"],
+        ["margins", *(f"{padding:.3f}" for _ in range(4))],
+        stroke,
+        ["fill", ["type", "none"]],
+        ["effects", ["font", ["size", f"{size:.3f}", f"{size:.3f}"]],
+            ["justify", "left", "top"]],
         ["uuid", _Quoted(_uid(f"graphic:text:{key}"))],
     ]
 
@@ -275,16 +320,12 @@ def _graphic_text(
 def _note_box(
     x: float, y: float, lines: tuple[str, ...], key: str,
 ) -> list[list]:
-    """Size a compact note frame from its actual text content."""
-    width = max(13.97, max(len(line) for line in lines) * 0.58 + 5.08)
-    height = max(7.62, len(lines) * 2.54 + 3.81)
-    nodes = [_graphic_rectangle(x, y, x + width, y + height, f"note:{key}")]
-    for index, line in enumerate(lines):
-        nodes.append(_graphic_text(
-            line, x + 1.905, y + 3.175 + index * 2.54, 0.90,
-            f"note:{key}:{index}",
-        ))
-    return nodes
+    """Create one native note text_box sized from the supplied text."""
+    if not lines or any(not line.strip() for line in lines):
+        raise ValueError(f"Note {key!r} must contain non-empty lines.")
+    return [_graphic_text(
+        "\n".join(lines), x, y, 0.90, key, padding=1.27, border=True,
+    )]
 
 
 def _graphic_rule(x1: float, y1: float, x2: float, y2: float, key: str) -> list:
@@ -323,16 +364,19 @@ def _functional_block(
         raise ValueError(f"Invalid functional-block bounds for {key}.")
     if tab_width <= 5.08 or tab_width > right - x:
         raise ValueError(f"Functional-block tab does not fit its frame: {key}.")
-    estimated_title_width = len(title) * 0.72 + 5.08
-    if estimated_title_width > tab_width:
+    measured_title_width, _ = _measure_text_box(title, 1.27, padding=1.27)
+    if measured_title_width > tab_width - 2.54:
         raise ValueError(
             f"Functional-block title {title!r} exceeds its tab width "
-            f"({estimated_title_width:.2f} mm > {tab_width:.2f} mm)."
+            f"({measured_title_width + 2.54:.2f} mm > {tab_width:.2f} mm)."
         )
     return [
         _graphic_rectangle(x, y, right, bottom, f"zone:{key}"),
         _graphic_tab(x, y, tab_width, key),
-        _graphic_text(title, x + 2.54, y - 2.54, 1.27, f"zone-title:{key}"),
+        _graphic_text(
+            title, x + 1.27, y - 4.83, 1.27,
+            f"zone-title:{key}", padding=1.27, border=False,
+        ),
     ]
 
 
@@ -402,10 +446,10 @@ def generate_reference_schematic(destination: Path) -> Path:
         ("C3", "Device", "C", "1uF", (266.70, 101.60), {
             "1": ("VREG_2V7", "local", ""), "2": ("GND", "local", ""),
         }),
-        ("R51", "Device", "R", "NC", (236.22, 177.80), {
+        ("R51", "Device", "R", "100k", (236.22, 177.80), {
             "1": ("VREG_2V7", "local", ""), "2": ("ADDR1", "local", ""),
         }),
-        ("R52", "Device", "R", "NC", (236.22, 190.50), {
+        ("R52", "Device", "R", "100k", (236.22, 190.50), {
             "1": ("VREG_2V7", "local", ""), "2": ("ADDR0", "local", ""),
         }),
         ("R53", "Device", "R", "100k", (256.54, 177.80), {
@@ -546,7 +590,8 @@ def generate_reference_schematic(destination: Path) -> Path:
         field_angle = 90 if reference.startswith("R") else 0
         instance = [
             "symbol", ["lib_id", _Quoted(lib_id)], ["at", f"{sx:.3f}", f"{sy:.3f}", str(rotation)],
-            ["unit", "1"], ["in_bom", "yes"], ["on_board", "yes"], ["dnp", "no"],
+            ["unit", "1"], ["in_bom", "yes"], ["on_board", "yes"],
+            ["dnp", "yes" if reference in {"R51", "R52"} else "no"],
             ["uuid", _Quoted(symbol_uuid)],
             _prop(
                 "Reference", reference, 0, reference_x, reference_y,
@@ -757,17 +802,8 @@ def generate_reference_schematic(destination: Path) -> Path:
             raise ValueError(f"Expected {net} local label is missing at {reference}.{pin_number}.")
         label_points.pop(point)
 
-    # Preserve a second named point on the VBUS sense divider without
-    # extending its wire run to another component or block.
-    sense_start = pin_world_points[("R1", "2")]
-    sense_end = pin_world_points[("R4", "2")]
-    sense_tap = (round((sense_start[0] + sense_end[0]) / 2, 3), sense_start[1])
-    add_junction(sense_tap, "VBUS_VS_DISCH:label-tap")
-    label_points[sense_tap] = (
-        "VBUS_VS_DISCH", "local", None,
-        sense_tap[0], sense_tap[1] + 7.62, None, 0,
-    )
-
+    # R1.2 and R4.2 share one physical wire network. Keep one local label on
+    # that island; U1.18 carries the matching label on a disconnected island.
     # The two PMOS devices face one another so their common FET_MID node is
     # an actual continuous wire, not two detached same-name flags.
     t4_fet_mid = pin_world_points[("T4", "3")]
@@ -782,17 +818,7 @@ def generate_reference_schematic(destination: Path) -> Path:
     fet_mid_branch = (round((t4_fet_mid[0] + t1_fet_mid[0]) / 2, 3), t4_fet_mid[1])
     add_junction(fet_mid_branch, "FET_MID:R10-branch")
     add_route("FET_MID", [fet_mid_branch, r10_fet_mid], "common-node-to-r10")
-    fet_mid_label_point = (fet_mid_branch[0], 111.76)
-    add_junction(fet_mid_label_point, "FET_MID:label-tap")
-    label_points[fet_mid_label_point] = (
-        "FET_MID", "local", None,
-        fet_mid_label_point[0] + 2.54, fet_mid_label_point[1], "left", 0,
-    )
-    label_points[r10_fet_mid] = (
-        "FET_MID", "local", None,
-        r10_fet_mid[0] + 2.54, r10_fet_mid[1], "left", 0,
-    )
-
+    # FET_MID is one continuous physical network and needs no local labels.
     # T1's gate is on its outer right side. Drop it straight into the middle
     # of the VSNK_GATE resistor bus, between R11 and R13.
     t1_gate = pin_world_points[("T1", "1")]
@@ -803,10 +829,11 @@ def generate_reference_schematic(destination: Path) -> Path:
     ], "t1-gate-to-bias-bus")
     gate_bus_tap = (gate_lane_x, gate_bus_y)
     add_junction(gate_bus_tap, "VSNK_GATE:T1-gate-tap")
-    label_points[gate_bus_tap] = (
-        "VSNK_GATE", "local", None,
-        gate_bus_tap[0] + 2.54, gate_bus_tap[1], "left", 0,
-    )
+    # T1.1 and R11.1 now sit on the same physical wire island as the other
+    # gate-bus pins. Remove the two endpoint labels instead of duplicating
+    # their net name along one connected network.
+    remove_local_label("T1", "1", "VSNK_GATE")
+    remove_local_label("R11", "1", "VSNK_GATE")
 
     # CC1 and CC2 use repeated local labels at the receptacle, ESD array,
     # and controller. Avoid physical traces across the dense USB-C pin field;
@@ -842,16 +869,10 @@ def generate_reference_schematic(destination: Path) -> Path:
     remove_local_label("C2", "1", "VREG_2V7")
     remove_local_label("C3", "1", "VREG_2V7")
 
-    # The short VREG_1V2 bypass net is shown by its direct U1.21-to-C1 wire.
-    # Remove the U1-side one-off label and add a second local label on a clear
-    # point of that wire, away from the capacitor bodies and adjacent pin names.
+    # VREG_1V2 is one direct U1.21-to-C1 physical network, so it needs no
+    # local labels at either connected endpoint.
     remove_local_label("U1", "21", "VREG_1V2")
-    vreg_1v2_tap = (251.460, 109.220)
-    add_junction(vreg_1v2_tap, "VREG_1V2:label-tap")
-    label_points[vreg_1v2_tap] = (
-        "VREG_1V2", "local", None,
-        256.540, 109.220, "left", 0,
-    )
+    remove_local_label("C1", "1", "VREG_1V2")
 
     # U1.23 is directly wired to C2 and C3. Put the reused VREG_2V7 label
     # on the vertical pin-to-branch wire, in the clear gap above the capacitors.
@@ -880,7 +901,11 @@ def generate_reference_schematic(destination: Path) -> Path:
     add_route("VBUS_FILTERED", [
         d4_filtered, c4_filtered, r1_filtered,
     ], "d4-c4-r1-filtered-rail")
+    # D4.1, C4.1 and R1.1 are one physical network. Remove duplicate labels
+    # from the connected island; the exported netlist proves continuity.
+    remove_local_label("D4", "1", "VBUS_FILTERED")
     remove_local_label("C4", "1", "VBUS_FILTERED")
+    remove_local_label("R1", "1", "VBUS_FILTERED")
 
     # Each address strap is a left-to-right resistor chain: VREG_2V7,
     # pull-up, ADDR node, pull-down, GND. Put the ADDR label above the wire
@@ -927,7 +952,7 @@ def generate_reference_schematic(destination: Path) -> Path:
         "VBUS BULK PROTECTION", 43.18, "vbus-bulk",
     ))
     rules.extend(_functional_block(
-        149.86, 86.36, 213.36, 175.26,
+        137.16, 86.36, 213.36, 175.26,
         "VBUS MONITOR / FILTER", 55.88, "vbus-monitor",
     ))
     rules.extend(_functional_block(
@@ -942,7 +967,7 @@ def generate_reference_schematic(destination: Path) -> Path:
     # module. The protected VSNK output and discharge parts form the next
     # left-to-right stage in a compact, adjacent frame.
     rules.extend(_functional_zone(
-        297.18, 86.36, 372.11, 175.26,
+        294.64, 86.36, 372.11, 175.26,
         "BACK-TO-BACK PMOS SWITCH", 58.42, "power-switch",
     ))
     rules.extend(_functional_zone(
@@ -950,7 +975,7 @@ def generate_reference_schematic(destination: Path) -> Path:
         "VSNK OUTPUT / DISCHARGE", 33.02, "vsnk-output",
     ))
     rules.extend(_note_box(
-        151.13, 158.75,
+        151.13, 137.16,
         ("D4 is unspecified; verify its VBUS rating.",),
         "d4-selection",
     ))
@@ -969,7 +994,10 @@ def generate_reference_schematic(destination: Path) -> Path:
             local_label_uses[net] = local_label_uses.get(net, 0) + 1
     single_use = {net: count for net, count in local_label_uses.items() if count < 2}
     if single_use:
-        raise ValueError(f"Local net labels must be reused at least twice: {single_use}")
+        raise ValueError(
+            "Local labels must connect at least two disconnected wire networks: "
+            f"{single_use}"
+        )
 
     def label_position_is_on_wire(x: float, y: float) -> bool:
         """Return true when a label can attach directly to an existing wire."""
