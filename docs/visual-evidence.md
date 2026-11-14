@@ -4,9 +4,9 @@ This page presents production Tk UI captures, an animated placement-chooser walk
 
 For the complete behavior walkthrough, see the [STUSB4500 example](../examples/stusb4500/README.md). For task procedures, see the [workflow index](workflows.md).
 
-## Browse and place the STUSB4500 example
+## Browse the STUSB4500 example
 
-The chooser fixture uses the STUSB4500 reference schematic. The animation shows the current placement flow: browse the registered library, filter for USB-related blocks, inspect the facade, and select an implementation and configuration profile before placement.
+The chooser fixture uses the STUSB4500 reference schematic. The animation is a historical capture of the selection UI: browse the registered library, filter for USB-related blocks, inspect the facade, and choose an implementation and configuration profile. It does not prove that the current supported KiCad IPC API can complete interactive placement; that handoff remains unavailable on the tested build.
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/block-picker-workflow.gif" alt="Animated KiCad Blocks placement chooser: browse the STUSB4500 block, filter the library for USB blocks, and select the 5 V implementation with the 5 V / 2.4 A PDO1 profile" width="900">
@@ -62,7 +62,7 @@ The implementation details dialog uses a short **Variant value** label and expla
 
 ## Manage PCB layouts
 
-The PCB layout manager separates the stored layout table, the assignment selector, and its Save/Cancel footer.
+The currently published screenshot is from the earlier Save/Cancel UI checkpoint. The current branch autosaves each accepted Add, Remove, Assign, and Set default operation; the footer now contains **Save & close** and **Close**, with Save & close acting as a retry path after a failed write. Regenerate the preview before publishing the next visual-evidence bundle.
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/pcb-layout-manager-light.png" alt="PCB layouts manager with layout rows, implementation assignment controls, and Save layouts and Cancel footer buttons" width="1000">
