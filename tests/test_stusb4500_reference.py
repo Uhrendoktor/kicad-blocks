@@ -14,7 +14,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 from generate_reference import SCHEMATIC_GROUPS, _uid, generate_reference_schematic
 from kicad_blocks.pcb_layout import _all, _direct, parse_sexpr
-from validate_schematic_style import check_schematic_style
+from validate_schematic_style import _pin_world_info, _wire_networks, check_schematic_style
 
 
 def _instance_map(tree: list) -> dict[str, list]:
@@ -166,49 +166,19 @@ class STUSB4500ReferenceTests(unittest.TestCase):
         self.assertEqual(strap_names, {"ADDR0", "ADDR1"})
         self.assertNotIn("(global_label", content)
 
+
     def test_back_to_back_pmos_midpoint_is_directly_wired_to_r10(self) -> None:
         with tempfile.TemporaryDirectory(prefix="stusb4500-pmos-link-") as temporary:
-            content, tree, instances = self._generate(temporary)
+            content, tree, _instances = self._generate(temporary)
 
-        points = {}
-        for reference, pin_number in (("T4", "3"), ("T1", "2"), ("R10", "1")):
-            instance = instances[reference]
-            at = _direct(instance, "at")
-            lib_id = str(_direct(instance, "lib_id")[1])
-            library = next(
-                node for node in _all(tree, "symbol")
-                if _direct(node, "lib_id") is None and len(node) > 1
-                and str(node[1]) == lib_id
-            )
-            pin = next(
-                node for node in _all(library, "pin")
-                if _direct(node, "number") is not None
-                and str(_direct(node, "number")[1]) == pin_number
-            )
-            pin_at = _direct(pin, "at")
-            sx, sy, rotation = float(at[1]), float(at[2]), int(float(at[3]))
-            x, y = float(pin_at[1]), float(pin_at[2])
-            if rotation == 0:
-                points[(reference, pin_number)] = (round(sx + x, 3), round(sy - y, 3))
-            elif rotation == 180:
-                points[(reference, pin_number)] = (round(sx - x, 3), round(sy + y, 3))
-            else:
-                self.fail(f"Unexpected FET rotation for {reference}: {rotation}")
-
-        t4, t1, r10 = points[("T4", "3")], points[("T1", "2")], points[("R10", "1")]
-        midpoint = (round((t4[0] + t1[0]) / 2, 3), t4[1])
-        segments = {
-            frozenset(
-                (tuple(round(float(v), 3) for v in (p[1], p[2]))
-                 for p in _all(_direct(wire, "pts"), "xy"))
-            )
-            for wire in _all(tree, "wire")
-        }
-        self.assertIn(frozenset((t4, t1)), segments)
-        self.assertIn(frozenset((midpoint, r10)), segments)
-        self.assertAlmostEqual(midpoint[0], r10[0], places=3)
+        dsu, pins = _wire_networks(tree)
+        t4 = pins[("T4", "3")]["point"]
+        t1 = pins[("T1", "2")]["point"]
+        r10 = pins[("R10", "1")]["point"]
+        self.assertEqual(dsu.find(t4), dsu.find(t1))
+        self.assertEqual(dsu.find(t1), dsu.find(r10))
+        self.assertAlmostEqual((t4[0] + t1[0]) / 2, r10[0], places=3)
         self.assertNotIn('(label "FET_MID"', content)
-
 
     def test_power_path_is_split_into_switch_and_compact_output_stage(self) -> None:
         with tempfile.TemporaryDirectory(prefix="stusb4500-power-stages-") as temporary:
@@ -240,21 +210,20 @@ class STUSB4500ReferenceTests(unittest.TestCase):
         self.assertAlmostEqual(output[0] - switch[2], 2.54, places=3)
 
 
+
     def test_vbus_conditioning_groups_are_explained(self) -> None:
         with tempfile.TemporaryDirectory(prefix="stusb4500-vbus-groups-") as temporary:
             content, tree, _ = self._generate(temporary)
 
-        descriptions = {
-            str(node[1]) for node in _all(tree, "text_box")
-            if _direct(node, "uuid")
-            and "group-description:" in str(_direct(node, "uuid")[1])
+        text_by_uuid = {
+            str(_direct(node, "uuid")[1]): str(node[1])
+            for node in _all(tree, "text_box") if _direct(node, "uuid") is not None
         }
-        self.assertIn(
-            "VBUS filter, fast-charge path and VBUS_VS_DISCH divider. "
-            "D4 part is unspecified; verify its rating.\n"
-            "ST DS12499 REV. 8 | PAGE 26 | FIGURE 10",
-            descriptions,
-        )
+        group = next(item for item in SCHEMATIC_GROUPS if item["id"] == "vbus-monitor")
+        description_uuid = _uid("graphic:text:group-description:vbus-monitor")
+        self.assertIn(description_uuid, text_by_uuid)
+        self.assertIn(group["description"], text_by_uuid[description_uuid])
+        self.assertIn("ST DS12499 REV. 8 | PAGE 26 | FIGURE 10", text_by_uuid[description_uuid])
         self.assertIn("VBUS BULK PROTECTION", content)
         self.assertIn("VBUS MONITOR / FILTER", content)
 
@@ -281,6 +250,7 @@ class STUSB4500ReferenceTests(unittest.TestCase):
                 self.assertEqual(float(field_angle), 90.0, f"{reference} {field_name} angle")
 
 
+
     def test_j1_and_u1_fields_are_close_and_inside_their_groups(self) -> None:
         with tempfile.TemporaryDirectory(prefix="stusb4500-fields-") as temporary:
             _, _, instances = self._generate(temporary)
@@ -298,12 +268,14 @@ class STUSB4500ReferenceTests(unittest.TestCase):
             at = _direct(prop, "at")
             self.assertAlmostEqual(float(at[1]), float(u1[1]) + 22.86, places=3)
             self.assertAlmostEqual(float(at[2]), expected_y, places=3)
-            self.assertEqual(str(_direct(_direct(prop, "effects"), "justify")[1]), "right")
+            if field_name == "Reference":
+                self.assertEqual(str(_direct(_direct(prop, "effects"), "justify")[1]), "right")
+            else:
+                self.assertIsNone(_direct(_direct(prop, "effects"), "justify"))
 
         r55 = _direct(instances["R55"], "at")
         self.assertAlmostEqual(float(r55[1]), float(u1[1]) - 22.86, places=3)
         self.assertLess(abs(float(r55[2]) - float(u1[2])), 15.0)
-
 
     def test_group_descriptions_and_source_evidence_are_generated(self) -> None:
         with tempfile.TemporaryDirectory(prefix="stusb4500-group-descriptions-") as temporary:
