@@ -4911,6 +4911,13 @@ def _show_library_browser(
     details_scroll.pack(side="right", fill="y")
     details.configure(state="disabled")
     _bind_mousewheel(details, lambda amount: details.yview_scroll(amount, "units"))
+    facade_hint = ttk.Label(
+        right,
+        text="",
+        foreground=palette.get("muted", "#5f6871"),
+        font=("TkDefaultFont", 8),
+    )
+    facade_hint.grid(row=4, column=0, sticky="w", pady=(6, 0))
 
     selected_record = [None]
     facade_button = [None]
@@ -5025,9 +5032,16 @@ def _show_library_browser(
             open_layout_button[0].configure(
                 state="normal" if record is not None and _layout_choices(record) else "disabled"
             )
+        facade_available = selected_facade_instance(record) is not None
         if facade_button[0] is not None:
             facade_button[0].configure(
-                state="normal" if selected_facade_instance(record) is not None else "disabled"
+                state="normal" if facade_available else "disabled"
+            )
+        if record is None or facade_available:
+            facade_hint.configure(text="")
+        else:
+            facade_hint.configure(
+                text="Select this block in Eeschema to edit its library facade."
             )
 
     def place_selected(_event=None):
@@ -5163,7 +5177,7 @@ def _show_library_browser(
         if instance is None:
             messagebox.showinfo(
                 "Edit facade",
-                "Select one placed instance of this block in Eeschema, then reopen the library.",
+                "Select this block in Eeschema, then return to the Functional Block Library.",
                 parent=window,
             )
             return
@@ -5357,7 +5371,7 @@ def _show_library_browser(
     implementation_button.pack(side="left", padx=(6, 0))
     facade_button[0] = _action_button(
         action_toolbar, "Edit facade", edit_facade, "facade",
-        "Edit the library facade for the matching block instance selected in Eeschema",
+        "Edit the library copy; existing schematic instances must be updated separately",
     )
     facade_button[0].pack(side="left", padx=(6, 0))
     variants_button = _action_button(
