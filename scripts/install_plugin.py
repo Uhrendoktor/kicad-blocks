@@ -14,7 +14,6 @@ import sys
 import tempfile
 import uuid
 
-
 PLUGIN_IDENTIFIER = "org.uhrendoktor.kicadblocks"
 PLUGIN_DIRECTORY_NAME = "kicad-blocks"
 DEFAULT_SOURCE = pathlib.Path(__file__).resolve().parents[1] / "plugin" / PLUGIN_DIRECTORY_NAME
