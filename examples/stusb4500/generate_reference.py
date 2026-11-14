@@ -512,10 +512,11 @@ def _functional_block(
     if tab_width <= 5.08 or tab_width > right - x:
         raise ValueError(f"Functional-block tab does not fit its frame: {key}.")
     measured_title_width, _ = _measure_text_box(title, 1.27, padding=1.27)
-    if measured_title_width > tab_width - 2.54:
+    required_title_box_width = measured_title_width + 5.08
+    if required_title_box_width > tab_width - 2.54:
         raise ValueError(
-            f"Functional-block title {title!r} exceeds its tab width "
-            f"({measured_title_width + 2.54:.2f} mm > {tab_width:.2f} mm)."
+            f"Functional-block title {title!r} lacks single-line width reserve "
+            f"({required_title_box_width + 2.54:.2f} mm > {tab_width:.2f} mm)."
         )
     return [
         _graphic_rectangle(x, y, right, bottom, f"zone:{key}"),
@@ -578,9 +579,9 @@ def _group_text_width(group: dict) -> float:
     description_width, _ = _measure_text_box(
         _group_description(group), GROUP_DESCRIPTION_FONT_MM, 1.27,
     )
-    # The description box is inset by 2.54 mm on both sides, so the
-    # enclosing frame must reserve those additional 2.54 mm of width.
-    return max(title_width + 5.08, description_width + 5.08)
+    # Unbordered single-line titles reserve an additional 5.08 mm beyond
+    # the measured text box so KiCad's stroke font cannot wrap them.
+    return max(title_width + 7.62, description_width + 5.08)
 
 
 def _resolve_group_component_positions(
@@ -759,7 +760,7 @@ def _functional_group(group: dict, bounds: tuple[float, float, float, float]) ->
     title = str(group["title"])
     width = right - left
     tab_width = min(
-        width, max(12.70, _measure_text_box(title, 1.27, 1.27)[0] + 5.08),
+        width, max(12.70, _measure_text_box(title, 1.27, 1.27)[0] + 7.62),
     )
     description = _group_description(group)
     return [
