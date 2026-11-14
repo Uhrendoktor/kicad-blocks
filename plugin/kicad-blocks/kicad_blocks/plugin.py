@@ -2272,9 +2272,9 @@ def _edit_facade_symbol(
 
     run_action = getattr(kicad, "run_action", None)
     if not callable(run_action):
-        raise RuntimeError(
-            "KiCad's native action API is unavailable. Open Symbol Editor from Eeschema "
-            f"and search its library tree for {lib_id}."
+        raise TypeError(
+            "The supplied KiCad IPC client does not expose run_action. Open Symbol Editor "
+            f"from Eeschema and search its library tree for {lib_id}."
         )
 
     def invoke(action: str) -> None:
