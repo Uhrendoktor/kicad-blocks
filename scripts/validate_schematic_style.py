@@ -191,6 +191,14 @@ def _line_hits_box(a, b, box):
     return False
 
 
+def _inside(point, rect, margin: float = 0.0) -> bool:
+    x, y, width, height = rect
+    return (
+        x + margin - TOL <= point[0] <= x + width - margin + TOL
+        and y + margin - TOL <= point[1] <= y + height - margin + TOL
+    )
+
+
 def _instances(tree: list):
     result = {}
     for item in _all(tree, "symbol"):
