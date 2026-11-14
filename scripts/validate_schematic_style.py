@@ -18,6 +18,7 @@ from kicad_blocks.pcb_layout import _all, _direct, _head, parse_sexpr
 # The generic linter deliberately has no dependency on the STUSB4500 example.
 # These defaults are used only by the reusable geometry/presentation rules.
 FIELD_SYMBOL_MAX_GAP_MM = 9.00
+FIELD_SYMBOL_MAX_GAP_OVERRIDES_MM: dict[str, float] = {}
 SINGLE_LINE_TEXT_RESERVE_MM = 10.16
 ADJACENT_COMPONENT_PAIRS: tuple = ()
 COMMON_PIN_NET_GROUPS: tuple = ()
@@ -47,7 +48,8 @@ def _load_stusb4500_profile() -> None:
     """Load project-specific contracts only when the full profile is requested."""
     global ADJACENT_COMPONENT_PAIRS, COMMON_PIN_NET_GROUPS
     global COMPONENT_PROPERTY_LIMITS_MM, DIRECT_DECOUPLERS
-    global FIELD_SYMBOL_MAX_GAP_MM, FORBIDDEN_LOCAL_LABELS, FRAME_CONTENT_PADDING_MM
+    global FIELD_SYMBOL_MAX_GAP_MM, FIELD_SYMBOL_MAX_GAP_OVERRIDES_MM
+    global FORBIDDEN_LOCAL_LABELS, FRAME_CONTENT_PADDING_MM
     global GROUND_PINS_DOWN, GROUP_EVIDENCE, GROUP_GAP_MM
     global REQUIRED_NO_CONNECT_PINS, SCHEMATIC_GROUPS, WIRE_LENGTH_BUDGETS_MM
     global _uid, ZONES, FLOW, FRAME_GAP, _PROFILE_LOADED
@@ -63,6 +65,7 @@ def _load_stusb4500_profile() -> None:
     COMPONENT_PROPERTY_LIMITS_MM = profile.COMPONENT_PROPERTY_LIMITS_MM
     DIRECT_DECOUPLERS = profile.DIRECT_DECOUPLERS
     FIELD_SYMBOL_MAX_GAP_MM = profile.FIELD_SYMBOL_MAX_GAP_MM
+    FIELD_SYMBOL_MAX_GAP_OVERRIDES_MM = profile.FIELD_SYMBOL_MAX_GAP_OVERRIDES_MM
     FORBIDDEN_LOCAL_LABELS = profile.FORBIDDEN_LOCAL_LABELS
     FRAME_CONTENT_PADDING_MM = profile.FRAME_CONTENT_PADDING_MM
     GROUND_PINS_DOWN = profile.GROUND_PINS_DOWN
@@ -192,6 +195,12 @@ STYLE_RULES = {
         "severity": "error",
         "description": "A net label name must not be mixed between local, hierarchical and global label types.",
         "scope": "generic",
+    },
+    "SCH020": {
+        "name": "component-purpose-documentation",
+        "severity": "error",
+        "description": "Documented components must state both their electrical function and why the part is present.",
+        "scope": "profile",
     },
 }
 
@@ -1278,10 +1287,13 @@ def symbol_field_clearance_issues(tree: list) -> list[str]:
                 issues.append(f"{reference} {name} partially straddles its symbol body")
         elif body:
             gap = _symbol_box_gap(bounds, body)
-            if gap > FIELD_SYMBOL_MAX_GAP_MM + TOL:
+            max_gap = FIELD_SYMBOL_MAX_GAP_OVERRIDES_MM.get(
+                reference, FIELD_SYMBOL_MAX_GAP_MM,
+            )
+            if gap > max_gap + TOL:
                 issues.append(
                     f"{reference} {name} is {gap:.2f} mm from its visible symbol geometry; "
-                    f"maximum is {FIELD_SYMBOL_MAX_GAP_MM:.2f} mm"
+                    f"maximum is {max_gap:.2f} mm"
                 )
         for start, end in segments:
             if _strict_line_hits_box(start, end, bounds):
@@ -1552,13 +1564,16 @@ def circuit_documentation_issues(tree: list) -> list[str]:
         for node in _all(tree, "text_box")
         if (uid := _direct(node, "uuid")) is not None
     }
-    evidence_ok = bool(GROUP_EVIDENCE.get("datasheet") or GROUP_EVIDENCE.get("screenshot_asset"))
-    if not evidence_ok:
-        issues.append("group evidence must provide a datasheet or reviewed screenshot asset")
-    if not GROUP_EVIDENCE.get("screenshot_asset") and not (
-        GROUP_EVIDENCE.get("document") and GROUP_EVIDENCE.get("page") and GROUP_EVIDENCE.get("figure")
-    ):
-        issues.append("group evidence must identify its document, page and figure")
+    has_document_reference = bool(
+        GROUP_EVIDENCE.get("document")
+        and GROUP_EVIDENCE.get("page")
+        and GROUP_EVIDENCE.get("figure")
+    )
+    has_reviewed_asset = bool(GROUP_EVIDENCE.get("screenshot_asset"))
+    if not (has_document_reference or has_reviewed_asset):
+        issues.append(
+            "group evidence must identify a document/page/figure or a reviewed screenshot asset"
+        )
     for group in SCHEMATIC_GROUPS:
         members = tuple(group.get("documentation_members", ()))
         if not members:
@@ -1571,6 +1586,43 @@ def circuit_documentation_issues(tree: list) -> list[str]:
                 f"group {group['id']} must describe circuit members: {', '.join(missing)}"
             )
     return issues
+
+
+def component_purpose_issues(tree: list) -> list[str]:
+    """Require an explicit function and rationale for each documented component."""
+    _load_stusb4500_profile()
+    issues = []
+    text_by_uuid = {
+        str(uid[1]): str(node[1])
+        for node in _all(tree, "text_box")
+        if (uid := _direct(node, "uuid")) is not None
+    }
+    for group in SCHEMATIC_GROUPS:
+        description_id = _uid(f"graphic:text:group-description:{group['id']}")
+        description = text_by_uuid.get(description_id, "")
+        members = set(group.get("members", ()))
+        documented = set(group.get("documentation_members", ()))
+        for reference, purpose in group.get("component_purposes", {}).items():
+            if reference not in members:
+                issues.append(
+                    f"group {group['id']} documents {reference}, which is not a group member"
+                )
+            if reference not in documented:
+                issues.append(
+                    f"group {group['id']} must list {reference} as a documentation member"
+                )
+            for field in ("function", "rationale"):
+                phrase = str(purpose.get(field, "")).strip()
+                if not phrase:
+                    issues.append(
+                        f"group {group['id']} must provide {reference} {field}"
+                    )
+                elif phrase not in description:
+                    issues.append(
+                        f"group {group['id']} description must include {reference} {field}"
+                    )
+    return issues
+
 
 
 def label_text_collision_issues(tree: list) -> list[str]:
@@ -1651,6 +1703,7 @@ def check_schematic_style(tree: list, generic_only: bool = False) -> list[str]:
         ("SCH015", required_no_connect_issues),
         ("SCH016", wire_compactness_issues),
         ("SCH017", circuit_documentation_issues),
+        ("SCH020", component_purpose_issues),
         ("SCH011", group_comment_outline_issues),
     )
     checks = generic_checks if generic_only else (*generic_checks, *profile_checks)

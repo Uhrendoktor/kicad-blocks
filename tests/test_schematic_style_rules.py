@@ -25,6 +25,7 @@ from validate_schematic_style import (
     check_generic_schematic_style,
     check_schematic_style,
     common_pin_net_issues,
+    component_purpose_issues,
     group_comment_outline_issues,
     label_kind_consistency_issues,
     required_no_connect_issues,
@@ -50,10 +51,11 @@ class SchematicStyleRuleTests(unittest.TestCase):
         return copy.deepcopy(self.source)
 
     def test_rule_catalogue_and_generated_reference_pass(self) -> None:
-        self.assertEqual(len(STYLE_RULES), 19)
+        self.assertEqual(len(STYLE_RULES), 20)
         self.assertEqual(STYLE_RULES["SCH010"]["scope"], "generic")
         self.assertEqual(STYLE_RULES["SCH019"]["scope"], "generic")
         self.assertEqual(STYLE_RULES["SCH014"]["scope"], "profile")
+        self.assertEqual(STYLE_RULES["SCH020"]["scope"], "profile")
         self.assertEqual(check_schematic_style(self.fresh_tree()), [])
         self.assertEqual(check_generic_schematic_style(self.fresh_tree()), [])
 
@@ -65,6 +67,46 @@ class SchematicStyleRuleTests(unittest.TestCase):
         )
         title[1] = str(title[1]) + "\nWRAPPED"
         self.assertTrue(any("single line" in issue for issue in block_annotation_issues(tree)))
+
+
+    def test_symbol_field_gap_override_is_enforced_for_t1(self) -> None:
+        tree = self.fresh_tree()
+        t1 = next(
+            node for node in _all(tree, "symbol")
+            if any(
+                str(prop[1]) == "Reference" and str(prop[2]) == "T1"
+                for prop in _all(node, "property")
+            )
+        )
+        reference = next(
+            prop for prop in _all(t1, "property") if str(prop[1]) == "Reference"
+        )
+        at = _direct(reference, "at")
+        at[1] = str(float(at[1]) + 12.0)
+        issues = check_schematic_style(tree)
+        self.assertTrue(
+            any("T1 Reference" in issue and "maximum is 3.81 mm" in issue for issue in issues),
+            issues,
+        )
+
+    def test_component_purpose_requires_both_function_and_rationale(self) -> None:
+        tree = self.fresh_tree()
+        group = next(item for item in __import__("generate_reference").SCHEMATIC_GROUPS
+                     if item["id"] == "vbus-monitor")
+        purpose = group["component_purposes"]["R1"]
+        description_id = __import__("generate_reference")._uid(
+            "graphic:text:group-description:vbus-monitor"
+        )
+        description = next(
+            node for node in _all(tree, "text_box")
+            if str(_direct(node, "uuid")[1]) == description_id
+        )
+        description[1] = str(description[1]).replace(purpose["rationale"], "")
+        issues = component_purpose_issues(tree)
+        self.assertTrue(
+            any("R1 rationale" in issue for issue in issues),
+            issues,
+        )
 
     def test_generic_checker_does_not_import_example_generator(self) -> None:
         script = """
@@ -103,7 +145,7 @@ assert "generate_reference" not in sys.modules
         tree = self.fresh_tree()
         title = next(
             node for node in _all(tree, "text_box")
-            if str(node[1]) == "VSNK OUTPUT"
+            if str(node[1]) == "VSNK BULK PROTECTION"
         )
         size = _direct(title, "size")
         size[1] = f"{float(size[1]) - 3.0:.3f}"

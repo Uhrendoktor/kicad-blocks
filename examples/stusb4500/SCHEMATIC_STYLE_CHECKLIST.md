@@ -5,7 +5,7 @@ This is the review and acceptance checklist for the generated STUSB4500 child-bl
 ## Page composition and logical flow
 
 - [ ] Use an A3 landscape sheet; keep the formal KiCad title block in the lower-right corner.
-- [ ] Put the sheet title and source subtitle in the reserved top margin. Keep both inside native KiCad text boxes.
+- [ ] Use KiCad's native title-block fields for the sheet title, revision, company and source notes. Do not draw a second oversized title/subtitle banner on the schematic canvas.
 - [ ] Group related components in thin, unfilled functional frames with an attached title tab.
 - [ ] Keep tabs attached to their frames and put their titles inside the tab, not as floating text.
 - [ ] Make each functional frame just large enough for its member components, their references/values, required labels, and intentional local notes, with a consistent minimum clearance.
@@ -67,22 +67,23 @@ The machine-enforced rules now include:
 - [ ] `SCH006`: R1/R4 are aligned with no more than one resistor-body width of clear gap.
 - [ ] `SCH004`: T4.3, T1.2 and R10.1 form one continuous physical common-source network. The FET_MID label is forbidden.
 - [ ] `SCH006`: resistor references are within 3.0 mm of their symbol origin; capacitor references are within 4.0 mm and capacitor values within 5.5 mm.
-- [ ] `SCH010`: visible Reference/Value fields do not straddle symbol bodies, overlap pins/wires/labels/other fields, or sit more than 8.0 mm from their symbol body. Values may be centered wholly inside passive bodies.
+- [ ] `SCH010`: visible Reference/Value fields do not straddle symbol bodies, overlap pins/wires/labels/other fields, or exceed the 9.0 mm generic symbol-gap limit. The STUSB4500 profile tightens D50 to 2.54 mm and T1/T4 to 3.81 mm. Values may be centered wholly inside passive bodies.
 - [ ] `SCH011`: block titles contain no line breaks; every block description/comment panel has its own visible outline.
 - [ ] `SCH012`: labels and descriptive comment panels keep at least 2.54 mm clear of functional-frame borders.
 - [ ] `SCH013`: wires may end at intended pins but may not cross actual symbol primitive outlines, visible Reference/Value glyphs, annotation boxes, or intermediate pins. Circles, arcs, and polygonal outlines are checked by their geometry, not by an enclosing rectangle.
 - [ ] `SCH014`: configured paired pins share the declared logical net; C2.2 and C3.2 are physically joined and expose GND through exactly one hierarchical label.
 - [ ] `SCH015`: visible unused pins retain explicit no-connect markers. U1.3 is already a hidden `no_connect` library pin and must not receive an extra floating X.
 - [ ] `SCH016`: wire compactness is scored per group as total internal wire length divided by its configured budget. The condensed FET switch budget is 95 mm (score <= 1.0).
-- [ ] `SCH017`: non-trivial groups identify their member circuits and provide datasheet/page/figure or a reviewed screenshot asset.
+- [ ] `SCH017`: non-trivial groups identify their member circuits and provide document/page/figure or a reviewed screenshot asset; a repeated datasheet URL is not required.
 - [ ] `SCH018`: visible label glyphs do not overlap other label glyphs, symbol fields or annotation boxes.
 - [ ] `SCH019`: each label name uses one kind consistently: local, hierarchical, or global. A name must never mix these label types.
+- [ ] `SCH020`: each component declared for documentation has both a function and a rationale in its owning group description.
 - [ ] `SCH007` / `SCH009`: every declared group emits both a title and a description/source panel. Frames are derived from pin extents and have a fixed 2.54 mm horizontal gap along the primary flow.
 
 ## Automated and visual validation gate
 
 - [ ] Run unit tests, Ruff, and compileall, including the schematic style checker.
-- [ ] Run `scripts/validate_schematic_style.py --list-rules` to inspect rule IDs/severities and scope, then run `scripts/validate_schematic_style.py PATH_TO_SCHEMATIC`. The stable catalogue contains SCH001–SCH019. Run `--generic-only PATH_TO_SCHEMATIC` to use the reusable geometry/presentation subset without the STUSB4500 profile contracts.
+- [ ] Run `scripts/validate_schematic_style.py --list-rules` to inspect rule IDs/severities and scope, then run `scripts/validate_schematic_style.py PATH_TO_SCHEMATIC`. The stable catalogue contains SCH001–SCH020. Run `--generic-only PATH_TO_SCHEMATIC` to use the reusable geometry/presentation subset without the STUSB4500 profile contracts.
 - [ ] Export the schematic netlist with KiCad CLI and verify all critical pin-to-net assignments against the datasheet-derived map.
 - [ ] Run KiCad ERC with the standalone child-block validation profile. Suppress only expected root-sheet hierarchical ports, externally driven input/power pins, isolated hierarchical port labels, and absent project library tables. Internal shorts, pin conflicts, dangling wires/local labels, and all other ERC rules remain enabled; require zero unignored violations.
 - [ ] Export a fresh SVG from the exact tested commit and inspect the full page and dense regions. Confirm the boxes fit the text and remain close to the circuits they describe.

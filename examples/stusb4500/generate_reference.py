@@ -38,6 +38,7 @@ GROUP_TOP_PADDING_MM = 20.32
 GROUP_BOTTOM_PADDING_MM = 7.62
 FRAME_CONTENT_PADDING_MM = 2.54
 FIELD_SYMBOL_MAX_GAP_MM = 9.00
+FIELD_SYMBOL_MAX_GAP_OVERRIDES_MM = {"D50": 2.54, "T1": 3.81, "T4": 3.81}
 WIRE_LENGTH_BUDGETS_MM = {"power-switch": 95.00}
 COMMON_PIN_NET_GROUPS = (
     {
@@ -50,7 +51,6 @@ COMMON_PIN_NET_GROUPS = (
 REQUIRED_NO_CONNECT_PINS = ("U1.11", "U1.14", "U1.15", "U1.17", "U1.20")
 GROUP_DESCRIPTION_FONT_MM = 0.65
 GROUP_EVIDENCE = {
-    "datasheet": DATASHEET,
     "document": "ST DS12499 Rev. 8",
     "page": 26,
     "figure": "Figure 10",
@@ -83,9 +83,20 @@ SCHEMATIC_GROUPS = (
     },
     {
         "id": "vbus-monitor", "title": "VBUS MONITOR / FILTER",
-        "description": "VBUS filter and fast-charge path.\nR1/R4 form the VBUS_VS_DISCH monitor divider; verify D4 rating.",
+        "description": "VBUS input filter and STUSB4500 voltage-sense network.\nR1 (470 Ω) is the series current limiter at VBUS_VS_DISCH.\nR4 (1 kΩ) biases the sense node from VREG_2V7.",
         "members": ("D4", "C4", "R1", "R4"),
-        "documentation_members": ("R1", "R4"), "lane": "main", "order": 2,
+        "documentation_members": ("R1", "R4"),
+        "component_purposes": {
+            "R1": {
+                "function": "Series current limiter between VBUS_FILTERED and VBUS_VS_DISCH",
+                "rationale": "limits current through U1.18 during VBUS discharge",
+            },
+            "R4": {
+                "function": "Bias resistor from VREG_2V7 to VBUS_VS_DISCH",
+                "rationale": "sets the VBUS sense-node bias for monitoring",
+            },
+        },
+        "lane": "main", "order": 2,
         "extra_top_padding_mm": 10.16,
         "layout": {
             "anchor": "D4", "anchor_y_mm": 111.76,
@@ -126,12 +137,21 @@ SCHEMATIC_GROUPS = (
     },
     {
         "id": "power-switch", "title": "BACK-TO-BACK PMOS SWITCH",
-        "description": "Back-to-back P-channel switches with a direct common-source control network.",
-        "members": ("T4", "T1", "R10", "R11", "R13"), "lane": "main", "order": 4,
+        "description": "Back-to-back P-channel switches with common-source gate control.",
+        "members": ("T4", "T1", "R2", "R10", "R11", "R13"),
+        "documentation_members": ("R2",),
+        "component_purposes": {
+            "R2": {
+                "function": "Series resistor from VSNK to U1 DISCH",
+                "rationale": "limits DISCH current while output capacitance drains",
+            },
+        },
+        "lane": "main", "order": 4,
         "layout": {
             "anchor": "T4", "anchor_y_mm": 104.14,
             "constraints": (
                 {"kind": "offset", "component": "T1", "to": "T4", "dx_mm": 25.40, "dy_mm": 0.0},
+                {"kind": "offset", "component": "R2", "to": "T1", "dx_mm": 17.78, "dy_mm": 41.91},
                 {"kind": "midpoint_offset", "component": "R10", "between": ("T4", "T1"), "dx_mm": 0.0, "dy_mm": 17.78},
                 {"kind": "offset", "component": "R11", "to": "R10", "dx_mm": 7.62, "dy_mm": 7.62},
                 {"kind": "offset", "component": "R13", "to": "R11", "dx_mm": 20.32, "dy_mm": 0.0},
@@ -139,15 +159,13 @@ SCHEMATIC_GROUPS = (
         },
     },
     {
-        "id": "vsnk-output", "title": "VSNK OUTPUT",
-        "description": "Protected sink output with local bypass and TVS protection.\nR2 is the DISCH-to-VSNK discharge path.",
-        "members": ("R2", "C10", "D11"),
-        "documentation_members": ("R2",), "lane": "main", "order": 5,
+        "id": "vsnk-output", "title": "VSNK BULK PROTECTION",
+        "description": "Local VSNK bypass capacitance and transient clamp at the sink output.",
+        "members": ("C10", "D11"), "lane": "main", "order": 5,
         "layout": {
             "anchor": "C10", "anchor_y_mm": 99.06,
             "constraints": (
                 {"kind": "offset", "component": "D11", "to": "C10", "dx_mm": 0.0, "dy_mm": 25.40},
-                {"kind": "offset", "component": "R2", "to": "C10", "dx_mm": 0.0, "dy_mm": 46.99},
             ),
         },
     },
@@ -474,39 +492,6 @@ def _note_box(
     )]
 
 
-def _graphic_rule(x1: float, y1: float, x2: float, y2: float, key: str) -> list:
-    """Draw a restrained page-level divider."""
-    if abs(x1 - x2) > 0.001 and abs(y1 - y2) > 0.001:
-        raise ValueError(f"Non-orthogonal graphic rule: {(x1, y1)} -> {(x2, y2)}")
-    return [
-        "polyline",
-        ["pts", ["xy", f"{x1:.3f}", f"{y1:.3f}"], ["xy", f"{x2:.3f}", f"{y2:.3f}"]],
-        ["stroke", ["width", "0.254"], ["type", "default"]],
-        ["fill", ["type", "none"]],
-        ["uuid", _Quoted(_uid(f"graphic:rule:{key}"))],
-    ]
-
-
-def _sheet_header(
-    title: str, subtitle: str, *, x: float = 25.40,
-    title_y: float = 48.26, rule_right: float = 411.48, key: str = "sheet",
-) -> list[list]:
-    """Place a compact title/subtitle in the reserved top margin."""
-    if title_y + 17.78 >= 81.28:
-        raise ValueError("Sheet header must remain above the functional-block tabs.")
-    return [
-        _graphic_text(
-            title, x, title_y, 3.20, f"header:{key}:title",
-            box_width=rule_right - x, border=False,
-        ),
-        _graphic_text(
-            subtitle, x, title_y + 7.62, 1.05, f"header:{key}:subtitle",
-            box_width=rule_right - x, border=False,
-        ),
-        _graphic_rule(x, title_y + 13.97, rule_right, title_y + 13.97, f"header:{key}:rule"),
-    ]
-
-
 def _functional_block(
     x: float, y: float, right: float, bottom: float,
     title: str, tab_width: float, key: str,
@@ -576,7 +561,12 @@ def _group_evidence_line(group: dict) -> str:
 
 
 def _group_description(group: dict) -> str:
-    return f"{group['description']}\n{_group_evidence_line(group)}"
+    lines = [str(group["description"])]
+    for reference, purpose in group.get("component_purposes", {}).items():
+        lines.append(f"{reference}: {purpose['function']}.")
+        lines.append(f"Why: {purpose['rationale']}.")
+    lines.append(_group_evidence_line(group))
+    return "\n".join(lines)
 
 
 def _group_text_width(group: dict) -> float:
@@ -822,7 +812,7 @@ def generate_reference_schematic(destination: Path) -> Path:
             "1": ("CC1", "local", ""), "2": ("CC2", "local", ""),
             "3": ("GND", "local", ""),
         }),
-        ("D4", "Device", "D", "D4 (part not specified)", None, {
+        ("D4", "Device", "D", "", None, {
             "1": ("VBUS_FILTERED", "local", ""), "2": ("VBUS", "local", ""),
         }),
         ("C4", "Device", "C", "1uF", None, {
@@ -943,18 +933,11 @@ def generate_reference_schematic(destination: Path) -> Path:
             reference_x, reference_y = sx, sy - 33.02
             value_x, value_y = sx, sy - 30.48
         elif reference in {"T4", "T1"}:
-            # Keep both fields above the MOSFET bodies. The labels sit at
-            # opposite outer sides of the pair, away from gate/source wires.
-            dx = -5.08 if reference == "T4" else 8.89
-            reference_x, reference_y = (
-                sx + dx, sy - (5.08 if reference == "T1" else 6.35)
-            )
-            value_x, value_y = (
-                sx + (5.08 if reference == "T1" else dx),
-                sy - (7.62 if reference == "T1" else 8.89),
-            )
-            reference_justify = "right" if reference == "T4" else "left"
-            value_justify = reference_justify
+            # Keep both fields above the body, clear of the source/drain pin
+            # corridor below. Put the short reference left of the part name.
+            body_center_x = 1.651 if reference == "T4" else -1.651
+            reference_x, reference_y = sx + body_center_x - 2.75, sy - 6.35
+            value_x, value_y = sx + body_center_x + 2.00, sy - 6.35
         elif reference.startswith("R"):
             value_x, value_y = sx, sy
             if reference in {"R51", "R52", "R53", "R54"}:
@@ -978,10 +961,11 @@ def generate_reference_schematic(destination: Path) -> Path:
             value_x, value_y = sx + 6.35, sy
             value_justify = "left"
         elif reference.startswith("D"):
-            # Keep diode identifiers close to the symbol, not floating above it.
-            reference_x, reference_y = sx, sy - 6.35
+            # Keep diode identifiers near the symbol. D50's long part name
+            # sits below the TVS body, on the clear side facing the frame gap.
+            reference_x, reference_y = sx, sy - (3.81 if reference == "D50" else 6.35)
             value_x, value_y = (
-                sx, sy + 7.62 if reference == "D50" else sy - 3.81
+                sx, sy + 5.08 if reference == "D50" else sy - 3.81
             )
         elif reference.startswith("C"):
             # Put references on opposite sides of the decouplers where
@@ -1102,6 +1086,13 @@ def generate_reference_schematic(destination: Path) -> Path:
                             label_x = px + 2.54
                             label_y = py
                             justify = "left"
+                            label_angle = 0
+                        if reference == "C1" and pin["number"] == "2":
+                            # Route the GND port left of the capacitor. A rightward
+                            # stub would cross the nearby vertical VREG_1V2 rail.
+                            label_x = px - 5.08
+                            label_y = py
+                            justify = "right"
                             label_angle = 0
                         if reference == "R55" and pin["number"] == "2":
                             # Keep R55's GND label below the body and away
@@ -1406,12 +1397,9 @@ def generate_reference_schematic(destination: Path) -> Path:
     # RESET is exposed at U1 and pulled down locally by R55 beside the controller.
     # The MCU, I2C pull-ups and their connector intentionally belong to the parent.
 
-    # The header is page-level. Group frames and descriptions are generated
-    # from member pin geometry after the routed schematic has been assembled.
-    rules = _sheet_header(
-        "STUSB4500 USB-C / POWER DELIVERY SINK",
-        "DATASHEET-BASED REFERENCE  |  ST DS12499 REV. 8, FIGURE 10",
-    )
+    # Use the native KiCad title block for page metadata. The canvas itself
+    # is reserved for functional circuit groups and their local descriptions.
+    rules = []
 
     # Every local label must be intentionally reused; use a short physical
     # wire for one-off connections and reserve single-use ports for hierarchy.
