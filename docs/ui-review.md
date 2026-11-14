@@ -48,7 +48,7 @@ The statuses below describe the current implementation checkpoint, not final acc
 | Use OS-themed/native file and directory chooser | `plugin.py::_pick_kicad_file`, `_pick_directory`, `_pick_save_file` call Tk's standard `filedialog` APIs; `tests/test_library_browser.py` covers filters, initial folder/name, parent, default suffix and cancellation | Custom Zenity/KDialog process launching has been removed to follow `AGENTS.md`; real Ubuntu 26 Wayland dialog appearance, theme, parent grouping and returned path still need interactive verification |
 | Restore two horizontal Manage Libraries action groups | `plugin.py::_show_library_roots_dialog`; production visual capture `tests/capture_visual_docs.py` | Layout restored in source; refreshed capture must be inspected |
 
-The Functional Block Library preview uses two tabs so facade artwork and the circuit schematic each have enough room to remain legible. The schematic tab renders the selected Default or named implementation with KiCad CLI, and exposes a sheet selector when the implementation contains child sheets. Both views are scrollable; the preview is never approximated with a hand-drawn circuit.
+The Functional Block Library preview uses two tabs so facade artwork and the circuit schematic each have enough room to remain legible. The schematic tab renders the selected Default or named implementation with KiCad CLI, and exposes a sheet selector when the implementation contains child sheets. Both views are scrollable; the schematic keeps a paper-white drawing surface in both UI themes so KiCad's native sheet colors retain their intended contrast. The preview is never approximated with a hand-drawn circuit.
 
 ## Desktop and platform evidence
 
