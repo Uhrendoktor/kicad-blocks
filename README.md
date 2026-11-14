@@ -16,7 +16,7 @@ KiCad Blocks keeps a circuit's editable implementation in a shared library while
 A hierarchical sheet is useful for organizing a design inside one project. KiCad Blocks addresses a different need: keep a complete, editable circuit as a reusable library asset, then expose it in each consuming project through a standard symbol.
 
 - **Create** a block from a selected hierarchical sheet. Root-sheet hierarchical labels define the facade pins and their electrical types.
-- **Browse** blocks from registered shared folders. The intended native Place Block handoff is currently blocked by a missing supported KiCad schematic IPC operation; see the [compatibility notes](docs/explanation/compatibility.md).
+- **Browse and place** blocks from registered shared folders. The selected facade is created at the active sheet center, focused in the viewport and selected; cursor-attached placement awaits a supported KiCad schematic IPC operation. See the [compatibility notes](docs/explanation/compatibility.md).
 - **Configure per instance** with a variant, named profile, typed parameter overrides, and optional PCB layout.
 - **Maintain** shared implementations, edit facade artwork, publish revisions, or create project-local copies and synchronize them.
 - **Compose automatically** by placing child block facades inside an implementation and wiring their pins normally; KiCad Blocks derives dependencies from the saved schematic and netlist on publish.
