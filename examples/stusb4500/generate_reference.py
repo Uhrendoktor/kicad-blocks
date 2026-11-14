@@ -936,7 +936,7 @@ def generate_reference_schematic(destination: Path) -> Path:
             # Keep both fields above the body, clear of the source/drain pin
             # corridor below. Put the short reference left of the part name.
             body_center_x = 1.651 if reference == "T4" else -1.651
-            reference_x, reference_y = sx + body_center_x - 3.50, sy - 6.35
+            reference_x, reference_y = sx + body_center_x - 3.25, sy - 6.35
             value_x, value_y = sx + body_center_x + 2.00, sy - 6.35
         elif reference.startswith("R"):
             value_x, value_y = sx, sy
