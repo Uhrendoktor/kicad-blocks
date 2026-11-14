@@ -4196,10 +4196,10 @@ def _ask_implementation_details(
     ).pack(side="right", padx=(0, 8))
     dialog.bind("<Return>", lambda _event: accept())
     dialog.bind("<Escape>", lambda _event: dialog.destroy())
-    dialog.grab_set()
     source_entry.xview_moveto(1.0)
     selector_entry.focus_set()
     _set_window_geometry(dialog, 860, 540, 740, 460)
+    dialog.grab_set()
     dialog.wait_window()
     return result[0]
 
