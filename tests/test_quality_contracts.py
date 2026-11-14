@@ -104,15 +104,15 @@ def test_changed_file_ratchet_rejects_increased_annotation_debt(tmp_path: Path) 
     run_git("config", "user.email", "quality-contract@example.invalid")
     source = tmp_path / "module.py"
     source.write_text(
-        "def stable(value: str) -> str:\\n    return value\\n",
+        "def stable(value: str) -> str:\n    return value\n",
         encoding="utf-8",
     )
     run_git("add", "module.py")
     run_git("commit", "-m", "base")
     run_git("branch", "quality-base")
     source.write_text(
-        "def stable(value: str) -> str:\\n    return value\\n\\n"
-        "def introduced(value):\\n    return value\\n",
+        "def stable(value: str) -> str:\n    return value\n\n"
+        "def introduced(value):\n    return value\n",
         encoding="utf-8",
     )
     run_git("add", "module.py")
