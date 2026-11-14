@@ -799,7 +799,9 @@ def create_block(
             "symbol_file": SYMBOL_NAME,
             "implementation_file": IMPLEMENTATION_NAME,
             "layout_file": first_layout.get("file") if first_layout is not None else None,
-            "layout_project_file": first_layout.get("project_file") if first_layout is not None else None,
+            "layout_project_file": first_layout.get("project_file")
+            if first_layout is not None
+            else None,
             "layouts": layouts,
             "default_layout": first_layout.get("id") if first_layout is not None else None,
             "reference_prefix": reference_prefix,
