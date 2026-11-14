@@ -1,0 +1,125 @@
+#!/usr/bin/env python3
+"""Reject no-op tests and exact duplicate test bodies within one fixture scope."""
+
+from __future__ import annotations
+
+import ast
+import json
+from collections import defaultdict
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+TEST_ROOT = ROOT / "tests"
+
+
+class _TestCaseCollector(ast.NodeVisitor):
+    """Collect pytest test functions together with their class/fixture scope."""
+
+    def __init__(self) -> None:
+        self.class_path: list[str] = []
+        self.cases: list[
+            tuple[str, str, ast.FunctionDef | ast.AsyncFunctionDef, list[ast.stmt]]
+        ] = []
+
+    def visit_ClassDef(self, node: ast.ClassDef) -> None:
+        self.class_path.append(node.name)
+        self.generic_visit(node)
+        self.class_path.pop()
+
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+        self._collect(node)
+
+    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
+        self._collect(node)
+
+    def _collect(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> None:
+        if node.name.startswith("test_"):
+            body = list(node.body)
+            if body and _is_docstring(body[0]):
+                body = body[1:]
+            scope = ".".join(self.class_path)
+            qualified_name = ".".join((*self.class_path, node.name))
+            self.cases.append((scope, qualified_name, node, body))
+        self.generic_visit(node)
+
+
+def _is_docstring(statement: ast.stmt) -> bool:
+    """Return whether a statement is a Python docstring expression."""
+    return (
+        isinstance(statement, ast.Expr)
+        and isinstance(statement.value, ast.Constant)
+        and isinstance(statement.value.value, str)
+    )
+
+
+def _fingerprint(
+    node: ast.FunctionDef | ast.AsyncFunctionDef,
+    body: list[ast.stmt],
+) -> str:
+    """Return an AST identity key excluding test name and descriptive docstring."""
+    payload = {
+        "kind": type(node).__name__,
+        "arguments": ast.dump(node.args, include_attributes=False),
+        "decorators": [
+            ast.dump(decorator, include_attributes=False) for decorator in node.decorator_list
+        ],
+        "returns": (
+            ast.dump(node.returns, include_attributes=False)
+            if node.returns is not None
+            else None
+        ),
+        "body": ast.dump(
+            ast.Module(body=body, type_ignores=[]),
+            include_attributes=False,
+        ),
+    }
+    return json.dumps(payload, sort_keys=True)
+
+
+def scan_tests(root: Path) -> tuple[int, list[str]]:
+    """Return the discovered pytest test count and high-confidence quality findings.
+
+    Duplicate matching is intentionally limited to the same module and class/fixture
+    scope so module-specific fixtures and host environments are not conflated.
+    """
+    test_root = root / "tests"
+    count = 0
+    errors: list[str] = []
+    for path in sorted(test_root.rglob("test_*.py")):
+        relative = path.relative_to(root).as_posix()
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=relative)
+        except (OSError, SyntaxError) as exc:
+            errors.append(f"{relative}: cannot parse test source: {exc}")
+            continue
+
+        collector = _TestCaseCollector()
+        collector.visit(tree)
+        duplicates: dict[tuple[str, str], list[str]] = defaultdict(list)
+        for scope, qualified_name, node, body in collector.cases:
+            count += 1
+            if not body or all(isinstance(statement, ast.Pass) for statement in body):
+                errors.append(f"{relative}:{node.lineno}: {qualified_name} has no executable test body")
+            duplicates[(scope, _fingerprint(node, body))].append(qualified_name)
+
+        for names in duplicates.values():
+            if len(names) > 1:
+                errors.append(
+                    f"{relative}: exact duplicate test bodies in the same fixture scope: "
+                    + ", ".join(sorted(names))
+                )
+    return count, errors
+
+
+def main() -> int:
+    """Fail when the suite contains a no-op test or an exact duplicate test body."""
+    count, errors = scan_tests(ROOT)
+    if errors:
+        print("\n".join(errors))
+        return 1
+    print(f"test-quality=passed ({count} tests; no no-op or exact duplicate bodies)")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
