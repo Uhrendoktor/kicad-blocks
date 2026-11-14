@@ -6,28 +6,36 @@ import argparse
 import sys
 from collections import Counter
 from itertools import pairwise
+from math import hypot
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "plugin" / "kicad-blocks"))
 sys.path.insert(0, str(ROOT / "examples" / "stusb4500"))
 
-from generate_reference import _uid
-from kicad_blocks.pcb_layout import _all, _direct, parse_sexpr
+from generate_reference import (
+    ADJACENT_COMPONENT_PAIRS,
+    COMPONENT_PROPERTY_LIMITS_MM,
+    DIRECT_DECOUPLERS,
+    FORBIDDEN_LOCAL_LABELS,
+    GROUP_DESCRIPTION_FONT_MM,
+    GROUP_GAP_MM,
+    GROUND_PINS_DOWN,
+    SCHEMATIC_GROUPS,
+    _uid,
+)
+from kicad_blocks.pcb_layout import _all, _direct, _head, parse_sexpr
 
 TOL = 0.001
 PADDING = 1.27
-FRAME_GAP = 2.54
-ZONES = {
-    "usb-port": {"J1", "D1"},
-    "vbus-bulk": {"C50", "D50"},
-    "vbus-monitor": {"D4", "C4", "R1", "R4"},
-    "controller": {"U1", "C1", "C2", "C3"},
-    "address-straps": {"R51", "R52", "R53", "R54"},
-    "power-switch": {"T4", "T1", "R10", "R11", "R13"},
-    "vsnk-output": {"R2", "C10", "D11"},
-}
-FLOW = ("usb-port", "vbus-bulk", "vbus-monitor", "controller", "power-switch", "vsnk-output")
+FRAME_GAP = GROUP_GAP_MM
+ZONES = {group["id"]: set(group["members"]) for group in SCHEMATIC_GROUPS}
+FLOW = tuple(
+    group["id"] for group in sorted(
+        (item for item in SCHEMATIC_GROUPS if item["lane"] == "main"),
+        key=lambda item: int(item["order"]),
+    )
+)
 
 
 def _segments(tree: list):
@@ -328,7 +336,17 @@ def frame_and_component_issues(tree: list) -> list[str]:
 
 
 def check_schematic_style(tree: list) -> list[str]:
-    return wire_geometry_issues(tree) + label_network_issues(tree) + text_box_issues(tree) + frame_and_component_issues(tree)
+    return (
+        wire_geometry_issues(tree)
+        + label_network_issues(tree)
+        + label_wire_overlap_issues(tree)
+        + physical_topology_issues(tree)
+        + pin_orientation_issues(tree)
+        + component_spacing_issues(tree)
+        + group_metadata_issues(tree)
+        + text_box_issues(tree)
+        + frame_and_component_issues(tree)
+    )
 
 
 def validate_schematic_style(path: Path) -> dict[str, int]:
@@ -342,6 +360,7 @@ def validate_schematic_style(path: Path) -> dict[str, int]:
         "hierarchical_labels": len(_all(tree, "hierarchical_label")),
         "text_boxes": len(_all(tree, "text_box")),
         "functional_frames": len(ZONES),
+        "style_rules": 9,
     }
 
 
