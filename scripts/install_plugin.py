@@ -12,12 +12,12 @@ import shutil
 import sys
 import tempfile
 import uuid
-from pathlib import Path
+import pathlib
 
 
 PLUGIN_IDENTIFIER = "org.uhrendoktor.kicadblocks"
 PLUGIN_DIRECTORY_NAME = "kicad-blocks"
-DEFAULT_SOURCE = Path(__file__).resolve().parents[1] / "plugin" / PLUGIN_DIRECTORY_NAME
+DEFAULT_SOURCE = pathlib.Path(__file__).resolve().parents[1] / "plugin" / PLUGIN_DIRECTORY_NAME
 
 SUPPORTED_NIGHTLY_DIRECTORY = (10, 99)
 FIRST_STABLE_SCHEMATIC_IPC_MAJOR = 11
@@ -46,7 +46,7 @@ def validate_python_runtime(
             f"The installer is running {selected_implementation} {version_text}. "
             "Run the installer with a supported CPython version and choose a "
             "supported CPython 3.12, 3.13 or 3.14 interpreter in KiCad "
-            "Preferences > Plugins > Path to Python interpreter."
+            "Preferences > Plugins > pathlib.Path to Python interpreter."
         )
 
 
@@ -94,20 +94,20 @@ def validate_install_target(
         )
 
 
-def default_documents_home() -> Path:
+def default_documents_home() -> pathlib.Path:
     """Return KiCad's platform-specific user-data root."""
     configured = os.environ.get("KICAD_DOCUMENTS_HOME")
     if configured:
-        return Path(configured).expanduser().resolve()
+        return pathlib.Path(configured).expanduser().resolve()
     if sys.platform == "win32":
-        return (Path.home() / "Documents" / "KiCad").resolve()
+        return (pathlib.Path.home() / "Documents" / "KiCad").resolve()
     if sys.platform == "darwin":
-        return (Path.home() / "Documents" / "KiCad").resolve()
-    data_home = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share"))
+        return (pathlib.Path.home() / "Documents" / "KiCad").resolve()
+    data_home = pathlib.Path(os.environ.get("XDG_DATA_HOME", pathlib.Path.home() / ".local" / "share"))
     return data_home.expanduser().resolve()
 
 
-def validate_plugin_package(source: Path) -> dict:
+def validate_plugin_package(source: pathlib.Path) -> dict:
     """Fail before installation if the package manifest or entrypoint is invalid."""
     source = source.expanduser().resolve()
     manifest_path = source / "plugin.json"
@@ -177,16 +177,16 @@ def validate_plugin_package(source: Path) -> dict:
 
 
 def install_plugin(
-    source: Path,
-    documents_home: Path,
+    source: pathlib.Path,
+    documents_home: pathlib.Path,
     version: str,
     *,
     dry_run: bool = False,
-) -> Path:
+) -> pathlib.Path:
     """Atomically replace the installed plugin package for one KiCad version."""
     validate_install_target(version)
-    source = Path(source).expanduser().resolve()
-    documents_home = Path(documents_home).expanduser().resolve()
+    source = pathlib.Path(source).expanduser().resolve()
+    documents_home = pathlib.Path(documents_home).expanduser().resolve()
     manifest = validate_plugin_package(source)
     destination = documents_home / "kicad" / version / "plugins" / manifest["identifier"]
 
@@ -194,7 +194,7 @@ def install_plugin(
         return destination
 
     destination.parent.mkdir(parents=True, exist_ok=True)
-    staging_root = Path(
+    staging_root = pathlib.Path(
         tempfile.mkdtemp(prefix=".kicad-blocks-install-", dir=destination.parent)
     )
     staged_plugin = staging_root / manifest["identifier"]
@@ -252,11 +252,11 @@ def main() -> int:
     )
     parser.add_argument(
         "--documents-home",
-        type=Path,
+        type=pathlib.Path,
         default=default_documents_home(),
         help="Override KiCad's user-data root (defaults to the platform location).",
     )
-    parser.add_argument("--source", type=Path, default=DEFAULT_SOURCE)
+    parser.add_argument("--source", type=pathlib.Path, default=DEFAULT_SOURCE)
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
 
