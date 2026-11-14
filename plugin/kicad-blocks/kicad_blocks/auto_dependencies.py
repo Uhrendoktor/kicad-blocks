@@ -10,11 +10,70 @@ from __future__ import annotations
 import subprocess
 import tempfile
 import xml.etree.ElementTree as ET
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Protocol, SupportsFloat, TypedDict
+
+if TYPE_CHECKING:
+    from .repository import BlockRecord
+
+class KiCadNetlist(TypedDict):
+    """Schematic connectivity exported by KiCad CLI."""
+
+    component_refs: set[str]
+    pin_nets: dict[str, dict[str, str]]
 
 
-def parse_kicad_xml_netlist(path: Path) -> dict[str, Any]:
+class _SymbolText(Protocol):
+    value: str
+
+
+class _SymbolTextField(Protocol):
+    text: _SymbolText
+
+
+class _SymbolIdentifier(Protocol):
+    library: str
+    name: str
+
+
+class _SymbolPin(Protocol):
+    number: str
+
+
+class _SymbolDefinition(Protocol):
+    id: _SymbolIdentifier | None
+    pins: Sequence[_SymbolPin]
+
+
+class _SymbolTransform(Protocol):
+    orientation: int
+
+
+class _SymbolPosition(Protocol):
+    x: SupportsFloat
+    y: SupportsFloat
+
+
+class _PlacedSymbol(Protocol):
+    definition: _SymbolDefinition | None
+    reference: str | None
+    reference_field: _SymbolTextField | None
+    transform: _SymbolTransform | None
+    position: _SymbolPosition | None
+
+
+class BlockDependency(TypedDict):
+    """One placed child block and its electrical/placement mapping."""
+
+    child: BlockRecord
+    reference: str
+    position_mm: tuple[float, float]
+    orientation: int
+    pin_map: dict[str, str | None]
+
+
+def parse_kicad_xml_netlist(path: Path) -> KiCadNetlist:
     """Read component references and pin-to-net assignments from KiCad XML."""
     root = ET.parse(Path(path)).getroot()
     components = root.find("./components")
@@ -50,26 +109,26 @@ def parse_kicad_xml_netlist(path: Path) -> dict[str, Any]:
     return {"component_refs": component_refs, "pin_nets": pin_nets}
 
 
-def _field_text(instance: Any, field_name: str) -> str:
-    field = getattr(instance, field_name, None)
-    return str(getattr(getattr(field, "text", None), "value", "") or "").strip()
+def _field_text(instance: _PlacedSymbol) -> str:
+    field = instance.reference_field
+    return str(field.text.value or "").strip() if field is not None else ""
 
 
-def _millimetres(value: Any) -> float:
+def _millimetres(value: SupportsFloat) -> float:
     """Convert KiCad IPC coordinates, which are always nanometres, to millimetres."""
     return float(value) / 1_000_000.0
 
 
 def discover_block_dependencies(
-    parent,
-    records: list,
-    symbols: list,
-    netlist: dict[str, Any],
-) -> list[dict[str, Any]]:
+    parent: BlockRecord,
+    records: Sequence[BlockRecord],
+    symbols: Sequence[_PlacedSymbol],
+    netlist: KiCadNetlist,
+) -> list[BlockDependency]:
     """Build dependency occurrences from placed facade symbols and netlist pins."""
     from .repository import LIBRARY_NICKNAME
 
-    by_symbol: dict[tuple[str, str], Any] = {}
+    by_symbol: dict[tuple[str, str], BlockRecord] = {}
     for record in records:
         key = (
             str(record.manifest.get("library_nickname", "")),
@@ -95,11 +154,12 @@ def discover_block_dependencies(
 
     component_refs = set(netlist["component_refs"])
     pin_nets = netlist["pin_nets"]
-    occurrences: list[dict[str, Any]] = []
+    occurrences: list[BlockDependency] = []
     seen_references: set[str] = set()
 
     for symbol in symbols:
-        identifier = getattr(getattr(symbol, "definition", None), "id", None)
+        definition = symbol.definition
+        identifier = definition.id if definition is not None else None
         library_nickname = str(getattr(identifier, "library", "") or "")
         if library_nickname != LIBRARY_NICKNAME:
             continue
@@ -116,7 +176,7 @@ def discover_block_dependencies(
 
         reference = (
             str(getattr(symbol, "reference", "") or "").strip()
-            or _field_text(symbol, "reference_field")
+            or _field_text(symbol)
         )
         if not reference or "?" in reference:
             raise ValueError(
@@ -139,8 +199,8 @@ def discover_block_dependencies(
             raise ValueError(f"Block {child.name!r} has duplicate facade pin names.")
 
         symbol_pin_numbers = {
-            str(getattr(pin, "number", "")).strip()
-            for pin in getattr(symbol.definition, "pins", ())
+            str(pin.number).strip()
+            for pin in (definition.pins if definition is not None else ())
         }
         missing_numbers = sorted(
             {
@@ -163,15 +223,15 @@ def discover_block_dependencies(
             for pin in manifest_pins
         }
 
-        transform = getattr(symbol, "transform", None)
-        orientation_value = int(getattr(transform, "orientation", 1))
+        transform = symbol.transform
+        orientation_value = int(transform.orientation if transform is not None else 1)
         orientations = {1: 0, 2: 90, 3: 180, 4: 270}
         if orientation_value not in orientations:
             raise ValueError(
                 f"Block facade {reference!r} has unsupported orientation "
                 f"{orientation_value}."
             )
-        position = getattr(symbol, "position", None)
+        position = symbol.position
         if position is None:
             raise ValueError(f"Could not read the placement of block facade {reference!r}.")
 

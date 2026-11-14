@@ -3,8 +3,47 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Any
+from typing import Protocol, cast
+
+from .pcb_types import (
+    BatchBlockLayoutMergeResult,
+    BlockLayoutMergeResult,
+    PCBPlacementEntry,
+    PCBPlacementManifest,
+)
+
+
+class BoardItemId(Protocol):
+    """Minimal KIID surface consumed by PCB placement."""
+
+    @property
+    def value(self) -> str:
+        """Return the textual UUID value used to identify this board item."""
+        ...
+
+
+class BoardItem(Protocol):
+    """Minimal board-item surface consumed by PCB placement."""
+
+    @property
+    def id(self) -> BoardItemId:
+        """Return the native KiCad identifier assigned to this item."""
+        ...
+
+
+class Board(Protocol):
+    """Minimal PCB IPC surface used to resolve and move imported item groups."""
+
+    def get_items(self) -> Sequence[BoardItem]:
+        """Return the board items currently exposed by the KiCad IPC server."""
+        ...
+
+    def interactive_move(self, item_ids: Sequence[BoardItemId]) -> None:
+        """Start KiCad native interactive movement for the supplied identifiers."""
+        ...
+
 
 PLACEMENT_SCHEMA_VERSION = 1
 PLACEMENT_SIDECAR_SUFFIX = ".kicad-blocks-placement.json"
@@ -16,14 +55,18 @@ def placement_manifest_path(board_path: Path) -> Path:
     return Path(str(board_path) + PLACEMENT_SIDECAR_SUFFIX)
 
 
-def _merge_entries(result: dict[str, Any]) -> list[dict[str, Any]]:
-    entries = result.get("placements")
-    if entries is None:
-        entries = [result]
+def _merge_entries(
+    result: BlockLayoutMergeResult | BatchBlockLayoutMergeResult,
+) -> list[PCBPlacementEntry]:
+    entries = (
+        result["placements"]
+        if "placements" in result
+        else [cast(BlockLayoutMergeResult, result)]
+    )
     if not isinstance(entries, list) or not entries:
         raise ValueError("PCB merge result does not contain any block placements.")
 
-    normalized: list[dict[str, Any]] = []
+    normalized: list[PCBPlacementEntry] = []
     references: set[str] = set()
     item_ids: set[str] = set()
     for entry in entries:
@@ -64,7 +107,10 @@ def _merge_entries(result: dict[str, Any]) -> list[dict[str, Any]]:
     return normalized
 
 
-def write_pcb_placement_manifest(board_path: Path, merge_result: dict[str, Any]) -> Path:
+def write_pcb_placement_manifest(
+    board_path: Path,
+    merge_result: BlockLayoutMergeResult | BatchBlockLayoutMergeResult,
+) -> Path:
     """Write an exclusive sidecar binding each imported block to its root item IDs."""
     board_path = Path(board_path).expanduser().resolve()
     if not board_path.is_file():
@@ -87,7 +133,7 @@ def write_pcb_placement_manifest(board_path: Path, merge_result: dict[str, Any])
     return sidecar
 
 
-def read_pcb_placement_manifest(board_path: Path) -> dict[str, Any]:
+def read_pcb_placement_manifest(board_path: Path) -> PCBPlacementManifest:
     """Load and validate a sidecar only when it belongs to the active board."""
     board_path = Path(board_path).expanduser().resolve()
     sidecar = placement_manifest_path(board_path)
@@ -96,11 +142,12 @@ def read_pcb_placement_manifest(board_path: Path) -> dict[str, Any]:
             f"No KiCad Blocks placement manifest was found next to this board: {sidecar}"
         )
     try:
-        payload = json.loads(sidecar.read_text(encoding="utf-8"))
+        raw_payload = json.loads(sidecar.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
         raise ValueError(f"Could not read PCB placement manifest {sidecar}: {exc}") from exc
-    if not isinstance(payload, dict):
+    if not isinstance(raw_payload, dict):
         raise TypeError("PCB placement manifest must be a JSON object.")
+    payload = cast(PCBPlacementManifest, raw_payload)
     if payload.get("schema_version") != PLACEMENT_SCHEMA_VERSION:
         raise ValueError(
             f"Unsupported PCB placement manifest schema: {payload.get('schema_version')!r}."
@@ -134,7 +181,7 @@ def read_pcb_placement_manifest(board_path: Path) -> dict[str, Any]:
     return payload
 
 
-def resolve_placement_item_ids(board, placement: dict[str, Any]) -> list[Any]:
+def resolve_placement_item_ids(board: Board, placement: PCBPlacementEntry) -> list[BoardItemId]:
     """Resolve one block's recorded UUIDs to KIID objects on the active board."""
     requested = placement.get("item_uuids")
     if not isinstance(requested, list) or not requested:
@@ -145,13 +192,13 @@ def resolve_placement_item_ids(board, placement: dict[str, Any]) -> list[Any]:
     if len({value.casefold() for value in requested_ids}) != len(requested_ids):
         raise ValueError("Selected PCB block placement contains duplicate board-item UUIDs.")
 
-    available: dict[str, Any] = {}
+    available: dict[str, BoardItemId] = {}
     for item in board.get_items():
-        item_id = getattr(item, "id", None)
-        value = getattr(item_id, "value", None)
-        if value is None or not str(value).strip():
+        item_id = item.id
+        value = item_id.value
+        if not value.strip():
             raise TypeError("KiCad returned a board item without a readable KIID value.")
-        available[str(value).casefold()] = item_id
+        available[value.casefold()] = item_id
 
     missing = [value for value in requested_ids if value.casefold() not in available]
     if missing:
@@ -163,7 +210,7 @@ def resolve_placement_item_ids(board, placement: dict[str, Any]) -> list[Any]:
     return [available[value.casefold()] for value in requested_ids]
 
 
-def move_placement_at_cursor(board, placement: dict[str, Any]) -> int:
+def move_placement_at_cursor(board: Board, placement: PCBPlacementEntry) -> int:
     """Start KiCad's native interactive move for exactly one imported block group."""
     item_ids = resolve_placement_item_ids(board, placement)
     board.interactive_move(item_ids)

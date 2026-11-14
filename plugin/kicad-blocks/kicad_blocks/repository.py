@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import copy
 import hashlib
 import json
@@ -13,8 +14,21 @@ import tempfile
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
+from typing import cast
 
 from .extraction import extract_hierarchical_pins, prepare_block_implementation
+from .manifest_types import (
+    BlockDependencyManifest,
+    BlockDependencyOccurrence,
+    BlockLayoutConfiguration,
+    BlockLayoutInput,
+    BlockLayoutManifest,
+    BlockManifest,
+    BlockParameterInput,
+    BlockProfileInput,
+    BlockVariantInput,
+    BlockVariantManifest,
+)
 from .model import (
     BlockPin,
     normalize_parameters,
@@ -50,11 +64,14 @@ class BlockOccurrence:
 
 @dataclass(frozen=True, slots=True)
 class BlockRecord:
+    """Validated block asset directory with the normalized manifest used by the plugin."""
+
     path: Path
-    manifest: dict
+    manifest: BlockManifest
 
     @property
     def name(self) -> str:
+        """Return the display name recorded in the block manifest."""
         return str(self.manifest["name"])
 
     @property
@@ -68,10 +85,17 @@ class BlockRecord:
 
     @property
     def implementation(self) -> Path:
+        """Resolve the manifest's default schematic implementation asset."""
         return self.path / resolve_variant_implementation(self.manifest, "")
 
 
 def atomic_write(path: Path, content: str) -> None:
+    """Atomically replace a file after its contents have been flushed to disk.
+
+    The temporary file is created beside the destination so the final rename
+    stays on one filesystem. On failure, the previous destination remains
+    intact and the temporary file is removed.
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, temp_name = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
     try:
@@ -81,10 +105,8 @@ def atomic_write(path: Path, content: str) -> None:
             os.fsync(stream.fileno())
         os.replace(temp_name, path)
     except Exception:
-        try:
+        with contextlib.suppress(OSError):
             os.unlink(temp_name)
-        except OSError:
-            pass
         raise
 
 
@@ -148,7 +170,7 @@ def _symbol_definition_digest_from_file(path: Path, symbol_name: str) -> str:
     return _symbol_definition_digest(_named_symbol_node(tree, symbol_name, Path(path)))
 
 
-def _import_catalog_facade_edit(block: BlockRecord, manifest: dict) -> bool:
+def _import_catalog_facade_edit(block: BlockRecord, manifest: BlockManifest) -> bool:
     """Import a Symbol Editor catalog edit into the block's revisioned facade asset.
 
     KiCad edits the shared KBlocks catalog. The per-block .kicad_sym file is the
@@ -217,7 +239,7 @@ def _import_catalog_facade_edit(block: BlockRecord, manifest: dict) -> bool:
     return True
 
 
-def _save_catalog_symbol_baseline(block: BlockRecord, manifest: dict) -> None:
+def _save_catalog_symbol_baseline(block: BlockRecord, manifest: BlockManifest) -> None:
     """Record the exact facade definition currently published in the shared catalog."""
     catalog_path = block.path.parent / str(
         manifest.get("catalog_file", LIBRARY_CATALOG_NAME)
@@ -286,19 +308,52 @@ def ensure_stable_block_identity(block: BlockRecord) -> BlockRecord:
     return _record(block.path)
 
 
-def read_manifest(block_path: Path) -> dict:
+def read_manifest(block_path: Path) -> BlockManifest:
+    """Load, validate and normalize a shared or project-local block manifest.
+
+    Legacy manifests receive the defaults required by the current schema at
+    this boundary. Callers therefore consume one stable BlockManifest shape.
+    """
     manifest_path = block_path / MANIFEST_NAME
     try:
-        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        raw_manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     except FileNotFoundError as exc:
         raise ValueError(f"Block manifest not found: {manifest_path}") from exc
     except json.JSONDecodeError as exc:
         raise ValueError(f"Invalid block manifest: {manifest_path}: {exc}") from exc
+    if not isinstance(raw_manifest, dict):
+        raise TypeError(f"Block manifest must contain a JSON object: {manifest_path}")
+    manifest = cast(BlockManifest, raw_manifest)
     required = ("block_id", "name", "symbol_file", "implementation_file", "pins")
     missing = [key for key in required if key not in manifest]
     if missing:
         raise ValueError(f"Block manifest is missing fields: {', '.join(missing)}")
-    manifest["parameters"] = normalize_parameters(manifest.get("parameters", []))
+
+    # Normalize legacy manifests once at the disk boundary so application code
+    # receives the same explicit schema as newly created block assets.
+    manifest.setdefault("schema_version", 1)
+    manifest["name"] = str(manifest["name"])
+    manifest.setdefault("slug", slugify(manifest["name"]))
+    manifest.setdefault("description", "")
+    manifest["version"] = int(manifest.get("version", 1))
+    manifest["revision"] = str(manifest.get("revision") or "")
+    manifest.setdefault("created_by", "kicad-blocks")
+    manifest.setdefault("interface_source", "manual")
+    manifest.setdefault("library_nickname", LIBRARY_NICKNAME)
+    manifest.setdefault("symbol_name", slugify(manifest["name"]))
+    manifest.setdefault("catalog_file", LIBRARY_CATALOG_NAME)
+    manifest.setdefault("layout_file", None)
+    manifest.setdefault("layout_project_file", None)
+    manifest.setdefault("layouts", [])
+    manifest.setdefault("default_layout", None)
+    manifest.setdefault("reference_prefix", "X")
+    manifest.setdefault("parameters", [])
+    manifest.setdefault("variants", [])
+    manifest.setdefault("profiles", [])
+    manifest.setdefault("dependencies", [])
+    manifest.setdefault("files", [manifest["symbol_file"], manifest["implementation_file"]])
+    manifest.setdefault("hashes", {})
+    manifest["parameters"] = normalize_parameters(manifest["parameters"])
     interface_source = manifest.get("interface_source", "manual")
     if interface_source not in {"manual", "hierarchical_labels"}:
         raise ValueError(
@@ -306,7 +361,7 @@ def read_manifest(block_path: Path) -> dict:
             "expected 'manual' or 'hierarchical_labels'."
         )
     manifest["interface_source"] = interface_source
-    variants = manifest.get("variants", [])
+    variants = manifest["variants"]
     if not isinstance(variants, list):
         raise TypeError("Block manifest variants must be a list.")
     seen_variant_values: set[str] = set()
@@ -348,7 +403,7 @@ def read_manifest(block_path: Path) -> dict:
         manifest["default_variant"] = str(matching_variant["value"])
     else:
         manifest.pop("default_variant", None)
-    layouts = manifest.get("layouts", [])
+    layouts = manifest["layouts"]
     if not isinstance(layouts, list):
         raise TypeError("Block manifest layouts must be a list.")
     pin_items = manifest.get("pins", [])
@@ -462,8 +517,9 @@ def read_manifest(block_path: Path) -> dict:
                 links = ["Default"]
             layout["implementations"] = links
 
+    manifest["layouts"] = layouts
     manifest["profiles"] = normalize_profiles(
-        manifest.get("profiles", []),
+        manifest["profiles"],
         manifest["parameters"],
         variants,
         layouts,
@@ -477,6 +533,11 @@ def _record(path: Path) -> BlockRecord:
 
 
 def list_blocks(root: Path) -> list[BlockRecord]:
+    """Return valid shared blocks in a library root, sorted by display name.
+
+    Corrupt or incomplete block folders are skipped so one damaged asset does
+    not prevent the library browser from showing other usable blocks.
+    """
     root = Path(root).expanduser().resolve()
     if not root.exists():
         return []
@@ -492,6 +553,7 @@ def list_blocks(root: Path) -> list[BlockRecord]:
 
 
 def find_block_by_id(root: Path, block_id: str) -> BlockRecord:
+    """Find one shared block by its stable UUID, rejecting unknown identities."""
     for record in list_blocks(root):
         if record.manifest["block_id"] == block_id:
             return record
@@ -510,10 +572,10 @@ def create_block(
     source_sheet_uuid: str | None = None,
     layout_file: Path | None = None,
     layout_project_file: Path | None = None,
-    layout_files: list[dict] | None = None,
-    parameters: list[dict] | None = None,
-    variant_files: list[dict] | None = None,
-    profiles: list[dict] | None = None,
+    layout_files: list[BlockLayoutInput] | None = None,
+    parameters: list[BlockParameterInput] | None = None,
+    variant_files: list[BlockVariantInput] | None = None,
+    profiles: list[BlockProfileInput] | None = None,
 ) -> BlockRecord:
     """Create a versioned block with typed parameters and named PCB layouts.
 
@@ -612,7 +674,7 @@ def create_block(
         for nested_file, nested_content in implementation_assets.items():
             (staging / nested_file).write_text(nested_content, encoding="utf-8")
         files.extend(sorted(implementation_assets))
-        variants: list[dict[str, str]] = []
+        variants: list[BlockVariantManifest] = []
         seen_variant_values: set[str] = set()
         seen_variant_files: set[str] = set()
         for index, raw_variant in enumerate(variant_files or [], start=1):
@@ -636,12 +698,12 @@ def create_block(
             seen_variant_files.add(file_name.casefold())
             shutil.copy2(source_path, staging / file_name)
             files.append(file_name)
-            variant_descriptor = {"value": value, "file": file_name}
+            variant_descriptor: BlockVariantManifest = {"value": value, "file": file_name}
             if raw_variant.get("layout_id"):
                 variant_descriptor["layout_id"] = str(raw_variant["layout_id"]).casefold()
             variants.append(variant_descriptor)
 
-        layouts: list[dict] = []
+        layouts: list[BlockLayoutManifest] = []
         seen_layout_ids: set[str] = set()
         seen_layout_names: set[str] = set()
         for index, raw_layout in enumerate(raw_layouts, start=1):
@@ -694,7 +756,7 @@ def create_block(
                 if any(not isinstance(value, str) or not value.strip() for value in ports.values()):
                     raise ValueError(f"Layout {layout_name!r} port mappings cannot contain empty net names.")
 
-            descriptor = {
+            descriptor: BlockLayoutManifest = {
                 "id": layout_id,
                 "name": layout_name,
                 "file": board_name,
@@ -855,7 +917,7 @@ def set_project_symbol_defaults(
     return catalog_path
 
 
-def _asset_hashes(block_path: Path, manifest: dict) -> dict[str, str]:
+def _asset_hashes(block_path: Path, manifest: BlockManifest) -> dict[str, str]:
     result = {}
     for file_name in manifest.get("files", []):
         path = block_path / file_name
@@ -873,7 +935,7 @@ _LAYOUT_MANIFEST_KEYS = (
 )
 
 
-def _layout_configuration(manifest: dict) -> dict:
+def _layout_configuration(manifest: BlockManifest) -> BlockLayoutConfiguration:
     """Return the manifest fields that define a block's PCB implementations."""
     return {
         key: copy.deepcopy(manifest.get(key))
@@ -881,7 +943,7 @@ def _layout_configuration(manifest: dict) -> dict:
     }
 
 
-def _set_layout_configuration(manifest: dict, configuration: dict) -> None:
+def _set_layout_configuration(manifest: BlockManifest, configuration: BlockLayoutConfiguration) -> None:
     """Apply a previously validated PCB layout configuration to a manifest."""
     for key in _LAYOUT_MANIFEST_KEYS:
         value = copy.deepcopy(configuration.get(key))
@@ -891,7 +953,7 @@ def _set_layout_configuration(manifest: dict, configuration: dict) -> None:
             manifest[key] = value
 
 
-def _base_layout_configuration(manifest: dict, source_manifest: dict) -> dict:
+def _base_layout_configuration(manifest: BlockManifest, source_manifest: BlockManifest) -> BlockLayoutConfiguration:
     """Load the layout three-way baseline, handling local copies created by older versions."""
     if "base_layouts" in manifest:
         return copy.deepcopy(manifest["base_layouts"])
@@ -999,6 +1061,11 @@ def local_copy_for_instance(project_dir: Path, instance_id: str) -> BlockRecord 
 
 
 def unlink_instance_local_copy(project_dir: Path, instance_id: str) -> None:
+    """Remove the project-side binding for one schematic symbol KIID.
+
+    The project-local block asset itself is retained; only the lookup record
+    connecting this schematic instance to that asset is removed.
+    """
     path = _instance_links_path(project_dir)
     if not path.is_file():
         return
@@ -1820,7 +1887,7 @@ def add_dependency(
 
 def synchronize_dependencies(
     parent: BlockRecord,
-    occurrences: list[dict],
+    occurrences: list[BlockDependencyOccurrence],
 ) -> BlockRecord:
     """Replace a block's dependency graph with occurrences found in its schematic.
 
@@ -1922,13 +1989,13 @@ def synchronize_dependencies(
     return _record(parent.path)
 
 
-def _dependency_anchor(block_path: Path, manifest: dict) -> Path:
+def _dependency_anchor(block_path: Path, manifest: BlockManifest) -> Path:
     """Return the canonical source directory for resolving relative children."""
     source_path = manifest.get("source_path") if manifest.get("local_copy") else None
     return Path(source_path).expanduser().resolve() if source_path else Path(block_path).resolve()
 
 
-def _dependency_path(block_path: Path, manifest: dict, dependency: dict) -> Path | None:
+def _dependency_path(block_path: Path, manifest: BlockManifest, dependency: BlockDependencyManifest) -> Path | None:
     raw_path = dependency.get("path")
     if not raw_path:
         return None
@@ -2030,6 +2097,7 @@ def resolve_dependency_graph(
 
 
 def settings_file() -> Path:
+    """Return the per-user settings file path, independent of the project."""
     return Path.home() / ".config" / "kicad-blocks" / "settings.json"
 
 

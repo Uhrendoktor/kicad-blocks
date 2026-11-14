@@ -8,14 +8,14 @@ import hashlib
 import io
 import json
 import os
-from pathlib import Path
 import re
 import sys
 import tempfile
+import zipfile
+from pathlib import Path
 from urllib.error import HTTPError
 from urllib.parse import quote
 from urllib.request import Request, urlopen
-import zipfile
 
 API_VERSION = "2022-11-28"
 SUPPORTED_PYTHON_MINOR_VERSIONS = frozenset({12, 13, 14})
