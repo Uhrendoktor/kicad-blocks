@@ -500,7 +500,7 @@ def main() -> None:
                             "Create Functional Block window. "
                             f"Visible windows: {_windows(xdotool)!r}"
                         )
-                    except Exception as exc:
+                    except (OSError, subprocess.SubprocessError, RuntimeError) as exc:
                         ui_driver_errors.append(exc)
 
                 driver = threading.Thread(target=complete_visible_dialog, daemon=True)
