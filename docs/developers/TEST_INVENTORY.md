@@ -7,8 +7,8 @@ is listed individually with its assertion purpose. Files that are executable acc
 programs rather than pytest modules are listed separately and must remain explicitly
 registered in STANDALONE_TESTS in scripts/test_inventory.py.
 
-- Pytest modules: **23**
-- Individually inventoried pytest cases: **248**
+- Pytest modules: **24**
+- Individually inventoried pytest cases: **238**
 - Standalone acceptance runners: **7**
 - Additional CI validation runners: **2**
 
@@ -42,6 +42,7 @@ Core block model, facade generation, parameter handling, library registration, c
 | test_multi_selection_extracts_all_symbol_instances | Exercises multi selection extracts all symbol instances. |
 | test_plugin_manifest_has_valid_action_scope_contract | Exercises plugin manifest has valid action scope contract. |
 | test_project_catalog_can_seed_selected_block_configuration | Exercises project catalog can seed selected block configuration. |
+| test_library_settings_use_platformdirs_user_config_path | Exercises library settings use platformdirs user config path. |
 | test_registered_block_libraries_build_one_project_symbol_catalog | Exercises registered block libraries build one project symbol catalog. |
 | test_selected_library_is_registered_even_when_environment_overrides_default | Exercises selected library is registered even when environment overrides default. |
 | test_parse_pins_aliases_and_default | Parses pins aliases and default. |
@@ -116,19 +117,8 @@ Schematic editor action routing, selected-sheet behavior, facade editing, transa
 
 | Test | Purpose |
 | --- | --- |
-| test_edit_facade_prefers_native_symbol_editor_action_when_supported | Exercises edit facade prefers native symbol editor action when supported. |
-| test_edit_facade_targets_preview_symbol_without_schematic_selection | Exercises edit facade targets preview symbol without schematic selection. |
-| test_edit_facade_opens_symbol_editor_from_eeschema_tools_menu | Exercises edit facade opens symbol editor from eeschema tools menu. |
-| test_symbol_editor_menu_down_count_matches_standalone_and_manager_hosted_modes | Exercises symbol editor menu down count matches standalone and manager hosted modes. |
-| test_edit_facade_does_not_disturb_an_already_open_symbol_editor | Exercises edit facade does not disturb an already open symbol editor. |
-| test_edit_facade_wayland_rejects_unavailable_native_action_without_global_input | Exercises edit facade wayland rejects unavailable native action without global input. |
-| test_edit_facade_wayland_never_types_into_an_unverified_symbol_editor | Exercises edit facade wayland never types into an unverified symbol editor. |
-| test_edit_facade_uses_verified_menu_if_native_action_acknowledges_but_does_not_open_editor | Exercises edit facade uses verified menu if native action acknowledges but does not open editor. |
-| test_edit_facade_never_sends_menu_keys_to_pcb_editor | Exercises edit facade never sends menu keys to pcb editor. |
-| test_edit_facade_stops_when_eeschema_cannot_take_keyboard_focus | Exercises edit facade stops when eeschema cannot take keyboard focus. |
-| test_wayland_edit_facade_does_not_inject_without_verified_search_focus | Exercises wayland edit facade does not inject without verified search focus. |
-| test_wayland_edit_facade_does_not_inject_when_wtype_is_missing | Exercises wayland edit facade does not inject when wtype is missing. |
-| test_edit_facade_rejects_missing_symbol_in_project_catalog | Exercises edit facade rejects missing symbol in project catalog. |
+| test_edit_facade_reports_missing_supported_editor_selection_api | Exercises edit facade reports missing supported editor selection api. |
+| test_edit_facade_validates_exact_catalog_entry_before_reporting_capability_gap | Exercises edit facade validates exact catalog entry before reporting capability gap. |
 | test_ensure_project_facade_catalog_preserves_existing_unsaved_edits | Exercises ensure project facade catalog preserves existing unsaved edits. |
 | test_create_block_from_selected_sheet_never_prompts_for_manual_pins | Creates block from selected sheet never prompts for manual pins. |
 | test_create_block_rolls_back_new_block_when_project_registration_fails | Creates block rolls back new block when project registration fails. |
@@ -154,8 +144,9 @@ Schematic editor action routing, selected-sheet behavior, facade editing, transa
 | test_local_implementation_edit_opens_project_copy_not_library_source | Exercises local implementation edit opens project copy not library source. |
 | test_create_block_empty_selection_ipc_error_uses_active_sheet | Creates block empty selection ipc error uses active sheet. |
 | test_create_block_uses_selected_sheet_symbol_relative_to_active_sheet | Creates block uses selected sheet symbol relative to active sheet. |
-| test_run_action_dispatches_create_block_to_sheet_creation_workflow | Exercises run action dispatches create block to sheet creation workflow. |
-| test_run_action_captures_kicad_window_before_creating_tk | Exercises run action captures kicad window before creating tk. |
+| test_task_hub_edit_facade_uses_native_cross_platform_ipc_handoff | Exercises task hub edit facade uses native cross platform ipc handoff. |
+| test_run_action_does_not_discover_foreign_window_handles | Exercises run action does not discover foreign window handles. |
+| test_run_action_does_not_capture_native_windows_before_creating_tk | Exercises run action does not capture native windows before creating tk. |
 
 ### tests/test_extraction.py
 
@@ -215,7 +206,7 @@ Library search and selection, native previews, variants/profiles/layouts, cross-
 | test_invalid_profile_change_does_not_copy_new_variant_files | Exercises invalid profile change does not copy new variant files. |
 | test_variant_editor_refuses_to_remove_an_implementation_used_by_a_profile | Exercises variant editor refuses to remove an implementation used by a profile. |
 | test_window_geometry_respects_display_bounds | Exercises window geometry respects display bounds. |
-| test_tk_transient_uses_client_window_and_editor_owner | Exercises tk transient uses client window and editor owner. |
+| test_tk_transient_uses_only_the_in_process_parent | Exercises tk transient uses only the in process parent. |
 | test_record_lookup_finds_a_block_in_another_registered_library | Exercises record lookup finds a block in another registered library. |
 | test_mousewheel_scrolls_without_dragging_the_scrollbar | Exercises mousewheel scrolls without dragging the scrollbar. |
 | test_mousewheel_accumulates_high_resolution_trackpad_deltas | Exercises mousewheel accumulates high resolution trackpad deltas. |
@@ -228,16 +219,13 @@ Library search and selection, native previews, variants/profiles/layouts, cross-
 | test_double_click_row_lookup_never_reuses_a_previous_selection | Exercises double click row lookup never reuses a previous selection. |
 | test_placement_minimizes_browser_and_manager_and_restores_on_failure | Exercises placement minimizes browser and manager and restores on failure. |
 | test_minimizer_leaves_already_hidden_windows_unchanged | Exercises minimizer leaves already hidden windows unchanged. |
-| test_editor_capture_finds_eeschema_when_browser_has_focus | Exercises editor capture finds eeschema when browser has focus. |
-| test_editor_capture_does_not_treat_plugin_browser_as_eeschema | Exercises editor capture does not treat plugin browser as eeschema. |
-| test_native_placement_handoff_uses_add_symbol_hotkey_and_exact_library_name | Exercises native placement handoff uses add symbol hotkey and exact library name. |
-| test_native_placement_refuses_to_type_when_choose_symbol_dialog_is_absent | Exercises native placement refuses to type when choose symbol dialog is absent. |
-| test_native_run_action_status_is_checked_not_treated_as_truthy | Exercises native run action status is checked not treated as truthy. |
-| test_native_placement_uses_kicad_ipc_without_xdotool_or_captured_xid | Exercises native placement uses kicad ipc without xdotool or captured xid. |
-| test_native_placement_rejected_by_kicad_reports_real_status_without_xdotool | Exercises native placement rejected by kicad reports real status without xdotool. |
-| test_native_placement_does_not_send_global_wayland_keys_without_verified_editor | Exercises native placement does not send global wayland keys without verified editor. |
-| test_wayland_placement_does_not_inject_keys_when_xdotool_cannot_identify_editor | Exercises wayland placement does not inject keys when xdotool cannot identify editor. |
-| test_native_placement_requires_editor_when_ipc_is_unavailable | Exercises native placement requires editor when ipc is unavailable. |
+| test_system_theme_keeps_native_tk_theme_without_os_probes | Exercises system theme keeps native tk theme without os probes. |
+| test_sheet_center_uses_page_dimensions_orientation_and_grid | Exercises sheet center uses page dimensions orientation and grid. |
+| test_sheet_center_supports_custom_page_dimensions | Exercises sheet center supports custom page dimensions. |
+| test_sheet_center_rejects_unknown_or_invalid_page_settings | Exercises sheet center rejects unknown or invalid page settings. |
+| test_place_block_creates_at_page_centre_focuses_and_selects_new_symbol | Exercises place block creates at page centre focuses and selects new symbol. |
+| test_place_block_rejects_invalid_symbol_id_before_connecting | Exercises place block rejects invalid symbol id before connecting. |
+| test_place_block_requires_an_active_schematic | Exercises place block requires an active schematic. |
 
 ### tests/test_library_validation.py
 
@@ -293,6 +281,15 @@ Placement sidecar schema, exclusive writes, item-group identity, active-board ma
 | test_manifest_rejects_different_active_board_path | Exercises manifest rejects different active board path. |
 | test_manifest_rejects_unknown_schema_and_duplicate_item_ids | Exercises manifest rejects unknown schema and duplicate item ids. |
 | test_missing_board_item_refuses_partial_move | Exercises missing board item refuses partial move. |
+
+### tests/test_portability_contract.py
+
+Static guards that keep production feature paths free of OS-specific desktop APIs.
+
+| Test | Purpose |
+| --- | --- |
+| test_runtime_package_does_not_call_os_specific_desktop_helpers | Exercises runtime package does not call os specific desktop helpers. |
+| test_library_settings_directory_uses_platformdirs_dependency | Exercises library settings directory uses platformdirs dependency. |
 
 ### tests/test_profiles.py
 
