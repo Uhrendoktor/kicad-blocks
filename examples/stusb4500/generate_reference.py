@@ -923,6 +923,7 @@ def generate_reference_schematic(destination: Path) -> Path:
             elif len(prop) >= 3 and str(prop[1]) == "Datasheet" and str(prop[2]):
                 datasheet = str(prop[2])
         reference_justify = None
+        value_justify = None
         if reference == "U1":
             # Put both fields immediately outside the right edge of the QFN.
             # Left justification keeps the long value clear of the body.
@@ -934,15 +935,19 @@ def generate_reference_schematic(destination: Path) -> Path:
             reference_x, reference_y = sx, sy - 33.02
             value_x, value_y = sx, sy - 30.48
         elif reference in {"T4", "T1"}:
-            # Keep the device fields above the common-source wire.
-            reference_x, reference_y = sx, sy - 13.97
-            value_x, value_y = sx, sy - 11.43
+            # Keep long FET identifiers close to the body, outside the
+            # common-source wire corridor: T4 fields to the left, T1 to right.
+            dx = -5.08 if reference == "T4" else 10.16
+            reference_x, reference_y = sx + dx, sy - 2.54
+            value_x, value_y = sx + dx, sy
+            reference_justify = "right" if reference == "T4" else "left"
+            value_justify = reference_justify
         elif reference.startswith("R"):
             value_x, value_y = sx, sy
             if reference in {"R51", "R52", "R53", "R54"}:
                 # Address strap resistors are rotated horizontal; keep their
                 # references above the body and values centered inside it.
-                reference_x, reference_y = sx, sy - 3.81
+                reference_x, reference_y = sx, sy - 2.54
             else:
                 # Vertical resistors have a terminal directly above the body.
                 # Put the reference beside the body instead of on that pin.
@@ -954,16 +959,23 @@ def generate_reference_schematic(destination: Path) -> Path:
                 reference_x, reference_y = sx + dx, sy
                 reference_justify = "left" if dx > 0 else "right"
         elif reference == "D1":
-            # The ESD array's longer value sits completely above its symbol body.
+            # Keep the reference above the ESD-array body and the long part
+            # name to its right, clear of the two CC-line escape wires.
             reference_x, reference_y = sx, sy - 8.89
-            value_x, value_y = sx, sy - 6.35
+            value_x, value_y = sx + 10.16, sy
+            value_justify = "left"
         elif reference.startswith("D"):
             # Keep diode identifiers close to the symbol, not floating above it.
             reference_x, reference_y = sx, sy - 6.35
             value_x, value_y = sx, sy - 3.81
         elif reference.startswith("C"):
-            # Put references outside the vertical decoupler wire corridor.
-            reference_x, reference_y = sx - 3.81, sy
+            # Put references on opposite sides of the decouplers where
+            # adjacent bodies would otherwise crowd the field glyphs.
+            if reference == "C3":
+                reference_x, reference_y = sx + 3.81, sy
+                reference_justify = "left"
+            else:
+                reference_x, reference_y = sx - 3.81, sy
             value_x, value_y = sx - 4.45, sy + 2.54
         else:
             reference_x, reference_y = sx, sy - 8
@@ -986,7 +998,7 @@ def generate_reference_schematic(destination: Path) -> Path:
             _prop(
                 "Value", value, 1, value_x, value_y,
                 font_size=0.72 if reference.startswith("R") else 1.10,
-                justify=reference_justify if reference == "U1" else None,
+                justify=value_justify,
                 angle=field_angle,
             ),
             _prop("Footprint", footprint, 2, sx, sy, True),
@@ -1071,6 +1083,13 @@ def generate_reference_schematic(destination: Path) -> Path:
                             label_y = py + 2.54
                             justify = "right"
                             label_angle = 0
+                        if reference in {"R1", "R4"} and net in {"VBUS_FILTERED", "VREG_2V7"}:
+                            # These two VBUS monitor net names are adjacent;
+                            # rotate them along the vertical resistor axis.
+                            label_x = px
+                            label_y = py - 5.08
+                            justify = "left"
+                            label_angle = 90
                         if reference == "U1":
                             # Stagger the four tightly pitched top-side supply
                             # labels horizontally above the QFN, keeping their
