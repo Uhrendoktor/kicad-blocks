@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+from importlib import import_module
 import contextlib
 import logging
 import os
@@ -25,6 +26,7 @@ if TYPE_CHECKING:
     from tkinter import filedialog, messagebox, simpledialog, ttk
 
     from google.protobuf.message import Message
+    from kipy.geometry import Vector2
 else:
     tk = None
     ttk = None
@@ -38,6 +40,7 @@ from .manifest_types import (
     BlockLayoutEditInput,
     BlockParameter,
     BlockProfileInput,
+    BlockProfileManifest,
     BlockVariantEditInput,
     BlockVariantManifest,
 )
@@ -130,10 +133,18 @@ class _SchematicIpcClient(Protocol):
 
 
 class _SchematicForItemUpdate(Protocol):
-    """Schematic document/client pair consumed by the checked update helper."""
+    """Schematic document/client pair consumed by checked item and commit updates."""
 
     document: Message
     client: _SchematicIpcClient
+
+    def begin_commit(self) -> Message: ...
+
+    def push_commit(self, commit: Message, description: str) -> None: ...
+
+    def drop_commit(self, commit: Message) -> None: ...
+
+    def save(self) -> None: ...
 
 
 class _SchematicProject(Protocol):
@@ -231,7 +242,7 @@ class _Schematic(Protocol):
     def get_hierarchy(self) -> _SheetHierarchy: ...
 
     def place_symbol_from_library(
-        self, symbol_id: str, position: _SymbolPosition
+        self, symbol_id: str, position: Vector2
     ) -> _SchematicSymbol: ...
 
     def begin_commit(self) -> Message: ...
@@ -266,6 +277,30 @@ class _KiCadApp(Protocol):
     def close(self) -> None: ...
 
 
+class _TkLayoutOptions(TypedDict, total=False):
+    """Subset of Tk layout options used to remove legacy scrollbar arrows."""
+
+    sticky: str
+    expand: str
+    children: list[tuple[str, _TkLayoutOptions]]
+
+
+class _TkStyleLayout(Protocol):
+    """Callable layout operation with the recursive ttk layout schema."""
+
+    def layout(
+        self, style: str, layoutspec: list[tuple[str, _TkLayoutOptions]]
+    ) -> list[tuple[str, _TkLayoutOptions]]: ...
+
+
+class _CairoSVG(Protocol):
+    """Narrow SVG-to-PNG renderer interface used by toolbar icon generation."""
+
+    def svg2png(
+        self, *, bytestring: bytes, output_width: int, output_height: int
+    ) -> bytes | None: ...
+
+
 class _CommandResult(Protocol):
     """Subprocess-like result consumed by the injectable placement runner."""
 
@@ -287,6 +322,8 @@ class _TkActionIconOwner(Protocol):
 
 class _TkGeometryWindow(Protocol):
     """Geometry methods shared by real Tk windows and the lightweight test adapter."""
+
+    master: tkinter_types.Misc | _TkGeometryWindow | None
 
     def update_idletasks(self) -> None: ...
 
@@ -621,7 +658,8 @@ def _configure_tk_theme(root: tkinter_types.Tk) -> None:
         width=12,
     )
     # Remove legacy arrow buttons; keep a single, low-contrast draggable thumb.
-    style.layout(
+    _style_layout = cast(_TkStyleLayout, style).layout
+    _style_layout(
         "Vertical.TScrollbar",
         [
             (
@@ -633,7 +671,7 @@ def _configure_tk_theme(root: tkinter_types.Tk) -> None:
             )
         ],
     )
-    style.layout(
+    _style_layout(
         "Horizontal.TScrollbar",
         [
             (
@@ -670,7 +708,7 @@ def _configure_tk_theme(root: tkinter_types.Tk) -> None:
 
 def _editor_window_id_for_widget(window: tkinter_types.Misc | _TkGeometryWindow) -> str | None:
     """Find the invoking KiCad editor XID stored on a Tk parent chain."""
-    current: tkinter_types.Misc | None = window
+    current: tkinter_types.Misc | _TkGeometryWindow | None = window
     seen: set[int] = set()
     while current is not None and id(current) not in seen:
         seen.add(id(current))
@@ -695,8 +733,8 @@ def _set_window_geometry(
         requested_height_getter = getattr(window, "winfo_reqheight", None)
         if not callable(requested_width_getter) or not callable(requested_height_getter):
             raise AttributeError("Window does not expose requested content dimensions.")
-        requested_width = int(requested_width_getter())
-        requested_height = int(requested_height_getter())
+        requested_width = cast(Callable[[], int], requested_width_getter)()
+        requested_height = cast(Callable[[], int], requested_height_getter)()
     except Exception:
         # Tests and non-GUI callers can provide lightweight window adapters
         # without Tk's measurement methods; actual Tk sizing failures should
@@ -709,7 +747,7 @@ def _set_window_geometry(
     window.minsize(min(min_width, w), min(min_height, h))
     owner = _editor_window_id_for_widget(window)
     if owner:
-        _attach_tk_window_to_editor(window, owner)
+        _attach_tk_window_to_editor(cast(_TkTransientWindow, window), owner)
 
 
 def _set_x11_transient_owner(window_id: str, owner_window_id: str) -> bool:
@@ -907,9 +945,12 @@ def _create_action_icon(parent: tkinter_types.Misc, name: str) -> tkinter_types.
         "</svg>"
     )
     try:
-        import cairosvg
-
-        png = cairosvg.svg2png(bytestring=svg.encode("utf-8"), output_width=20, output_height=20)
+        cairosvg = cast(_CairoSVG, import_module("cairosvg"))
+        png = cairosvg.svg2png(
+            bytestring=svg.encode("utf-8"), output_width=20, output_height=20
+        )
+        if png is None:
+            raise ValueError("CairoSVG did not return PNG data for the toolbar icon.")
         image = tk.PhotoImage(data=base64.b64encode(png).decode("ascii"), master=parent)
     except (ImportError, OSError, tk.TclError, ValueError):
         LOG.debug("Could not render toolbar icon %s", name, exc_info=True)
@@ -953,17 +994,17 @@ def project_directory(schematic: _Schematic) -> Path:
     return resolved
 
 
-_LAST_LIBRARY_RELOAD_WARNING: str | None = None
-_LAST_LIBRARY_RELOAD_OK = True
+_last_library_reload_warning: str | None = None
+_last_library_reload_ok = True
 
 
 def _reload_symbol_library(kicad: _KiCadApp, nickname: str) -> bool:
     """Reload a project library using GUI-supported commands only."""
-    global _LAST_LIBRARY_RELOAD_WARNING, _LAST_LIBRARY_RELOAD_OK
+    global _last_library_reload_warning, _last_library_reload_ok
     from kipy.errors import LibraryCommandError
 
-    _LAST_LIBRARY_RELOAD_WARNING = None
-    _LAST_LIBRARY_RELOAD_OK = True
+    _last_library_reload_warning = None
+    _last_library_reload_ok = True
     try:
         # LT_SYMBOL=1; LTS_PROJECT=2. LoadAllLibraries is headless-only.
         kicad.reload_library(type=1, scope=2, nicknames=[nickname])
@@ -978,13 +1019,13 @@ def _reload_symbol_library(kicad: _KiCadApp, nickname: str) -> bool:
             raise RuntimeError("; ".join(str(error) for error in errors))
         return True
     except (LibraryCommandError, RuntimeError, TimeoutError) as exc:
-        _LAST_LIBRARY_RELOAD_OK = False
-        _LAST_LIBRARY_RELOAD_WARNING = (
+        _last_library_reload_ok = False
+        _last_library_reload_warning = (
             f"The block and project library table were saved, but Eeschema could not "
             f"reload {nickname!r}: {exc}. Save the project and restart Eeschema to "
             "load the updated block library."
         )
-        LOG.warning(_LAST_LIBRARY_RELOAD_WARNING)
+        LOG.warning(_last_library_reload_warning)
         return False
 
 
@@ -1015,7 +1056,6 @@ def _register_block(
 def place_block(
     schematic: _Schematic, record: BlockRecord, x_mm: float, y_mm: float
 ) -> _SchematicSymbol:
-    from kipy.geometry import Vector2
 
     symbol_id = f"{record.manifest['library_nickname']}:{record.manifest['symbol_name']}"
     instance = schematic.place_symbol_from_library(symbol_id, Vector2.from_xy_mm(x_mm, y_mm))
@@ -1088,7 +1128,10 @@ def _selected_symbol(schematic: _Schematic) -> _SchematicSymbol:
 
 
 def _symbol_identifier(instance: _SchematicSymbol) -> tuple[str, str]:
-    identifier = instance.definition.id
+    definition = instance.definition
+    identifier = definition.id if definition is not None else None
+    if identifier is None:
+        raise ValueError("The selected symbol has no library identifier.")
     return identifier.library, identifier.name
 
 
@@ -1099,8 +1142,8 @@ def _library_roots_for(value: str | Path | Sequence[str | Path] | None = None) -
         values = [Path(value)]
     else:
         values = [Path(item) for item in value]
-    roots = []
-    seen = set()
+    roots: list[Path] = []
+    seen: set[str] = set()
     for item in values:
         path = Path(item).expanduser().resolve()
         key = str(path)
@@ -1220,7 +1263,7 @@ def _update_schematic_item_checked(
 
 
 def _write_instance_configuration(
-    schematic: _SchematicForItemUpdate, instance: _ProtoBackedSchematicItem, values: dict[str, str]
+    schematic: _Schematic, instance: _ProtoBackedSchematicItem, values: dict[str, str]
 ) -> None:
     """Write validated facade fields through KiCad IPC as one undoable edit."""
     fields = {
@@ -1310,7 +1353,7 @@ def _show_selected_block_configuration(
     content.pack(fill="both", expand=True)
 
     profile_var = None
-    profile_labels: dict[str, dict] = {}
+    profile_labels: dict[str, BlockProfileManifest | None] = {}
     if profiles:
         section = ttk.LabelFrame(content, text="Configuration profile", padding=10)
         section.pack(fill="x", pady=(0, 10))
@@ -2588,8 +2631,8 @@ def _create_and_place(
         "implementation's hierarchical labels change, Publish synchronizes "
         "facade pin names and electrical types automatically."
         + (
-            f"\\n\\nLibrary reload note: {_LAST_LIBRARY_RELOAD_WARNING}"
-            if _LAST_LIBRARY_RELOAD_WARNING
+            f"\\n\\nLibrary reload note: {_last_library_reload_warning}"
+            if _last_library_reload_warning
             else ""
         ),
         parent=parent,
@@ -5214,10 +5257,10 @@ def _show_library_browser(
                     "and launch the Functional Block Library from that editor."
                 )
             _register_block(project_dir, record, kicad, current_roots[0])
-            if not _LAST_LIBRARY_RELOAD_OK:
+            if not _last_library_reload_ok:
                 messagebox.showwarning(
                     "Block library saved",
-                    _LAST_LIBRARY_RELOAD_WARNING
+                    _last_library_reload_warning
                     or "Restart Eeschema to refresh the project library table.",
                     parent=window,
                 )
