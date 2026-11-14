@@ -19,10 +19,10 @@ from generate_reference import (
     COMPONENT_PROPERTY_LIMITS_MM,
     DIRECT_DECOUPLERS,
     FIELD_SYMBOL_MAX_GAP_MM,
-    FRAME_CONTENT_PADDING_MM,
-    GROUP_EVIDENCE,
     FORBIDDEN_LOCAL_LABELS,
+    FRAME_CONTENT_PADDING_MM,
     GROUND_PINS_DOWN,
+    GROUP_EVIDENCE,
     GROUP_GAP_MM,
     REQUIRED_NO_CONNECT_PINS,
     SCHEMATIC_GROUPS,
@@ -1041,9 +1041,12 @@ def common_pin_net_issues(tree: list) -> list[str]:
             roots.append(root)
             if expected not in names_by_root.get(root, set()):
                 issues.append(f"{reference}.{number} must belong to common net {expected}")
-        if len(roots) > 1 and len(set(roots)) > 1:
-            if any(expected not in names_by_root.get(root, set()) for root in roots):
-                issues.append(f"configured pins {group['pins']} do not all share {expected}")
+        if (
+            len(roots) > 1
+            and len(set(roots)) > 1
+            and any(expected not in names_by_root.get(root, set()) for root in roots)
+        ):
+            issues.append(f"configured pins {group['pins']} do not all share {expected}")
     return issues
 
 
