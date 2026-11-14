@@ -33,7 +33,7 @@ Do not infer that the full KiCad integration matrix has been run on CPython 3.13
 
 The current KiCad add-on API documentation states that KiCad 9 and 10 support IPC add-ons in PCB Editor only, while KiCad 11 adds IPC add-ons in Schematic Editor. KiCad Blocks needs the Schematic Editor plugin surface, so stable KiCad 10.x is not a usable target for the schematic workflows.
 
-As of **2026-11-13**, the latest stable release announcement is [KiCad 10.0.8, published 2026-10-30](https://www.kicad.org/blog/2026/10/KiCad-10.0.8-Release/). The validated 10.99.0 build is a development nightly, not a stable release. Although the installer accepts KiCad 11.0 or newer version directories, stable KiCad 11 has not yet been validated by this repository's full integration matrix.
+As of **2026-11-14**, the latest stable release announcement is [KiCad 10.0.8, published 2026-10-30](https://www.kicad.org/blog/2026/10/KiCad-10.0.8-Release/). The validated 10.99.0 build is a development nightly, not a stable release. Although the installer accepts KiCad 11.0 or newer version directories, stable KiCad 11 has not yet been validated by this repository's full integration matrix.
 
 Primary references:
 
