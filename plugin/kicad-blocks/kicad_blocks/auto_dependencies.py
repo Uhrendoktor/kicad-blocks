@@ -10,11 +10,101 @@ from __future__ import annotations
 import subprocess
 import tempfile
 import xml.etree.ElementTree as ET
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Protocol, SupportsFloat, TypedDict, cast
+
+if TYPE_CHECKING:
+    from .repository import BlockRecord
 
 
-def parse_kicad_xml_netlist(path: Path) -> dict[str, Any]:
+class KiCadNetlist(TypedDict):
+    """Schematic connectivity exported by KiCad CLI."""
+
+    component_refs: set[str]
+    pin_nets: dict[str, dict[str, str]]
+
+
+class _SymbolText(Protocol):
+    value: str
+
+
+class _SymbolTextField(Protocol):
+    text: _SymbolText
+
+
+class _SymbolIdentifier(Protocol):
+    library: str
+    name: str
+
+
+class _SymbolPin(Protocol):
+    number: str
+
+
+class _SymbolDefinition(Protocol):
+    id: _SymbolIdentifier | None
+    pins: Sequence[_SymbolPin]
+
+
+class _SymbolTransform(Protocol):
+    orientation: int
+
+
+class _SymbolPosition(Protocol):
+    x: SupportsFloat
+    y: SupportsFloat
+
+
+class _PlacedSymbol(Protocol):
+    definition: _SymbolDefinition | None
+    reference: str | None
+    reference_field: _SymbolTextField | None
+    transform: _SymbolTransform | None
+    position: _SymbolPosition | None
+
+
+class BlockDependency(TypedDict):
+    """One placed child block and its electrical/placement mapping."""
+
+    child: BlockRecord
+    reference: str
+    position_mm: tuple[float, float]
+    orientation: int
+    pin_map: dict[str, str | None]
+
+
+class DependencySynchronizationResult(TypedDict):
+    """Updated block record and whether dependency metadata changed."""
+
+    block: BlockRecord
+    changed: bool
+    count: int
+
+
+class _SchematicSheetReference(Protocol):
+    """Sheet identifier accepted by the KiCad per-sheet schematic selector."""
+
+    def __str__(self) -> str: ...
+
+
+class _SchematicSheet(Protocol):
+    """Symbol-query surface for one sheet in the implementation hierarchy."""
+
+    def get_symbols(self) -> Sequence[_PlacedSymbol]: ...
+
+
+class _SchematicForDependencyScan(Protocol):
+    """Schematic hierarchy methods needed to find placed child block facades."""
+
+    def iter_sheets(self) -> Sequence[_SchematicSheetReference]: ...
+
+    def for_sheet(self, sheet: _SchematicSheetReference) -> _SchematicSheet: ...
+
+    def get_symbols(self) -> Sequence[_PlacedSymbol]: ...
+
+
+def parse_kicad_xml_netlist(path: Path) -> KiCadNetlist:
     """Read component references and pin-to-net assignments from KiCad XML."""
     root = ET.parse(Path(path)).getroot()
     components = root.find("./components")
@@ -50,26 +140,26 @@ def parse_kicad_xml_netlist(path: Path) -> dict[str, Any]:
     return {"component_refs": component_refs, "pin_nets": pin_nets}
 
 
-def _field_text(instance: Any, field_name: str) -> str:
-    field = getattr(instance, field_name, None)
-    return str(getattr(getattr(field, "text", None), "value", "") or "").strip()
+def _field_text(instance: _PlacedSymbol) -> str:
+    field = instance.reference_field
+    return str(field.text.value or "").strip() if field is not None else ""
 
 
-def _millimetres(value: Any) -> float:
+def _millimetres(value: SupportsFloat) -> float:
     """Convert KiCad IPC coordinates, which are always nanometres, to millimetres."""
     return float(value) / 1_000_000.0
 
 
 def discover_block_dependencies(
-    parent,
-    records: list,
-    symbols: list,
-    netlist: dict[str, Any],
-) -> list[dict[str, Any]]:
+    parent: BlockRecord,
+    records: Sequence[BlockRecord],
+    symbols: Sequence[_PlacedSymbol],
+    netlist: KiCadNetlist,
+) -> list[BlockDependency]:
     """Build dependency occurrences from placed facade symbols and netlist pins."""
     from .repository import LIBRARY_NICKNAME
 
-    by_symbol: dict[tuple[str, str], Any] = {}
+    by_symbol: dict[tuple[str, str], BlockRecord] = {}
     for record in records:
         key = (
             str(record.manifest.get("library_nickname", "")),
@@ -95,11 +185,12 @@ def discover_block_dependencies(
 
     component_refs = set(netlist["component_refs"])
     pin_nets = netlist["pin_nets"]
-    occurrences: list[dict[str, Any]] = []
+    occurrences: list[BlockDependency] = []
     seen_references: set[str] = set()
 
     for symbol in symbols:
-        identifier = getattr(getattr(symbol, "definition", None), "id", None)
+        definition = symbol.definition
+        identifier = definition.id if definition is not None else None
         library_nickname = str(getattr(identifier, "library", "") or "")
         if library_nickname != LIBRARY_NICKNAME:
             continue
@@ -114,10 +205,7 @@ def discover_block_dependencies(
         if child.manifest.get("block_id") == parent.manifest.get("block_id"):
             raise ValueError(f"Block {parent.name!r} cannot contain itself.")
 
-        reference = (
-            str(getattr(symbol, "reference", "") or "").strip()
-            or _field_text(symbol, "reference_field")
-        )
+        reference = str(getattr(symbol, "reference", "") or "").strip() or _field_text(symbol)
         if not reference or "?" in reference:
             raise ValueError(
                 f"Block facade {symbol_name!r} has no annotated reference. "
@@ -139,8 +227,7 @@ def discover_block_dependencies(
             raise ValueError(f"Block {child.name!r} has duplicate facade pin names.")
 
         symbol_pin_numbers = {
-            str(getattr(pin, "number", "")).strip()
-            for pin in getattr(symbol.definition, "pins", ())
+            str(pin.number).strip() for pin in (definition.pins if definition is not None else ())
         }
         missing_numbers = sorted(
             {
@@ -163,15 +250,14 @@ def discover_block_dependencies(
             for pin in manifest_pins
         }
 
-        transform = getattr(symbol, "transform", None)
-        orientation_value = int(getattr(transform, "orientation", 1))
+        transform = symbol.transform
+        orientation_value = int(transform.orientation if transform is not None else 1)
         orientations = {1: 0, 2: 90, 3: 180, 4: 270}
         if orientation_value not in orientations:
             raise ValueError(
-                f"Block facade {reference!r} has unsupported orientation "
-                f"{orientation_value}."
+                f"Block facade {reference!r} has unsupported orientation {orientation_value}."
             )
-        position = getattr(symbol, "position", None)
+        position = symbol.position
         if position is None:
             raise ValueError(f"Could not read the placement of block facade {reference!r}.")
 
@@ -191,31 +277,25 @@ def discover_block_dependencies(
     return sorted(occurrences, key=lambda item: item["reference"].casefold())
 
 
-def _all_sheet_symbols(schematic) -> list:
+def _all_sheet_symbols(schematic: _SchematicForDependencyScan) -> list[_PlacedSymbol]:
     """Collect facade symbols from every sheet in the implementation hierarchy."""
     try:
         sheets = list(schematic.iter_sheets())
         symbols = [
-            symbol
-            for sheet in sheets
-            for symbol in schematic.for_sheet(sheet).get_symbols()
+            symbol for sheet in sheets for symbol in schematic.for_sheet(sheet).get_symbols()
         ]
     except AttributeError:
         symbols = list(schematic.get_symbols())
     return symbols or list(schematic.get_symbols())
 
 
-def synchronize_block_dependencies(parent, library_roots: list[Path], kicad_cli: str):
+def synchronize_block_dependencies(parent: BlockRecord, library_roots: list[Path], kicad_cli: str) -> DependencySynchronizationResult:
     """Rebuild a block's dependency manifest from its saved default implementation."""
     from kipy import KiCad
 
     from .repository import list_blocks, synchronize_dependencies
 
-    records = [
-        record
-        for library_root in library_roots
-        for record in list_blocks(library_root)
-    ]
+    records = [record for library_root in library_roots for record in list_blocks(library_root)]
     implementation = parent.implementation
     with tempfile.TemporaryDirectory(prefix="kicad-block-netlist-") as temporary:
         netlist_path = Path(temporary) / "implementation.net.xml"
@@ -239,9 +319,7 @@ def synchronize_block_dependencies(parent, library_roots: list[Path], kicad_cli:
                 timeout=120,
             )
         except subprocess.TimeoutExpired as exc:
-            raise RuntimeError(
-                f"KiCad netlist export timed out for {parent.name!r}."
-            ) from exc
+            raise RuntimeError(f"KiCad netlist export timed out for {parent.name!r}.") from exc
         if result.returncode != 0 or not netlist_path.is_file():
             detail = (result.stderr or result.stdout).strip()
             raise RuntimeError(
@@ -259,13 +337,12 @@ def synchronize_block_dependencies(parent, library_roots: list[Path], kicad_cli:
     try:
         schematic = kicad.get_schematic()
         if schematic is None:
-            raise RuntimeError(
-                f"KiCad could not open {parent.name!r} for dependency discovery."
-            )
+            raise RuntimeError(f"KiCad could not open {parent.name!r} for dependency discovery.")
+        typed_schematic = cast(_SchematicForDependencyScan, schematic)
         occurrences = discover_block_dependencies(
             parent,
             records,
-            _all_sheet_symbols(schematic),
+            _all_sheet_symbols(typed_schematic),
             netlist,
         )
     finally:

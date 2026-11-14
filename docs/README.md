@@ -33,6 +33,11 @@ Read these pages to understand why KiCad Blocks behaves as it does.
 - [STUSB4500 example](../examples/stusb4500/README.md) — a datasheet-derived editable circuit and its generated evidence.
 - [Changelog](../CHANGELOG.md) — version history and changes not yet assigned to a release.
 
+## Developer quality reference
+
+- [Test inventory](developers/TEST_INVENTORY.md) — every pytest case and standalone acceptance runner, with its purpose and invocation context.
+- [Repository quality audit](developers/REPOSITORY_AUDIT.md) — test-overlap decisions, annotation policy, and conservative dead-code review findings.
+
 ## Contribute
 
 The [contributor guide](contributing.md) describes the documentation structure, editorial conventions, and validation checks. When product behavior changes, update the relevant guide in the same pull request as the code.
