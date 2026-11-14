@@ -2327,7 +2327,43 @@ def _edit_facade_symbol(
     wayland = bool(os.environ.get("WAYLAND_DISPLAY")) or (
         os.environ.get("XDG_SESSION_TYPE", "").casefold() == "wayland"
     )
+    executable = None if wayland else (xdotool or shutil.which("xdotool"))
     initial_symbol_editor = None
+    if executable:
+        # Snapshot the editor state before invoking an action. An already-open
+        # Symbol Editor may not have its tree filter focused; never type into it
+        # or disturb unsaved edits just because its title contains our symbol.
+        existing = command_runner(
+            [executable, "search", "--onlyvisible", "--name", "Symbol Editor"],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=5,
+        )
+        for candidate in reversed(
+            [
+                item.strip()
+                for item in str(getattr(existing, "stdout", "") or "").splitlines()
+                if item.strip()
+            ]
+        ):
+            title = command_runner(
+                [executable, "getwindowname", candidate],
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=5,
+            )
+            if "symbol editor" in str(getattr(title, "stdout", "") or "").casefold():
+                initial_symbol_editor = candidate
+                break
+    if initial_symbol_editor is not None:
+        LOG.info(
+            "Symbol Editor is already open; leaving its current edit state untouched for %s",
+            lib_id,
+        )
+        return False
+
     action_started = False
     action_error = None
     run_action = getattr(kicad, "run_action", None)
@@ -2386,7 +2422,6 @@ def _edit_facade_symbol(
         # portable public API for querying another application's window title.
         return True
 
-    executable = xdotool or shutil.which("xdotool")
     if not executable:
         if action_started:
             return False
@@ -2423,8 +2458,7 @@ def _edit_facade_symbol(
                 return window_id
         return None
 
-    initial_symbol_editor = visible_symbol_editor()
-    symbol_editor_id = initial_symbol_editor
+    symbol_editor_id = None
     deadline = time.monotonic() + 5.0
     while time.monotonic() < deadline:
         symbol_editor_id = visible_symbol_editor()
