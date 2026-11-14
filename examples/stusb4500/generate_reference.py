@@ -910,7 +910,7 @@ def generate_reference_schematic(destination: Path) -> Path:
         "VBUS MONITOR / FILTER", 55.88, "vbus-monitor",
     ))
     rules.extend(_functional_block(
-        218.44, 86.36, 292.10, 160.02,
+        215.90, 86.36, 292.10, 160.02,
         "STUSB4500 CONTROLLER", 53.34, "controller",
     ))
     rules.extend(_functional_block(

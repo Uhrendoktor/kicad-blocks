@@ -400,6 +400,20 @@ class STUSB4500ReferenceTests(unittest.TestCase):
             "D4.1 and R1.1 are the two reused labels on the wired filtered rail",
         )
         self.assertEqual(float(_direct(instances["D4"], "at")[3]), 180.0)
+        sense_labels = [
+            node for node in _all(tree, "label")
+            if len(node) > 1 and str(node[1]) == "VBUS_VS_DISCH"
+        ]
+        self.assertIn(
+            (194.310, 127.000),
+            {
+                (
+                    round(float(_direct(label, "at")[1]), 3),
+                    round(float(_direct(label, "at")[2]), 3),
+                )
+                for label in sense_labels
+            },
+        )
         for segment in (
             '(wire (pts (xy 163.830 111.760) (xy 172.720 111.760))',
             '(wire (pts (xy 172.720 111.760) (xy 185.420 111.760))',
@@ -548,7 +562,7 @@ class STUSB4500ReferenceTests(unittest.TestCase):
             ))
         bounds = {frame[0]: frame for frame in frames}
         self.assertAlmostEqual(bounds["vbus-monitor"][3], 213.360, places=3)
-        self.assertAlmostEqual(bounds["controller"][1], 218.440, places=3)
+        self.assertAlmostEqual(bounds["controller"][1], 215.900, places=3)
         for index, first in enumerate(frames):
             for second in frames[index + 1:]:
                 overlap_x = min(first[3], second[3]) - max(first[1], second[1])
@@ -561,7 +575,16 @@ class STUSB4500ReferenceTests(unittest.TestCase):
 
     def test_r55_ground_label_stub_does_not_cross_u1_cc2_pin4(self) -> None:
         with tempfile.TemporaryDirectory(prefix="stusb4500-u1-gnd-cc2-") as temporary:
-            _content, tree, _instances = self._generate(temporary)
+            content, tree, instances = self._generate(temporary)
+        self.assertIn(
+            '(wire (pts (xy 231.140 119.380) (xy 223.520 119.380))',
+            content,
+        )
+        self.assertIn(
+            '(wire (pts (xy 223.520 119.380) (xy 223.520 121.920))',
+            content,
+        )
+        self.assertAlmostEqual(float(_direct(instances["R55"], "at")[1]), 223.520, places=3)
 
         ground_pin = (223.520, 130.810)
         ground_stubs = []
