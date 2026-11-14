@@ -272,9 +272,16 @@ def _pin_world_info(tree: list) -> dict[tuple[str, str], dict]:
     """Resolve every component pin to a sheet coordinate and outward angle."""
     lib_symbols = _direct(tree, "lib_symbols")
     library = {}
+    def descendants(node):
+        for child in node[1:]:
+            if not isinstance(child, list):
+                continue
+            yield child
+            yield from descendants(child)
+
     if lib_symbols is not None:
-        for node in lib_symbols[1:]:
-            if isinstance(node, list) and _head(node) == "symbol" and len(node) > 1:
+        for node in _all(lib_symbols, "symbol"):
+            if len(node) > 1:
                 library[str(node[1])] = node
 
     result = {}
@@ -287,7 +294,9 @@ def _pin_world_info(tree: list) -> dict[tuple[str, str], dict]:
             continue
         sx, sy, rotation = float(at[1]), float(at[2]), int(float(at[3]))
         seen = set()
-        for pin in _all(definition, "pin"):
+        for pin in descendants(definition):
+            if _head(pin) != "pin":
+                continue
             number_node, pin_at = _direct(pin, "number"), _direct(pin, "at")
             if number_node is None or pin_at is None:
                 continue
