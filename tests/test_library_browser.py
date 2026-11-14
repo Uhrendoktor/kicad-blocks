@@ -179,6 +179,7 @@ class LibraryBrowserTests(unittest.TestCase):
                 project_catalog,
                 source_symbol,
                 self.block.manifest["symbol_name"],
+                shared_catalog_file=self.block.symbol_library,
                 baseline_digest=self.block.manifest["catalog_symbol_hash"],
             )
         )
@@ -209,6 +210,7 @@ class LibraryBrowserTests(unittest.TestCase):
                 project_catalog,
                 source_symbol,
                 self.block.manifest["symbol_name"],
+                shared_catalog_file=self.block.symbol_library,
                 baseline_digest=self.block.manifest["catalog_symbol_hash"],
             )
         )
@@ -224,8 +226,48 @@ class LibraryBrowserTests(unittest.TestCase):
                 project_catalog,
                 source_symbol,
                 self.block.manifest["symbol_name"],
+                shared_catalog_file=self.block.symbol_library,
                 baseline_digest=self.block.manifest["catalog_symbol_hash"],
             )
+        )
+
+    def test_project_catalog_sync_uses_a_changed_shared_library_symbol(self):
+        project_catalog = self.root / "project" / "KBlocks.kicad_sym"
+        merge_symbol_catalog(
+            project_catalog.parent,
+            self.block.path / self.block.manifest["symbol_file"],
+        )
+        merge_symbol_catalog(
+            project_catalog.parent,
+            self.filter_block.path / self.filter_block.manifest["symbol_file"],
+        )
+        shared_catalog = self.block.symbol_library
+        shared_text = shared_catalog.read_text(encoding="utf-8")
+        self.assertIn('"Buck Converter"', shared_text)
+        shared_catalog.write_text(
+            shared_text.replace(
+                '"Buck Converter"', '"Shared Library Facade"', 1
+            ),
+            encoding="utf-8",
+        )
+        block_symbol = self.block.path / self.block.manifest["symbol_file"]
+
+        self.assertTrue(
+            synchronize_project_symbol_catalog(
+                project_catalog,
+                block_symbol,
+                self.block.manifest["symbol_name"],
+                shared_catalog_file=shared_catalog,
+                baseline_digest=self.block.manifest["catalog_symbol_hash"],
+            )
+        )
+        self.assertIn(
+            '"Shared Library Facade"',
+            project_catalog.read_text(encoding="utf-8"),
+        )
+        self.assertNotIn(
+            '"Shared Library Facade"',
+            block_symbol.read_text(encoding="utf-8"),
         )
 
     def test_project_catalog_sync_preserves_a_project_local_facade_edit(self):
@@ -257,6 +299,7 @@ class LibraryBrowserTests(unittest.TestCase):
                 project_catalog,
                 source_symbol,
                 self.block.manifest["symbol_name"],
+                shared_catalog_file=self.block.symbol_library,
                 baseline_digest=self.block.manifest["catalog_symbol_hash"],
             )
         )
