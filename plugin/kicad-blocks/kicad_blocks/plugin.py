@@ -26,8 +26,8 @@ if TYPE_CHECKING:
     from tkinter import filedialog, messagebox, simpledialog, ttk
 
     from google.protobuf.message import Message
-    from kipy.geometry import Vector2
     from kipy.common_types import KIID, Commit
+    from kipy.geometry import Vector2
     from kipy.proto.common.types import DocumentSpecifier
 else:
     tk = None
