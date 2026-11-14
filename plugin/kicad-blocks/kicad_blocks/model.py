@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+from pathlib import Path
 import re
 import unicodedata
 import uuid
@@ -32,6 +33,7 @@ class BlockPin:
     number: str = ""
 
     def as_manifest(self, index: int) -> dict[str, str]:
+        """Return this pin's stable, numbered manifest representation."""
         return {
             "name": self.name,
             "number": self.number or str(index),
@@ -664,6 +666,7 @@ def render_implementation_schematic(
 
 
 def sha256_file(path: Path) -> str:
+    """Return the SHA-256 hex digest of a file's complete byte contents."""
     digest = hashlib.sha256()
     with open(path, "rb") as stream:
         for chunk in iter(lambda: stream.read(1024 * 1024), b""):
@@ -672,5 +675,6 @@ def sha256_file(path: Path) -> str:
 
 
 def revision_for_hashes(hashes: dict[str, str]) -> str:
+    """Create a stable revision identifier from sorted asset digests."""
     payload = json.dumps(hashes, sort_keys=True, separators=(",", ":")).encode()
     return hashlib.sha256(payload).hexdigest()
