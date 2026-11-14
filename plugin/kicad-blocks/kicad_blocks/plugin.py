@@ -10,7 +10,6 @@ import re
 import shutil
 import subprocess
 import tempfile
-import time
 from pathlib import Path
 
 # The core block model and IPC helpers must remain importable in headless
@@ -2118,7 +2117,7 @@ def _edit_facade_symbol(
 
     run_action = getattr(kicad, "run_action", None)
     if not callable(run_action):
-        raise RuntimeError("This KiCad IPC binding does not expose native editor actions. Update KiCad and kicad-python.")
+        raise TypeError("This KiCad IPC binding does not expose native editor actions. Update KiCad and kicad-python.")
     try:
         response = run_action("common.Control.showSymbolEditor")
     except Exception as exc:
@@ -2211,7 +2210,7 @@ def _start_native_symbol_placement(
         raise ValueError("The selected block has an invalid KiCad symbol name.")
     run_action = getattr(kicad, "run_action", None)
     if not callable(run_action):
-        raise RuntimeError("This KiCad IPC binding does not expose native editor actions. Update KiCad and kicad-python.")
+        raise TypeError("This KiCad IPC binding does not expose native editor actions. Update KiCad and kicad-python.")
     try:
         response = run_action("eeschema.InteractiveDrawing.placeSymbol")
     except Exception as exc:
