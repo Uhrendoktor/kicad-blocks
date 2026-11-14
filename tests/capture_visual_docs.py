@@ -11,20 +11,126 @@ import shutil
 import subprocess
 import sys
 import time
+import tkinter as tk
+from collections.abc import Callable, Iterator
 from pathlib import Path
+from tkinter import ttk
+from typing import Protocol, TypedDict, cast
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "plugin" / "kicad-blocks"))
 
 from kicad_blocks import plugin as plugin_actions
+from kicad_blocks.manifest_types import (
+    BlockLayoutInput,
+    BlockManifest,
+    BlockParameterInput,
+    BlockProfileInput,
+    BlockVariantInput,
+)
 from kicad_blocks.model import parse_pins
-from kicad_blocks.repository import create_block, revision_for_hashes
+from kicad_blocks.repository import BlockRecord, create_block, revision_for_hashes
 
 from scripts.visual_asset_inventory import ASSET_NAMES
 
-sys.path.insert(0, str(ROOT / 'examples' / 'stusb4500'))
+sys.path.insert(0, str(ROOT / "examples" / "stusb4500"))
 from generate_reference import generate_reference_schematic
+
+
+class PlacementSelection(TypedDict):
+    """Resolved profile and implementation selected for a visual placement fixture."""
+
+    record: BlockRecord
+    variant: str
+    profile: str
+    parameters: dict[str, str]
+    layout: str
+
+
+class LayoutDialogResult(TypedDict):
+    """Validated result returned by the production PCB layout details dialog."""
+
+    name: str
+    source: str
+    linked_implementation: str
+
+
+class _SchematicFixture(Protocol):
+    """Minimal schematic adapter accepted by the production block browser."""
+
+    def get_selection(self) -> list[tk.Misc]: ...
+
+
+class _KiCadFixture(Protocol):
+    """Empty structural adapter for a browser whose actions are not invoked."""
+
+
+class _PluginActions(Protocol):
+    """Typed view of the production UI helpers exercised by visual capture."""
+
+    configured_library_roots: Callable[[], list[Path]]
+    default_library_root: Callable[[], Path]
+
+    def load_tkinter(self) -> None: ...
+
+class _GifFrameCount(Protocol):
+    """Pillow image surface exposing the animated frame count."""
+
+    n_frames: int
+
+    def close(self) -> None: ...
+
+
+plugin_api = cast(_PluginActions, plugin_actions)
+
+
+def _private_action(name: str) -> Callable[..., None]:
+    """Resolve one production-private UI function without exposing its module symbol."""
+    return cast(Callable[..., None], getattr(plugin_actions, name))
+
+
+configure_tk_theme = cast(
+    Callable[[tk.Misc], None], _private_action("_configure_tk_theme")
+)
+pick_block_for_placement = cast(
+    Callable[[list[BlockRecord], tk.Misc], PlacementSelection | None],
+    _private_action("_pick_block_for_placement"),
+)
+show_library_browser = cast(
+    Callable[
+        [tk.Misc, _SchematicFixture, _KiCadFixture, Path, Path | list[Path], str | None],
+        None,
+    ],
+    _private_action("_show_library_browser"),
+)
+show_library_roots_dialog = cast(
+    Callable[[tk.Misc], bool], _private_action("_show_library_roots_dialog")
+)
+show_action_hub = cast(Callable[[tk.Misc], ttk.Notebook], _private_action("_show_action_hub"))
+show_block_variant_editor = cast(
+    Callable[[BlockRecord, tk.Misc], Path | None],
+    _private_action("_show_block_variant_editor"),
+)
+show_block_layout_editor = cast(
+    Callable[[BlockRecord, tk.Misc], bool | None],
+    _private_action("_show_block_layout_editor"),
+)
+ask_layout_details = cast(
+    Callable[[tk.Misc, BlockRecord], LayoutDialogResult | None],
+    _private_action("_ask_layout_details"),
+)
+ask_implementation_details = cast(
+    Callable[..., tuple[str, str] | None],
+    _private_action("_ask_implementation_details"),
+)
+ask_create_block_details = cast(
+    Callable[[tk.Misc, Path], tuple[str, str] | None],
+    _private_action("_ask_create_block_details"),
+)
+
+type _ModalResult = Path | tuple[str, str] | LayoutDialogResult | bool | None
+type _ModalPreparationResult = None | tuple[None, None]
 
 
 def find_executable(*names: str) -> str:
@@ -35,7 +141,8 @@ def find_executable(*names: str) -> str:
     raise FileNotFoundError(f"Missing executable; tried: {', '.join(names)}")
 
 
-def walk_widgets(widget):
+def walk_widgets(widget: tk.Misc) -> Iterator[tk.Misc]:
+    """Yield a Tk widget and all of its descendants in display-tree order."""
     yield widget
     for child in widget.winfo_children():
         yield from walk_widgets(child)
@@ -52,7 +159,10 @@ def window_id(xdotool: str, title: str = "Place Functional Block") -> str | None
     for candidate in dict.fromkeys(candidates):
         result = subprocess.run(
             [xdotool, "search", "--onlyvisible", "--name", candidate],
-            capture_output=True, text=True, check=False, timeout=5,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=5,
         )
         ids = [line for line in result.stdout.splitlines() if line.strip().isdigit()]
         if ids:
@@ -71,16 +181,21 @@ def capture_window(
 
     geometry = subprocess.run(
         [xdotool, "getwindowgeometry", "--shell", identifier],
-        capture_output=True, text=True, check=True, timeout=5,
+        capture_output=True,
+        text=True,
+        check=True,
+        timeout=5,
     ).stdout
-    values = {}
+    values: dict[str, int] = {}
     for line in geometry.splitlines():
         if "=" in line:
             key, value = line.split("=", 1)
             values[key] = int(value)
     bbox = (
-        values["X"], values["Y"],
-        values["X"] + values["WIDTH"], values["Y"] + values["HEIGHT"],
+        values["X"],
+        values["Y"],
+        values["X"] + values["WIDTH"],
+        values["Y"] + values["HEIGHT"],
     )
     image = ImageGrab.grab(bbox=bbox)
     if image.width < minimum_size[0] or image.height < minimum_size[1]:
@@ -91,16 +206,15 @@ def capture_window(
     image.save(destination, format="PNG")
 
 
-def capture_picker(records, output_dir: Path) -> dict:
+def capture_picker(records: list[BlockRecord], output_dir: Path) -> PlacementSelection:
     """Capture initial, filtered and profile-selected states of the production chooser."""
     from PIL import Image, ImageStat
 
     xdotool = find_executable("xdotool")
-    plugin_actions._load_tkinter()
-    tk = plugin_actions.tk
+    plugin_api.load_tkinter()
     parent = tk.Tk()
     parent.title("KiCad Blocks visual fixture host")
-    plugin_actions._configure_tk_theme(parent)
+    configure_tk_theme(parent)
     parent.geometry("320x100+10+10")
     parent.update()
 
@@ -123,7 +237,8 @@ def capture_picker(records, output_dir: Path) -> dict:
                 raise TimeoutError("The Place Functional Block chooser did not appear.")
             dialog = next(
                 (
-                    child for child in parent.winfo_children()
+                    child
+                    for child in parent.winfo_children()
                     if isinstance(child, tk.Toplevel) and child.title() == "Place Functional Block"
                 ),
                 None,
@@ -138,10 +253,18 @@ def capture_picker(records, output_dir: Path) -> dict:
             dialog.update()
             capture_window(xdotool, identifier, frame_paths[0])
             widgets = list(walk_widgets(dialog))
-            entries = [item for item in widgets if item.winfo_class() in ("TEntry", "Entry")]
-            combos = [item for item in widgets if item.winfo_class() == "TCombobox"]
+            entries = [
+                cast(tk.Entry | ttk.Entry, item)
+                for item in widgets
+                if item.winfo_class() in ("TEntry", "Entry")
+            ]
+            combos = [
+                cast(ttk.Combobox, item) for item in widgets if item.winfo_class() == "TCombobox"
+            ]
             if not entries or len(combos) < 2:
-                raise RuntimeError(f"Unexpected chooser controls: entries={len(entries)}, combos={len(combos)}")
+                raise RuntimeError(
+                    f"Unexpected chooser controls: entries={len(entries)}, combos={len(combos)}"
+                )
 
             entries[0].delete(0, "end")
             entries[0].insert(0, "usb")
@@ -152,19 +275,22 @@ def capture_picker(records, output_dir: Path) -> dict:
             combos[1].event_generate("<<ComboboxSelected>>")
             dialog.update()
             if combos[0].get() != "5V":
-                raise AssertionError(f"Profile did not select the 5V implementation: {combos[0].get()!r}")
+                raise AssertionError(
+                    f"Profile did not select the 5V implementation: {combos[0].get()!r}"
+                )
             capture_window(xdotool, identifier, frame_paths[2])
 
-            place = next(
+            place_widget = next(
                 (
-                    item for item in widgets
+                    item
+                    for item in widgets
                     if item.winfo_class() == "TButton" and item.cget("text") == "Place Block"
                 ),
                 None,
             )
-            if place is None:
+            if place_widget is None:
                 raise RuntimeError("The Place Block button is missing.")
-            place.invoke()
+            cast(ttk.Button, place_widget).invoke()
             completed[0] = True
         except (
             AssertionError,
@@ -187,7 +313,7 @@ def capture_picker(records, output_dir: Path) -> dict:
 
     parent.after(250, drive)
     try:
-        selected = plugin_actions._pick_block_for_placement(records, parent)
+        selected = pick_block_for_placement(records, parent)
     finally:
         parent.destroy()
 
@@ -205,14 +331,12 @@ def capture_picker(records, output_dir: Path) -> dict:
 
     for path in frame_paths:
         with Image.open(path) as image:
-            sample = image.convert("RGB").resize((48, 32))
+            sample = cast(Image.Image, image.convert("RGB").resize((48, 32)))
             if max(ImageStat.Stat(sample).stddev) < 2.0:
                 raise AssertionError(f"Screenshot appears blank or uniform: {path.name}")
     if len({hashlib.sha256(path.read_bytes()).hexdigest() for path in frame_paths}) != 3:
         raise AssertionError("The three chooser states were not captured as distinct images.")
     return selected
-
-
 
 
 def _capture_visible_window(
@@ -226,37 +350,30 @@ def _capture_visible_window(
     if identifier is None:
         raise TimeoutError(f"Window {title!r} was not visible for capture.")
     time.sleep(0.3)
-    capture_window(
-        xdotool, identifier, destination, minimum_size=minimum_size
-    )
+    capture_window(xdotool, identifier, destination, minimum_size=minimum_size)
 
 
 def _capture_modal(
-    parent,
-    opener,
+    parent: tk.Misc,
+    opener: Callable[[], _ModalResult],
     title: str,
     destination: Path,
     xdotool: str,
     *,
     minimum_size: tuple[int, int] = (600, 400),
-    prepare=None,
+    prepare: Callable[[tk.Toplevel], _ModalPreparationResult] | None = None,
 ) -> None:
     """Capture a real modal window and close it without invoking an action."""
     errors: list[str] = []
     existing_windows = {
-        child.winfo_id()
-        for child in parent.winfo_children()
-        if isinstance(child, plugin_actions.tk.Toplevel)
+        child.winfo_id() for child in parent.winfo_children() if isinstance(child, tk.Toplevel)
     }
 
     def capture_and_close() -> None:
         dialog = None
         try:
             parent.update_idletasks()
-            windows = [
-                child for child in parent.winfo_children()
-                if isinstance(child, plugin_actions.tk.Toplevel)
-            ]
+            windows = [child for child in parent.winfo_children() if isinstance(child, tk.Toplevel)]
             dialog = next(
                 (child for child in windows if child.title() == title),
                 None,
@@ -265,23 +382,16 @@ def _capture_modal(
                 # A stale expected title must not strand opener() inside
                 # wait_window(). Close the new modal and report the mismatch.
                 dialog = next(
-                    (
-                        child for child in windows
-                        if child.winfo_id() not in existing_windows
-                    ),
+                    (child for child in windows if child.winfo_id() not in existing_windows),
                     None,
                 )
                 actual_title = dialog.title() if dialog is not None else "no new Tk modal"
-                raise RuntimeError(
-                    f"Expected modal {title!r}, but Tk created {actual_title!r}."
-                )
+                raise RuntimeError(f"Expected modal {title!r}, but Tk created {actual_title!r}.")
             if prepare is not None:
                 prepare(dialog)
             dialog.update_idletasks()
             dialog.update()
-            _capture_visible_window(
-                xdotool, title, destination, minimum_size=minimum_size
-            )
+            _capture_visible_window(xdotool, title, destination, minimum_size=minimum_size)
         except (
             ImportError,
             KeyError,
@@ -289,14 +399,14 @@ def _capture_modal(
             RuntimeError,
             subprocess.SubprocessError,
             TimeoutError,
-            plugin_actions.tk.TclError,
+            tk.TclError,
             TypeError,
             ValueError,
         ) as exc:
             errors.append(f"{type(exc).__name__}: {exc}")
         finally:
             if dialog is not None:
-                with contextlib.suppress(plugin_actions.tk.TclError):
+                with contextlib.suppress(tk.TclError):
                     dialog.destroy()
 
     parent.after(400, capture_and_close)
@@ -305,25 +415,23 @@ def _capture_modal(
         raise RuntimeError(f"Could not capture {title!r}: {errors[0]}")
 
 
-def _make_themed_root(theme: str, title: str):
-    plugin_actions._load_tkinter()
-    root = plugin_actions.tk.Tk()
+def _make_themed_root(theme: str, title: str) -> tk.Tk:
+    plugin_api.load_tkinter()
+    root = tk.Tk()
     os.environ["KICAD_BLOCKS_THEME"] = theme
-    plugin_actions._configure_tk_theme(root)
+    configure_tk_theme(root)
     root.title(title)
     root.update_idletasks()
     root.update()
     return root
 
 
-def _select_default_implementation(dialog) -> None:
-    tree = next(
-        (
-            widget for widget in walk_widgets(dialog)
-            if widget.winfo_class() == "Treeview"
-        ),
+def _select_default_implementation(dialog: tk.Toplevel) -> None:
+    tree_widget = next(
+        (widget for widget in walk_widgets(dialog) if widget.winfo_class() == "Treeview"),
         None,
     )
+    tree = cast(ttk.Treeview, tree_widget) if tree_widget is not None else None
     if tree is None or "0" not in tree.get_children():
         raise RuntimeError("The implementations dialog does not contain its Default row.")
     tree.selection_set("0")
@@ -333,7 +441,8 @@ def _select_default_implementation(dialog) -> None:
     dialog.update()
 
     buttons = [
-        widget for widget in walk_widgets(dialog)
+        cast(ttk.Button, widget)
+        for widget in walk_widgets(dialog)
         if widget.winfo_class() == "TButton"
         and widget.cget("text") in {"Edit default", "Edit variant"}
     ]
@@ -343,19 +452,17 @@ def _select_default_implementation(dialog) -> None:
     )
     if edit_button is None or not edit_button.instate(["!disabled"]):
         selection = tree.selection()
-        state = [
-            (widget.cget("text"), widget.cget("state"))
-            for widget in buttons
-        ]
+        state = [(widget.cget("text"), widget.cget("state")) for widget in buttons]
         raise RuntimeError(
             "The Default row edit action is unavailable: "
             f"rows={tree.get_children()!r}, selection={selection!r}, buttons={state!r}."
         )
 
 
-def _select_existing_pcb_file(dialog) -> None:
+def _select_existing_pcb_file(dialog: tk.Toplevel) -> None:
     combos = [
-        widget for widget in walk_widgets(dialog)
+        cast(ttk.Combobox, widget)
+        for widget in walk_widgets(dialog)
         if widget.winfo_class() == "TCombobox"
     ]
     if len(combos) < 2:
@@ -364,16 +471,19 @@ def _select_existing_pcb_file(dialog) -> None:
     combos[0].event_generate("<<ComboboxSelected>>")
     dialog.update_idletasks()
     fields = [
-        widget for widget in walk_widgets(dialog)
+        cast(tk.Entry | ttk.Entry, widget)
+        for widget in walk_widgets(dialog)
         if widget.winfo_class() in {"TEntry", "Entry"}
     ]
-    choose_button = next(
+    choose_widget = next(
         (
-            widget for widget in walk_widgets(dialog)
+            widget
+            for widget in walk_widgets(dialog)
             if widget.winfo_class() == "TButton" and widget.cget("text") == "Choose file…"
         ),
         None,
     )
+    choose_button = cast(ttk.Button, choose_widget) if choose_widget is not None else None
     if (
         len(fields) < 2
         or not fields[1].winfo_ismapped()
@@ -383,7 +493,7 @@ def _select_existing_pcb_file(dialog) -> None:
         raise RuntimeError("Selecting an existing PCB file did not reveal its file picker.")
 
 
-def _assert_layout_manager_footer(dialog) -> None:
+def _assert_layout_manager_footer(dialog: tk.Toplevel) -> None:
     labels = {"Save layouts", "Cancel"}
     visible = {
         widget.cget("text")
@@ -392,29 +502,38 @@ def _assert_layout_manager_footer(dialog) -> None:
     }
     missing = sorted(labels - visible)
     if missing:
-        raise RuntimeError("PCB layout manager footer buttons are not visible: " + ", ".join(missing))
+        raise RuntimeError(
+            "PCB layout manager footer buttons are not visible: " + ", ".join(missing)
+        )
 
 
-def _assert_blank_pcb_file_picker_hidden(dialog) -> None:
+def _assert_blank_pcb_file_picker_hidden(dialog: tk.Toplevel) -> None:
     fields = [
-        widget for widget in walk_widgets(dialog)
+        cast(tk.Entry | ttk.Entry, widget)
+        for widget in walk_widgets(dialog)
         if widget.winfo_class() in {"TEntry", "Entry"}
     ]
-    choose_button = next(
+    choose_widget = next(
         (
-            widget for widget in walk_widgets(dialog)
+            widget
+            for widget in walk_widgets(dialog)
             if widget.winfo_class() == "TButton" and widget.cget("text") == "Choose file…"
         ),
         None,
     )
-    if len(fields) < 2 or fields[1].winfo_ismapped() or (
-        choose_button is not None and choose_button.winfo_ismapped()
+    choose_button = cast(ttk.Button, choose_widget) if choose_widget is not None else None
+    if (
+        len(fields) < 2
+        or fields[1].winfo_ismapped()
+        or (choose_button is not None and choose_button.winfo_ismapped())
     ):
-        raise RuntimeError("The blank-board mode should hide its PCB file entry and Choose file button.")
+        raise RuntimeError(
+            "The blank-board mode should hide its PCB file entry and Choose file button."
+        )
     _assert_add_layout_footer(dialog)
 
 
-def _assert_add_layout_footer(dialog) -> None:
+def _assert_add_layout_footer(dialog: tk.Toplevel) -> None:
     labels = {"Add layout", "Cancel"}
     visible = {
         widget.cget("text")
@@ -426,28 +545,28 @@ def _assert_add_layout_footer(dialog) -> None:
         raise RuntimeError("Add PCB layout footer buttons are not visible: " + ", ".join(missing))
 
 
-def capture_ui_workflows(library_roots, record, project_dir: Path, output_dir: Path) -> None:
+def capture_ui_workflows(
+    library_roots: list[Path], record: BlockRecord, project_dir: Path, output_dir: Path
+) -> None:
     """Export actual app windows, using the same theme initialization as run_action."""
     from types import SimpleNamespace
 
     xdotool = find_executable("xdotool")
     original_theme = os.environ.get("KICAD_BLOCKS_THEME")
     original_library_override = os.environ.pop("KICAD_BLOCKS_LIBRARY", None)
-    original_configured_roots = plugin_actions.configured_library_roots
-    original_default_root = plugin_actions.default_library_root
+    original_configured_roots = plugin_api.configured_library_roots
+    original_default_root = plugin_api.default_library_root
     roots = [Path(item).resolve() for item in library_roots]
-    plugin_actions.configured_library_roots = lambda: roots
-    plugin_actions.default_library_root = lambda: roots[0]
-    schematic = SimpleNamespace(get_selection=list)
-    kicad = SimpleNamespace()
+    plugin_api.configured_library_roots = lambda: roots
+    plugin_api.default_library_root = lambda: roots[0]
+    schematic = cast(_SchematicFixture, SimpleNamespace(get_selection=list))
+    kicad = cast(_KiCadFixture, SimpleNamespace())
 
     try:
         for theme in ("light", "dark"):
             root = _make_themed_root(theme, "Functional Block Library")
             try:
-                plugin_actions._show_library_browser(
-                    root, schematic, kicad, project_dir, roots, "0x1"
-                )
+                show_library_browser(root, schematic, kicad, project_dir, roots, "0x1")
                 root.update_idletasks()
                 root.update()
                 _capture_visible_window(
@@ -457,7 +576,8 @@ def capture_ui_workflows(library_roots, record, project_dir: Path, output_dir: P
                     minimum_size=(1000, 650),
                 )
                 browser_entries = [
-                    widget for widget in walk_widgets(root)
+                    cast(tk.Entry | ttk.Entry, widget)
+                    for widget in walk_widgets(root)
                     if widget.winfo_class() in {"TEntry", "Entry"}
                 ]
                 if not browser_entries:
@@ -474,7 +594,7 @@ def capture_ui_workflows(library_roots, record, project_dir: Path, output_dir: P
                 )
                 _capture_modal(
                     root,
-                    lambda target=root: plugin_actions._show_library_roots_dialog(target),
+                    lambda target=root: show_library_roots_dialog(target),
                     "Manage Libraries",
                     output_dir / f"library-folders-{theme}.png",
                     xdotool,
@@ -486,7 +606,7 @@ def capture_ui_workflows(library_roots, record, project_dir: Path, output_dir: P
 
             root = _make_themed_root(theme, "KiCad Blocks — Tasks")
             try:
-                notebook = plugin_actions._show_action_hub(root)
+                notebook = show_action_hub(root)
                 root.update_idletasks()
                 root.update()
                 _capture_visible_window(
@@ -497,9 +617,7 @@ def capture_ui_workflows(library_roots, record, project_dir: Path, output_dir: P
                 )
                 tabs = notebook.tabs()
                 if len(tabs) != 3:
-                    raise RuntimeError(
-                        f"Expected all three task-hub tabs, found {len(tabs)}."
-                    )
+                    raise RuntimeError(f"Expected all three task-hub tabs, found {len(tabs)}.")
                 for index, suffix in ((1, "edit-maintain"), (2, "checks-pcb")):
                     notebook.select(tabs[index])
                     root.update_idletasks()
@@ -542,7 +660,7 @@ def capture_ui_workflows(library_roots, record, project_dir: Path, output_dir: P
             try:
                 _capture_modal(
                     root,
-                    lambda target=root: plugin_actions._show_block_variant_editor(record, target),
+                    lambda target=root: show_block_variant_editor(record, target),
                     f"Implementations — {record.name}",
                     output_dir / f"implementation-variants-{theme}.png",
                     xdotool,
@@ -551,7 +669,7 @@ def capture_ui_workflows(library_roots, record, project_dir: Path, output_dir: P
                 )
                 _capture_modal(
                     root,
-                    lambda target=root: plugin_actions._show_block_layout_editor(record, target),
+                    lambda target=root: show_block_layout_editor(record, target),
                     f"PCB layouts — {record.name}",
                     output_dir / f"pcb-layout-manager-{theme}.png",
                     xdotool,
@@ -563,7 +681,7 @@ def capture_ui_workflows(library_roots, record, project_dir: Path, output_dir: P
                 )
                 _capture_modal(
                     root,
-                    lambda target=root: plugin_actions._ask_layout_details(target, record),
+                    lambda target=root: ask_layout_details(target, record),
                     "Add PCB layout",
                     output_dir / f"add-pcb-layout-blank-{theme}.png",
                     xdotool,
@@ -572,7 +690,7 @@ def capture_ui_workflows(library_roots, record, project_dir: Path, output_dir: P
                 )
                 _capture_modal(
                     root,
-                    lambda target=root: plugin_actions._ask_layout_details(target, record),
+                    lambda target=root: ask_layout_details(target, record),
                     "Add PCB layout",
                     output_dir / f"add-pcb-layout-file-{theme}.png",
                     xdotool,
@@ -581,7 +699,7 @@ def capture_ui_workflows(library_roots, record, project_dir: Path, output_dir: P
                 )
                 _capture_modal(
                     root,
-                    lambda target=root: plugin_actions._ask_implementation_details(
+                    lambda target=root: ask_implementation_details(
                         target,
                         value="5V",
                         source=str(record.implementation),
@@ -593,7 +711,7 @@ def capture_ui_workflows(library_roots, record, project_dir: Path, output_dir: P
                 )
                 _capture_modal(
                     root,
-                    lambda target=root: plugin_actions._ask_create_block_details(
+                    lambda target=root: ask_create_block_details(
                         target, Path("stusb4500_reference.kicad_sch")
                     ),
                     "Create Functional Block",
@@ -604,8 +722,8 @@ def capture_ui_workflows(library_roots, record, project_dir: Path, output_dir: P
             finally:
                 root.destroy()
     finally:
-        plugin_actions.configured_library_roots = original_configured_roots
-        plugin_actions.default_library_root = original_default_root
+        plugin_api.configured_library_roots = original_configured_roots
+        plugin_api.default_library_root = original_default_root
         if original_theme is None:
             os.environ.pop("KICAD_BLOCKS_THEME", None)
         else:
@@ -614,14 +732,12 @@ def capture_ui_workflows(library_roots, record, project_dir: Path, output_dir: P
             os.environ["KICAD_BLOCKS_LIBRARY"] = original_library_override
 
 
-def _select_first_table_row(dialog) -> None:
-    tree = next(
-        (
-            widget for widget in walk_widgets(dialog)
-            if widget.winfo_class() == "Treeview"
-        ),
+def _select_first_table_row(dialog: tk.Toplevel) -> None:
+    tree_widget = next(
+        (widget for widget in walk_widgets(dialog) if widget.winfo_class() == "Treeview"),
         None,
     )
+    tree = cast(ttk.Treeview, tree_widget) if tree_widget is not None else None
     if tree is None or not tree.get_children():
         raise RuntimeError("The table contains no rows to select for the UI capture.")
     first = tree.get_children()[0]
@@ -639,25 +755,33 @@ def build_gif(output_dir: Path) -> None:
     frames = [Image.open(output_dir / name).convert("RGB") for name in names]
     try:
         size = (max(frame.width for frame in frames), max(frame.height for frame in frames))
-        normalized = []
+        normalized: list[Image.Image] = []
         for frame in frames:
             canvas = Image.new("RGB", size, (248, 248, 248))
             canvas.paste(frame, ((size[0] - frame.width) // 2, (size[1] - frame.height) // 2))
             normalized.append(canvas)
         destination = output_dir / "block-picker-workflow.gif"
         normalized[0].save(
-            destination, save_all=True, append_images=normalized[1:],
-            duration=1100, loop=0, optimize=True, disposal=2,
+            destination,
+            save_all=True,
+            append_images=normalized[1:],
+            duration=1100,
+            loop=0,
+            optimize=True,
+            disposal=2,
         )
-        with Image.open(destination) as gif:
+        gif = cast(_GifFrameCount, Image.open(destination))
+        try:
             if gif.n_frames != 3:
                 raise AssertionError(f"Expected three animation frames, found {gif.n_frames}.")
+        finally:
+            gif.close()
     finally:
         for frame in frames:
             frame.close()
 
 
-def render_native_svgs(cli: str, record, output_dir: Path) -> None:
+def render_native_svgs(cli: str, record: BlockRecord, output_dir: Path) -> None:
     symbol_dir = output_dir / "_symbol"
     schematic_dir = output_dir / "_schematic"
     symbol_dir.mkdir()
@@ -668,10 +792,20 @@ def render_native_svgs(cli: str, record, output_dir: Path) -> None:
 
     symbol_export = subprocess.run(
         [
-            cli, "sym", "export", "svg", "--symbol", str(record.manifest["symbol_name"]),
-            "--output", str(symbol_dir), str(record.symbol_library),
+            cli,
+            "sym",
+            "export",
+            "svg",
+            "--symbol",
+            str(record.manifest["symbol_name"]),
+            "--output",
+            str(symbol_dir),
+            str(record.symbol_library),
         ],
-        check=False, capture_output=True, text=True, timeout=60,
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=60,
     )
     if symbol_export.returncode:
         raise RuntimeError(
@@ -680,7 +814,10 @@ def render_native_svgs(cli: str, record, output_dir: Path) -> None:
         )
     schematic_export = subprocess.run(
         [cli, "sch", "export", "svg", "--output", str(schematic_dir), str(record.implementation)],
-        check=False, capture_output=True, text=True, timeout=60,
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=60,
     )
     if schematic_export.returncode:
         raise RuntimeError(
@@ -690,7 +827,9 @@ def render_native_svgs(cli: str, record, output_dir: Path) -> None:
     symbols = sorted(symbol_dir.glob("*.svg"))
     schematics = sorted(schematic_dir.glob("*.svg"))
     if len(symbols) != 1 or not schematics:
-        raise RuntimeError(f"KiCad SVG export failed: symbols={len(symbols)}, schematics={len(schematics)}")
+        raise RuntimeError(
+            f"KiCad SVG export failed: symbols={len(symbols)}, schematics={len(schematics)}"
+        )
     shutil.copy2(symbols[0], output_dir / "functional-block-facade.svg")
     shutil.copy2(schematics[0], output_dir / "functional-block-implementation.svg")
     for name in ("functional-block-facade.svg", "functional-block-implementation.svg"):
@@ -715,15 +854,55 @@ def main() -> int:
     with tempfile.TemporaryDirectory(prefix="kicad-blocks-visual-docs-") as temporary:
         library = Path(temporary) / "library"
         sensor = create_block(
-            library, "Sensor Input", parse_pins("SENSOR:input, GND:passive"),
+            library,
+            "Sensor Input",
+            parse_pins("SENSOR:input, GND:passive"),
             description="A second library entry used to demonstrate searchable filtering.",
         )
         reference_source = Path(temporary) / "stusb4500-reference.kicad_sch"
         generate_reference_schematic(reference_source)
         layout_source = Path(temporary) / "stusb4500-reference.kicad_pcb"
         layout_source.write_text("(kicad_pcb)\n", encoding="utf-8")
+        parameters: list[BlockParameterInput] = [
+            {
+                "name": "PDO_CURRENT_A",
+                "type": "number",
+                "default": "2.4",
+                "description": "Current rating of the selected sink PDO in amperes.",
+            }
+        ]
+        variant_files: list[BlockVariantInput] = [
+            {"value": "5V", "path": reference_source},
+            {"value": "9V", "path": reference_source},
+            {"value": "12V", "path": reference_source},
+        ]
+        layout_files: list[BlockLayoutInput] = [{"name": "Reference PCB", "path": layout_source}]
+        profiles: list[BlockProfileInput] = [
+            {
+                "id": "pdo1_5v_2a4",
+                "name": "5 V / 2.4 A (PDO1)",
+                "description": "Datasheet Table 19 example: fixed 5 V sink PDO.",
+                "variant": "5V",
+                "parameters": {"PDO_CURRENT_A": "2.4"},
+            },
+            {
+                "id": "pdo2_9v_1a33",
+                "name": "9 V / 1.33 A (PDO2)",
+                "description": "Datasheet Table 19 example: 9 V sink PDO.",
+                "variant": "9V",
+                "parameters": {"PDO_CURRENT_A": "1.33"},
+            },
+            {
+                "id": "pdo3_12v_1a",
+                "name": "12 V / 1.0 A (PDO3)",
+                "description": "Datasheet Table 19 example: 12 V sink PDO.",
+                "variant": "12V",
+                "parameters": {"PDO_CURRENT_A": "1.0"},
+            },
+        ]
         target = create_block(
-            library, "STUSB4500 USB-PD Sink",
+            library,
+            "STUSB4500 USB-PD Sink",
             parse_pins(
                 "VBUS:input, GND:passive, CC1:bidir, CC2:bidir, VSNK:output, "
                 "SCL:input, SDA:bidir, ALERT#:output, RESET:input, VMCU:input"
@@ -732,37 +911,14 @@ def main() -> int:
                 "STUSB4500QTR USB Type-C PD sink reference circuit based on "
                 "ST DS12499 Rev. 8 Figure 10."
             ),
-            parameters=[{
-                "name": "PDO_CURRENT_A", "type": "number", "default": "2.4",
-                "description": "Current rating of the selected sink PDO in amperes.",
-            }],
-            variant_files=[
-                {"value": "5V", "path": reference_source},
-                {"value": "9V", "path": reference_source},
-                {"value": "12V", "path": reference_source},
-            ],
-            layout_files=[{"name": "Reference PCB", "path": layout_source}],
-            profiles=[
-                {
-                    "id": "pdo1_5v_2a4", "name": "5 V / 2.4 A (PDO1)",
-                    "description": "Datasheet Table 19 example: fixed 5 V sink PDO.",
-                    "variant": "5V", "parameters": {"PDO_CURRENT_A": "2.4"},
-                },
-                {
-                    "id": "pdo2_9v_1a33", "name": "9 V / 1.33 A (PDO2)",
-                    "description": "Datasheet Table 19 example: 9 V sink PDO.",
-                    "variant": "9V", "parameters": {"PDO_CURRENT_A": "1.33"},
-                },
-                {
-                    "id": "pdo3_12v_1a", "name": "12 V / 1.0 A (PDO3)",
-                    "description": "Datasheet Table 19 example: 12 V sink PDO.",
-                    "variant": "12V", "parameters": {"PDO_CURRENT_A": "1.0"},
-                },
-            ],
+            parameters=parameters,
+            variant_files=variant_files,
+            layout_files=layout_files,
+            profiles=profiles,
         )
         shutil.copy2(reference_source, target.implementation)
         manifest_path = target.path / "manifest.json"
-        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest = cast(BlockManifest, json.loads(manifest_path.read_text(encoding="utf-8")))
         manifest["hashes"]["implementation.kicad_sch"] = hashlib.sha256(
             target.implementation.read_bytes()
         ).hexdigest()
@@ -784,13 +940,13 @@ def main() -> int:
         capture_picker([target, sensor], output_dir)
         build_gif(output_dir)
 
-    assets = {}
+    assets: dict[str, str] = {}
     for name in sorted(ASSET_NAMES):
         path = output_dir / name
         if not path.is_file() or not path.stat().st_size:
             raise FileNotFoundError(f"Expected generated asset is missing: {name}")
         assets[name] = hashlib.sha256(path.read_bytes()).hexdigest()
-    manifest = {
+    manifest: dict[str, str | int | dict[str, str]] = {
         "schema_version": 1,
         "source_sha": os.environ.get("GITHUB_SHA", "local"),
         "generator": "tests/capture_visual_docs.py",
@@ -809,7 +965,8 @@ def main() -> int:
         "assets": assets,
     }
     (output_dir / "manifest.json").write_text(
-        json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8",
+        json.dumps(manifest, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
     )
     print(
         f"kicad-visual-docs=passed asset_count={len(assets)} "
