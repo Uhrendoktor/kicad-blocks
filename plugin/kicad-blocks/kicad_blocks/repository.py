@@ -952,7 +952,7 @@ def _layout_configuration(manifest: BlockManifest) -> BlockLayoutConfiguration:
         "layouts": copy.deepcopy(manifest["layouts"]),
         "default_layout": manifest["default_layout"],
         "layout_file": manifest["layout_file"],
-        "layout_project_file": manifest["layout_project_file"],
+        "layout_project_file": manifest.get("layout_project_file"),
     }
     layout_ports = manifest.get("layout_ports")
     if layout_ports is not None:
