@@ -14,9 +14,9 @@ import tempfile
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
+from typing import cast
 
 from platformdirs import user_config_path
-from typing import cast
 
 from .extraction import extract_hierarchical_pins, prepare_block_implementation
 from .manifest_types import (
