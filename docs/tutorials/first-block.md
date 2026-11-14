@@ -1,4 +1,4 @@
-# Create and place your first block
+# Create and inspect your first block
 
 This tutorial takes one existing hierarchical-sheet circuit and turns it into a reusable library block. At the end, the source design remains intact, the library contains a separate implementation, and a consuming project contains one ordinary facade symbol.
 
@@ -49,11 +49,13 @@ The browser can register the selected facade in the consuming project's combined
 
 **Interactive placement limitation:** on the tested KiCad build, the supported schematic IPC API does not expose the operation required to attach the selected library symbol to the interactive placement cursor. The Place block action reports this capability gap; it does not claim a symbol has been placed. See the [compatibility notes](../explanation/compatibility.md).
 
-## 5. Configure one instance
+## 5. Configure an existing placed instance
 
-Select the placed facade and open **KiCad Blocks Tasks → Configure selected instance**.
+When a project already contains a placed facade, select it and open **KiCad Blocks Tasks → Configure selected instance**.
 
 Choose a named profile or set its implementation variant, typed parameter values, and PCB layout. Save the settings. They are written to that placed symbol instance; other instances and the shared library are unchanged.
+
+New interactive placement from the library browser is not available on the tested KiCad build because the supported schematic IPC API lacks the required symbol-to-cursor handoff. See the [compatibility notes](../explanation/compatibility.md#kicad-editor-action-api-boundary).
 
 For the exact instance fields and supported parameter types, see [per-instance fields and parameters](../reference.md#per-instance-fields).
 
