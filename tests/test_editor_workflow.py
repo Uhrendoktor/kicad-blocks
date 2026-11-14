@@ -66,41 +66,20 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
             )
         ]
 
-    def test_edit_facade_uses_native_cross_platform_ipc_action(self):
+    def test_edit_facade_reports_missing_supported_editor_selection_api(self):
         from kicad_blocks.repository import build_project_symbol_catalog
 
         project_catalog = build_project_symbol_catalog(self.project, [self.library])
-        run_action = Mock(return_value=SimpleNamespace(status=1))
-        close_browser = Mock()
-        opened = plugin_actions._edit_facade_symbol(
-            self.block,
-            SimpleNamespace(run_action=run_action),
-            project_catalog=project_catalog,
-            close_browser=close_browser,
-        )
-        self.assertFalse(opened)  # Native editor opened; final tree selection stays in KiCad.
-        run_action.assert_called_once_with("common.Control.showSymbolEditor")
-        close_browser.assert_called_once_with()
-
-    def test_edit_facade_rejects_ipc_action_failure(self):
-        from kicad_blocks.repository import build_project_symbol_catalog
-
-        project_catalog = build_project_symbol_catalog(self.project, [self.library])
-        run_action = Mock(return_value=SimpleNamespace(status=2))
-        with self.assertRaisesRegex(RuntimeError, "RunActionStatus=2"):
+        run_action = Mock()
+        with self.assertRaisesRegex(RuntimeError, "supported KiCad IPC API yet"):
             plugin_actions._edit_facade_symbol(
-                self.block, SimpleNamespace(run_action=run_action), project_catalog=project_catalog
+                self.block,
+                SimpleNamespace(run_action=run_action),
+                project_catalog=project_catalog,
             )
-        run_action.assert_called_once_with("common.Control.showSymbolEditor")
+        run_action.assert_not_called()
 
-    def test_edit_facade_requires_native_ipc_action(self):
-        from kicad_blocks.repository import build_project_symbol_catalog
-
-        project_catalog = build_project_symbol_catalog(self.project, [self.library])
-        with self.assertRaisesRegex(TypeError, "does not expose native editor actions"):
-            plugin_actions._edit_facade_symbol(self.block, SimpleNamespace(), project_catalog=project_catalog)
-
-    def test_edit_facade_validates_exact_catalog_entry_before_opening_editor(self):
+    def test_edit_facade_validates_exact_catalog_entry_before_reporting_capability_gap(self):
         from kicad_blocks.repository import build_project_symbol_catalog
 
         project_catalog = build_project_symbol_catalog(self.project, [self.library])
