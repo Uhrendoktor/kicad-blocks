@@ -2351,9 +2351,22 @@ def _clean_facade_preview_svg(svg_file: Path, record, output_dir: Path) -> Path:
         if view_width > 0 and view_height > 0:
             root.set("width", f"{view_width:g}px")
             root.set("height", f"{view_height:g}px")
-    if not root.attrib.get("width") or not root.attrib.get("height"):
-        root.set("width", "300px")
-        root.set("height", "150px")
+    else:
+        def valid_dimension(value: str | None) -> bool:
+            if not value:
+                return False
+            match = re.fullmatch(
+                r"\s*([+]?(?:\d+(?:\.\d*)?|\.\d+))(?:px|pt|pc|mm|cm|in)?\s*",
+                value,
+                flags=re.IGNORECASE,
+            )
+            return bool(match and float(match.group(1)) > 0)
+
+        if not valid_dimension(root.attrib.get("width")) or not valid_dimension(
+            root.attrib.get("height")
+        ):
+            root.set("width", "300px")
+            root.set("height", "150px")
 
     cleaned_svg = output_dir / "facade-preview.svg"
     ET.ElementTree(root).write(
