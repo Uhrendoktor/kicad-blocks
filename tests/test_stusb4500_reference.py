@@ -342,10 +342,10 @@ class STUSB4500ReferenceTests(unittest.TestCase):
             if str(node[1]) == "STUSB4500 USB-C / POWER DELIVERY SINK"
         )
         self.assertGreater(float(_direct(header_title, "size")[1]), 350.0)
-        self.assertIsNone(_direct(header_title, "stroke"))
+        self.assertEqual(float(_direct(_direct(header_title, "stroke"), "width")[1]), -1.0)
         for caption_text in ("VBUS CLAMP + FILTER", "VBUS_VS_DISCH SENSE DIVIDER"):
             caption = next(node for node in _all(tree, "text_box") if str(node[1]) == caption_text)
-            self.assertIsNone(_direct(caption, "stroke"))
+            self.assertEqual(float(_direct(_direct(caption, "stroke"), "width")[1]), -1.0)
         self.assertIn('(text_box "VSNK OUTPUT"', content)
 
     def test_no_label_glyph_is_replaced_by_a_global_label(self) -> None:
