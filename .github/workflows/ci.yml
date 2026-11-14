@@ -23,6 +23,8 @@ jobs:
     timeout-minutes: 50
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Install KiCad development CLI if missing
         shell: bash
@@ -111,7 +113,7 @@ jobs:
           python3 -m venv "${RUNNER_TEMP}/kicad-blocks-venv"
           PY="${RUNNER_TEMP}/kicad-blocks-venv/bin/python"
           "$PY" -m pip install --upgrade pip
-          "$PY" -m pip install pytest ruff cairosvg pillow
+          "$PY" -m pip install pytest ruff==0.17.2 pyright==1.1.414 hypothesis==6.168.3 cairosvg pillow
           "$PY" --version
           "$PY" -m pip --version
 
@@ -192,7 +194,29 @@ jobs:
 
       - name: Ruff lint
         shell: bash
-        run: "${RUNNER_TEMP}/kicad-blocks-venv/bin/python -m ruff check plugin tests"
+        run: "${RUNNER_TEMP}/kicad-blocks-venv/bin/python -m ruff check plugin tests scripts"
+
+      - name: Ruff format
+        shell: bash
+        run: "${RUNNER_TEMP}/kicad-blocks-venv/bin/python -m ruff format --check plugin tests scripts"
+
+      - name: Pyright reviewed production inventory
+        shell: bash
+        run: "${RUNNER_TEMP}/kicad-blocks-venv/bin/pyright -p pyrightconfig.json"
+
+      - name: Test inventory and changed-file quality ratchet
+        shell: bash
+        env:
+          QUALITY_BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          set -euo pipefail
+          PY="${RUNNER_TEMP}/kicad-blocks-venv/bin/python"
+          "$PY" scripts/check_test_inventory.py --check
+          BASE="$QUALITY_BASE_SHA"
+          if [[ -z "$BASE" || "$BASE" =~ ^0+$ ]]; then
+            BASE="$(git rev-parse HEAD^)"
+          fi
+          "$PY" scripts/check_python_quality.py --base "$BASE"
 
       - name: Validate documentation links and images
         shell: bash
@@ -231,13 +255,13 @@ jobs:
         shell: bash
         run: |
           xvfb-run -a -s "-screen 0 1280x800x24" \
-            "${RUNNER_TEMP}/kicad-blocks-venv/bin/python" tests/test_eeschema_gui.py
+            "${RUNNER_TEMP}/kicad-blocks-venv/bin/python" tests/acceptance_eeschema_gui.py
 
       - name: Verify native-rendered functional block picker
         shell: bash
         run: |
           xvfb-run -a -s "-screen 0 1280x800x24" \
-            "${RUNNER_TEMP}/kicad-blocks-venv/bin/python" tests/test_library_picker_gui.py
+            "${RUNNER_TEMP}/kicad-blocks-venv/bin/python" tests/acceptance_library_picker_gui.py
       - name: Generate real KiCad visual documentation previews
         shell: bash
         run: |
@@ -263,19 +287,19 @@ jobs:
         shell: bash
         run: |
           xvfb-run -a -s "-screen 0 1280x800x24" \
-            "${RUNNER_TEMP}/kicad-blocks-venv/bin/python" tests/test_plugin_registration.py
+            "${RUNNER_TEMP}/kicad-blocks-venv/bin/python" tests/acceptance_plugin_registration.py
 
       - name: Verify real KiCad IPC placement (headless)
         shell: bash
-        run: "${RUNNER_TEMP}/kicad-blocks-venv/bin/python tests/test_ipc_headless.py"
+        run: "${RUNNER_TEMP}/kicad-blocks-venv/bin/python tests/acceptance_ipc_headless.py"
 
       - name: Verify PCB IPC primitives (headless)
         shell: bash
-        run: "${RUNNER_TEMP}/kicad-blocks-venv/bin/python tests/test_pcb_ipc.py"
+        run: "${RUNNER_TEMP}/kicad-blocks-venv/bin/python tests/acceptance_pcb_ipc.py"
 
       - name: Verify PCB block layout merge (headless)
         shell: bash
-        run: "${RUNNER_TEMP}/kicad-blocks-venv/bin/python tests/test_pcb_layout.py"
+        run: "${RUNNER_TEMP}/kicad-blocks-venv/bin/python tests/acceptance_pcb_layout.py"
 
       # Build each ABI-specific dependency wheel with that exact interpreter.
       # KiCad's plugin manager installs wheels only, so publish a prebuilt
@@ -323,7 +347,7 @@ jobs:
         shell: bash
         run: |
           xvfb-run -a -s "-screen 0 1280x800x24" \
-            "${RUNNER_TEMP}/kicad-blocks-venv-cp313/bin/python" tests/test_plugin_registration.py
+            "${RUNNER_TEMP}/kicad-blocks-venv-cp313/bin/python" tests/acceptance_plugin_registration.py
 
       - name: Set up CPython 3.14.4
         uses: actions/setup-python@v5
@@ -368,7 +392,7 @@ jobs:
         shell: bash
         run: |
           xvfb-run -a -s "-screen 0 1280x800x24" \
-            "${RUNNER_TEMP}/kicad-blocks-venv-cp314/bin/python" tests/test_plugin_registration.py
+            "${RUNNER_TEMP}/kicad-blocks-venv-cp314/bin/python" tests/acceptance_plugin_registration.py
 
       - name: Publish verified visual documentation previews
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'

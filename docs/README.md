@@ -26,6 +26,10 @@ Read these pages to understand why KiCad Blocks behaves as it does.
 - [Architecture and design model](explanation/architecture.md) — facade symbols, stored implementations, variants, parameters, local copies, automatic child-block dependencies and the native KiCad boundary.
 - [Compatibility and test coverage](explanation/compatibility.md) — tested environment, interpreter coverage, unvalidated targets, and known gaps.
 
+## Testing and contribution
+
+- [Test inventory](testing/TEST_INVENTORY.md) — every unit test, its purpose, and each native KiCad/GUI acceptance runner.
+
 ## Reference
 
 - [Feature reference](reference.md) — action names, block and project files, instance fields, parameter syntax, PCB merge behavior, report files, and settings.

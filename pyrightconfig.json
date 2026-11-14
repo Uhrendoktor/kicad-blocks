@@ -1,0 +1,19 @@
+{
+  "include": [
+    "plugin/kicad-blocks/kicad_blocks/model.py",
+    "plugin/kicad-blocks/kicad_blocks/extraction.py",
+    "plugin/kicad-blocks/kicad_blocks/pcb_placement.py"
+  ],
+  "exclude": [
+    "**/__pycache__",
+    "**/.pytest_cache",
+    "**/.ruff_cache",
+    "plugin/kicad-blocks/kicad_blocks/plugin.py"
+  ],
+  "extraPaths": ["plugin/kicad-blocks"],
+  "typeCheckingMode": "standard",
+  "pythonVersion": "3.12",
+  "pythonPlatform": "Linux",
+  "reportMissingImports": "none",
+  "reportMissingModuleSource": "none"
+}
