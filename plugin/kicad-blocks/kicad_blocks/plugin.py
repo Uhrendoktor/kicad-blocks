@@ -2566,7 +2566,7 @@ def _edit_facade_symbol(
     # Verify the current library symbol through the native IPC document API instead.
     get_open_documents = getattr(kicad, "get_open_documents", None)
     if not callable(get_open_documents):
-        raise RuntimeError(
+        raise TypeError(
             "The connected KiCad Python IPC binding cannot verify the active Symbol Editor "
             f"symbol {lib_id!r}. Update kicad-python or open Tools → Symbol Editor manually."
         )
