@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import contextlib
+import hashlib
 import logging
 import os
 import re
@@ -661,6 +662,31 @@ def _reload_symbol_library(kicad, nickname: str) -> bool:
         return False
 
 
+
+
+def _facade_edit_library_nickname(record) -> str:
+    """Return a stable project-library alias for editing the source catalog directly."""
+    source_catalog = Path(record.symbol_library).expanduser().resolve()
+    root_key = hashlib.sha256(str(source_catalog.parent).encode("utf-8")).hexdigest()[:10]
+    return f"KBEdit_{root_key}"
+
+
+def _register_facade_edit_library(project_dir: Path, record, kicad) -> str:
+    """Register the shared source catalog separately from the project's placement snapshot."""
+    nickname = _facade_edit_library_nickname(record)
+    register_project_symbol_library(
+        project_dir,
+        nickname,
+        Path(record.symbol_library),
+        description=f"KiCad Blocks source facade library — {Path(record.symbol_library).parent.name}",
+        replace_existing=True,
+    )
+    if not _reload_symbol_library(kicad, nickname):
+        raise RuntimeError(
+            _LAST_LIBRARY_RELOAD_WARNING
+            or f"KiCad could not load the source facade library {nickname!r}."
+        )
+    return nickname
 
 
 def _register_block(
@@ -2215,6 +2241,7 @@ def _edit_facade_symbol(
     *,
     xdotool: str | None = None,
     wtype: str | None = None,
+    edit_library_nickname: str | None = None,
     command_runner=subprocess.run,
     pause=time.sleep,
 ) -> bool:
@@ -2241,7 +2268,7 @@ def _edit_facade_symbol(
 
     catalog = parse_sexpr(catalog_path.read_text(encoding="utf-8"))
     _named_symbol_node(catalog, symbol_name, catalog_path)
-    lib_id = f"{nickname}:{symbol_name}"
+    lib_id = f"{edit_library_nickname or nickname}:{symbol_name}"
 
     run_action = getattr(kicad, "run_action", None)
     if not callable(run_action):
@@ -5155,10 +5182,14 @@ def _show_library_browser(
                     parent=window,
                 )
                 return
+            edit_nickname = _register_facade_edit_library(
+                project_dir, refreshed_record, kicad
+            )
             opened = _edit_facade_symbol(
                 refreshed_record,
                 kicad,
                 editor_window_id,
+                edit_library_nickname=edit_nickname,
             )
             if not opened:
                 messagebox.showinfo(
