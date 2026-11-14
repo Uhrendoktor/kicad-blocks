@@ -81,11 +81,11 @@ for the layout, labeling, and electrical-routing rules applied to this example.
 
 ## Declarative groups and automatic layout
 
-The generator declares functional groups by component membership rather than by manually positioned frame rectangles. It measures member pins from the loaded KiCad symbols, derives each group's box/title/description panel, and packs the primary stages left-to-right with a constant 2.54 mm gap. The address straps form a secondary row aligned to the controller. Group descriptions carry the datasheet source, page and figure metadata; the schema also accepts a reviewed screenshot asset for a group when one is added.
+The generator declares functional groups by component membership rather than by manually positioned frame rectangles. It measures member pins from the loaded KiCad symbols, derives each group's box/title/description panel, and packs the primary stages left-to-right with a constant 2.54 mm gap. The address straps form a secondary row aligned to the controller. Group descriptions carry the datasheet source, page and figure metadata. A screenshot-asset field is reserved, but automatic datasheet image embedding is not implemented yet.
 
 The current packer automates group-level placement and several component constraints (R1/R4, C2/C3 and the U1.6 reset pull-down). Other component positions remain local relative-layout seeds at this stage; the next step is to replace those remaining seeds with an internal graph/constraint placer.
 
-The schematic clippy checker runs as part of the KiCad CLI validation. It checks label/wire collisions, group containment of pins/fields/wires/labels, pin orientation, physical decoupler and FET connectivity, component adjacency and field proximity, plus the existing net-label, orthogonal-wire and frame rules. See [SCHEMATIC_STYLE_CHECKLIST.md](SCHEMATIC_STYLE_CHECKLIST.md) for the exact enforced rules.
+The schematic clippy checker runs as part of the KiCad CLI validation. It exposes nine stable rule IDs (SCH001–SCH009) and checks label/wire collisions, group containment of pins/fields/wires/labels, pin orientation, physical decoupler and FET connectivity, component adjacency and field proximity, plus the existing net-label, orthogonal-wire and frame rules. Run `python scripts/validate_schematic_style.py --list-rules` to list them. See [SCHEMATIC_STYLE_CHECKLIST.md](SCHEMATIC_STYLE_CHECKLIST.md) for the exact enforced rules.
 
 ## Component set
 
