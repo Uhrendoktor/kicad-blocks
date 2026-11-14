@@ -131,6 +131,21 @@ def _wait_for_editor(
     )
 
 
+def _dump_accessibility_tree(process_id: int) -> str:
+    """Diagnostic-only probe of KiCad's native accessibility surface."""
+    try:
+        import xa11y
+        app = xa11y.App.by_pid(process_id, timeout=5.0)
+        tree = app.dump(max_depth=14)
+    except Exception as exc:
+        result = f"xa11y accessibility probe unavailable: {type(exc).__name__}: {exc}"
+        print(result, flush=True)
+        return result
+    print("--- xa11y KiCad accessibility tree ---", flush=True)
+    print(tree[:24000], flush=True)
+    print("--- end xa11y accessibility tree ---", flush=True)
+    return tree
+
 def _wait_for_window_title(xdotool: str, predicate, timeout_s: float = 12.0) -> tuple[str, str, str]:
     deadline = time.monotonic() + timeout_s
     last_windows = []
@@ -560,6 +575,7 @@ def main() -> None:
             # in the browser preview, even when the active schematic contains
             # no placed instance of that block.
             facade_editor_client = KiCad(timeout_ms=30000)
+            _dump_accessibility_tree(process.pid)
             try:
                 live_schematic = facade_editor_client.get_schematic()
                 if live_schematic is None:
