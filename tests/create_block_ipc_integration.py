@@ -441,7 +441,13 @@ def main() -> None:
                                     text=True,
                                 )
                                 subprocess.run(
-                                    [xdotool, "key", "--clearmodifiers", "ctrl+a"],
+                                    [xdotool, "key", "--clearmodifiers", "Home"],
+                                    check=True,
+                                    capture_output=True,
+                                    text=True,
+                                )
+                                subprocess.run(
+                                    [xdotool, "key", "--clearmodifiers", "shift+End"],
                                     check=True,
                                     capture_output=True,
                                     text=True,
@@ -569,6 +575,12 @@ def main() -> None:
                     f"Expected exactly one new block from the selected sheet, found {len(records)}."
                 )
             selected_record = records[0]
+            if selected_record.name != "Power Stage Block":
+                raise AssertionError(
+                    "The visible Create Block form did not apply the entered name; "
+                    f"expected 'Power Stage Block', found {selected_record.name!r}. "
+                    f"Library records: {[item.name for item in records]!r}"
+                )
             selected_manifest = selected_record.manifest
             if selected_manifest["interface_source"] != "hierarchical_labels":
                 raise AssertionError("The selected-sheet block did not retain its extraction provenance.")
@@ -622,7 +634,15 @@ def main() -> None:
                 raise AssertionError(
                     f"Expected one additional block from the active subsheet, found {len(records)} total."
                 )
-            active_record = next(item for item in records if item.name == "Control Interface Block")
+            active_matches = [
+                item for item in records if item.name == "Control Interface Block"
+            ]
+            if len(active_matches) != 1:
+                raise AssertionError(
+                    "The visible Create Block form did not apply the active-sheet name; "
+                    f"expected 'Control Interface Block', found {[item.name for item in records]!r}."
+                )
+            active_record = active_matches[0]
             if [item["name"] for item in active_record.manifest["pins"]] != ["SCL", "SDA", "ALERT"]:
                 raise AssertionError(
                     f"Active-sheet facade pins came from the wrong sheet: {active_record.manifest['pins']!r}"
