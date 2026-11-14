@@ -197,8 +197,7 @@ jobs:
         run: |
           set -euo pipefail
           PY="${RUNNER_TEMP}/kicad-blocks-venv/bin/python"
-          git fetch --no-tags origin main
-          "$PY" scripts/check_python_quality.py --base-ref origin/main
+          "$PY" scripts/check_python_quality.py
           "$PY" scripts/test_inventory.py --check
           "$PY" scripts/check_test_quality.py
           "$PY" -m ruff check plugin tests scripts examples
