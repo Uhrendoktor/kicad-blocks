@@ -74,6 +74,7 @@ class _PluginActions(Protocol):
 
     def load_tkinter(self) -> None: ...
 
+
 class _GifFrameCount(Protocol):
     """Pillow image surface exposing the animated frame count."""
 
@@ -90,9 +91,7 @@ def _private_action(name: str) -> Callable[..., None]:
     return cast(Callable[..., None], getattr(plugin_actions, name))
 
 
-configure_tk_theme = cast(
-    Callable[[tk.Misc], None], _private_action("_configure_tk_theme")
-)
+configure_tk_theme = cast(Callable[[tk.Misc], None], _private_action("_configure_tk_theme"))
 pick_block_for_placement = cast(
     Callable[[list[BlockRecord], tk.Misc], PlacementSelection | None],
     _private_action("_pick_block_for_placement"),
