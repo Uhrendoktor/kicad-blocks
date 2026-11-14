@@ -30,7 +30,7 @@ from .pcb_types import (
     ResolvedBlockLayout,
 )
 from .sexpr import QuotedSExpr as _Quoted
-from .sexpr import SExprList, parse_sexpr
+from .sexpr import SExpr, SExprList, parse_sexpr
 from .sexpr import dump_sexpr as _dump
 from .sexpr import sexpr_all as _all
 from .sexpr import sexpr_direct as _direct

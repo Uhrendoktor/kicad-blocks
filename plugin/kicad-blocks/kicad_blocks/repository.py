@@ -42,15 +42,12 @@ from .model import (
 )
 from .report_types import BlockRevisionReport, LocalCopyPublishReport, LocalCopySyncReport
 from .settings_types import InstanceLink, InstanceLinks, LibrarySettings
-from .sexpr import (
-    QuotedSExpr as _Quoted,
-    SExprList,
-    dump_sexpr as _dump,
-    parse_sexpr,
-    sexpr_all as _all,
-    sexpr_direct as _direct,
-    sexpr_head as _head,
-)
+from .sexpr import QuotedSExpr as _Quoted
+from .sexpr import SExprList, parse_sexpr
+from .sexpr import dump_sexpr as _dump
+from .sexpr import sexpr_all as _all
+from .sexpr import sexpr_direct as _direct
+from .sexpr import sexpr_head as _head
 
 MANIFEST_NAME = "manifest.json"
 SYMBOL_NAME = "block.kicad_sym"
