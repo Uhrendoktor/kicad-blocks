@@ -10,7 +10,7 @@ from collections.abc import Callable, Sequence
 from importlib import import_module
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Protocol, TypeVar, cast
+from typing import TYPE_CHECKING, Protocol, TypeVar, cast
 from unittest.mock import Mock, patch
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -23,10 +23,12 @@ from kicad_blocks.model import (
     parse_pins,
     resolve_variant_implementation,
 )
-from kicad_blocks.pcb_types import ResolvedBlockLayout
 from kicad_blocks.repository import BlockRecord, create_block, read_manifest
 
 plugin_actions = import_module("kicad_blocks.plugin")
+
+if TYPE_CHECKING:
+    from kicad_blocks.pcb_types import ResolvedBlockLayout
 
 
 _HookResult = TypeVar("_HookResult")
