@@ -2264,6 +2264,28 @@ def _ensure_project_facade_catalog(
     return catalog
 
 
+def _symbol_editor_menu_down_count(editor_pid: str) -> int | None:
+    """Return the KiCad Tools-menu offset to Symbol Editor for this frame mode.
+
+    KiCad's Eeschema menu puts the Symbol Editor after:
+    - standalone Eeschema: Switch to PCB Editor, Calculator Tools;
+    - manager-hosted Eeschema: Update PCB, Switch to PCB Editor,
+      Switch to Project Manager, Calculator Tools.
+    The native menu action itself is not exposed by every KiCad IPC build.
+    """
+    if not editor_pid.isdigit():
+        return None
+    try:
+        executable = Path(os.readlink(f"/proc/{editor_pid}/exe")).name.casefold()
+    except (OSError, ValueError):
+        return None
+    if "eeschema" in executable:
+        return 2
+    if executable.startswith("kicad"):
+        return 4
+    return None
+
+
 def _edit_facade_symbol(
     record,
     kicad,
@@ -2305,6 +2327,7 @@ def _edit_facade_symbol(
     wayland = bool(os.environ.get("WAYLAND_DISPLAY")) or (
         os.environ.get("XDG_SESSION_TYPE", "").casefold() == "wayland"
     )
+    initial_symbol_editor = None
     action_started = False
     action_error = None
     run_action = getattr(kicad, "run_action", None)
@@ -2400,7 +2423,8 @@ def _edit_facade_symbol(
                 return window_id
         return None
 
-    symbol_editor_id = None
+    initial_symbol_editor = visible_symbol_editor()
+    symbol_editor_id = initial_symbol_editor
     deadline = time.monotonic() + 5.0
     while time.monotonic() < deadline:
         symbol_editor_id = visible_symbol_editor()
@@ -2445,9 +2469,22 @@ def _edit_facade_symbol(
                 "bring the Schematic Editor to the foreground, then retry."
             )
 
+        editor_pid = send("getwindowpid", str(editor_window_id), check=False)
+        menu_down_count = _symbol_editor_menu_down_count(editor_pid)
+        if menu_down_count is None:
+            raise RuntimeError(
+                "Could not determine whether this Eeschema frame is standalone or "
+                "manager-hosted, so Edit Facade did not guess a Tools-menu shortcut. "
+                f"Open Tools → Symbol Editor manually, then search for {lib_id}."
+            )
+
+        # Do not use the "S" mnemonic: it also matches Switch to PCB Editor.
+        # Walk the documented Tools-menu order to the exact Symbol Editor item.
         send("key", "--clearmodifiers", "alt+t")
-        pause(0.25)
-        send("key", "--clearmodifiers", "s")
+        pause(0.12)
+        send("key", "--clearmodifiers", "Home")
+        for _ in range(menu_down_count):
+            send("key", "--clearmodifiers", "Down")
         send("key", "--clearmodifiers", "Return")
         deadline = time.monotonic() + 5.0
         while time.monotonic() < deadline:
@@ -2471,10 +2508,22 @@ def _edit_facade_symbol(
             + f"Open Tools → Symbol Editor manually, then search for {lib_id}."
         )
 
+    if close_browser is not None:
+        close_browser()
+
     send("windowfocus", "--sync", symbol_editor_id)
-    send("key", "--clearmodifiers", "ctrl+l")
-    pause(0.1)
-    send("key", "--clearmodifiers", "ctrl+a")
+    if initial_symbol_editor is not None:
+        # An already-open editor may have the drawing canvas, not its filter,
+        # focused. Do not type into an unknown widget or disturb unsaved edits.
+        LOG.info(
+            "Symbol Editor was already open; manual library-tree search required for %s",
+            lib_id,
+        )
+        return False
+
+    # KiCad focuses the library-tree search field when a new Symbol Editor
+    # window opens. Type directly into that verified initial focus; Ctrl+L is
+    # the Project Manager's Symbol Editor shortcut, not a tree-search command.
     send("type", "--clearmodifiers", "--delay", "12", symbol_name)
     pause(0.2)
     send("key", "--clearmodifiers", "Return")
