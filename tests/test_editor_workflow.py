@@ -108,6 +108,70 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
             ["/usr/bin/xdotool", "getwindowfocus"],
         )
 
+    def test_edit_facade_uses_native_kicad_action_without_xdotool(self):
+        instance = SimpleNamespace(
+            id="dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+            definition=SimpleNamespace(
+                id=SimpleNamespace(
+                    library=self.block.manifest["library_nickname"],
+                    name=self.block.manifest["symbol_name"],
+                )
+            ),
+        )
+        schematic = SimpleNamespace(get_selection=Mock(return_value=[instance]))
+        kicad = SimpleNamespace(
+            run_action=Mock(return_value=SimpleNamespace(status=1))
+        )
+        with (
+            patch.object(
+                plugin_actions, "_block_record_for_instance", return_value=self.block
+            ),
+            patch.object(plugin_actions.shutil, "which", return_value=None),
+            patch.object(plugin_actions.subprocess, "run") as run_command,
+        ):
+            plugin_actions._edit_facade_symbol(
+                self.library,
+                schematic,
+                self.project,
+                None,
+                self.parent,
+                kicad=kicad,
+                expected_block_id=self.block.manifest["block_id"],
+            )
+        kicad.run_action.assert_called_once_with(
+            "eeschema.EditorControl.editLibSymbolWithSymbolEditor"
+        )
+        run_command.assert_not_called()
+
+    def test_edit_facade_rejects_a_changed_or_mismatched_selection(self):
+        instance = SimpleNamespace(
+            id="dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+            definition=SimpleNamespace(
+                id=SimpleNamespace(
+                    library=self.block.manifest["library_nickname"],
+                    name=self.block.manifest["symbol_name"],
+                )
+            ),
+        )
+        schematic = SimpleNamespace(get_selection=Mock(return_value=[instance]))
+        kicad = SimpleNamespace(run_action=Mock())
+        with (
+            patch.object(
+                plugin_actions, "_block_record_for_instance", return_value=self.block
+            ),
+            self.assertRaisesRegex(ValueError, "selection changed"),
+        ):
+            plugin_actions._edit_facade_symbol(
+                self.library,
+                schematic,
+                self.project,
+                None,
+                self.parent,
+                kicad=kicad,
+                expected_block_id="different-block-id",
+            )
+        kicad.run_action.assert_not_called()
+
     def test_create_block_from_selected_sheet_never_prompts_for_manual_pins(self):
         source = self.project / "power_stage.kicad_sch"
         source.write_text("(kicad_sch)", encoding="utf-8")
