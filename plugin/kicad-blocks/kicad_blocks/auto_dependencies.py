@@ -10,11 +10,119 @@ from __future__ import annotations
 import subprocess
 import tempfile
 import xml.etree.ElementTree as ET
+from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Any
+from typing import Protocol, TypedDict
+
+from .json_types import JsonObject
 
 
-def parse_kicad_xml_netlist(path: Path) -> dict[str, Any]:
+class Netlist(TypedDict):
+    """Component and electrical connectivity data exported by KiCad."""
+
+    component_refs: set[str]
+    pin_nets: dict[str, dict[str, str]]
+
+
+class ManifestPin(TypedDict):
+    """Name and stable facade pin number read from a block manifest."""
+
+    name: str
+    number: str
+
+
+class BlockRecordLike(Protocol):
+    """Repository block fields used during child-dependency discovery."""
+
+    manifest: JsonObject
+    name: str
+    path: Path
+    implementation: Path
+
+
+class _TextValue(Protocol):
+    value: str
+
+
+class _Field(Protocol):
+    text: _TextValue
+
+
+class _ReferenceFieldSymbol(Protocol):
+    reference_field: _Field
+    reference: str
+
+
+class _SymbolId(Protocol):
+    library: str
+    name: str
+
+
+class _SymbolPin(Protocol):
+    number: str
+
+
+class _SymbolDefinition(Protocol):
+    id: _SymbolId
+    pins: Sequence[_SymbolPin]
+
+
+class _SymbolPosition(Protocol):
+    x: int | float
+    y: int | float
+
+
+class _SymbolTransform(Protocol):
+    orientation: int
+
+
+class FacadeSymbol(Protocol):
+    """Small structural view of the KiCad symbol IPC object used here."""
+
+    definition: _SymbolDefinition
+    transform: _SymbolTransform
+    position: _SymbolPosition
+    reference: str
+    reference_field: _Field
+
+
+class _SheetLike(Protocol):
+    """One KiCad schematic sheet handle."""
+
+    ...
+
+
+class _SheetSchematic(Protocol):
+    def get_symbols(self) -> Sequence[FacadeSymbol]: ...
+
+
+class SchematicLike(Protocol):
+    """Schematic IPC methods required for hierarchy-wide symbol discovery."""
+
+    def iter_sheets(self) -> Sequence[_SheetLike]: ...
+    def for_sheet(self, sheet: _SheetLike) -> _SheetSchematic: ...
+    def get_symbols(self) -> Sequence[FacadeSymbol]: ...
+
+
+class DependencyOccurrence(TypedDict):
+    """One child block placement and its resolved electrical pin mapping."""
+
+    child: BlockRecordLike
+    reference: str
+    position_mm: tuple[float, float]
+    orientation: int
+    pin_map: dict[str, str | None]
+
+
+class DependencySyncResult(TypedDict):
+    """Summary returned after dependency metadata is reconciled."""
+
+    block: BlockRecordLike
+    changed: bool
+    count: int
+
+
+def parse_kicad_xml_netlist(path: Path) -> Netlist:
     """Read component references and pin-to-net assignments from KiCad XML."""
     root = ET.parse(Path(path)).getroot()
     components = root.find("./components")
@@ -50,26 +158,43 @@ def parse_kicad_xml_netlist(path: Path) -> dict[str, Any]:
     return {"component_refs": component_refs, "pin_nets": pin_nets}
 
 
-def _field_text(instance: Any, field_name: str) -> str:
-    field = getattr(instance, field_name, None)
-    return str(getattr(getattr(field, "text", None), "value", "") or "").strip()
+def _field_text(instance: _ReferenceFieldSymbol) -> str:
+    """Read KiCad's displayed reference value from a placed symbol."""
+    return str(getattr(getattr(instance.reference_field, "text", None), "value", "") or "").strip()
 
 
-def _millimetres(value: Any) -> float:
+def _millimetres(value: int | float) -> float:
     """Convert KiCad IPC coordinates, which are always nanometres, to millimetres."""
     return float(value) / 1_000_000.0
 
 
+def _manifest_pins(record: BlockRecordLike) -> list[ManifestPin]:
+    """Validate and normalize the named pin definitions from a block manifest."""
+    raw_pins = record.manifest.get("pins", [])
+    if not isinstance(raw_pins, Sequence) or isinstance(raw_pins, (str, bytes)):
+        raise ValueError(f"Block {record.name!r} has an invalid pin manifest.")
+    pins: list[ManifestPin] = []
+    for item in raw_pins:
+        if not isinstance(item, Mapping):
+            raise ValueError(f"Block {record.name!r} has an invalid pin manifest entry.")
+        name = item.get("name")
+        number = item.get("number", "")
+        if not isinstance(name, str) or not isinstance(number, str):
+            raise ValueError(f"Block {record.name!r} has a pin without a text name or number.")
+        pins.append({"name": name, "number": number})
+    return pins
+
+
 def discover_block_dependencies(
-    parent,
-    records: list,
-    symbols: list,
-    netlist: dict[str, Any],
-) -> list[dict[str, Any]]:
+    parent: BlockRecordLike,
+    records: Sequence[BlockRecordLike],
+    symbols: Sequence[FacadeSymbol],
+    netlist: Netlist,
+) -> list[DependencyOccurrence]:
     """Build dependency occurrences from placed facade symbols and netlist pins."""
     from .repository import LIBRARY_NICKNAME
 
-    by_symbol: dict[tuple[str, str], Any] = {}
+    by_symbol: dict[tuple[str, str], BlockRecordLike] = {}
     for record in records:
         key = (
             str(record.manifest.get("library_nickname", "")),
@@ -95,7 +220,7 @@ def discover_block_dependencies(
 
     component_refs = set(netlist["component_refs"])
     pin_nets = netlist["pin_nets"]
-    occurrences: list[dict[str, Any]] = []
+    occurrences: list[DependencyOccurrence] = []
     seen_references: set[str] = set()
 
     for symbol in symbols:
@@ -133,8 +258,8 @@ def discover_block_dependencies(
                 "Save and annotate the implementation, then publish again."
             )
 
-        manifest_pins = child.manifest.get("pins", [])
-        pin_names = [str(pin["name"]) for pin in manifest_pins]
+        manifest_pins = _manifest_pins(child)
+        pin_names = [pin["name"] for pin in manifest_pins]
         if len(pin_names) != len(set(pin_names)):
             raise ValueError(f"Block {child.name!r} has duplicate facade pin names.")
 
@@ -144,7 +269,7 @@ def discover_block_dependencies(
         }
         missing_numbers = sorted(
             {
-                str(pin.get("number", "")).strip()
+                pin["number"].strip()
                 for pin in manifest_pins
                 if str(pin.get("number", "")).strip()
             }
@@ -159,21 +284,18 @@ def discover_block_dependencies(
 
         component_pin_nets = pin_nets.get(reference, {})
         pin_map = {
-            str(pin["name"]): component_pin_nets.get(str(pin.get("number", "")).strip())
+            pin["name"]: component_pin_nets.get(pin["number"].strip())
             for pin in manifest_pins
         }
 
-        transform = getattr(symbol, "transform", None)
-        orientation_value = int(getattr(transform, "orientation", 1))
+        orientation_value = int(symbol.transform.orientation)
         orientations = {1: 0, 2: 90, 3: 180, 4: 270}
         if orientation_value not in orientations:
             raise ValueError(
                 f"Block facade {reference!r} has unsupported orientation "
                 f"{orientation_value}."
             )
-        position = getattr(symbol, "position", None)
-        if position is None:
-            raise ValueError(f"Could not read the placement of block facade {reference!r}.")
+        position = symbol.position
 
         occurrences.append(
             {
@@ -191,7 +313,7 @@ def discover_block_dependencies(
     return sorted(occurrences, key=lambda item: item["reference"].casefold())
 
 
-def _all_sheet_symbols(schematic) -> list:
+def _all_sheet_symbols(schematic: SchematicLike) -> list[FacadeSymbol]:
     """Collect facade symbols from every sheet in the implementation hierarchy."""
     try:
         sheets = list(schematic.iter_sheets())
@@ -205,7 +327,9 @@ def _all_sheet_symbols(schematic) -> list:
     return symbols or list(schematic.get_symbols())
 
 
-def synchronize_block_dependencies(parent, library_roots: list[Path], kicad_cli: str):
+def synchronize_block_dependencies(
+    parent: BlockRecordLike, library_roots: list[Path], kicad_cli: str
+) -> DependencySyncResult:
     """Rebuild a block's dependency manifest from its saved default implementation."""
     from kipy import KiCad
 
