@@ -127,7 +127,7 @@ class STUSB4500ReferenceTests(unittest.TestCase):
             "STUSB4500 CONTROLLER",
             "I2C ADDRESS STRAPS",
             "BACK-TO-BACK PMOS SWITCH",
-            "VSNK OUTPUT",
+            "VSNK BULK PROTECTION",
         )
         for title in titles:
             self.assertIn(f'(text_box "{title}"', content)
@@ -296,7 +296,7 @@ class STUSB4500ReferenceTests(unittest.TestCase):
 
     def test_group_descriptions_and_source_evidence_are_generated(self) -> None:
         with tempfile.TemporaryDirectory(prefix="stusb4500-group-descriptions-") as temporary:
-            content, tree, _ = self._generate(temporary)
+            content, tree, instances = self._generate(temporary)
 
         text_by_uuid = {
             str(_direct(node, "uuid")[1]): str(node[1])
@@ -636,12 +636,16 @@ class STUSB4500ReferenceTests(unittest.TestCase):
             self.assertAlmostEqual(float(at[1]) - float(d50[1]), dx, places=3)
             self.assertAlmostEqual(float(at[2]) - float(d50[2]), dy, places=3)
 
-        for reference, body_center_x in (("T4", 2.00), ("T1", -2.00)):
+        for reference, body_center_x in (("T4", 1.651), ("T1", -1.651)):
             origin = _direct(instances[reference], "at")
-            for field_name, dy in (("Reference", -3.81), ("Value", -6.35)):
+            expected = {
+                "Reference": (body_center_x - 4.00, -6.35),
+                "Value": (body_center_x + 2.00, -6.35),
+            }
+            for field_name, (dx, dy) in expected.items():
                 at = _direct(_property(instances[reference], field_name), "at")
                 self.assertAlmostEqual(
-                    float(at[1]) - float(origin[1]), body_center_x, places=3,
+                    float(at[1]) - float(origin[1]), dx, places=3,
                     msg=f"{reference} {field_name} x",
                 )
                 self.assertAlmostEqual(
@@ -657,10 +661,10 @@ class STUSB4500ReferenceTests(unittest.TestCase):
         label = next(
             node for node in _all(tree, "hierarchical_label")
             if str(node[1]) == "GND"
-            and abs(float(_direct(node, "at")[1]) - (float(origin[1]) + 5.08)) < 0.001
+            and abs(float(_direct(node, "at")[1]) - (float(origin[1]) - 5.08)) < 0.001
         )
         at = _direct(label, "at")
-        self.assertAlmostEqual(float(at[1]), float(origin[1]) + 5.08, places=3)
+        self.assertAlmostEqual(float(at[1]), float(origin[1]) - 5.08, places=3)
         self.assertAlmostEqual(float(at[2]), float(origin[2]) - 3.81, places=3)
         self.assertEqual(float(at[3]), 0.0)
         self.assertEqual(label_wire_overlap_issues(tree), [])

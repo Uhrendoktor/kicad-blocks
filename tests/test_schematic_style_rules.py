@@ -145,7 +145,7 @@ assert "generate_reference" not in sys.modules
         tree = self.fresh_tree()
         title = next(
             node for node in _all(tree, "text_box")
-            if str(node[1]) == "VSNK OUTPUT"
+            if str(node[1]) == "VSNK BULK PROTECTION"
         )
         size = _direct(title, "size")
         size[1] = f"{float(size[1]) - 3.0:.3f}"

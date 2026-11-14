@@ -933,11 +933,11 @@ def generate_reference_schematic(destination: Path) -> Path:
             reference_x, reference_y = sx, sy - 33.02
             value_x, value_y = sx, sy - 30.48
         elif reference in {"T4", "T1"}:
-            # Center both fields over the visible MOSFET body. The reference
-            # sits nearest the symbol; the longer part name sits one line above.
-            body_center_x = 2.00 if reference == "T4" else -2.00
-            reference_x, reference_y = sx + body_center_x, sy - 3.81
-            value_x, value_y = sx + body_center_x, sy - 6.35
+            # Keep both fields above the body, clear of the source/drain pin
+            # corridor below. Put the short reference left of the part name.
+            body_center_x = 1.651 if reference == "T4" else -1.651
+            reference_x, reference_y = sx + body_center_x - 4.00, sy - 6.35
+            value_x, value_y = sx + body_center_x + 2.00, sy - 6.35
         elif reference.startswith("R"):
             value_x, value_y = sx, sy
             if reference in {"R51", "R52", "R53", "R54"}:
@@ -1088,11 +1088,11 @@ def generate_reference_schematic(destination: Path) -> Path:
                             justify = "left"
                             label_angle = 0
                         if reference == "C1" and pin["number"] == "2":
-                            # Keep the GND port horizontal and to the right of
-                            # the pin so its glyph is clear of the vertical C1.1 rail.
-                            label_x = px + 5.08
+                            # Route the GND port left of the capacitor. A rightward
+                            # stub would cross the nearby vertical VREG_1V2 rail.
+                            label_x = px - 5.08
                             label_y = py
-                            justify = "left"
+                            justify = "right"
                             label_angle = 0
                         if reference == "R55" and pin["number"] == "2":
                             # Keep R55's GND label below the body and away
