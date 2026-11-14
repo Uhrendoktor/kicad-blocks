@@ -2091,13 +2091,14 @@ def _edit_facade_symbol(
     project_catalog: Path | None = None,
     close_browser=None,
 ) -> bool:
-    """Open KiCad Symbol Editor through the native, cross-platform IPC action.
+    """Validate the facade entry, then report the missing supported editor API.
 
-    IPC currently has no portable library-tree row-selection API. The plugin
-    therefore leaves the last selection in KiCad's own editor UI and supplies
-    the exact generated library ID through its existing handoff message.
+    KiCad's documented IPC surface cannot open or select a specific symbol in
+    Symbol Editor. KiCad.run_action is explicitly unstable, and the current
+    Eeschema server has no handler for its RunAction protobuf. No desktop-specific
+    input fallback or manual-only handoff is allowed.
     """
-    del editor_window_id  # IPC targets the KiCad instance that launched the action.
+    del kicad, editor_window_id, close_browser
     symbol_name = str(record.manifest.get("symbol_name") or "").strip()
     catalog_path = (
         Path(project_catalog).expanduser().resolve()
@@ -2111,30 +2112,17 @@ def _edit_facade_symbol(
 
     from .pcb_layout import parse_sexpr
     from .repository import _named_symbol_node
+
     catalog = parse_sexpr(catalog_path.read_text(encoding="utf-8"))
     _named_symbol_node(catalog, symbol_name, catalog_path)
     lib_id = f"{LIBRARY_NICKNAME}:{symbol_name}"
-
-    run_action = getattr(kicad, "run_action", None)
-    if not callable(run_action):
-        raise TypeError("This KiCad IPC binding does not expose native editor actions. Update KiCad and kicad-python.")
-    try:
-        response = run_action("common.Control.showSymbolEditor")
-    except Exception as exc:
-        raise RuntimeError(f"KiCad could not open Symbol Editor through IPC: {exc}") from exc
-    status = _native_run_action_status(response)
-    if status != 1:
-        detail = (
-            "KiCad rejected the native Symbol Editor action"
-            if status is not None
-            else "KiCad returned no successful status for the native Symbol Editor action"
-        )
-        raise RuntimeError(f"{detail} (RunActionStatus={status}). Update KiCad or its IPC binding.")
-
-    if close_browser is not None:
-        close_browser()
-    LOG.info("KiCad opened Symbol Editor; select %s in its library tree.", lib_id)
-    return False
+    raise RuntimeError(
+        "Edit Facade is not available through the supported KiCad IPC API yet. "
+        f"The generated entry {lib_id} was validated, but KiCad exposes no supported "
+        "IPC operation to open and select a library symbol in Symbol Editor. "
+        "The unstable RunAction API is not used, and no manual-only or "
+        "OS-specific input fallback is provided. This requires an upstream KiCad API."
+    )
 
 
 def _place_existing(root, schematic, kicad, project_dir, parent) -> None:
@@ -2177,53 +2165,30 @@ def _edit_block_implementation(root, schematic, kicad, project_dir, parent) -> N
 
 
 
-def _native_run_action_status(response) -> int | None:
-    """Return KiCad's RunActionStatus value without assuming a truthy response means success."""
-    status = getattr(response, "status", None)
-    if status is None:
-        return None
-    try:
-        return int(status)
-    except (TypeError, ValueError):
-        name = str(getattr(status, "name", status)).strip().upper()
-        if name in {"RAS_OK", "OK"}:
-            return 1
-        if name in {"RAS_INVALID", "INVALID"}:
-            return 2
-        if name in {"RAS_FRAME_NOT_OPEN", "FRAME_NOT_OPEN"}:
-            return 3
-        return None
-
-
 def _start_native_symbol_placement(
     kicad,
     _editor_window_id: str | None,
     symbol_name: str,
 ) -> None:
-    """Open KiCad’s native Add Symbol chooser using cross-platform IPC.
+    """Refuse placement until KiCad exposes a supported interactive IPC action.
 
-    The IPC action does not accept a symbol ID or expose a portable API for
-    entering text into the chooser. The user completes the normal library
-    selection in KiCad's chooser; the plugin does not synthesize global input.
+    The supported schematic API can place a symbol at explicit coordinates, but
+    it does not start the native interactive cursor/chooser. The unstable
+    RunAction request is not implemented by the tested Eeschema server. Do not
+    pretend a generic chooser plus manual search is equivalent to Place Block.
     """
+    del kicad
     if not symbol_name or any(char.isspace() for char in symbol_name):
         raise ValueError("The selected block has an invalid KiCad symbol name.")
-    run_action = getattr(kicad, "run_action", None)
-    if not callable(run_action):
-        raise TypeError("This KiCad IPC binding does not expose native editor actions. Update KiCad and kicad-python.")
-    try:
-        response = run_action("eeschema.InteractiveDrawing.placeSymbol")
-    except Exception as exc:
-        raise RuntimeError(f"KiCad could not start native symbol placement through IPC: {exc}") from exc
-    status = _native_run_action_status(response)
-    if status != 1:
-        detail = (
-            "KiCad rejected the native Place Symbol action"
-            if status is not None
-            else "KiCad returned no successful status for the native Place Symbol action"
-        )
-        raise RuntimeError(f"{detail} (RunActionStatus={status}). Update KiCad or its IPC binding.")
-    LOG.info("KiCad opened the native symbol chooser. Select KBlocks:%s.", symbol_name)
+    raise RuntimeError(
+        "Place Block is not available through the supported KiCad IPC API yet. "
+        f"KiCad can place {LIBRARY_NICKNAME}:{symbol_name} only at explicit "
+        "coordinates; it does not expose a supported IPC operation to start the "
+        "interactive placement cursor for that exact symbol. The unstable "
+        "RunAction request has no handler in the tested Eeschema build. "
+        "No manual-only or OS-specific input fallback is provided. "
+        "This requires an upstream KiCad API."
+    )
 
 
 def _library_record_search_text(record) -> str:
@@ -4704,21 +4669,13 @@ def _show_library_browser(
                 raise RuntimeError(
                     "The project facade preview is unavailable. Refresh the library and retry Edit Facade."
                 )
-            opened = _edit_facade_symbol(
+            _edit_facade_symbol(
                 record,
                 kicad,
                 editor_window_id,
                 project_catalog=project_catalog,
                 close_browser=window.destroy,
             )
-            if not opened:
-                messagebox.showinfo(
-                    "Edit facade",
-                    "Symbol Editor handoff requested. In its library tree, search for "
-                    + f"{LIBRARY_NICKNAME}:{record.manifest['symbol_name']}"
-                    + " and select the result. Saved facade edits are imported by Publish implementation.",
-                    parent=window.master,
-                )
         except (OSError, RuntimeError, ValueError, LookupError, subprocess.SubprocessError) as exc:
             LOG.exception("Could not open generated library facade")
             messagebox.showerror("Edit facade", str(exc), parent=window)
