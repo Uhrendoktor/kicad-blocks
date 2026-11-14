@@ -74,7 +74,9 @@ The current supported KiCad schematic API does not provide the editor operations
 
 | API | Documented behavior | Why it is insufficient |
 | --- | --- | --- |
-| `Schematic.place_symbol_from_library(lib_id, position, ...)` | Places a symbol at explicit schematic coordinates | Does not start the interactive placement cursor or native chooser. |
+| `Schematic.place_symbol_from_library(lib_id, position, ...)` | Creates a symbol at explicit schematic coordinates | Does not start the interactive placement cursor. |
+| `EditorCommandsHandler.add_to_selection(items)` | Adds the specified items to the active editor selection; Eeschema implements this request | Selects the symbol but does not initiate movement or attach it to the pointer. |
+| `Board.interactive_move(items)` | Selects board items and starts the native interactive move tool | This API exists for PCB only; there is no corresponding `Schematic.interactive_move(items)` API or Eeschema `InteractiveMoveItems` handler. |
 | `KiCad.open_document(path, type)` | Opens a document in headless mode | Explicitly unsupported in GUI mode. |
 | `KiCad.open_library_item(library, name, type)` | Loads a library item into its editor | Currently supports footprints only, not symbols. |
 | `KiCad.run_action(action)` | Runs an arbitrary KiCad tool action | Explicitly unstable and not guaranteed; the tested Eeschema returns `no handler available for request of type kiapi.common.commands.RunAction`. It is not used by the production plugin. |
