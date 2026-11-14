@@ -753,7 +753,7 @@ def _attach_tk_window_to_editor(
     if master is None or not callable(transient):
         return False
     try:
-        cast(Callable[[tkinter_types.Wm], None], transient)(cast(tkinter_types.Wm, master))
+        cast(Callable[[object], None], transient)(master)
         window.update_idletasks()
         return True
     except (AttributeError, tk.TclError):
