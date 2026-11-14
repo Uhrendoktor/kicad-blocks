@@ -31,6 +31,7 @@ from kicad_blocks.plugin import (
     _library_record_for_tree_row,
     _minimize_placement_windows,
     _native_symbol_preview_photo,
+    _native_schematic_preview_pages,
     _new_blank_pcb_source,
     _pick_directory,
     _pick_kicad_file,
@@ -185,6 +186,54 @@ class LibraryBrowserTests(unittest.TestCase):
         self.assertIsNone(selected_file)
         self.assertIsNone(selected_directory)
         self.assertIsNone(selected_save)
+
+    def test_native_schematic_preview_exports_selected_implementation_and_all_sheets(self):
+        calls = []
+
+        def export(arguments, **kwargs):
+            calls.append(arguments)
+            output_dir = Path(arguments[arguments.index("--output") + 1])
+            output_dir.mkdir(parents=True, exist_ok=True)
+            (output_dir / "implementation_1v8.svg").write_text(
+                '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 60"></svg>',
+                encoding="utf-8",
+            )
+            (output_dir / "implementation_1v8-sheet1.svg").write_text(
+                '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 60"></svg>',
+                encoding="utf-8",
+            )
+            return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+        with (
+            patch("kicad_blocks.plugin.find_kicad_cli", return_value="/usr/bin/kicad-cli"),
+            patch("kicad_blocks.plugin.subprocess.run", side_effect=export),
+            patch("resvg_py.svg_to_bytes", return_value=b"schematic-png"),
+            patch("kicad_blocks.plugin._SCHEMATIC_PREVIEW_CACHE", {}),
+        ):
+            pages = _native_schematic_preview_pages(
+                self.block,
+                "1V8",
+                width=760,
+            )
+            cached_pages = _native_schematic_preview_pages(
+                self.block,
+                "1V8",
+                width=760,
+            )
+
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(
+            calls[0][-1],
+            str(self.v18.resolve()),
+        )
+        self.assertEqual(
+            calls[0][1:5],
+            ["sch", "export", "svg", "--no-background-color"],
+        )
+        self.assertEqual(calls[0][calls[0].index("--output") + 1], calls[0][calls[0].index("--output") + 1])
+        self.assertEqual([label for label, _png in pages], ["Root sheet", "Sheet 2 · sheet1"])
+        self.assertEqual(pages, cached_pages)
+        self.assertTrue(all(png == b"schematic-png" for _label, png in pages))
 
     def test_native_facade_preview_removes_reference_and_component_name(self):
         from xml.etree import ElementTree as ET
