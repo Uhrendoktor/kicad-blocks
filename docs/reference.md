@@ -56,9 +56,9 @@ The PCB Editor provides a separate **Place Imported Block Layout** action for a 
 
 The Functional Block Library browser presents these primary actions:
 
-- **Place block** — starts KiCad's native symbol chooser and placement tool for the selected block.
+- **Place block** — starts KiCad's native symbol chooser and placement tool. Select the displayed `KBlocks:<symbol>` entry in KiCad's chooser, then place it on the schematic.
 - **Open implementation** — opens the default or selected implementation schematic.
-- **Edit facade** — opens the generated library symbol shown in the preview directly in Symbol Editor. No placed schematic instance is required. KiCad edits the project's existing **KBlocks** catalog, which is refreshed from the registered shared libraries before the editor opens. Save the symbol, then use **Publish implementation** to import the project-catalog edit into the block's revisioned facade asset and update the shared catalog. Conflicting project/shared edits are rejected rather than overwritten.
+- **Edit facade** — validates the generated library symbol shown in the preview, opens KiCad's native Symbol Editor, and displays its exact `KBlocks:<symbol>` identifier for selection in the library tree. No placed schematic instance is required. KiCad edits the project's existing **KBlocks** catalog, which is refreshed from the registered shared libraries before the editor opens. Save the symbol, then use **Publish implementation** to import the project-catalog edit into the block's revisioned facade asset and update the shared catalog. Conflicting project/shared edits are rejected rather than overwritten.
 - **Implementations** — opens the default and named implementation list.
 - **Open PCB layout** — opens a stored board file for inspection.
 - **Manage PCB layouts** — edits stored boards, implementation links, and the default layout.
