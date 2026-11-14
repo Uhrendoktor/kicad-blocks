@@ -36,6 +36,7 @@ from kicad_blocks.plugin import (
     _new_blank_pcb_source,
     _pick_directory,
     _pick_kicad_file,
+    _pick_save_file,
     _pick_record,
     _preferred_library_selection,
     _restore_placement_windows,
@@ -249,6 +250,26 @@ class LibraryBrowserTests(unittest.TestCase):
         self.assertIn("--filename", command)
         self.assertIn("--file-filter=KiCad schematic | *.kicad_sch", command)
         self.assertEqual(run.call_args.kwargs["env"]["GTK_USE_PORTAL"], "1")
+
+    def test_desktop_save_dialog_preserves_initial_filename_and_default_extension(self):
+        run = Mock(return_value=SimpleNamespace(returncode=0, stdout="/tmp/exported", stderr=""))
+        with (
+            patch("kicad_blocks.plugin.shutil.which", side_effect=lambda name: "/usr/bin/zenity" if name == "zenity" else None),
+            patch("kicad_blocks.plugin.subprocess.run", run),
+            patch.dict(os.environ, {"XDG_CURRENT_DESKTOP": "GNOME", "WAYLAND_DISPLAY": "wayland-0"}),
+        ):
+            selected = _pick_save_file(
+                object(),
+                title="Save BOM",
+                initial_path=Path("/tmp") / "buck_bom.csv",
+                defaultextension=".csv",
+                filetypes=[("CSV", "*.csv")],
+            )
+        self.assertEqual(selected, "/tmp/exported.csv")
+        command = run.call_args.args[0]
+        self.assertEqual(command[command.index("--filename") + 1], "/tmp/buck_bom.csv")
+        self.assertIn("--save", command)
+        self.assertIn("--confirm-overwrite", command)
 
     def test_kdialog_uses_transient_parent_embedding_on_x11(self):
         run = Mock(return_value=SimpleNamespace(returncode=0, stdout="/tmp/board.kicad_pcb", stderr=""))
