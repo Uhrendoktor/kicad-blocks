@@ -222,10 +222,22 @@ def _configure_tk_theme(root) -> None:
     style.configure("TFrame", background=colors["background"])
     style.configure("TPanedwindow", background=colors["background"])
     style.configure("TLabel", background=colors["background"], foreground=colors["foreground"])
-    style.configure("TLabelframe", background=colors["background"], foreground=colors["foreground"],
-                    bordercolor=colors["border"], lightcolor=colors["border"],
-                    darkcolor=colors["border"], relief="solid", borderwidth=1)
-    style.configure("TLabelframe.Label", background=colors["background"], foreground=colors["muted"], padding=(4, 0))
+    style.configure(
+        "TLabelframe",
+        background=colors["background"],
+        foreground=colors["foreground"],
+        bordercolor=colors["border"],
+        lightcolor=colors["border"],
+        darkcolor=colors["border"],
+        relief="solid",
+        borderwidth=1,
+    )
+    style.configure(
+        "TLabelframe.Label",
+        background=colors["background"],
+        foreground=colors["muted"],
+        padding=(4, 0),
+    )
     style.configure(
         "TButton",
         background=colors["surface_alt"],
@@ -254,31 +266,74 @@ def _configure_tk_theme(root) -> None:
         lightcolor=[("focus", colors["accent"]), ("!focus", colors["surface_alt"])],
         darkcolor=[("focus", colors["accent"]), ("!focus", colors["surface_alt"])],
     )
-    style.configure("TEntry", fieldbackground=colors["field"], foreground=colors["foreground"],
-                    insertcolor=colors["foreground"], bordercolor=colors["border"],
-                    lightcolor=colors["border"], darkcolor=colors["border"], padding=(7, 5))
-    style.map("TEntry", bordercolor=[("focus", colors["accent"])],
-              lightcolor=[("focus", colors["accent"])], darkcolor=[("focus", colors["accent"])])
-    style.configure("TCombobox", fieldbackground=colors["field"], background=colors["surface_alt"],
-                    foreground=colors["foreground"], arrowcolor=colors["foreground"],
-                    bordercolor=colors["border"], lightcolor=colors["border"],
-                    darkcolor=colors["border"], padding=(7, 5))
-    style.map("TCombobox", fieldbackground=[("readonly", colors["field"])],
-              selectbackground=[("readonly", colors["selected"])],
-              selectforeground=[("readonly", colors["foreground"])],
-              bordercolor=[("focus", colors["accent"])])
-    style.configure("Treeview", background=colors["surface"], fieldbackground=colors["surface"],
-                    foreground=colors["foreground"], bordercolor=colors["border"],
-                    lightcolor=colors["border"], darkcolor=colors["border"],
-                    rowheight=36, relief="flat", borderwidth=0, padding=(4, 3))
-    style.map("Treeview", background=[("selected", colors["selected"])],
-              foreground=[("selected", colors["foreground"])])
-    style.configure("Treeview.Heading", background=colors["surface_alt"], foreground=colors["muted"],
-                    bordercolor=colors["border"], lightcolor=colors["surface_alt"],
-                    darkcolor=colors["border"], relief="flat", padding=(8, 8),
-                    font=("TkDefaultFont", 9, "bold"))
-    style.map("Treeview.Heading", background=[("active", colors["hover"])],
-              foreground=[("active", colors["foreground"])])
+    style.configure(
+        "TEntry",
+        fieldbackground=colors["field"],
+        foreground=colors["foreground"],
+        insertcolor=colors["foreground"],
+        bordercolor=colors["border"],
+        lightcolor=colors["border"],
+        darkcolor=colors["border"],
+        padding=(7, 5),
+    )
+    style.map(
+        "TEntry",
+        bordercolor=[("focus", colors["accent"])],
+        lightcolor=[("focus", colors["accent"])],
+        darkcolor=[("focus", colors["accent"])],
+    )
+    style.configure(
+        "TCombobox",
+        fieldbackground=colors["field"],
+        background=colors["surface_alt"],
+        foreground=colors["foreground"],
+        arrowcolor=colors["foreground"],
+        bordercolor=colors["border"],
+        lightcolor=colors["border"],
+        darkcolor=colors["border"],
+        padding=(7, 5),
+    )
+    style.map(
+        "TCombobox",
+        fieldbackground=[("readonly", colors["field"])],
+        selectbackground=[("readonly", colors["selected"])],
+        selectforeground=[("readonly", colors["foreground"])],
+        bordercolor=[("focus", colors["accent"])],
+    )
+    style.configure(
+        "Treeview",
+        background=colors["surface"],
+        fieldbackground=colors["surface"],
+        foreground=colors["foreground"],
+        bordercolor=colors["border"],
+        lightcolor=colors["border"],
+        darkcolor=colors["border"],
+        rowheight=36,
+        relief="flat",
+        borderwidth=0,
+        padding=(4, 3),
+    )
+    style.map(
+        "Treeview",
+        background=[("selected", colors["selected"])],
+        foreground=[("selected", colors["foreground"])],
+    )
+    style.configure(
+        "Treeview.Heading",
+        background=colors["surface_alt"],
+        foreground=colors["muted"],
+        bordercolor=colors["border"],
+        lightcolor=colors["surface_alt"],
+        darkcolor=colors["border"],
+        relief="flat",
+        padding=(8, 8),
+        font=("TkDefaultFont", 9, "bold"),
+    )
+    style.map(
+        "Treeview.Heading",
+        background=[("active", colors["hover"])],
+        foreground=[("active", colors["foreground"])],
+    )
     style.configure(
         "TLabelframe",
         background=colors["background"],
