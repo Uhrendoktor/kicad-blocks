@@ -48,7 +48,7 @@ STYLE_RULES = {
     },
     "SCH005": {
         "name": "pin-orientation",
-        "severity": "warning",
+        "severity": "error",
         "description": "Ground pins that can face down should use a downward symbol orientation.",
     },
     "SCH006": {
@@ -714,8 +714,18 @@ def validate_schematic_style(path: Path) -> dict[str, int]:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("schematic", type=Path)
+    parser.add_argument("schematic", type=Path, nargs="?")
+    parser.add_argument(
+        "--list-rules", action="store_true",
+        help="list registered schematic lint rules and their severity",
+    )
     args = parser.parse_args()
+    if args.list_rules:
+        for rule_id, rule in STYLE_RULES.items():
+            print(f"{rule_id} [{rule['severity']}] {rule['name']}: {rule['description']}")
+        return
+    if args.schematic is None:
+        parser.error("schematic is required unless --list-rules is used")
     totals = validate_schematic_style(args.schematic)
     print("Schematic style audit passed: " + ", ".join(f"{k}={v}" for k, v in totals.items()))
 
