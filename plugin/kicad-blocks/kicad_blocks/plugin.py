@@ -2042,7 +2042,7 @@ def _ask_create_block_details(parent, source_sheet: Path) -> tuple[str, str] | N
 
     buttons = ttk.Frame(frame)
     buttons.pack(fill="x")
-    ttk.Button(buttons, text="Cancel", command=dialog.destroy).pack(side="right")
+    _action_button(buttons, "Cancel", dialog.destroy, "cancel", "Cancel block creation").pack(side="right")
     _action_button(buttons, "Create Block", accept, "create", "Create the reusable block from this sheet").pack(side="right", padx=(0, 8))
     dialog.bind("<Return>", lambda _event: accept())
     dialog.bind("<Escape>", lambda _event: dialog.destroy())
@@ -3546,7 +3546,7 @@ def _ask_layout_details(parent, record) -> dict | None:
 
     buttons = ttk.Frame(frame)
     buttons.grid(row=8, column=0, columnspan=3, sticky="ew", pady=(4, 0))
-    ttk.Button(buttons, text="Cancel", command=dialog.destroy).pack(side="right")
+    _action_button(buttons, "Cancel", dialog.destroy, "cancel", "Cancel layout creation").pack(side="right")
     _action_button(buttons, "Add layout", accept, "create", "Add this PCB layout to the block").pack(side="right", padx=(0, 8))
     dialog.bind("<Return>", lambda _event: accept())
     dialog.bind("<Escape>", lambda _event: dialog.destroy())
@@ -3773,7 +3773,7 @@ def _show_block_layout_editor(
     _action_button(actions, "Add layout", add_layout, "add", "Add a PCB layout").pack(side="left")
     remove_button = _action_button(actions, "Remove", remove_layout, "remove", "Remove the selected PCB layout", state="disabled")
     remove_button.pack(side="left", padx=(8, 0))
-    default_button = ttk.Button(
+    default_button = _action_button(
         actions, "Set default", make_default, "default", "Use this layout as the default", state="disabled"
     )
     default_button.pack(side="left", padx=(8, 0))
@@ -3786,8 +3786,9 @@ def _show_block_layout_editor(
         values=implementation_values, state="readonly", width=22,
     )
     implementation_combo.pack(side="left", padx=(8, 0))
-    link_button = ttk.Button(
-        link_actions, text="Assign", command=link_selected, state="disabled"
+    link_button = _action_button(
+        link_actions, "Assign", link_selected, "select",
+        "Associate the selected layout with this implementation", state="disabled"
     )
     link_button.pack(side="left", padx=(8, 0))
 
@@ -3802,8 +3803,10 @@ def _show_block_layout_editor(
 
     footer = ttk.Frame(frame)
     footer.grid(row=6, column=0, sticky="ew", pady=(14, 0))
-    ttk.Button(footer, text="Cancel", command=dialog.destroy).pack(side="right")
-    save_button = ttk.Button(footer, text="Save layouts", state="disabled")
+    _action_button(footer, "Cancel", dialog.destroy, "cancel", "Close without saving layout changes").pack(side="right")
+    save_button = _action_button(
+        footer, "Save layouts", lambda: None, "save", "Save PCB layout changes", state="disabled"
+    )
     save_button.pack(side="right", padx=(0, 8))
     created_layout_to_open = [None]
 
@@ -4201,7 +4204,7 @@ def _ask_implementation_details(
 
     buttons = ttk.Frame(frame)
     buttons.grid(row=8, column=0, columnspan=3, sticky="ew", pady=(16, 8))
-    ttk.Button(buttons, text="Cancel", command=dialog.destroy).pack(side="right")
+    _action_button(buttons, "Cancel", dialog.destroy, "cancel", "Cancel implementation setup").pack(side="right")
     _action_button(
         buttons, "Use implementation", accept, "select", "Use the selected implementation",
     ).pack(side="right", padx=(0, 8))
@@ -4448,17 +4451,20 @@ def _show_block_variant_editor(
     _action_button(actions, "Add variant", add_variant, "add", "Add a named implementation variant").pack(side="left")
     edit_button = _action_button(actions, "Edit variant", edit_variant, "edit", "Edit the selected implementation", state="disabled")
     edit_button.pack(side="left", padx=(8, 0))
-    default_button = ttk.Button(
-        actions, "Set as default", make_default, "default", "Set the selected implementation as default", state="disabled"
+    default_button = _action_button(
+        actions, "Set as default", make_default, "default",
+        "Set the selected implementation as default", state="disabled"
     )
     default_button.pack(side="left", padx=(8, 0))
-    remove_button = ttk.Button(
-        actions, "Remove", remove_variant, "remove", "Remove the selected variant", state="disabled"
+    remove_button = _action_button(
+        actions, "Remove", remove_variant, "remove",
+        "Remove the selected variant", state="disabled"
     )
     remove_button.pack(side="left", padx=(8, 0))
     _action_button(actions, "Cancel", dialog.destroy, "cancel", "Close without saving changes").pack(side="right")
-    save_button = ttk.Button(
-        actions, "Save changes", save_and_close, "save", "Save implementation changes", state="disabled"
+    save_button = _action_button(
+        actions, "Save changes", save_and_close, "save",
+        "Save implementation changes", state="disabled"
     )
     save_button.pack(side="right", padx=(0, 8))
 
@@ -5281,9 +5287,9 @@ def _show_library_browser(
         buttons.pack(fill="x")
         _action_button(buttons, "Manage layouts…", manage_layouts, "layouts", "Manage stored PCB layouts").pack(side="left")
         _action_button(buttons, "Open", launch_layout, "open", "Open the selected PCB layout").pack(side="right")
-        ttk.Button(buttons, text="Cancel", command=chooser.destroy).pack(
-            side="right", padx=(0, 6)
-        )
+        _action_button(
+            buttons, "Cancel", chooser.destroy, "cancel", "Close without opening a PCB layout",
+        ).pack(side="right", padx=(0, 6))
         _set_window_geometry(chooser, 500, 200, 440, 170)
         combo.focus_set()
 
