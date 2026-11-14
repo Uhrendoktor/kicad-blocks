@@ -2545,10 +2545,35 @@ def _start_native_symbol_placement(
         if not editor_window_id:
             editor_window_id = _capture_eeschema_window_id()
         if not editor_window_id:
+            wayland = bool(os.environ.get("WAYLAND_DISPLAY")) or (
+                os.environ.get("XDG_SESSION_TYPE", "").casefold() == "wayland"
+            )
+            wtype = shutil.which("wtype") if wayland else None
+            if wtype:
+                try:
+                    command_runner(
+                        [wtype, "-k", "a"],
+                        capture_output=True,
+                        text=True,
+                        check=True,
+                        timeout=5,
+                    )
+                    pause(0.2)
+                    LOG.info(
+                        "Opened the Eeschema Add Symbol chooser through the Wayland virtual keyboard"
+                    )
+                    return
+                except (OSError, subprocess.SubprocessError) as exc:
+                    LOG.warning("Wayland Add Symbol handoff failed: %s", exc)
             raise RuntimeError(
                 (f"{action_error}. " if action_error else "")
                 + "Could not identify the active Schematic Editor. "
-                "Keep the project schematic open and launch the library from Eeschema."
+                + (
+                    "On Wayland, activate Eeschema before retrying; if the chooser does not open, "
+                    "press A and choose the block from KBlocks."
+                    if wayland
+                    else "Keep the project schematic open and launch the library from Eeschema."
+                )
             )
         editor_pid = send("getwindowpid", str(editor_window_id))
         if not editor_pid:
