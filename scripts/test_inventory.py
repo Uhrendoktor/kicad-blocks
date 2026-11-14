@@ -199,9 +199,10 @@ def _purpose_from_name(name: str) -> str:
         ("is_", "Checks that "),
         ("has_", "Checks that "),
     )
-    for prefix, wording in verbs:
+    for prefix, candidate_wording in verbs:
         if phrase.startswith(prefix):
             phrase = phrase[len(prefix):]
+            wording = candidate_wording
             break
     else:
         wording = "Exercises "
@@ -218,10 +219,12 @@ def _escape_cell(value: str) -> str:
 
 def _test_functions(tree: ast.Module) -> list[ast.FunctionDef | ast.AsyncFunctionDef]:
     """Return every pytest/unittest test function in source order."""
-    found: list[ast.FunctionDef | ast.AsyncFunctionDef] = []
-    for node in ast.walk(tree):
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name.startswith("test_"):
-            found.append(node)
+    found = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+        and node.name.startswith("test_")
+    ]
     return sorted(found, key=lambda node: (node.lineno, node.name))
 
 
@@ -264,9 +267,10 @@ def render_inventory(root: Path = ROOT) -> str:
             raise ValueError(
                 f"{relative} collects no pytest tests and is not registered as a standalone runner."
             )
-        cases: list[tuple[str, str]] = []
-        for function in functions:
-            cases.append((function.name, _purpose_from_name(function.name)))
+        cases = [
+            (function.name, _purpose_from_name(function.name))
+            for function in functions
+        ]
         pytest_modules.append((relative, _module_purpose(relative, tree), cases))
 
     actual_standalone = set(STANDALONE_TESTS)

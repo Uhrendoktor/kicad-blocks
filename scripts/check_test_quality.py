@@ -96,12 +96,12 @@ def scan_tests(root: Path) -> tuple[int, list[str]]:
                 )
             duplicates[(scope, _fingerprint(node, body))].append(qualified_name)
 
-        for names in duplicates.values():
-            if len(names) > 1:
-                errors.append(
-                    f"{relative}: exact duplicate test bodies in the same fixture scope: "
-                    + ", ".join(sorted(names))
-                )
+        errors.extend(
+            f"{relative}: exact duplicate test bodies in the same fixture scope: "
+            + ", ".join(sorted(names))
+            for names in duplicates.values()
+            if len(names) > 1
+        )
     return count, errors
 
 

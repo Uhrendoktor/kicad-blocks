@@ -180,10 +180,14 @@ def python_policy_violations(source: str, filename: str = "<memory>") -> tuple[s
     for root in roots:
         stringified = isinstance(root, ast.Constant) and isinstance(root.value, str)
         for node in _expanded_expression_nodes(root):
-            if (
-                stringified
-                and isinstance(node, ast.Name)
-                and node.id in any_names
+            if stringified and (
+                (isinstance(node, ast.Name) and node.id in any_names)
+                or (
+                    isinstance(node, ast.Attribute)
+                    and node.attr == "Any"
+                    and isinstance(node.value, ast.Name)
+                    and node.value.id in typing_modules
+                )
             ):
                 violations.append(
                     f"{filename}:{getattr(node, 'lineno', 1)}: explicit Any reference in a "
@@ -191,27 +195,13 @@ def python_policy_violations(source: str, filename: str = "<memory>") -> tuple[s
                     "or a structured value type"
                 )
             elif (
-                stringified
-                and isinstance(node, ast.Attribute)
-                and node.attr == "Any"
-                and isinstance(node.value, ast.Name)
-                and node.value.id in typing_modules
-            ):
-                violations.append(
-                    f"{filename}:{getattr(node, 'lineno', 1)}: explicit Any reference in a "
-                    "stringified annotation is prohibited; use a concrete type, a narrow Protocol, "
-                    "or a structured value type"
+                (isinstance(node, ast.Name) and (node.id == "object" or node.id in object_names))
+                or (
+                    isinstance(node, ast.Attribute)
+                    and node.attr == "object"
+                    and isinstance(node.value, ast.Name)
+                    and node.value.id in builtins_modules
                 )
-            elif isinstance(node, ast.Name) and (node.id == "object" or node.id in object_names):
-                violations.append(
-                    f"{filename}:{getattr(node, 'lineno', 1)}: generic object annotation is "
-                    "prohibited; use a concrete type, a narrow Protocol, or a structured value type"
-                )
-            elif (
-                isinstance(node, ast.Attribute)
-                and node.attr == "object"
-                and isinstance(node.value, ast.Name)
-                and node.value.id in builtins_modules
             ):
                 violations.append(
                     f"{filename}:{getattr(node, 'lineno', 1)}: generic object annotation is "
@@ -220,13 +210,7 @@ def python_policy_violations(source: str, filename: str = "<memory>") -> tuple[s
 
     for root in type_comment_roots:
         for node in _expanded_expression_nodes(root):
-            if isinstance(node, ast.Name) and node.id in any_names:
-                violations.append(
-                    f"{filename}:{getattr(node, 'lineno', 1)}: explicit Any reference in a "
-                    "type comment is prohibited; use a concrete type, a narrow Protocol, "
-                    "or a structured value type"
-                )
-            elif (
+            if (isinstance(node, ast.Name) and node.id in any_names) or (
                 isinstance(node, ast.Attribute)
                 and node.attr == "Any"
                 and isinstance(node.value, ast.Name)
@@ -237,12 +221,7 @@ def python_policy_violations(source: str, filename: str = "<memory>") -> tuple[s
                     "type comment is prohibited; use a concrete type, a narrow Protocol, "
                     "or a structured value type"
                 )
-            elif isinstance(node, ast.Name) and (node.id == "object" or node.id in object_names):
-                violations.append(
-                    f"{filename}:{getattr(node, 'lineno', 1)}: generic object annotation is "
-                    "prohibited; use a concrete type, a narrow Protocol, or a structured value type"
-                )
-            elif (
+            elif (isinstance(node, ast.Name) and (node.id == "object" or node.id in object_names)) or (
                 isinstance(node, ast.Attribute)
                 and node.attr == "object"
                 and isinstance(node.value, ast.Name)
@@ -306,12 +285,14 @@ def annotation_ratchet_violations(base_ref: str, root: Path = ROOT) -> tuple[str
         )
         before = Counter() if previous.returncode else annotation_debt(previous.stdout, relative)
         current = annotation_debt(path.read_text(encoding="utf-8"), relative)
-        for rule in sorted(set(before) | set(current)):
-            if current[rule] > before[rule]:
-                violations.append(
-                    f"{relative}: {rule} increased from {before[rule]} to {current[rule]} "
-                    f"relative to {base_sha[:12]}"
-                )
+        violations.extend(
+            [
+                f"{relative}: {rule} increased from {before[rule]} to {current[rule]} "
+                f"relative to {base_sha[:12]}"
+                for rule in sorted(set(before) | set(current))
+                if current[rule] > before[rule]
+            ]
+        )
     return tuple(violations)
 
 
