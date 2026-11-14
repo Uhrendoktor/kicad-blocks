@@ -2209,34 +2209,93 @@ def _create_and_place(
 
 
 
+def _ensure_project_facade_catalog(
+    project_dir: Path,
+    record,
+    kicad,
+) -> Path:
+    """Ensure the highlighted symbol exists in the already-registered KBlocks project catalog.
+
+    Do not rebuild an existing catalog here: a user may have unsaved or
+    unpublished edits to another facade in that same project library.
+    """
+    from .pcb_layout import parse_sexpr
+    from .repository import _named_symbol_node, merge_symbol_catalog
+
+    project_dir = Path(project_dir).expanduser().resolve()
+    catalog = project_dir / ".kicad_blocks" / LIBRARY_CATALOG_NAME
+    catalog.parent.mkdir(parents=True, exist_ok=True)
+    symbol_name = str(record.manifest.get("symbol_name") or "")
+    catalog_changed = False
+
+    if not catalog.is_file():
+        merge_symbol_catalog(catalog.parent, record.path / record.manifest["symbol_file"])
+        catalog_changed = True
+    else:
+        tree = parse_sexpr(catalog.read_text(encoding="utf-8"))
+        try:
+            _named_symbol_node(tree, symbol_name, catalog)
+        except ValueError:
+            # Merge only the missing symbol. Never rebuild the whole project
+            # catalog here, because that would discard edits to other symbols.
+            merge_symbol_catalog(catalog.parent, record.path / record.manifest["symbol_file"])
+            catalog_changed = True
+
+    table_path = project_dir / "sym-lib-table"
+    previous_table = table_path.read_bytes() if table_path.is_file() else None
+    register_project_symbol_library(
+        project_dir,
+        LIBRARY_NICKNAME,
+        catalog,
+        description="KiCad Blocks — all registered functional-block libraries",
+        replace_existing=True,
+    )
+    table_changed = (
+        not table_path.is_file()
+        or table_path.read_bytes() != previous_table
+    )
+    if catalog_changed or table_changed:
+        if not _reload_symbol_library(kicad, LIBRARY_NICKNAME):
+            raise RuntimeError(
+                _LAST_LIBRARY_RELOAD_WARNING
+                or "Eeschema could not reload the project KBlocks symbol catalog."
+            )
+
+    return catalog
+
+
 def _edit_facade_symbol(
     record,
     kicad,
     editor_window_id: str | None,
     *,
+    project_catalog: Path | None = None,
     xdotool: str | None = None,
     wtype: str | None = None,
+    close_browser=None,
     command_runner=subprocess.run,
     pause=time.sleep,
 ) -> bool:
-    """Open the generated library facade directly; no schematic instance is required.
+    """Open the highlighted KBlocks library symbol in KiCad's native Symbol Editor.
 
-    KiCad's standard Edit Library Symbol action is selection-bound. Instead,
-    use the native Symbol Editor frame and its library-tree search, targeting
-    the exact unique symbol name stored in the highlighted BlockRecord.
-    Return False when the editor is open and the search field is focused, but
-    no safe desktop text-input helper is available.
+    The Eeschema IPC implementation in supported KiCad builds does not handle
+    RunAction, so the GUI action is invoked through the documented Tools menu.
+    X11 is verified by window title. Wayland uses wtype only after the invoking
+    browser is closed and Eeschema is returned to the foreground; the compositor
+    does not expose a portable window-enumeration API to this plugin.
     """
-    nickname = str(record.manifest.get("library_nickname") or "").strip()
+    nickname = LIBRARY_NICKNAME
     symbol_name = str(record.manifest.get("symbol_name") or "").strip()
-    catalog_path = Path(record.symbol_library).expanduser().resolve()
-    if not nickname or not symbol_name or any(char.isspace() for char in symbol_name):
+    catalog_path = (
+        Path(project_catalog).expanduser().resolve()
+        if project_catalog is not None
+        else Path(record.symbol_library).expanduser().resolve()
+    )
+    if not symbol_name or any(char.isspace() for char in symbol_name):
         raise ValueError("The highlighted block has an invalid library symbol identifier.")
     if not catalog_path.is_file():
-        raise FileNotFoundError(f"The generated facade catalog is missing: {catalog_path}")
+        raise FileNotFoundError(f"The project facade catalog is missing: {catalog_path}")
 
-    # The preview is rendered from this same catalog and symbol name. Verify
-    # the target exists exactly once before launching the editor.
     from .pcb_layout import parse_sexpr
     from .repository import _named_symbol_node
 
@@ -2244,101 +2303,130 @@ def _edit_facade_symbol(
     _named_symbol_node(catalog, symbol_name, catalog_path)
     lib_id = f"{nickname}:{symbol_name}"
 
-    run_action = getattr(kicad, "run_action", None)
-    if not callable(run_action):
-        raise TypeError(
-            "The supplied KiCad IPC client does not expose run_action. Open Symbol Editor "
-            f"from Eeschema and search its library tree for {lib_id}."
-        )
-
-    def invoke(action: str) -> None:
-        try:
-            response = run_action(action)
-        except Exception as exc:
-            raise RuntimeError(f"KiCad could not run {action}: {exc}") from exc
-        status = _native_run_action_status(response)
-        if status != 1:
-            detail = (
-                "returned an unknown status"
-                if status is None
-                else f"was rejected (RunActionStatus={status})"
-            )
-            raise RuntimeError(
-                f"KiCad action {action} {detail}. Open Symbol Editor manually and "
-                f"search for {lib_id}."
-            )
-
-    # Show the actual KiCad editor, ensure its library tree is visible, and
-    # focus the tree's native search field before sending any keyboard input.
-    invoke("common.Control.showSymbolEditor")
-    pause(0.25)
-    invoke("common.Control.showLibraryTree")
-    invoke("common.Control.libraryTreeSearch")
-    pause(0.1)
-
     wayland = bool(os.environ.get("WAYLAND_DISPLAY")) or (
         os.environ.get("XDG_SESSION_TYPE", "").casefold() == "wayland"
     )
-    executable = wtype or (shutil.which("wtype") if wayland else None)
-    if wayland and executable:
-        # The native libraryTreeSearch action has just focused Symbol Editor's
-        # search control. Keyboard input is sent only after that target action
-        # succeeded; never guess a Wayland surface from an X11 window ID.
-        command_runner(
-            [executable, "-M", "ctrl", "-k", "a"],
-            capture_output=True, text=True, check=True, timeout=5,
-        )
-        command_runner(
-            [executable, "-d", "12", symbol_name],
-            capture_output=True, text=True, check=True, timeout=5,
-        )
-        command_runner(
+    if wayland:
+        executable = wtype or shutil.which("wtype")
+        if not executable:
+            return False
+        if close_browser is not None:
+            close_browser()
+        # Closing the transient library browser returns focus to the Eeschema
+        # window that launched it. Tools -> Symbol Editor is a native KiCad
+        # menu action; Ctrl+L is the documented library-tree search shortcut.
+        commands = [
+            [executable, "-M", "alt", "-k", "t", "-m", "alt"],
+            [executable, "-d", "120", "Symbol Editor"],
             [executable, "-k", "Return"],
-            capture_output=True, text=True, check=True, timeout=5,
+        ]
+        for arguments in commands:
+            command_runner(
+                arguments,
+                capture_output=True,
+                text=True,
+                check=True,
+                timeout=5,
+            )
+        pause(0.65)
+        for arguments in (
+            [executable, "-M", "ctrl", "-k", "l", "-m", "ctrl"],
+            [executable, "-M", "ctrl", "-k", "a", "-m", "ctrl"],
+            [executable, "-d", "12", symbol_name],
+            [executable, "-k", "Return"],
+        ):
+            command_runner(
+                arguments,
+                capture_output=True,
+                text=True,
+                check=True,
+                timeout=5,
+            )
+        LOG.info(
+            "Sent the native Symbol Editor menu/search sequence for %s via Wayland",
+            lib_id,
         )
-        pause(0.35)
-        LOG.info("Opened library facade %s in KiCad Symbol Editor", lib_id)
-        return True
+        # Wayland intentionally reports a handoff rather than claiming that
+        # the compositor opened the requested symbol: this process cannot
+        # enumerate or verify the target surface.
+        return False
 
     executable = xdotool or shutil.which("xdotool")
-    if executable:
-        def send(*arguments: str) -> str:
-            result = command_runner(
-                [executable, *arguments],
-                capture_output=True, text=True, check=True, timeout=5,
-            )
-            return str(getattr(result, "stdout", "") or "").strip()
+    if not executable:
+        return False
 
-        # Verify the focused window belongs to the invoking Eeschema process
-        # and is not the schematic canvas. The preceding native action placed
-        # keyboard focus in the Symbol Editor's library-tree search control.
-        if not editor_window_id:
-            editor_window_id = _capture_eeschema_window_id()
-        if editor_window_id:
-            focused_id = send("getwindowfocus")
-            focused_name = (
-                send("getwindowname", focused_id).casefold()
-                if focused_id else ""
-            )
-            if (
-                focused_id
-                and focused_id != str(editor_window_id)
-                and "symbol editor" in focused_name
-            ):
-                send("key", "--clearmodifiers", "ctrl+a")
-                send("type", "--clearmodifiers", "--delay", "12", symbol_name)
-                send("key", "--clearmodifiers", "Return")
-                pause(0.35)
-                LOG.info("Opened library facade %s in KiCad Symbol Editor", lib_id)
-                return True
+    def send(*arguments: str, check: bool = True) -> str:
+        result = command_runner(
+            [executable, *arguments],
+            capture_output=True,
+            text=True,
+            check=check,
+            timeout=5,
+        )
+        return str(getattr(result, "stdout", "") or "").strip()
 
-    # Do not type into an unknown window. KiCad's native editor and search field
-    # remain open and focused so the user can complete the exact search manually.
-    LOG.info(
-        "Symbol Editor opened with library search focused; manual search required for %s",
-        lib_id,
+    if not editor_window_id:
+        editor_window_id = _capture_eeschema_window_id()
+    if not editor_window_id:
+        raise RuntimeError(
+            "Could not identify the active Eeschema window. Open Symbol Editor "
+            "from Eeschema's Tools menu and search for " + lib_id + "."
+        )
+
+    def visible_symbol_editor() -> str | None:
+        result = send("search", "--onlyvisible", "--name", "Symbol Editor", check=False)
+        candidates = [item.strip() for item in result.splitlines() if item.strip()]
+        for window_id in reversed(candidates):
+            title = send("getwindowname", window_id, check=False).casefold()
+            if "symbol editor" in title:
+                return window_id
+        return None
+
+    symbol_editor_id = visible_symbol_editor()
+    if symbol_editor_id is None:
+        send("windowactivate", "--sync", str(editor_window_id))
+        send("windowfocus", "--sync", str(editor_window_id))
+        send("key", "--clearmodifiers", "alt+t")
+        pause(0.15)
+        # In KiCad's Tools menu the Symbol Editor item is addressable by its
+        # underlined S accelerator. The following window check is authoritative.
+        send("key", "--clearmodifiers", "s")
+        send("key", "--clearmodifiers", "Return")
+        deadline = time.monotonic() + 5.0
+        while time.monotonic() < deadline:
+            symbol_editor_id = visible_symbol_editor()
+            if symbol_editor_id is not None:
+                break
+            pause(0.1)
+
+    if symbol_editor_id is None:
+        raise RuntimeError(
+            "Eeschema did not open Symbol Editor from Tools. Open Tools → Symbol Editor "
+            f"manually, then search for {lib_id}."
+        )
+
+    send("windowactivate", "--sync", symbol_editor_id)
+    send("windowfocus", "--sync", symbol_editor_id)
+    send("key", "--clearmodifiers", "ctrl+l")
+    pause(0.1)
+    send("key", "--clearmodifiers", "ctrl+a")
+    send("type", "--clearmodifiers", "--delay", "12", symbol_name)
+    pause(0.2)
+    send("key", "--clearmodifiers", "Return")
+
+    deadline = time.monotonic() + 5.0
+    target_title = symbol_name.casefold()
+    while time.monotonic() < deadline:
+        current_title = send("getwindowname", symbol_editor_id, check=False).casefold()
+        if target_title in current_title:
+            LOG.info("Opened library facade %s in KiCad Symbol Editor", lib_id)
+            return True
+        pause(0.1)
+
+    raise RuntimeError(
+        f"Symbol Editor opened, but KiCad did not confirm {lib_id!r} as the current symbol. "
+        "Check the library-tree filter and select the highlighted symbol."
     )
-    return False
 
 
 
@@ -5186,30 +5274,23 @@ def _show_library_browser(
         if record is None:
             return
         try:
-            refreshed_record = _register_block(
-                project_dir, record, kicad, current_roots[0]
+            project_catalog = _ensure_project_facade_catalog(
+                project_dir, record, kicad
             )
-            if not _LAST_LIBRARY_RELOAD_OK:
-                messagebox.showwarning(
-                    "Edit facade",
-                    _LAST_LIBRARY_RELOAD_WARNING
-                    or "KiCad could not reload the generated facade catalog. Restart Eeschema and retry.",
-                    parent=window,
-                )
-                return
             opened = _edit_facade_symbol(
-                refreshed_record,
+                record,
                 kicad,
                 editor_window_id,
+                project_catalog=project_catalog,
+                close_browser=window.destroy,
             )
             if not opened:
                 messagebox.showinfo(
                     "Edit facade",
-                    "Symbol Editor is open. Search its library tree for "
-                    + f"{refreshed_record.manifest['library_nickname']}:"
-                    + str(refreshed_record.manifest["symbol_name"])
-                    + " and press Enter.",
-                    parent=window,
+                    "Symbol Editor handoff requested. In its library tree, search for "
+                    + f"{LIBRARY_NICKNAME}:{record.manifest['symbol_name']}"
+                    + " and select the result. Saved facade edits are imported by Publish implementation.",
+                    parent=window.master,
                 )
         except (OSError, RuntimeError, ValueError, LookupError, subprocess.SubprocessError) as exc:
             LOG.exception("Could not open generated library facade")
