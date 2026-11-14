@@ -27,6 +27,8 @@ if TYPE_CHECKING:
     from google.protobuf.message import Message
 else:
     tk = None
+    tkinter_types = None
+    ttk_types = None
     ttk = None
     filedialog = None
     messagebox = None
@@ -143,7 +145,7 @@ class _TkTransientWindow(Protocol):
 
 def load_tkinter() -> None:
     """Load the optional desktop UI toolkit when the manager is run."""
-    global tk, ttk, filedialog, messagebox, simpledialog
+    global tk, tkinter_types, ttk, filedialog, messagebox, simpledialog
     if tk is not None:
         return
 
@@ -154,6 +156,7 @@ def load_tkinter() -> None:
     from tkinter import ttk as ttk_module
 
     tk = tkinter_module
+    tkinter_types = tkinter_module
     ttk = ttk_module
     filedialog = filedialog_module
     messagebox = messagebox_module
