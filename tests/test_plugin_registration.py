@@ -132,6 +132,57 @@ def _wait_for_editor(
     )
 
 
+def _wait_for_window_title(xdotool: str, predicate, timeout_s: float = 12.0) -> tuple[str, str, str]:
+    deadline = time.monotonic() + timeout_s
+    last_windows = []
+    while time.monotonic() < deadline:
+        last_windows = _windows(xdotool)
+        match = next((item for item in reversed(last_windows) if predicate(item[1].casefold())), None)
+        if match is not None:
+            return match
+        time.sleep(0.1)
+    raise TimeoutError(f"Expected KiCad window did not appear; windows={last_windows!r}")
+
+
+def _select_native_symbol_in_test_harness(xdotool: str, symbol_name: str) -> None:
+    """Use X11 input only in this GUI-test driver, never in plugin runtime code."""
+    chooser = _wait_for_window_title(
+        xdotool, lambda title: "choose symbol" in title or "select symbol" in title
+    )
+    subprocess.run([xdotool, "windowfocus", "--sync", chooser[0]], check=True, capture_output=True, text=True)
+    subprocess.run([xdotool, "type", "--clearmodifiers", "--delay", "12", symbol_name], check=True, capture_output=True, text=True)
+    subprocess.run([xdotool, "key", "--clearmodifiers", "Return"], check=True, capture_output=True, text=True)
+
+
+def _select_facade_in_test_harness(xdotool: str, symbol_name: str) -> None:
+    """Complete the native Symbol Editor library-tree search in the X11 test session."""
+    editor = _wait_for_window_title(xdotool, lambda title: "symbol editor" in title)
+    subprocess.run([xdotool, "windowfocus", "--sync", editor[0]], check=True, capture_output=True, text=True)
+    subprocess.run([xdotool, "key", "--clearmodifiers", "ctrl+l"], check=True, capture_output=True, text=True)
+    subprocess.run([xdotool, "type", "--clearmodifiers", "--delay", "12", symbol_name], check=True, capture_output=True, text=True)
+    time.sleep(0.35)
+    subprocess.run([xdotool, "key", "--clearmodifiers", "Return"], check=True, capture_output=True, text=True)
+
+
+def _wait_for_symbol_document(kicad, expected_lib_id: str, timeout_s: float = 8.0) -> None:
+    from kipy.proto.common.types import DocumentType
+    deadline = time.monotonic() + timeout_s
+    observed = []
+    while time.monotonic() < deadline:
+        observed = []
+        for document in kicad.get_open_documents(DocumentType.DOCTYPE_SYMBOL):
+            identifier = getattr(document, "lib_id", None)
+            if identifier is None:
+                continue
+            nickname = str(getattr(identifier, "library_nickname", "") or "")
+            name = str(getattr(identifier, "entry_name", "") or "")
+            if nickname and name:
+                observed.append(f"{nickname}:{name}")
+        if expected_lib_id in observed:
+            return
+        time.sleep(0.1)
+    raise AssertionError(f"Symbol Editor did not report {expected_lib_id!r}; observed={observed!r}")
+
 def _close_editor(process: subprocess.Popen, window_id: str, xdotool: str) -> None:
     subprocess.run(
         [xdotool, "windowclose", window_id],
@@ -528,49 +579,28 @@ def main() -> None:
                         "opening Edit Facade: "
                         + str(plugin_actions._LAST_LIBRARY_RELOAD_WARNING)
                     )
-                try:
-                    opened = plugin_actions._edit_facade_symbol(
-                        refreshed_record,
-                        facade_editor_client,
-                        window_id,
-                        project_catalog=project / ".kicad_blocks" / LIBRARY_CATALOG_NAME,
-                        xdotool=xdotool,
-                    )
-                except Exception:
-                    debug_image = (
-                        Path(os.environ.get("RUNNER_TEMP", tempfile.gettempdir()))
-                        / "edit-facade-gui-debug.xwd"
-                    )
-                    capture = subprocess.run(
-                        ["xwd", "-root", "-silent", "-out", str(debug_image)],
-                        capture_output=True,
-                        text=True,
-                        check=False,
-                    )
-                    print(
-                        "Edit Facade failure screenshot: "
-                        + (str(debug_image) if capture.returncode == 0 else capture.stderr)
-                    )
-                    raise
-                if not opened:
+                opened = plugin_actions._edit_facade_symbol(
+                    refreshed_record,
+                    facade_editor_client,
+                    project_catalog=project / ".kicad_blocks" / LIBRARY_CATALOG_NAME,
+                )
+                if opened:
                     raise AssertionError(
-                        "Edit Facade opened Symbol Editor but could not complete the "
-                        "native library-tree search for the generated facade."
+                        "Edit Facade must leave library-tree selection to KiCad's native UI; "
+                        "the plugin must not use platform-specific keyboard injection."
                     )
+                _select_facade_in_test_harness(xdotool, placement_symbol_name)
+                expected_facade_id = f"{refreshed_record.manifest['library_nickname']}:{placement_symbol_name}"
+                _wait_for_symbol_document(facade_editor_client, expected_facade_id)
                 editor_windows = _windows(xdotool)
                 matching_editor = [
                     item for item in editor_windows
-                    if item[0] != window_id
-                    and (
-                        "symbol editor" in item[1].casefold()
-                        or placement_symbol_name.casefold() in item[1].casefold()
-                    )
+                    if item[0] != window_id and "symbol editor" in item[1].casefold()
                 ]
                 if not matching_editor:
                     raise AssertionError(
-                        "Edit Facade did not leave a Symbol Editor window open for the "
-                        f"generated library symbol {refreshed_record.manifest['library_nickname']}:{placement_symbol_name}; "
-                        f"visible_windows={editor_windows!r}"
+                        "Edit Facade did not leave a Symbol Editor window open for "
+                        f"{expected_facade_id}; visible_windows={editor_windows!r}"
                     )
                 print(
                     "Edit Facade opened the generated project library symbol "
@@ -579,22 +609,16 @@ def main() -> None:
             finally:
                 facade_editor_client.close()
 
-            subprocess.run(
-                [xdotool, "windowfocus", "--sync", window_id],
-                capture_output=True,
-                text=True,
-                check=True,
-            )
+            finally:
+                facade_editor_client.close()
 
-            # Run the same native placement helper used by the Functional
-            # Block Library. This is deliberately a real Eeschema process:
-            # no mocked window IDs, chooser, or keyboard events.
+            placement_client = KiCad(timeout_ms=30000)
             plugin_actions._start_native_symbol_placement(
-                SimpleNamespace(),
-                window_id,
+                placement_client,
+                None,
                 placement_symbol_name,
-                xdotool=xdotool,
             )
+            _select_native_symbol_in_test_harness(xdotool, placement_symbol_name)
             placement_focus = subprocess.run(
                 [xdotool, "getwindowfocus"],
                 capture_output=True,
@@ -716,6 +740,8 @@ def main() -> None:
                 f"Functional Block Library placement helper selected and placed "
                 f"{expected_lib_id}; the saved schematic passed KiCad CLI export."
             )
+
+            placement_client.close()
 
             print(
                 "KiCad plugin registration passed: plugin.json discovered, "
