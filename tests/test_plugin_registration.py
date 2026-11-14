@@ -534,7 +534,7 @@ def main() -> None:
                 if not matching_editor:
                     raise AssertionError(
                         "Edit Facade did not leave a Symbol Editor window open for the "
-                        f"generated library symbol {edit_nickname}:{placement_symbol_name}; "
+                        f"generated library symbol {refreshed_record.manifest['library_nickname']}:{placement_symbol_name}; "
                         f"visible_windows={editor_windows!r}"
                     )
                 print(
