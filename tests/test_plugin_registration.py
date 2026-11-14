@@ -22,6 +22,7 @@ sys.path.insert(0, str(PLUGIN_SOURCE))
 from kicad_blocks import plugin as plugin_actions
 from kicad_blocks.model import parse_pins
 from kicad_blocks.repository import create_block, register_project_symbol_library
+from kipy import KiCad
 
 
 def _find_executable(*names: str) -> str:
@@ -483,6 +484,64 @@ def main() -> None:
                     f"stdout: {configuration_probe.stdout}; stderr: {configuration_probe.stderr}"
                 )
             print(picker_probe.stdout.strip())
+
+            # Edit Facade must open the exact shared library symbol rendered
+            # in the browser preview, even when the active schematic contains
+            # no placed instance of that block.
+            facade_editor_client = KiCad(timeout_ms=30000)
+            try:
+                live_schematic = facade_editor_client.get_schematic()
+                if live_schematic is None:
+                    raise RuntimeError("Live Eeschema IPC returned no schematic for Edit Facade.")
+                live_selection = plugin_actions._safe_schematic_selection(live_schematic)
+                if live_selection:
+                    raise AssertionError(
+                        "Edit Facade GUI regression requires an empty schematic selection; "
+                        f"found {len(live_selection)} selected item(s)."
+                    )
+                edit_nickname = plugin_actions._register_facade_edit_library(
+                    project, block, facade_editor_client
+                )
+                opened = plugin_actions._edit_facade_symbol(
+                    block,
+                    facade_editor_client,
+                    window_id,
+                    edit_library_nickname=edit_nickname,
+                    xdotool=xdotool,
+                )
+                if not opened:
+                    raise AssertionError(
+                        "Edit Facade opened Symbol Editor but could not complete the "
+                        "native library-tree search for the generated facade."
+                    )
+                editor_windows = _windows(xdotool)
+                matching_editor = [
+                    item for item in editor_windows
+                    if item[0] != window_id
+                    and (
+                        "symbol editor" in item[1].casefold()
+                        or placement_symbol_name.casefold() in item[1].casefold()
+                    )
+                ]
+                if not matching_editor:
+                    raise AssertionError(
+                        "Edit Facade did not leave a Symbol Editor window open for the "
+                        f"generated library symbol {edit_nickname}:{placement_symbol_name}; "
+                        f"visible_windows={editor_windows!r}"
+                    )
+                print(
+                    "Edit Facade opened the generated shared library symbol "
+                    f"{edit_nickname}:{placement_symbol_name} with no placed schematic instance."
+                )
+            finally:
+                facade_editor_client.close()
+
+            subprocess.run(
+                [xdotool, "windowfocus", "--sync", window_id],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
 
             # Run the same native placement helper used by the Functional
             # Block Library. This is deliberately a real Eeschema process:
