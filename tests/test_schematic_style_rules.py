@@ -60,6 +60,21 @@ class SchematicStyleRuleTests(unittest.TestCase):
         title[1] = str(title[1]) + "\nWRAPPED"
         self.assertTrue(any("single line" in issue for issue in block_annotation_issues(tree)))
 
+    def test_generic_multiline_unbordered_text_is_rejected(self) -> None:
+        tree = [
+            "kicad_sch",
+            [
+                "text_box", "BLOCK TITLE\\nWRAPPED",
+                ["at", "10", "10", "0"], ["size", "40", "8"],
+                ["stroke", ["width", "-1"]],
+                ["uuid", "future-schematic-title"],
+            ],
+        ]
+        self.assertTrue(any(
+            "multiline annotation" in issue
+            for issue in block_annotation_issues(tree)
+        ))
+
     def test_group_comment_requires_its_own_outline(self) -> None:
         tree = self.fresh_tree()
         note = next(
