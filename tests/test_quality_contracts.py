@@ -87,6 +87,7 @@ def test_parameter_values_remain_one_quoted_sexpr_field(value: str) -> None:
     assert parsed[1][2] == value
     assert len(parsed) == 2
 
+
 def test_changed_file_ratchet_rejects_increased_annotation_debt(tmp_path: Path) -> None:
     """Rejects a changed Python file that adds unannotated parameters and returns."""
     def run_git(*arguments: str) -> None:
