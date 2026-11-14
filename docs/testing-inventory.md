@@ -298,7 +298,7 @@ Regression coverage for global typing policy violations, nested object annotatio
 | `test_rejects_explicit_any_outside_reviewed_boundaries` | rejects explicit Any outside reviewed boundaries. |
 | `test_allows_the_one_documented_untrusted_object_input` | allows the one documented untrusted object input. |
 | `test_requires_documentation_for_production_python_modules` | requires documentation for production Python modules. |
-| `test_pyright_inventory_requires_every_core_module_or_a_host_exclusion` | pyright inventory requires every core module or a host exclusion. |
+| `test_pyright_inventory_requires_each_core_module_to_be_included_or_reviewed` | pyright inventory requires each core module to be included or reviewed. |
 | `test_rejects_unreviewed_nested_object_annotations` | rejects unreviewed nested object annotations. |
 
 ### `tests/test_release_package.py`
