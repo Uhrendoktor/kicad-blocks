@@ -1446,7 +1446,7 @@ def _show_selected_block_configuration(
         )
         layout_combo.pack(fill="x")
 
-        def update_layout_for_variant(_event=None):
+        def update_layout_for_variant(_event: tkinter_types.Event[tkinter_types.Misc] | None = None):
             if variant_var is None:
                 return
             selected = next(
@@ -1601,7 +1601,7 @@ def _show_selected_block_configuration(
     dialog.wait_window()
 
 
-def sync_selected_local(schematic, kicad, project_dir: Path) -> dict:
+def sync_selected_local(schematic: _Schematic, kicad: _KiCadApp, project_dir: Path) -> dict:
     """Synchronize the local implementation linked to the selected symbol KIID."""
     instance = _selected_symbol(schematic)
     local_record = local_copy_for_instance(project_dir, str(instance.id))
@@ -1773,13 +1773,13 @@ def _pick_block_for_placement(
         selected_record[0] = preferred
         update_metadata(preferred)
 
-    def selection_changed(_event=None):
+    def selection_changed(_event: tkinter_types.Event[tkinter_types.Misc] | None = None):
         selection = tree.selection()
         record = records_by_id.get(selection[0]) if selection else None
         selected_record[0] = record
         update_metadata(record)
 
-    def variant_changed(_event=None):
+    def variant_changed(_event: tkinter_types.Event[tkinter_types.Misc] | None = None):
         if updating_config[0]:
             return
         if selected_record[0] is not None and profile_value.get() != "Custom":
@@ -1787,7 +1787,7 @@ def _pick_block_for_placement(
             profile_value.set("Custom" if selected_record[0].manifest.get("profiles") else "")
             updating_config[0] = False
 
-    def profile_changed(_event=None):
+    def profile_changed(_event: tkinter_types.Event[tkinter_types.Misc] | None = None):
         record = selected_record[0]
         if record is None or profile_value.get() in ("", "Custom"):
             return
@@ -1802,7 +1802,7 @@ def _pick_block_for_placement(
         if profile is not None:
             variant_value.set(str(profile.get("variant") or "(single implementation)"))
 
-    def choose(_event=None):
+    def choose(_event: tkinter_types.Event[tkinter_types.Misc] | None = None):
         record = selected_record[0]
         if record is None:
             return "break"
@@ -1987,14 +1987,14 @@ def _pick_record(
             )
             select_button.configure(state="normal")
 
-    def choose_selected(_event=None):
+    def choose_selected(_event: tkinter_types.Event[tkinter_types.Misc] | None = None):
         record = selected_record[0]
         if record is not None:
             chosen_record[0] = record
             dialog.destroy()
         return "break"
 
-    def focus_results(_event=None):
+    def focus_results(_event: tkinter_types.Event[tkinter_types.Misc] | None = None):
         children = tree.get_children()
         if children:
             selection = tree.selection()
@@ -2004,7 +2004,7 @@ def _pick_record(
             tree.focus_set()
         return "break"
 
-    def choose_double_clicked(event):
+    def choose_double_clicked(event: tkinter_types.Event[tkinter_types.Misc]):
         row_id = tree.identify_row(event.y)
         record = records_by_id.get(row_id) if row_id else None
         if record is None:
@@ -2426,7 +2426,7 @@ def _ask_create_block_details(
 
 
 def _selected_sheet_symbol_source(
-    schematic, project_dir: Path, *, selection: list | None = None
+    schematic: _Schematic, project_dir: Path, *, selection: list[_SchematicSymbol] | None = None
 ) -> tuple[Path, str] | None:
     """Resolve one typed KiCad SheetSymbol using the active parent's directory."""
     if selection is None:
@@ -2466,11 +2466,11 @@ def _selected_sheet_symbol_source(
 
 
 def _create_and_place(
-    root,
-    schematic,
-    kicad,
-    project_dir,
-    parent,
+    root: Path | list[Path],
+    schematic: _Schematic,
+    kicad: _KiCadApp,
+    project_dir: Path,
+    parent: tkinter_types.Misc,
     editor_window_id: str | None = None,
 ) -> None:
     """Create a block from one selected SheetSymbol or the currently open sheet."""
@@ -2597,7 +2597,7 @@ def _create_and_place(
     )
 
 
-def _edit_facade_symbol(root, schematic, project_dir, editor_window_id, parent) -> None:
+def _edit_facade_symbol(root: Path | list[Path], schematic: _Schematic, project_dir: Path, editor_window_id: str | None, parent: tkinter_types.Misc) -> None:
     """Open the selected library-backed facade through Eeschema's native Symbol Editor action."""
     instance = _selected_symbol(schematic)
     record = _block_record_for_instance(root, project_dir, instance)
@@ -3261,7 +3261,6 @@ def _register_implementation_catalog(record: BlockRecord, library_roots: list[Pa
     return register_project_symbol_library(
         record.path,
         LIBRARY_NICKNAME,
-        BlockRecord,
         catalog,
         description="KiCad Blocks — registered child facades",
         replace_existing=True,
@@ -3269,12 +3268,12 @@ def _register_implementation_catalog(record: BlockRecord, library_roots: list[Pa
 
 
 def _launch_block_asset(
-    kicad,
+    kicad: _KiCadApp,
     path: Path,
     description: str,
     *,
     editor_window_id: str | None = None,
-):
+) -> subprocess.Popen[bytes]:
     """Open a stored KiCad asset and group its window under the invoking editor."""
     path = Path(path).expanduser().resolve()
     if not path.is_file():
@@ -3819,7 +3818,7 @@ def _ask_layout_details(
 
     browse_button.configure(command=browse)
 
-    def update_mode(_event=None):
+    def update_mode(_event: tkinter_types.Event[tkinter_types.Misc] | None = None):
         use_existing = mode_value.get() == "Choose an existing PCB file"
         if use_existing:
             source_entry.grid()
@@ -3872,7 +3871,7 @@ def _ask_layout_details(
 
 
 def _show_block_layout_editor(
-    record, parent, kicad=None, editor_window_id: str | None = None
+    record: BlockRecord, parent: tkinter_types.Misc, kicad: _KiCadApp | None = None, editor_window_id: str | None = None
 ) -> Path | None:
     """Manage stored PCB boards and keep every board linked to an implementation."""
     from .model import slugify
@@ -4071,7 +4070,7 @@ def _show_block_layout_editor(
         status_value.set(f"{item['name']} is now available to {selected}.")
         render(item["id"])
 
-    def update_actions(_event=None):
+    def update_actions(_event: tkinter_types.Event[tkinter_types.Misc] | None = None):
         has_selection = selected_layout() is not None
         remove_button.configure(state="normal" if has_selection else "disabled")
         default_button.configure(state="normal" if has_selection else "disabled")
@@ -4153,7 +4152,7 @@ def _show_block_layout_editor(
 
 
 def _pick_kicad_file(
-    parent,
+    parent: tkinter_types.Misc,
     *,
     title: str,
     suffix: str,
@@ -4177,7 +4176,7 @@ def _pick_kicad_file(
     return selected or None
 
 
-def _pick_directory(parent, *, title: str, initial_path: str | Path | None = None) -> str | None:
+def _pick_directory(parent: tkinter_types.Misc, *, title: str, initial_path: str | Path | None = None) -> str | None:
     """Use the operating system directory chooser with a shared parent policy."""
     initial = Path(initial_path).expanduser() if initial_path else Path.cwd()
     if initial.is_file():
@@ -4295,7 +4294,7 @@ def _ask_implementation_details(
 
     browse_button.configure(command=browse)
 
-    def update_source_mode(_event=None):
+    def update_source_mode(_event: tkinter_types.Event[tkinter_types.Misc] | None = None):
         mode = mode_value.get()
         copy_combo.grid_remove()
         source_entry.grid_remove()
@@ -4389,7 +4388,7 @@ def _ask_implementation_details(
 
 
 def _show_block_variant_editor(
-    record, parent, *, kicad=None, editor_window_id: str | None = None
+    record: BlockRecord, parent: tkinter_types.Misc, *, kicad: _KiCadApp | None = None, editor_window_id: str | None = None
 ) -> Path | None:
     """Manage named implementations and select which one empty KB_VARIANT uses."""
     dialog = tkinter_types.Toplevel(parent)
@@ -4895,7 +4894,7 @@ def _bind_mousewheel(
     """Bind wheel and high-resolution trackpad scrolling to a scrollable pane."""
     remainder = [0.0]
 
-    def on_wheel(event):
+    def on_wheel(event: tkinter_types.Event[tkinter_types.Misc]) -> str:
         number = getattr(event, "num", None)
         if number == 4:
             amount = -1
@@ -4916,7 +4915,7 @@ def _bind_mousewheel(
             scroll_command(amount)
         return "break"
 
-    def bind_tree(target) -> None:
+    def bind_tree(target: tkinter_types.Misc) -> None:
         for sequence in ("<MouseWheel>", "<Button-4>", "<Button-5>"):
             target.bind(sequence, on_wheel, add="+")
         if include_children:
@@ -5061,7 +5060,7 @@ def _show_library_browser(
     facade_button = [None]
     open_layout_button = [None]
 
-    def set_details(record):
+    def set_details(record: BlockRecord | None) -> None:
         selected_record[0] = record
         if record is None:
             name_label.configure(
@@ -5184,7 +5183,7 @@ def _show_library_browser(
         if facade_button[0] is not None:
             facade_button[0].configure(state="normal" if record is not None else "disabled")
 
-    def place_selected(_event=None):
+    def place_selected(_event: tkinter_types.Event[tkinter_types.Misc] | None = None):
         nonlocal editor_window_id
         record = selected_record[0]
         if record is None:
@@ -5219,7 +5218,7 @@ def _show_library_browser(
             LOG.exception("Native block placement handoff failed")
             messagebox.showerror("Place Block", str(exc), parent=window)
 
-    def open_implementation(_event=None):
+    def open_implementation(_event: tkinter_types.Event[tkinter_types.Misc] | None = None):
         record = selected_record[0]
         if record is None:
             return
@@ -5291,7 +5290,7 @@ def _show_library_browser(
         _set_window_geometry(chooser, 500, 190, 440, 160)
         combo.focus_set()
 
-    def edit_facade(_event=None):
+    def edit_facade(_event: tkinter_types.Event[tkinter_types.Misc] | None = None):
         record = selected_record[0]
         if record is None:
             return
@@ -5319,7 +5318,7 @@ def _show_library_browser(
         except (OSError, RuntimeError, ValueError, LookupError, subprocess.SubprocessError) as exc:
             messagebox.showerror("Edit facade symbol", str(exc), parent=window)
 
-    def manage_layouts(_event=None):
+    def manage_layouts(_event: tkinter_types.Event[tkinter_types.Misc] | None = None):
         record = selected_record[0]
         if record is None:
             return
@@ -5337,7 +5336,7 @@ def _show_library_browser(
             LOG.exception("Could not update PCB layouts")
             messagebox.showerror("Manage PCB layouts", str(exc), parent=window)
 
-    def edit_variants(_event=None):
+    def edit_variants(_event: tkinter_types.Event[tkinter_types.Misc] | None = None):
         record = selected_record[0]
         if record is None:
             return
@@ -5360,7 +5359,7 @@ def _show_library_browser(
             LOG.exception("Could not update implementation variants")
             messagebox.showerror("Manage implementations", str(exc), parent=window)
 
-    def open_layout(_event=None):
+    def open_layout(_event: tkinter_types.Event[tkinter_types.Misc] | None = None):
         record = selected_record[0]
         if record is None:
             return
@@ -5451,12 +5450,12 @@ def _show_library_browser(
             tree.focus_set()
         return "break"
 
-    def focus_search(_event=None):
+    def focus_search(_event: tkinter_types.Event[tkinter_types.Misc] | None = None):
         search_entry.focus_set()
         search_entry.icursor("end")
         return "break"
 
-    def place_double_clicked(event):
+    def place_double_clicked(event: tkinter_types.Event[tkinter_types.Misc]):
         row_id = tree.identify_row(event.y)
         record = _library_record_for_tree_row(records_by_id, row_id)
         if record is None:
@@ -5637,7 +5636,7 @@ def _resolve_variant_text(
     return value.strip()
 
 
-def _open_selected_block_implementation(root, schematic, kicad, project_dir, parent):
+def _open_selected_block_implementation(root: Path | list[Path], schematic: _Schematic, kicad: _KiCadApp, project_dir: Path, parent: tkinter_types.Misc) -> subprocess.Popen[bytes]:
     """Open the selected facade's exact variant implementation; never guess a fallback."""
     instance = _selected_symbol(schematic)
     record = _block_record_for_instance(root, project_dir, instance)
@@ -5674,7 +5673,7 @@ def open_selected_implementation_action() -> None:
 
 
 def _export_recursive_bom(
-    root: Path | list[Path], parent, schematic=None, project_dir: Path | None = None
+    root: Path | list[Path], parent: tkinter_types.Misc, schematic: _Schematic | None = None, project_dir: Path | None = None
 ) -> None:
     parameter_values = None
     selection = _safe_schematic_selection(schematic)
@@ -5769,7 +5768,7 @@ def _validate_shared_library(root: Path | list[Path], parent: tkinter_types.Misc
 
 
 def _validate_recursive_erc(
-    root: Path | list[Path], parent, schematic=None, project_dir: Path | None = None
+    root: Path | list[Path], parent: tkinter_types.Misc, schematic: _Schematic | None = None, project_dir: Path | None = None
 ) -> None:
     parameter_values = None
     selection = _safe_schematic_selection(schematic)
@@ -5874,7 +5873,7 @@ def _open_generated_pcb_copy(kicad: _KiCadApp, board_path: Path) -> subprocess.P
 
 
 def _apply_block_pcb_layout(
-    schematic, kicad, project_dir: Path, library_root: Path, parent
+    schematic: _Schematic, kicad: _KiCadApp, project_dir: Path, library_root: Path, parent: tkinter_types.Misc
 ) -> None:
     """Create a new project-board copy with the selected block's stored PCB layout."""
     instance = _selected_symbol(schematic)
@@ -6017,7 +6016,7 @@ def _apply_block_pcb_layout(
 
 
 def _apply_selected_block_pcb_layouts(
-    schematic, kicad, project_dir: Path, library_root: Path, parent
+    schematic: _Schematic, kicad: _KiCadApp, project_dir: Path, library_root: Path, parent: tkinter_types.Misc
 ) -> None:
     """Batch-apply the layouts for all selected block facade instances."""
     instances = _selected_symbols(schematic)
@@ -6140,7 +6139,7 @@ def _apply_selected_block_pcb_layouts(
     )
 
 
-def _show_action_hub(root):
+def _show_action_hub(root: tkinter_types.Misc) -> ttk_types.Notebook:
     """Show a scrollable task hub for less frequent and context-specific actions."""
     _configure_tk_theme(root)
     root.title("KiCad Blocks — Tasks")
@@ -6278,10 +6277,10 @@ def _show_action_hub(root):
         content_id = canvas.create_window((0, 0), window=content, anchor="nw")
         description_labels = []
 
-        def update_scroll_region(_event=None, target=canvas):
+        def update_scroll_region(_event: tkinter_types.Event[tkinter_types.Misc] | None = None, target: tkinter_types.Canvas = canvas) -> None:
             target.configure(scrollregion=target.bbox("all"))
 
-        def fit_content_width(event, target=canvas, item=content_id, labels=description_labels):
+        def fit_content_width(event: tkinter_types.Event[tkinter_types.Misc], target: tkinter_types.Canvas = canvas, item: int = content_id, labels: list[ttk_types.Label] = description_labels) -> None:
             target.itemconfigure(item, width=event.width)
             wrap = max(260, min(560, event.width - 390))
             for label in labels:
