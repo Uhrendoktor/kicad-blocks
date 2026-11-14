@@ -218,10 +218,10 @@ Broken manifests are reported as validation errors rather than silently skipped.
 | --- | --- |
 | Default shared library folder | `~/Documents/KiCad/Blocks` |
 | Override for new blocks | `KICAD_BLOCKS_LIBRARY=/path/to/library` |
-| Persisted library preferences | `~/.config/kicad-blocks/settings.json` |
+| Persisted library preferences | `platformdirs` user config path: Linux `~/.config/kicad-blocks/settings.json`, macOS `~/Library/Application Support/kicad-blocks/settings.json`, Windows `%LOCALAPPDATA%\\kicad-blocks\\settings.json` |
 | Theme override | `KICAD_BLOCKS_THEME=system`, `light`, or `dark` |
 | Project-local assets | `<project>/.kicad_blocks/` |
-| Native Add Symbol shortcut used for placement handoff | `A` |
+| Native Place Symbol handoff | KiCad IPC opens the native chooser; choose the generated `KBlocks:<symbol>` entry there |
 
 ## Compatibility
 
