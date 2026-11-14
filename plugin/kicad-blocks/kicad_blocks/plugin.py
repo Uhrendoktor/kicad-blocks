@@ -64,6 +64,7 @@ from .operations import (
 )
 from .pcb_layout import BlockLayoutPlacement, merge_block_layout, merge_block_layouts
 from .pcb_placement import placement_manifest_path, write_pcb_placement_manifest
+from .report_types import LocalCopyPublishReport
 from .pcb_types import ResolvedBlockLayout
 from .repository import (
     LIBRARY_CATALOG_NAME,
@@ -87,7 +88,6 @@ from .repository import (
     set_library_root,
 )
 from .repository import library_roots as configured_library_roots
-from .report_types import LocalCopyPublishReport
 
 LOG = logging.getLogger("kicad_blocks")
 
