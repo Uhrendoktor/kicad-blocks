@@ -2385,42 +2385,24 @@ def _edit_facade_symbol(
 
     if wayland:
         if not action_started:
-            # wtype injects into whichever surface owns keyboard focus. Without
-            # an acknowledged native action there is no safe way to prove that
-            # the focused surface is Eeschema rather than this browser or a
-            # different application, so leave the browser open for manual use.
-            LOG.info(
-                "%s; not injecting keys into an unverified Wayland window",
-                action_error or "Native Symbol Editor action is unavailable",
+            detail = f"{action_error}. " if action_error else ""
+            raise RuntimeError(
+                detail
+                + "KiCad did not open Symbol Editor through IPC. On Wayland, the plugin "
+                + "cannot safely send global menu keys to an unverified window. Open "
+                + "Tools → Symbol Editor in Eeschema, then search for "
+                + f"{lib_id}. A placed schematic instance is not required."
             )
-            return False
         if close_browser is not None:
             close_browser()
-        executable = wtype or shutil.which("wtype")
-        if not executable:
-            LOG.info(
-                "Symbol Editor was opened for %s; wtype is unavailable for automatic library search",
-                lib_id,
-            )
-            return False
-        pause(0.35)
-        for arguments in (
-            [executable, "-M", "ctrl", "-k", "l", "-m", "ctrl"],
-            [executable, "-M", "ctrl", "-k", "a", "-m", "ctrl"],
-            [executable, "-d", "12", symbol_name],
-            [executable, "-k", "Return"],
-        ):
-            command_runner(
-                arguments,
-                capture_output=True,
-                text=True,
-                check=True,
-                timeout=5,
-            )
-        LOG.info("Dispatched library-tree search for %s through KiCad's native editor action", lib_id)
-        # KiCad acknowledged the target frame, but Wayland does not provide a
-        # portable public API for querying another application's window title.
-        return True
+        LOG.info(
+            "KiCad opened Symbol Editor for %s; leaving its existing editor state untouched",
+            lib_id,
+        )
+        # Wayland does not expose a portable way to verify whether this is a
+        # newly created editor or an already-open editor whose canvas has focus.
+        # Do not inject global keys or risk overwriting an unsaved symbol.
+        return False
 
     if not executable:
         if action_started:
