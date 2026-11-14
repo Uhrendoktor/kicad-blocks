@@ -1,0 +1,19 @@
+{
+  "include": [
+    "plugin/kicad-blocks",
+    "scripts",
+    "examples",
+    "tests"
+  ],
+  "exclude": [
+    "**/__pycache__",
+    ".venv"
+  ],
+  "extraPaths": [
+    "plugin/kicad-blocks",
+    "examples/stusb4500"
+  ],
+  "typeCheckingMode": "strict",
+  "reportMissingImports": "error",
+  "pythonVersion": "3.12"
+}
