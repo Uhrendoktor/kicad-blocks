@@ -8,8 +8,10 @@ import math
 import re
 import unicodedata
 import uuid
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
+
+from .json_types import JsonValue
 
 PIN_TYPES = ("input", "output", "bidirectional", "tristate", "passive")
 _KICAD_PIN_TYPES = {
@@ -53,7 +55,7 @@ def parameter_field_name(name: str) -> str:
     return PARAMETER_FIELD_PREFIX + str(name)
 
 
-def resolve_variant_implementation(manifest: dict, value: str) -> str:
+def resolve_variant_implementation(manifest: Mapping[str, JsonValue], value: str) -> str:
     """Resolve an explicit selector or the configured default implementation.
 
     An empty KB_VARIANT selects default_variant when one is configured,
@@ -76,7 +78,7 @@ def resolve_variant_implementation(manifest: dict, value: str) -> str:
     return str(matches[0]["file"])
 
 
-def validate_parameter_value(parameter: dict, value: object) -> str:
+def validate_parameter_value(parameter: Mapping[str, JsonValue], value: JsonValue) -> str:
     """Validate and normalize one single-line parameter value."""
     name = str(parameter.get("name", "parameter"))
     kind = str(parameter.get("type", "string")).casefold()
@@ -106,7 +108,7 @@ def validate_parameter_value(parameter: dict, value: object) -> str:
     raise ValueError(f"Unsupported type {kind!r} for parameter {name!r}.")
 
 
-def normalize_parameters(parameters: Iterable[dict] | None) -> list[dict[str, str]]:
+def normalize_parameters(parameters: Iterable[Mapping[str, JsonValue]] | None) -> list[dict[str, str]]:
     """Validate parameter declarations from a block manifest or API call."""
     normalized: list[dict[str, str]] = []
     seen: set[str] = set()
@@ -140,12 +142,12 @@ def normalize_parameters(parameters: Iterable[dict] | None) -> list[dict[str, st
 
 
 def normalize_profiles(
-    profiles: Iterable[dict] | None,
-    parameters: Iterable[dict] | None,
-    variants: Iterable[dict] | None,
-    layouts: Iterable[dict] | None,
+    profiles: Iterable[Mapping[str, JsonValue]] | None,
+    parameters: Iterable[Mapping[str, JsonValue]] | None,
+    variants: Iterable[Mapping[str, JsonValue]] | None,
+    layouts: Iterable[Mapping[str, JsonValue]] | None,
     default_layout: str | None = None,
-) -> list[dict]:
+) -> list[dict[str, JsonValue]]:
     """Validate named configuration profiles for one block.
 
     A profile is a reusable preset for one declared schematic variant, a
@@ -166,7 +168,7 @@ def normalize_profiles(
         str(item.get("id", "")).casefold(): str(item.get("id", ""))
         for item in layouts or ()
     }
-    normalized: list[dict] = []
+    normalized: list[dict[str, JsonValue]] = []
     seen_ids: set[str] = set()
     seen_names: set[str] = set()
 
@@ -249,7 +251,7 @@ def normalize_profiles(
     return normalized
 
 
-def resolve_profile_configuration(manifest: dict, profile_id: str) -> dict:
+def resolve_profile_configuration(manifest: Mapping[str, JsonValue], profile_id: str) -> dict[str, JsonValue]:
     """Resolve one profile into its complete per-instance field values."""
     requested = str(profile_id or "").strip().casefold()
     profiles = manifest.get("profiles") or []
@@ -290,7 +292,7 @@ def parse_parameters(spec: str) -> list[dict[str, str]]:
 
 
 def resolve_parameter_values(
-    parameters: Iterable[dict] | None, overrides: dict[str, object] | None = None
+    parameters: Iterable[Mapping[str, JsonValue]] | None, overrides: Mapping[str, JsonValue] | None = None
 ) -> dict[str, str]:
     """Resolve defaults plus caller overrides, rejecting unknown parameters."""
     definitions = normalize_parameters(parameters)
@@ -305,8 +307,8 @@ def resolve_parameter_values(
 
 def substitute_parameter_templates(
     content: str,
-    parameters: Iterable[dict] | None,
-    overrides: dict[str, object] | None = None,
+    parameters: Iterable[Mapping[str, JsonValue]] | None,
+    overrides: Mapping[str, JsonValue] | None = None,
 ) -> str:
     """Substitute {{NAME}} tokens in KiCad text fields using validated values.
 
@@ -347,9 +349,8 @@ def substitute_parameter_templates(
         elif character == '"':
             in_string = True
 
-    def escape(match: re.Match) -> str:
-        value = values[match.group(1)]
-        return value.replace("\\", "\\\\").replace('"', '\\"')
+    def escape(match: re.Match[str]) -> str:
+        return sexpr_quote(values[match.group(1)])[1:-1]
 
     return _PARAMETER_TOKEN.sub(escape, content)
 
@@ -402,8 +403,23 @@ def parse_pins(spec: str) -> list[BlockPin]:
 
 
 def sexpr_quote(value: str) -> str:
-    """Quote a string using KiCad's S-expression string conventions."""
-    return json.dumps(str(value), ensure_ascii=False)
+    """Quote text using KiCad's UTF-8 and C-style S-expression escapes."""
+    escaped: list[str] = []
+    for character in str(value):
+        codepoint = ord(character)
+        if character == "\\":
+            escaped.append("\\\\")
+        elif character == '"':
+            escaped.append('\\\"')
+        elif character == "\n":
+            escaped.append("\\n")
+        elif character == "\r":
+            escaped.append("\\r")
+        elif codepoint < 0x20 or codepoint == 0x7F:
+            escaped.append(f"\\x{codepoint:02x}")
+        else:
+            escaped.append(character)
+    return '"' + "".join(escaped) + '"'
 
 
 def _pin_y(row: int, row_count: int, pitch: float = 2.54) -> float:
@@ -508,7 +524,7 @@ def render_symbol_library(
     pins: Iterable[BlockPin],
     *,
     reference_prefix: str = "X",
-    parameters: Iterable[dict] = (),
+    parameters: Iterable[Mapping[str, JsonValue]] = (),
     default_layout_id: str | None = None,
     include_profile_field: bool = False,
 ) -> str:
@@ -647,7 +663,7 @@ def render_implementation_schematic(
     return "\n".join(lines)
 
 
-def sha256_file(path) -> str:
+def sha256_file(path: Path) -> str:
     digest = hashlib.sha256()
     with open(path, "rb") as stream:
         for chunk in iter(lambda: stream.read(1024 * 1024), b""):

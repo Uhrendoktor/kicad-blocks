@@ -45,6 +45,7 @@ from .pcb_placement import placement_manifest_path, write_pcb_placement_manifest
 from .repository import (
     LIBRARY_CATALOG_NAME,
     LIBRARY_NICKNAME,
+    BlockRecord,
     add_library_root,
     atomic_write,
     build_project_symbol_catalog,
@@ -1311,7 +1312,7 @@ def _pick_block_for_placement(records, parent):
 
     records_by_id = {}
     visible_records = []
-    selected_record = [None]
+    selected_record: list[BlockRecord | None] = [None]
     chosen = [None]
     updating_config = [False]
     preview_size = [None]
@@ -1527,8 +1528,8 @@ def _pick_record(records, parent, title: str):
     count_label = ttk.Label(outer)
     count_label.pack(anchor="w", pady=(4, 0))
 
-    records_by_id: dict[str, object] = {}
-    selected_record = [None]
+    records_by_id: dict[str, BlockRecord] = {}
+    selected_record: list[BlockRecord | None] = [None]
     chosen_record = [None]
     select_button = ttk.Button(outer, text="Select block", state="disabled")
     select_button.pack(side="right", pady=(10, 0))
@@ -2701,7 +2702,7 @@ def _native_symbol_preview_photo(
     # Tk images belong to a particular Tcl interpreter, so cache only PNG bytes.
     return tk.PhotoImage(data=base64.b64encode(png_data).decode("ascii"))
 
-_NATIVE_PREVIEW_CACHE: dict[tuple, object] = {}
+_NATIVE_PREVIEW_CACHE: dict[tuple[str, int, str, int, int], bytes] = {}
 
 
 def _draw_facade_preview(canvas, record) -> None:
@@ -2806,6 +2807,7 @@ def _register_implementation_catalog(record, library_roots: list[Path]) -> Path:
     return register_project_symbol_library(
         record.path,
         LIBRARY_NICKNAME,
+    BlockRecord,
         catalog,
         description="KiCad Blocks — registered child facades",
         replace_existing=True,
@@ -4472,8 +4474,8 @@ def _show_library_browser(
     window.title("Functional Block Library")
     _set_window_geometry(window, 1600, 1000, 1200, 720)
     current_roots = [_library_roots_for(library_root)]
-    records: list = []
-    records_by_id: dict[str, object] = {}
+    records: list[BlockRecord] = []
+    records_by_id: dict[str, BlockRecord] = {}
 
     style = ttk.Style(window)
     palette = getattr(window, "_kicad_blocks_palette", {})
@@ -4585,7 +4587,7 @@ def _show_library_browser(
     details.configure(state="disabled")
     _bind_mousewheel(details, lambda amount: details.yview_scroll(amount, "units"))
 
-    selected_record = [None]
+    selected_record: list[BlockRecord | None] = [None]
     facade_button = [None]
     open_layout_button = [None]
 

@@ -1,0 +1,23 @@
+{
+  "include": [
+    "plugin/kicad-blocks/kicad_blocks/json_types.py",
+    "plugin/kicad-blocks/kicad_blocks/model.py",
+    "plugin/kicad-blocks/kicad_blocks/pcb_placement.py"
+  ],
+  "exclude": [
+    "**/__pycache__",
+    "tests",
+    "examples"
+  ],
+  "strict": [
+    "plugin/kicad-blocks/kicad_blocks/json_types.py",
+    "plugin/kicad-blocks/kicad_blocks/model.py"
+  ],
+  "extraPaths": [
+    "plugin/kicad-blocks"
+  ],
+  "typeCheckingMode": "standard",
+  "reportMissingImports": "none",
+  "reportMissingModuleSource": "none",
+  "pythonVersion": "3.12"
+}
