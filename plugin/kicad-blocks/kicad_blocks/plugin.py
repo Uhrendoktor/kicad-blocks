@@ -3814,10 +3814,16 @@ def _desktop_file_dialog(
 
     name, executable = backend
     initial = Path(initial_path).expanduser() if initial_path else Path.cwd()
-    initial_file = initial if initial.is_file() else None
-    initial_directory = initial.parent if initial_file else initial
+    if initial.is_dir():
+        initial_file = None
+        initial_directory = initial
+    else:
+        initial_file = initial
+        initial_directory = initial.parent
     if not initial_directory.is_dir():
         initial_directory = Path.cwd()
+        if initial_file is not None:
+            initial_file = initial_directory / initial_file.name
 
     if name == "zenity":
         command = [executable, "--file-selection", "--title", title]
@@ -3837,7 +3843,7 @@ def _desktop_file_dialog(
         env = os.environ.copy()
         if os.environ.get("WAYLAND_DISPLAY"):
             # GTK will use the XDG file-chooser portal when the desktop provides it.
-            env.setdefault("GTK_USE_PORTAL", "1")
+            env["GTK_USE_PORTAL"] = "1"
     else:
         env = None
         if mode == "directory":
@@ -3910,7 +3916,12 @@ def _pick_save_file(
         filetypes=filetypes,
     )
     if selected is not _DESKTOP_CHOOSER_UNAVAILABLE:
-        return selected
+        if selected:
+            output = Path(selected).expanduser()
+            if not output.suffix and defaultextension:
+                output = output.with_suffix(defaultextension)
+            return str(output)
+        return None
     initial = Path(initial_path).expanduser()
     return filedialog.asksaveasfilename(
         title=title,
