@@ -269,16 +269,16 @@ class STUSB4500ReferenceTests(unittest.TestCase):
             self.assertLess(float(at[2]), float(j1[2]) - 27.94)
 
         u1 = _direct(instances["U1"], "at")
-        for field_name, expected_y in (("Reference", float(u1[2]) - 41.91),
-                                       ("Value", float(u1[2]) - 39.37)):
+        for field_name, expected_y in (("Reference", float(u1[2]) - 17.78),
+                                       ("Value", float(u1[2]) - 15.24)):
             prop = _property(instances["U1"], field_name)
             at = _direct(prop, "at")
-            self.assertAlmostEqual(float(at[1]), float(u1[1]) + 22.86, places=3)
+            self.assertAlmostEqual(float(at[1]), float(u1[1]) + 15.24, places=3)
             self.assertAlmostEqual(float(at[2]), expected_y, places=3)
             if field_name == "Reference":
-                self.assertEqual(str(_direct(_direct(prop, "effects"), "justify")[1]), "right")
+                self.assertEqual(str(_direct(_direct(prop, "effects"), "justify")[1]), "left")
             else:
-                self.assertIsNone(_direct(_direct(prop, "effects"), "justify"))
+                self.assertEqual(str(_direct(_direct(prop, "effects"), "justify")[1]), "left")
 
         r55 = _direct(instances["R55"], "at")
         self.assertAlmostEqual(float(r55[1]), float(u1[1]) - 22.86, places=3)
@@ -525,7 +525,7 @@ class STUSB4500ReferenceTests(unittest.TestCase):
         self.assertEqual(delta("T4", "T1"), (40.64, 0.0))
         t4, t1, r10 = origin("T4"), origin("T1"), origin("R10")
         self.assertAlmostEqual(r10[0], (t4[0] + t1[0]) / 2, places=3)
-        self.assertAlmostEqual(r10[1] - t4[1], 27.94, places=3)
+        self.assertAlmostEqual(r10[1] - t4[1], 17.78, places=3)
         self.assertEqual(delta("R10", "R11"), (7.62, 7.62))
         self.assertEqual(delta("R11", "R13"), (20.32, 0.0))
         self.assertEqual(delta("C10", "D11"), (0.0, 25.40))
@@ -575,7 +575,7 @@ class STUSB4500ReferenceTests(unittest.TestCase):
 
     def test_style_linter_exposes_stable_rule_ids(self) -> None:
         rule_ids = tuple(STYLE_RULES)
-        self.assertEqual(rule_ids, tuple(f"SCH{index:03d}" for index in range(1, 10)))
+        self.assertEqual(rule_ids, tuple(f"SCH{index:03d}" for index in range(1, 19)))
         self.assertTrue(all(rule["severity"] in {"error", "warning"} for rule in STYLE_RULES.values()))
         self.assertTrue(all(rule["name"] and rule["description"] for rule in STYLE_RULES.values()))
 
