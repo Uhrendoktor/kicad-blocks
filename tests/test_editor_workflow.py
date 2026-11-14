@@ -104,6 +104,7 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
 
         project_catalog = build_project_symbol_catalog(self.project, [self.library])
         calls = []
+        pauses = []
         search_count = [0]
 
         def command_runner(arguments, **kwargs):
@@ -140,7 +141,7 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
                 project_catalog=project_catalog,
                 xdotool="/usr/bin/xdotool",
                 command_runner=command_runner,
-                pause=lambda _seconds: None,
+                pause=pauses.append,
             )
 
         self.assertTrue(opened)
@@ -160,6 +161,7 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
             ["/usr/bin/xdotool", "type", "--clearmodifiers", "--delay", "12", self.block.manifest["symbol_name"]],
             calls,
         )
+        self.assertIn(0.35, pauses)
 
 
     def test_edit_facade_opens_symbol_editor_from_eeschema_tools_menu(self):
@@ -167,6 +169,7 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
 
         project_catalog = build_project_symbol_catalog(self.project, [self.library])
         calls = []
+        pauses = []
         search_count = [0]
 
         def command_runner(arguments, **kwargs):
@@ -203,7 +206,7 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
                 project_catalog=project_catalog,
                 xdotool="/usr/bin/xdotool",
                 command_runner=command_runner,
-                pause=lambda _seconds: None,
+                pause=pauses.append,
             )
 
         self.assertTrue(opened)
@@ -223,6 +226,7 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
             ["/usr/bin/xdotool", "type", "--clearmodifiers", "--delay", "12", self.block.manifest["symbol_name"]],
             calls,
         )
+        self.assertIn(0.35, pauses)
 
 
     def test_symbol_editor_menu_down_count_matches_standalone_and_manager_hosted_modes(self):

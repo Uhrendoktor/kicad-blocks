@@ -2541,7 +2541,8 @@ def _edit_facade_symbol(
     send("key", "--clearmodifiers", "ctrl+l")
     pause(0.12)
     send("type", "--clearmodifiers", "--delay", "12", symbol_name)
-    pause(0.2)
+    # KiCad regenerates and selects matching tree rows after a 200 ms text debounce.
+    pause(0.35)
     send("key", "--clearmodifiers", "Return")
 
     deadline = time.monotonic() + 5.0
