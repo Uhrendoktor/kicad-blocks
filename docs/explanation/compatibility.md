@@ -29,7 +29,7 @@ The production runtime now uses cross-platform libraries and APIs for these shar
 
 Upstream references: [Python Tkinter](https://docs.python.org/3/library/tkinter.html), [platformdirs supported platforms](https://platformdirs.readthedocs.io/en/latest/index.html), [resvg_py supported OS/architecture and Python wheel matrix](https://resvg-py.readthedocs.io/en/latest/installation.html), [Pillow platform support](https://pillow.readthedocs.io/en/stable/), and [KiCad IPC API](https://dev-docs.kicad.org/en/apis-and-binding/ipc-api/).
 
-This table documents upstream library capability, not validated KiCad Blocks compatibility. Windows/macOS integration remains untested until the packaging limitation is lifted and representative runs are performed.
+This table documents upstream library capability, not validated KiCad Blocks compatibility. Windows/macOS integration remains untested. The Linux-only IPC wheel packaging limitation is separate from the current KiCad editor-action API gap.
 
 ## Interpreter coverage
 
@@ -66,7 +66,22 @@ Primary references:
 | Linux ARM or other architectures | Not validated; no matching published wheel |
 | Non-CPython interpreters or other Python minor versions | Rejected by the installer |
 
-The production plugin uses Tkinter and its standard file-selection dialogs, and invokes Symbol Editor and Place Symbol through KiCad IPC. Final symbol selection is performed in KiCad's native UI. `xdotool` is confined to the Linux/X11 GUI test harness; it is not a production dependency or runtime fallback. The plugin no longer probes `/proc`, Windows registry, macOS defaults, GNOME settings, KDE configuration files, X11, or Wayland to implement product behavior.
+The production plugin uses Tkinter and its standard file-selection dialogs. It does not use `/proc`, Windows registry, macOS defaults, GNOME settings, KDE configuration files, X11, or Wayland to implement product behavior. `xdotool` is confined to the Linux/X11 GUI test harness; it is not a production dependency or runtime fallback.
+
+### KiCad editor-action API boundary
+
+The current supported KiCad schematic API does not provide the editor operations needed for full Place Block and Edit Facade workflows:
+
+| API | Documented behavior | Why it is insufficient |
+| --- | --- | --- |
+| `Schematic.place_symbol_from_library(lib_id, position, ...)` | Places a symbol at explicit schematic coordinates | Does not start the interactive placement cursor or native chooser. |
+| `KiCad.open_document(path, type)` | Opens a document in headless mode | Explicitly unsupported in GUI mode. |
+| `KiCad.open_library_item(library, name, type)` | Loads a library item into its editor | Currently supports footprints only, not symbols. |
+| `KiCad.run_action(action)` | Runs an arbitrary KiCad tool action | Explicitly unstable and not guaranteed; the tested Eeschema returns `no handler available for request of type kiapi.common.commands.RunAction`. It is not used by the production plugin. |
+
+The supported API is documented in the [KiCad Python KiCad class](https://docs.kicad.org/kicad-python/kicad.html) and [Schematic class](https://docs.kicad.org/kicad-python/schematic.html). KiCad's API docs describe IPC as cross-platform, but that transport guarantee does not imply every editor operation exists on the server. An upstream feature proposal for interactive symbol placement ([KiCad MR !2332](https://gitlab.com/kicad/code/kicad/-/merge_requests/2332)) is closed without merge and is not available as an upstream contract.
+
+Accordingly, Place Block and Edit Facade currently report an explicit capability error. They do not silently become manual-only workflows or switch to platform-specific input injection. These core features remain incomplete until KiCad provides supported interactive placement and Symbol Editor selection APIs, followed by real GUI validation.
 
 ### Cross-process window ownership
 
