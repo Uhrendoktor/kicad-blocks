@@ -54,6 +54,15 @@ class BlockVariantInput(TypedDict, total=False):
     layout_id: str
 
 
+class BlockVariantEditInput(TypedDict, total=False):
+    """Editable variant row assembled by the library management dialog."""
+
+    value: Required[str]
+    source: FileSystemPath
+    file: str
+    layout_id: str
+
+
 class BlockVariantManifest(TypedDict):
     """Persisted implementation variant and its optional PCB association."""
 
@@ -73,6 +82,19 @@ class BlockLayoutInput(TypedDict, total=False):
     project_file: FileSystemPath
     ports: dict[str, str]
     legacy: bool
+
+
+class BlockLayoutEditInput(TypedDict, total=False):
+    """Editable PCB layout row used when updating a stored block."""
+
+    id: str
+    name: Required[str]
+    source: FileSystemPath
+    file: str
+    project_source: FileSystemPath
+    project_file: str
+    implementations: list[str]
+    ports: dict[str, str]
 
 
 class BlockLayoutManifest(TypedDict):
