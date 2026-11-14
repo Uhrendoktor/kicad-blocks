@@ -190,7 +190,7 @@ jobs:
           set -euo pipefail
           PY="${RUNNER_TEMP}/kicad-blocks-venv/bin/python"
           "$PY" -m pytest -q
-          "$PY" -m compileall -q plugin tests
+          "$PY" -m compileall -q plugin tests scripts
 
       - name: Strict Python quality contract
         shell: bash
@@ -526,8 +526,8 @@ jobs:
           PY="${RUNNER_TEMP}/kicad-blocks-visual-venv/bin/python"
           "$PY" -m pip install -r requirements-dev.txt -r plugin/kicad-blocks/requirements.txt
           "$PY" -m pytest -q
-          "$PY" -m compileall -q plugin tests
-          "$PY" -m ruff check plugin tests
+          "$PY" -m compileall -q plugin tests scripts
+          "$PY" -m ruff check plugin tests scripts/validate_schematic_style.py
 
       - name: Validate generated reference files with KiCad CLI
         shell: bash

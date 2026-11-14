@@ -12,6 +12,7 @@ import os
 import subprocess
 import sys
 import uuid
+from typing import TypedDict
 from collections.abc import Iterator
 from pathlib import Path
 from typing import TypedDict
@@ -34,6 +35,144 @@ DATASHEET = "https://www.st.com/resource/en/datasheet/stusb4500.pdf"
 ROOT_UUID = str(uuid.uuid5(uuid.NAMESPACE_URL, "kicad-blocks:stusb4500-reference:root"))
 PROJECT = "functional-block-implementation"
 
+# Declarative circuit groups.  Their page-level placement, frame bounds,
+# titles and descriptions are derived from member pin geometry.
+GROUP_GAP_MM = 2.54
+GROUP_X_PADDING_MM = 13.97
+GROUP_TOP_PADDING_MM = 20.32
+GROUP_BOTTOM_PADDING_MM = 7.62
+FRAME_CONTENT_PADDING_MM = 2.54
+FIELD_SYMBOL_MAX_GAP_MM = 9.00
+WIRE_LENGTH_BUDGETS_MM = {"power-switch": 95.00}
+COMMON_PIN_NET_GROUPS = (
+    {
+        "name": "GND",
+        "pins": (("C2", "2"), ("C3", "2")),
+        "wire_connected": True,
+        "single_label": True,
+    },
+)
+REQUIRED_NO_CONNECT_PINS = ("U1.11", "U1.14", "U1.15", "U1.17", "U1.20")
+GROUP_DESCRIPTION_FONT_MM = 0.65
+GROUP_EVIDENCE = {
+    "datasheet": DATASHEET,
+    "document": "ST DS12499 Rev. 8",
+    "page": 26,
+    "figure": "Figure 10",
+    # Optional source crop; the group metadata can bind a page/figure image
+    # once a reviewed asset is checked into the example.
+    "screenshot_asset": None,
+}
+SCHEMATIC_GROUPS = (
+    {
+        "id": "usb-port", "title": "USB-C PORT / CC PROTECTION",
+        "description": "Type-C receptacle and dual CC-line ESD protection.",
+        "members": ("J1", "D1"), "lane": "main", "order": 0,
+        "layout": {
+            "anchor": "J1", "anchor_y_mm": 139.70,
+            "constraints": (
+                {"kind": "offset", "component": "D1", "to": "J1", "dx_mm": 33.02, "dy_mm": 0.0},
+            ),
+        },
+    },
+    {
+        "id": "vbus-bulk", "title": "VBUS BULK PROTECTION",
+        "description": "Input bulk capacitance and VBUS transient clamp.",
+        "members": ("C50", "D50"), "lane": "main", "order": 1,
+        "layout": {
+            "anchor": "C50", "anchor_y_mm": 132.08,
+            "constraints": (
+                {"kind": "offset", "component": "D50", "to": "C50", "dx_mm": 20.32, "dy_mm": 0.0},
+            ),
+        },
+    },
+    {
+        "id": "vbus-monitor", "title": "VBUS MONITOR / FILTER",
+        "description": "VBUS filter and fast-charge path.\nR1/R4 form the VBUS_VS_DISCH monitor divider; verify D4 rating.",
+        "members": ("D4", "C4", "R1", "R4"),
+        "documentation_members": ("R1", "R4"), "lane": "main", "order": 2,
+        "extra_top_padding_mm": 10.16,
+        "layout": {
+            "anchor": "D4", "anchor_y_mm": 111.76,
+            "constraints": (
+                {"kind": "offset", "component": "C4", "to": "D4", "dx_mm": 12.70, "dy_mm": 3.81},
+                {"kind": "offset", "component": "R1", "to": "C4", "dx_mm": 12.70, "dy_mm": 0.0},
+                {"kind": "offset", "component": "R4", "to": "R1", "dx_mm": 5.08, "dy_mm": 0.0},
+            ),
+        },
+    },
+    {
+        "id": "controller", "title": "STUSB4500 CONTROLLER",
+        "description": "USB-PD controller with directly wired VREG_1V2 and VREG_2V7 bypass capacitors.",
+        "members": ("U1", "C1", "C2", "C3", "R55"), "lane": "main", "order": 3,
+        "layout": {
+            "anchor": "U1", "anchor_y_mm": 137.16,
+            "constraints": (
+                {"kind": "offset", "component": "C1", "to": "U1", "dx_mm": 5.08, "dy_mm": -35.56},
+                {"kind": "offset", "component": "C2", "to": "U1", "dx_mm": 15.24, "dy_mm": -35.56},
+                {"kind": "offset", "component": "C3", "to": "C2", "dx_mm": 5.08, "dy_mm": 0.0},
+                {"kind": "pin_offset", "component": "R55", "to": "U1", "pin": "6", "dx_mm": -7.62, "dy_mm": 7.62},
+            ),
+        },
+    },
+    {
+        "id": "address-straps", "title": "I2C ADDRESS STRAPS",
+        "description": "Selectable ADDR0/ADDR1 pull-up and pull-down networks.",
+        "members": ("R51", "R52", "R53", "R54"), "lane": "secondary",
+        "align_to": "controller", "y_offset_mm": 25.40,
+        "layout": {
+            "anchor": "R51", "anchor_y_mm": 177.80,
+            "constraints": (
+                {"kind": "offset", "component": "R52", "to": "R51", "dx_mm": 0.0, "dy_mm": 12.70},
+                {"kind": "offset", "component": "R53", "to": "R51", "dx_mm": 20.32, "dy_mm": 0.0},
+                {"kind": "offset", "component": "R54", "to": "R53", "dx_mm": 0.0, "dy_mm": 12.70},
+            ),
+        },
+    },
+    {
+        "id": "power-switch", "title": "BACK-TO-BACK PMOS SWITCH",
+        "description": "Back-to-back P-channel switches with a direct common-source control network.",
+        "members": ("T4", "T1", "R10", "R11", "R13"), "lane": "main", "order": 4,
+        "layout": {
+            "anchor": "T4", "anchor_y_mm": 104.14,
+            "constraints": (
+                {"kind": "offset", "component": "T1", "to": "T4", "dx_mm": 25.40, "dy_mm": 0.0},
+                {"kind": "midpoint_offset", "component": "R10", "between": ("T4", "T1"), "dx_mm": 0.0, "dy_mm": 17.78},
+                {"kind": "offset", "component": "R11", "to": "R10", "dx_mm": 7.62, "dy_mm": 7.62},
+                {"kind": "offset", "component": "R13", "to": "R11", "dx_mm": 20.32, "dy_mm": 0.0},
+            ),
+        },
+    },
+    {
+        "id": "vsnk-output", "title": "VSNK OUTPUT",
+        "description": "Protected sink output with local bypass and TVS protection.\nR2 is the DISCH-to-VSNK discharge path.",
+        "members": ("R2", "C10", "D11"),
+        "documentation_members": ("R2",), "lane": "main", "order": 5,
+        "layout": {
+            "anchor": "C10", "anchor_y_mm": 99.06,
+            "constraints": (
+                {"kind": "offset", "component": "D11", "to": "C10", "dx_mm": 0.0, "dy_mm": 25.40},
+                {"kind": "offset", "component": "R2", "to": "C10", "dx_mm": 0.0, "dy_mm": 46.99},
+            ),
+        },
+    },
+)
+DIRECT_DECOUPLERS = (
+    ("U1", "21", "C1", "1"),
+    ("U1", "23", "C2", "1"),
+    ("U1", "23", "C3", "1"),
+)
+GROUND_PINS_DOWN = ("D1.3",)
+FORBIDDEN_LOCAL_LABELS = ("VREG_1V2", "FET_MID")
+ADJACENT_COMPONENT_PAIRS = (
+    {"left": "R1", "right": "R4", "body_width_mm": 2.54, "max_gap_mm": 2.54},
+    {"left": "C2", "right": "C3", "body_width_mm": 2.54, "max_gap_mm": 2.54},
+)
+COMPONENT_PROPERTY_LIMITS_MM = {
+    "resistor_reference": 3.00,
+    "capacitor_reference": 4.00,
+    "capacitor_value": 5.50,
+}
 
 class _PinData(TypedDict):
     """Electrical and geometric data extracted from one library pin."""
@@ -246,9 +385,18 @@ def _wire(start: tuple[float, float], end: tuple[float, float], key: str) -> SEx
 
 
 def _prop(
-    name: str, value: str, number: int, x: float, y: float, hidden: bool = False
-) -> SExprList:
-    effects = ["effects", ["font", ["size", "1.27", "1.27"]]]
+    name: str, value: str, number: int, x: float, y: float,
+    hidden: bool = False, font_size: float = 1.27, justify: str | None = None,
+    angle: int = 0,
+) -> list:
+    effects = ["effects", ["font", ["size", f"{font_size:.3f}", f"{font_size:.3f}"]]]
+    if justify:
+        if justify not in {"left", "right"}:
+            raise ValueError(
+                f"Unsupported property justification {justify!r}; "
+                "KiCad centers property text when horizontal justification is omitted."
+            )
+        effects.append(["justify", justify])
     if hidden:
         effects.append("hide")
     return [
@@ -256,26 +404,27 @@ def _prop(
         QuotedSExpr(name),
         QuotedSExpr(value),
         ["id", str(number)],
-        ["at", f"{x:.3f}", f"{y:.3f}", "0"],
+        ["at", f"{x:.3f}", f"{y:.3f}", str(angle)],
         effects,
     ]
 
 
 def _label(
-    name: str,
-    x: float,
-    y: float,
-    *,
-    hierarchical: bool = False,
-    shape: str = "passive",
-    justify: str = "left",
-    angle: int = 0,
-    key: str,
-) -> SExprList:
-    effects = ["effects", ["font", ["size", "1.0", "1.0"]], ["justify", justify, "bottom"]]
-    node = ["hierarchical_label" if hierarchical else "label", QuotedSExpr(name)]
+    name: str, x: float, y: float, *, hierarchical: bool = False,
+    shape: str = "passive", justify: str | None = "left", angle: int = 0, key: str,
+) -> list:
+    effects = ["effects", ["font", ["size", "1.0", "1.0"]]]
+    if justify is not None:
+        if justify not in {"left", "right"}:
+            raise ValueError(
+                f"Unsupported label justification {justify!r}; "
+                "KiCad centers label text when horizontal justification is omitted."
+            )
+        effects.append(["justify", justify, "bottom"])
     if hierarchical:
-        node.append(["shape", shape])
+        node = ["hierarchical_label", _Quoted(name), ["shape", shape]]
+    else:
+        node = ["label", _Quoted(name)]
     node.extend(
         [
             ["at", f"{x:.3f}", f"{y:.3f}", str(angle)],
@@ -286,307 +435,532 @@ def _label(
     return node
 
 
+def _graphic_rectangle(
+    x1: float, y1: float, x2: float, y2: float, key: str,
+) -> list:
+    """Draw a light, unfilled functional-zone frame."""
+    return [
+        "rectangle",
+        ["start", f"{x1:.3f}", f"{y1:.3f}"],
+        ["end", f"{x2:.3f}", f"{y2:.3f}"],
+        ["stroke", ["width", "0.254"], ["type", "default"]],
+        ["fill", ["type", "none"]],
+        ["uuid", _Quoted(_uid(f"graphic:rectangle:{key}"))],
+    ]
+
+
+def _graphic_tab(x: float, y: float, width: float, key: str) -> list:
+    """Draw three tab edges; the frame top serves as the fourth edge."""
+    top = y - 5.08
+    right = x + width
+    return [
+        "polyline",
+        ["pts",
+            ["xy", f"{x:.3f}", f"{y:.3f}"],
+            ["xy", f"{x:.3f}", f"{top:.3f}"],
+            ["xy", f"{right:.3f}", f"{top:.3f}"],
+            ["xy", f"{right:.3f}", f"{y:.3f}"],
+        ],
+        ["stroke", ["width", "0.254"], ["type", "default"]],
+        ["fill", ["type", "none"]],
+        ["uuid", _Quoted(_uid(f"graphic:tab:{key}"))],
+    ]
+
+
+def _glyph_advance(character: str) -> float:
+    """Estimate the relative advance of KiCad's stroke font."""
+    if character in "ilI.,:;!|'":
+        return 0.30
+    if character in "MW@%&":
+        return 0.90
+    if character.isspace():
+        return 0.34
+    if character.isupper() or character.isdigit():
+        return 0.64
+    return 0.55
+
+
+def _measure_text_box(
+    value: str, size: float, padding: float = 1.27,
+) -> tuple[float, float]:
+    """Measure text conservatively and add equal physical padding on every side."""
+    if size <= 0 or padding < 0:
+        raise ValueError("Text size must be positive and padding cannot be negative.")
+    lines = value.splitlines() or [""]
+    line_width = max(
+        (sum(_glyph_advance(character) for character in line) for line in lines),
+        default=0.0,
+    )
+    width = 2 * padding + max(line_width * size * 1.30, size)
+    height = 2 * padding + len(lines) * size * 1.55
+    return round(width, 3), round(height, 3)
+
+
+def _graphic_text(
+    value: str, x: float, y: float, size: float, key: str,
+    *, padding: float = 1.27, border: bool = True,
+    box_width: float | None = None,
+) -> list:
+    """Create a native KiCad text_box with measured size and uniform margins.
+
+    Coordinates identify the top-left box corner. KiCad lays out/reflows text
+    inside the native text_box; this helper supplies conservative dimensions
+    and identical physical padding on all four sides. Callers may widen the
+    box to a known tab or page region to prevent KiCad from wrapping a title.
+    """
+    measured_width, height = _measure_text_box(value, size, padding)
+    width = measured_width if box_width is None else box_width
+    if width + 0.001 < measured_width:
+        raise ValueError(
+            f"Text box width {width:.3f} mm is smaller than measured width "
+            f"{measured_width:.3f} mm for {value!r}."
+        )
+    result = [
+        "text_box", _Quoted(value),
+        ["at", f"{x:.3f}", f"{y:.3f}", "0"],
+        ["size", f"{width:.3f}", f"{height:.3f}"],
+        ["margins", *(f"{padding:.3f}" for _ in range(4))],
+        ["fill", ["type", "none"]],
+        ["effects", ["font", ["size", f"{size:.3f}", f"{size:.3f}"]],
+            ["justify", "left", "top"]],
+        ["uuid", _Quoted(_uid(f"graphic:text:{key}"))],
+    ]
+    stroke_width = "0.1524" if border else "-1"
+    result.insert(5, ["stroke", ["width", stroke_width], ["type", "default"]])
+    return result
+
+
+def _note_box(
+    x: float, y: float, lines: tuple[str, ...], key: str,
+) -> list[list]:
+    """Create one native note text_box sized from the supplied text."""
+    if not lines or any(not line.strip() for line in lines):
+        raise ValueError(f"Note {key!r} must contain non-empty lines.")
+    return [_graphic_text(
+        "\n".join(lines), x, y, 0.90, key,
+        padding=1.27, border=True, box_width=40.64,
+    )]
+
+
+def _graphic_rule(x1: float, y1: float, x2: float, y2: float, key: str) -> list:
+    """Draw a restrained page-level divider."""
+    if abs(x1 - x2) > 0.001 and abs(y1 - y2) > 0.001:
+        raise ValueError(f"Non-orthogonal graphic rule: {(x1, y1)} -> {(x2, y2)}")
+    return [
+        "polyline",
+        ["pts", ["xy", f"{x1:.3f}", f"{y1:.3f}"], ["xy", f"{x2:.3f}", f"{y2:.3f}"]],
+        ["stroke", ["width", "0.254"], ["type", "default"]],
+        ["fill", ["type", "none"]],
+        ["uuid", _Quoted(_uid(f"graphic:rule:{key}"))],
+    ]
+
+
+def _sheet_header(
+    title: str, subtitle: str, *, x: float = 25.40,
+    title_y: float = 48.26, rule_right: float = 411.48, key: str = "sheet",
+) -> list[list]:
+    """Place a compact title/subtitle in the reserved top margin."""
+    if title_y + 17.78 >= 81.28:
+        raise ValueError("Sheet header must remain above the functional-block tabs.")
+    return [
+        _graphic_text(
+            title, x, title_y, 3.20, f"header:{key}:title",
+            box_width=rule_right - x, border=False,
+        ),
+        _graphic_text(
+            subtitle, x, title_y + 7.62, 1.05, f"header:{key}:subtitle",
+            box_width=rule_right - x, border=False,
+        ),
+        _graphic_rule(x, title_y + 13.97, rule_right, title_y + 13.97, f"header:{key}:rule"),
+    ]
+
+
+def _functional_block(
+    x: float, y: float, right: float, bottom: float,
+    title: str, tab_width: float, key: str,
+) -> list[list]:
+    """Generate one grid-aligned, thin-frame module with an attached title tab."""
+    if not (x < right and y < bottom):
+        raise ValueError(f"Invalid functional-block bounds for {key}.")
+    if tab_width <= 5.08 or tab_width > right - x:
+        raise ValueError(f"Functional-block tab does not fit its frame: {key}.")
+    measured_title_width, _ = _measure_text_box(title, 1.27, padding=1.27)
+    required_title_box_width = measured_title_width + 10.16
+    if required_title_box_width > tab_width - 2.54:
+        raise ValueError(
+            f"Functional-block title {title!r} lacks single-line width reserve "
+            f"({required_title_box_width + 2.54:.2f} mm > {tab_width:.2f} mm)."
+        )
+    return [
+        _graphic_rectangle(x, y, right, bottom, f"zone:{key}"),
+        _graphic_tab(x, y, tab_width, key),
+        _graphic_text(
+            title, x + 1.27, y - 4.83, 1.27,
+            f"zone-title:{key}", padding=1.27, border=False,
+            box_width=tab_width - 2.54,
+        ),
+    ]
+
+
+def _functional_zone(
+    x: float, y: float, right: float, bottom: float,
+    title: str, tab_width: float, key: str,
+) -> list[list]:
+    """Backward-compatible alias for the reusable functional-block helper."""
+    return _functional_block(x, y, right, bottom, title, tab_width, key)
+
+
+def _symbol_rotation(reference: str) -> int:
+    """Return the canonical rotation used by the reference layout."""
+    if reference in {"T1", "D4", "C1"}:
+        return 180
+    if reference == "D1":
+        return 270
+    if reference in {"R51", "R52", "R53", "R54"}:
+        return 90
+    return 0
+
+
+def _world_pin(sx: float, sy: float, rotation: int, pin: dict) -> tuple[float, float]:
+    """Transform a library pin coordinate into sheet coordinates."""
+    x, y = float(pin["x"]), float(pin["y"])
+    if rotation == 0:
+        return round(sx + x, 3), round(sy - y, 3)
+    if rotation == 90:
+        return round(sx - y, 3), round(sy - x, 3)
+    if rotation == 180:
+        return round(sx - x, 3), round(sy + y, 3)
+    if rotation == 270:
+        return round(sx + y, 3), round(sy + x, 3)
+    raise ValueError(f"Unsupported symbol rotation: {rotation}.")
+
+
+def _group_evidence_line(group: dict) -> str:
+    evidence = {**GROUP_EVIDENCE, **group.get("evidence", {})}
+    return (
+        f"{str(evidence['document']).upper()} | "
+        f"PAGE {evidence['page']} | {str(evidence['figure']).upper()}"
+    )
+
+
+def _group_description(group: dict) -> str:
+    return f"{group['description']}\n{_group_evidence_line(group)}"
+
+
+def _group_text_width(group: dict) -> float:
+    title_width, _ = _measure_text_box(str(group["title"]), 1.27, 1.27)
+    description_width, _ = _measure_text_box(
+        _group_description(group), GROUP_DESCRIPTION_FONT_MM, 1.27,
+    )
+    # Unbordered single-line titles reserve an additional 10.16 mm beyond
+    # the measured text box to cover KiCad's renderer-specific glyph widths.
+    return max(title_width + 12.70, description_width + 5.08)
+
+
+def _resolve_group_component_positions(
+    specs: list[tuple], loaded: dict[tuple[str, str], list],
+) -> dict[str, list[float]]:
+    """Resolve component origins from group anchors and relative constraints.
+
+    Layout metadata uses offsets, midpoint relations and library-pin-relative
+    relations. Sheet coordinates are deliberately absent from symbol specs.
+    """
+    by_ref = {spec[0]: spec for spec in specs}
+    positions: dict[str, list[float]] = {}
+    for group in SCHEMATIC_GROUPS:
+        layout = group.get("layout")
+        if not isinstance(layout, dict):
+            raise ValueError(f"Group {group['id']} has no component layout metadata.")
+        anchor = str(layout.get("anchor", ""))
+        if anchor not in group["members"] or anchor not in by_ref:
+            raise ValueError(f"Group {group['id']} has an invalid layout anchor {anchor!r}.")
+        positions[anchor] = [0.0, float(layout["anchor_y_mm"])]
+        pending = list(layout.get("constraints", ()))
+        while pending:
+            unresolved = []
+            progressed = False
+            for rule in pending:
+                kind = str(rule["kind"])
+                component = str(rule["component"])
+                if component not in group["members"] or component in positions:
+                    raise ValueError(
+                        f"Invalid or duplicate layout target {component!r} in {group['id']}."
+                    )
+                if kind == "offset":
+                    reference = str(rule["to"])
+                    if reference not in positions:
+                        unresolved.append(rule)
+                        continue
+                    base = positions[reference]
+                    point = (
+                        base[0] + float(rule["dx_mm"]),
+                        base[1] + float(rule["dy_mm"]),
+                    )
+                elif kind == "midpoint_offset":
+                    first_ref, second_ref = (str(item) for item in rule["between"])
+                    if first_ref not in positions or second_ref not in positions:
+                        unresolved.append(rule)
+                        continue
+                    first, second = positions[first_ref], positions[second_ref]
+                    point = (
+                        (first[0] + second[0]) / 2 + float(rule.get("dx_mm", 0.0)),
+                        (first[1] + second[1]) / 2 + float(rule.get("dy_mm", 0.0)),
+                    )
+                elif kind == "pin_offset":
+                    reference = str(rule["to"])
+                    if reference not in positions:
+                        unresolved.append(rule)
+                        continue
+                    reference_spec = by_ref[reference]
+                    definition = loaded[(reference_spec[1], reference_spec[2])]
+                    pin_number = str(rule["pin"])
+                    pin = next(
+                        (
+                            item for item in _pin_data(definition)
+                            if item["number"] == pin_number
+                        ),
+                        None,
+                    )
+                    if pin is None:
+                        raise ValueError(
+                            f"Layout constraint for {component} references "
+                            f"missing pin {reference}.{pin_number}."
+                        )
+                    reference_rotation = _symbol_rotation(reference)
+                    pin_point = _world_pin(
+                        *positions[reference], reference_rotation, pin,
+                    )
+                    point = (
+                        pin_point[0] + float(rule["dx_mm"]),
+                        pin_point[1] + float(rule["dy_mm"]),
+                    )
+                else:
+                    raise ValueError(
+                        f"Unsupported layout relation {kind!r} in group {group['id']}."
+                    )
+                positions[component] = [round(point[0], 3), round(point[1], 3)]
+                progressed = True
+            if not progressed and unresolved:
+                raise ValueError(
+                    f"Unresolved component layout constraints in {group['id']}: "
+                    + ", ".join(str(rule["component"]) for rule in unresolved)
+                )
+            pending = unresolved
+        unresolved_members = set(group["members"]) - set(positions)
+        if unresolved_members:
+            raise ValueError(
+                f"Group {group['id']} has no layout constraints for "
+                + ", ".join(sorted(unresolved_members))
+            )
+
+    expected = {spec[0] for spec in specs}
+    if set(positions) != expected:
+        raise ValueError("Every component must resolve from exactly one group layout.")
+    return positions
+
+
+def _pack_component_groups(
+    specs: list[tuple], loaded: dict[tuple[str, str], list],
+) -> dict[str, tuple[float, float]]:
+    """Resolve local constraints, then pack derived group bounds left-to-right."""
+    by_ref = {spec[0]: spec for spec in specs}
+    positions = _resolve_group_component_positions(specs, loaded)
+
+    def raw_bounds(group: dict) -> tuple[float, float, float, float]:
+        points = []
+        for reference in group["members"]:
+            spec = by_ref[reference]
+            rotation = _symbol_rotation(reference)
+            definition = loaded[(spec[1], spec[2])]
+            points.extend(
+                _world_pin(*positions[reference], rotation, pin)
+                for pin in _pin_data(definition)
+            )
+        if not points:
+            raise ValueError(f"Group {group['id']} contains no symbol pins.")
+        return (
+            min(p[0] for p in points), min(p[1] for p in points),
+            max(p[0] for p in points), max(p[1] for p in points),
+        )
+
+    placed: dict[str, tuple[float, float, float, float]] = {}
+    cursor = 25.40
+    primary = sorted(
+        (item for item in SCHEMATIC_GROUPS if item["lane"] == "main"),
+        key=lambda item: int(item["order"]),
+    )
+    for group in primary:
+        left, top, right, bottom = raw_bounds(group)
+        width = max(
+            right - left + 2 * GROUP_X_PADDING_MM,
+            _group_text_width(group),
+        )
+        shift_x = cursor + GROUP_X_PADDING_MM - left
+        for reference in group["members"]:
+            positions[reference][0] += shift_x
+        placed[group["id"]] = (cursor, top, cursor + width, bottom)
+        cursor += width + GROUP_GAP_MM
+
+    for group in (item for item in SCHEMATIC_GROUPS if item["lane"] != "main"):
+        target_id = str(group.get("align_to", ""))
+        if target_id not in placed:
+            raise ValueError(f"Group {group['id']} has an unknown alignment target.")
+        left, top, right, bottom = raw_bounds(group)
+        width = max(
+            right - left + 2 * GROUP_X_PADDING_MM,
+            _group_text_width(group),
+        )
+        target_left, _, target_right, _ = placed[target_id]
+        shift_x = (target_left + target_right - left - right) / 2
+        shift_y = float(group.get("y_offset_mm", 0.0))
+        for reference in group["members"]:
+            positions[reference][0] += shift_x
+            positions[reference][1] += shift_y
+        placed[group["id"]] = (
+            left + shift_x - GROUP_X_PADDING_MM, top + shift_y,
+            left + shift_x - GROUP_X_PADDING_MM + width, bottom + shift_y,
+        )
+
+    assigned = [reference for group in SCHEMATIC_GROUPS for reference in group["members"]]
+    if len(assigned) != len(set(assigned)) or set(assigned) != set(by_ref):
+        raise ValueError("Every component must belong to exactly one schematic group.")
+    return {reference: (point[0], point[1]) for reference, point in positions.items()}
+
+
+def _functional_group(group: dict, bounds: tuple[float, float, float, float]) -> list[list]:
+    """Generate a frame, title tab and descriptive source panel from bounds."""
+    left, top, right, bottom = bounds
+    title = str(group["title"])
+    width = right - left
+    tab_width = min(
+        width, max(12.70, _measure_text_box(title, 1.27, 1.27)[0] + 12.70),
+    )
+    description = _group_description(group)
+    return [
+        _graphic_rectangle(left, top, right, bottom, f"zone:{group['id']}"),
+        _graphic_tab(left, top, tab_width, group["id"]),
+        _graphic_text(
+            title, left + 1.27, top - 4.83, 1.27,
+            f"zone-title:{group['id']}", padding=1.27, border=False,
+            box_width=tab_width - 2.54,
+        ),
+        _graphic_text(
+            description, left + 2.54, top + 2.54, GROUP_DESCRIPTION_FONT_MM,
+            f"group-description:{group['id']}", padding=1.27, border=True,
+            box_width=width - 5.08,
+        ),
+    ]
+
+
 def generate_reference_schematic(destination: Path) -> Path:
     """Write the editable, datasheet-derived STUSB4500 implementation sheet."""
     root = _symbol_root()
     specs = [
-        # ref, library, symbol, value, position, pin-number -> (net, kind, shape)
-        (
-            "U1",
-            "Interface_USB",
-            "STUSB4500QTR",
-            "STUSB4500QTR",
-            (213.36, 157.48),
-            {
-                "1": ("CC1", "local", ""),
-                "2": ("CC1", "local", ""),
-                "3": ("NC", "nc", ""),
-                "4": ("CC2", "local", ""),
-                "5": ("CC2", "local", ""),
-                "6": ("RESET", "local", ""),
-                "7": ("SCL", "local", ""),
-                "8": ("SDA", "local", ""),
-                "9": ("DISCH", "local", ""),
-                "10": ("GND", "local", ""),
-                "11": ("NC", "nc", ""),
-                "12": ("ADDR0", "local", ""),
-                "13": ("ADDR1", "local", ""),
-                "14": ("NC", "nc", ""),
-                "15": ("NC", "nc", ""),
-                "16": ("VBUS_EN_SNK", "local", ""),
-                "17": ("NC", "nc", ""),
-                "18": ("VBUS_VS_DISCH", "local", ""),
-                "19": ("ALERT#", "local", ""),
-                "20": ("NC", "nc", ""),
-                "21": ("VREG_1V2", "local", ""),
-                "22": ("GND", "local", ""),
-                "23": ("VREG_2V7", "local", ""),
-                "24": ("VBUS", "local", ""),
-                "25": ("GND", "local", ""),
-            },
-        ),
-        (
-            "J1",
-            "Connector",
-            "USB_C_Receptacle",
-            "USB 3.1 Type-C receptacle",
-            (50.8, 142.24),
-            {
-                "A1": ("GND", "hier", "passive"),
-                "A4": ("VBUS", "hier", "input"),
-                "A5": ("CC1", "hier", "bidirectional"),
-                "A9": ("VBUS", "local", ""),
-                "A12": ("GND", "local", ""),
-                "B1": ("GND", "local", ""),
-                "B4": ("VBUS", "local", ""),
-                "B5": ("CC2", "hier", "bidirectional"),
-                "B9": ("VBUS", "local", ""),
-                "B12": ("GND", "local", ""),
-            },
-        ),
-        (
-            "J10",
-            "Connector_Generic",
-            "Conn_01x02",
-            "MPT_0.5_2-2.54",
-            (388.62, 93.98),
-            {
-                "1": ("VSNK", "hier", "output"),
-                "2": ("GND", "hier", "passive"),
-            },
-        ),
-        (
-            "J2",
-            "Connector_Generic",
-            "Conn_01x06",
-            "MCU interface",
-            (373.38, 213.36),
-            {
-                "1": ("SCL", "hier", "input"),
-                "2": ("SDA", "hier", "bidirectional"),
-                "3": ("ALERT#", "hier", "output"),
-                "4": ("RESET", "hier", "input"),
-                "5": ("VMCU", "hier", "input"),
-                "6": ("GND", "hier", "passive"),
-            },
-        ),
-        (
-            "C50",
-            "Device",
-            "C",
-            "4.7uF",
-            (88.9, 190.5),
-            {"1": ("VBUS", "local", ""), "2": ("GND", "local", "")},
-        ),
-        (
-            "C1",
-            "Device",
-            "C",
-            "1uF",
-            (190.5, 96.52),
-            {"1": ("VREG_1V2", "local", ""), "2": ("GND", "local", "")},
-        ),
-        (
-            "C2",
-            "Device",
-            "C",
-            "1uF",
-            (213.36, 96.52),
-            {"1": ("VREG_2V7", "local", ""), "2": ("GND", "local", "")},
-        ),
-        (
-            "C3",
-            "Device",
-            "C",
-            "1uF",
-            (236.22, 96.52),
-            {"1": ("VREG_2V7", "local", ""), "2": ("GND", "local", "")},
-        ),
-        (
-            "C4",
-            "Device",
-            "C",
-            "1uF",
-            (78.74, 96.52),
-            {"1": ("VBUS_FILTERED", "local", ""), "2": ("GND", "local", "")},
-        ),
-        (
-            "D4",
-            "Device",
-            "D",
-            "D4 (part not specified)",
-            (93.98, 88.9),
-            {"1": ("VBUS_FILTERED", "local", ""), "2": ("VBUS", "local", "")},
-        ),
-        (
-            "C10",
-            "Device",
-            "C",
-            "100nF",
-            (360.68, 93.98),
-            {"1": ("VSNK", "local", ""), "2": ("GND", "local", "")},
-        ),
-        (
-            "R1",
-            "Device",
-            "R",
-            "470",
-            (144.78, 127),
-            {"1": ("VBUS_FILTERED", "local", ""), "2": ("VBUS_VS_DISCH", "local", "")},
-        ),
-        (
-            "R2",
-            "Device",
-            "R",
-            "1k",
-            (274.32, 175.26),
-            {"1": ("DISCH", "local", ""), "2": ("VSNK", "local", "")},
-        ),
-        (
-            "R3",
-            "Device",
-            "R",
-            "4.7k",
-            (309.88, 213.36),
-            {"1": ("VMCU", "local", ""), "2": ("SCL", "local", "")},
-        ),
-        (
-            "R4",
-            "Device",
-            "R",
-            "1k",
-            (167.64, 127),
-            {"1": ("VREG_2V7", "local", ""), "2": ("VBUS_VS_DISCH", "local", "")},
-        ),
-        (
-            "R5",
-            "Device",
-            "R",
-            "4.7k",
-            (332.74, 213.36),
-            {"1": ("VMCU", "local", ""), "2": ("SDA", "local", "")},
-        ),
-        (
-            "R6",
-            "Device",
-            "R",
-            "4.7k",
-            (355.6, 213.36),
-            {"1": ("VMCU", "local", ""), "2": ("ALERT#", "local", "")},
-        ),
-        (
-            "R10",
-            "Device",
-            "R",
-            "100k",
-            (297.18, 116.84),
-            {"1": ("FET_MID", "local", ""), "2": ("VSNK_GATE", "local", "")},
-        ),
-        (
-            "R11",
-            "Device",
-            "R",
-            "22k",
-            (325.12, 124.46),
-            {"1": ("VSNK_GATE", "local", ""), "2": ("GND", "local", "")},
-        ),
-        (
-            "R13",
-            "Device",
-            "R",
-            "100",
-            (353.06, 124.46),
-            {"1": ("VSNK_GATE", "local", ""), "2": ("VBUS_EN_SNK", "local", "")},
-        ),
-        (
-            "R51",
-            "Device",
-            "R",
-            "NC",
-            (147.32, 228.6),
-            {"1": ("VREG_2V7", "local", ""), "2": ("ADDR1", "local", "")},
-        ),
-        (
-            "R52",
-            "Device",
-            "R",
-            "NC",
-            (172.72, 228.6),
-            {"1": ("VREG_2V7", "local", ""), "2": ("ADDR0", "local", "")},
-        ),
-        (
-            "R53",
-            "Device",
-            "R",
-            "100k",
-            (198.12, 228.6),
-            {"1": ("ADDR1", "local", ""), "2": ("GND", "local", "")},
-        ),
-        (
-            "R54",
-            "Device",
-            "R",
-            "100k",
-            (223.52, 228.6),
-            {"1": ("ADDR0", "local", ""), "2": ("GND", "local", "")},
-        ),
-        (
-            "R55",
-            "Device",
-            "R",
-            "10k",
-            (261.62, 228.6),
-            {"1": ("RESET", "local", ""), "2": ("GND", "local", "")},
-        ),
-        (
-            "D1",
-            "STUSB4500_Custom",
-            "ESDA25W",
-            "ESDA25W",
-            (88.9, 139.7),
-            {"1": ("CC1", "local", ""), "2": ("CC2", "local", ""), "3": ("GND", "local", "")},
-        ),
-        (
-            "D50",
-            "Device",
-            "D_TVS",
-            "ESDA25P35-1U1M",
-            (106.68, 190.5),
-            {"1": ("VBUS", "local", ""), "2": ("GND", "local", "")},
-        ),
-        (
-            "D11",
-            "Device",
-            "D_TVS",
-            "ESDA25P35-1U1M",
-            (373.38, 124.46),
-            {"1": ("VSNK", "local", ""), "2": ("GND", "local", "")},
-        ),
-        (
-            "T4",
-            "Transistor_FET",
-            "Q_PMOS_GSD",
-            "STL6P3LLH6",
-            (284.48, 76.2),
-            {
-                "1": ("VBUS_EN_SNK", "local", ""),
-                "2": ("VBUS", "local", ""),
-                "3": ("FET_MID", "local", ""),
-            },
-        ),
-        (
-            "T1",
-            "Transistor_FET",
-            "Q_PMOS_GSD",
-            "STL6P3LLH6",
-            (337.82, 76.2),
-            {
-                "1": ("VSNK_GATE", "local", ""),
-                "2": ("FET_MID", "local", ""),
-                "3": ("VSNK", "local", ""),
-            },
-        ),
+        # ref, library, symbol, value, unused position slot, pin-number -> (net, kind, shape).
+        # Component origins are resolved exclusively from SCHEMATIC_GROUPS layout constraints.
+        ("U1", "Interface_USB", "STUSB4500QTR", "STUSB4500QTR", None, {
+            "1": ("CC1", "local", ""), "2": ("CC1", "local", ""),
+            "4": ("CC2", "local", ""),
+            "5": ("CC2", "local", ""), "6": ("RESET", "hier", "input"),
+            "7": ("SCL", "hier", "input"), "8": ("SDA", "hier", "bidirectional"),
+            "9": ("DISCH", "local", ""), "10": ("GND", "hier", "passive"),
+            "11": ("NC", "nc", ""), "12": ("ADDR0", "local", ""),
+            "13": ("ADDR1", "local", ""), "14": ("NC", "nc", ""),
+            "15": ("NC", "nc", ""), "16": ("VBUS_EN_SNK", "local", ""),
+            "17": ("NC", "nc", ""), "18": ("VBUS_VS_DISCH", "local", ""),
+            "19": ("ALERT#", "hier", "output"), "20": ("NC", "nc", ""),
+            "21": ("VREG_1V2", "local", ""), "22": ("VSYS", "hier", "input"),
+            "23": ("VREG_2V7", "local", ""), "24": ("VBUS", "local", ""),
+            "25": ("GND", "local", ""),
+        }),
+        ("J1", "Connector", "USB_C_Receptacle", "USB 3.1 Type-C receptacle", None, {
+            "A1": ("GND", "local", ""), "A4": ("VBUS", "local", ""),
+            "A5": ("CC1", "local", ""), "A9": ("VBUS", "local", ""),
+            "A12": ("GND", "local", ""), "B1": ("GND", "local", ""),
+            "B4": ("VBUS", "local", ""), "B5": ("CC2", "local", ""),
+            "B9": ("VBUS", "local", ""), "B12": ("GND", "local", ""),
+        }),
+        ("C50", "Device", "C", "4.7uF", None, {
+            "1": ("VBUS", "local", ""), "2": ("GND", "local", ""),
+        }),
+        ("D50", "Device", "D_TVS", "ESDA25P35-1U1M", None, {
+            "1": ("VBUS", "local", ""), "2": ("GND", "local", ""),
+        }),
+        ("D1", "STUSB4500_Custom", "ESDA25W", "ESDA25W", None, {
+            "1": ("CC1", "local", ""), "2": ("CC2", "local", ""),
+            "3": ("GND", "local", ""),
+        }),
+        ("D4", "Device", "D", "D4 (part not specified)", None, {
+            "1": ("VBUS_FILTERED", "local", ""), "2": ("VBUS", "local", ""),
+        }),
+        ("C4", "Device", "C", "1uF", None, {
+            "1": ("VBUS_FILTERED", "local", ""), "2": ("GND", "local", ""),
+        }),
+        ("R1", "Device", "R", "470", None, {
+            "1": ("VBUS_FILTERED", "local", ""), "2": ("VBUS_VS_DISCH", "local", ""),
+        }),
+        ("R4", "Device", "R", "1k", None, {
+            "1": ("VREG_2V7", "local", ""), "2": ("VBUS_VS_DISCH", "local", ""),
+        }),
+        ("C1", "Device", "C", "1uF", None, {
+            "1": ("VREG_1V2", "local", ""), "2": ("GND", "local", ""),
+        }),
+        ("C2", "Device", "C", "1uF", None, {
+            "1": ("VREG_2V7", "local", ""), "2": ("GND", "local", ""),
+        }),
+        ("C3", "Device", "C", "1uF", None, {
+            "1": ("VREG_2V7", "local", ""), "2": ("GND", "local", ""),
+        }),
+        ("R51", "Device", "R", "100k", None, {
+            "1": ("VREG_2V7", "local", ""), "2": ("ADDR1", "local", ""),
+        }),
+        ("R52", "Device", "R", "100k", None, {
+            "1": ("VREG_2V7", "local", ""), "2": ("ADDR0", "local", ""),
+        }),
+        ("R53", "Device", "R", "100k", None, {
+            "1": ("ADDR1", "local", ""), "2": ("GND", "local", ""),
+        }),
+        ("R54", "Device", "R", "100k", None, {
+            "1": ("ADDR0", "local", ""), "2": ("GND", "local", ""),
+        }),
+        ("R55", "Device", "R", "10k", None, {
+            "1": ("RESET", "local", ""), "2": ("GND", "local", ""),
+        }),
+        ("T4", "Transistor_FET", "Q_PMOS_GSD", "STL6P3LLH6", None, {
+            "1": ("VBUS_EN_SNK", "local", ""), "2": ("VBUS", "local", ""),
+            "3": ("FET_MID", "local", ""),
+        }),
+        ("T1", "Transistor_FET", "Q_PMOS_GSD", "STL6P3LLH6", None, {
+            "1": ("VSNK_GATE", "local", ""), "2": ("FET_MID", "local", ""),
+            "3": ("VSNK", "hier", "output"),
+        }),
+        ("R10", "Device", "R", "100k", None, {
+            "1": ("FET_MID", "local", ""), "2": ("VSNK_GATE", "local", ""),
+        }),
+        ("R11", "Device", "R", "22k", None, {
+            "1": ("VSNK_GATE", "local", ""), "2": ("GND", "local", ""),
+        }),
+        ("R13", "Device", "R", "100", None, {
+            "1": ("VSNK_GATE", "local", ""), "2": ("VBUS_EN_SNK", "local", ""),
+        }),
+        ("R2", "Device", "R", "1k", None, {
+            "1": ("DISCH", "local", ""), "2": ("VSNK", "hier", "output"),
+        }),
+        ("C10", "Device", "C", "100nF", None, {
+            "1": ("VSNK", "hier", "output"), "2": ("GND", "local", ""),
+        }),
+        ("D11", "Device", "D_TVS", "ESDA25P35-1U1M", None, {
+            "1": ("VSNK", "hier", "output"), "2": ("GND", "local", ""),
+        }),
     ]
+
+    # All ground endpoints intentionally use the same hierarchical parent
+    # interface. Do not create sheet-local GND labels inside this block.
+    for spec in specs:
+        pin_map = spec[-1]
+        for pin_number, mapping in tuple(pin_map.items()):
+            if mapping[0] == "GND":
+                pin_map[pin_number] = ("GND", "hier", "passive")
 
     library_symbols = []
     loaded = {}
@@ -596,6 +970,7 @@ def generate_reference_schematic(destination: Path) -> Path:
             loaded[key] = _load_symbol(root, library, symbol_name)
             library_symbols.append(loaded[key])
 
+    positions = _pack_component_groups(specs, loaded)
     instances = []
     labels = []
     no_connects = []
@@ -605,7 +980,8 @@ def generate_reference_schematic(destination: Path) -> Path:
     ] = {}
     pin_world_points: dict[tuple[str, str], tuple[float, float]] = {}
     no_connect_points: set[tuple[float, float]] = set()
-    for reference, library, symbol_name, value, (sx, sy), pin_map in specs:
+    for reference, library, symbol_name, value, _position, pin_map in specs:
+        sx, sy = positions[reference]
         definition = loaded[(library, symbol_name)]
         pins = _pin_data(definition)
         numbers = {pin["number"] for pin in pins}
@@ -623,37 +999,98 @@ def generate_reference_schematic(destination: Path) -> Path:
                 footprint = str(prop[2])
             elif len(prop) >= 3 and str(prop[1]) == "Datasheet" and str(prop[2]):
                 datasheet = str(prop[2])
+        reference_justify = None
+        value_justify = None
         if reference == "U1":
-            # Keep text well above the four top-side supply pins and their labels.
-            field_x, ref_y, value_y = sx, sy - 44, sy - 41
+            # Put both fields immediately outside the right edge of the QFN.
+            # Left justification keeps the long value clear of the body.
+            reference_x, reference_y = sx + 15.24, sy - 17.78
+            value_x, value_y = sx + 15.24, sy - 15.24
+            reference_justify = "left"
+            value_justify = "left"
         elif reference == "J1":
-            field_x, ref_y, value_y = sx - 10, sy - 44, sy - 41
-        elif reference == "J10":
-            # Keep the long connector value clear of the page boundary.
-            field_x, ref_y, value_y = sx - 12, sy - 19, sy - 16
-        elif reference == "J2":
-            field_x, ref_y, value_y = sx + 12, sy - 10, sy - 7
+            # Put the connector fields immediately above its tall body.
+            reference_x, reference_y = sx, sy - 33.02
+            value_x, value_y = sx, sy - 30.48
         elif reference in {"T4", "T1"}:
-            field_x, ref_y, value_y = sx + 12, sy + 11, sy + 14
+            # Keep both fields above the MOSFET bodies. The labels sit at
+            # opposite outer sides of the pair, away from gate/source wires.
+            dx = -5.08 if reference == "T4" else 8.89
+            reference_x, reference_y = (
+                sx + dx, sy - (5.08 if reference == "T1" else 6.35)
+            )
+            value_x, value_y = (
+                sx + (5.08 if reference == "T1" else dx),
+                sy - (7.62 if reference == "T1" else 8.89),
+            )
+            reference_justify = "right" if reference == "T4" else "left"
+            value_justify = reference_justify
+        elif reference.startswith("R"):
+            value_x, value_y = sx, sy
+            if reference in {"R51", "R52", "R53", "R54"}:
+                # Address strap resistors are rotated horizontal; keep their
+                # references above the body and values centered inside it.
+                reference_x, reference_y = sx, sy - 2.54
+            else:
+                # Vertical resistors have a terminal directly above the body.
+                # Put the reference beside the body instead of on that pin.
+                ref_offsets = {
+                    "R1": -2.54, "R2": 2.54, "R4": 2.54,
+                    "R10": -2.54, "R11": 2.54, "R13": -2.54, "R55": -2.54,
+                }
+                dx = ref_offsets[reference]
+                reference_x, reference_y = sx + dx, sy
+                reference_justify = "left" if dx > 0 else "right"
         elif reference == "D1":
-            field_x, ref_y, value_y = sx, sy - 15, sy - 12
+            # Keep the reference above the ESD-array body and the long part
+            # name to its right, clear of the two CC-line escape wires.
+            reference_x, reference_y = sx, sy - 8.89
+            value_x, value_y = sx + 6.35, sy
+            value_justify = "left"
         elif reference.startswith("D"):
-            field_x, ref_y, value_y = sx, sy - 12, sy - 9
-        elif reference.startswith(("R", "C")):
-            field_x, ref_y, value_y = sx - 8, sy - 1.5, sy + 1.5
+            # Keep diode identifiers close to the symbol, not floating above it.
+            reference_x, reference_y = sx, sy - 6.35
+            value_x, value_y = (
+                sx, sy + 7.62 if reference == "D50" else sy - 3.81
+            )
+        elif reference.startswith("C"):
+            # Put references on opposite sides of the decouplers where
+            # adjacent bodies would otherwise crowd the field glyphs.
+            if reference == "C3":
+                reference_x, reference_y = sx + 3.81, sy
+                reference_justify = "left"
+            else:
+                reference_x, reference_y = sx - 3.81, sy
+            value_x, value_y = (
+                sx + 4.45 if reference == "C3" else sx - 4.45,
+                sy + 2.54,
+            )
+            if reference == "C3":
+                value_justify = "left"
         else:
-            field_x, ref_y, value_y = sx, sy - 8, sy - 5
+            reference_x, reference_y = sx, sy - 8
+            value_x, value_y = sx, sy - 5
+        rotation = _symbol_rotation(reference)
+        # Vertical resistor fields follow the body; fields on symbol-rotated
+        # address resistors are counter-rotated so that their text stays legible.
+        field_angle = 90 if reference.startswith("R") else 0
         instance = [
-            "symbol",
-            ["lib_id", QuotedSExpr(lib_id)],
-            ["at", f"{sx:.3f}", f"{sy:.3f}", "0"],
-            ["unit", "1"],
-            ["in_bom", "yes"],
-            ["on_board", "yes"],
-            ["dnp", "no"],
-            ["uuid", QuotedSExpr(symbol_uuid)],
-            _prop("Reference", reference, 0, field_x, ref_y),
-            _prop("Value", value, 1, field_x, value_y),
+            "symbol", ["lib_id", _Quoted(lib_id)], ["at", f"{sx:.3f}", f"{sy:.3f}", str(rotation)],
+            ["unit", "1"], ["in_bom", "yes"], ["on_board", "yes"],
+            ["dnp", "yes" if reference in {"R51", "R52"} else "no"],
+            ["uuid", _Quoted(symbol_uuid)],
+            _prop(
+                "Reference", reference, 0, reference_x, reference_y,
+                font_size=0.95 if reference.startswith("R") else 1.10,
+                justify=reference_justify,
+                angle=field_angle,
+            ),
+            _prop(
+                "Value", value, 1, value_x, value_y,
+                font_size=0.72 if reference.startswith("R") else 1.10,
+                justify=value_justify,
+                angle=field_angle,
+            ),
             _prop("Footprint", footprint, 2, sx, sy, True),
             _prop("Datasheet", datasheet, 3, sx, sy, True),
         ]
@@ -668,8 +1105,16 @@ def generate_reference_schematic(destination: Path) -> Path:
             net_spec = pin_map.get(pin["number"])
             if net_spec:
                 net, kind, *shape = net_spec
-                px = sx + pin["x"]
-                py = sy - pin["y"]
+                if rotation == 0:
+                    px, py = sx + pin["x"], sy - pin["y"]
+                elif rotation == 90:
+                    px, py = sx - pin["y"], sy - pin["x"]
+                elif rotation == 180:
+                    px, py = sx - pin["x"], sy + pin["y"]
+                elif rotation == 270:
+                    px, py = sx + pin["y"], sy + pin["x"]
+                else:
+                    raise ValueError(f"Unsupported symbol rotation {rotation} for {reference}.")
                 point = (round(px, 3), round(py, 3))
                 pin_world_points[(reference, pin["number"])] = point
                 if kind in {"hier", "local"}:
@@ -689,7 +1134,7 @@ def generate_reference_schematic(destination: Path) -> Path:
                         # Coordinate-quadrant guesses are unsafe for stacked
                         # USB-C connector pins: they can route CC1/CC2 stubs
                         # vertically across adjacent VBUS pins and short nets.
-                        angle = pin["angle"] % 360
+                        angle = (pin["angle"] + rotation) % 360
                         outward = {
                             0: (-1, 0),
                             90: (0, 1),
@@ -702,13 +1147,70 @@ def generate_reference_schematic(destination: Path) -> Path:
                                 f"{reference}.{pin['number']} ({pin['name']})."
                             )
                         dx, dy = outward[angle]
-                        label_x = px + dx * 5.08
-                        label_y = py + dy * 5.08
+                        label_x = px + dx * 2.54
+                        label_y = py + dy * 2.54
                         justify = "right" if dx < 0 else "left"
-                        # The QFN regulator pins occupy one 2.54 mm pitch row.
-                        # Rotate only their rail labels to prevent horizontal
-                        # text collisions while keeping other pin labels normal.
-                        label_angle = 90 if reference == "U1" and dy != 0 else 0
+                        label_angle = 0
+                        if net == "GND" and kind == "hier":
+                            # Rotate hierarchical GND ports to follow their
+                            # physical wire twig, including downward stubs.
+                            label_angle = {
+                                0: 180, 90: 90, 180: 0, 270: 270,
+                            }[angle]
+                            if angle in {90, 270}:
+                                justify = "right"
+                        if reference == "D1" and pin["number"] in {"1", "2"}:
+                            # D1's ground pin points down; fan CC labels out
+                            # above the ESD array so they do not cross wires.
+                            label_x = px + 5.08 if pin["number"] == "1" else px - 5.08
+                            label_y = py - 5.08
+                            justify = "left" if pin["number"] == "1" else "right"
+                        if reference == "U1" and pin["number"] == "6":
+                            # RESET is physically wired to R55. Put the
+                            # hierarchical port on its own perpendicular twig,
+                            # not inline on the U1-to-pull-down wire.
+                            label_x = px
+                            label_y = py - 2.54
+                            justify = "right"
+                        if reference == "C1" and pin["number"] == "1":
+                            # The label branches sideways while C1.1 is wired
+                            # directly upward to U1.21.
+                            label_x = px + 2.54
+                            label_y = py
+                            justify = "left"
+                            label_angle = 0
+                        if reference == "R55" and pin["number"] == "2":
+                            # Keep R55's GND label below the body and away
+                            # from U1.4/CC2; the short vertical stub stays in
+                            # the controller's left margin.
+                            label_x = px
+                            label_y = py + 2.54
+                            justify = "right"
+                            label_angle = 90
+                        if reference in {"R1", "R4"} and net in {"VBUS_FILTERED", "VREG_2V7"}:
+                            # Keep each monitor label on a short, straight
+                            # vertical twig instead of a long L-shaped detour.
+                            label_x = px
+                            label_y = py - 5.08
+                            justify = "left"
+                            label_angle = 90
+                        if reference == "U1":
+                            # Stagger the four tightly pitched top-side supply
+                            # labels horizontally above the QFN, keeping their
+                            # text clear of the vertical pin names.
+                            u1_top_labels = {
+                                "24": (0.00, -2.54, "right", 0),
+                                # Move VSYS left of the vertical pin rail and
+                                # align it with VBUS; this separates it from
+                                # the nearby C2 GND label.
+                                "22": (-2.54, -5.08, "right", 0),
+                                "25": (0.00, 5.08, "right", 90),
+                            }
+                            override = u1_top_labels.get(pin["number"])
+                            if override is not None:
+                                offset_x, offset_y, justify, label_angle = override
+                                label_x = px + offset_x
+                                label_y = py + offset_y
                         # One label is sufficient for stacked connector pins.
                         # Prefer the hierarchical port when it shares a point
                         # with local labels for the same electrical net.
@@ -724,9 +1226,10 @@ def generate_reference_schematic(destination: Path) -> Path:
                 elif kind == "nc":
                     no_connect_points.add(point)
             elif reference == "J1":
-                px = sx + pin["x"]
-                py = sy - pin["y"]
-                no_connect_points.add((round(px, 3), round(py, 3)))
+                px, py = _world_pin(sx, sy, rotation, pin)
+                point = (round(px, 3), round(py, 3))
+                pin_world_points[(reference, pin["number"])] = point
+                no_connect_points.add(point)
         instance.append(
             [
                 "instances",
@@ -744,30 +1247,9 @@ def generate_reference_schematic(destination: Path) -> Path:
         )
         instances.append(instance)
 
+    # Generate label glyphs after wiring so consumed endpoints do not retain
+    # duplicate flags on top of their visible wire connections.
     label_stubs = []
-    for point, (net, kind, shape_name, x, y, justify, angle) in sorted(label_points.items()):
-        px, py = point
-        labels.append(
-            _label(
-                net,
-                x,
-                y,
-                hierarchical=kind == "hier",
-                shape=shape_name,
-                justify=justify,
-                angle=angle,
-                key=f"label:{kind}:{net}:{px:.3f}:{py:.3f}",
-            )
-        )
-        if (round(x, 3), round(y, 3)) != point:
-            label_stubs.append(
-                [
-                    "wire",
-                    ["pts", ["xy", f"{px:.3f}", f"{py:.3f}"], ["xy", f"{x:.3f}", f"{y:.3f}"]],
-                    ["stroke", ["width", "0"], ["type", "default"]],
-                    ["uuid", QuotedSExpr(_uid(f"label-stub:{kind}:{net}:{px:.3f}:{py:.3f}"))],
-                ]
-            )
     for point in sorted(no_connect_points - set(label_points)):
         x, y = point
         no_connects.append(
@@ -783,13 +1265,11 @@ def generate_reference_schematic(destination: Path) -> Path:
     # These groups are deliberately collinear; generation fails if a later
     # placement change breaks the intended geometry.
     wire_groups = [
-        ("VREG_2V7", [("C2", "1"), ("C3", "1")], ("C2", "1")),
-        ("GND", [("C1", "2"), ("C2", "2"), ("C3", "2")], ("C1", "2")),
         ("VBUS_VS_DISCH", [("R1", "2"), ("R4", "2")], ("R1", "2")),
         ("VREG_2V7", [("R51", "1"), ("R52", "1")], ("R51", "1")),
-        ("GND", [("R53", "2"), ("R54", "2")], ("R53", "2")),
-        ("VMCU", [("R3", "1"), ("R5", "1"), ("R6", "1")], ("R3", "1")),
         ("VSNK_GATE", [("R10", "2"), ("R11", "1"), ("R13", "1")], ("R11", "1")),
+        ("ADDR1", [("R51", "2"), ("R53", "1")], ("R51", "2")),
+        ("ADDR0", [("R52", "2"), ("R54", "1")], ("R52", "2")),
     ]
     wires = []
     junctions = []
@@ -837,75 +1317,7 @@ def generate_reference_schematic(destination: Path) -> Path:
             if point != anchor_point:
                 label_points.pop(point, None)
 
-    # The FET common node is a meaningful part of the power path. Route it as
-    # one visible, orthogonal trunk with a branch to R10 rather than three
-    # unrelated text labels.
-    fet_t4_drain = pin_world_points[("T4", "3")]
-    fet_t1_source = pin_world_points[("T1", "2")]
-    fet_r10_node = pin_world_points[("R10", "1")]
-    if fet_t1_source[1] <= fet_t4_drain[1] or fet_r10_node[1] <= fet_t1_source[1]:
-        raise ValueError("FET_MID route corridor no longer fits between the FETs and R10.")
-    fet_out = (fet_t4_drain[0], round(fet_t4_drain[1] - 5.08, 3))
-    fet_lane_x = fet_r10_node[0]
-    fet_track_y = round(fet_t1_source[1] + 10.16, 3)
-    fet_tee = (fet_r10_node[0], fet_track_y)
-    fet_end_track = (fet_t1_source[0], fet_track_y)
-    fet_route = [
-        fet_t4_drain,
-        fet_out,
-        (fet_lane_x, fet_out[1]),
-        (fet_lane_x, fet_track_y),
-        fet_end_track,
-        fet_t1_source,
-    ]
-    for index, (start, end) in enumerate(itertools.pairwise(fet_route)):
-        wires.append(_wire(start, end, f"FET_MID:power-trunk:{index}"))
-    wires.append(_wire(fet_tee, fet_r10_node, "FET_MID:R10-branch"))
-    junctions.append(
-        [
-            "junction",
-            ["at", f"{fet_tee[0]:.3f}", f"{fet_tee[1]:.3f}"],
-            ["diameter", "0"],
-            ["color", "0", "0", "0", "0"],
-            ["uuid", QuotedSExpr(_uid(f"junction:FET_MID:{fet_tee[0]:.3f}:{fet_tee[1]:.3f}"))],
-        ]
-    )
-    # Keep one label on the now-wired island so the exported net retains the
-    # stable FET_MID name used by downstream netlist checks.
-    for ref, pin_number in (("T4", "3"), ("T1", "2")):
-        point = pin_world_points[(ref, pin_number)]
-        label = label_points.get(point)
-        if label is None or label[0] != "FET_MID" or label[1] != "local":
-            raise ValueError(f"Expected local FET_MID label is missing at {ref}.{pin_number}.")
-        label_points.pop(point)
-    anchor_label = label_points.get(fet_r10_node)
-    if anchor_label is None or anchor_label[0] != "FET_MID":
-        raise ValueError("The FET_MID label anchor at R10.1 is missing.")
-
-    # Route the gate-control lead around the common-source FET node and the
-    # VSNK output rail. The vertical leg uses the clear corridor between the
-    # VBUS spine (ending at T4) and the FET_MID trunk.
-    fet_gate = pin_world_points[("T1", "1")]
-    gate_target = pin_world_points[("R10", "2")]
-    gate_out = (292.1, fet_gate[1])
-    if gate_out[0] >= gate_target[0] or gate_target[1] <= fet_gate[1]:
-        raise ValueError("T1 gate route corridor no longer fits its divider branch.")
-    gate_route = [
-        fet_gate,
-        gate_out,
-        (gate_out[0], gate_target[1]),
-        gate_target,
-    ]
-    for index, (start, end) in enumerate(itertools.pairwise(gate_route)):
-        wires.append(_wire(start, end, f"VSNK_GATE:T1-to-R10:{index}"))
-    gate_label = label_points.get(fet_gate)
-    if gate_label is None or gate_label[0] != "VSNK_GATE" or gate_label[1] != "local":
-        raise ValueError("Expected local VSNK_GATE label is missing at T1 gate.")
-    label_points.pop(fet_gate)
-
-    # Core input path: the USB-C VBUS contact feeds a clear top rail to the
-    # first PMOS switch. A separate short branch serves the input capacitor
-    # and TVS at the receptacle; the routes deliberately avoid the CC pair.
+    # Local helpers for short, visible orthogonal connections.
     def add_route(net: str, points: list[tuple[float, float]], key: str) -> None:
         if len(points) < 2:
             raise ValueError(f"{net} route {key} needs at least two points.")
@@ -930,249 +1342,289 @@ def generate_reference_schematic(destination: Path) -> Path:
             raise ValueError(f"Expected {net} local label is missing at {reference}.{pin_number}.")
         label_points.pop(point)
 
-    # J1 VBUS -> top VBUS spine -> T4 source.
-    usb_vbus = pin_world_points[("J1", "A4")]
-    t4_vbus = pin_world_points[("T4", "2")]
-    add_route(
-        "VBUS",
-        [
-            usb_vbus,
-            (63.5, usb_vbus[1]),
-            (63.5, 81.28),
-            t4_vbus,
-        ],
-        "usb-input-to-power-spine",
+    def remove_hierarchical_label(reference: str, pin_number: str, net: str) -> None:
+        point = pin_world_points[(reference, pin_number)]
+        label = label_points.get(point)
+        if label is None or label[0] != net or label[1] != "hier":
+            raise ValueError(
+                f"Expected {net} hierarchical label is missing at {reference}.{pin_number}."
+            )
+        label_points.pop(point)
+
+    # C2/C3 are parallel bypass parts. Join their GND terminals physically
+    # and expose that shared net through one downward-facing hierarchical port.
+    c2_ground = pin_world_points[("C2", "2")]
+    c3_ground = pin_world_points[("C3", "2")]
+    if abs(c2_ground[1] - c3_ground[1]) > 0.001:
+        raise ValueError(f"C2/C3 ground pins are not aligned: {c2_ground}, {c3_ground}")
+    remove_hierarchical_label("C2", "2", "GND")
+    remove_hierarchical_label("C3", "2", "GND")
+    shared_ground_junction = (
+        round((c2_ground[0] + c3_ground[0]) / 2, 3), c2_ground[1],
     )
-    remove_local_label("T4", "2", "VBUS")
+    shared_ground_port = (
+        shared_ground_junction[0], round(shared_ground_junction[1] + 2.54, 3),
+    )
+    add_route("GND", [c2_ground, c3_ground], "c2-c3-shared-ground-rail")
+    add_junction(shared_ground_junction, "GND:C2-C3-shared-branch")
+    # Generate the single hierarchical port as a short label twig from the branch.
+    label_points[shared_ground_junction] = (
+        "GND", "hier", "passive",
+        shared_ground_port[0], shared_ground_port[1], "right", 90,
+    )
 
-    # D4 is the VBUS feed for the filter capacitor; bring its input up to the
-    # main rail with a short branch. The crossing is an intentional T-junction.
-    d4_vbus = pin_world_points[("D4", "2")]
-    d4_rail = (d4_vbus[0], 81.28)
-    add_route("VBUS", [d4_vbus, d4_rail], "d4-vbus-tap")
-    remove_local_label("D4", "2", "VBUS")
-    add_junction(d4_rail, "VBUS:D4-tap")
+    # R1.2 and R4.2 share one physical wire network. Keep one local label on
+    # that island; U1.18 carries the matching label on a disconnected island.
+    # Connect the PMOS common-source midpoint directly to the resistor
+    # network. This is one compact physical net and needs no FET_MID label.
+    t4_fet_mid = pin_world_points[("T4", "3")]
+    t1_fet_mid = pin_world_points[("T1", "2")]
+    r10_fet_mid = pin_world_points[("R10", "1")]
+    remove_local_label("T4", "3", "FET_MID")
+    remove_local_label("T1", "2", "FET_MID")
+    remove_local_label("R10", "1", "FET_MID")
+    if abs(t4_fet_mid[1] - t1_fet_mid[1]) > 0.001:
+        raise ValueError(f"PMOS common-node pins are not aligned: {t4_fet_mid}, {t1_fet_mid}")
+    fet_mid_branch = (
+        round((t4_fet_mid[0] + t1_fet_mid[0]) / 2, 3),
+        t4_fet_mid[1],
+    )
+    if abs(fet_mid_branch[0] - r10_fet_mid[0]) > 0.001:
+        raise ValueError("R10.1 must align vertically below the FET midpoint.")
+    add_route("FET_MID", [t4_fet_mid, t1_fet_mid], "back-to-back-pmos-common-source")
+    add_junction(fet_mid_branch, "FET_MID:common-source-midpoint")
+    add_route(
+        "FET_MID", [fet_mid_branch, r10_fet_mid],
+        "common-source-midpoint-to-r10",
+    )
 
-    # Input bulk capacitor and TVS sit together beside the receptacle. This
-    # short local wire joins their VBUS terminals; the named VBUS port carries
-    # the longer connection back to J1 and the top power spine.
+    # The VSNK_GATE control bus is physically wired across R10/R11/R13.
+    # Keep its one label at R11.1; T1.1 is a separate, matching label island.
+    # Do not bridge the two wire islands with another routed segment.
+
+    # CC1 and CC2 use repeated local labels at the receptacle, ESD array,
+    # and controller. Avoid physical traces across the dense USB-C pin field;
+    # the labels remain close to the connector terminals and are reused.
+
+    # The input bulk capacitor and TVS share a short local VBUS entry rail.
     c50_vbus = pin_world_points[("C50", "1")]
     d50_vbus = pin_world_points[("D50", "1")]
-    add_route(
-        "VBUS",
-        [
-            c50_vbus,
-            (d50_vbus[0], c50_vbus[1]),
-            d50_vbus,
-        ],
-        "input-cap-tvss-feed",
-    )
+    add_route("VBUS", [
+        c50_vbus, (d50_vbus[0], c50_vbus[1]), d50_vbus,
+    ], "input-cap-tvs-feed")
     remove_local_label("D50", "1", "VBUS")
 
-    # A single local ground route joins the input capacitor and the TVS cathode.
-    c50_gnd = pin_world_points[("C50", "2")]
-    d50_gnd = pin_world_points[("D50", "2")]
+    # All regulator bypass capacitors connect directly to IC supply pins.
+    # VREG_1V2 uses a dedicated upper corridor; C2/C3 remain adjacent.
+    u1_vreg_1v2 = pin_world_points[("U1", "21")]
+    c1_vreg_1v2 = pin_world_points[("C1", "1")]
+    remove_local_label("U1", "21", "VREG_1V2")
+    remove_local_label("C1", "1", "VREG_1V2")
+    if abs(u1_vreg_1v2[0] - c1_vreg_1v2[0]) > 0.001:
+        raise ValueError(
+            f"C1.1 must align with U1.21 for a direct bypass route: "
+            f"{c1_vreg_1v2}, {u1_vreg_1v2}"
+        )
     add_route(
-        "GND",
-        [
-            c50_gnd,
-            (d50_gnd[0], c50_gnd[1]),
-            d50_gnd,
-        ],
-        "input-protection-ground",
+        "VREG_1V2", [u1_vreg_1v2, c1_vreg_1v2],
+        "u1-vreg-1v2-direct-to-c1",
     )
-    remove_local_label("D50", "2", "GND")
 
-    # CC1 and CC2 are routed independently from the receptacle to the
-    # protection array. The hierarchical port labels remain at the connector.
-    cc1_j1 = pin_world_points[("J1", "A5")]
-    cc2_j1 = pin_world_points[("J1", "B5")]
-    cc1_d1 = pin_world_points[("D1", "1")]
-    cc2_d1 = pin_world_points[("D1", "2")]
+    u1_vreg_2v7 = pin_world_points[("U1", "23")]
+    c2_vreg_2v7 = pin_world_points[("C2", "1")]
+    c3_vreg_2v7 = pin_world_points[("C3", "1")]
+    vreg_2v7_branch = (u1_vreg_2v7[0], 90.17)
+    c3_vreg_2v7_branch = (c3_vreg_2v7[0], 90.17)
+    # Extend the trunk to C3; C2 branches into the same physical supply rail.
+    add_route("VREG_2V7", [
+        u1_vreg_2v7, vreg_2v7_branch,
+        c3_vreg_2v7_branch, c3_vreg_2v7,
+    ], "u1-vreg-2v7-to-c3")
+    c2_vreg_2v7_branch = (c2_vreg_2v7[0], 90.17)
     add_route(
-        "CC1",
-        [
-            cc1_j1,
-            (73.66, cc1_j1[1]),
-            (73.66, cc1_d1[1]),
-            cc1_d1,
-        ],
-        "usb-cc1-to-esd",
+        "VREG_2V7", [c2_vreg_2v7_branch, c2_vreg_2v7],
+        "vreg-2v7-rail-to-c2",
     )
-    add_route(
-        "CC2",
-        [
-            cc2_j1,
-            (78.74, cc2_j1[1]),
-            (78.74, cc2_d1[1]),
-            cc2_d1,
-        ],
-        "usb-cc2-to-esd",
-    )
-    remove_local_label("D1", "1", "CC1")
-    remove_local_label("D1", "2", "CC2")
+    add_junction(c2_vreg_2v7_branch, "VREG_2V7:C2-bypass-branch")
+    remove_local_label("C2", "1", "VREG_2V7")
+    remove_local_label("C3", "1", "VREG_2V7")
 
-    # D4's filtered-side terminal faces left. C4 is placed on that side so
-    # the bypass connection is a short, direct orthogonal wire; the longer
-    # R1/U1 monitor net uses one matching local label at each functional end.
+    # Keep the reusable VREG_2V7 label on the branch wire, not on a
+    # decoupler pin. Decoupler pins themselves remain label-free.
+    remove_local_label("U1", "23", "VREG_2V7")
+    vreg_2v7_label_tap = (u1_vreg_2v7[0], 95.250)
+    label_points[vreg_2v7_label_tap] = (
+        "VREG_2V7", "local", None,
+        vreg_2v7_label_tap[0], vreg_2v7_label_tap[1], "left", 0,
+    )
+
+    # R55.1 is physically wired to U1.6; RESET remains a hierarchical parent port.
+    reset_pin = pin_world_points[("U1", "6")]
+    reset_pull_down = pin_world_points[("R55", "1")]
+    remove_local_label("R55", "1", "RESET")
+    add_route("RESET", [
+        reset_pin,
+        (reset_pull_down[0], reset_pin[1]),
+        reset_pull_down,
+    ], "u1-reset-to-r55")
+
+    # D4 is reversed so VBUS enters from the connector side and filtered VBUS
+    # exits to the right. The local rail ties its output to C4.1 and R1.1.
     d4_filtered = pin_world_points[("D4", "1")]
     c4_filtered = pin_world_points[("C4", "1")]
-    add_route(
-        "VBUS_FILTERED",
-        [
-            d4_filtered,
-            (c4_filtered[0], d4_filtered[1]),
-            c4_filtered,
-        ],
-        "filter-capacitor-connection",
-    )
+    r1_filtered = pin_world_points[("R1", "1")]
+    add_route("VBUS_FILTERED", [d4_filtered, c4_filtered], "d4-to-c4-filtered-rail")
+    # The C4.1 wire island and R1.1 terminal island retain one matching
+    # local label each. They are electrically joined by the label pair.
     remove_local_label("D4", "1", "VBUS_FILTERED")
 
-    # Protected VSNK runs above the switches to J10. C10 and D11 branch from
-    # the connector-side output node, keeping the power path visually distinct
-    # from the lower FET gate-control wiring.
-    t1_vsnk = pin_world_points[("T1", "3")]
-    j10_vsnk = pin_world_points[("J10", "1")]
-    c10_vsnk = pin_world_points[("C10", "1")]
-    d11_vsnk = pin_world_points[("D11", "1")]
-    output_rail_y = c10_vsnk[1]
-    output_lane_x = round(c10_vsnk[0] + 5.08, 3)
-    # Leave T1 pin 3 horizontally to the right before turning up/down to the
-    # output spine. A vertical segment directly above the FET body would cross
-    # the adjacent FET_MID lead at T1 pin 2 and short the two nets.
-    add_route(
-        "VSNK",
-        [
-            t1_vsnk,
-            (output_lane_x, t1_vsnk[1]),
-            (output_lane_x, output_rail_y),
-            (c10_vsnk[0], output_rail_y),
-            (j10_vsnk[0], output_rail_y),
-            j10_vsnk,
-        ],
-        "protected-output-spine",
-    )
-    remove_local_label("T1", "3", "VSNK")
-    remove_local_label("C10", "1", "VSNK")
-    output_tap = (d11_vsnk[0], output_rail_y)
-    add_route("VSNK", [output_tap, d11_vsnk], "d11-output-tap")
-    remove_local_label("D11", "1", "VSNK")
-    add_junction(output_tap, "VSNK:D11-tap")
+    # Each address strap is a left-to-right resistor chain: VREG_2V7,
+    # pull-up, ADDR node, pull-down, GND. Put the ADDR label above the wire
+    # midpoint rather than over either resistor body or value field.
+    for net_name, first_pin, second_pin in (
+        ("ADDR1", ("R51", "2"), ("R53", "1")),
+        ("ADDR0", ("R52", "2"), ("R54", "1")),
+    ):
+        first = pin_world_points[first_pin]
+        second = pin_world_points[second_pin]
+        if abs(first[1] - second[1]) > 0.001:
+            raise ValueError(f"{net_name} strap resistors are not on the same row: {first}, {second}")
+        anchor = first
+        label = label_points.get(anchor)
+        if label is None or label[0] != net_name:
+            raise ValueError(f"Missing {net_name} strap junction label at {first_pin}.")
+        label_points.pop(anchor)
+        midpoint = (round((first[0] + second[0]) / 2, 3), first[1])
+        add_junction(midpoint, f"{net_name}:label-tap")
+        label_points[midpoint] = (
+            net_name, "local", None, midpoint[0], midpoint[1] - 5.08, None, 0,
+        )
 
-    # Functional-zone separator; avoid decorative boxes around the circuitry.
-    rules = [
-        [
-            "polyline",
-            ["pts", ["xy", "44.45", "38.1"], ["xy", "398.78", "38.1"]],
-            ["stroke", ["width", "0.254"], ["type", "default"]],
-            ["fill", ["type", "none"]],
-            ["uuid", QuotedSExpr(_uid("graphic:title-rule"))],
-        ],
-    ]
+    # VSNK exits at the right side of the switch block as an explicit parent
+    # interface. C10, D11 and the discharge resistor use local VSNK labels.
+    # No output connector is embedded in the block.
+
+    # RESET is exposed at U1 and pulled down locally by R55 beside the controller.
+    # The MCU, I2C pull-ups and their connector intentionally belong to the parent.
+
+    # The header is page-level. Group frames and descriptions are generated
+    # from member pin geometry after the routed schematic has been assembled.
+    rules = _sheet_header(
+        "STUSB4500 USB-C / POWER DELIVERY SINK",
+        "DATASHEET-BASED REFERENCE  |  ST DS12499 REV. 8, FIGURE 10",
+    )
+
+    # Every local label must be intentionally reused; use a short physical
+    # wire for one-off connections and reserve single-use ports for hierarchy.
+    local_label_uses: dict[str, int] = {}
+    for net, kind, *_ in label_points.values():
+        if kind == "local":
+            local_label_uses[net] = local_label_uses.get(net, 0) + 1
+    single_use = {net: count for net, count in local_label_uses.items() if count < 2}
+    if single_use:
+        raise ValueError(
+            "Local labels must connect at least two disconnected wire networks: "
+            f"{single_use}"
+        )
+
+    def label_position_is_on_wire(x: float, y: float) -> bool:
+        """Return true when a label can attach directly to an existing wire."""
+        for wire in wires:
+            points_node = _direct(wire, "pts")
+            if points_node is None:
+                continue
+            points = [
+                (round(float(point[1]), 3), round(float(point[2]), 3))
+                for point in _all(points_node, "xy")
+            ]
+            for start, end in zip(points, points[1:]):
+                if abs(start[1] - end[1]) < 0.001:
+                    if abs(y - start[1]) < 0.001 and min(start[0], end[0]) - 0.001 <= x <= max(start[0], end[0]) + 0.001:
+                        return True
+                elif abs(start[0] - end[0]) < 0.001:
+                    if abs(x - start[0]) < 0.001 and min(start[1], end[1]) - 0.001 <= y <= max(start[1], end[1]) + 0.001:
+                        return True
+        return False
+
+    def segment_is_already_wired(
+        start: tuple[float, float], end: tuple[float, float],
+    ) -> bool:
+        """Avoid duplicating a route segment when a label branches from it."""
+        target = frozenset((start, end))
+        for existing in (*wires, *label_stubs):
+            points_node = _direct(existing, "pts")
+            if points_node is None:
+                continue
+            points = [
+                (round(float(point[1]), 3), round(float(point[2]), 3))
+                for point in _all(points_node, "xy")
+            ]
+            if any(frozenset((a, b)) == target for a, b in zip(points, points[1:])):
+                return True
+        return False
+
+    # Emit only surviving labels after local wires have consumed their
+    # intermediate endpoint labels. This avoids duplicate flags on wire ends.
+    # Offset labels use orthogonal two-point segments. Prefer a vertical-first
+    # bend so an existing pin-to-rail wire can be reused without duplication.
+    for point, (net, kind, shape_name, x, y, justify, angle) in sorted(label_points.items()):
+        px, py = point
+        labels.append(
+            _label(
+                net, x, y, hierarchical=kind == "hier", shape=shape_name,
+                justify=justify, angle=angle, key=f"label:{kind}:{net}:{px:.3f}:{py:.3f}",
+            )
+        )
+        target = (round(x, 3), round(y, 3))
+        start = (round(px, 3), round(py, 3))
+        if target != start and not label_position_is_on_wire(*target):
+            path = [start]
+            if start[0] != target[0] and start[1] != target[1]:
+                path.append((start[0], target[1]))
+            path.append(target)
+            for segment_index, (segment_start, segment_end) in enumerate(zip(path, path[1:])):
+                if segment_start == segment_end or segment_is_already_wired(segment_start, segment_end):
+                    continue
+                label_stubs.append(
+                    _wire(
+                        segment_start,
+                        segment_end,
+                        f"label-stub:{kind}:{net}:{px:.3f}:{py:.3f}:{segment_index}",
+                    )
+                )
+
+    # Derive frames from the measured pins and pack them using the same fixed
+    # horizontal gap used by the group placement pass.
+    for group in SCHEMATIC_GROUPS:
+        members = set(group["members"])
+        points = [
+            point for (reference, _number), point in pin_world_points.items()
+            if reference in members
+        ]
+        if not points:
+            raise ValueError(f"Cannot derive bounds for empty group {group['id']}.")
+        left = min(point[0] for point in points) - GROUP_X_PADDING_MM
+        right = max(point[0] for point in points) + GROUP_X_PADDING_MM
+        top = min(point[1] for point in points) - (
+            GROUP_TOP_PADDING_MM + float(group.get("extra_top_padding_mm", 0.0))
+        )
+        bottom = max(point[1] for point in points) + GROUP_BOTTOM_PADDING_MM
+        right = max(right, left + _group_text_width(group))
+        rules.extend(_functional_group(group, (left, top, right, bottom)))
 
     schematic = [
-        "kicad_sch",
-        ["version", "20250114"],
-        ["generator", QuotedSExpr("kicad-blocks")],
-        ["uuid", QuotedSExpr(ROOT_UUID)],
-        ["paper", QuotedSExpr("A3")],
-        [
-            "title_block",
-            ["title", QuotedSExpr("STUSB4500 USB Type-C / USB Power Delivery Sink")],
-            ["date", QuotedSExpr("2026-11-13")],
-            ["rev", QuotedSExpr("Layout revision 2")],
-            ["company", QuotedSExpr("KiCad Blocks — Reference design")],
-            ["comment", "1", QuotedSExpr("Source: ST DS12499 Rev. 8, Figure 10")],
-            [
-                "comment",
-                "2",
-                QuotedSExpr(
-                    "Reference only: verify component ratings, footprints and thermal design before production."
-                ),
-            ],
+        "kicad_sch", ["version", "20250114"], ["generator", _Quoted("kicad-blocks")],
+        ["uuid", _Quoted(ROOT_UUID)], ["paper", _Quoted("A3")],
+        ["title_block",
+            ["title", _Quoted("STUSB4500 USB Type-C / USB Power Delivery Sink")],
+            ["date", _Quoted("2026-11-14")],
+            ["rev", _Quoted("Electrical and layout refinement 6")],
+            ["company", _Quoted("KiCad Blocks — Reference design")],
+            ["comment", "1", _Quoted("Source: ST DS12499 Rev. 8, Figure 10")],
+            ["comment", "2", _Quoted("Reference only: verify component ratings, footprints and thermal design before production.")],
         ],
         ["lib_symbols", *library_symbols],
-        *instances,
-        *wires,
-        *label_stubs,
-        *labels,
-        *no_connects,
-        *junctions,
-        *rules,
-        [
-            "text",
-            QuotedSExpr("STUSB4500QTR — USB Type-C / USB PD sink controller"),
-            ["at", "50.8", "30.48", "0"],
-            ["effects", ["font", ["size", "2.0", "2.0"]]],
-            ["uuid", QuotedSExpr(_uid("text:title"))],
-        ],
-        [
-            "text",
-            QuotedSExpr("USB-C INPUT / CC ESD"),
-            ["at", "50.8", "63.5", "0"],
-            ["effects", ["font", ["size", "1.4", "1.4"]]],
-            ["uuid", QuotedSExpr(_uid("text:input"))],
-        ],
-        [
-            "text",
-            QuotedSExpr("VBUS FILTER / SENSE"),
-            ["at", "114.3", "63.5", "0"],
-            ["effects", ["font", ["size", "1.4", "1.4"]]],
-            ["uuid", QuotedSExpr(_uid("text:filtering"))],
-        ],
-        [
-            "text",
-            QuotedSExpr("PD CONTROLLER / BYPASS"),
-            ["at", "190.5", "63.5", "0"],
-            ["effects", ["font", ["size", "1.4", "1.4"]]],
-            ["uuid", QuotedSExpr(_uid("text:controller"))],
-        ],
-        [
-            "text",
-            QuotedSExpr("OPTIONAL HOST / I2C INTERFACE"),
-            ["at", "304.8", "180.34", "0"],
-            ["effects", ["font", ["size", "1.4", "1.4"]]],
-            ["uuid", QuotedSExpr(_uid("text:mcu"))],
-        ],
-        [
-            "text",
-            QuotedSExpr("BACK-TO-BACK POWER SWITCH"),
-            ["at", "281.94", "58.42", "0"],
-            ["effects", ["font", ["size", "1.4", "1.4"]]],
-            ["uuid", QuotedSExpr(_uid("text:power-path"))],
-        ],
-        [
-            "text",
-            QuotedSExpr("PROTECTED VSNK OUTPUT"),
-            ["at", "355.6", "58.42", "0"],
-            ["effects", ["font", ["size", "1.4", "1.4"]]],
-            ["uuid", QuotedSExpr(_uid("text:output"))],
-        ],
-        [
-            "text",
-            QuotedSExpr("I2C ADDRESS / RESET STRAPS"),
-            ["at", "147.32", "198.12", "0"],
-            ["effects", ["font", ["size", "1.2", "1.2"]]],
-            ["uuid", QuotedSExpr(_uid("text:address"))],
-        ],
-        [
-            "text",
-            QuotedSExpr(
-                "D4 order code is not specified by ST; select a part rated for the final VBUS range."
-            ),
-            ["at", "50.8", "264.16", "0"],
-            ["effects", ["font", ["size", "1.0", "1.0"]]],
-            ["uuid", QuotedSExpr(_uid("text:note"))],
-        ],
-        [
-            "text",
-            QuotedSExpr(
-                "REFERENCE ONLY — complete component, protection, USB-C compliance and thermal review before release."
-            ),
-            ["at", "50.8", "270.51", "0"],
-            ["effects", ["font", ["size", "1.0", "1.0"]]],
-            ["uuid", QuotedSExpr(_uid("text:production-note"))],
-        ],
+        *instances, *wires, *label_stubs, *labels, *no_connects, *junctions, *rules,
         ["sheet_instances", ["path", QuotedSExpr("/"), ["page", QuotedSExpr("1")]]],
         ["embedded_fonts", "no"],
     ]

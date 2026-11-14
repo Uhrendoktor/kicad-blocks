@@ -73,6 +73,20 @@ The sheet uses A3 landscape and a 2.54 mm placement grid. Functional sections re
 
 Electrical relationships use orthogonal KiCad wires for local connections. Longer control and supply nets use matching labels or hierarchical ports rather than long wires across the sheet.
 
+U1.22 (VSYS) remains a separate hierarchical input in the implementation;
+it is not tied to GND. The regulator bypass network and the VBUS filter/sense
+network use short, explicit pin-level wiring. See the
+[STUSB4500 schematic style and electrical checklist](SCHEMATIC_STYLE_CHECKLIST.md)
+for the layout, labeling, and electrical-routing rules applied to this example.
+
+## Declarative groups and automatic layout
+
+The generator declares functional groups by component membership rather than by manually positioned frame rectangles. It measures member pins from the loaded KiCad symbols, derives each group's box/title/description panel, and packs the primary stages left-to-right with a constant 2.54 mm gap. The address straps form a secondary row aligned to the controller. Group descriptions carry the datasheet source, page and figure metadata. A screenshot-asset field is reserved, but automatic datasheet image embedding is not implemented yet.
+
+Component origins are now resolved from declarative per-group anchors and relationships: relative offsets, midpoint placement (R10 between T4/T1), and pin-relative placement (R55 from U1.6). The symbol specification no longer carries per-component sheet coordinates. The group packer translates the resolved component topology as a unit and derives the frame from member-pin extents. The constraints are explicit schematic-design intent rather than an automatic net-graph optimizer; a future placer can infer more relationships from connectivity and symbol roles. Each group retains one vertical anchor baseline as a layout tuning parameter; primary horizontal placement, component-relative positions, and frame dimensions are derived.
+
+The schematic Clippy checker runs as part of KiCad CLI validation and exposes 18 stable IDs (SCH001–SCH018). Generic rules cover orthogonal wire geometry, label topology/collisions, symbol-field clearance, single-line block titles, bordered comment panels, wire-vs-symbol obstacles and annotation geometry. Profile rules add this design's physical-net contracts, shared C2/C3 GND, the required U1.3 no-connect marker, group padding, circuit documentation and a scored wire-length budget for the back-to-back FET stage. Run `python scripts/validate_schematic_style.py --list-rules` to list IDs and scope; run `python scripts/validate_schematic_style.py --generic-only PATH_TO_SCHEMATIC` to apply the reusable presentation/geometry subset without importing this example's generator or electrical contracts. See [SCHEMATIC_STYLE_CHECKLIST.md](SCHEMATIC_STYLE_CHECKLIST.md) for details.
+
 ## Component set
 
 | Reference(s) | Value / part | Role |
@@ -115,9 +129,17 @@ CI exports the generated schematic to SVG and validates its netlist. The standar
 
 ## Electrical scope and safety
 
-This is a **datasheet-derived reference reconstruction**, not a production design or a claim of electrical-rule-check sign-off.
+This is a **datasheet-derived reference reconstruction**, not a production design or production compliance sign-off.
 
 ST does not specify an order code for D4. Before using this circuit, verify the selected diode, protection ratings, component footprints, thermal/current capability, USB Type-C/PD compliance and configured NVM PDO profile for the target application. Confirm all power-path component ratings and the PCB layout for the expected operating conditions.
+
+The CI child-block validation exports a KiCad netlist and checks the critical
+pin-to-net assignments. Its standalone ERC profile suppresses only checks that
+cannot be resolved for an isolated child sheet: root-sheet hierarchical ports,
+externally driven input/power pins, isolated hierarchical-port labels, and
+missing project library tables. Internal shorts, pin conflicts, dangling wires
+and dangling local labels remain subject to ERC. This is a child-block
+validation profile, not a substitute for ERC in the consuming parent project.
 
 **Primary source:** [STUSB4500 datasheet DS12499, Rev. 8](https://www.st.com/resource/en/datasheet/stusb4500.pdf), Figure 10 and Table 1.
 

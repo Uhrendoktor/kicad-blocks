@@ -28,7 +28,7 @@ The selected root sheet's hierarchical labels define the new facade interface. I
 
 ## Inspect a library entry
 
-The Functional Block Library presents registered blocks in a searchable list with the selected entry's facade preview and actions.
+The Functional Block Library presents registered blocks in a searchable list with two preview modes. The **Facade** tab shows the generated library symbol; the **Schematic** tab renders the actual selected implementation with KiCad CLI. When a block has named implementations, the circuit selector switches between them; hierarchical implementations also expose a sheet selector.
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/library-browser-light.png" alt="Functional Block Library with searchable block rows, facade preview, and Place block, Implementation, Edit facade, Variants, Open PCB, PCB layouts, Refresh, and Libraries actions" width="1000">
@@ -39,6 +39,14 @@ The selected STUSB4500 entry exposes its description, external pins, parameters,
 <p align="center">
   <img src="https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/library-browser-details-light.png" alt="Functional Block Library showing the STUSB4500 block, its ten external pins, parameter and implementation choices" width="1000">
 </p>
+
+The schematic view previews the editable implementation itself, independently of the facade, on a paper-white drawing surface so native KiCad colors stay legible in both UI themes. The selector starts at **Default** and can switch to a named variant; hierarchical designs expose their child sheets in the **Sheet** selector.
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/library-browser-schematic-light.png" alt="Functional Block Library with the Schematic tab selected, showing the STUSB4500 implementation rendered by KiCad" width="1000">
+</p>
+
+The same schematic preview is captured in the [dark theme](https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/library-browser-schematic-dark.png).
 
 Manage shared library roots with the **Manage Libraries** dialog:
 

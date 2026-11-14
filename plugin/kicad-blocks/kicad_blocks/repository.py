@@ -6,6 +6,7 @@ import contextlib
 import copy
 import hashlib
 import json
+import logging
 import math
 import os
 import re
@@ -62,6 +63,36 @@ LIBRARY_CATALOG_NAME = "KBlocks.kicad_sym"
 LOCAL_NICKNAME_PREFIX = "KBLocal_"  # Reserved for migration of pre-catalog projects.
 INSTANCE_LINKS_NAME = "instances.json"
 
+_LIBRARY_GITIGNORE_BEGIN = "# BEGIN KiCad Blocks generated-file exclusions"
+_LIBRARY_GITIGNORE_END = "# END KiCad Blocks generated-file exclusions"
+_LIBRARY_GITIGNORE_BLOCK = """# BEGIN KiCad Blocks generated-file exclusions
+# KiCad Blocks previews, caches, and generated validation/ERC output.
+.cache/
+cache/
+preview/
+previews/
+reports/
+erc/
+library-validation.json
+*.erc.json
+*.cache
+
+# KiCad project-local settings, lock files, and backups.
+*.kicad_prl
+*.lck
+*-backups/
+
+# Temporary editor and operating-system files.
+*.bak
+*.tmp
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
+# END KiCad Blocks generated-file exclusions
+"""
 
 type _RawJsonScalar = str | int | float | bool | None
 type _RawManifestVariant = dict[str, _RawJsonScalar]
@@ -71,6 +102,10 @@ type _RawManifestLayout = dict[str, _RawManifestLayoutValue]
 type _RawInstanceLinkValue = _RawJsonScalar | dict[str, _RawJsonScalar]
 type _RawInstanceLinksValue = _RawJsonScalar | dict[str, _RawInstanceLinkValue]
 type _RawLibrarySettingValue = _RawJsonScalar | list[_RawJsonScalar]
+
+
+
+_LOG = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -131,42 +166,83 @@ def atomic_write(path: Path, content: str) -> None:
         raise
 
 
+def ensure_library_gitignore(library_root: Path) -> Path:
+    """Install managed cache exclusions without replacing a library's own rules."""
+    root = Path(library_root).expanduser().resolve()
+    if not root.is_dir():
+        raise NotADirectoryError(f"Functional-block library directory does not exist: {root}")
+
+    ignore_file = root / ".gitignore"
+    try:
+        existing = ignore_file.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        existing = ""
+
+    if _LIBRARY_GITIGNORE_BEGIN in existing and _LIBRARY_GITIGNORE_END in existing:
+        return ignore_file
+
+    separator = "" if not existing or existing.endswith("\n") else "\n"
+    atomic_write(ignore_file, existing + separator + _LIBRARY_GITIGNORE_BLOCK)
+    return ignore_file
+
+
+def _merge_symbol_node(
+    catalog_path: Path,
+    source_tree: list,
+    symbol: list,
+) -> Path:
+    """Replace one named symbol while retaining the catalog's other entries."""
+    catalog_path = Path(catalog_path).expanduser().resolve()
+    if _head(source_tree) != "kicad_symbol_lib":
+        raise ValueError(f"Invalid KiCad symbol library source for {catalog_path}.")
+    if _head(symbol) != "symbol" or len(symbol) < 2:
+        raise ValueError("Expected a named KiCad symbol node.")
+    symbol_name = str(symbol[1])
+
+    if catalog_path.is_file():
+        existing = parse_sexpr(catalog_path.read_text(encoding="utf-8"))
+        if _head(existing) != "kicad_symbol_lib":
+            raise ValueError(f"Invalid KiCad symbol catalog: {catalog_path}")
+    else:
+        existing = copy.deepcopy(source_tree)
+        existing[:] = [
+            item for item in existing
+            if item is existing[0] or _head(item) != "symbol"
+        ]
+
+    matches = [
+        (index, item)
+        for index, item in enumerate(existing[1:], start=1)
+        if _head(item) == "symbol" and len(item) > 1 and str(item[1]) == symbol_name
+    ]
+    if len(matches) > 1:
+        raise ValueError(
+            f"Expected at most one {symbol_name!r} symbol in {catalog_path}; "
+            f"found {len(matches)}."
+        )
+    if not matches:
+        existing.append(copy.deepcopy(symbol))
+    else:
+        existing[matches[0][0]] = copy.deepcopy(symbol)
+    atomic_write(catalog_path, _dump(existing) + "\n")
+    return catalog_path
+
+
 def merge_symbol_catalog(library_root: Path, symbol_file: Path) -> Path:
     """Insert/replace one facade symbol in the library's stable KiCad catalog."""
     library_root = Path(library_root).expanduser().resolve()
     symbol_file = Path(symbol_file).expanduser().resolve()
     if not symbol_file.is_file():
         raise FileNotFoundError(symbol_file)
-    catalog = library_root / LIBRARY_CATALOG_NAME
     incoming = parse_sexpr(symbol_file.read_text(encoding="utf-8"))
     incoming_symbols = [item for item in incoming[1:] if _head(item) == "symbol"]
     if _head(incoming) != "kicad_symbol_lib" or len(incoming_symbols) != 1:
         raise ValueError(f"Expected one KiCad facade symbol in {symbol_file}.")
-    symbol = incoming_symbols[0]
-    symbol_name = str(symbol[1])
-    if catalog.is_file():
-        existing = parse_sexpr(catalog.read_text(encoding="utf-8"))
-        if _head(existing) != "kicad_symbol_lib":
-            raise ValueError(f"Invalid KiCad symbol catalog: {catalog}")
-    else:
-        existing = incoming
-    existing_symbols = [
-        (index, item) for index, item in enumerate(existing[1:], start=1) if _head(item) == "symbol"
-    ]
-    match = next(
-        (
-            index
-            for index, item in existing_symbols
-            if len(item) > 1 and str(item[1]) == symbol_name
-        ),
-        None,
+    return _merge_symbol_node(
+        library_root / LIBRARY_CATALOG_NAME,
+        incoming,
+        incoming_symbols[0],
     )
-    if match is None:
-        existing.append(symbol)
-    else:
-        existing[match] = symbol
-    atomic_write(catalog, _dump(existing) + "\n")
-    return catalog
 
 
 def _named_symbol_node(symbol_library: SExprList, symbol_name: str, source: Path) -> SExprList:
@@ -193,6 +269,139 @@ def _symbol_definition_digest_from_file(path: Path, symbol_name: str) -> str:
     tree = parse_sexpr(Path(path).read_text(encoding="utf-8"))
     return _symbol_definition_digest(_named_symbol_node(tree, symbol_name, Path(path)))
 
+
+def synchronize_project_symbol_catalog(
+    project_catalog: Path,
+    block_symbol_file: Path,
+    symbol_name: str,
+    *,
+    shared_catalog_file: Path | None = None,
+    baseline_digest: str | None = None,
+) -> bool:
+    """Refresh one unchanged project-catalog symbol from its library sources.
+
+    A sidecar records the definition last synchronized into this project. If
+    the project symbol diverges from that definition, it is treated as a
+    project-local edit and is never overwritten. The per-block asset and the
+    shared library catalog are both considered: whichever alone changed from
+    the published baseline becomes the source. Divergent simultaneous edits
+    are rejected instead of silently choosing one.
+    """
+    project_catalog = Path(project_catalog).expanduser().resolve()
+    block_symbol_file = Path(block_symbol_file).expanduser().resolve()
+    if project_catalog.name != LIBRARY_CATALOG_NAME:
+        raise ValueError(
+            f"Project symbol catalog must be named {LIBRARY_CATALOG_NAME!r}."
+        )
+    if not block_symbol_file.is_file():
+        raise FileNotFoundError(block_symbol_file)
+
+    source_tree = parse_sexpr(block_symbol_file.read_text(encoding="utf-8"))
+    source_symbol = _named_symbol_node(source_tree, symbol_name, block_symbol_file)
+    source_digest = _symbol_definition_digest(source_symbol)
+
+    if shared_catalog_file is not None:
+        shared_catalog_file = Path(shared_catalog_file).expanduser().resolve()
+        if shared_catalog_file.is_file():
+            shared_tree = parse_sexpr(
+                shared_catalog_file.read_text(encoding="utf-8")
+            )
+            shared_symbol = _named_symbol_node(
+                shared_tree, symbol_name, shared_catalog_file
+            )
+            shared_digest = _symbol_definition_digest(shared_symbol)
+            if shared_digest == source_digest:
+                source_tree = shared_tree
+                source_symbol = shared_symbol
+                source_digest = shared_digest
+            else:
+                baseline = str(baseline_digest) if baseline_digest else None
+                if baseline is None:
+                    raise RuntimeError(
+                        "Facade symbol conflict: the block asset and shared "
+                        "library catalog differ, but this block has no published "
+                        "catalog baseline. Reconcile the two definitions manually."
+                    )
+                block_changed = source_digest != baseline
+                shared_changed = shared_digest != baseline
+                if block_changed and shared_changed:
+                    raise RuntimeError(
+                        "Facade symbol conflict: both the block asset and shared "
+                        "library catalog changed since the last publish. Reconcile "
+                        "the two definitions manually before refreshing the project."
+                    )
+                if shared_changed:
+                    source_tree = shared_tree
+                    source_symbol = shared_symbol
+                    source_digest = shared_digest
+
+    state_file = project_catalog.with_name(f"{project_catalog.stem}.sync.json")
+    if state_file.is_file():
+        try:
+            state = json.loads(state_file.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            raise ValueError(
+                f"Invalid project symbol synchronization state: {state_file}"
+            ) from exc
+        if not isinstance(state, dict) or not isinstance(state.get("symbols"), dict):
+            raise ValueError(
+                f"Invalid project symbol synchronization state: {state_file}"
+            )
+    else:
+        state = {"schema_version": 1, "symbols": {}}
+    synchronized = state["symbols"]
+
+    def save_state() -> None:
+        atomic_write(
+            state_file,
+            json.dumps(state, indent=2, ensure_ascii=False) + "\n",
+        )
+
+    if not project_catalog.is_file():
+        _merge_symbol_node(project_catalog, source_tree, source_symbol)
+        synchronized[symbol_name] = source_digest
+        save_state()
+        return True
+
+    catalog_tree = parse_sexpr(project_catalog.read_text(encoding="utf-8"))
+    project_matches = [
+        item for item in _all(catalog_tree, "symbol")
+        if len(item) >= 2 and str(item[1]) == symbol_name
+    ]
+    if not project_matches:
+        _merge_symbol_node(project_catalog, source_tree, source_symbol)
+        synchronized[symbol_name] = source_digest
+        save_state()
+        return True
+    if len(project_matches) != 1:
+        raise ValueError(
+            f"Expected exactly one {symbol_name!r} symbol in {project_catalog}; "
+            f"found {len(project_matches)}."
+        )
+
+    project_digest = _symbol_definition_digest(project_matches[0])
+    if project_digest == source_digest:
+        if synchronized.get(symbol_name) != source_digest:
+            synchronized[symbol_name] = source_digest
+            save_state()
+        return False
+
+    previous_digest = synchronized.get(symbol_name)
+    if previous_digest is None:
+        previous_digest = baseline_digest
+    if previous_digest and project_digest == str(previous_digest):
+        # Only this symbol is replaced; other project-local symbols remain intact.
+        _merge_symbol_node(project_catalog, source_tree, source_symbol)
+        synchronized[symbol_name] = source_digest
+        save_state()
+        return True
+
+    # The project entry diverged from the last synchronized definition. Keep
+    # that project-local edit; a later publish can make it the new source.
+    return False
+
+
+def _import_catalog_facade_edit(block: BlockRecord, manifest: dict) -> bool:
 
 def _import_catalog_facade_edit(block: BlockRecord, manifest: BlockManifest) -> bool:
     """Import a Symbol Editor catalog edit into the block's revisioned facade asset.
@@ -706,6 +915,7 @@ def create_block(
     """
     root = Path(root).expanduser().resolve()
     root.mkdir(parents=True, exist_ok=True)
+    ensure_library_gitignore(root)
     if not name.strip():
         raise ValueError("Block name cannot be empty.")
     block_id = str(uuid.uuid4())
@@ -1105,6 +1315,7 @@ def make_local_copy(source: BlockRecord, project_dir: Path) -> BlockRecord:
     project_dir = Path(project_dir).expanduser().resolve()
     local_root = project_dir / ".kicad_blocks" / "local"
     local_root.mkdir(parents=True, exist_ok=True)
+    ensure_library_gitignore(local_root.parent)
     local_id = str(uuid.uuid4())
     suffix = local_id.replace("-", "")[:8].upper()
     folder = local_root / f"{source.manifest['slug']}_{suffix}.kicad_block"
@@ -2307,6 +2518,19 @@ def library_roots() -> list[Path]:
         if key not in seen:
             seen.add(key)
             result.append(resolved)
+
+    # Backfill libraries that were registered before automatic ignore-file
+    # initialization was introduced. Read-only roots remain usable.
+    for root in result:
+        if root.is_dir():
+            try:
+                ensure_library_gitignore(root)
+            except (OSError, UnicodeError):
+                _LOG.warning(
+                    "Could not install the KiCad Blocks .gitignore in %s",
+                    root,
+                    exc_info=True,
+                )
     return result
 
 
@@ -2344,6 +2568,7 @@ def add_library_root(path: Path, *, make_default: bool = False) -> list[Path]:
     path = Path(path).expanduser().resolve()
     if not path.is_dir():
         raise NotADirectoryError(f"Functional-block library directory does not exist: {path}")
+    ensure_library_gitignore(path)
     settings = _read_library_settings()
     roots = _normalized_library_settings_roots(settings)
     if path not in roots:
@@ -2384,6 +2609,7 @@ def set_library_root(path: Path) -> Path:
     """Register a folder and make it default unless an environment override is active."""
     path = Path(path).expanduser().resolve()
     path.mkdir(parents=True, exist_ok=True)
+    ensure_library_gitignore(path)
     settings = _read_library_settings()
     roots = _normalized_library_settings_roots(settings)
     if path not in roots:
