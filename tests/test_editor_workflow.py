@@ -60,6 +60,7 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
         project_catalog = build_project_symbol_catalog(self.project, [self.library])
         actions = []
         calls = []
+        search_count = [0]
 
         def run_action(action):
             actions.append(action)
@@ -68,7 +69,11 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
         def command_runner(arguments, **kwargs):
             calls.append(arguments)
             if arguments[1:4] == ["search", "--onlyvisible", "--name"]:
-                return SimpleNamespace(stdout="0x200", returncode=0)
+                search_count[0] += 1
+                return SimpleNamespace(
+                    stdout="0x200" if search_count[0] > 1 else "",
+                    returncode=0,
+                )
             if arguments[1:3] == ["getwindowname", "0x200"]:
                 return SimpleNamespace(
                     stdout=f"Symbol Editor — {self.block.manifest['symbol_name']}",
@@ -88,10 +93,7 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
 
         self.assertTrue(opened)
         self.assertEqual(actions, ["common.Control.showSymbolEditor"])
-        self.assertNotIn(
-            ["/usr/bin/xdotool", "key", "--clearmodifiers", "alt+t"],
-            calls,
-        )
+        self.assertNotIn(["/usr/bin/xdotool", "key", "--clearmodifiers", "alt+t"], calls)
         self.assertIn(
             ["/usr/bin/xdotool", "type", "--clearmodifiers", "--delay", "12", self.block.manifest["symbol_name"]],
             calls,
@@ -102,10 +104,27 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
 
         project_catalog = build_project_symbol_catalog(self.project, [self.library])
         calls = []
+        search_count = [0]
+
         def command_runner(arguments, **kwargs):
             calls.append(arguments)
             if arguments[1:4] == ["search", "--onlyvisible", "--name"]:
-                return SimpleNamespace(stdout="0x200", returncode=0)
+                search_count[0] += 1
+                return SimpleNamespace(
+                    stdout="0x200" if search_count[0] > 2 else "",
+                    returncode=0,
+                )
+            if arguments[1:3] == ["getwindowname", "0x100"]:
+                return SimpleNamespace(
+                    stdout="placement-test — Schematic Editor",
+                    returncode=0,
+                )
+            if arguments[1:3] == ["getwindowclassname", "0x100"]:
+                return SimpleNamespace(stdout="eeschema", returncode=0)
+            if arguments[1:2] == ["getwindowfocus"]:
+                return SimpleNamespace(stdout="0x100", returncode=0)
+            if arguments[1:3] == ["getwindowpid", "0x100"]:
+                return SimpleNamespace(stdout="1001", returncode=0)
             if arguments[1:3] == ["getwindowname", "0x200"]:
                 return SimpleNamespace(
                     stdout=f"Symbol Editor — {self.block.manifest['symbol_name']}",
@@ -113,24 +132,34 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
                 )
             return SimpleNamespace(stdout="", returncode=0)
 
-        opened = plugin_actions._edit_facade_symbol(
-            self.block,
-            SimpleNamespace(),
-            "0x100",
-            project_catalog=project_catalog,
-            xdotool="/usr/bin/xdotool",
-            command_runner=command_runner,
-            pause=lambda _seconds: None,
-        )
+        with patch.object(plugin_actions.os, "readlink", return_value="/usr/bin/eeschema-nightly"):
+            opened = plugin_actions._edit_facade_symbol(
+                self.block,
+                SimpleNamespace(),
+                "0x100",
+                project_catalog=project_catalog,
+                xdotool="/usr/bin/xdotool",
+                command_runner=command_runner,
+                pause=lambda _seconds: None,
+            )
 
         self.assertTrue(opened)
-        self.assertIn(["/usr/bin/xdotool", "windowfocus", "--sync", "0x200"], calls)
-        self.assertIn(["/usr/bin/xdotool", "key", "--clearmodifiers", "ctrl+l"], calls)
+        self.assertIn(["/usr/bin/xdotool", "windowraise", "0x100"], calls)
+        self.assertIn(["/usr/bin/xdotool", "windowactivate", "--sync", "0x100"], calls)
+        self.assertIn(["/usr/bin/xdotool", "windowfocus", "--sync", "0x100"], calls)
+        self.assertIn(["/usr/bin/xdotool", "key", "--clearmodifiers", "alt+t"], calls)
+        self.assertIn(["/usr/bin/xdotool", "key", "--clearmodifiers", "Home"], calls)
+        self.assertEqual(
+            calls.count(["/usr/bin/xdotool", "key", "--clearmodifiers", "Down"]),
+            2,
+        )
+        self.assertIn(["/usr/bin/xdotool", "key", "--clearmodifiers", "Return"], calls)
+        self.assertNotIn(["/usr/bin/xdotool", "key", "--clearmodifiers", "s"], calls)
         self.assertIn(
             ["/usr/bin/xdotool", "type", "--clearmodifiers", "--delay", "12", self.block.manifest["symbol_name"]],
             calls,
         )
-        self.assertIn(["/usr/bin/xdotool", "key", "--clearmodifiers", "Return"], calls)
+
 
     def test_edit_facade_opens_symbol_editor_from_eeschema_tools_menu(self):
         from kicad_blocks.repository import build_project_symbol_catalog
