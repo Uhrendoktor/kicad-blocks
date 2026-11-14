@@ -23,6 +23,8 @@ jobs:
     timeout-minutes: 50
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Install KiCad development CLI if missing
         shell: bash
@@ -111,7 +113,7 @@ jobs:
           python3 -m venv "${RUNNER_TEMP}/kicad-blocks-venv"
           PY="${RUNNER_TEMP}/kicad-blocks-venv/bin/python"
           "$PY" -m pip install --upgrade pip
-          "$PY" -m pip install pytest ruff cairosvg pillow
+          "$PY" -m pip install -r requirements-dev.txt
           "$PY" --version
           "$PY" -m pip --version
 
@@ -190,9 +192,19 @@ jobs:
           "$PY" -m pytest -q
           "$PY" -m compileall -q plugin tests
 
-      - name: Ruff lint
+      - name: Strict Python quality contract
         shell: bash
-        run: "${RUNNER_TEMP}/kicad-blocks-venv/bin/python -m ruff check plugin tests"
+        run: |
+          set -euo pipefail
+          PY="${RUNNER_TEMP}/kicad-blocks-venv/bin/python"
+          git fetch --no-tags origin main
+          "$PY" scripts/check_python_quality.py --base-ref origin/main
+          "$PY" scripts/test_inventory.py --check
+          "$PY" -m ruff check plugin tests scripts examples
+          "$PY" -m ruff format --check plugin tests scripts examples
+          "$PY" -m pyright -p pyrightconfig.json
+          ty check plugin/kicad-blocks/kicad_blocks/json_types.py plugin/kicad-blocks/kicad_blocks/model.py plugin/kicad-blocks/kicad_blocks/pcb_placement.py
+          vulture --min-confidence 100 plugin/kicad-blocks/kicad_blocks scripts
 
       - name: Validate documentation links and images
         shell: bash
@@ -493,7 +505,7 @@ jobs:
         run: |
           set -euo pipefail
           PY="${RUNNER_TEMP}/kicad-blocks-visual-venv/bin/python"
-          "$PY" -m pip install -r plugin/kicad-blocks/requirements.txt pytest ruff
+          "$PY" -m pip install -r requirements-dev.txt -r plugin/kicad-blocks/requirements.txt
           "$PY" -m pytest -q
           "$PY" -m compileall -q plugin tests
           "$PY" -m ruff check plugin tests
