@@ -267,22 +267,23 @@ def rename_block_symbol_asset(block_path: Path, new_symbol_name: str) -> None:
     manifest = read_manifest(block_path)
     symbol_path = block_path / manifest["symbol_file"]
     root = parse_sexpr(symbol_path.read_text(encoding="utf-8"))
-    symbols = [item for item in root[1:] if _head(item) == "symbol"]
+    symbols = [item for item in root[1:] if isinstance(item, list) and _head(item) == "symbol"]
     if _head(root) != "kicad_symbol_lib" or len(symbols) != 1:
         raise ValueError(f"Expected one facade symbol in {symbol_path}.")
     symbol = symbols[0]
-    old_name = str(symbol[1])
-    symbol[1] = type(symbol[1])(new_symbol_name) if isinstance(symbol[1], str) else new_symbol_name
+    if len(symbol) < 2 or not isinstance(symbol[1], str):
+        raise ValueError(f"Facade symbol in {symbol_path} has no valid name.")
+    old_name = symbol[1]
+    symbol[1] = type(symbol[1])(new_symbol_name)
     for child in symbol[1:]:
-        if _head(child) == "symbol" and len(child) > 1:
-            child_name = str(child[1])
-            if child_name.startswith(old_name + "_"):
-                suffix = child_name[len(old_name) :]
-                child[1] = (
-                    type(child[1])(new_symbol_name + suffix)
-                    if isinstance(child[1], str)
-                    else new_symbol_name + suffix
-                )
+        if not isinstance(child, list) or _head(child) != "symbol" or len(child) < 2:
+            continue
+        if not isinstance(child[1], str):
+            continue
+        child_name = child[1]
+        if child_name.startswith(old_name + "_"):
+            suffix = child_name[len(old_name) :]
+            child[1] = type(child[1])(new_symbol_name + suffix)
     atomic_write(symbol_path, _dump(root) + "\n")
 
 
@@ -625,7 +626,7 @@ def create_block(
     if layout_files is None:
         if layout_project_file is not None and layout_file is None:
             raise ValueError("A KiCad project-settings sidecar requires a PCB layout.")
-        raw_layouts = (
+        raw_layouts: list[BlockLayoutInput] = (
             [
                 {
                     "name": Path(layout_file).stem,
@@ -638,21 +639,13 @@ def create_block(
             else []
         )
     else:
-        if not isinstance(layout_files, list):
-            raise ValueError("layout_files must be a list of layout definitions.")
         raw_layouts = layout_files
 
-    parameters = normalize_parameters(parameters)
-    if variant_files is not None and not isinstance(variant_files, list):
-        raise ValueError("variant_files must be a list of variant definitions.")
-    if profiles is not None and not isinstance(profiles, list):
-        raise ValueError("profiles must be a list of profile definitions.")
+    normalized_parameters = normalize_parameters(parameters)
     expected_pins = {pin.name for pin in pins}
     default_layout_id = None
     if raw_layouts:
         first_layout = raw_layouts[0]
-        if not isinstance(first_layout, dict):
-            raise TypeError("Each PCB layout definition must be an object.")
         first_source = first_layout.get("path", first_layout.get("file"))
         if not first_source:
             raise ValueError("First PCB layout is missing its source PCB path.")
@@ -673,7 +666,7 @@ def create_block(
             block_id,
             pins,
             reference_prefix=reference_prefix,
-            parameters=parameters,
+            parameters=normalized_parameters,
             default_layout_id=default_layout_id,
             include_profile_field=bool(profiles),
         )
@@ -689,8 +682,6 @@ def create_block(
         seen_variant_values: set[str] = set()
         seen_variant_files: set[str] = set()
         for index, raw_variant in enumerate(variant_files or [], start=1):
-            if not isinstance(raw_variant, dict):
-                raise TypeError("Each schematic variant definition must be an object.")
             value = str(raw_variant.get("value", "")).strip()
             source_value = raw_variant.get("path", raw_variant.get("file"))
             if not value or len(value) > 128 or "\n" in value or "\r" in value:
@@ -716,16 +707,15 @@ def create_block(
             shutil.copy2(source_path, staging / file_name)
             files.append(file_name)
             variant_descriptor: BlockVariantManifest = {"value": value, "file": file_name}
-            if raw_variant.get("layout_id"):
-                variant_descriptor["layout_id"] = str(raw_variant["layout_id"]).casefold()
+            layout_id = raw_variant.get("layout_id")
+            if layout_id:
+                variant_descriptor["layout_id"] = str(layout_id).casefold()
             variants.append(variant_descriptor)
 
         layouts: list[BlockLayoutManifest] = []
         seen_layout_ids: set[str] = set()
         seen_layout_names: set[str] = set()
         for index, raw_layout in enumerate(raw_layouts, start=1):
-            if not isinstance(raw_layout, dict):
-                raise TypeError("Each PCB layout definition must be an object.")
             source_value = raw_layout.get("path", raw_layout.get("file"))
             if not source_value:
                 raise ValueError(f"Layout {index} is missing its source PCB path.")
@@ -790,8 +780,8 @@ def create_block(
             layouts.append(descriptor)
 
         hashes = {file_name: sha256_file(staging / file_name) for file_name in files}
-        first_layout = layouts[0] if layouts else {}
-        manifest = {
+        first_layout = layouts[0] if layouts else None
+        manifest: BlockManifest = {
             "schema_version": 1,
             "block_id": block_id,
             "name": name.strip(),
@@ -808,20 +798,20 @@ def create_block(
             "catalog_file": LIBRARY_CATALOG_NAME,
             "symbol_file": SYMBOL_NAME,
             "implementation_file": IMPLEMENTATION_NAME,
-            "layout_file": first_layout.get("file"),
-            "layout_project_file": first_layout.get("project_file"),
+            "layout_file": first_layout.get("file") if first_layout is not None else None,
+            "layout_project_file": first_layout.get("project_file") if first_layout is not None else None,
             "layouts": layouts,
-            "default_layout": first_layout.get("id") if layouts else None,
+            "default_layout": first_layout.get("id") if first_layout is not None else None,
             "reference_prefix": reference_prefix,
             "pins": [pin.as_manifest(index + 1) for index, pin in enumerate(pins)],
-            "parameters": parameters,
+            "parameters": normalized_parameters,
             "variants": variants,
             "profiles": normalize_profiles(
                 profiles,
-                parameters,
+                normalized_parameters,
                 variants,
                 layouts,
-                first_layout.get("id") if layouts else None,
+                first_layout.get("id") if first_layout is not None else None,
             ),
             "dependencies": [],
             "files": files,
