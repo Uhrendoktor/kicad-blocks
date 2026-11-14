@@ -435,7 +435,7 @@ def main() -> None:
                             if dialog_window is not None:
                                 window_id, _title = dialog_window
                                 subprocess.run(
-                                    [xdotool, "windowactivate", "--sync", window_id],
+                                    [xdotool, "windowfocus", "--sync", window_id],
                                     check=True,
                                     capture_output=True,
                                     text=True,
