@@ -22,7 +22,7 @@ if TYPE_CHECKING:
     import tkinter as tk
     import tkinter as tkinter_types
     import tkinter.ttk as ttk_types
-    from tkinter import filedialog, messagebox, simpledialog, ttk
+    from tkinter import TkOption, filedialog, messagebox, simpledialog, ttk
 
     from google.protobuf.message import Message
     from kipy.common_types import Commit
@@ -87,6 +87,7 @@ from .repository import (
     set_library_root,
 )
 from .repository import library_roots as configured_library_roots
+from .report_types import LocalCopyPublishReport
 
 LOG = logging.getLogger("kicad_blocks")
 
@@ -382,7 +383,7 @@ class _TkGeometryWindow(Protocol):
 
     def geometry(self, value: str) -> str: ...
 
-    def minsize(self, width: int, height: int) -> None: ...
+    def minsize(self, width: int, height: int) -> tuple[int, int]: ...
 
 
 class _TkTransientWindow(Protocol):
@@ -847,16 +848,16 @@ def _create_action_icon(parent: tkinter_types.Misc, name: str) -> tkinter_types.
 
 
 def _action_button(
-    parent,
+    parent: tkinter_types.Misc,
     text: str,
-    command,
+    command: Callable[[], None],
     icon: str,
     tooltip: str,
-    **button_options,
-):
+    **button_options: TkOption,
+) -> ttk_types.Button:
     """Create a consistently padded, semantic icon-and-label action button."""
     image = _create_action_icon(parent, icon)
-    options = {"text": text, "command": command, "padding": (9, 6)}
+    options: dict[str, TkOption] = {"text": text, "command": command, "padding": (9, 6)}
     options.update(button_options)
     if image is not None:
         options.update({"image": image, "compound": "left"})
@@ -1039,7 +1040,7 @@ def _library_roots_for(value: str | Path | Sequence[str | Path] | None = None) -
 
 
 def _list_library_records(library_paths: Path | Sequence[Path] | None = None) -> list[BlockRecord]:
-    records = []
+    records: list[BlockRecord] = []
     for library_path in _library_roots_for(library_paths):
         records.extend(list_blocks(library_path))
     return sorted(
@@ -1151,9 +1152,7 @@ def _write_instance_configuration(
     schematic: _Schematic, instance: _SchematicSymbol, values: dict[str, str]
 ) -> None:
     """Write validated facade fields through KiCad IPC as one undoable edit."""
-    fields = {
-        str(getattr(field, "name", "")): field for field in getattr(instance, "user_fields", ())
-    }
+    fields: dict[str, _UserField] = {field.name: field for field in instance.user_fields}
     missing = sorted(set(values) - set(fields))
     if missing:
         raise RuntimeError(
@@ -1162,10 +1161,7 @@ def _write_instance_configuration(
             "the block library and replace the instance."
         )
 
-    original_values = {
-        name: str(getattr(getattr(fields[name], "text", None), "value", "") or "")
-        for name in values
-    }
+    original_values = {name: fields[name].text.value for name in values}
     commit = schematic.begin_commit()
     try:
         for name, value in values.items():
@@ -1197,9 +1193,7 @@ def _show_selected_block_configuration(
     variants = block.manifest.get("variants", [])
     profiles = block.manifest.get("profiles", [])
     current_values = _parameter_values_for_instance(instance, block)
-    fields = {
-        str(getattr(field, "name", "")): field for field in getattr(instance, "user_fields", ())
-    }
+    fields: dict[str, _UserField] = {field.name: field for field in instance.user_fields}
 
     required = [parameter_field_name(item["name"]) for item in parameters]
     if variants:
@@ -1230,6 +1224,7 @@ def _show_selected_block_configuration(
     content.pack(fill="both", expand=True)
 
     profile_var = None
+    profile_combo: ttk_types.Combobox | None = None
     profile_labels: dict[str, BlockProfileManifest | None] = {}
     if profiles:
         section = ttk.LabelFrame(content, text="Configuration profile", padding=10)
@@ -1274,7 +1269,7 @@ def _show_selected_block_configuration(
             variant_combo, "Choose a declared variant or enter a KiCad text-variable reference."
         )
 
-    parameter_vars = {}
+    parameter_vars: dict[str, tkinter_types.StringVar] = {}
     if parameters:
         section = ttk.LabelFrame(content, text="Parameters", padding=10)
         section.pack(fill="both", expand=True, pady=(0, 10))
@@ -1417,7 +1412,7 @@ def _show_selected_block_configuration(
         if profile_var.get() != "Custom (manual settings)":
             profile_var.set("Custom (manual settings)")
 
-    if profile_var is not None:
+    if profile_combo is not None:
         profile_combo.bind("<<ComboboxSelected>>", apply_profile)
         for linked_variable in (
             ([variant_var] if variant_var is not None else [])
@@ -1516,7 +1511,9 @@ def _show_selected_block_configuration(
     dialog.wait_window()
 
 
-def sync_selected_local(schematic: _Schematic, kicad: _KiCadApp, project_dir: Path) -> dict:
+def sync_selected_local(
+    schematic: _Schematic, kicad: _KiCadApp, project_dir: Path
+) -> LocalCopyPublishReport:
     """Synchronize the local implementation linked to the selected symbol KIID."""
     instance = _selected_symbol(schematic)
     local_record = local_copy_for_instance(project_dir, str(instance.id))
@@ -1660,7 +1657,7 @@ def _pick_block_for_placement(
         )
         _draw_facade_preview(preview, record)
 
-    def render_results(*_args):
+    def render_results(*_args: str) -> None:
         nonlocal visible_records
         visible_records = _filter_library_records(records, search.get())
         tree.delete(*tree.get_children())
@@ -1842,13 +1839,13 @@ def _pick_record(
     )
     count_label.pack(anchor="w", pady=(3, 0))
 
-    def short_description(record) -> str:
+    def short_description(record: BlockRecord) -> str:
         value = " ".join(str(record.manifest.get("description", "") or "").split())
         return value[:177].rstrip() + "…" if len(value) > 180 else value
 
     records_by_id: dict[str, BlockRecord] = {}
     selected_record: list[BlockRecord | None] = [None]
-    chosen_record = [None]
+    chosen_record: list[BlockRecord | None] = [None]
     select_button = _action_button(
         outer,
         "Select block",
@@ -1866,7 +1863,7 @@ def _pick_record(
         "Close without selecting a block",
     ).pack(side="right", padx=(0, 8), pady=(10, 0))
 
-    def render_results(*_args):
+    def render_results(*_args: str) -> None:
         visible = _filter_library_records(records, search.get())
         preferred = _preferred_library_selection(visible, selected_record[0])
         children = tree.get_children()
@@ -2329,9 +2326,9 @@ def _ask_create_block_details(
         highlightbackground=palette.get("border", "#b8c0c8"),
         highlightcolor=palette.get("accent", "#4c789f"),
     )
-    result = [None]
+    result: list[tuple[str, str] | None] = [None]
 
-    def accept():
+    def accept() -> None:
         value = name.get().strip()
         if not value:
             messagebox.showerror("Create Functional Block", "Enter a block name.", parent=dialog)
