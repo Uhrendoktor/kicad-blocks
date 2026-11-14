@@ -1,0 +1,35 @@
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+addopts = ["--strict-markers", "--strict-config"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+respect-gitignore = true
+force-exclude = false
+
+[tool.ruff.lint]
+# Explicit project selection. These rules cover correctness, import consistency,
+# unsafe annotation escape hatches, common bug patterns, and low-risk simplifications.
+select = [
+  "E4",
+  "E7",
+  "E9",
+  "F",
+  "W",
+  "I",
+  "ANN401",
+  "B",
+  "PERF",
+  "RET",
+  "SIM",
+  "UP",
+]
+ignore = [
+  "E402",
+  "E501",
+]
+
+[tool.ruff.format]
+docstring-code-format = true
