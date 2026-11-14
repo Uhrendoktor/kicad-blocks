@@ -18,7 +18,7 @@ import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, TypeVar, cast
 
 from .pcb_types import (
     AppliedNetclassPattern,
@@ -39,10 +39,17 @@ from .sexpr import sexpr_head as _head
 if TYPE_CHECKING:
     from .repository import BlockRecord
 
+_T = TypeVar("_T")
 
-def _num(value: str) -> float:
+# This helper remains available to existing internal integrations and tests.
+__all__ = ["_xy"]
+
+
+def _num(value: SExpr) -> float:
+    if isinstance(value, list):
+        raise ValueError(f"Expected a scalar token, found an S-expression: {_dump(value)}")
     try:
-        result = float(str(value))
+        result = float(value)
     except (TypeError, ValueError) as exc:
         raise ValueError(f"Invalid coordinate/net code token {value!r}.") from exc
     if not math.isfinite(result):
@@ -124,10 +131,10 @@ def _rewrite_nets(
         if old_code not in mapping:
             raise ValueError(f"Board item references undefined source net code {old_code}.")
         code, name = mapping[old_code]
+        rewritten: list[SExpr] = [str(code)]
         if include_net_name:
-            node[1:] = [str(code), _Quoted(name)]
-        else:
-            node[1:] = [str(code)]
+            rewritten.append(_Quoted(name))
+        node[1:] = rewritten
         return
     for child in node[1:]:
         _rewrite_nets(child, mapping, include_net_name=include_net_name)
@@ -204,7 +211,7 @@ def _transform_item(
         if tag in absolute_tags:
             if tag == "pts":
                 for point in item[1:]:
-                    if _head(point) == "xy":
+                    if isinstance(point, list) and _head(point) == "xy":
                         _transform_point(
                             point,
                             anchor_mm=anchor_mm,
@@ -282,12 +289,12 @@ def _merge_net_chain_sections(
 
     target_section = _direct(target_board, "net_chains")
     if target_section is None:
-        target_section = ["net_chains"]
+        target_section = cast(SExprList, ["net_chains"])
         target_board.append(target_section)
 
     # Include names already present in the destination PCB section.
     for chain in target_section[1:]:
-        if _head(chain) != "net_chain":
+        if not isinstance(chain, list) or _head(chain) != "net_chain":
             continue
         name_node = _direct(chain, "name")
         if name_node is not None and len(name_node) >= 2:
@@ -295,7 +302,7 @@ def _merge_net_chain_sections(
 
     chain_name_map: dict[str, str] = {}
     for raw_chain in source_section[1:]:
-        if _head(raw_chain) != "net_chain":
+        if not isinstance(raw_chain, list) or _head(raw_chain) != "net_chain":
             continue
         chain = parse_sexpr(_dump(raw_chain))
         name_node = _direct(chain, "name")
@@ -373,8 +380,7 @@ def _normalise_class_assignment(value: str | list[str] | None) -> list[str]:
         return []
     if isinstance(value, str):
         return [value] if value else []
-    if isinstance(value, list) and all(isinstance(item, str) for item in value):
-        return list(value)
+    return list(value)
     raise ValueError(f"Invalid KiCad netclass assignment value: {value!r}")
 
 
@@ -847,8 +853,8 @@ def merge_block_layouts(
             results.append(result)
             current_board = stage_output
 
-    def flatten(values_by_placement: Sequence[list[str]]) -> list[str]:
-        values: list[str] = []
+    def flatten(values_by_placement: Sequence[list[_T]]) -> list[_T]:
+        values: list[_T] = []
         for placement_values in values_by_placement:
             for value in placement_values:
                 if value not in values:
@@ -979,7 +985,7 @@ def merge_block_layout(
         port_map[layout_net] = destination
 
     net_map: dict[int, tuple[int, str]] = {0: (0, "")}
-    new_net_nodes: list[list] = []
+    new_net_nodes: list[SExprList] = []
     for old_code, source_name in source_nets.items():
         if old_code == 0:
             continue
@@ -1021,7 +1027,7 @@ def merge_block_layout(
         "dimension",
         "target",
     }
-    imported: list[list] = []
+    imported: list[SExprList] = []
     imported_references: list[str] = []
     interactive_item_uuids: list[str] = []
     skipped: set[str] = set()
@@ -1082,7 +1088,7 @@ def merge_block_layout(
         if not item_uuid or item_uuid in interactive_item_uuids:
             raise ValueError(f"Imported PCB object has a missing or duplicate UUID: {item_uuid!r}.")
         interactive_item_uuids.append(item_uuid)
-        imported.append(item)
+        imported.append(cast(SExprList, item))
 
     if not imported:
         raise ValueError(f"Block {block.name!r} has no importable PCB objects.")
@@ -1096,7 +1102,7 @@ def merge_block_layout(
         for code, source_name in source_nets.items()
         if code in net_map and code != 0
     }
-    existing_chain_names = set()
+    existing_chain_names: set[str] = set()
     target_chain_section = _direct(target, "net_chains")
     if target_chain_section is not None:
         for chain in target_chain_section[1:]:
