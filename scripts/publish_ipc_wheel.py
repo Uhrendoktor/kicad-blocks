@@ -120,12 +120,15 @@ def _get_or_create_release(repo: str, token: str) -> dict:
         "prerelease": True,
     }
     try:
-        return _api_request(
+        created = _api_request(
             "POST",
             f"{api}/repos/{repo}/releases",
             token,
             payload=payload,
         )
+        if created is None:
+            raise RuntimeError("GitHub did not return the newly created release.")
+        return created
     except RuntimeError:
         # POST may have succeeded even if the TLS response was lost. Re-read
         # the tag before deciding that release creation actually failed.
@@ -194,14 +197,14 @@ def publish_wheel(wheelhouse: Path, repo: str, token: str) -> str:
         # A timed-out upload may nevertheless have reached GitHub. Verify the
         # release state before retrying the whole publication or failing CI.
         refreshed_release = _api_request("GET", _release_url(repo), token, allow_not_found=True)
-        uploaded = (
-            _matching_asset(refreshed_release, wheel.name, wheel_size)
-            if refreshed_release is not None
-            else None
-        )
+        uploaded = None
+        if refreshed_release is not None:
+            uploaded = _matching_asset(refreshed_release, wheel.name, wheel_size)
         if uploaded is None:
             raise
 
+    if uploaded is None:
+        raise RuntimeError("GitHub did not return or retain the uploaded wheel asset.")
     if uploaded.get("name") != wheel.name or uploaded.get("size") != wheel_size:
         raise RuntimeError(f"GitHub release asset verification failed: {uploaded!r}.")
     download_url = uploaded.get("browser_download_url")
