@@ -1587,6 +1587,7 @@ def circuit_documentation_issues(tree: list) -> list[str]:
             )
     return issues
 
+
 def component_purpose_issues(tree: list) -> list[str]:
     """Require an explicit function and rationale for each documented component."""
     _load_stusb4500_profile()
@@ -1624,7 +1625,7 @@ def component_purpose_issues(tree: list) -> list[str]:
 
 
 
-def label_text_collision_issues(tree: list):
+def label_text_collision_issues(tree: list) -> list[str]:
     """Reject label glyph overlap with other labels, fields and annotation boxes."""
     issues = []
     labels = []

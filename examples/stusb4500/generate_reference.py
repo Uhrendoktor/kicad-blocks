@@ -89,11 +89,11 @@ SCHEMATIC_GROUPS = (
         "component_purposes": {
             "R1": {
                 "function": "Series current limiter between VBUS_FILTERED and VBUS_VS_DISCH",
-                "rationale": "limits current through U1.18 when the controller discharges the receptacle-side VBUS node",
+                "rationale": "limits current through U1.18 during VBUS discharge",
             },
             "R4": {
-                "function": "Bias resistor from VREG_2V7 to the VBUS_VS_DISCH sense node",
-                "rationale": "provides the reference bias used by the VBUS monitor network",
+                "function": "Bias resistor from VREG_2V7 to VBUS_VS_DISCH",
+                "rationale": "sets the VBUS sense-node bias for monitoring",
             },
         },
         "lane": "main", "order": 2,
@@ -137,13 +137,13 @@ SCHEMATIC_GROUPS = (
     },
     {
         "id": "power-switch", "title": "BACK-TO-BACK PMOS SWITCH",
-        "description": "Back-to-back P-channel switches with a direct common-source control network.\nR2 (1 kΩ) connects VSNK to U1 DISCH for controlled output discharge.\nIt limits current through the DISCH output during detach and reset.",
+        "description": "Back-to-back P-channel switches with common-source gate control.",
         "members": ("T4", "T1", "R2", "R10", "R11", "R13"),
         "documentation_members": ("R2",),
         "component_purposes": {
             "R2": {
-                "function": "Series discharge resistor from VSNK to U1 DISCH",
-                "rationale": "limits current through the controller open-drain DISCH output while it discharges output capacitance",
+                "function": "Series resistor from VSNK to U1 DISCH",
+                "rationale": "limits DISCH current while output capacitance drains",
             },
         },
         "lane": "main", "order": 4,
@@ -151,7 +151,7 @@ SCHEMATIC_GROUPS = (
             "anchor": "T4", "anchor_y_mm": 104.14,
             "constraints": (
                 {"kind": "offset", "component": "T1", "to": "T4", "dx_mm": 25.40, "dy_mm": 0.0},
-                {"kind": "offset", "component": "R2", "to": "T1", "dx_mm": 17.78, "dy_mm": 25.40},
+                {"kind": "offset", "component": "R2", "to": "T1", "dx_mm": 17.78, "dy_mm": 41.91},
                 {"kind": "midpoint_offset", "component": "R10", "between": ("T4", "T1"), "dx_mm": 0.0, "dy_mm": 17.78},
                 {"kind": "offset", "component": "R11", "to": "R10", "dx_mm": 7.62, "dy_mm": 7.62},
                 {"kind": "offset", "component": "R13", "to": "R11", "dx_mm": 20.32, "dy_mm": 0.0},
@@ -563,9 +563,8 @@ def _group_evidence_line(group: dict) -> str:
 def _group_description(group: dict) -> str:
     lines = [str(group["description"])]
     for reference, purpose in group.get("component_purposes", {}).items():
-        lines.append(
-            f"{reference}: {purpose['function']}; {purpose['rationale']}."
-        )
+        lines.append(f"{reference}: {purpose['function']}.")
+        lines.append(f"Why: {purpose['rationale']}.")
     lines.append(_group_evidence_line(group))
     return "\n".join(lines)
 

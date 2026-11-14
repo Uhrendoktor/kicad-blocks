@@ -204,7 +204,7 @@ class STUSB4500ReferenceTests(unittest.TestCase):
             float(positions["R2"][1]) - float(positions["T1"][1]), 17.78, places=3,
         )
         self.assertAlmostEqual(
-            float(positions["R2"][2]) - float(positions["T1"][2]), 25.40, places=3,
+            float(positions["R2"][2]) - float(positions["T1"][2]), 41.91, places=3,
         )
         output_x = {round(float(positions[reference][1]), 3) for reference in ("C10", "D11")}
         self.assertEqual(len(output_x), 1)
@@ -589,7 +589,7 @@ class STUSB4500ReferenceTests(unittest.TestCase):
         self.assertAlmostEqual(r10[1] - t4[1], 17.78, places=3)
         self.assertEqual(delta("R10", "R11"), (7.62, 7.62))
         self.assertEqual(delta("R11", "R13"), (20.32, 0.0))
-        self.assertEqual(delta("T1", "R2"), (17.78, 25.40))
+        self.assertEqual(delta("T1", "R2"), (17.78, 41.91))
         self.assertEqual(delta("C10", "D11"), (0.0, 25.40))
 
     def test_functional_frames_are_derived_and_packed_with_constant_spacing(self) -> None:
