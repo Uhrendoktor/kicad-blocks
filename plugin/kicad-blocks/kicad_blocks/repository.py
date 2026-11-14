@@ -84,8 +84,9 @@ class BlockRecord:
     @property
     def symbol_library(self) -> Path:
         """Stable facade catalog shared by every block in this library."""
-        if self.manifest.get("local_copy") and self.manifest.get("source_path"):
-            library_root = Path(self.manifest["source_path"]).expanduser().resolve().parent
+        source_path = self.manifest.get("source_path")
+        if self.manifest.get("local_copy") and source_path:
+            library_root = Path(source_path).expanduser().resolve().parent
         else:
             library_root = self.path.parent
         return library_root / str(self.manifest.get("catalog_file", LIBRARY_CATALOG_NAME))
