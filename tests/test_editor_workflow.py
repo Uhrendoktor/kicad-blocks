@@ -227,9 +227,7 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
             ),
             self.assertRaisesRegex(ValueError, "invalid project symbol table"),
         ):
-            _create_and_place(
-                self.library, schematic, self.kicad, self.project, self.parent
-            )
+            _create_and_place(self.library, schematic, self.kicad, self.project, self.parent)
 
         self.assertFalse(created.path.exists())
         self.assertTrue(self.block.path.is_dir())
@@ -264,9 +262,7 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
             patch.object(plugin_actions, "create_block", return_value=self.block) as create,
             patch.object(plugin_actions, "_register_block", return_value=self.block),
         ):
-            _create_and_place(
-                self.library, schematic, self.kicad, self.project, self.parent
-            )
+            _create_and_place(self.library, schematic, self.kicad, self.project, self.parent)
 
         details.assert_called_once_with(self.parent, source.resolve())
         create.assert_called_once_with(
@@ -290,9 +286,7 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
             patch.object(plugin_actions, "create_block") as create,
             self.assertRaisesRegex(ValueError, "exactly one hierarchical sheet symbol"),
         ):
-            _create_and_place(
-                self.library, schematic, self.kicad, self.project, self.parent
-            )
+            _create_and_place(self.library, schematic, self.kicad, self.project, self.parent)
         details.assert_not_called()
         create.assert_not_called()
         schematic.get_hierarchy.assert_not_called()
@@ -312,9 +306,7 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
                 ValueError, "current selection is not a hierarchical sheet symbol"
             ),
         ):
-            _create_and_place(
-                self.library, schematic, self.kicad, self.project, self.parent
-            )
+            _create_and_place(self.library, schematic, self.kicad, self.project, self.parent)
         details.assert_not_called()
         create.assert_not_called()
         schematic.get_hierarchy.assert_not_called()
@@ -355,9 +347,7 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
             patch.object(plugin_actions, "create_block", return_value=self.block) as create,
             patch.object(plugin_actions, "_register_block", return_value=self.block),
         ):
-            _create_and_place(
-                self.library, schematic, self.kicad, self.project, self.parent
-            )
+            _create_and_place(self.library, schematic, self.kicad, self.project, self.parent)
         create.assert_called_once_with(
             self.library,
             "Power Stage",
@@ -378,9 +368,7 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
             patch.object(plugin_actions, "create_block") as create,
             self.assertRaisesRegex(ValueError, "no Sheetfile property"),
         ):
-            _create_and_place(
-                self.library, schematic, self.kicad, self.project, self.parent
-            )
+            _create_and_place(self.library, schematic, self.kicad, self.project, self.parent)
         details.assert_not_called()
         create.assert_not_called()
 
@@ -397,9 +385,7 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
             patch.object(plugin_actions, "create_block") as create,
             self.assertRaisesRegex(ValueError, "no UUID"),
         ):
-            _create_and_place(
-                self.library, schematic, self.kicad, self.project, self.parent
-            )
+            _create_and_place(self.library, schematic, self.kicad, self.project, self.parent)
         details.assert_not_called()
         create.assert_not_called()
 
@@ -416,9 +402,7 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
             patch.object(plugin_actions, "create_block") as create,
             self.assertRaisesRegex(RuntimeError, "selection API is unavailable"),
         ):
-            _create_and_place(
-                self.library, schematic, self.kicad, self.project, self.parent
-            )
+            _create_and_place(self.library, schematic, self.kicad, self.project, self.parent)
         details.assert_not_called()
         create.assert_not_called()
         schematic.get_selection_as_string.assert_not_called()
@@ -435,9 +419,7 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
             patch.object(plugin_actions, "create_block") as create,
             self.assertRaisesRegex(FileNotFoundError, "active parent sheet"),
         ):
-            _create_and_place(
-                self.library, schematic, self.kicad, self.project, self.parent
-            )
+            _create_and_place(self.library, schematic, self.kicad, self.project, self.parent)
         details.assert_not_called()
         create.assert_not_called()
 
@@ -478,9 +460,7 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
             patch.object(plugin_actions, "create_block", return_value=self.block) as create,
             patch.object(plugin_actions, "_register_block", return_value=self.block),
         ):
-            _create_and_place(
-                self.library, schematic, self.kicad, self.project, self.parent
-            )
+            _create_and_place(self.library, schematic, self.kicad, self.project, self.parent)
 
         details.assert_called_once_with(self.parent, source.resolve())
         create.assert_called_once_with(
@@ -624,9 +604,7 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
         )
 
         with self.assertRaisesRegex(RuntimeError, "symbol item is immutable"):
-            _write_instance_configuration(
-                schematic, instance, {"KB_PARAM_OUTPUT_VOLTAGE": "1.8"}
-            )
+            _write_instance_configuration(schematic, instance, {"KB_PARAM_OUTPUT_VOLTAGE": "1.8"})
 
         self.assertEqual(field.text.value, "3.3")
         schematic.drop_commit.assert_called_once_with(commit)
@@ -804,9 +782,7 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
             patch.object(plugin_actions, "create_block", return_value=self.block) as create,
             patch.object(plugin_actions, "_register_block", return_value=self.block),
         ):
-            _create_and_place(
-                self.library, schematic, self.kicad, self.project, self.parent
-            )
+            _create_and_place(self.library, schematic, self.kicad, self.project, self.parent)
 
         create.assert_called_once_with(
             self.library,
@@ -864,9 +840,7 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
             patch.object(plugin_actions, "create_block", return_value=self.block) as create,
             patch.object(plugin_actions, "_register_block", return_value=self.block),
         ):
-            _create_and_place(
-                self.library, schematic, self.kicad, self.project, self.parent
-            )
+            _create_and_place(self.library, schematic, self.kicad, self.project, self.parent)
 
         create.assert_called_once_with(
             self.library,
@@ -890,6 +864,7 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
         kicad = SimpleNamespace(
             get_schematic=Mock(return_value=self.schematic),
         )
+
         class _KiCadModule(types.ModuleType):
             KiCad: Mock
 
