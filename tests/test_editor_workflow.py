@@ -1,12 +1,12 @@
 """Exercise the plugin's library editor launch and publish workflow."""
 
 import subprocess
-from importlib import import_module
 import sys
 import tempfile
 import types
 import unittest
 from collections.abc import Callable
+from importlib import import_module
 from pathlib import Path
 from types import SimpleNamespace
 from typing import TypedDict, TypeVar, cast
