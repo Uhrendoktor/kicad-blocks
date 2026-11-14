@@ -113,7 +113,7 @@ jobs:
           python3 -m venv "${RUNNER_TEMP}/kicad-blocks-venv"
           PY="${RUNNER_TEMP}/kicad-blocks-venv/bin/python"
           "$PY" -m pip install --upgrade pip
-          "$PY" -m pip install pytest ruff==0.17.2 pyright==1.1.414 hypothesis==6.168.3 cairosvg pillow
+          "$PY" -m pip install pytest ruff==0.17.2 pyright==1.1.414 hypothesis==6.168.3 vulture==2.16 cairosvg pillow
           "$PY" --version
           "$PY" -m pip --version
 
@@ -190,19 +190,23 @@ jobs:
           set -euo pipefail
           PY="${RUNNER_TEMP}/kicad-blocks-venv/bin/python"
           "$PY" -m pytest -q
-          "$PY" -m compileall -q plugin tests
+          "$PY" -m compileall -q plugin tests scripts examples
 
       - name: Ruff lint
         shell: bash
-        run: "${RUNNER_TEMP}/kicad-blocks-venv/bin/python -m ruff check plugin tests scripts"
+        run: "${RUNNER_TEMP}/kicad-blocks-venv/bin/python -m ruff check plugin tests scripts examples"
 
       - name: Ruff format
         shell: bash
-        run: "${RUNNER_TEMP}/kicad-blocks-venv/bin/python -m ruff format --check plugin tests scripts"
+        run: "${RUNNER_TEMP}/kicad-blocks-venv/bin/python -m ruff format --check plugin tests scripts examples"
 
       - name: Pyright reviewed production inventory
         shell: bash
         run: "${RUNNER_TEMP}/kicad-blocks-venv/bin/pyright -p pyrightconfig.json"
+
+      - name: High-confidence dead-code scan
+        shell: bash
+        run: "${RUNNER_TEMP}/kicad-blocks-venv/bin/vulture plugin/kicad-blocks/kicad_blocks scripts --min-confidence 100"
 
       - name: Test inventory and changed-file quality ratchet
         shell: bash
