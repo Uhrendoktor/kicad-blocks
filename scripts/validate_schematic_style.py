@@ -18,7 +18,7 @@ from kicad_blocks.pcb_layout import _all, _direct, _head, parse_sexpr
 # The generic linter deliberately has no dependency on the STUSB4500 example.
 # These defaults are used only by the reusable geometry/presentation rules.
 FIELD_SYMBOL_MAX_GAP_MM = 9.00
-SINGLE_LINE_TEXT_RESERVE_MM = 5.08
+SINGLE_LINE_TEXT_RESERVE_MM = 10.16
 ADJACENT_COMPONENT_PAIRS: tuple = ()
 COMMON_PIN_NET_GROUPS: tuple = ()
 COMPONENT_PROPERTY_LIMITS_MM: dict[str, float] = {}
