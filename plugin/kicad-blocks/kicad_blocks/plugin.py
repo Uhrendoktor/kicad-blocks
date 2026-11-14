@@ -2254,12 +2254,13 @@ def _ensure_project_facade_catalog(
         not table_path.is_file()
         or table_path.read_bytes() != previous_table
     )
-    if catalog_changed or table_changed:
-        if not _reload_symbol_library(kicad, LIBRARY_NICKNAME):
-            raise RuntimeError(
-                _LAST_LIBRARY_RELOAD_WARNING
-                or "Eeschema could not reload the project KBlocks symbol catalog."
-            )
+    if (catalog_changed or table_changed) and not _reload_symbol_library(
+        kicad, LIBRARY_NICKNAME
+    ):
+        raise RuntimeError(
+            _LAST_LIBRARY_RELOAD_WARNING
+            or "Eeschema could not reload the project KBlocks symbol catalog."
+        )
 
     return catalog
 
