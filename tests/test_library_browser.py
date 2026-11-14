@@ -779,7 +779,7 @@ class LibraryBrowserTests(unittest.TestCase):
         )
 
         self.assertIs(result, symbol)
-        args, kwargs = schematic.place_symbol_from_library.call_args
+        args, _kwargs = schematic.place_symbol_from_library.call_args
         self.assertEqual(args[0], f"{LIBRARY_NICKNAME}:buck_converter_ab12cd34")
         self.assertEqual(args[1], Vector2.from_xy_mm(148.5, 105.0))
         schematic.clear_selection.assert_called_once_with()
