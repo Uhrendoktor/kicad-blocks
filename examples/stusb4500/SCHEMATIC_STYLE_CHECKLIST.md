@@ -55,7 +55,7 @@ The reference generator declares each circuit group in `SCHEMATIC_GROUPS`. A gro
 
 The layout pass derives each primary group's pin extents, frame, title-tab width and description area from the loaded KiCad library symbols. It then packs the primary groups from left to right with the same 2.54 mm frame gap. The address-strap group is aligned to the controller group in a secondary lane. R1/R4 and C2/C3 adjacency, and R55's placement relative to U1.6, are explicit component constraints.
 
-Current boundary: page-level block packing and frame geometry are automatic, while several component positions inside a group remain relative layout seeds. The next internal-layout iteration can replace those remaining seeds with a graph/constraint placer without changing the group metadata or linter interface.
+Component positions are now derived from each group's declared anchor and relative constraints (offsets, a midpoint relation for the FET network, and a pin-relative relation for the RESET pull-down). The symbol specification no longer contains sheet coordinates. The layout model still expresses design intent through explicit relationships; it does not yet infer a complete layout from the electrical net graph. That can be added behind the same group metadata and linter interface.
 
 The machine-enforced rules now include:
 
