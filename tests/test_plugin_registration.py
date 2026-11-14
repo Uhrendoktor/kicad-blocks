@@ -598,13 +598,18 @@ def main() -> None:
                         "checking Edit Facade capability: "
                         + str(plugin_actions._LAST_LIBRARY_RELOAD_WARNING)
                     )
-                with self.assertRaisesRegex(
-                    RuntimeError, "no supported KiCad IPC operation"
-                ):
+                try:
                     plugin_actions._edit_facade_symbol(
                         refreshed_record,
                         facade_editor_client,
                         project_catalog=project / ".kicad_blocks" / LIBRARY_CATALOG_NAME,
+                    )
+                except RuntimeError as exc:
+                    if "no supported KiCad IPC operation" not in str(exc):
+                        raise
+                else:
+                    raise AssertionError(
+                        "Edit Facade must report the missing supported Symbol Editor API."
                     )
                 print(
                     "Edit Facade correctly reports the missing supported Symbol Editor "
