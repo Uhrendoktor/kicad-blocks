@@ -12,9 +12,9 @@ from pathlib import Path
 
 from .model import BlockPin
 from .sexpr import (
+    QuotedSExpr as _Quoted,
     SExpr,
     SExprList,
-    QuotedSExpr as _Quoted,
     dump_sexpr as _dump,
     parse_sexpr,
     sexpr_all as _all,
