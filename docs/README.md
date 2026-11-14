@@ -29,6 +29,7 @@ Read these pages to understand why KiCad Blocks behaves as it does.
 ## Testing and contribution
 
 - [Test inventory](testing/TEST_INVENTORY.md) — every unit test, its purpose, and each native KiCad/GUI acceptance runner.
+- [Repository audit](testing/REPOSITORY_AUDIT.md) — confirmed overlaps, dead-code policy, and candidates for future consolidation.
 
 ## Reference
 
