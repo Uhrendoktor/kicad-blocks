@@ -1922,7 +1922,7 @@ def synchronize_dependencies(
     return _record(parent.path)
 
 
-def _dependency_anchor(block_path: Path, manifest: dict) -> Path
+def _dependency_anchor(block_path: Path, manifest: dict) -> Path:
     """Return the canonical source directory for resolving relative children."""
     source_path = manifest.get("source_path") if manifest.get("local_copy") else None
     return Path(source_path).expanduser().resolve() if source_path else Path(block_path).resolve()
