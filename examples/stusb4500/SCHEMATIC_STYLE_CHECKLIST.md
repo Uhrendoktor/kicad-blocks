@@ -49,6 +49,26 @@ This is the review and acceptance checklist for the generated STUSB4500 child-bl
 - [ ] Check all label stubs as well as main wires. Label glyphs must not cover pin names, values, component references, nearby notes, or block tabs.
 - [ ] Recheck the rendered KiCad SVG at readable zoom after every position, orientation, font-size, or frame change. Passing the S-expression parser is not a visual pass.
 
+## Clippy rules and declared group model
+
+The reference generator declares each circuit group in `SCHEMATIC_GROUPS`. A group owns a stable ID, title, description, member references, lane/order or alignment constraint, and optional evidence metadata. The shared source-evidence record points to ST DS12499 Rev. 8, page 26, Figure 10; each group can override that reference and may supply a reviewed screenshot asset path.
+
+The layout pass derives each primary group's pin extents, frame, title-tab width and description area from the loaded KiCad library symbols. It then packs the primary groups from left to right with the same 2.54 mm frame gap. The address-strap group is aligned to the controller group in a secondary lane. R1/R4 and C2/C3 adjacency, and R55's placement relative to U1.6, are explicit component constraints.
+
+Current boundary: page-level block packing and frame geometry are automatic, while several component positions inside a group remain relative layout seeds. The next internal-layout iteration can replace those remaining seeds with a graph/constraint placer without changing the group metadata or linter interface.
+
+The machine-enforced rules now include:
+
+- [ ] A label's visible glyph rectangle must not be penetrated by a wire. The label's own connection at its anchor is allowed.
+- [ ] Every member pin, visible Reference/Value field, generated label glyph, wire segment and text box must remain inside its owning frame. A wire crossing a frame boundary is an error.
+- [ ] Declared ground pins face down where symbol orientation permits it. D1.3 is currently an explicit down-facing ground-pin rule.
+- [ ] U1.21-C1.1, U1.23-C2.1 and U1.23-C3.1 must belong to physical wire networks. A label cannot satisfy this rule; those supply pins must remain label-free.
+- [ ] C2/C3 decouplers are placed as a contiguous pair. Their common pin network is a physical branch, not a pair of pin labels.
+- [ ] R1/R4 are aligned with no more than one resistor-body width of clear gap.
+- [ ] T4.3, T1.2 and R10.1 form one continuous physical common-source network. The FET_MID label is forbidden.
+- [ ] Resistor references are within 4.0 mm of their symbol origin; capacitor reference and value fields are within 6.0 mm.
+- [ ] Every declared group emits both a title and a description/source panel. Frames are derived from pin extents and have a fixed 2.54 mm horizontal gap along the primary flow.
+
 ## Automated and visual validation gate
 
 - [ ] Run unit tests, Ruff, and compileall, including the schematic style checker.
