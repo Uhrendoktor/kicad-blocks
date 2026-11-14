@@ -1,6 +1,6 @@
 """Narrow ttk widget contracts consumed by KiCad Blocks."""
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from typing import Callable
 from tkinter import Misc, PhotoImage, TkOption, Variable
 
@@ -135,8 +135,11 @@ class Style:
         self, style: str, cnf: Mapping[str, TkOption] | None = ..., **kwargs: TkOption
     ) -> dict[str, TkOption] | None: ...
     def map(
-        self, style: str, cnf: Mapping[str, TkOption] | None = ..., **kwargs: TkOption
-    ) -> dict[str, TkOption] | None: ...
+        self,
+        style: str,
+        cnf: Mapping[str, Sequence[tuple[str, TkOption]]] | None = ...,
+        **kwargs: Sequence[tuple[str, TkOption]],
+    ) -> dict[str, Sequence[tuple[str, TkOption]]] | None: ...
     def lookup(
         self, style: str, option: str, state: tuple[str, ...] = ..., default: str | None = ...
     ) -> str: ...
