@@ -109,7 +109,7 @@ def main() -> int:
     """Fail when the suite contains a no-op test or an exact duplicate test body."""
     count, errors = scan_tests(ROOT)
     if errors:
-        print("\\n".join(errors))
+        print("\n".join(errors))
         return 1
     print(f"test-quality=passed ({count} tests; no no-op or exact duplicate bodies)")
     return 0

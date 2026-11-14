@@ -130,15 +130,15 @@ def test_reports_exact_duplicate_test_bodies_even_when_docstrings_differ(tmp_pat
     test_root = tmp_path / "tests"
     test_root.mkdir()
     (test_root / "test_duplicates.py").write_text(
-        "def test_first():\\n"
-        '    """First description."""\\n'
-        "    result = 3\\n"
-        "    assert result == 3\\n"
-        "\\n"
-        "def test_second():\\n"
-        '    """Different description."""\\n'
-        "    result = 3\\n"
-        "    assert result == 3\\n",
+        "def test_first():\n"
+        '    """First description."""\n'
+        "    result = 3\n"
+        "    assert result == 3\n"
+        "\n"
+        "def test_second():\n"
+        '    """Different description."""\n'
+        "    result = 3\n"
+        "    assert result == 3\n",
         encoding="utf-8",
     )
 
@@ -154,19 +154,19 @@ def test_different_bodies_and_class_fixture_scopes_are_not_duplicates(tmp_path: 
     test_root = tmp_path / "tests"
     test_root.mkdir()
     (test_root / "test_distinct.py").write_text(
-        "def test_first():\\n"
-        "    assert 1 == 1\\n"
-        "\\n"
-        "def test_second():\\n"
-        "    assert 2 == 2\\n"
-        "\\n"
-        "class TestFirstFixture:\\n"
-        "    def test_value(self):\\n"
-        "        assert 3 == 3\\n"
-        "\\n"
-        "class TestSecondFixture:\\n"
-        "    def test_value(self):\\n"
-        "        assert 3 == 3\\n",
+        "def test_first():\n"
+        "    assert 1 == 1\n"
+        "\n"
+        "def test_second():\n"
+        "    assert 2 == 2\n"
+        "\n"
+        "class TestFirstFixture:\n"
+        "    def test_value(self):\n"
+        "        assert 3 == 3\n"
+        "\n"
+        "class TestSecondFixture:\n"
+        "    def test_value(self):\n"
+        "        assert 3 == 3\n",
         encoding="utf-8",
     )
 
@@ -181,11 +181,11 @@ def test_reports_empty_and_pass_only_test_bodies(tmp_path: Path) -> None:
     test_root = tmp_path / "tests"
     test_root.mkdir()
     (test_root / "test_noop.py").write_text(
-        "def test_empty():\\n"
-        "    pass\\n"
-        "\\n"
-        "def test_documented_only():\\n"
-        '    """This is only documentation."""\\n',
+        "def test_empty():\n"
+        "    pass\n"
+        "\n"
+        "def test_documented_only():\n"
+        '    """This is only documentation."""\n',
         encoding="utf-8",
     )
 
