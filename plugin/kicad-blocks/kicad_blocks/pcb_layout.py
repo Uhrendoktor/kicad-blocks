@@ -73,11 +73,11 @@ def parse_sexpr(source: str) -> list:
     root: list = []
     stack = [root]
     for token in _lex(source):
-        if token == "(":
+        if token == "(" and not isinstance(token, _Quoted):
             node: list = []
             stack[-1].append(node)
             stack.append(node)
-        elif token == ")":
+        elif token == ")" and not isinstance(token, _Quoted):
             if len(stack) == 1:
                 raise ValueError("Unexpected ')' in KiCad S-expression.")
             stack.pop()
