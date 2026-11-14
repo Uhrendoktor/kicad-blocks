@@ -103,6 +103,18 @@ class _SchematicForItemUpdate(Protocol):
     client: _SchematicIpcClient
 
 
+class _TkPaletteOwner(Protocol):
+    """Tk window carrying the selected KiCad Blocks palette."""
+
+    _kicad_blocks_palette: dict[str, str]
+
+
+class _TkActionIconOwner(Protocol):
+    """Tk window retaining PhotoImage references used by action buttons."""
+
+    _kicad_blocks_action_icons: dict[str, tkinter_types.PhotoImage]
+
+
 class _TkGeometryWindow(Protocol):
     """Geometry methods shared by real Tk windows and the lightweight test adapter."""
 
@@ -483,7 +495,7 @@ def _configure_tk_theme(root: tkinter_types.Tk) -> None:
         background=[("active", colors["accent"]), ("pressed", colors["accent"])],
     )
     style.configure("TSeparator", background=colors["border"])
-    setattr(root, "_kicad_blocks_palette", colors)
+    cast(_TkPaletteOwner, root)._kicad_blocks_palette = colors
 
 
 def _editor_window_id_for_widget(window: tkinter_types.Misc | _TkGeometryWindow) -> str | None:
@@ -731,9 +743,12 @@ def _create_action_icon(parent: tkinter_types.Misc, name: str) -> tkinter_types.
         LOG.debug("Could not render toolbar icon %s", name, exc_info=True)
         return None
     owner = parent.winfo_toplevel()
-    images = getattr(owner, "_kicad_blocks_action_icons", {})
+    images = cast(
+        dict[str, tkinter_types.PhotoImage],
+        getattr(owner, "_kicad_blocks_action_icons", {}),
+    )
     images[name] = image
-    setattr(owner, "_kicad_blocks_action_icons", images)
+    cast(_TkActionIconOwner, owner)._kicad_blocks_action_icons = images
     return image
 
 
