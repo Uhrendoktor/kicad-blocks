@@ -27,6 +27,8 @@ if TYPE_CHECKING:
 
     from google.protobuf.message import Message
     from kipy.geometry import Vector2
+    from kipy.common_types import Commit, KIID
+    from kipy.proto.common.types import DocumentSpecifier
 else:
     tk = None
     ttk = None
@@ -135,121 +137,159 @@ class _SchematicIpcClient(Protocol):
 class _SchematicForItemUpdate(Protocol):
     """Schematic document/client pair consumed by checked item and commit updates."""
 
-    document: Message
-    client: _SchematicIpcClient
+    @property
+    def document(self) -> DocumentSpecifier: ...
 
-    def begin_commit(self) -> Message: ...
+    @property
+    def client(self) -> _SchematicIpcClient: ...
 
-    def push_commit(self, commit: Message, description: str) -> None: ...
+    def begin_commit(self) -> Commit: ...
 
-    def drop_commit(self, commit: Message) -> None: ...
+    def push_commit(self, commit: Commit, description: str) -> None: ...
+
+    def drop_commit(self, commit: Commit) -> None: ...
 
     def save(self) -> None: ...
 
 
 class _SchematicProject(Protocol):
-    """Project metadata and text-variable expansion used by editor actions."""
+    """Project text-variable expansion used by variant resolution."""
+
+    def expand_text_variables(self, text: str) -> str: ...
+
+
+class _SchematicProjectPath(Protocol):
+    """Project path consumed when locating a saved schematic's project folder."""
 
     path: str | Path
 
-    def expand_text_variables(self, value: str) -> str: ...
-
 
 class _SymbolTextValue(Protocol):
-    value: str
+    @property
+    def value(self) -> str: ...
 
 
 class _SymbolTextField(Protocol):
-    text: _SymbolTextValue
+    @property
+    def text(self) -> _SymbolTextValue: ...
 
 
 class _SymbolIdentifier(Protocol):
-    library: str
-    name: str
+    @property
+    def library(self) -> str: ...
+
+    @property
+    def name(self) -> str: ...
 
 
 class _SymbolPin(Protocol):
-    number: str
+    @property
+    def number(self) -> str: ...
 
 
 class _SymbolDefinition(Protocol):
-    id: _SymbolIdentifier | None
-    pins: Sequence[_SymbolPin]
+    @property
+    def id(self) -> _SymbolIdentifier | None: ...
+
+    @property
+    def pins(self) -> Sequence[_SymbolPin]: ...
 
 
 class _SymbolTransform(Protocol):
-    orientation: int
+    @property
+    def orientation(self) -> int: ...
 
 
 class _SymbolPosition(Protocol):
-    x: float
-    y: float
+    @property
+    def x(self) -> float: ...
 
-
-class _SchematicSymbol(Protocol):
-    """Placed schematic symbol fields consumed by block configuration actions."""
-
-    id: str
-    reference: str | None
-    definition: _SymbolDefinition | None
-    user_fields: Sequence[_UserField]
-    path: _SheetPath
-    reference_field: _SymbolTextField | None
-    transform: _SymbolTransform | None
-    position: _SymbolPosition | None
+    @property
+    def y(self) -> float: ...
 
 
 class _UserField(Protocol):
-    name: str
-    text: _SymbolTextValue
+    @property
+    def name(self) -> str: ...
 
-
-class _SheetPathElement(Protocol):
-    value: str
+    @property
+    def text(self) -> _SymbolTextValue: ...
 
 
 class _SheetPath(Protocol):
-    path: Sequence[str | _SheetPathElement]
+    @property
+    def path(self) -> Sequence[KIID]: ...
 
 
 class _SheetInstance(Protocol):
-    filename: str
-    name: str
-    path: _SheetPath
-    children: Sequence[_SheetInstance]
+    @property
+    def filename(self) -> str: ...
+
+    @property
+    def name(self) -> str: ...
+
+    @property
+    def path(self) -> _SheetPath: ...
+
+    @property
+    def children(self) -> Sequence[_SheetInstance]: ...
 
 
 class _SheetHierarchy(Protocol):
-    root: _SheetInstance | None
+    @property
+    def root(self) -> _SheetInstance | None: ...
 
 
-class _Schematic(Protocol):
+class _SheetSymbol(Protocol):
+    @property
+    def id(self) -> KIID: ...
+
+    @property
+    def user_fields(self) -> Sequence[_UserField]: ...
+
+
+class _SchematicSymbol(_ProtoBackedSchematicItem, Protocol):
+    """Placed schematic symbol fields consumed by block configuration actions."""
+
+    @property
+    def id(self) -> KIID: ...
+
+    @property
+    def reference(self) -> str: ...
+
+    @property
+    def definition(self) -> _SymbolDefinition | None: ...
+
+    @property
+    def user_fields(self) -> Sequence[_UserField]: ...
+
+    @property
+    def path(self) -> _SheetPath: ...
+
+    @property
+    def reference_field(self) -> _SymbolTextField | None: ...
+
+    @property
+    def transform(self) -> _SymbolTransform | None: ...
+
+    @property
+    def position(self) -> _SymbolPosition | None: ...
+
+
+class _Schematic(_SchematicForItemUpdate, Protocol):
     """Editor operations used by block management and placement actions."""
-
-    document: Message
-    client: _SchematicIpcClient
 
     def get_project(self) -> _SchematicProject: ...
 
     def get_selection(self) -> Sequence[_SchematicSymbol]: ...
 
-    def get_selection_as_string(self) -> str: ...
-
     def get_symbols(self) -> Sequence[_SchematicSymbol]: ...
 
-    def get_sheet_symbols(self) -> Sequence[_SchematicSymbol]: ...
+    def get_sheet_symbols(self) -> Sequence[_SheetSymbol]: ...
 
     def get_hierarchy(self) -> _SheetHierarchy: ...
 
     def place_symbol_from_library(self, symbol_id: str, position: Vector2) -> _SchematicSymbol: ...
-
-    def begin_commit(self) -> Message: ...
-
-    def push_commit(self, commit: Message, description: str) -> None: ...
-
-    def drop_commit(self, commit: Message) -> None: ...
-
-    def save(self) -> None: ...
 
 
 class _LibraryLoadStatus(Protocol):
@@ -320,8 +360,6 @@ class _TkActionIconOwner(Protocol):
 
 class _TkGeometryWindow(Protocol):
     """Geometry methods shared by real Tk windows and the lightweight test adapter."""
-
-    master: tkinter_types.Misc | _TkGeometryWindow | None
 
     def update_idletasks(self) -> None: ...
 
@@ -977,7 +1015,7 @@ def _action_button(
 
 
 def project_directory(schematic: _Schematic) -> Path:
-    project = schematic.get_project()
+    project = cast(_SchematicProjectPath, schematic.get_project())
     raw = Path(project.path).expanduser()
     if raw.is_file() or raw.suffix.lower() == ".kicad_pro":
         raw = raw.parent
@@ -1188,7 +1226,7 @@ def _library_record_for_instance(
 
 
 def make_selected_local(
-    schematic: _Schematic, kicad: _KiCadApp, project_dir: Path, library_root: Path
+    schematic: _Schematic, kicad: _KiCadApp, project_dir: Path, library_root: Path | list[Path]
 ) -> Path:
     """Create an independent implementation copy bound to this symbol KIID."""
     instance = _selected_symbol(schematic)
@@ -1259,7 +1297,7 @@ def _update_schematic_item_checked(
 
 
 def _write_instance_configuration(
-    schematic: _Schematic, instance: _ProtoBackedSchematicItem, values: dict[str, str]
+    schematic: _Schematic, instance: _SchematicSymbol, values: dict[str, str]
 ) -> None:
     """Write validated facade fields through KiCad IPC as one undoable edit."""
     fields = {
@@ -1294,7 +1332,7 @@ def _write_instance_configuration(
 
 
 def _show_selected_block_configuration(
-    schematic: _Schematic, project_dir: Path, library_root: Path, parent: tkinter_types.Misc
+    schematic: _Schematic, project_dir: Path, library_root: Path | list[Path], parent: tkinter_types.Misc
 ) -> None:
     """Edit instance-local profile, variant, parameters and PCB layout."""
     load_tkinter()
@@ -5943,7 +5981,7 @@ def _apply_block_pcb_layout(
     schematic: _Schematic,
     kicad: _KiCadApp,
     project_dir: Path,
-    library_root: Path,
+    library_root: Path | list[Path],
     parent: tkinter_types.Misc,
 ) -> None:
     """Create a new project-board copy with the selected block's stored PCB layout."""
@@ -6090,7 +6128,7 @@ def _apply_selected_block_pcb_layouts(
     schematic: _Schematic,
     kicad: _KiCadApp,
     project_dir: Path,
-    library_root: Path,
+    library_root: Path | list[Path],
     parent: tkinter_types.Misc,
 ) -> None:
     """Batch-apply the layouts for all selected block facade instances."""
