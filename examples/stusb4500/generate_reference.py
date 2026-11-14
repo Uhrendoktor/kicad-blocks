@@ -577,7 +577,9 @@ def _group_text_width(group: dict) -> float:
     description_width, _ = _measure_text_box(
         _group_description(group), GROUP_DESCRIPTION_FONT_MM, 1.27,
     )
-    return max(title_width + 2.54, description_width + 2.54)
+    # The description box is inset by 2.54 mm on both sides, so the
+    # enclosing frame must reserve those additional 2.54 mm of width.
+    return max(title_width + 5.08, description_width + 5.08)
 
 
 def _resolve_group_component_positions(
