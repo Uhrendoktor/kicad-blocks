@@ -545,6 +545,13 @@ def _create_action_icon(parent, name: str):
         "remove": '<path d="M3 7h18M8 7V4h8v3M6 7l1 14h10l1-14"/><path d="M10 11v6M14 11v6"/>',
         "default": '<path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2L12 17.3l-5.6 2.9 1.1-6.2L3 9.6l6.2-.9z"/>',
         "close": '<path d="m6 6 12 12M18 6 6 18"/>',
+        "configure": '<circle cx="12" cy="12" r="3"/><path d="M19 13.5a7.5 7.5 0 0 0 0-3l2-1.5-2-3.5-2.4 1a7.5 7.5 0 0 0-2.6-1.5L13.7 2h-4l-.4 3a7.5 7.5 0 0 0-2.6 1.5l-2.4-1-2 3.5 2 1.5a7.5 7.5 0 0 0 0 3l-2 1.5 2 3.5 2.4-1a7.5 7.5 0 0 0 2.6 1.5l.4 3h4l.4-3a7.5 7.5 0 0 0 2.6-1.5l2.4 1 2-3.5z"/>',
+        "publish": '<path d="M12 3v12M7 8l5-5 5 5"/><path d="M4 15v5h16v-5"/>',
+        "local": '<path d="M4 4h11l5 5v11H4z"/><path d="M15 4v5h5M8 14h8M8 17h5"/>',
+        "sync": '<path d="M20 7v5h-5M4 17v-5h5"/><path d="M5.5 9A7 7 0 0 1 18 6M18.5 15A7 7 0 0 1 6 18"/>',
+        "validate": '<path d="m5 12 4 4L19 6"/><path d="M12 2a10 10 0 1 0 10 10"/>',
+        "bom": '<path d="M6 3h12v18H6z"/><path d="M9 8h6M9 12h6M9 16h6"/>',
+        "erc": '<path d="M12 2 20 5v6c0 5-3.5 8.5-8 11-4.5-2.5-8-6-8-11V5z"/><path d="m8 12 2.5 2.5L16 9"/>',
     }
     path_data = drawings.get(name)
     if not path_data:
@@ -2205,65 +2212,102 @@ def _create_and_place(
 
 
 def _edit_facade_symbol(
-    root, schematic, project_dir, editor_window_id, parent
+    root,
+    schematic,
+    project_dir,
+    editor_window_id,
+    parent,
+    *,
+    kicad=None,
+    expected_block_id: str | None = None,
 ) -> None:
-    """Open the selected library-backed facade through Eeschema's native Symbol Editor action."""
+    """Open the library copy of the selected facade through KiCad's editor action."""
     instance = _selected_symbol(schematic)
     record = _block_record_for_instance(root, project_dir, instance)
-    xdotool = shutil.which("xdotool")
-    if not xdotool:
-        raise RuntimeError(
-            "Editing a selected facade from the manager requires xdotool on the "
-            "supported Linux/X11 setup. In Eeschema, select the block symbol and "
-            "press Ctrl+Shift+E to open its library version in Symbol Editor."
-        )
-    if not editor_window_id:
-        editor_window_id = _capture_eeschema_window_id()
-    if not editor_window_id:
-        raise RuntimeError(
-            "Could not identify the active Eeschema window. Select the block symbol "
-            "in Eeschema and retry Edit facade symbol."
-        )
+    if (
+        expected_block_id is not None
+        and record.manifest.get("block_id") != expected_block_id
+    ):
+        raise ValueError("The Eeschema selection changed. Select the highlighted block and retry.")
 
-    minimized_windows = _minimize_placement_windows(parent)
-    try:
-        subprocess.run(
-            [xdotool, "windowfocus", "--sync", editor_window_id],
-            capture_output=True,
-            text=True,
-            check=True,
-            timeout=3,
-        )
-        subprocess.run(
-            [xdotool, "key", "--clearmodifiers", "ctrl+shift+e"],
-            capture_output=True,
-            text=True,
-            check=True,
-            timeout=3,
-        )
-        deadline = time.monotonic() + 5.0
-        focused = editor_window_id
-        while time.monotonic() < deadline:
-            result = subprocess.run(
-                [xdotool, "getwindowfocus"],
-                capture_output=True,
-                text=True,
-                check=False,
-                timeout=3,
-            )
-            focused = result.stdout.strip()
-            if result.returncode == 0 and focused and focused != editor_window_id:
+    run_action = getattr(kicad, "run_action", None)
+    if callable(run_action):
+        try:
+            response = run_action("eeschema.EditorControl.editLibSymbolWithSymbolEditor")
+            if _native_run_action_status(response) == 1:
                 LOG.info(
                     "Opened library facade %s:%s in KiCad Symbol Editor",
                     record.manifest.get("library_nickname"),
                     record.manifest.get("symbol_name"),
                 )
                 return
-            time.sleep(0.1)
+            LOG.info(
+                "KiCad did not accept the native Edit Library Symbol action; checking desktop fallbacks"
+            )
+        except Exception:
+            LOG.debug("KiCad IPC Edit Library Symbol action failed", exc_info=True)
+
+    xdotool = shutil.which("xdotool")
+    if not editor_window_id:
+        editor_window_id = _capture_eeschema_window_id()
+    minimized_windows = _minimize_placement_windows(parent)
+    try:
+        if xdotool and editor_window_id:
+            subprocess.run(
+                [xdotool, "windowfocus", "--sync", editor_window_id],
+                capture_output=True,
+                text=True,
+                check=True,
+                timeout=3,
+            )
+            subprocess.run(
+                [xdotool, "key", "--clearmodifiers", "ctrl+shift+e"],
+                capture_output=True,
+                text=True,
+                check=True,
+                timeout=3,
+            )
+            deadline = time.monotonic() + 5.0
+            while time.monotonic() < deadline:
+                result = subprocess.run(
+                    [xdotool, "getwindowfocus"],
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                    timeout=3,
+                )
+                focused = result.stdout.strip()
+                if result.returncode == 0 and focused and focused != editor_window_id:
+                    LOG.info(
+                        "Opened library facade %s:%s in KiCad Symbol Editor",
+                        record.manifest.get("library_nickname"),
+                        record.manifest.get("symbol_name"),
+                    )
+                    return
+                time.sleep(0.1)
+            raise RuntimeError(
+                "Eeschema did not open Symbol Editor. Confirm the selected facade is "
+                "linked to the registered KBlocks library."
+            )
+
+        wayland = bool(os.environ.get("WAYLAND_DISPLAY")) or (
+            os.environ.get("XDG_SESSION_TYPE", "").casefold() == "wayland"
+        )
+        wtype = shutil.which("wtype") if wayland else None
+        if wtype:
+            subprocess.run(
+                [wtype, "-M", "CTRL", "-M", "SHIFT", "-k", "e"],
+                capture_output=True,
+                text=True,
+                check=True,
+                timeout=5,
+            )
+            return
+
         raise RuntimeError(
-            "Eeschema did not hand focus to Symbol Editor after Ctrl+Shift+E. "
-            "Make sure the selected facade is linked to the block library and "
-            "that the hotkey is still assigned to Edit Library Symbol."
+            "KiCad did not accept its native Edit Library Symbol action and no "
+            "supported desktop shortcut helper is available. In Eeschema, select "
+            "this block and press Ctrl+Shift+E."
         )
     except Exception:
         _restore_placement_windows(minimized_windows)
@@ -4904,7 +4948,8 @@ def _show_library_browser(
             selected_record_for_instance = _block_record_for_instance(
                 current_roots[0], project_dir, selection[0]
             )
-        except (OSError, RuntimeError, ValueError, LookupError):
+        except Exception:
+            LOG.debug("Could not resolve the current Eeschema selection for Edit facade", exc_info=True)
             return None
         if selected_record_for_instance.manifest.get("block_id") != record.manifest.get("block_id"):
             return None
@@ -4924,7 +4969,13 @@ def _show_library_browser(
             return
         try:
             _edit_facade_symbol(
-                current_roots[0], schematic, project_dir, editor_window_id, window
+                current_roots[0],
+                schematic,
+                project_dir,
+                editor_window_id,
+                window,
+                kicad=kicad,
+                expected_block_id=str(record.manifest.get("block_id")),
             )
         except (OSError, RuntimeError, ValueError, LookupError, subprocess.SubprocessError) as exc:
             messagebox.showerror("Edit facade", str(exc), parent=window)
@@ -5710,28 +5761,19 @@ def _apply_selected_block_pcb_layouts(
 
 
 def _show_action_hub(root):
-    """Show a scrollable task hub for less frequent and context-specific actions."""
+    """Show compact, icon-led task actions with secondary guidance in tooltips."""
     _configure_tk_theme(root)
     root.title("KiCad Blocks — Tasks")
-    root.geometry("900x660")
-    root.minsize(760, 540)
+    root.geometry("820x580")
+    root.minsize(680, 480)
 
-    outer = ttk.Frame(root, padding=18)
+    outer = ttk.Frame(root, padding=14)
     outer.pack(fill="both", expand=True)
     ttk.Label(
         outer,
         text="KiCad Blocks",
-        font=("TkDefaultFont", 18, "bold"),
-    ).pack(anchor="w")
-    ttk.Label(
-        outer,
-        text=(
-            "Choose an operation. For normal block selection and placement, use the "
-            "Functional Block Library browser; the remaining actions are grouped by workflow."
-        ),
-        wraplength=840,
-        justify="left",
-    ).pack(anchor="w", pady=(4, 14))
+        font=("TkDefaultFont", 16, "bold"),
+    ).pack(anchor="w", pady=(0, 10))
 
     tabs = ttk.Notebook(outer)
     tabs.pack(fill="both", expand=True)
@@ -5742,18 +5784,21 @@ def _show_action_hub(root):
             [
                 (
                     "Browse and place blocks",
-                    "Search registered libraries, inspect a facade, configure it, and place it from the browser.",
+                    "Browse registered libraries, configure a facade, and start native placement.",
                     "manage-library",
+                    "libraries",
                 ),
                 (
                     "Create block from sheet",
-                    "Select a hierarchical sheet symbol in its parent, or run this from the open sheet with nothing selected.",
+                    "Select a hierarchical sheet symbol, or create from the currently open sheet.",
                     "create-block",
+                    "create",
                 ),
                 (
                     "Open block implementation",
-                    "Select one placed block instance to open its implementation or matching variant.",
+                    "Open the implementation for one selected block instance.",
                     "open-implementation",
+                    "implementation",
                 ),
             ],
         ),
@@ -5762,28 +5807,33 @@ def _show_action_hub(root):
             [
                 (
                     "Configure selected instance",
-                    "Select one block instance to edit its profile, variant, parameters, or PCB layout.",
+                    "Edit the profile, variant, parameters, or PCB layout for one instance.",
                     "configure-instance",
+                    "configure",
                 ),
                 (
                     "Edit facade symbol",
-                    "Select one block instance to edit its library symbol in Symbol Editor.",
+                    "Edit the library facade for one selected block instance.",
                     "edit-facade",
+                    "facade",
                 ),
                 (
                     "Publish implementation",
-                    "Select a library block implementation and publish its current changes.",
+                    "Publish the current library implementation and update dependent metadata.",
                     "publish-block",
+                    "publish",
                 ),
                 (
                     "Make selected instance local",
-                    "Select one shared-library block instance to create an independent project copy.",
+                    "Create an independent project-local copy of the selected shared block.",
                     "make-local-copy",
+                    "local",
                 ),
                 (
                     "Synchronize local copy",
-                    "Select one local block instance to reconcile it with its shared-library source.",
+                    "Reconcile the selected local implementation with its shared-library source.",
                     "synchronize-local-copy",
+                    "sync",
                 ),
             ],
         ),
@@ -5792,28 +5842,33 @@ def _show_action_hub(root):
             [
                 (
                     "Validate registered libraries",
-                    "Check manifests, assets, dependencies, revisions, and recursive ERC for all libraries.",
+                    "Validate manifests, assets, dependencies, revisions, and recursive ERC.",
                     "validate-libraries",
+                    "validate",
                 ),
                 (
                     "Export recursive BOM",
-                    "Select one block instance to export its BOM including nested dependencies.",
+                    "Export the bill of materials for one block and its dependencies.",
                     "recursive-bom",
+                    "bom",
                 ),
                 (
                     "Run recursive ERC",
-                    "Select one block instance to check its implementation and nested dependencies.",
+                    "Run electrical-rule checks for one implementation and its dependencies.",
                     "recursive-erc",
+                    "erc",
                 ),
                 (
                     "Apply selected PCB layout",
-                    "Select one block instance with a stored layout; a new board copy is created.",
+                    "Create a merged board copy from one selected block layout.",
                     "apply-pcb-layout",
+                    "pcb",
                 ),
                 (
                     "Apply multiple PCB layouts",
-                    "Select two or more block instances with stored layouts; a combined board copy is created.",
+                    "Create one combined board copy from multiple selected block layouts.",
                     "apply-multiple-pcb-layouts",
+                    "layouts",
                 ),
             ],
         ),
@@ -5824,79 +5879,24 @@ def _show_action_hub(root):
         root.destroy()
         run_action(selected_action, editor_window_id=editor_window_id)
 
-    canvas_background = (
-        ttk.Style(root).lookup("TFrame", "background") or root.cget("background")
-    )
     for tab_name, actions in groups:
-        tab = ttk.Frame(tabs)
+        tab = ttk.Frame(tabs, padding=(12, 10))
         tabs.add(tab, text=tab_name)
-        scroll_area = ttk.Frame(tab)
-        scroll_area.pack(fill="both", expand=True)
-        canvas = tk.Canvas(
-            scroll_area,
-            background=canvas_background,
-            highlightthickness=0,
-            borderwidth=0,
-        )
-        scrollbar = ttk.Scrollbar(
-            scroll_area, orient="vertical", command=canvas.yview, style="Vertical.TScrollbar"
-        )
-        canvas.configure(yscrollcommand=scrollbar.set)
-        canvas.pack(side="left", fill="both", expand=True)
-        scrollbar.pack(side="right", fill="y")
-
-        content = ttk.Frame(canvas, padding=14)
-        content_id = canvas.create_window((0, 0), window=content, anchor="nw")
-        description_labels = []
-
-        def update_scroll_region(_event=None, target=canvas):
-            target.configure(scrollregion=target.bbox("all"))
-
-        def fit_content_width(event, target=canvas, item=content_id, labels=description_labels):
-            target.itemconfigure(item, width=event.width)
-            wrap = max(260, min(560, event.width - 390))
-            for label in labels:
-                label.configure(wraplength=wrap)
-
-        content.bind("<Configure>", update_scroll_region)
-        canvas.bind("<Configure>", fit_content_width)
-        _bind_mousewheel(
-            canvas,
-            lambda amount, target=canvas: target.yview_scroll(amount, "units"),
-            include_children=True,
-        )
-
-        for row, (title, description, action_id) in enumerate(actions):
-            cell = ttk.Frame(content, padding=(0, 3))
-            cell.grid(row=row, column=0, sticky="ew", pady=4)
-            ttk.Button(
+        for row, (title, description, action_id, icon_name) in enumerate(actions):
+            cell = ttk.Frame(tab)
+            cell.grid(row=row, column=0, sticky="ew", pady=3)
+            button = _action_button(
                 cell,
-                text=title,
+                title,
                 command=lambda selected=action_id: dispatch(selected),
-                width=31,
-            ).grid(row=0, column=0, sticky="nw", padx=(0, 12))
-            description_label = ttk.Label(
-                cell,
-                text=description,
-                wraplength=440,
-                justify="left",
+                icon=icon_name,
+                tooltip=description,
             )
-            description_label.grid(row=0, column=1, sticky="ew")
-            description_labels.append(description_label)
-            cell.columnconfigure(1, weight=1)
-        content.columnconfigure(0, weight=1)
+            button.pack(fill="x", expand=True)
+        tab.columnconfigure(0, weight=1)
 
     footer = ttk.Frame(outer)
-    footer.pack(fill="x", pady=(12, 0))
-    ttk.Label(
-        footer,
-        text=(
-            "PCB Editor: use “Place Imported Block Layout” after applying a layout "
-            "from the schematic actions."
-        ),
-        wraplength=700,
-        justify="left",
-    ).pack(side="left", anchor="w")
+    footer.pack(fill="x", pady=(10, 0))
     ttk.Button(footer, text="Close", command=root.destroy).pack(side="right")
     return tabs
 
