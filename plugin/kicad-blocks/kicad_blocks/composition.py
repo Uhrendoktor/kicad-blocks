@@ -8,7 +8,8 @@ import tempfile
 import uuid
 from pathlib import Path
 
-from .json_types import JsonObject
+from .manifest_types import BlockDependencyManifest
+from .report_types import BlockCompositionItem, BlockCompositionReport, BlockCompositionStepResult
 from .model import (
     BlockPin,
     facade_pin_connection_points,
@@ -31,7 +32,7 @@ from .repository import (
 
 
 def _child_record(
-    parent: BlockRecord, dependency: JsonObject, records: dict[str, BlockRecord]
+    parent: BlockRecord, dependency: BlockDependencyManifest, records: dict[str, BlockRecord]
 ) -> BlockRecord:
     block_id = str(dependency.get("block_id", ""))
     child = records.get(block_id)
@@ -82,9 +83,9 @@ def _refresh_local_revision(record: BlockRecord) -> None:
 
 def _compose_direct_children(
     parent: BlockRecord,
-    dependencies: list[tuple[JsonObject, BlockRecord]],
+    dependencies: list[tuple[BlockDependencyManifest, BlockRecord]],
     kicad_cli: str,
-) -> JsonObject:
+) -> BlockCompositionStepResult:
     if not dependencies:
         return {"placed": [], "labels": 0}
 
@@ -269,7 +270,7 @@ def compose_block_implementation(
     block: BlockRecord,
     library_root: Path,
     kicad_cli: str | Path,
-) -> JsonObject:
+) -> BlockCompositionReport:
     """Recursively compose dependency facade instances into parent implementations."""
     root = Path(library_root).expanduser().resolve()
     cli = str(kicad_cli)
@@ -277,7 +278,7 @@ def compose_block_implementation(
     records[block.manifest["block_id"]] = block
     visiting: set[str] = set()
     completed: set[str] = set()
-    reports: list[JsonObject] = []
+    reports: list[BlockCompositionItem] = []
 
     def compose(current: BlockRecord) -> None:
         block_id = current.manifest["block_id"]
@@ -287,7 +288,7 @@ def compose_block_implementation(
             return
         visiting.add(block_id)
         current_manifest = read_manifest(current.path)
-        direct: list[tuple[JsonObject, BlockRecord]] = []
+        direct: list[tuple[BlockDependencyManifest, BlockRecord]] = []
         for dependency in current_manifest.get("dependencies", []):
             child = _child_record(current, dependency, records)
             pinned_revision = dependency.get("revision")

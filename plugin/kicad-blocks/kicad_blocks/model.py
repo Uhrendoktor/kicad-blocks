@@ -11,8 +11,20 @@ import uuid
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
+from typing import cast
 
-from .json_types import JsonValue
+from .manifest_types import (
+    BlockLayoutManifest,
+    BlockManifest,
+    BlockParameter,
+    BlockParameterInput,
+    BlockProfileInput,
+    BlockProfileManifest,
+    BlockVariantManifest,
+    ParameterScalar,
+    ParameterType,
+    ResolvedProfileConfiguration,
+)
 
 PIN_TYPES = ("input", "output", "bidirectional", "tristate", "passive")
 _KICAD_PIN_TYPES = {
@@ -57,7 +69,7 @@ def parameter_field_name(name: str) -> str:
     return PARAMETER_FIELD_PREFIX + str(name)
 
 
-def resolve_variant_implementation(manifest: Mapping[str, JsonValue], value: str) -> str:
+def resolve_variant_implementation(manifest: BlockManifest, value: str) -> str:
     """Resolve an explicit selector or the configured default implementation.
 
     An empty KB_VARIANT selects default_variant when one is configured,
@@ -80,7 +92,9 @@ def resolve_variant_implementation(manifest: Mapping[str, JsonValue], value: str
     return str(matches[0]["file"])
 
 
-def validate_parameter_value(parameter: Mapping[str, JsonValue], value: JsonValue) -> str:
+def validate_parameter_value(
+    parameter: BlockParameterInput | BlockParameter, value: ParameterScalar
+) -> str:
     """Validate and normalize one single-line parameter value."""
     name = str(parameter.get("name", "parameter"))
     kind = str(parameter.get("type", "string")).casefold()
@@ -110,9 +124,11 @@ def validate_parameter_value(parameter: Mapping[str, JsonValue], value: JsonValu
     raise ValueError(f"Unsupported type {kind!r} for parameter {name!r}.")
 
 
-def normalize_parameters(parameters: Iterable[Mapping[str, JsonValue]] | None) -> list[dict[str, str]]:
+def normalize_parameters(
+    parameters: Iterable[BlockParameterInput | BlockParameter] | None,
+) -> list[BlockParameter]:
     """Validate parameter declarations from a block manifest or API call."""
-    normalized: list[dict[str, str]] = []
+    normalized: list[BlockParameter] = []
     seen: set[str] = set()
     for item in parameters or ():
         if not isinstance(item, dict):
@@ -138,18 +154,23 @@ def normalize_parameters(parameters: Iterable[Mapping[str, JsonValue]] | None) -
         if len(description) > 256 or "\n" in description or "\r" in description:
             raise ValueError(f"Description for parameter {name!r} must be a single line of at most 256 characters.")
         normalized.append(
-            {"name": name, "type": kind, "default": default, "description": description}
+            {
+                "name": name,
+                "type": cast(ParameterType, kind),
+                "default": default,
+                "description": description,
+            }
         )
     return normalized
 
 
 def normalize_profiles(
-    profiles: Iterable[Mapping[str, JsonValue]] | None,
-    parameters: Iterable[Mapping[str, JsonValue]] | None,
-    variants: Iterable[Mapping[str, JsonValue]] | None,
-    layouts: Iterable[Mapping[str, JsonValue]] | None,
+    profiles: Iterable[BlockProfileInput | BlockProfileManifest] | None,
+    parameters: Iterable[BlockParameterInput | BlockParameter] | None,
+    variants: Iterable[BlockVariantManifest] | None,
+    layouts: Iterable[BlockLayoutManifest] | None,
     default_layout: str | None = None,
-) -> list[dict[str, JsonValue]]:
+) -> list[BlockProfileManifest]:
     """Validate named configuration profiles for one block.
 
     A profile is a reusable preset for one declared schematic variant, a
@@ -170,7 +191,7 @@ def normalize_profiles(
         str(item.get("id", "")).casefold(): str(item.get("id", ""))
         for item in layouts or ()
     }
-    normalized: list[dict[str, JsonValue]] = []
+    normalized: list[BlockProfileManifest] = []
     seen_ids: set[str] = set()
     seen_names: set[str] = set()
 
@@ -253,7 +274,9 @@ def normalize_profiles(
     return normalized
 
 
-def resolve_profile_configuration(manifest: Mapping[str, JsonValue], profile_id: str) -> dict[str, JsonValue]:
+def resolve_profile_configuration(
+    manifest: BlockManifest, profile_id: str
+) -> ResolvedProfileConfiguration:
     """Resolve one profile into its complete per-instance field values."""
     requested = str(profile_id or "").strip().casefold()
     profiles = manifest.get("profiles") or []
@@ -294,7 +317,8 @@ def parse_parameters(spec: str) -> list[dict[str, str]]:
 
 
 def resolve_parameter_values(
-    parameters: Iterable[Mapping[str, JsonValue]] | None, overrides: Mapping[str, JsonValue] | None = None
+    parameters: Iterable[BlockParameterInput | BlockParameter] | None,
+    overrides: Mapping[str, ParameterScalar] | None = None,
 ) -> dict[str, str]:
     """Resolve defaults plus caller overrides, rejecting unknown parameters."""
     definitions = normalize_parameters(parameters)
@@ -309,8 +333,8 @@ def resolve_parameter_values(
 
 def substitute_parameter_templates(
     content: str,
-    parameters: Iterable[Mapping[str, JsonValue]] | None,
-    overrides: Mapping[str, JsonValue] | None = None,
+    parameters: Iterable[BlockParameterInput | BlockParameter] | None,
+    overrides: Mapping[str, ParameterScalar] | None = None,
 ) -> str:
     """Substitute {{NAME}} tokens in KiCad text fields using validated values.
 
@@ -526,7 +550,7 @@ def render_symbol_library(
     pins: Iterable[BlockPin],
     *,
     reference_prefix: str = "X",
-    parameters: Iterable[Mapping[str, JsonValue]] = (),
+    parameters: Iterable[BlockParameterInput | BlockParameter] = (),
     default_layout_id: str | None = None,
     include_profile_field: bool = False,
 ) -> str:

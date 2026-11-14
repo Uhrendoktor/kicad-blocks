@@ -7,7 +7,10 @@ validated at its file boundary and then represented by one of these schemas.
 
 from __future__ import annotations
 
-from typing import Literal, NotRequired, Required, TypedDict
+from typing import TYPE_CHECKING, Literal, NotRequired, Required, TypedDict
+
+if TYPE_CHECKING:
+    from .repository import BlockRecord
 
 ParameterType = Literal["string", "number", "integer", "boolean"]
 InterfaceSource = Literal["manual", "hierarchical_labels"]

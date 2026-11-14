@@ -2,11 +2,11 @@
   "include": [
     "plugin/kicad-blocks",
     "scripts",
-    "examples"
+    "examples",
+    "tests"
   ],
   "exclude": [
     "**/__pycache__",
-    "tests",
     ".venv"
   ],
   "extraPaths": [

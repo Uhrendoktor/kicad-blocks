@@ -10,7 +10,12 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-from .json_types import JsonObject
+from .report_types import (
+    BlockErcReport,
+    BlockValidationItem,
+    BomExportReport,
+    LibraryValidationReport,
+)
 from .model import (
     resolve_profile_configuration,
     revision_for_hashes,
@@ -74,7 +79,7 @@ def export_block_bom(
     kicad_cli: str | Path | None = None,
     library_root: Path | None = None,
     parameter_values: dict[str, str] | None = None,
-) -> JsonObject:
+) -> BomExportReport:
     """Export one BOM containing the root block and its recursive dependencies.
 
     Each internal schematic is exported by KiCad itself. References are
@@ -187,7 +192,7 @@ def validate_block_library(
     kicad_cli: str | Path | None = None,
     *,
     run_erc: bool = True,
-) -> JsonObject:
+) -> LibraryValidationReport:
     """Validate every shared block's manifest, assets, profiles and dependencies.
 
     Optionally run recursive KiCad ERC for every block. The machine-readable
@@ -200,11 +205,11 @@ def validate_block_library(
 
     report_directory.mkdir(parents=True, exist_ok=True)
     report_path = report_directory / "library-validation.json"
-    block_reports: list[JsonObject] = []
+    block_reports: list[BlockValidationItem] = []
     discovered = sorted(library_root.glob("*.kicad_block"))
 
     for block_path in discovered:
-        item: JsonObject = {
+        item: BlockValidationItem = {
             "path": str(block_path),
             "name": block_path.stem,
             "block_id": "",
@@ -336,7 +341,7 @@ def validate_block_tree(
     kicad_cli: str | Path | None = None,
     library_root: Path | None = None,
     parameter_values: dict[str, str] | None = None,
-) -> list[JsonObject]:
+) -> list[BlockErcReport]:
     """Run KiCad ERC against the root implementation and every nested block.
 
     KiCad exit code 5 means violations were found; other non-zero exit codes
@@ -347,7 +352,7 @@ def validate_block_tree(
     report_directory = Path(report_directory).expanduser().resolve()
     report_directory.mkdir(parents=True, exist_ok=True)
 
-    reports: list[JsonObject] = []
+    reports: list[BlockErcReport] = []
     with tempfile.TemporaryDirectory(prefix="kicad-blocks-erc-") as temp:
         temporary_directory = Path(temp)
         for index, occurrence in enumerate(blocks):
