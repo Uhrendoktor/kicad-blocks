@@ -233,14 +233,14 @@ def annotation_debt(source: str, filename: str = "<memory>") -> Counter[str]:
     return debt
 
 
-def _merge_base(base_ref: str) -> str:
+def _merge_base(base_ref: str, root: Path = ROOT) -> str:
     """Resolve the common ancestor used by the changed-file annotation ratchet."""
-    return _git_output(("merge-base", base_ref, "HEAD")).strip()
+    return _git_output(("merge-base", base_ref, "HEAD"), root).strip()
 
 
 def annotation_ratchet_violations(base_ref: str, root: Path = ROOT) -> tuple[str, ...]:
     """Prevent per-file annotation debt from increasing relative to the merge base."""
-    base_sha = _merge_base(base_ref)
+    base_sha = _merge_base(base_ref, root)
     changed = _git_output(
         ("diff", "--name-only", "--diff-filter=ACMR", f"{base_sha}...HEAD", "--", "*.py", "*.pyi"),
         root,
