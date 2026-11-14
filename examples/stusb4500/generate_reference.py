@@ -665,6 +665,13 @@ def generate_reference_schematic(destination: Path) -> Path:
                             label_x = px
                             label_y = py - 5.08 if pin["number"] == "1" else py + 5.08
                             justify = "right"
+                        if reference == "U1" and pin["number"] == "6":
+                            # RESET is physically wired to R55. Put the
+                            # hierarchical port on its own perpendicular twig,
+                            # not inline on the U1-to-pull-down wire.
+                            label_x = px
+                            label_y = py - 2.54
+                            justify = "right"
                         if reference == "C1" and pin["number"] == "1":
                             # The label branches sideways while C1.1 is wired
                             # directly upward to U1.21.
@@ -847,13 +854,9 @@ def generate_reference_schematic(destination: Path) -> Path:
     ], "input-cap-tvs-feed")
     remove_local_label("D50", "1", "VBUS")
 
-    # Decoupling capacitors connect directly to the exact U1 regulator pins.
-    u1_vreg_1v2 = pin_world_points[("U1", "21")]
-    c1_vreg_1v2 = pin_world_points[("C1", "1")]
-    add_route("VREG_1V2", [
-        u1_vreg_1v2, (u1_vreg_1v2[0], 92.71),
-        (c1_vreg_1v2[0], 92.71), c1_vreg_1v2,
-    ], "u1-vreg-1v2-to-c1")
+    # Decoupling capacitors C2/C3 are physically connected to their supply
+    # pins. VREG_1V2 runs in a separate corridor and uses one local label at
+    # each endpoint rather than crossing the VREG_2V7 rail.
     u1_vreg_2v7 = pin_world_points[("U1", "23")]
     c2_vreg_2v7 = pin_world_points[("C2", "1")]
     c3_vreg_2v7 = pin_world_points[("C3", "1")]
@@ -868,11 +871,6 @@ def generate_reference_schematic(destination: Path) -> Path:
     add_junction(vreg_2v7_branch, "VREG_2V7:C2-C3-bypass-branch")
     remove_local_label("C2", "1", "VREG_2V7")
     remove_local_label("C3", "1", "VREG_2V7")
-
-    # VREG_1V2 is one direct U1.21-to-C1 physical network, so it needs no
-    # local labels at either connected endpoint.
-    remove_local_label("U1", "21", "VREG_1V2")
-    remove_local_label("C1", "1", "VREG_1V2")
 
     # U1.23 is directly wired to C2 and C3. Put the reused VREG_2V7 label
     # on the vertical pin-to-branch wire, in the clear gap above the capacitors.
