@@ -3794,6 +3794,137 @@ def _show_block_layout_editor(
     dialog.wait_window()
     return created_layout_to_open[0]
 
+_DESKTOP_CHOOSER_UNAVAILABLE = object()
+
+
+def _desktop_file_dialog(
+    *,
+    mode: str,
+    title: str,
+    initial_path: str | Path = "",
+    suffix: str = "",
+    filetypes: list[tuple[str, str]] | None = None,
+):
+    """Prefer the desktop's GTK/Qt chooser on Linux; return a sentinel if unavailable."""
+    if not sys.platform.startswith("linux"):
+        return _DESKTOP_CHOOSER_UNAVAILABLE
+
+    desktop = os.environ.get("XDG_CURRENT_DESKTOP", "").casefold()
+    candidates = (
+        ("kdialog", "kdialog"),
+        ("zenity", "zenity"),
+    ) if "kde" in desktop or "plasma" in desktop else (
+        ("zenity", "zenity"),
+        ("kdialog", "kdialog"),
+    )
+    backend = None
+    for name, executable_name in candidates:
+        executable = shutil.which(executable_name)
+        if executable:
+            backend = (name, executable)
+            break
+    if backend is None:
+        return _DESKTOP_CHOOSER_UNAVAILABLE
+
+    name, executable = backend
+    initial = Path(initial_path).expanduser() if initial_path else Path.cwd()
+    initial_file = initial if initial.is_file() else None
+    initial_directory = initial.parent if initial_file else initial
+    if not initial_directory.is_dir():
+        initial_directory = Path.cwd()
+
+    if name == "zenity":
+        command = [executable, "--file-selection", "--title", title]
+        if mode == "directory":
+            command.extend(["--directory", "--filename", str(initial_directory) + os.sep])
+        else:
+            command.extend(["--filename", str(initial_file or initial_directory)])
+            if mode == "save":
+                command.extend(["--save", "--confirm-overwrite"])
+            filters = filetypes or (
+                [(f"KiCad files (*{suffix})", f"*{suffix}")] if suffix else []
+            )
+            command.extend(
+                f"--file-filter={label} | {pattern}"
+                for label, pattern in filters
+            )
+        env = os.environ.copy()
+        if os.environ.get("WAYLAND_DISPLAY"):
+            # GTK will use the XDG file-chooser portal when the desktop provides it.
+            env.setdefault("GTK_USE_PORTAL", "1")
+    else:
+        env = None
+        if mode == "directory":
+            command = [
+                executable, "--getexistingdirectory", str(initial_directory),
+                "--title", title,
+            ]
+        else:
+            pattern = next(
+                (item[1] for item in (filetypes or []) if item[1]),
+                f"*{suffix}" if suffix else "*",
+            )
+            command = [
+                executable,
+                "--getsavefilename" if mode == "save" else "--getopenfilename",
+                str(initial_file or initial_directory),
+                pattern,
+                "--title", title,
+            ]
+
+    try:
+        result = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=300,
+            env=env,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        LOG.warning("Desktop file chooser %s could not start: %s", name, exc)
+        return _DESKTOP_CHOOSER_UNAVAILABLE
+    if result.returncode == 1:
+        return None
+    if result.returncode != 0:
+        detail = (result.stderr or result.stdout or "").strip()
+        raise RuntimeError(
+            f"The {name} file chooser failed"
+            + (f": {detail}" if detail else f" (exit status {result.returncode})")
+        )
+    selected = (result.stdout or "").strip()
+    return selected or None
+
+
+def _pick_save_file(
+    parent,
+    *,
+    title: str,
+    initial_path: str | Path,
+    defaultextension: str,
+    filetypes: list[tuple[str, str]],
+) -> str | None:
+    """Save-file dialog using the same desktop chooser preference as open dialogs."""
+    selected = _desktop_file_dialog(
+        mode="save",
+        title=title,
+        initial_path=initial_path,
+        suffix=defaultextension,
+        filetypes=filetypes,
+    )
+    if selected is not _DESKTOP_CHOOSER_UNAVAILABLE:
+        return selected
+    initial = Path(initial_path).expanduser()
+    return filedialog.asksaveasfilename(
+        title=title,
+        initialdir=str(initial.parent),
+        initialfile=initial.name,
+        defaultextension=defaultextension,
+        filetypes=filetypes,
+        parent=parent,
+    ) or None
+
+
 def _pick_kicad_file(
     parent,
     *,
@@ -3806,17 +3937,23 @@ def _pick_kicad_file(
     directory = initial.parent if initial.is_file() else initial
     if not directory.is_dir():
         directory = Path.cwd()
-    selected = filedialog.askopenfilename(
+    filetypes = [
+        (f"KiCad {suffix.upper().lstrip('.')} files", f"*{suffix}"),
+        ("All files", "*.*"),
+    ]
+    selected = _desktop_file_dialog(
+        mode="open", title=title, initial_path=initial,
+        suffix=suffix, filetypes=filetypes,
+    )
+    if selected is not _DESKTOP_CHOOSER_UNAVAILABLE:
+        return selected
+    return filedialog.askopenfilename(
         title=title,
         initialdir=str(directory),
         initialfile=initial.name if initial.is_file() else "",
-        filetypes=[
-            (f"KiCad {suffix.upper().lstrip('.')} files", f"*{suffix}"),
-            ("All files", "*.*"),
-        ],
+        filetypes=filetypes,
         parent=parent,
-    )
-    return selected or None
+    ) or None
 
 
 def _pick_directory(
@@ -3828,13 +3965,17 @@ def _pick_directory(
         initial = initial.parent
     if not initial.is_dir():
         initial = Path.cwd()
-    selected = filedialog.askdirectory(
+    selected = _desktop_file_dialog(
+        mode="directory", title=title, initial_path=initial,
+    )
+    if selected is not _DESKTOP_CHOOSER_UNAVAILABLE:
+        return selected
+    return filedialog.askdirectory(
         title=title,
         initialdir=str(initial),
         mustexist=True,
         parent=parent,
-    )
-    return selected or None
+    ) or None
 
 
 def _new_blank_schematic_source() -> Path:
@@ -5316,12 +5457,12 @@ def _export_recursive_bom(root: Path | list[Path], parent, schematic=None, proje
     )
     record = dependency_result["block"]
     library_root = record.path.parent
-    output = filedialog.asksaveasfilename(
+    output = _pick_save_file(
+        parent,
         title="Save recursive block BOM",
+        initial_path=Path.cwd() / f"{record.manifest['slug']}_bom.csv",
         defaultextension=".csv",
-        initialfile=f"{record.manifest['slug']}_bom.csv",
         filetypes=[("CSV", "*.csv"), ("All files", "*.*")],
-        parent=parent,
     )
     if not output:
         return
@@ -5338,9 +5479,8 @@ def _export_recursive_bom(root: Path | list[Path], parent, schematic=None, proje
 
 def _validate_shared_library(root: Path | list[Path], parent) -> None:
     """Validate every registered library, keeping each report in its own folder."""
-    output = filedialog.askdirectory(
-        title="Select a folder for the library validation reports",
-        parent=parent,
+    output = _pick_directory(
+        parent, title="Select a folder for the library validation reports"
     )
     if not output:
         return
@@ -5406,9 +5546,8 @@ def _validate_recursive_erc(root: Path | list[Path], parent, schematic=None, pro
     )
     record = dependency_result["block"]
     library_root = record.path.parent
-    output = filedialog.askdirectory(
-        title="Select a folder for recursive ERC reports",
-        parent=parent,
+    output = _pick_directory(
+        parent, title="Select a folder for recursive ERC reports"
     )
     if not output:
         return
@@ -5502,10 +5641,10 @@ def _apply_block_pcb_layout(
         return
 
     pins = [str(pin["name"]) for pin in block.manifest.get("pins", [])]
-    board_path = filedialog.askopenfilename(
+    board_path = _pick_kicad_file(
+        parent,
         title="Select the existing project PCB board",
-        filetypes=[("KiCad PCB", "*.kicad_pcb"), ("All files", "*.*")],
-        parent=parent,
+        suffix=".kicad_pcb",
     )
     if not board_path:
         return
@@ -5560,13 +5699,12 @@ def _apply_block_pcb_layout(
     default_output = (
         source_board.with_name(f"{source_board.stem}_{instance.reference}_blocks.kicad_pcb")
     )
-    output_path = filedialog.asksaveasfilename(
+    output_path = _pick_save_file(
+        parent,
         title="Save merged PCB board copy",
-        initialdir=str(source_board.parent),
-        initialfile=default_output.name,
+        initial_path=default_output,
         defaultextension=".kicad_pcb",
         filetypes=[("KiCad PCB", "*.kicad_pcb")],
-        parent=parent,
     )
     if not output_path:
         return
@@ -5718,13 +5856,12 @@ def _apply_selected_block_pcb_layouts(
     default_output = source_board.with_name(
         f"{source_board.stem}_{len(placements)}blocks.kicad_pcb"
     )
-    output_path = filedialog.asksaveasfilename(
+    output_path = _pick_save_file(
+        parent,
         title="Save combined PCB block layout copy",
-        initialdir=str(source_board.parent),
-        initialfile=default_output.name,
+        initial_path=default_output,
         defaultextension=".kicad_pcb",
         filetypes=[("KiCad PCB", "*.kicad_pcb")],
-        parent=parent,
     )
     if not output_path:
         return
