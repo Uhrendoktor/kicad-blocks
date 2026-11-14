@@ -787,7 +787,7 @@ class LibraryBrowserTests(unittest.TestCase):
             _start_native_symbol_placement(kicad, None, "buck_converter_ab12cd34")
 
     def test_native_placement_requires_native_ipc_action(self):
-        with self.assertRaisesRegex(RuntimeError, "does not expose native editor actions"):
+        with self.assertRaisesRegex(TypeError, "does not expose native editor actions"):
             _start_native_symbol_placement(SimpleNamespace(), None, "buck_converter_ab12cd34")
 
     def test_native_placement_rejects_invalid_symbol_id_before_ipc(self):
