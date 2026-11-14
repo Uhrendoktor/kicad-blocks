@@ -90,40 +90,63 @@ def atomic_write(path: Path, content: str) -> None:
         raise
 
 
+def _merge_symbol_node(
+    catalog_path: Path,
+    source_tree: list,
+    symbol: list,
+) -> Path:
+    """Replace one named symbol while retaining the catalog's other entries."""
+    catalog_path = Path(catalog_path).expanduser().resolve()
+    if _head(source_tree) != "kicad_symbol_lib":
+        raise ValueError(f"Invalid KiCad symbol library source for {catalog_path}.")
+    if _head(symbol) != "symbol" or len(symbol) < 2:
+        raise ValueError("Expected a named KiCad symbol node.")
+    symbol_name = str(symbol[1])
+
+    if catalog_path.is_file():
+        existing = parse_sexpr(catalog_path.read_text(encoding="utf-8"))
+        if _head(existing) != "kicad_symbol_lib":
+            raise ValueError(f"Invalid KiCad symbol catalog: {catalog_path}")
+    else:
+        existing = copy.deepcopy(source_tree)
+        existing[:] = [
+            item for item in existing
+            if item is existing[0] or _head(item) != "symbol"
+        ]
+
+    matches = [
+        (index, item)
+        for index, item in enumerate(existing[1:], start=1)
+        if _head(item) == "symbol" and len(item) > 1 and str(item[1]) == symbol_name
+    ]
+    if len(matches) > 1:
+        raise ValueError(
+            f"Expected at most one {symbol_name!r} symbol in {catalog_path}; "
+            f"found {len(matches)}."
+        )
+    if not matches:
+        existing.append(copy.deepcopy(symbol))
+    else:
+        existing[matches[0][0]] = copy.deepcopy(symbol)
+    atomic_write(catalog_path, _dump(existing) + "\n")
+    return catalog_path
+
+
 def merge_symbol_catalog(library_root: Path, symbol_file: Path) -> Path:
     """Insert/replace one facade symbol in the library's stable KiCad catalog."""
     library_root = Path(library_root).expanduser().resolve()
     symbol_file = Path(symbol_file).expanduser().resolve()
     if not symbol_file.is_file():
         raise FileNotFoundError(symbol_file)
-    catalog = library_root / LIBRARY_CATALOG_NAME
     incoming = parse_sexpr(symbol_file.read_text(encoding="utf-8"))
     incoming_symbols = [item for item in incoming[1:] if _head(item) == "symbol"]
     if _head(incoming) != "kicad_symbol_lib" or len(incoming_symbols) != 1:
         raise ValueError(f"Expected one KiCad facade symbol in {symbol_file}.")
-    symbol = incoming_symbols[0]
-    symbol_name = str(symbol[1])
-    if catalog.is_file():
-        existing = parse_sexpr(catalog.read_text(encoding="utf-8"))
-        if _head(existing) != "kicad_symbol_lib":
-            raise ValueError(f"Invalid KiCad symbol catalog: {catalog}")
-    else:
-        existing = incoming
-    existing_symbols = [
-        (index, item)
-        for index, item in enumerate(existing[1:], start=1)
-        if _head(item) == "symbol"
-    ]
-    match = next(
-        (index for index, item in existing_symbols if len(item) > 1 and str(item[1]) == symbol_name),
-        None,
+    return _merge_symbol_node(
+        library_root / LIBRARY_CATALOG_NAME,
+        incoming,
+        incoming_symbols[0],
     )
-    if match is None:
-        existing.append(symbol)
-    else:
-        existing[match] = symbol
-    atomic_write(catalog, _dump(existing) + "\n")
-    return catalog
 
 
 def _named_symbol_node(symbol_library: list, symbol_name: str, source: Path) -> list:
@@ -152,30 +175,68 @@ def _symbol_definition_digest_from_file(path: Path, symbol_name: str) -> str:
 
 def synchronize_project_symbol_catalog(
     project_catalog: Path,
-    source_symbol_file: Path,
+    block_symbol_file: Path,
     symbol_name: str,
     *,
+    shared_catalog_file: Path | None = None,
     baseline_digest: str | None = None,
 ) -> bool:
-    """Refresh one unchanged project-catalog symbol from its library source.
+    """Refresh one unchanged project-catalog symbol from its library sources.
 
-    A small sidecar records the source digest last synchronized into this
-    project. If the project symbol differs from that digest, it is treated as
-    a project-local edit and is never overwritten. Older catalogs without a
-    sidecar use the block manifest's published digest as their baseline.
+    A sidecar records the definition last synchronized into this project. If
+    the project symbol diverges from that definition, it is treated as a
+    project-local edit and is never overwritten. The per-block asset and the
+    shared library catalog are both considered: whichever alone changed from
+    the published baseline becomes the source. Divergent simultaneous edits
+    are rejected instead of silently choosing one.
     """
     project_catalog = Path(project_catalog).expanduser().resolve()
-    source_symbol_file = Path(source_symbol_file).expanduser().resolve()
+    block_symbol_file = Path(block_symbol_file).expanduser().resolve()
     if project_catalog.name != LIBRARY_CATALOG_NAME:
         raise ValueError(
             f"Project symbol catalog must be named {LIBRARY_CATALOG_NAME!r}."
         )
-    if not source_symbol_file.is_file():
-        raise FileNotFoundError(source_symbol_file)
+    if not block_symbol_file.is_file():
+        raise FileNotFoundError(block_symbol_file)
 
-    source_tree = parse_sexpr(source_symbol_file.read_text(encoding="utf-8"))
-    source_symbol = _named_symbol_node(source_tree, symbol_name, source_symbol_file)
+    source_tree = parse_sexpr(block_symbol_file.read_text(encoding="utf-8"))
+    source_symbol = _named_symbol_node(source_tree, symbol_name, block_symbol_file)
     source_digest = _symbol_definition_digest(source_symbol)
+
+    if shared_catalog_file is not None:
+        shared_catalog_file = Path(shared_catalog_file).expanduser().resolve()
+        if shared_catalog_file.is_file():
+            shared_tree = parse_sexpr(
+                shared_catalog_file.read_text(encoding="utf-8")
+            )
+            shared_symbol = _named_symbol_node(
+                shared_tree, symbol_name, shared_catalog_file
+            )
+            shared_digest = _symbol_definition_digest(shared_symbol)
+            if shared_digest == source_digest:
+                source_tree = shared_tree
+                source_symbol = shared_symbol
+                source_digest = shared_digest
+            else:
+                baseline = str(baseline_digest) if baseline_digest else None
+                if baseline is None:
+                    raise RuntimeError(
+                        "Facade symbol conflict: the block asset and shared "
+                        "library catalog differ, but this block has no published "
+                        "catalog baseline. Reconcile the two definitions manually."
+                    )
+                block_changed = source_digest != baseline
+                shared_changed = shared_digest != baseline
+                if block_changed and shared_changed:
+                    raise RuntimeError(
+                        "Facade symbol conflict: both the block asset and shared "
+                        "library catalog changed since the last publish. Reconcile "
+                        "the two definitions manually before refreshing the project."
+                    )
+                if shared_changed:
+                    source_tree = shared_tree
+                    source_symbol = shared_symbol
+                    source_digest = shared_digest
 
     state_file = project_catalog.with_name(f"{project_catalog.stem}.sync.json")
     if state_file.is_file():
@@ -200,7 +261,7 @@ def synchronize_project_symbol_catalog(
         )
 
     if not project_catalog.is_file():
-        merge_symbol_catalog(project_catalog.parent, source_symbol_file)
+        _merge_symbol_node(project_catalog, source_tree, source_symbol)
         synchronized[symbol_name] = source_digest
         save_state()
         return True
@@ -211,7 +272,7 @@ def synchronize_project_symbol_catalog(
         if len(item) >= 2 and str(item[1]) == symbol_name
     ]
     if not project_matches:
-        merge_symbol_catalog(project_catalog.parent, source_symbol_file)
+        _merge_symbol_node(project_catalog, source_tree, source_symbol)
         synchronized[symbol_name] = source_digest
         save_state()
         return True
@@ -233,7 +294,7 @@ def synchronize_project_symbol_catalog(
         previous_digest = baseline_digest
     if previous_digest and project_digest == str(previous_digest):
         # Only this symbol is replaced; other project-local symbols remain intact.
-        merge_symbol_catalog(project_catalog.parent, source_symbol_file)
+        _merge_symbol_node(project_catalog, source_tree, source_symbol)
         synchronized[symbol_name] = source_digest
         save_state()
         return True
