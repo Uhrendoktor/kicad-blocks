@@ -6,13 +6,13 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import pathlib
 import platform
 import re
 import shutil
 import sys
 import tempfile
 import uuid
-import pathlib
 
 
 PLUGIN_IDENTIFIER = "org.uhrendoktor.kicadblocks"
