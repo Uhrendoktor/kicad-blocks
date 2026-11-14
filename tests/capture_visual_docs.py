@@ -74,47 +74,6 @@ class _PluginActions(Protocol):
 
     def load_tkinter(self) -> None: ...
 
-    def _configure_tk_theme(self, root: tk.Misc) -> None: ...
-
-    def _pick_block_for_placement(
-        self, records: list[BlockRecord], parent: tk.Misc
-    ) -> PlacementSelection | None: ...
-
-    def _show_library_browser(
-        self,
-        window: tk.Misc,
-        schematic: _SchematicFixture,
-        kicad: _KiCadFixture,
-        project_dir: Path,
-        library_root: Path | list[Path],
-        editor_window_id: str | None,
-    ) -> None: ...
-
-    def _show_library_roots_dialog(self, parent: tk.Misc) -> bool: ...
-
-    def _show_action_hub(self, root: tk.Misc) -> ttk.Notebook: ...
-
-    def _show_block_variant_editor(self, record: BlockRecord, parent: tk.Misc) -> Path | None: ...
-
-    def _show_block_layout_editor(self, record: BlockRecord, parent: tk.Misc) -> bool | None: ...
-
-    def _ask_layout_details(
-        self, parent: tk.Misc, record: BlockRecord
-    ) -> LayoutDialogResult | None: ...
-
-    def _ask_implementation_details(
-        self,
-        parent: tk.Misc,
-        *,
-        value: str = "",
-        source: str = "",
-    ) -> tuple[str, str] | None: ...
-
-    def _ask_create_block_details(
-        self, parent: tk.Misc, source_sheet: Path
-    ) -> tuple[str, str] | None: ...
-
-
 class _GifFrameCount(Protocol):
     """Pillow image surface exposing the animated frame count."""
 
@@ -124,6 +83,47 @@ class _GifFrameCount(Protocol):
 
 
 plugin_api = cast(_PluginActions, plugin_actions)
+configure_tk_theme = cast(
+    Callable[[tk.Misc], None], getattr(plugin_actions, "_configure_tk_theme")
+)
+pick_block_for_placement = cast(
+    Callable[[list[BlockRecord], tk.Misc], PlacementSelection | None],
+    getattr(plugin_actions, "_pick_block_for_placement"),
+)
+show_library_browser = cast(
+    Callable[
+        [tk.Misc, _SchematicFixture, _KiCadFixture, Path, Path | list[Path], str | None],
+        None,
+    ],
+    getattr(plugin_actions, "_show_library_browser"),
+)
+show_library_roots_dialog = cast(
+    Callable[[tk.Misc], bool], getattr(plugin_actions, "_show_library_roots_dialog")
+)
+show_action_hub = cast(Callable[[tk.Misc], ttk.Notebook], getattr(plugin_actions, "_show_action_hub"))
+show_block_variant_editor = cast(
+    Callable[[BlockRecord, tk.Misc], Path | None],
+    getattr(plugin_actions, "_show_block_variant_editor"),
+)
+show_block_layout_editor = cast(
+    Callable[[BlockRecord, tk.Misc], bool | None],
+    getattr(plugin_actions, "_show_block_layout_editor"),
+)
+ask_layout_details = cast(
+    Callable[[tk.Misc, BlockRecord], LayoutDialogResult | None],
+    getattr(plugin_actions, "_ask_layout_details"),
+)
+ask_implementation_details = cast(
+    Callable[..., tuple[str, str] | None],
+    getattr(plugin_actions, "_ask_implementation_details"),
+)
+ask_create_block_details = cast(
+    Callable[[tk.Misc, Path], tuple[str, str] | None],
+    getattr(plugin_actions, "_ask_create_block_details"),
+)
+
+type _ModalResult = Path | tuple[str, str] | LayoutDialogResult | bool | None
+type _ModalPreparationResult = None | tuple[None, None]
 
 
 def find_executable(*names: str) -> str:
@@ -207,7 +207,7 @@ def capture_picker(records: list[BlockRecord], output_dir: Path) -> PlacementSel
     plugin_api.load_tkinter()
     parent = tk.Tk()
     parent.title("KiCad Blocks visual fixture host")
-    plugin_api._configure_tk_theme(parent)
+    configure_tk_theme(parent)
     parent.geometry("320x100+10+10")
     parent.update()
 
@@ -306,7 +306,7 @@ def capture_picker(records: list[BlockRecord], output_dir: Path) -> PlacementSel
 
     parent.after(250, drive)
     try:
-        selected = plugin_api._pick_block_for_placement(records, parent)
+        selected = pick_block_for_placement(records, parent)
     finally:
         parent.destroy()
 
@@ -324,7 +324,7 @@ def capture_picker(records: list[BlockRecord], output_dir: Path) -> PlacementSel
 
     for path in frame_paths:
         with Image.open(path) as image:
-            sample = image.convert("RGB").resize((48, 32))
+            sample = cast(Image.Image, image.convert("RGB").resize((48, 32)))
             if max(ImageStat.Stat(sample).stddev) < 2.0:
                 raise AssertionError(f"Screenshot appears blank or uniform: {path.name}")
     if len({hashlib.sha256(path.read_bytes()).hexdigest() for path in frame_paths}) != 3:
@@ -348,13 +348,13 @@ def _capture_visible_window(
 
 def _capture_modal(
     parent: tk.Misc,
-    opener: Callable[[], None],
+    opener: Callable[[], _ModalResult],
     title: str,
     destination: Path,
     xdotool: str,
     *,
     minimum_size: tuple[int, int] = (600, 400),
-    prepare: Callable[[tk.Toplevel], None] | None = None,
+    prepare: Callable[[tk.Toplevel], _ModalPreparationResult] | None = None,
 ) -> None:
     """Capture a real modal window and close it without invoking an action."""
     errors: list[str] = []
@@ -412,7 +412,7 @@ def _make_themed_root(theme: str, title: str) -> tk.Tk:
     plugin_api.load_tkinter()
     root = tk.Tk()
     os.environ["KICAD_BLOCKS_THEME"] = theme
-    plugin_api._configure_tk_theme(root)
+    configure_tk_theme(root)
     root.title(title)
     root.update_idletasks()
     root.update()
@@ -559,7 +559,7 @@ def capture_ui_workflows(
         for theme in ("light", "dark"):
             root = _make_themed_root(theme, "Functional Block Library")
             try:
-                plugin_api._show_library_browser(root, schematic, kicad, project_dir, roots, "0x1")
+                show_library_browser(root, schematic, kicad, project_dir, roots, "0x1")
                 root.update_idletasks()
                 root.update()
                 _capture_visible_window(
@@ -587,7 +587,7 @@ def capture_ui_workflows(
                 )
                 _capture_modal(
                     root,
-                    lambda target=root: plugin_api._show_library_roots_dialog(target),
+                    lambda target=root: show_library_roots_dialog(target),
                     "Manage Libraries",
                     output_dir / f"library-folders-{theme}.png",
                     xdotool,
@@ -599,7 +599,7 @@ def capture_ui_workflows(
 
             root = _make_themed_root(theme, "KiCad Blocks — Tasks")
             try:
-                notebook = plugin_api._show_action_hub(root)
+                notebook = show_action_hub(root)
                 root.update_idletasks()
                 root.update()
                 _capture_visible_window(
@@ -653,7 +653,7 @@ def capture_ui_workflows(
             try:
                 _capture_modal(
                     root,
-                    lambda target=root: plugin_api._show_block_variant_editor(record, target),
+                    lambda target=root: show_block_variant_editor(record, target),
                     f"Implementations — {record.name}",
                     output_dir / f"implementation-variants-{theme}.png",
                     xdotool,
@@ -662,7 +662,7 @@ def capture_ui_workflows(
                 )
                 _capture_modal(
                     root,
-                    lambda target=root: plugin_api._show_block_layout_editor(record, target),
+                    lambda target=root: show_block_layout_editor(record, target),
                     f"PCB layouts — {record.name}",
                     output_dir / f"pcb-layout-manager-{theme}.png",
                     xdotool,
@@ -674,7 +674,7 @@ def capture_ui_workflows(
                 )
                 _capture_modal(
                     root,
-                    lambda target=root: plugin_api._ask_layout_details(target, record),
+                    lambda target=root: ask_layout_details(target, record),
                     "Add PCB layout",
                     output_dir / f"add-pcb-layout-blank-{theme}.png",
                     xdotool,
@@ -683,7 +683,7 @@ def capture_ui_workflows(
                 )
                 _capture_modal(
                     root,
-                    lambda target=root: plugin_api._ask_layout_details(target, record),
+                    lambda target=root: ask_layout_details(target, record),
                     "Add PCB layout",
                     output_dir / f"add-pcb-layout-file-{theme}.png",
                     xdotool,
@@ -692,7 +692,7 @@ def capture_ui_workflows(
                 )
                 _capture_modal(
                     root,
-                    lambda target=root: plugin_api._ask_implementation_details(
+                    lambda target=root: ask_implementation_details(
                         target,
                         value="5V",
                         source=str(record.implementation),
@@ -704,7 +704,7 @@ def capture_ui_workflows(
                 )
                 _capture_modal(
                     root,
-                    lambda target=root: plugin_api._ask_create_block_details(
+                    lambda target=root: ask_create_block_details(
                         target, Path("stusb4500_reference.kicad_sch")
                     ),
                     "Create Functional Block",
@@ -933,13 +933,13 @@ def main() -> int:
         capture_picker([target, sensor], output_dir)
         build_gif(output_dir)
 
-    assets = {}
+    assets: dict[str, str] = {}
     for name in sorted(ASSET_NAMES):
         path = output_dir / name
         if not path.is_file() or not path.stat().st_size:
             raise FileNotFoundError(f"Expected generated asset is missing: {name}")
         assets[name] = hashlib.sha256(path.read_bytes()).hexdigest()
-    manifest = {
+    manifest: dict[str, str | int | dict[str, str]] = {
         "schema_version": 1,
         "source_sha": os.environ.get("GITHUB_SHA", "local"),
         "generator": "tests/capture_visual_docs.py",
