@@ -176,7 +176,22 @@ def python_policy_violations(source: str, filename: str = "<memory>") -> tuple[s
 
     for root in roots:
         for node in _expanded_expression_nodes(root):
-            if isinstance(node, ast.Name) and (node.id == "object" or node.id in object_names):
+            if isinstance(node, ast.Name) and node.id in any_names:
+                violations.append(
+                    f"{filename}:{getattr(node, 'lineno', 1)}: stringified annotation references "
+                    "explicit Any; use a concrete type, a narrow Protocol, or a structured value type"
+                )
+            elif (
+                isinstance(node, ast.Attribute)
+                and node.attr == "Any"
+                and isinstance(node.value, ast.Name)
+                and node.value.id in typing_modules
+            ):
+                violations.append(
+                    f"{filename}:{getattr(node, 'lineno', 1)}: stringified annotation references "
+                    "typing.Any; use a concrete type, a narrow Protocol, or a structured value type"
+                )
+            elif isinstance(node, ast.Name) and (node.id == "object" or node.id in object_names):
                 violations.append(
                     f"{filename}:{getattr(node, 'lineno', 1)}: generic object annotation is "
                     "prohibited; use a concrete type, a narrow Protocol, or a structured value type"
