@@ -671,7 +671,11 @@ def _library_record_for_instance(library_root: Path | list[Path], instance):
 def make_selected_local(schematic, kicad, project_dir: Path, library_root: Path) -> Path:
     """Create an independent implementation copy bound to this symbol KIID."""
     instance = _selected_symbol(schematic)
-    source = _library_record_for_instance(library_root, instance)
+    library_roots = _library_roots_for(library_root)
+    source = _library_record_for_instance(library_roots, instance)
+    source = synchronize_block_dependencies(
+        source, library_roots, find_kicad_cli()
+    )["block"]
     local = make_local_copy(source, project_dir)
     link_instance_to_local_copy(project_dir, str(instance.id), local)
     return local.path
@@ -1113,6 +1117,10 @@ def sync_selected_local(schematic, kicad, project_dir: Path) -> dict:
             "The selected block instance does not have a project-local copy. "
             "Use the Local action first."
         )
+    library_roots = _library_roots_for()
+    local_record = synchronize_block_dependencies(
+        local_record, library_roots, find_kicad_cli()
+    )["block"]
     result = publish_local_copy(local_record)
     _reload_symbol_library(kicad, LIBRARY_NICKNAME)
     return result
@@ -1990,7 +1998,11 @@ def _create_and_place(
         source_sheet_uuid=source_sheet_uuid,
         description=description,
     )
-    record = _register_block(project_dir, record, kicad)
+    library_roots = _library_roots_for(root)
+    record = synchronize_block_dependencies(
+        record, library_roots, find_kicad_cli()
+    )["block"]
+    record = _register_block(project_dir, record, kicad, library_roots)
     pins_summary = "\\n".join(
         f"  • {pin['name']} — {pin['electrical_type']}"
         for pin in record.manifest.get("pins", [])
@@ -2096,14 +2108,7 @@ def _edit_block_implementation(root, schematic, kicad, project_dir, parent) -> N
         record = _pick_record(list_blocks(root), parent, "Edit Block Implementation")
     if record is None:
         return None
-    catalog = build_project_symbol_catalog(record.path, _library_roots_for(root))
-    register_project_symbol_library(
-        record.path,
-        LIBRARY_NICKNAME,
-        catalog,
-        description="KiCad Blocks — registered child facades",
-        replace_existing=True,
-    )
+    _register_implementation_catalog(record, _library_roots_for(root))
     process = _launch_block_asset(
         kicad,
         record.implementation,
@@ -2617,6 +2622,18 @@ def _block_overview_text(record) -> str:
         f"Version · {manifest.get('version', 1)}",
     ])
     return "\n".join(lines)
+
+
+def _register_implementation_catalog(record, library_roots: list[Path]) -> Path:
+    """Register every shared facade so implementation editors can use Add Symbol."""
+    catalog = build_project_symbol_catalog(record.path, library_roots)
+    return register_project_symbol_library(
+        record.path,
+        LIBRARY_NICKNAME,
+        catalog,
+        description="KiCad Blocks — registered child facades",
+        replace_existing=True,
+    )
 
 
 def _launch_block_asset(
@@ -4566,6 +4583,11 @@ def _show_library_browser(
         record = selected_record[0]
         if record is None:
             return
+        try:
+            _register_implementation_catalog(record, current_roots[0])
+        except (OSError, RuntimeError, ValueError) as exc:
+            messagebox.showerror("Open implementation", str(exc), parent=window)
+            return
         choices = [
             {
                 "label": "Default — " + str(record.manifest["implementation_file"]),
@@ -4949,14 +4971,7 @@ def _open_selected_block_implementation(root, schematic, kicad, project_dir, par
         )
     # Make every registered block facade available in the implementation editor.
     # Users place child facades with KiCad's ordinary Add Symbol workflow.
-    catalog = build_project_symbol_catalog(record.path, _library_roots_for(root))
-    register_project_symbol_library(
-        record.path,
-        LIBRARY_NICKNAME,
-        catalog,
-        description="KiCad Blocks — registered child facades",
-        replace_existing=True,
-    )
+    _register_implementation_catalog(record, _library_roots_for(root))
     process = _launch_block_asset(
         kicad,
         implementation_path,

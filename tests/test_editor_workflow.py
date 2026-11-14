@@ -113,6 +113,12 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
             ) as details,
             patch.object(plugin_actions, "messagebox", messagebox),
             patch.object(plugin_actions, "create_block", return_value=self.block) as create,
+            patch.object(
+                plugin_actions,
+                "synchronize_block_dependencies",
+                return_value={"block": self.block, "changed": False, "count": 0},
+            ),
+            patch.object(plugin_actions, "find_kicad_cli", return_value="/usr/bin/kicad-cli"),
             patch.object(plugin_actions, "_register_block", return_value=self.block) as register,
         ):
             plugin_actions._create_and_place(
@@ -133,7 +139,9 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
             source_sheet_uuid="dddddddd-dddd-4ddd-8ddd-dddddddddddd",
             description="Power stage description",
         )
-        register.assert_called_once_with(self.project, self.block, self.kicad)
+        register.assert_called_once_with(
+            self.project, self.block, self.kicad, [self.library.resolve()]
+        )
         messagebox.showinfo.assert_called_once()
 
 
@@ -174,6 +182,12 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
             ) as details,
             patch.object(plugin_actions, "messagebox", messagebox),
             patch.object(plugin_actions, "create_block", return_value=self.block) as create,
+            patch.object(
+                plugin_actions,
+                "synchronize_block_dependencies",
+                return_value={"block": self.block, "changed": False, "count": 0},
+            ),
+            patch.object(plugin_actions, "find_kicad_cli", return_value="/usr/bin/kicad-cli"),
             patch.object(plugin_actions, "_register_block", return_value=self.block),
         ):
             plugin_actions._create_and_place(
@@ -223,6 +237,7 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
 
         with (
             patch.object(plugin_actions, "messagebox", self.messagebox),
+            patch.object(plugin_actions, "_register_implementation_catalog"),
             patch("subprocess.Popen", return_value=process) as popen,
         ):
             opened = plugin_actions._edit_block_implementation(
@@ -463,6 +478,7 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
 
         with (
             patch.object(plugin_actions, "messagebox", self.messagebox),
+            patch.object(plugin_actions, "_register_implementation_catalog"),
             patch("subprocess.Popen", return_value=process) as popen,
         ):
             opened = plugin_actions._edit_block_implementation(
@@ -519,6 +535,12 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
             ),
             patch.object(plugin_actions, "messagebox", self.messagebox),
             patch.object(plugin_actions, "create_block", return_value=self.block) as create,
+            patch.object(
+                plugin_actions,
+                "synchronize_block_dependencies",
+                return_value={"block": self.block, "changed": False, "count": 0},
+            ),
+            patch.object(plugin_actions, "find_kicad_cli", return_value="/usr/bin/kicad-cli"),
             patch.object(plugin_actions, "_register_block", return_value=self.block),
         ):
             plugin_actions._create_and_place(
@@ -583,6 +605,12 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
             ),
             patch.object(plugin_actions, "messagebox", self.messagebox),
             patch.object(plugin_actions, "create_block", return_value=self.block) as create,
+            patch.object(
+                plugin_actions,
+                "synchronize_block_dependencies",
+                return_value={"block": self.block, "changed": False, "count": 0},
+            ),
+            patch.object(plugin_actions, "find_kicad_cli", return_value="/usr/bin/kicad-cli"),
             patch.object(plugin_actions, "_register_block", return_value=self.block),
         ):
             plugin_actions._create_and_place(

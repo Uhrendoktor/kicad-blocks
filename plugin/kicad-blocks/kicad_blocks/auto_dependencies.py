@@ -191,6 +191,20 @@ def discover_block_dependencies(
     return sorted(occurrences, key=lambda item: item["reference"].casefold())
 
 
+def _all_sheet_symbols(schematic) -> list:
+    """Collect facade symbols from every sheet in the implementation hierarchy."""
+    try:
+        sheets = list(schematic.iter_sheets())
+        symbols = [
+            symbol
+            for sheet in sheets
+            for symbol in schematic.for_sheet(sheet).get_symbols()
+        ]
+    except AttributeError:
+        symbols = list(schematic.get_symbols())
+    return symbols or list(schematic.get_symbols())
+
+
 def synchronize_block_dependencies(parent, library_roots: list[Path], kicad_cli: str):
     """Rebuild a block's dependency manifest from its saved default implementation."""
     from kipy import KiCad
@@ -251,7 +265,7 @@ def synchronize_block_dependencies(parent, library_roots: list[Path], kicad_cli:
         occurrences = discover_block_dependencies(
             parent,
             records,
-            list(schematic.get_symbols()),
+            _all_sheet_symbols(schematic),
             netlist,
         )
     finally:

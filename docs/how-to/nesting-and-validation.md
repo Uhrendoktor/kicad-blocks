@@ -12,7 +12,7 @@ Child blocks are composed through ordinary schematic symbols. There is no separa
 
 The dependency manifest is derived from the saved schematic. KiCad Blocks records each child reference, placement, orientation, library identity, and pin-to-net mapping. Pin numbers—not matching pin names—associate the netlist with the child's facade interface. An intentionally unconnected pin remains unconnected; no same-name net is invented.
 
-The dependency graph is reconciled whenever a library implementation is published, before recursive BOM/ERC export, and during registered-library validation. Removing a child facade removes that dependency the next time the parent is reconciled. Dependency cycles and stale or unresolved child facades are reported rather than silently accepted.
+The dependency graph is reconciled when a block is first created, whenever a library implementation is published, when a project-local copy is made or synchronized, before recursive BOM/ERC export, and during registered-library validation. Removing a child facade removes that dependency the next time the parent is reconciled. Dependency cycles and stale or unresolved child facades are reported rather than silently accepted.
 
 The default implementation is the source used for the library-wide dependency graph. Named variants remain separate implementation files.
 

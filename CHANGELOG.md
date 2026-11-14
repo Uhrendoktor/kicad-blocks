@@ -14,7 +14,7 @@ Changes are grouped by project version. Items under **Unreleased** describe chan
 ### Changed
 - Detect child-block dependencies from placed facade symbols and KiCad schematic connectivity instead of requiring a manual Nest a block action, pin map, or rotation prompt.
 - Register the shared facade catalog when opening an implementation so child blocks can be placed through Eeschema's normal Add Symbol command.
-- Reconcile dependency metadata automatically when publishing, validating registered libraries, and exporting recursive BOM/ERC.
+- Reconcile dependency metadata automatically on block creation, publishing, local-copy creation/synchronization, library validation, and recursive BOM/ERC export.
 - Reorganize the documentation around a first-use tutorial, task-focused how-to guides, conceptual explanations, and technical reference.
 - Update the compatibility guide to distinguish the full CPython 3.12 KiCad integration run from CPython 3.13/3.14 plugin-discovery smoke tests.
 - Refresh the action map and procedures for the current library browser, implementation editor, and PCB layout manager.
