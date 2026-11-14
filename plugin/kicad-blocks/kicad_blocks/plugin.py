@@ -160,6 +160,12 @@ class _SchematicProject(Protocol):
     def expand_text_variables(self, text: str) -> str: ...
 
 
+class _SchematicProjectPath(Protocol):
+    """Project path consumed when locating the saved schematic's project folder."""
+
+    path: str | Path
+
+
 class _SheetPageSettings(Protocol):
     """Page properties used to choose a deterministic placement location."""
 
@@ -168,15 +174,8 @@ class _SheetPageSettings(Protocol):
     user_page_size: _SymbolPosition | None
 
 
-class _SchematicProjectPath(Protocol):
-    """Project path consumed when locating a saved schematic's project folder."""
-
-    path: str | Path
-
-
 class _SymbolTextValue(Protocol):
-    @property
-    def value(self) -> str: ...
+    value: str
 
 
 class _SymbolTextField(Protocol):
@@ -292,7 +291,7 @@ class _SchematicSymbol(_ProtoBackedSchematicItem, Protocol):
 class _Schematic(_SchematicForItemUpdate, Protocol):
     """Editor operations used by block management and placement actions."""
 
-    def get_project(self) -> _SchematicProject: ...
+    def get_project(self) -> _SchematicProjectPath: ...
 
     def get_selection(self) -> Sequence[_SchematicSymbol]: ...
 
@@ -426,7 +425,7 @@ def _system_prefers_dark_theme() -> bool | None:
     return None
 
 
-def _configure_tk_theme(root: tkinter_types.Tk) -> None:
+def _configure_tk_theme(root: tkinter_types.Tk | tkinter_types.Toplevel) -> None:
     """Apply a compact KiCad-compatible palette to themed and classic Tk widgets."""
     dark = _system_prefers_dark_theme()
     if dark is None:
@@ -850,7 +849,7 @@ def _create_action_icon(parent: tkinter_types.Misc, name: str) -> tkinter_types.
 def _action_button(
     parent: tkinter_types.Misc,
     text: str,
-    command: Callable[[], None],
+    command: Callable[[], object],
     icon: str,
     tooltip: str,
     **button_options: TkOption,
@@ -2838,7 +2837,9 @@ def _library_record_for_tree_row(records_by_id: dict, row_id: str | None):
     return records_by_id.get(str(row_id))
 
 
-def _minimize_placement_windows(window: _TkMinimizableWindow) -> list[_TkMinimizableWindow]:
+def _minimize_placement_windows(
+    window: tkinter_types.Tk | tkinter_types.Toplevel,
+) -> list[_TkMinimizableWindow]:
     """Minimize the browser and its manager parent so Eeschema's canvas is visible."""
     minimized: list[_TkMinimizableWindow] = []
     current: _TkMinimizableWindow | None = cast(_TkMinimizableWindow, window)
@@ -3003,8 +3004,8 @@ _NATIVE_PREVIEW_CACHE: dict[tuple[str, int, str, int, int], bytes] = {}
 
 
 def _draw_facade_preview(
-    canvas,
-    record,
+    canvas: tkinter_types.Canvas,
+    record: BlockRecord,
     *,
     library_file: str | Path | None = None,
 ) -> None:
@@ -4954,7 +4955,7 @@ def _bind_mousewheel(
 
 
 def _show_library_browser(
-    window: tkinter_types.Tk,
+    window: tkinter_types.Tk | tkinter_types.Toplevel,
     schematic: _Schematic,
     kicad: _KiCadApp,
     project_dir: Path,
