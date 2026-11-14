@@ -241,7 +241,7 @@ def discover_block_dependencies(
 
         reference = (
             str(getattr(symbol, "reference", "") or "").strip()
-            or _field_text(symbol, "reference_field")
+            or _field_text(symbol)
         )
         if not reference or "?" in reference:
             raise ValueError(
