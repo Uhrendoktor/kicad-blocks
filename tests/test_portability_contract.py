@@ -25,6 +25,15 @@ class ProductionPortabilityContractTests(unittest.TestCase):
             "ydotool",
             "wmctrl",
             "sys.platform",
+            "platform.system(",
+            "os.name",
+            "os.readlink(",
+            "ctypes.windll",
+            "os.startfile(",
+            "xdg-open",
+            "wmctrl",
+            "wtype",
+            "ydotool",
         )
         sources = {
             path.relative_to(PLUGIN_PACKAGE).as_posix(): path.read_text(encoding="utf-8")
