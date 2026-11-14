@@ -357,13 +357,6 @@ class _ResvgPy(Protocol):
     def svg_to_bytes(self, *, svg_string: str, width: int, height: int) -> bytes: ...
 
 
-class _CommandResult(Protocol):
-    """Subprocess-like result consumed by the injectable placement runner."""
-
-    stdout: str | None
-    returncode: int
-
-
 class _TkPaletteOwner(Protocol):
     """Tk window carrying the selected KiCad Blocks palette."""
 
@@ -377,9 +370,11 @@ class _TkActionIconOwner(Protocol):
 
 
 class _TkGeometryWindow(Protocol):
-    """Geometry methods shared by real Tk windows and the lightweight test adapter."""
+    """Geometry and transient operations shared by Tk windows and test adapters."""
 
     def update_idletasks(self) -> None: ...
+
+    def transient(self, master: tkinter_types.Misc) -> None: ...
 
     def winfo_screenwidth(self) -> int: ...
 
@@ -695,19 +690,6 @@ def _configure_tk_theme(root: tkinter_types.Tk) -> None:
     )
     style.configure("TSeparator", background=colors["border"])
     cast(_TkPaletteOwner, root).kicad_blocks_palette = colors
-
-
-def _editor_window_id_for_widget(window: tkinter_types.Misc | _TkGeometryWindow) -> str | None:
-    """Find the invoking KiCad editor XID stored on a Tk parent chain."""
-    current: tkinter_types.Misc | _TkGeometryWindow | None = window
-    seen: set[int] = set()
-    while current is not None and id(current) not in seen:
-        seen.add(id(current))
-        owner = getattr(current, "_kicad_blocks_editor_window_id", None)
-        if owner:
-            return str(owner)
-        current = getattr(current, "master", None)
-    return None
 
 
 def _set_window_geometry(
