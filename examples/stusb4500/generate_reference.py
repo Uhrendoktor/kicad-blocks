@@ -896,15 +896,6 @@ def generate_reference_schematic(destination: Path) -> Path:
     no_connect_points: set[tuple[float, float]] = set()
     for reference, library, symbol_name, value, _position, pin_map in specs:
         sx, sy = positions[reference]
-        if reference == "R55":
-            reset_pin = pin_world_points.get(("U1", "6"))
-            if reset_pin is None:
-                raise ValueError("U1.6 must be placed before the RESET pull-down.")
-            # Device:R pin 1 is 5.08 mm above its origin; leave a 2.54 mm
-            # physical segment between the RESET pin and the resistor terminal.
-            # Move the vertical pull-down left of U1's CC pins. Its top
-            # terminal is reached by a short two-segment RESET route.
-            sx, sy = reset_pin[0] - 7.62, reset_pin[1] + 7.62
         definition = loaded[(library, symbol_name)]
         pins = _pin_data(definition)
         numbers = {pin["number"] for pin in pins}
