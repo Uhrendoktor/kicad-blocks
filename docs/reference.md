@@ -56,7 +56,7 @@ The PCB Editor provides a separate **Place Imported Block Layout** action for a 
 
 The Functional Block Library browser presents these primary actions:
 
-- **Place block** — registers the selected facade in the project catalog. Interactive cursor placement is not currently available on the tested KiCad build because its supported schematic IPC API does not expose the required selected-library-symbol handoff. The plugin reports that capability gap rather than opening an unrelated chooser or relying on desktop input automation.
+- **Place block** — creates the selected facade at the active sheet's grid-snapped page centre, focuses it in Eeschema, and leaves it selected. This is fixed-coordinate placement, not cursor-attached movement; KiCad's supported schematic IPC API does not yet expose the interactive-move request available in PCB Editor.
 - **Open implementation** — opens the default or selected implementation schematic.
 - **Edit facade** — validates the generated library symbol shown in the preview. The tested KiCad build does not expose a supported cross-platform IPC operation to open Symbol Editor and load that exact library item from Eeschema. The plugin reports this capability gap; the edit workflow remains incomplete until KiCad exposes the API.
 - **Implementations** — opens the default and named implementation list.
