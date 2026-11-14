@@ -893,6 +893,34 @@ class LibraryBrowserTests(unittest.TestCase):
             )
         self.assertEqual(calls, [["/usr/bin/wtype", "-k", "a"]])
 
+    def test_wayland_placement_uses_wtype_when_xdotool_cannot_find_native_editor(self):
+        calls = []
+        def command_runner(arguments, **kwargs):
+            calls.append(arguments)
+            return SimpleNamespace(stdout="", returncode=0)
+        with (
+            patch(
+                "kicad_blocks.plugin.shutil.which",
+                side_effect=lambda name: {
+                    "xdotool": "/usr/bin/xdotool",
+                    "wtype": "/usr/bin/wtype",
+                }.get(name),
+            ),
+            patch("kicad_blocks.plugin._capture_eeschema_window_id", return_value=None),
+            patch.dict(
+                os.environ,
+                {"WAYLAND_DISPLAY": "wayland-0", "XDG_SESSION_TYPE": "wayland"},
+            ),
+        ):
+            _start_native_symbol_placement(
+                SimpleNamespace(),
+                None,
+                "buck_converter_ab12cd34",
+                command_runner=command_runner,
+                pause=lambda _seconds: None,
+            )
+        self.assertEqual(calls, [["/usr/bin/wtype", "-k", "a"]])
+
     def test_native_placement_requires_editor_when_ipc_is_unavailable(self):
         with (
             patch("kicad_blocks.plugin.shutil.which", return_value="/usr/bin/xdotool"),
