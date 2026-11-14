@@ -2386,7 +2386,6 @@ def _edit_facade_symbol(
 
     symbol_editor_id = visible_symbol_editor()
     if symbol_editor_id is None:
-        send("windowactivate", "--sync", str(editor_window_id))
         send("windowfocus", "--sync", str(editor_window_id))
         send("key", "--clearmodifiers", "alt+t")
         pause(0.15)
@@ -2407,7 +2406,6 @@ def _edit_facade_symbol(
             f"manually, then search for {lib_id}."
         )
 
-    send("windowactivate", "--sync", symbol_editor_id)
     send("windowfocus", "--sync", symbol_editor_id)
     send("key", "--clearmodifiers", "ctrl+l")
     pause(0.1)
