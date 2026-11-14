@@ -10,7 +10,7 @@ from collections.abc import Callable, Sequence
 from importlib import import_module
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Protocol, TypeVar, TypedDict, cast
+from typing import Protocol, TypedDict, TypeVar, cast
 from unittest.mock import Mock, patch
 
 ROOT = Path(__file__).resolve().parents[1]
