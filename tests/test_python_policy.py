@@ -82,8 +82,19 @@ def test_requires_documentation_for_production_python_modules(tmp_path, monkeypa
     assert any("missing module docstring" in error for error in errors)
 
 
-def test_pyright_inventory_requires_every_core_module_or_a_host_exclusion(tmp_path, monkeypatch):
+def test_pyright_inventory_requires_each_core_module_to_be_included_or_reviewed(
+    tmp_path, monkeypatch
+):
     monkeypatch.setattr(policy, "ROOT", tmp_path)
+    monkeypatch.setattr(
+        policy,
+        "REVIEWED_PYRIGHT_EXCLUSIONS",
+        {
+            "plugin/kicad-blocks/kicad_blocks/plugin.py": (
+                "The KiCad/Qt host adapter needs native stubs."
+            )
+        },
+    )
     core = tmp_path / "plugin" / "kicad-blocks" / "kicad_blocks"
     core.mkdir(parents=True)
     (core / "model.py").write_text('"""Model."""\n', encoding="utf-8")
@@ -100,7 +111,16 @@ def test_pyright_inventory_requires_every_core_module_or_a_host_exclusion(tmp_pa
     config.write_text('{"include":["scripts"] ,"exclude":[]}', encoding="utf-8")
     errors = policy._check_pyright_inventory()
     assert any("model.py" in error for error in errors)
-    assert any("plugin.py" in error for error in errors)
+    assert any("plugin.py" in error and "must remain explicitly excluded" in error for error in errors)
+
+    config.write_text(
+        '{"include":["plugin/kicad-blocks/kicad_blocks"],'
+        '"exclude":["plugin/kicad-blocks/kicad_blocks/plugin.py",'
+        '"plugin/kicad-blocks/kicad_blocks/model.py"]}',
+        encoding="utf-8",
+    )
+    errors = policy._check_pyright_inventory()
+    assert any("model.py" in error and "no reviewed migration rationale" in error for error in errors)
 
 
 def test_rejects_unreviewed_nested_object_annotations(tmp_path, monkeypatch):
