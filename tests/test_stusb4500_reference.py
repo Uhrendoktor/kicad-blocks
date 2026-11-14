@@ -14,7 +14,13 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 from generate_reference import SCHEMATIC_GROUPS, _uid, generate_reference_schematic
 from kicad_blocks.pcb_layout import _all, _direct, parse_sexpr
-from validate_schematic_style import _wire_networks, check_schematic_style
+from validate_schematic_style import (
+    STYLE_RULES,
+    _text_visual_bounds,
+    _wire_networks,
+    check_schematic_style,
+    label_wire_overlap_issues,
+)
 
 
 def _instance_map(tree: list) -> dict[str, list]:
@@ -524,6 +530,37 @@ class STUSB4500ReferenceTests(unittest.TestCase):
             instance = instances[reference]
             self.assertEqual(str(_property(instance, "Value")[2]), "100k")
             self.assertEqual(str(_direct(instance, "dnp")[1]).lower(), "yes")
+
+    def test_style_linter_exposes_stable_rule_ids(self) -> None:
+        rule_ids = tuple(STYLE_RULES)
+        self.assertEqual(rule_ids, tuple(f"SCH{index:03d}" for index in range(1, 10)))
+        self.assertTrue(all(rule["severity"] in {"error", "warning"} for rule in STYLE_RULES.values()))
+        self.assertTrue(all(rule["name"] and rule["description"] for rule in STYLE_RULES.values()))
+
+    def test_label_glyph_wire_overlap_is_a_dedicated_error(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="stusb4500-label-overlap-") as temporary:
+            _content, tree, _instances = self._generate(temporary)
+
+        label = next(
+            node for node in _all(tree, "label")
+            if str(node[1]) == "CC1"
+        )
+        x, y, width, height = _text_visual_bounds(str(label[1]), label)
+        wire_y = y + height / 2
+        tree.append([
+            "wire",
+            ["pts",
+                ["xy", f"{x - 1.0:.3f}", f"{wire_y:.3f}"],
+                ["xy", f"{x + width + 1.0:.3f}", f"{wire_y:.3f}"],
+            ],
+            ["stroke", ["width", "0"], ["type", "default"]],
+            ["uuid", "00000000-0000-0000-0000-000000000001"],
+        ])
+        issues = label_wire_overlap_issues(tree)
+        self.assertTrue(
+            any("CC1" in issue and "overlaps a wire" in issue for issue in issues),
+            issues,
+        )
 
     def test_native_text_boxes_have_uniform_padding_and_style_audit_passes(self) -> None:
         with tempfile.TemporaryDirectory(prefix="stusb4500-style-audit-") as temporary:
