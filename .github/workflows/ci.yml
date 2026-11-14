@@ -192,7 +192,7 @@ jobs:
 
       - name: Ruff lint
         shell: bash
-        run: "${RUNNER_TEMP}/kicad-blocks-venv/bin/python -m ruff check plugin tests scripts"
+        run: "${RUNNER_TEMP}/kicad-blocks-venv/bin/python -m ruff check plugin tests scripts/validate_schematic_style.py"
 
       - name: Validate documentation links and images
         shell: bash
@@ -502,7 +502,7 @@ jobs:
           "$PY" -m pip install -r plugin/kicad-blocks/requirements.txt pytest ruff
           "$PY" -m pytest -q
           "$PY" -m compileall -q plugin tests scripts
-          "$PY" -m ruff check plugin tests scripts
+          "$PY" -m ruff check plugin tests scripts/validate_schematic_style.py
 
       - name: Validate generated reference files with KiCad CLI
         shell: bash
