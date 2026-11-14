@@ -36,6 +36,7 @@ def _collect_cases(
                     cases.append((node.name, f"{node.name}.{member.name}", member, body))
     return cases
 
+
 def _is_docstring(statement: ast.stmt) -> bool:
     """Return whether a statement is a Python docstring expression."""
     return (
