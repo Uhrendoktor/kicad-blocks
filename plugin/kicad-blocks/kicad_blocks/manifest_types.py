@@ -166,6 +166,7 @@ class BlockManifest(TypedDict):
     library_nickname: str
     symbol_name: str
     catalog_file: str
+    catalog_symbol_hash: NotRequired[str]
     symbol_file: str
     implementation_file: str
     layout_file: str | None
