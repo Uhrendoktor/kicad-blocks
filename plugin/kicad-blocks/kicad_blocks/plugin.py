@@ -3728,9 +3728,12 @@ def _show_block_variant_editor(
     ttk.Label(
         frame, text="Circuit implementations", font=("TkDefaultFont", 12, "bold")
     ).grid(row=0, column=0, sticky="w")
+    status_value = tk.StringVar(
+        value="Empty KB_VARIANT uses the default implementation."
+    )
     ttk.Label(
         frame,
-        text="Empty KB_VARIANT uses the default implementation.",
+        textvariable=status_value,
         foreground=palette.get("muted", "#5f6871"),
         font=("TkDefaultFont", 8),
     ).grid(row=1, column=0, sticky="w", pady=(3, 8))
@@ -3826,7 +3829,7 @@ def _show_block_variant_editor(
             )
         else:
             default_button.configure(text="Set as default", state="disabled")
-        save_button.configure(state="normal" if dirty[0] else "disabled")
+        save_button.configure(state="normal")
 
     def add_variant():
         details = _ask_implementation_details(dialog, record=record, allow_create=True)
@@ -3841,6 +3844,7 @@ def _show_block_variant_editor(
         variants.append({"value": value, "source": source, "open_after_save": True})
         dirty[0] = True
         render(len(variants))
+        persist_variant_changes()
 
     def edit_variant():
         row_index = selected_index()
@@ -3879,6 +3883,7 @@ def _show_block_variant_editor(
         variants[index] = updated
         dirty[0] = True
         render(row_index)
+        persist_variant_changes()
 
     def remove_variant():
         row_index = selected_index()
@@ -3916,10 +3921,14 @@ def _show_block_variant_editor(
         ):
             return
         variants.pop(index)
+        removed_file = candidate.get("file")
+        if removed_file and new_implementation_to_open[0] == Path(record.path) / removed_file:
+            new_implementation_to_open[0] = None
         if is_default:
             default_variant[0] = ""
         dirty[0] = True
         render(min(row_index, len(variants)) if variants else 0)
+        persist_variant_changes()
 
     def make_default():
         row_index = selected_index()
@@ -3931,13 +3940,11 @@ def _show_block_variant_editor(
         default_variant[0] = selected
         dirty[0] = True
         render(row_index)
+        persist_variant_changes()
 
-    def save_and_close(open_path: Path | None = None):
+    def persist_variant_changes() -> bool:
         if not dirty[0]:
-            if open_path is not None:
-                new_implementation_to_open[0] = open_path
-            dialog.destroy()
-            return
+            return True
         open_value = next(
             (str(item["value"]) for item in variants if item.get("open_after_save")),
             None,
@@ -3946,20 +3953,42 @@ def _show_block_variant_editor(
             _save_block_variants(
                 record, variants, default_variant=default_variant[0] or None
             )
-            if open_value:
-                from .repository import read_manifest
+            from .repository import read_manifest
 
-                saved = read_manifest(Path(record.path))
+            saved = read_manifest(Path(record.path))
+            variants[:] = [
+                {
+                    "value": str(item["value"]),
+                    "file": str(item["file"]),
+                    **(
+                        {"layout_id": str(item["layout_id"]).casefold()}
+                        if item.get("layout_id") else {}
+                    ),
+                }
+                for item in saved.get("variants", [])
+            ]
+            default_variant[0] = str(saved.get("default_variant") or "")
+            if open_value:
                 selected = next(
                     item for item in saved.get("variants", [])
                     if str(item["value"]).casefold() == open_value.casefold()
                 )
                 new_implementation_to_open[0] = Path(record.path) / selected["file"]
-            if open_path is not None:
-                new_implementation_to_open[0] = open_path
         except (OSError, RuntimeError, TypeError, ValueError, KeyError, StopIteration) as exc:
+            status_value.set("Save failed; use Save & close to retry.")
             messagebox.showerror("Save implementations", str(exc), parent=dialog)
+            update_actions()
+            return False
+        dirty[0] = False
+        status_value.set("Saved.")
+        update_actions()
+        return True
+
+    def save_and_close(open_path: Path | None = None):
+        if not persist_variant_changes():
             return
+        if open_path is not None:
+            new_implementation_to_open[0] = open_path
         dialog.destroy()
 
     actions = ttk.Frame(frame)
@@ -3987,12 +4016,12 @@ def _show_block_variant_editor(
         dialog.destroy()
 
     _action_button(
-        actions, "Cancel", cancel_variant_edits, "cancel",
-        "Close without saving implementation changes",
+        actions, "Close", cancel_variant_edits, "cancel",
+        "Close the implementation manager",
     ).pack(side="right")
     save_button = _action_button(
-        actions, "Save changes", save_and_close, "save",
-        "Save implementation changes", state="disabled"
+        actions, "Save & close", save_and_close, "save",
+        "Save any pending changes and close the implementation manager"
     )
     save_button.pack(side="right", padx=(0, 8))
 
