@@ -219,7 +219,7 @@ jobs:
             fi
             "$PY" -m ruff format --check "${CHANGED_PYTHON[@]}"
           fi
-          "$PY" -m pyright -p pyrightconfig.json
+          "$PY" -m pyright -p pyrightconfig.json --pythonpath "$PY"
           ty check plugin/kicad-blocks
           vulture --min-confidence 100 plugin/kicad-blocks/kicad_blocks scripts
 
