@@ -5845,10 +5845,10 @@ def _apply_selected_block_pcb_layouts(
             )
         )
 
-    board_path = filedialog.askopenfilename(
+    board_path = _pick_kicad_file(
+        parent,
         title="Select the existing project PCB board",
-        filetypes=[("KiCad PCB", "*.kicad_pcb"), ("All files", "*.*")],
-        parent=parent,
+        suffix=".kicad_pcb",
     )
     if not board_path:
         return
