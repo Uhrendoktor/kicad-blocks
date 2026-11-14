@@ -2191,7 +2191,7 @@ def _schematic_page_center_mm(schematic) -> tuple[float, float]:
     """Return the active sheet's page center, snapped to KiCad's 50 mil grid."""
     settings_getter = getattr(schematic, "get_page_settings", None)
     if not callable(settings_getter):
-        raise RuntimeError("The active schematic does not expose page settings.")
+        raise TypeError("The active schematic does not expose page settings.")
     settings = settings_getter()
     page_size = int(getattr(settings, "page_size", 0) or 0)
 
