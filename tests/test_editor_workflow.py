@@ -1,6 +1,5 @@
 """Exercise the plugin's library editor launch and publish workflow."""
 
-import os
 import subprocess
 import sys
 import tempfile
