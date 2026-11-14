@@ -41,6 +41,7 @@ from kicad_blocks.plugin import (
     _save_block_layouts,
     _save_block_variants,
     _set_window_geometry,
+    _schematic_page_center_mm,
     _start_native_symbol_placement,
     _system_prefers_dark_theme,
 )
@@ -766,25 +767,92 @@ class LibraryBrowserTests(unittest.TestCase):
         self.assertEqual(browser.events, [])
         self.assertEqual(manager.events, ["iconify"])
 
-    def test_place_block_creates_at_sheet_centre_and_selects_only_new_symbol(self):
-        from kipy.geometry import Vector2
+    def test_sheet_center_uses_page_dimensions_orientation_and_grid(self):
+        landscape = SimpleNamespace(page_size=2, orientation=1)
+        schematic = SimpleNamespace(get_page_settings=lambda: landscape)
+        self.assertEqual(_schematic_page_center_mm(schematic), (148.59, 105.41))
 
-        symbol = SimpleNamespace(id="placed-symbol-id")
-        schematic = Mock()
-        schematic.place_symbol_from_library.return_value = symbol
-        kicad = SimpleNamespace(get_schematic=Mock(return_value=schematic))
+        portrait = SimpleNamespace(page_size=2, orientation=2)
+        schematic = SimpleNamespace(get_page_settings=lambda: portrait)
+        self.assertEqual(_schematic_page_center_mm(schematic), (105.41, 148.59))
 
-        result = _start_native_symbol_placement(
-            kicad, None, "buck_converter_ab12cd34"
+    def test_sheet_center_supports_custom_page_dimensions(self):
+        custom = SimpleNamespace(
+            page_size=16,
+            orientation=1,
+            user_page_size=SimpleNamespace(x=300_000_000, y=200_000_000),
         )
+        schematic = SimpleNamespace(get_page_settings=lambda: custom)
+        self.assertEqual(_schematic_page_center_mm(schematic), (149.86, 100.33))
+
+    def test_sheet_center_rejects_unknown_or_invalid_page_settings(self):
+        unknown = SimpleNamespace(
+            get_page_settings=lambda: SimpleNamespace(page_size=99, orientation=1)
+        )
+        with self.assertRaisesRegex(RuntimeError, "Unsupported KiCad schematic page-size"):
+            _schematic_page_center_mm(unknown)
+        invalid_custom = SimpleNamespace(
+            get_page_settings=lambda: SimpleNamespace(
+                page_size=16,
+                user_page_size=SimpleNamespace(x=0, y=200_000_000),
+            )
+        )
+        with self.assertRaisesRegex(RuntimeError, "invalid schematic page dimensions"):
+            _schematic_page_center_mm(invalid_custom)
+
+    def test_place_block_creates_at_page_centre_focuses_and_selects_new_symbol(self):
+        symbol = SimpleNamespace(id="placed-symbol-id", path=object())
+
+        class Schematic:
+            def __init__(self):
+                self.selected = []
+                self.placement = None
+                self.saved = False
+
+            def get_page_settings(self):
+                return SimpleNamespace(page_size=2, orientation=1)
+
+            def place_symbol_from_library(self, symbol_id, position):
+                self.placement = (symbol_id, position)
+                return symbol
+
+            def clear_selection(self):
+                self.selected.clear()
+
+            def add_to_selection(self, items):
+                self.selected.extend(items)
+
+            def get_selection(self):
+                return self.selected
+
+            def save(self):
+                self.saved = True
+
+        schematic = Schematic()
+        kicad = SimpleNamespace(get_schematic=lambda: schematic)
+        focus = Mock(return_value=schematic)
+        vector2_module = SimpleNamespace(
+            Vector2=SimpleNamespace(from_xy_mm=lambda x, y: (x, y))
+        )
+        with (
+            patch.dict(
+                sys.modules,
+                {"kipy": SimpleNamespace(), "kipy.geometry": vector2_module},
+            ),
+            patch("kicad_blocks.plugin._focus_schematic_items_in_editor", focus),
+        ):
+            result = _start_native_symbol_placement(
+                kicad, None, "buck_converter_ab12cd34"
+            )
 
         self.assertIs(result, symbol)
-        args, _kwargs = schematic.place_symbol_from_library.call_args
-        self.assertEqual(args[0], f"{LIBRARY_NICKNAME}:buck_converter_ab12cd34")
-        self.assertEqual(args[1], Vector2.from_xy_mm(148.5, 105.0))
-        schematic.clear_selection.assert_called_once_with()
-        schematic.add_to_selection.assert_called_once_with(symbol)
-        schematic.save.assert_called_once_with()
+        self.assertEqual(
+            schematic.placement,
+            (f"{LIBRARY_NICKNAME}:buck_converter_ab12cd34", (148.59, 105.41)),
+        )
+        focus.assert_called_once_with(schematic, [symbol])
+        self.assertEqual(schematic.selected, [symbol])
+        self.assertTrue(schematic.saved)
 
     def test_place_block_rejects_invalid_symbol_id_before_connecting(self):
         get_schematic = Mock()
