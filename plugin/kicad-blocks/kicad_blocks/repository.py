@@ -1345,18 +1345,18 @@ def synchronize_facade_pins_from_implementation(block: BlockRecord) -> list[str]
 
     _import_catalog_facade_edit(block, manifest)
     extracted = extract_hierarchical_pins(implementation_tree)
-    previous = manifest.get("pins", [])
-    previous_by_name = {
-        str(item.get("name", "")).casefold(): item for item in previous if isinstance(item, dict)
+    previous: list[BlockPinManifest] = manifest.get("pins", [])
+    previous_by_name: dict[str, BlockPinManifest] = {
+        str(item.get("name", "")).casefold(): item for item in previous
     }
 
     used_numbers = {
         str(item.get("number"))
         for item in previous
-        if isinstance(item, dict) and str(item.get("number", "")).strip()
+        if str(item.get("number", "")).strip()
     }
     next_number = 1
-    normalized_pins = []
+    normalized_pins: list[BlockPin] = []
     for pin in extracted:
         old = previous_by_name.get(pin.name.casefold())
         if old is not None:
@@ -1385,7 +1385,10 @@ def synchronize_facade_pins_from_implementation(block: BlockRecord) -> list[str]
         (
             item
             for item in symbol[1:]
-            if _head(item) == "symbol" and len(item) >= 2 and str(item[1]) == pin_unit_name
+            if isinstance(item, list)
+            and _head(item) == "symbol"
+            and len(item) >= 2
+            and str(item[1]) == pin_unit_name
         ),
         None,
     )
@@ -1393,7 +1396,7 @@ def synchronize_facade_pins_from_implementation(block: BlockRecord) -> list[str]
         raise ValueError(f"Facade symbol {symbol_name!r} has no pin unit {pin_unit_name!r}.")
 
     current_pin_nodes = _all(pin_unit, "pin")
-    current_by_name = {}
+    current_by_name: dict[str, SExprList] = {}
     for node in current_pin_nodes:
         name = _direct(node, "name")
         if name is not None and len(name) >= 2:
@@ -1415,16 +1418,19 @@ def synchronize_facade_pins_from_implementation(block: BlockRecord) -> list[str]
     default_pin_unit = next(
         item
         for item in default_symbol[1:]
-        if _head(item) == "symbol" and len(item) >= 2 and str(item[1]) == pin_unit_name
+        if isinstance(item, list)
+        and _head(item) == "symbol"
+        and len(item) >= 2
+        and str(item[1]) == pin_unit_name
     )
     default_pin_nodes = _all(default_pin_unit, "pin")
-    default_by_name = {}
+    default_by_name: dict[str, SExprList] = {}
     for node in default_pin_nodes:
         name = _direct(node, "name")
         if name is not None and len(name) >= 2:
             default_by_name[str(name[1]).casefold()] = node
 
-    updated_pin_nodes = []
+    updated_pin_nodes: list[SExprList] = []
     for pin in normalized_pins:
         key = pin.name.casefold()
         existing = current_by_name.get(key)
