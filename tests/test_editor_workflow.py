@@ -54,6 +54,19 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
         self._dependency_patch.stop()
         self.temp.cleanup()
 
+    def _open_symbol_documents(self, doc_type):
+        from kipy.proto.common.types import DocumentType
+
+        self.assertEqual(doc_type, DocumentType.DOCTYPE_SYMBOL)
+        return [
+            SimpleNamespace(
+                lib_id=SimpleNamespace(
+                    library_nickname=plugin_actions.LIBRARY_NICKNAME,
+                    entry_name=self.block.manifest["symbol_name"],
+                )
+            )
+        ]
+
     def test_edit_facade_prefers_native_symbol_editor_action_when_supported(self):
         from kicad_blocks.repository import build_project_symbol_catalog
 
@@ -78,14 +91,14 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
                 return SimpleNamespace(stdout="0x200", returncode=0)
             if arguments[1:3] == ["getwindowname", "0x200"]:
                 return SimpleNamespace(
-                    stdout=f"Symbol Editor — {self.block.manifest['symbol_name']}",
+                    stdout="Symbol Editor",
                     returncode=0,
                 )
             return SimpleNamespace(stdout="", returncode=0)
 
         opened = plugin_actions._edit_facade_symbol(
             self.block,
-            SimpleNamespace(run_action=run_action),
+            SimpleNamespace(run_action=run_action, get_open_documents=self._open_symbol_documents),
             "0x100",
             project_catalog=project_catalog,
             xdotool="/usr/bin/xdotool",
@@ -138,7 +151,7 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
                 return SimpleNamespace(stdout="1001", returncode=0)
             if arguments[1:3] == ["getwindowname", "0x200"]:
                 return SimpleNamespace(
-                    stdout=f"Symbol Editor — {self.block.manifest['symbol_name']}",
+                    stdout="Symbol Editor",
                     returncode=0,
                 )
             return SimpleNamespace(stdout="", returncode=0)
@@ -146,7 +159,7 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
         with patch.object(plugin_actions.os, "readlink", return_value="/usr/bin/eeschema-nightly"):
             opened = plugin_actions._edit_facade_symbol(
                 self.block,
-                SimpleNamespace(),
+                SimpleNamespace(get_open_documents=self._open_symbol_documents),
                 "0x100",
                 project_catalog=project_catalog,
                 xdotool="/usr/bin/xdotool",
@@ -211,7 +224,7 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
                 return SimpleNamespace(stdout="1001", returncode=0)
             if arguments[1:3] == ["getwindowname", "0x200"]:
                 return SimpleNamespace(
-                    stdout=f"Symbol Editor — {self.block.manifest['symbol_name']}",
+                    stdout="Symbol Editor",
                     returncode=0,
                 )
             return SimpleNamespace(stdout="", returncode=0)
@@ -219,7 +232,7 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
         with patch.object(plugin_actions.os, "readlink", return_value="/usr/bin/eeschema-nightly"):
             opened = plugin_actions._edit_facade_symbol(
                 self.block,
-                SimpleNamespace(),
+                SimpleNamespace(get_open_documents=self._open_symbol_documents),
                 "0x100",
                 project_catalog=project_catalog,
                 xdotool="/usr/bin/xdotool",
@@ -376,7 +389,7 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
                 return SimpleNamespace(stdout="1001", returncode=0)
             if arguments[1:3] == ["getwindowname", "0x200"]:
                 return SimpleNamespace(
-                    stdout=f"Symbol Editor — {self.block.manifest['symbol_name']}",
+                    stdout="Symbol Editor",
                     returncode=0,
                 )
             return SimpleNamespace(stdout="", returncode=0)
@@ -384,7 +397,7 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
         with patch.object(plugin_actions.os, "readlink", return_value="/usr/bin/eeschema-nightly"):
             opened = plugin_actions._edit_facade_symbol(
                 self.block,
-                SimpleNamespace(run_action=run_action),
+                SimpleNamespace(run_action=run_action, get_open_documents=self._open_symbol_documents),
                 "0x100",
                 project_catalog=project_catalog,
                 xdotool="/usr/bin/xdotool",

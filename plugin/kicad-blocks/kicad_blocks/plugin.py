@@ -2562,17 +2562,45 @@ def _edit_facade_symbol(
     pause(0.35)
     send("key", "--clearmodifiers", "Return")
 
+    # KiCad's Symbol Editor frame title is always the generic "Symbol Editor".
+    # Verify the current library symbol through the native IPC document API instead.
+    get_open_documents = getattr(kicad, "get_open_documents", None)
+    if not callable(get_open_documents):
+        raise RuntimeError(
+            "The connected KiCad Python IPC binding cannot verify the active Symbol Editor "
+            f"symbol {lib_id!r}. Update kicad-python or open Tools → Symbol Editor manually."
+        )
+
+    from kipy.proto.common.types import DocumentType
+
     deadline = time.monotonic() + 5.0
-    target_title = symbol_name.casefold()
+    observed_lib_ids: list[str] = []
     while time.monotonic() < deadline:
-        current_title = send("getwindowname", symbol_editor_id, check=False).casefold()
-        if target_title in current_title:
+        try:
+            open_documents = get_open_documents(DocumentType.DOCTYPE_SYMBOL)
+        except Exception as exc:
+            raise RuntimeError(
+                f"KiCad IPC could not query the active Symbol Editor symbol {lib_id!r}: {exc}"
+            ) from exc
+
+        observed_lib_ids = []
+        for document in open_documents:
+            identifier = getattr(document, "lib_id", None)
+            if identifier is None:
+                continue
+            library_nickname = str(getattr(identifier, "library_nickname", "") or "")
+            entry_name = str(getattr(identifier, "entry_name", "") or "")
+            if library_nickname and entry_name:
+                observed_lib_ids.append(f"{library_nickname}:{entry_name}")
+
+        if lib_id in observed_lib_ids:
             LOG.info("Opened library facade %s in KiCad Symbol Editor", lib_id)
             return True
         pause(0.1)
 
     raise RuntimeError(
-        f"Symbol Editor opened, but KiCad did not confirm {lib_id!r} as the current symbol. "
+        f"Symbol Editor opened, but KiCad IPC did not report {lib_id!r} as the current symbol. "
+        f"Open symbol documents: {observed_lib_ids!r}. "
         "Check the library-tree filter and select the highlighted symbol."
     )
 
