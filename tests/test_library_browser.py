@@ -31,6 +31,7 @@ from kicad_blocks.plugin import (
     _library_record_for_instance,
     _library_record_for_tree_row,
     _minimize_placement_windows,
+    _native_run_action_status,
     _new_blank_pcb_source,
     _pick_directory,
     _pick_kicad_file,
