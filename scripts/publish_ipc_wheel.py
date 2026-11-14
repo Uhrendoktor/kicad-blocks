@@ -6,7 +6,6 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import socket
 import ssl
 import time
 from pathlib import Path
