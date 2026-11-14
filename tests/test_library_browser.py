@@ -40,8 +40,8 @@ from kicad_blocks.plugin import (
     _restore_placement_windows,
     _save_block_layouts,
     _save_block_variants,
-    _set_window_geometry,
     _schematic_page_center_mm,
+    _set_window_geometry,
     _start_native_symbol_placement,
     _system_prefers_dark_theme,
 )
