@@ -10,6 +10,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import uuid
 from pathlib import Path
@@ -31,7 +32,7 @@ from kicad_blocks.repository import (
 from kipy import KiCad
 from kipy.errors import ApiError
 from pynng.exceptions import NNGException
-from test_plugin_registration import _close_editor, _find_executable, _launch
+from test_plugin_registration import _close_editor, _find_executable, _launch, _windows
 
 
 def _find_cli() -> str:
@@ -405,10 +406,105 @@ def main() -> None:
                     "KiCad did not preserve the selected hierarchical sheet as a typed SheetSymbol."
                 )
 
-            def create_details(name: str, description: str):
-                return lambda _parent, _source: (name, description)
-
             def run_creation(parent_schematic, name: str, description: str):
+                """Drive the visible production dialog, then run its registered IPC action."""
+                ui_errors = []
+                ui_driver_errors = []
+                messages = SimpleNamespace(
+                    showinfo=lambda *args, **kwargs: None,
+                    showwarning=lambda title, message, **kwargs: ui_errors.append(
+                        (title, message)
+                    ),
+                    showerror=lambda title, message, **kwargs: ui_errors.append(
+                        (title, message)
+                    ),
+                )
+
+                def complete_visible_dialog():
+                    try:
+                        deadline = time.monotonic() + 12.0
+                        while time.monotonic() < deadline:
+                            dialog_window = next(
+                                (
+                                    (window_id, title)
+                                    for window_id, title, _window_class in _windows(xdotool)
+                                    if title.strip() == "Create Functional Block"
+                                ),
+                                None,
+                            )
+                            if dialog_window is not None:
+                                window_id, _title = dialog_window
+                                subprocess.run(
+                                    [xdotool, "windowfocus", "--sync", window_id],
+                                    check=True,
+                                    capture_output=True,
+                                    text=True,
+                                )
+                                subprocess.run(
+                                    [xdotool, "key", "--clearmodifiers", "ctrl+a"],
+                                    check=True,
+                                    capture_output=True,
+                                    text=True,
+                                )
+                                subprocess.run(
+                                    [
+                                        xdotool,
+                                        "type",
+                                        "--clearmodifiers",
+                                        "--delay",
+                                        "1",
+                                        name,
+                                    ],
+                                    check=True,
+                                    capture_output=True,
+                                    text=True,
+                                )
+                                subprocess.run(
+                                    [xdotool, "key", "--clearmodifiers", "Return"],
+                                    check=True,
+                                    capture_output=True,
+                                    text=True,
+                                )
+                                return
+                            time.sleep(0.05)
+                        # Unblock the UI action on failure. This also
+                        # catches the original regression where a transient
+                        # child existed but was hidden by a withdrawn root.
+                        hidden = subprocess.run(
+                            [
+                                xdotool,
+                                "search",
+                                "--name",
+                                "Create Functional Block",
+                            ],
+                            capture_output=True,
+                            text=True,
+                            check=False,
+                        )
+                        if hidden.returncode == 0 and hidden.stdout.strip():
+                            hidden_id = hidden.stdout.strip().splitlines()[-1]
+                            subprocess.run(
+                                [xdotool, "windowactivate", hidden_id],
+                                check=False,
+                                capture_output=True,
+                                text=True,
+                            )
+                            subprocess.run(
+                                [xdotool, "key", "--clearmodifiers", "Escape"],
+                                check=False,
+                                capture_output=True,
+                                text=True,
+                            )
+                        raise TimeoutError(
+                            "The registered Create Block action did not show its visible "
+                            "Create Functional Block window. "
+                            f"Visible windows: {_windows(xdotool)!r}"
+                        )
+                    except Exception as exc:
+                        ui_driver_errors.append(exc)
+
+                driver = threading.Thread(target=complete_visible_dialog, daemon=True)
+                driver.start()
                 with (
                     patch.object(
                         plugin_actions,
@@ -416,21 +512,30 @@ def main() -> None:
                         return_value=[library_root],
                     ),
                     patch.object(
+                        plugin_actions,
+                        "default_library_root",
+                        return_value=library_root,
+                    ),
+                    patch.object(
                         plugin_actions, "_reload_symbol_library", return_value=True
                     ),
-                    patch.object(
-                        plugin_actions,
-                        "_ask_create_block_details",
-                        side_effect=create_details(name, description),
-                    ),
-                    patch.object(
-                        plugin_actions,
-                        "messagebox",
-                        SimpleNamespace(showinfo=lambda *args, **kwargs: None),
-                    ),
+                    patch.object(plugin_actions, "messagebox", messages),
+                    patch.object(kicad, "get_schematic", return_value=parent_schematic),
+                    patch("kipy.KiCad", return_value=kicad),
                 ):
-                    plugin_actions._create_and_place(
-                        library_root, parent_schematic, kicad, project_dir, object()
+                    plugin_actions.run_action("create-block")
+                driver.join(timeout=2.0)
+                if driver.is_alive():
+                    raise TimeoutError("The Create Block GUI driver did not finish.")
+                if ui_driver_errors:
+                    raise AssertionError(
+                        "Could not complete the visible Create Block dialog: "
+                        + "; ".join(str(error) for error in ui_driver_errors)
+                    )
+                if ui_errors:
+                    raise AssertionError(
+                        "The registered Create Block action reported an error: "
+                        + "; ".join(f"{title}: {message}" for title, message in ui_errors)
                     )
 
             run_creation(

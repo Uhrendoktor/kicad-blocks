@@ -73,8 +73,8 @@ Then enable the KiCad API in Eeschema's plugin preferences, select the supported
    recursive ERC/BOM for implementation-level results; project-native
    ERC/netlist/BOM see the facade only.
 
-The [first-block tutorial](docs/tutorials/first-block.md) walks through the
-complete sequence, including the expected files and per-instance configuration.
+The [first-block tutorial](docs/tutorials/first-block.md) walks through
+block creation, inspection, expected files, and the current placement API limit.
 
 ## Documentation
 

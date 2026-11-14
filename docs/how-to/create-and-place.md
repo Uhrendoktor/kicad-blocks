@@ -5,9 +5,9 @@ Use this guide to turn a hierarchical sheet into a library block or place an exi
 ## Create a block from a sheet
 
 1. Open the parent schematic in Eeschema and select the hierarchical sheet symbol to package. Alternatively, open the target sheet itself and run the command with no selection.
-2. Choose **Create Block from Sheet**.
-3. Enter the name and optional description.
-4. Choose the shared library destination.
+2. Choose **Create Block from Sheet**. The creation form opens in a visible plugin window and identifies the source sheet.
+3. Enter the required block name and optional description.
+4. Create the block in the configured default shared library.
 
 KiCad Blocks copies the selected sheet and its child schematic files into a new `.kicad_block` directory. It leaves the source project unchanged. The root sheet's hierarchical labels become the facade pins; child-sheet labels remain internal.
 
@@ -21,7 +21,7 @@ Open **Browse and Place Functional Blocks**, then choose **Manage Libraries**.
 - Choose **Create library** to create an empty folder.
 - Choose **Change folder** to point a registration at another location.
 - Choose **Set default** to select the destination for newly created blocks.
-- Choose **Unregister** to remove a folder from the list without deleting its files.
+- Choose **Unregister** to remove a non-default folder from the list without deleting its files. The active default library cannot be unregistered; use **Change folder** to migrate that registration.
 
 The browser searches all registered libraries. A folder that contains no valid `.kicad_block` assets will not show usable entries.
 
@@ -31,13 +31,11 @@ The browser searches all registered libraries. A folder that contains no valid `
 2. Choose **Browse and Place Functional Blocks**.
 3. Type in the search field. Search covers the block name, description, pin names, declared parameters, variants, and layout names.
 4. Select a result to inspect its description, facade, pins, configurable settings, implementations, profiles, and PCB layout options.
-5. Choose an implementation variant or named profile when the block provides one.
-6. Choose **Place block** or double-click the selected row.
-7. Confirm the facade in KiCad's native **Choose Symbol** dialog and place it with the normal KiCad tool.
+5. Review the intended implementation and configuration.
 
-The browser minimizes before placement so the Eeschema canvas remains visible. Restore it from the taskbar after placement or cancellation.
+The project receives a combined `KBlocks.kicad_sym` catalog and `.kicad_blocks/` metadata when the library entry is registered. The shared library stays in its original folder; implementation schematics are not copied into the parent project.
 
-The project receives a combined `KBlocks.kicad_sym` catalog and `.kicad_blocks/` metadata. The shared library stays in its original folder; implementation schematics are not copied into the parent project.
+**Interactive placement limitation:** on the tested KiCad build, the supported schematic IPC API does not expose a way for the plugin to attach the selected library symbol to KiCad's interactive placement cursor. The Place block action reports this capability gap instead of opening an unrelated chooser or injecting desktop input. This part of the workflow remains unavailable until KiCad exposes the required API.
 
 ## Open or manage a stored PCB layout
 
