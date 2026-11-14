@@ -2209,136 +2209,134 @@ def _create_and_place(
 
 
 def _edit_facade_symbol(
-    root,
-    schematic,
-    project_dir,
-    editor_window_id,
-    parent,
+    record,
+    kicad,
+    editor_window_id: str | None,
     *,
-    kicad=None,
-    expected_block_id: str | None = None,
-) -> None:
-    """Open the library copy of the selected facade through KiCad's editor action."""
-    instance = _selected_symbol(schematic)
-    record = _block_record_for_instance(root, project_dir, instance)
-    if (
-        expected_block_id is not None
-        and record.manifest.get("block_id") != expected_block_id
-    ):
-        raise ValueError("The Eeschema selection changed. Select the highlighted block and retry.")
+    xdotool: str | None = None,
+    wtype: str | None = None,
+    command_runner=subprocess.run,
+    pause=time.sleep,
+) -> bool:
+    """Open the generated library facade directly; no schematic instance is required.
+
+    KiCad's standard Edit Library Symbol action is selection-bound. Instead,
+    use the native Symbol Editor frame and its library-tree search, targeting
+    the exact unique symbol name stored in the highlighted BlockRecord.
+    Return False when the editor is open and the search field is focused, but
+    no safe desktop text-input helper is available.
+    """
+    nickname = str(record.manifest.get("library_nickname") or "").strip()
+    symbol_name = str(record.manifest.get("symbol_name") or "").strip()
+    catalog_path = Path(record.symbol_library).expanduser().resolve()
+    if not nickname or not symbol_name or any(char.isspace() for char in symbol_name):
+        raise ValueError("The highlighted block has an invalid library symbol identifier.")
+    if not catalog_path.is_file():
+        raise FileNotFoundError(f"The generated facade catalog is missing: {catalog_path}")
+
+    # The preview is rendered from this same catalog and symbol name. Verify
+    # the target exists exactly once before launching the editor.
+    from .pcb_layout import parse_sexpr
+    from .repository import _named_symbol_node
+
+    catalog = parse_sexpr(catalog_path.read_text(encoding="utf-8"))
+    _named_symbol_node(catalog, symbol_name, catalog_path)
+    lib_id = f"{nickname}:{symbol_name}"
 
     run_action = getattr(kicad, "run_action", None)
-    if callable(run_action):
-        try:
-            response = run_action("eeschema.EditorControl.editLibSymbolWithSymbolEditor")
-            if _native_run_action_status(response) == 1:
-                LOG.info(
-                    "Opened library facade %s:%s in KiCad Symbol Editor",
-                    record.manifest.get("library_nickname"),
-                    record.manifest.get("symbol_name"),
-                )
-                return
-            LOG.info(
-                "KiCad did not accept the native Edit Library Symbol action; checking desktop fallbacks"
-            )
-        except Exception:
-            LOG.debug("KiCad IPC Edit Library Symbol action failed", exc_info=True)
-
-    xdotool = shutil.which("xdotool")
-    if not editor_window_id:
-        editor_window_id = _capture_eeschema_window_id()
-    minimized_windows = _minimize_placement_windows(parent)
-    try:
-        if xdotool and editor_window_id:
-            subprocess.run(
-                [xdotool, "windowfocus", "--sync", editor_window_id],
-                capture_output=True,
-                text=True,
-                check=True,
-                timeout=3,
-            )
-            subprocess.run(
-                [xdotool, "key", "--clearmodifiers", "ctrl+shift+e"],
-                capture_output=True,
-                text=True,
-                check=True,
-                timeout=3,
-            )
-            deadline = time.monotonic() + 5.0
-            while time.monotonic() < deadline:
-                result = subprocess.run(
-                    [xdotool, "getwindowfocus"],
-                    capture_output=True,
-                    text=True,
-                    check=False,
-                    timeout=3,
-                )
-                focused = result.stdout.strip()
-                if result.returncode == 0 and focused and focused != editor_window_id:
-                    LOG.info(
-                        "Opened library facade %s:%s in KiCad Symbol Editor",
-                        record.manifest.get("library_nickname"),
-                        record.manifest.get("symbol_name"),
-                    )
-                    return
-                time.sleep(0.1)
-            raise RuntimeError(
-                "Eeschema did not open Symbol Editor. Confirm the selected facade is "
-                "linked to the registered KBlocks library."
-            )
-
-        wayland = bool(os.environ.get("WAYLAND_DISPLAY")) or (
-            os.environ.get("XDG_SESSION_TYPE", "").casefold() == "wayland"
-        )
+    if not callable(run_action):
         raise RuntimeError(
-            "KiCad did not accept its native Edit Library Symbol action. "
-            + (
-                "On Wayland, select this block in Eeschema and press Ctrl+Shift+E; "
-                "automatic key injection was not attempted because the editor window "
-                "could not be identified."
-                if wayland
-                else "In Eeschema, select this block and press Ctrl+Shift+E."
-            )
+            "KiCad's native action API is unavailable. Open Symbol Editor from Eeschema "
+            f"and search its library tree for {lib_id}."
         )
-    except Exception:
-        _restore_placement_windows(minimized_windows)
-        raise
 
-def _place_existing(root, schematic, kicad, project_dir, parent) -> None:
-    """Open the searchable browser; placement is handed to KiCad's native cursor tool."""
-    editor_window_id = getattr(parent, "_kicad_blocks_editor_window_id", None)
-    browser = tk.Toplevel(parent)
-    _attach_tk_window_to_editor(browser, editor_window_id)
-    _show_library_browser(
-        browser, schematic, kicad, project_dir,
-        default_library_root(), editor_window_id,
-    )
+    def invoke(action: str) -> None:
+        try:
+            response = run_action(action)
+        except Exception as exc:
+            raise RuntimeError(f"KiCad could not run {action}: {exc}") from exc
+        status = _native_run_action_status(response)
+        if status != 1:
+            detail = (
+                "returned an unknown status"
+                if status is None
+                else f"was rejected (RunActionStatus={status})"
+            )
+            raise RuntimeError(
+                f"KiCad action {action} {detail}. Open Symbol Editor manually and "
+                f"search for {lib_id}."
+            )
 
+    # Show the actual KiCad editor, ensure its library tree is visible, and
+    # focus the tree's native search field before sending any keyboard input.
+    invoke("common.Control.showSymbolEditor")
+    pause(0.25)
+    invoke("common.Control.showLibraryTree")
+    invoke("common.Control.libraryTreeSearch")
+    pause(0.1)
 
-def _edit_block_implementation(root, schematic, kicad, project_dir, parent) -> None:
-    """Compatibility helper for opening a library implementation from the manager."""
-    selected = _safe_schematic_selection(schematic)
-    if len(selected) == 1 and hasattr(selected[0], "definition"):
-        record = _block_record_for_instance(root, project_dir, selected[0])
-    else:
-        record = _pick_record(list_blocks(root), parent, "Edit Block Implementation")
-    if record is None:
-        return None
-    _register_implementation_catalog(record, _library_roots_for(root))
-    process = _launch_block_asset(
-        kicad,
-        record.implementation,
-        "implementation schematic",
-        editor_window_id=getattr(parent, "_kicad_blocks_editor_window_id", None),
+    wayland = bool(os.environ.get("WAYLAND_DISPLAY")) or (
+        os.environ.get("XDG_SESSION_TYPE", "").casefold() == "wayland"
     )
-    messagebox.showinfo(
-        "Block Implementation",
-        f"Opened {record.name} implementation in Eeschema.\n\n"
-        "After editing a shared library block, run Publish. "
-        "A project-local implementation remains independent until explicitly synchronized.",
-        parent=parent,
+    executable = wtype or (shutil.which("wtype") if wayland else None)
+    if wayland and executable:
+        # The native libraryTreeSearch action has just focused Symbol Editor's
+        # search control. Keyboard input is sent only after that target action
+        # succeeded; never guess a Wayland surface from an X11 window ID.
+        command_runner(
+            [executable, "-M", "ctrl", "-k", "a"],
+            capture_output=True, text=True, check=True, timeout=5,
+        )
+        command_runner(
+            [executable, "-d", "12", symbol_name],
+            capture_output=True, text=True, check=True, timeout=5,
+        )
+        command_runner(
+            [executable, "-k", "Return"],
+            capture_output=True, text=True, check=True, timeout=5,
+        )
+        pause(0.35)
+        LOG.info("Opened library facade %s in KiCad Symbol Editor", lib_id)
+        return True
+
+    executable = xdotool or shutil.which("xdotool")
+    if executable:
+        def send(*arguments: str) -> str:
+            result = command_runner(
+                [executable, *arguments],
+                capture_output=True, text=True, check=True, timeout=5,
+            )
+            return str(getattr(result, "stdout", "") or "").strip()
+
+        # Verify the focused window belongs to the invoking Eeschema process
+        # and is not the schematic canvas. The preceding native action placed
+        # keyboard focus in the Symbol Editor's library-tree search control.
+        if not editor_window_id:
+            editor_window_id = _capture_eeschema_window_id()
+        if editor_window_id:
+            editor_pid = send("getwindowpid", str(editor_window_id))
+            focused_id = send("getwindowfocus")
+            focused_pid = send("getwindowpid", focused_id) if focused_id else ""
+            if (
+                focused_id
+                and focused_id != str(editor_window_id)
+                and editor_pid
+                and focused_pid == editor_pid
+            ):
+                send("key", "--clearmodifiers", "ctrl+a")
+                send("type", "--clearmodifiers", "--delay", "12", symbol_name)
+                send("key", "--clearmodifiers", "Return")
+                pause(0.35)
+                LOG.info("Opened library facade %s in KiCad Symbol Editor", lib_id)
+                return True
+
+    # Do not type into an unknown window. KiCad's native editor and search field
+    # remain open and focused so the user can complete the exact search manually.
+    LOG.info(
+        "Symbol Editor opened with library search focused; manual search required for %s",
+        lib_id,
     )
-    return process
+    return False
 
 
 
@@ -4915,14 +4913,6 @@ def _show_library_browser(
     details_scroll.pack(side="right", fill="y")
     details.configure(state="disabled")
     _bind_mousewheel(details, lambda amount: details.yview_scroll(amount, "units"))
-    facade_hint = ttk.Label(
-        right,
-        text="",
-        foreground=palette.get("muted", "#5f6871"),
-        font=("TkDefaultFont", 8),
-    )
-    facade_hint.grid(row=4, column=0, sticky="w", pady=(6, 0))
-
     selected_record = [None]
     facade_button = [None]
     open_layout_button = [None]
@@ -5036,16 +5026,9 @@ def _show_library_browser(
             open_layout_button[0].configure(
                 state="normal" if record is not None and _layout_choices(record) else "disabled"
             )
-        facade_available = selected_facade_instance(record) is not None
         if facade_button[0] is not None:
             facade_button[0].configure(
-                state="normal" if facade_available else "disabled"
-            )
-        if record is None or facade_available:
-            facade_hint.configure(text="")
-        else:
-            facade_hint.configure(
-                text="Select this block in Eeschema to edit its library facade."
+                state="normal" if record is not None else "disabled"
             )
 
     def place_selected(_event=None):
@@ -5156,46 +5139,38 @@ def _show_library_browser(
         _set_window_geometry(chooser, 500, 190, 440, 160)
         combo.focus_set()
 
-    def selected_facade_instance(record):
-        if record is None:
-            return None
-        selection = _safe_schematic_selection(schematic)
-        if len(selection) != 1 or not hasattr(selection[0], "definition"):
-            return None
-        try:
-            selected_record_for_instance = _block_record_for_instance(
-                current_roots[0], project_dir, selection[0]
-            )
-        except Exception:
-            LOG.debug("Could not resolve the current Eeschema selection for Edit facade", exc_info=True)
-            return None
-        if selected_record_for_instance.manifest.get("block_id") != record.manifest.get("block_id"):
-            return None
-        return selection[0]
-
     def edit_facade(_event=None):
         record = selected_record[0]
         if record is None:
             return
-        instance = selected_facade_instance(record)
-        if instance is None:
-            messagebox.showinfo(
-                "Edit facade",
-                "Select this block in Eeschema, then return to the Functional Block Library.",
-                parent=window,
-            )
-            return
         try:
-            _edit_facade_symbol(
-                current_roots[0],
-                schematic,
-                project_dir,
-                editor_window_id,
-                window,
-                kicad=kicad,
-                expected_block_id=str(record.manifest.get("block_id")),
+            refreshed_record = _register_block(
+                project_dir, record, kicad, current_roots[0]
             )
+            if not _LAST_LIBRARY_RELOAD_OK:
+                messagebox.showwarning(
+                    "Edit facade",
+                    _LAST_LIBRARY_RELOAD_WARNING
+                    or "KiCad could not reload the generated facade catalog. Restart Eeschema and retry.",
+                    parent=window,
+                )
+                return
+            opened = _edit_facade_symbol(
+                refreshed_record,
+                kicad,
+                editor_window_id,
+            )
+            if not opened:
+                messagebox.showinfo(
+                    "Edit facade",
+                    "Symbol Editor is open. Search its library tree for "
+                    + f"{refreshed_record.manifest['library_nickname']}:"
+                    + str(refreshed_record.manifest["symbol_name"])
+                    + " and press Enter.",
+                    parent=window,
+                )
         except (OSError, RuntimeError, ValueError, LookupError, subprocess.SubprocessError) as exc:
+            LOG.exception("Could not open generated library facade")
             messagebox.showerror("Edit facade", str(exc), parent=window)
 
     def manage_layouts(_event=None):
@@ -5375,7 +5350,7 @@ def _show_library_browser(
     implementation_button.pack(side="left", padx=(6, 0))
     facade_button[0] = _action_button(
         action_toolbar, "Edit facade", edit_facade, "facade",
-        "Edit the library copy; existing schematic instances must be updated separately",
+        "Open the generated library facade in KiCad Symbol Editor",
     )
     facade_button[0].pack(side="left", padx=(6, 0))
     variants_button = _action_button(
