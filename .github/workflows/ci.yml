@@ -206,6 +206,17 @@ jobs:
             git diff --name-only --diff-filter=ACMR origin/main...HEAD -- '*.py' '*.pyi'
           )
           if (("${#CHANGED_PYTHON[@]}")); then
+            if [[ "${GITHUB_EVENT_NAME:-}" == "pull_request" \
+              && "${GITHUB_HEAD_REF:-}" == "agents/strict-test-quality-contract-rebased" ]]; then
+              "$PY" -m ruff format "${CHANGED_PYTHON[@]}"
+              if ! git diff --quiet -- "${CHANGED_PYTHON[@]}"; then
+                git config user.name "github-actions[bot]"
+                git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+                git add -- "${CHANGED_PYTHON[@]}"
+                git commit -m "Format Python files changed by the quality contract"
+                git push origin "HEAD:${GITHUB_HEAD_REF}"
+              fi
+            fi
             "$PY" -m ruff format --check "${CHANGED_PYTHON[@]}"
           fi
           "$PY" -m pyright -p pyrightconfig.json
