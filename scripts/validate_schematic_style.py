@@ -266,6 +266,259 @@ def _frame_bounds(tree: list, zone: str):
     return None
 
 
+
+
+def _pin_world_info(tree: list) -> dict[tuple[str, str], dict]:
+    """Resolve every component pin to a sheet coordinate and outward angle."""
+    lib_symbols = _direct(tree, "lib_symbols")
+    library = {}
+    if lib_symbols is not None:
+        for node in lib_symbols[1:]:
+            if isinstance(node, list) and _head(node) == "symbol" and len(node) > 1:
+                library[str(node[1])] = node
+
+    result = {}
+    for reference, instance in _instances(tree).items():
+        lib_id_node, at = _direct(instance, "lib_id"), _direct(instance, "at")
+        if lib_id_node is None or at is None:
+            continue
+        definition = library.get(str(lib_id_node[1]))
+        if definition is None:
+            continue
+        sx, sy, rotation = float(at[1]), float(at[2]), int(float(at[3]))
+        seen = set()
+        for pin in _all(definition, "pin"):
+            number_node, pin_at = _direct(pin, "number"), _direct(pin, "at")
+            if number_node is None or pin_at is None:
+                continue
+            number = str(number_node[1])
+            if number in seen:
+                continue
+            seen.add(number)
+            x, y = float(pin_at[1]), float(pin_at[2])
+            if rotation == 0:
+                point = (round(sx + x, 3), round(sy - y, 3))
+            elif rotation == 90:
+                point = (round(sx - y, 3), round(sy - x, 3))
+            elif rotation == 180:
+                point = (round(sx - x, 3), round(sy + y, 3))
+            elif rotation == 270:
+                point = (round(sx + y, 3), round(sy + x, 3))
+            else:
+                continue
+            result[(reference, number)] = {
+                "point": point,
+                "angle": (int(float(pin_at[3])) + rotation) % 360,
+            }
+    return result
+
+
+def _wire_networks(tree: list):
+    """Return a DSU of physically connected wire segments (labels excluded)."""
+    segments = [segment for segment in _segments(tree) if len(segment) == 2]
+    junctions = {
+        (
+            round(float(_direct(node, "at")[1]), 3),
+            round(float(_direct(node, "at")[2]), 3),
+        )
+        for node in _all(tree, "junction") if _direct(node, "at") is not None
+    }
+    pin_info = _pin_world_info(tree)
+    points = {info["point"] for info in pin_info.values()}
+    points |= junctions | {point for segment in segments for point in segment}
+    dsu = _DSU()
+    for start, end in segments:
+        axis = 0 if abs(start[1] - end[1]) <= TOL else 1
+        split = [point for point in points if _on_segment(point, start, end)]
+        split.sort(key=lambda point: point[axis], reverse=start[axis] > end[axis])
+        for first, second in pairwise(split):
+            dsu.union(first, second)
+    return dsu, pin_info
+
+
+def _strict_line_hits_box(a, b, box) -> bool:
+    """Check intersection with the visible text interior, excluding its anchor."""
+    x, y, width, height = box
+    if abs(a[1] - b[1]) <= TOL:
+        return (
+            y + TOL < a[1] < y + height - TOL
+            and min(max(a[0], b[0]), x + width) - max(min(a[0], b[0]), x) > TOL
+        )
+    if abs(a[0] - b[0]) <= TOL:
+        return (
+            x + TOL < a[0] < x + width - TOL
+            and min(max(a[1], b[1]), y + height) - max(min(a[1], b[1]), y) > TOL
+        )
+    return False
+
+
+def label_wire_overlap_issues(tree: list) -> list[str]:
+    """Reject wires that pass through visible local/hierarchical label glyphs."""
+    issues = []
+    segments = [segment for segment in _segments(tree) if len(segment) == 2]
+    for kind in ("label", "hierarchical_label"):
+        for node in _all(tree, kind):
+            bounds = _text_visual_bounds(str(node[1]), node)
+            if bounds is not None and any(
+                _strict_line_hits_box(a, b, bounds) for a, b in segments
+            ):
+                at = _direct(node, "at")
+                issues.append(
+                    f"{kind} {str(node[1])!r} at "
+                    f"({float(at[1]):.3f}, {float(at[2]):.3f}) overlaps a wire"
+                )
+    return issues
+
+
+def physical_topology_issues(tree: list) -> list[str]:
+    """Require decouplers and the back-to-back FET midpoint to be wire-connected."""
+    issues = []
+    dsu, pin_info = _wire_networks(tree)
+    pairs = list(DIRECT_DECOUPLERS) + [
+        ("T4", "3", "T1", "2"),
+        ("T1", "2", "R10", "1"),
+    ]
+    label_positions = {
+        (round(float(_direct(node, "at")[1]), 3), round(float(_direct(node, "at")[2]), 3))
+        for kind in ("label", "hierarchical_label")
+        for node in _all(tree, kind) if _direct(node, "at") is not None
+    }
+    for ref_a, pin_a, ref_b, pin_b in pairs:
+        first, second = pin_info.get((ref_a, pin_a)), pin_info.get((ref_b, pin_b))
+        if first is None or second is None:
+            issues.append(
+                f"required physical net is missing pin {ref_a}.{pin_a} or {ref_b}.{pin_b}"
+            )
+            continue
+        a, b = first["point"], second["point"]
+        if dsu.find(a) != dsu.find(b):
+            issues.append(f"{ref_a}.{pin_a} must be directly wire-connected to {ref_b}.{pin_b}")
+        if a in label_positions or b in label_positions:
+            issues.append(f"{ref_a}.{pin_a}/{ref_b}.{pin_b} must not use labels instead of direct wires")
+
+    forbidden = set(FORBIDDEN_LOCAL_LABELS)
+    for node in _all(tree, "label"):
+        if len(node) > 1 and str(node[1]) in forbidden:
+            issues.append(f"local label {str(node[1])!r} is forbidden on a directly wired net")
+    return issues
+
+
+def pin_orientation_issues(tree: list) -> list[str]:
+    """Check declared ground pins face down (global pin angle 90 degrees)."""
+    issues = []
+    pin_info = _pin_world_info(tree)
+    for key in GROUND_PINS_DOWN:
+        reference, number = key.split(".", 1)
+        pin = pin_info.get((reference, number))
+        if pin is None:
+            issues.append(f"ground orientation rule references missing pin {key}")
+        elif pin["angle"] != 90:
+            issues.append(
+                f"ground pin {key} points at {pin['angle']} degrees; expected 90 degrees (down)"
+            )
+    return issues
+
+
+def component_spacing_issues(tree: list) -> list[str]:
+    """Enforce declared adjacency and short component property offsets."""
+    issues = []
+    instances = _instances(tree)
+    positions = {}
+    for reference, instance in instances.items():
+        at = _direct(instance, "at")
+        if at is not None:
+            positions[reference] = (float(at[1]), float(at[2]))
+    for rule in ADJACENT_COMPONENT_PAIRS:
+        left, right = str(rule["left"]), str(rule["right"])
+        if left not in positions or right not in positions:
+            issues.append(f"adjacency rule references missing components {left}/{right}")
+            continue
+        ax, ay = positions[left]
+        bx, by = positions[right]
+        if abs(ay - by) > TOL:
+            issues.append(f"adjacent components {left}/{right} are not aligned")
+            continue
+        gap = abs(bx - ax) - float(rule["body_width_mm"])
+        if gap > float(rule["max_gap_mm"]) + TOL:
+            issues.append(
+                f"components {left}/{right} gap is {gap:.2f} mm; "
+                f"maximum is {float(rule['max_gap_mm']):.2f} mm"
+            )
+    for reference, instance in instances.items():
+        at = _direct(instance, "at")
+        if at is None:
+            continue
+        sx, sy = float(at[1]), float(at[2])
+        ref_prop, value_prop = _property(instance, "Reference"), _property(instance, "Value")
+        checks = []
+        if reference.startswith("R") and ref_prop is not None:
+            checks.append(("Reference", ref_prop, COMPONENT_PROPERTY_LIMITS_MM["resistor_reference"]))
+        if reference.startswith("C"):
+            if ref_prop is not None:
+                checks.append(("Reference", ref_prop, COMPONENT_PROPERTY_LIMITS_MM["capacitor_reference"]))
+            if value_prop is not None:
+                checks.append(("Value", value_prop, COMPONENT_PROPERTY_LIMITS_MM["capacitor_value"]))
+        for name, prop, limit in checks:
+            prop_at = _direct(prop, "at")
+            if prop_at is None:
+                issues.append(f"{reference} {name} field has no position")
+                continue
+            distance = hypot(float(prop_at[1]) - sx, float(prop_at[2]) - sy)
+            if distance > limit + TOL:
+                issues.append(
+                    f"{reference} {name} field is {distance:.2f} mm from the component; "
+                    f"maximum is {limit:.2f} mm"
+                )
+    return issues
+
+
+def group_metadata_issues(tree: list) -> list[str]:
+    """Every declarative group must emit its generated title and description."""
+    issues = []
+    text_uuids = {
+        str(uid[1]) for node in _all(tree, "text_box")
+        if (uid := _direct(node, "uuid")) is not None
+    }
+    for group in SCHEMATIC_GROUPS:
+        for key, description in (
+            (f"graphic:text:zone-title:{group['id']}", "title"),
+            (f"graphic:text:group-description:{group['id']}", "description"),
+        ):
+            expected = _uid(key)
+            if expected not in text_uuids:
+                issues.append(f"schematic group {group['id']} is missing its generated {description}")
+    return issues
+
+
+def _text_visual_bounds(value: str, node: list) -> tuple[float, float, float, float] | None:
+    """Approximate the printable text rectangle for a label or symbol field."""
+    at, effects = _direct(node, "at"), _direct(node, "effects")
+    if at is None:
+        return None
+    font_node = _direct(_direct(effects, "font"), "size") if effects is not None else None
+    font = float(font_node[1]) if font_node is not None else 1.0
+    width = max(font, sum(_advance(ch) for ch in value) * font * 1.12)
+    height = font * 1.55
+    x, y, angle = float(at[1]), float(at[2]), int(float(at[3]))
+    justify_node = _direct(effects, "justify") if effects is not None else None
+    justify = str(justify_node[1]) if justify_node is not None else "center"
+    left = x if justify == "left" else x - width if justify == "right" else x - width / 2
+    if angle in {90, 270}:
+        return x - height / 2, y - width / 2, height, width
+    if justify_node is not None and len(justify_node) > 2 and str(justify_node[2]) == "top":
+        return left, y, width, height
+    return left, y - height, width, height
+
+
+def _rect_inside(inner, outer) -> bool:
+    ix, iy, iw, ih = inner
+    ox, oy, ow, oh = outer
+    return (
+        ix >= ox - TOL and iy >= oy - TOL
+        and ix + iw <= ox + ow + TOL
+        and iy + ih <= oy + oh + TOL
+    )
+
 def frame_and_component_issues(tree: list) -> list[str]:
     issues, instances, frames = [], _instances(tree), {}
     for ref, instance in instances.items():
