@@ -120,7 +120,7 @@ class STUSB4500ReferenceTests(unittest.TestCase):
             "STUSB4500 CONTROLLER",
             "I2C ADDRESS STRAPS",
             "BACK-TO-BACK PMOS SWITCH",
-            "VSNK OUTPUT / DISCHARGE",
+            "VSNK OUTPUT",
         )
         for title in titles:
             self.assertIn(f'(text_box "{title}"', content)
@@ -215,7 +215,7 @@ class STUSB4500ReferenceTests(unittest.TestCase):
             content, tree, instances = self._generate(temporary)
 
         self.assertIn('(text_box "BACK-TO-BACK PMOS SWITCH"', content)
-        self.assertIn('(text_box "VSNK OUTPUT / DISCHARGE"', content)
+        self.assertIn('(text_box "VSNK OUTPUT"', content)
 
         positions = {
             reference: _direct(instances[reference], "at")
@@ -558,7 +558,7 @@ class STUSB4500ReferenceTests(unittest.TestCase):
             "USB-C PORT / CC PROTECTION", "VBUS BULK PROTECTION",
             "VBUS MONITOR / FILTER", "STUSB4500 CONTROLLER",
             "I2C ADDRESS STRAPS", "BACK-TO-BACK PMOS SWITCH",
-            "VSNK OUTPUT / DISCHARGE",
+            "VSNK OUTPUT",
         }.issubset(titles))
 
     def test_functional_frames_do_not_overlap_each_other(self) -> None:
