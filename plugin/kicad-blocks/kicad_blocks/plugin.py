@@ -12,7 +12,7 @@ import subprocess
 import sys
 import tempfile
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterator, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Protocol, cast
 
@@ -36,6 +36,7 @@ else:
 
 from .auto_dependencies import synchronize_block_dependencies
 from .extraction import selected_sheet_file, selected_sheet_instance_uuid
+from .manifest_types import BlockLayoutInput, BlockParameterInput, BlockVariantInput
 from .model import (
     LAYOUT_FIELD_NAME,
     PARAMETER_FIELD_PREFIX,
@@ -78,7 +79,7 @@ from .repository import library_roots as configured_library_roots
 
 LOG = logging.getLogger("kicad_blocks")
 
-_KEEP_DEFAULT_VARIANT = object()
+_KEEP_DEFAULT_VARIANT = _KeepDefaultVariant()
 
 
 class _ProtoBackedSchematicItem(Protocol):
@@ -103,6 +104,147 @@ class _SchematicForItemUpdate(Protocol):
 
     document: Message
     client: _SchematicIpcClient
+
+
+class _SchematicProject(Protocol):
+    """Project metadata and text-variable expansion used by editor actions."""
+
+    path: str | Path
+
+    def expand_text_variables(self, value: str) -> str: ...
+
+
+class _SymbolTextValue(Protocol):
+    value: str
+
+
+class _SymbolTextField(Protocol):
+    text: _SymbolTextValue
+
+
+class _SymbolIdentifier(Protocol):
+    library: str
+    name: str
+
+
+class _SymbolPin(Protocol):
+    number: str
+
+
+class _SymbolDefinition(Protocol):
+    id: _SymbolIdentifier | None
+    pins: Sequence[_SymbolPin]
+
+
+class _SymbolTransform(Protocol):
+    orientation: int
+
+
+class _SymbolPosition(Protocol):
+    x: float
+    y: float
+
+
+class _SchematicSymbol(Protocol):
+    """Placed schematic symbol fields consumed by block configuration actions."""
+
+    id: str
+    reference: str | None
+    definition: _SymbolDefinition | None
+    user_fields: Sequence[_UserField]
+    path: _SheetPath
+    reference_field: _SymbolTextField | None
+    transform: _SymbolTransform | None
+    position: _SymbolPosition | None
+
+
+class _UserField(Protocol):
+    name: str
+    text: _SymbolTextValue
+
+
+class _SheetPathElement(Protocol):
+    value: str
+
+
+class _SheetPath(Protocol):
+    path: Sequence[str | _SheetPathElement]
+
+
+class _SheetInstance(Protocol):
+    filename: str
+    name: str
+    path: _SheetPath
+    children: Sequence[_SheetInstance]
+
+
+class _SheetHierarchy(Protocol):
+    root: _SheetInstance | None
+
+
+class _Schematic(Protocol):
+    """Editor operations used by block management and placement actions."""
+
+    document: Message
+    client: _SchematicIpcClient
+
+    def get_project(self) -> _SchematicProject: ...
+
+    def get_selection(self) -> Sequence[_SchematicSymbol]: ...
+
+    def get_selection_as_string(self) -> str: ...
+
+    def get_symbols(self) -> Sequence[_SchematicSymbol]: ...
+
+    def get_sheet_symbols(self) -> Sequence[_SchematicSymbol]: ...
+
+    def get_hierarchy(self) -> _SheetHierarchy: ...
+
+    def place_symbol_from_library(
+        self, symbol_id: str, position: _SymbolPosition
+    ) -> _SchematicSymbol: ...
+
+    def begin_commit(self) -> Message: ...
+
+    def push_commit(self, commit: Message, description: str) -> None: ...
+
+    def drop_commit(self, commit: Message) -> None: ...
+
+    def save(self) -> None: ...
+
+
+class _LibraryLoadStatus(Protocol):
+    nickname: str
+    error_message: str | None
+
+
+class _KiCadApp(Protocol):
+    """Small KiCad application surface used by interactive plugin actions."""
+
+    def get_schematic(self) -> _Schematic | None: ...
+
+    def reload_library(self, *, type: int, scope: int, nicknames: list[str]) -> None: ...
+
+    def wait_for_libraries(
+        self, *, types: list[int], scope: int, timeout_s: float
+    ) -> Sequence[_LibraryLoadStatus]: ...
+
+    def get_kicad_binary_path(self, editor: str) -> str | None: ...
+
+    def run_action(self, action: str) -> None: ...
+
+    def close(self) -> None: ...
+
+
+class _CommandResult(Protocol):
+    """Subprocess-like result consumed by the injectable placement runner."""
+
+    stdout: str | None
+    returncode: int
+
+
+class _KeepDefaultVariant:
+    """Sentinel distinguishing an omitted default variant from an explicit None."""
 
 
 class _TkPaletteOwner(Protocol):
@@ -772,7 +914,7 @@ def _action_button(
     return button
 
 
-def project_directory(schematic) -> Path:
+def project_directory(schematic: _Schematic) -> Path:
     project = schematic.get_project()
     raw = Path(project.path).expanduser()
     if raw.is_file() or raw.suffix.lower() == ".kicad_pro":
@@ -790,7 +932,7 @@ _LAST_LIBRARY_RELOAD_WARNING: str | None = None
 _LAST_LIBRARY_RELOAD_OK = True
 
 
-def _reload_symbol_library(kicad, nickname: str) -> bool:
+def _reload_symbol_library(kicad: _KiCadApp, nickname: str) -> bool:
     """Reload a project library using GUI-supported commands only."""
     global _LAST_LIBRARY_RELOAD_WARNING, _LAST_LIBRARY_RELOAD_OK
     from kipy.errors import LibraryCommandError
@@ -821,7 +963,7 @@ def _reload_symbol_library(kicad, nickname: str) -> bool:
         return False
 
 
-def _register_block(project_dir: Path, record, kicad, library_paths: list[Path] | None = None):
+def _register_block(project_dir: Path, record: BlockRecord, kicad: _KiCadApp, library_paths: list[Path] | None = None) -> BlockRecord:
     """Refresh the project's unified catalog from every registered block library."""
     record = ensure_stable_block_identity(record)
     roots = [
@@ -840,7 +982,7 @@ def _register_block(project_dir: Path, record, kicad, library_paths: list[Path] 
     return record
 
 
-def place_block(schematic, record, x_mm: float, y_mm: float):
+def place_block(schematic: _Schematic, record: BlockRecord, x_mm: float, y_mm: float) -> _SchematicSymbol:
     from kipy.geometry import Vector2
 
     symbol_id = f"{record.manifest['library_nickname']}:{record.manifest['symbol_name']}"
@@ -868,7 +1010,7 @@ def _is_empty_selection_error(error: BaseException) -> bool:
     )
 
 
-def _safe_schematic_selection(schematic) -> list:
+def _safe_schematic_selection(schematic: _Schematic | None) -> list[_SchematicSymbol]:
     """Return the current typed IPC selection, normalizing empty-selection errors."""
     if schematic is None or not hasattr(schematic, "get_selection"):
         return []
@@ -880,7 +1022,7 @@ def _safe_schematic_selection(schematic) -> list:
         raise
 
 
-def _selection_fragment(schematic) -> str:
+def _selection_fragment(schematic: _Schematic) -> str:
     """Read the legacy serialized selection only when typed IPC cannot resolve it."""
     getter = getattr(schematic, "get_selection_as_string", None)
     if not callable(getter):
@@ -896,7 +1038,7 @@ def _selection_fragment(schematic) -> str:
         ) from exc
 
 
-def _selected_symbols(schematic) -> list:
+def _selected_symbols(schematic: _Schematic) -> list[_SchematicSymbol]:
     selection = _safe_schematic_selection(schematic)
     symbols = [
         item for item in selection if hasattr(item, "definition") and hasattr(item.definition, "id")
@@ -906,19 +1048,19 @@ def _selected_symbols(schematic) -> list:
     return symbols
 
 
-def _selected_symbol(schematic):
+def _selected_symbol(schematic: _Schematic) -> _SchematicSymbol:
     symbols = _selected_symbols(schematic)
     if len(symbols) != 1:
         raise ValueError("Select exactly one block symbol instance in the schematic.")
     return symbols[0]
 
 
-def _symbol_identifier(instance) -> tuple[str, str]:
+def _symbol_identifier(instance: _SchematicSymbol) -> tuple[str, str]:
     identifier = instance.definition.id
     return identifier.library, identifier.name
 
 
-def _library_roots_for(value=None) -> list[Path]:
+def _library_roots_for(value: str | Path | Sequence[str | Path] | None = None) -> list[Path]:
     if value is None:
         values = configured_library_roots()
     elif isinstance(value, (str, Path)):
@@ -936,7 +1078,7 @@ def _library_roots_for(value=None) -> list[Path]:
     return roots
 
 
-def _list_library_records(library_paths=None) -> list:
+def _list_library_records(library_paths: Path | Sequence[Path] | None = None) -> list[BlockRecord]:
     records = []
     for library_path in _library_roots_for(library_paths):
         records.extend(list_blocks(library_path))
@@ -946,7 +1088,7 @@ def _list_library_records(library_paths=None) -> list:
     )
 
 
-def _library_record_for_instance(library_root: Path | list[Path], instance):
+def _library_record_for_instance(library_root: Path | list[Path], instance: _SchematicSymbol) -> BlockRecord:
     library_nickname, symbol_name = _symbol_identifier(instance)
     matches = [
         record
@@ -972,7 +1114,7 @@ def _library_record_for_instance(library_root: Path | list[Path], instance):
     return matches[0]
 
 
-def make_selected_local(schematic, kicad, project_dir: Path, library_root: Path) -> Path:
+def make_selected_local(schematic: _Schematic, kicad: _KiCadApp, project_dir: Path, library_root: Path) -> Path:
     """Create an independent implementation copy bound to this symbol KIID."""
     instance = _selected_symbol(schematic)
     library_roots = _library_roots_for(library_root)
@@ -983,7 +1125,7 @@ def make_selected_local(schematic, kicad, project_dir: Path, library_root: Path)
     return local.path
 
 
-def _parameter_values_for_instance(instance, block) -> dict[str, str]:
+def _parameter_values_for_instance(instance: _SchematicSymbol, block: BlockRecord) -> dict[str, str]:
     """Read editable KB_PARAM_* user fields from one placed facade symbol."""
     parameters = block.manifest.get("parameters", [])
     overrides = {}
@@ -1039,7 +1181,7 @@ def _update_schematic_item_checked(
         raise RuntimeError(message)
 
 
-def _write_instance_configuration(schematic, instance, values: dict[str, str]) -> None:
+def _write_instance_configuration(schematic: _SchematicForItemUpdate, instance: _ProtoBackedSchematicItem, values: dict[str, str]) -> None:
     """Write validated facade fields through KiCad IPC as one undoable edit."""
     fields = {
         str(getattr(field, "name", "")): field for field in getattr(instance, "user_fields", ())
@@ -1073,7 +1215,7 @@ def _write_instance_configuration(schematic, instance, values: dict[str, str]) -
 
 
 def _show_selected_block_configuration(
-    schematic, project_dir: Path, library_root: Path, parent
+    schematic: _Schematic, project_dir: Path, library_root: Path, parent: tkinter_types.Misc
 ) -> None:
     """Edit instance-local profile, variant, parameters and PCB layout."""
     load_tkinter()
@@ -1434,7 +1576,7 @@ def sync_selected_local(schematic, kicad, project_dir: Path) -> dict:
     return result
 
 
-def _pick_block_for_placement(records, parent):
+def _pick_block_for_placement(records: list[BlockRecord], parent: tkinter_types.Misc) -> BlockRecord | None:
     """Choose, inspect and configure a functional block before native placement."""
     if not records:
         raise ValueError("No blocks were found in the registered functional-block libraries.")
@@ -1523,7 +1665,7 @@ def _pick_block_for_placement(records, parent):
 
     preview.bind("<Configure>", preview_resized)
 
-    def update_metadata(record):
+    def update_metadata(record: BlockRecord) -> None:
         if record is None:
             name.configure(text="No matching functional blocks")
             description.configure(text="")
@@ -1672,7 +1814,7 @@ def _pick_block_for_placement(records, parent):
     return chosen[0]
 
 
-def _pick_record(records, parent, title: str):
+def _pick_record(records: list[BlockRecord], parent: tkinter_types.Misc, title: str) -> BlockRecord | None:
     """Show a searchable modal picker for manager actions that need a library block."""
     if not records:
         raise ValueError("No blocks were found in the configured library.")
@@ -2074,7 +2216,7 @@ def _collect_block_profiles(parent, parameters, variants, layouts) -> list[dict]
     return profiles
 
 
-def _sheet_path_ids(value) -> tuple[str, ...]:
+def _sheet_path_ids(value: _SheetPath | Sequence[str] | None) -> tuple[str, ...]:
     """Normalize a KiCad SheetPath or a sequence of KIID values."""
     if value is None:
         return ()
@@ -2092,13 +2234,13 @@ def _sheet_path_ids(value) -> tuple[str, ...]:
     return tuple(result)
 
 
-def _walk_sheet_instances(instance):
+def _walk_sheet_instances(instance: _SheetInstance) -> Iterator[_SheetInstance]:
     yield instance
     for child in getattr(instance, "children", ()) or ():
         yield from _walk_sheet_instances(child)
 
 
-def _active_sheet_instance(schematic):
+def _active_sheet_instance(schematic: _Schematic) -> _SheetInstance:
     """Resolve the currently displayed Eeschema sheet from its IPC sheet path."""
     hierarchy = schematic.get_hierarchy()
     root = getattr(hierarchy, "root", None)
@@ -2150,7 +2292,7 @@ def _active_sheet_instance(schematic):
     )
 
 
-def _active_sheet_source(schematic, project_dir: Path) -> tuple[Path, str | None]:
+def _active_sheet_source(schematic: _Schematic, project_dir: Path) -> tuple[Path, str | None]:
     instance = _active_sheet_instance(schematic)
     filename = str(getattr(instance, "filename", "") or "").strip()
     if not filename:
@@ -2168,7 +2310,7 @@ def _active_sheet_source(schematic, project_dir: Path) -> tuple[Path, str | None
     return source, sheet_uuid
 
 
-def _ask_create_block_details(parent, source_sheet: Path) -> tuple[str, str] | None:
+def _ask_create_block_details(parent: tkinter_types.Misc, source_sheet: Path) -> tuple[str, str] | None:
     """Collect the block name and description in one creation dialog."""
     dialog = tkinter_types.Toplevel(parent)
     dialog.title("Create Functional Block")
@@ -2460,7 +2602,7 @@ def _edit_facade_symbol(root, schematic, project_dir, editor_window_id, parent) 
         raise
 
 
-def _place_existing(root, schematic, kicad, project_dir, parent) -> None:
+def _place_existing(root: Path | list[Path], schematic: _Schematic, kicad: _KiCadApp, project_dir: Path, parent: tkinter_types.Misc) -> None:
     """Open the searchable browser; placement is handed to KiCad's native cursor tool."""
     editor_window_id = getattr(parent, "_kicad_blocks_editor_window_id", None)
     browser = tkinter_types.Toplevel(parent)
@@ -2475,7 +2617,7 @@ def _place_existing(root, schematic, kicad, project_dir, parent) -> None:
     )
 
 
-def _edit_block_implementation(root, schematic, kicad, project_dir, parent) -> None:
+def _edit_block_implementation(root: Path | list[Path], schematic: _Schematic, kicad: _KiCadApp, project_dir: Path, parent: tkinter_types.Misc) -> None:
     """Compatibility helper for opening a library implementation from the manager."""
     selected = _safe_schematic_selection(schematic)
     if len(selected) == 1 and hasattr(selected[0], "definition"):
@@ -2606,13 +2748,13 @@ def _capture_eeschema_window_id() -> str | None:
 
 
 def _start_native_symbol_placement(
-    _kicad,
+    _kicad: _KiCadApp | None,
     editor_window_id: str | None,
     symbol_name: str,
     *,
     xdotool: str | None = None,
-    command_runner=subprocess.run,
-    pause=time.sleep,
+    command_runner: Callable[..., _CommandResult] = subprocess.run,
+    pause: Callable[[float], None] = time.sleep,
 ) -> None:
     """Open KiCad's native symbol chooser and select the exact block facade."""
     if not symbol_name or any(char.isspace() for char in symbol_name):
@@ -2727,7 +2869,7 @@ def _start_native_symbol_placement(
     )
 
 
-def _library_record_search_text(record) -> str:
+def _library_record_search_text(record: BlockRecord) -> str:
     manifest = record.manifest
     parts = [
         str(manifest.get("name", "")),
@@ -2747,7 +2889,7 @@ def _library_record_search_text(record) -> str:
     return " ".join(parts).casefold()
 
 
-def _filter_library_records(records: list, query: str) -> list:
+def _filter_library_records(records: list[BlockRecord], query: str) -> list[BlockRecord]:
     """Filter blocks by name, description, pins, parameters, variants or layouts."""
     needle = str(query or "").strip().casefold()
     if not needle:
@@ -2774,7 +2916,7 @@ def _library_record_for_tree_row(records_by_id: dict, row_id: str | None):
     return records_by_id.get(str(row_id))
 
 
-def _minimize_placement_windows(window) -> list:
+def _minimize_placement_windows(window: tkinter_types.Misc) -> list[tkinter_types.Misc]:
     """Minimize the browser and its manager parent so Eeschema's canvas is visible."""
     minimized = []
     current = window
@@ -2793,14 +2935,14 @@ def _minimize_placement_windows(window) -> list:
     return minimized
 
 
-def _restore_placement_windows(windows: list) -> None:
+def _restore_placement_windows(windows: list[tkinter_types.Misc]) -> None:
     """Restore windows minimized before a placement handoff failed."""
     for window in reversed(windows):
         with contextlib.suppress(Exception):
             window.deiconify()
 
 
-def _clean_facade_preview_svg(svg_file: Path, record, output_dir: Path) -> Path:
+def _clean_facade_preview_svg(svg_file: Path, record: BlockRecord, output_dir: Path) -> Path:
     """Remove component-name and reference placeholder artwork from the SVG."""
     import xml.etree.ElementTree as ET
 
@@ -2939,7 +3081,7 @@ def _native_symbol_preview_photo(
 _NATIVE_PREVIEW_CACHE: dict[tuple[str, int, str, int, int], bytes] = {}
 
 
-def _draw_facade_preview(canvas, record) -> None:
+def _draw_facade_preview(canvas: tkinter_types.Canvas, record: BlockRecord) -> None:
     """Display a faithful KiCad-rendered facade preview; never approximate it."""
     canvas.delete("all")
     height = max(int(canvas.winfo_height()), 250)
@@ -2975,7 +3117,7 @@ def _draw_facade_preview(canvas, record) -> None:
     canvas.configure(scrollregion=(0, 0, max(width, photo.width()), max(height, photo.height())))
 
 
-def _block_overview_text(record) -> str:
+def _block_overview_text(record: BlockRecord) -> str:
     """Summarize a block in terms useful to circuit designers."""
     manifest = record.manifest
     description = str(manifest.get("description", "") or "").strip()
@@ -3040,7 +3182,7 @@ def _block_overview_text(record) -> str:
     return "\n".join(lines)
 
 
-def _register_implementation_catalog(record, library_roots: list[Path]) -> Path:
+def _register_implementation_catalog(record: BlockRecord, library_roots: list[Path]) -> Path:
     """Register every shared facade so implementation editors can use Add Symbol."""
     catalog = build_project_symbol_catalog(record.path, library_roots)
     return register_project_symbol_library(
@@ -4415,7 +4557,7 @@ def _show_block_variant_editor(
     return new_implementation_to_open[0]
 
 
-def _show_library_roots_dialog(parent) -> bool:
+def _show_library_roots_dialog(parent: tkinter_types.Misc) -> bool:
     """Manage registered library folders with explicit add/create/edit actions."""
     dialog = tkinter_types.Toplevel(parent)
     dialog.title("Manage Libraries")
@@ -4666,7 +4808,7 @@ def _show_library_roots_dialog(parent) -> bool:
     return changed[0]
 
 
-def _bind_mousewheel(widget, scroll_command, *, include_children: bool = False) -> None:
+def _bind_mousewheel(widget: tkinter_types.Misc, scroll_command: Callable[[int], None], *, include_children: bool = False) -> None:
     """Bind wheel and high-resolution trackpad scrolling to a scrollable pane."""
     remainder = [0.0]
 
@@ -4702,9 +4844,9 @@ def _bind_mousewheel(widget, scroll_command, *, include_children: bool = False) 
 
 
 def _show_library_browser(
-    window,
-    schematic,
-    kicad,
+    window: tkinter_types.Tk,
+    schematic: _Schematic,
+    kicad: _KiCadApp,
     project_dir: Path,
     library_root: Path | list[Path],
     editor_window_id: str | None,
@@ -5344,14 +5486,14 @@ def run_library_browser() -> None:
     run_action("manage-library")
 
 
-def _field_value(instance, field_name: str) -> str:
+def _field_value(instance: _SchematicSymbol, field_name: str) -> str:
     for field in getattr(instance, "user_fields", ()):
         if str(getattr(field, "name", "")) == field_name:
             return str(getattr(getattr(field, "text", None), "value", "") or "").strip()
     return ""
 
 
-def _sheet_variables_for_symbol(schematic, instance) -> dict[str, str]:
+def _sheet_variables_for_symbol(schematic: _Schematic, instance: _SchematicSymbol) -> dict[str, str]:
     """Collect custom fields on hierarchical sheet symbols containing this occurrence."""
     sheet_path = list(getattr(getattr(instance, "path", None), "path", ()))
     if not sheet_path:
@@ -5379,7 +5521,7 @@ def _sheet_variables_for_symbol(schematic, instance) -> dict[str, str]:
     return variables
 
 
-def _resolve_variant_text(raw_value: str, project, sheet_variables: dict[str, str]) -> str:
+def _resolve_variant_text(raw_value: str, project: _SchematicProject, sheet_variables: dict[str, str]) -> str:
     """Expand sheet custom fields and normal KiCad project text variables."""
     import re
 
@@ -5390,7 +5532,7 @@ def _resolve_variant_text(raw_value: str, project, sheet_variables: dict[str, st
     for _ in range(12):
         previous = value
 
-        def replace_sheet(match):
+        def replace_sheet(match: re.Match[str]) -> str:
             return sheet_variables.get(match.group(1), match.group(0))
 
         value = token.sub(replace_sheet, value)
@@ -5484,7 +5626,7 @@ def _export_recursive_bom(
     )
 
 
-def _validate_shared_library(root: Path | list[Path], parent) -> None:
+def _validate_shared_library(root: Path | list[Path], parent: tkinter_types.Misc) -> None:
     """Validate every registered library, keeping each report in its own folder."""
     output = filedialog.askdirectory(
         title="Select a folder for the library validation reports",
@@ -5581,7 +5723,7 @@ def _validate_recursive_erc(
     )
 
 
-def _publish_block(root, kicad, project_dir, parent) -> None:
+def _publish_block(root: Path | list[Path], kicad: _KiCadApp, project_dir: Path, parent: tkinter_types.Misc) -> None:
     library_paths = _library_roots_for(root)
     record = _pick_record(_list_library_records(library_paths), parent, "Publish Library Block")
     if record is None:
@@ -5602,7 +5744,7 @@ def _publish_block(root, kicad, project_dir, parent) -> None:
     )
 
 
-def _block_record_for_instance(library_root: Path | list[Path], project_dir: Path, instance):
+def _block_record_for_instance(library_root: Path | list[Path], project_dir: Path, instance: _SchematicSymbol) -> BlockRecord:
     """Resolve the selected instance to its local copy or any registered shared library."""
     local_record = local_copy_for_instance(project_dir, str(instance.id))
     if local_record is not None:
@@ -5629,7 +5771,7 @@ def _parse_pin_net_map(value: str, pins: list[str]) -> dict[str, str]:
     return mapping
 
 
-def _open_generated_pcb_copy(kicad, board_path: Path):
+def _open_generated_pcb_copy(kicad: _KiCadApp, board_path: Path) -> subprocess.Popen[bytes]:
     """Open only the newly generated board copy in a separate PCB Editor process."""
     board_path = Path(board_path).expanduser().resolve()
     if not board_path.is_file():
