@@ -2383,20 +2383,28 @@ def _capture_eeschema_window_id() -> str | None:
             continue
         seen.add(window_id)
         try:
-            window_class = subprocess.run(
-                [xdotool, "getwindowclassname", window_id],
-                capture_output=True,
-                text=True,
-                check=False,
-                timeout=3,
-            ).stdout.strip().casefold()
-            window_title = subprocess.run(
-                [xdotool, "getwindowname", window_id],
-                capture_output=True,
-                text=True,
-                check=False,
-                timeout=3,
-            ).stdout.strip().casefold()
+            window_class = (
+                subprocess.run(
+                    [xdotool, "getwindowclassname", window_id],
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                    timeout=3,
+                )
+                .stdout.strip()
+                .casefold()
+            )
+            window_title = (
+                subprocess.run(
+                    [xdotool, "getwindowname", window_id],
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                    timeout=3,
+                )
+                .stdout.strip()
+                .casefold()
+            )
         except (OSError, subprocess.TimeoutExpired):
             continue
 
@@ -3522,7 +3530,10 @@ def _show_block_layout_editor(
     add_button = ttk.Button(actions, text="Add layout", command=add_layout)
     add_button.pack(side="left")
     remove_button = ttk.Button(
-        actions, text="Remove", command=remove_layout, state="disabled"
+        actions,
+        text="Remove",
+        command=remove_layout,
+        state="disabled",
     )
     remove_button.pack(side="left", padx=(8, 0))
     default_button = ttk.Button(
