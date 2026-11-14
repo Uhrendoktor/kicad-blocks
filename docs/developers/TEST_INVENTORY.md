@@ -8,7 +8,7 @@ programs rather than pytest modules are listed separately and must remain explic
 registered in STANDALONE_TESTS in scripts/test_inventory.py.
 
 - Pytest modules: **23**
-- Individually inventoried pytest cases: **208**
+- Individually inventoried pytest cases: **211**
 - Standalone acceptance runners: **7**
 - Additional CI validation runners: **2**
 
@@ -314,6 +314,9 @@ Regression tests for the AST-based Any/object policy, annotation-debt ratchet, a
 | test_quoted_sexpr_values_round_trip | Exercises quoted sexpr values round trip. |
 | test_parameter_values_remain_one_quoted_sexpr_field | Exercises parameter values remain one quoted sexpr field. |
 | `test_changed_file_ratchet_rejects_increased_annotation_debt` | Exercises changed file ratchet rejects increased annotation debt. |
+| `test_reports_exact_duplicate_test_bodies_even_when_docstrings_differ` | Reports exact duplicate test bodies even when docstrings differ. |
+| `test_different_bodies_and_class_fixture_scopes_are_not_duplicates` | Exercises different bodies and class fixture scopes are not duplicates. |
+| `test_reports_empty_and_pass_only_test_bodies` | Reports empty and pass only test bodies. |
 
 
 ### tests/test_release_package.py

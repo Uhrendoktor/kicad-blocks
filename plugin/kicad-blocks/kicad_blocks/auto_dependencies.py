@@ -111,7 +111,7 @@ def parse_kicad_xml_netlist(path: Path) -> KiCadNetlist:
 
 def _field_text(instance: _PlacedSymbol) -> str:
     field = instance.reference_field
-    return str(field.text.value or "") .strip() if field is not None else ""
+    return str(field.text.value or "").strip() if field is not None else ""
 
 
 def _millimetres(value: SupportsFloat) -> float:

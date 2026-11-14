@@ -200,6 +200,7 @@ jobs:
           git fetch --no-tags origin main
           "$PY" scripts/check_python_quality.py --base-ref origin/main
           "$PY" scripts/test_inventory.py --check
+          "$PY" scripts/check_test_quality.py
           "$PY" -m ruff check plugin tests scripts examples
           "$PY" -m ruff format --check plugin tests scripts examples
           "$PY" -m pyright -p pyrightconfig.json

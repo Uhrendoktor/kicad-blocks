@@ -33,6 +33,7 @@ class BlockPin:
     number: str = ""
 
     def as_manifest(self, index: int) -> dict[str, str]:
+        """Serialize this pin using its stable KiCad symbol pin number."""
         return {
             "name": self.name,
             "number": self.number or str(index),
@@ -665,6 +666,7 @@ def render_implementation_schematic(
 
 
 def sha256_file(path: Path) -> str:
+    """Return a file SHA-256 digest while streaming large assets in bounded chunks."""
     digest = hashlib.sha256()
     with open(path, "rb") as stream:
         for chunk in iter(lambda: stream.read(1024 * 1024), b""):
@@ -673,5 +675,6 @@ def sha256_file(path: Path) -> str:
 
 
 def revision_for_hashes(hashes: dict[str, str]) -> str:
+    """Build a deterministic revision ID from sorted asset names and content digests."""
     payload = json.dumps(hashes, sort_keys=True, separators=(",", ":")).encode()
     return hashlib.sha256(payload).hexdigest()
