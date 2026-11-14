@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+import tomllib
 from pathlib import Path
 
 from hypothesis import given, settings
@@ -51,6 +52,79 @@ def test_allows_runtime_object_construction_and_ordinary_prose() -> None:
         "def label(value: str) -> str:\n    return value\n"
     )
     assert python_policy_violations(source, "fixture.py") == ()
+
+
+def test_ruff_policy_uses_full_selection_and_exact_compatibility_exceptions() -> None:
+    """Keep Ruff comprehensive while limiting deliberate rule exceptions to known boundaries."""
+    project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    lint = project["tool"]["ruff"]["lint"]
+
+    expected_global_ignores = {
+        "COM812",
+        "COM819",
+        "D203",
+        "D206",
+        "D213",
+        "D300",
+        "E111",
+        "E114",
+        "E117",
+        "ISC002",
+        "N999",
+        "PLC0415",
+        "PLR6301",
+        "UP031",
+        "Q000",
+        "Q001",
+        "Q002",
+        "Q003",
+        "Q004",
+        "W191",
+    }
+    bootstrap_paths = {
+        "plugin/kicad-blocks/entrypoints/action_hub.py",
+        "plugin/kicad-blocks/entrypoints/browse_blocks.py",
+        "plugin/kicad-blocks/entrypoints/create_block.py",
+        "plugin/kicad-blocks/entrypoints/open_implementation.py",
+        "scripts/validate_schematic_style.py",
+        "examples/stusb4500/generate_reference.py",
+        "tests/test_schematic_style_rules.py",
+        "tests/test_variants.py",
+        "tests/test_profiles.py",
+        "tests/test_operations.py",
+        "tests/test_library_validation.py",
+        "tests/test_pcb_placement.py",
+        "tests/test_library_picker_gui.py",
+        "tests/validate_kicad_cli.py",
+        "tests/test_auto_dependencies.py",
+        "tests/test_extraction.py",
+        "tests/test_blocks.py",
+        "tests/test_pcb_layout.py",
+        "tests/test_pcb_layout_unit.py",
+        "tests/test_eeschema_gui.py",
+        "tests/test_ipc_headless.py",
+        "tests/test_stusb4500_reference.py",
+        "tests/test_editor_workflow.py",
+        "tests/test_library_browser.py",
+        "tests/create_block_ipc_integration.py",
+        "tests/test_plugin_registration.py",
+        "tests/test_instance_configuration_gui.py",
+        "tests/capture_visual_docs.py",
+    }
+    expected_per_file = {
+        "tests/**/*.py": ["S101", "PLR2004", "T201"],
+        "scripts/check_python_quality.py": ["T201"],
+        "scripts/check_test_quality.py": ["T201"],
+        "scripts/test_inventory.py": ["T201"],
+        "scripts/verify_release_gate.py": ["T201"],
+        "scripts/validate_docs.py": ["T201"],
+        **{path: ["E402"] for path in bootstrap_paths},
+    }
+
+    assert lint["select"] == ["ALL"]
+    assert lint["preview"] is True
+    assert set(lint["ignore"]) == expected_global_ignores
+    assert lint["per-file-ignores"] == expected_per_file
 
 
 @settings(max_examples=80, deadline=None)
