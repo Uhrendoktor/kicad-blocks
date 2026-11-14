@@ -166,7 +166,7 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
         register.assert_called_once_with(
             self.project, self.block, self.kicad, [self.library.resolve()]
         )
-        messagebox.showinfo.assert_called_once()
+        messagebox.showinfo.assert_not_called()
 
 
     def test_create_block_rolls_back_new_block_when_project_registration_fails(self):
@@ -543,7 +543,7 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
         self.assertIn("implementation.kicad_sch", published_manifest["hashes"])
         self.kicad.reload_library.assert_called_once()
         self.kicad.wait_for_libraries.assert_called_once()
-        self.messagebox.showinfo.assert_called()
+        self.messagebox.showinfo.assert_not_called()
 
     def test_instance_configuration_is_one_undoable_ipc_update(self):
         from google.protobuf.empty_pb2 import Empty
@@ -906,8 +906,7 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
             project_catalog=project_catalog,
             close_browser=root.destroy,
         )
-        self.messagebox.showinfo.assert_called_once()
-        self.assertIn(self.block.manifest["symbol_name"], self.messagebox.showinfo.call_args.args[1])
+        self.messagebox.showinfo.assert_not_called()
         root.withdraw.assert_called_once_with()
         root.destroy.assert_called_once_with()
 
