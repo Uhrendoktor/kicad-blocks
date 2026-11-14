@@ -23,7 +23,7 @@ def main() -> None:
     xdotool = shutil.which("xdotool")
     if not xdotool:
         raise FileNotFoundError("xdotool is required for the picker GUI test.")
-    plugin_actions._load_tkinter()
+    plugin_actions.load_tkinter()
     with tempfile.TemporaryDirectory(prefix="kicad-block-picker-") as temp:
         library = Path(temp) / "library"
         first = create_block(
@@ -88,9 +88,7 @@ def main() -> None:
 
         parent.after(250, drive_picker)
         try:
-            selected = plugin_actions._pick_record(
-                [first, target], parent, picker_title
-            )
+            selected = plugin_actions._pick_record([first, target], parent, picker_title)
         finally:
             parent.destroy()
         if interaction_errors:
