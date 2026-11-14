@@ -351,7 +351,7 @@ class _TkStyleLayout(Protocol):
     ) -> list[tuple[str, _TkLayoutOptions]]: ...
 
 
-class _CairoSVG(Protocol):
+class _ResvgPy(Protocol):
     """Narrow SVG-to-PNG renderer interface used by toolbar icon generation."""
 
     def svg_to_bytes(self, *, svg_string: str, width: int, height: int) -> bytes: ...
@@ -845,7 +845,7 @@ def _create_action_icon(parent: tkinter_types.Misc, name: str) -> tkinter_types.
         "</svg>"
     )
     try:
-        renderer = cast(_CairoSVG, import_module("resvg_py"))
+        renderer = cast(_ResvgPy, import_module("resvg_py"))
         png = renderer.svg_to_bytes(svg_string=svg, width=20, height=20)
         image = tk.PhotoImage(data=base64.b64encode(png).decode("ascii"), master=parent)
     except (ImportError, OSError, tk.TclError, ValueError):
@@ -2972,16 +2972,13 @@ def _native_symbol_preview_photo(
                     )
                 svg_file = candidates[0]
 
-            try:
-                import cairosvg
-            except ImportError as exc:
-                raise RuntimeError(
-                    "The native KiCad preview rasterizer is missing. Reinstall KiCad Blocks "
-                    "so its CairoSVG dependency is installed."
-                ) from exc
-
             svg_file = _clean_facade_preview_svg(svg_file, record, output_dir)
-            png_data = cairosvg.svg2png(url=str(svg_file), output_width=int(width))
+            renderer = cast(_ResvgPy, import_module("resvg_py"))
+            png_data = renderer.svg_to_bytes(
+                svg_string=svg_file.read_text(encoding="utf-8"),
+                width=int(width),
+                height=int(max_height),
+            )
             try:
                 from io import BytesIO
 
