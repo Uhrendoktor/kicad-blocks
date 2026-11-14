@@ -1035,7 +1035,7 @@ def _instance_links_path(project_dir: Path) -> Path:
 def _read_instance_links(path: Path) -> InstanceLinks:
     """Read and validate the project-local KIID-to-block lookup document."""
     try:
-        raw: object = json.loads(path.read_text(encoding="utf-8"))
+        raw = json.loads(path.read_text(encoding="utf-8"))
     except FileNotFoundError:
         return {"schema_version": 1, "instances": {}}
     except json.JSONDecodeError as error:
