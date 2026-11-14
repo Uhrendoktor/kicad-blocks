@@ -73,6 +73,12 @@ The sheet uses A3 landscape and a 2.54 mm placement grid. Functional sections re
 
 Electrical relationships use orthogonal KiCad wires for local connections. Longer control and supply nets use matching labels or hierarchical ports rather than long wires across the sheet.
 
+U1.22 (VSYS) remains a separate hierarchical input in the implementation;
+it is not tied to GND. The regulator bypass network and the VBUS filter/sense
+network use short, explicit pin-level wiring. See the
+[STUSB4500 schematic style and electrical checklist](SCHEMATIC_STYLE_CHECKLIST.md)
+for the layout, labeling, and electrical-routing rules applied to this example.
+
 ## Component set
 
 | Reference(s) | Value / part | Role |
@@ -115,9 +121,17 @@ CI exports the generated schematic to SVG and validates its netlist. The standar
 
 ## Electrical scope and safety
 
-This is a **datasheet-derived reference reconstruction**, not a production design or a claim of electrical-rule-check sign-off.
+This is a **datasheet-derived reference reconstruction**, not a production design or production compliance sign-off.
 
 ST does not specify an order code for D4. Before using this circuit, verify the selected diode, protection ratings, component footprints, thermal/current capability, USB Type-C/PD compliance and configured NVM PDO profile for the target application. Confirm all power-path component ratings and the PCB layout for the expected operating conditions.
+
+The CI child-block validation exports a KiCad netlist and checks the critical
+pin-to-net assignments. Its standalone ERC profile suppresses only checks that
+cannot be resolved for an isolated child sheet: root-sheet hierarchical ports,
+externally driven input/power pins, isolated hierarchical-port labels, and
+missing project library tables. Internal shorts, pin conflicts, dangling wires
+and dangling local labels remain subject to ERC. This is a child-block
+validation profile, not a substitute for ERC in the consuming parent project.
 
 **Primary source:** [STUSB4500 datasheet DS12499, Rev. 8](https://www.st.com/resource/en/datasheet/stusb4500.pdf), Figure 10 and Table 1.
 
