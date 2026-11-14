@@ -1180,7 +1180,7 @@ def synchronize_local_copy(local_block: BlockRecord) -> LocalCopySyncReport:
             "Create a reviewed replacement instance instead."
         )
 
-    base_hashes = manifest.get("base_hashes", {})
+    base_hashes: dict[str, str] = cast(dict[str, str], manifest.get("base_hashes", {}))
     local_hashes = _asset_hashes(local_block.path, manifest)
     source_hashes = _asset_hashes(source.path, source.manifest)
     base_dependencies = manifest.get("base_dependencies", manifest.get("dependencies", []))
@@ -2021,15 +2021,13 @@ def synchronize_dependencies(
             mapping[str(pin_name)] = net_name
 
         previous = existing_by_reference.get(key)
-        same_occurrence = (
-            previous is not None and previous["block_id"] == child.manifest["block_id"]
+        previous_instance_id = (
+            previous.get("instance_id")
+            if previous is not None and previous["block_id"] == child.manifest["block_id"]
+            else None
         )
         dependency: BlockDependencyManifest = {
-            "instance_id": (
-                str(previous.get("instance_id") or uuid.uuid4())
-                if same_occurrence
-                else str(uuid.uuid4())
-            ),
+            "instance_id": str(previous_instance_id or uuid.uuid4()),
             "reference": reference,
             "position_mm": [position[0], position[1]],
             "orientation": orientation,
