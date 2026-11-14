@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import sys
 from collections import Counter
+from itertools import pairwise
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -134,7 +135,7 @@ def label_network_issues(tree: list) -> list[str]:
         split = [p for p in points if _on_segment(p, a, b)]
         axis = 0 if abs(a[1] - b[1]) <= TOL else 1
         split.sort(key=lambda p: p[axis], reverse=a[axis] > b[axis])
-        for p, q in zip(split, split[1:]):
+        for p, q in pairwise(split):
             dsu.union(p, q)
     totals, island_uses = Counter(), Counter()
     issues = []
@@ -272,7 +273,7 @@ def frame_and_component_issues(tree: list) -> list[str]:
         for other_name, other_rect in entries[i + 1:]:
             if _overlap(rect, other_rect):
                 issues.append(f"functional frames overlap: {name}/{other_name}")
-    for left_name, right_name in zip(FLOW, FLOW[1:]):
+    for left_name, right_name in pairwise(FLOW):
         if left_name in frames and right_name in frames:
             left, right = frames[left_name], frames[right_name]
             gap = right[0] - (left[0] + left[2])
@@ -289,14 +290,11 @@ def frame_and_component_issues(tree: list) -> list[str]:
             if not (x + 2.54 - TOL <= point[0] <= x + w - 2.54 + TOL and y + 2.54 - TOL <= point[1] <= y + h - 2.54 + TOL):
                 issues.append(f"component {ref} is not comfortably inside frame {zone}")
     for zone, rect in frames.items():
-        x, y, w, h = rect
         for segment in _segments(tree):
             if len(segment) != 2:
                 continue
             a, b = segment
-            def inside(p):
-                return x - TOL <= p[0] <= x + w + TOL and y - TOL <= p[1] <= y + h + TOL
-            if inside(a) and inside(b):
+            if _inside(a, rect) and _inside(b, rect):
                 continue
             if _line_hits_box(a, b, rect):
                 issues.append(f"wire {a}->{b} crosses the {zone} frame boundary")
