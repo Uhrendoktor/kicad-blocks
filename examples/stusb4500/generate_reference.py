@@ -544,7 +544,7 @@ def _functional_zone(
 
 def _symbol_rotation(reference: str) -> int:
     """Return the canonical rotation used by the reference layout."""
-    if reference in {"T1", "D4"}:
+    if reference in {"T1", "D4", "C1"}:
         return 180
     if reference == "D1":
         return 270
@@ -947,7 +947,10 @@ def generate_reference_schematic(destination: Path) -> Path:
             # opposite outer sides of the pair, away from gate/source wires.
             dx = -5.08 if reference == "T4" else 8.89
             reference_x, reference_y = sx + dx, sy - 6.35
-            value_x, value_y = sx + (6.35 if reference == "T1" else dx), sy - 8.89
+            value_x, value_y = (
+                sx + (5.08 if reference == "T1" else dx),
+                sy - (7.62 if reference == "T1" else 8.89),
+            )
             reference_justify = "right" if reference == "T4" else "left"
             value_justify = reference_justify
         elif reference.startswith("R"):
@@ -986,7 +989,12 @@ def generate_reference_schematic(destination: Path) -> Path:
                 reference_justify = "left"
             else:
                 reference_x, reference_y = sx - 3.81, sy
-            value_x, value_y = sx - 4.45, sy + 2.54
+            value_x, value_y = (
+                sx + 4.45 if reference == "C3" else sx - 4.45,
+                sy + 2.54,
+            )
+            if reference == "C3":
+                value_justify = "left"
         else:
             reference_x, reference_y = sx, sy - 8
             value_x, value_y = sx, sy - 5
@@ -1071,6 +1079,8 @@ def generate_reference_schematic(destination: Path) -> Path:
                             label_angle = {
                                 0: 180, 90: 90, 180: 0, 270: 270,
                             }[angle]
+                            if angle in {90, 270}:
+                                justify = "right"
                         if reference == "D1" and pin["number"] in {"1", "2"}:
                             # D1's ground pin points down; fan CC labels out
                             # above the ESD array so they do not cross wires.
@@ -1098,7 +1108,7 @@ def generate_reference_schematic(destination: Path) -> Path:
                             label_x = px
                             label_y = py + 2.54
                             justify = "right"
-                            label_angle = 0
+                            label_angle = 90
                         if reference in {"R1", "R4"} and net in {"VBUS_FILTERED", "VREG_2V7"}:
                             # Keep each monitor label on a short, straight
                             # vertical twig instead of a long L-shaped detour.
@@ -1116,7 +1126,7 @@ def generate_reference_schematic(destination: Path) -> Path:
                                 # align it with VBUS; this separates it from
                                 # the nearby C2 GND label.
                                 "22": (-2.54, -5.08, "right", 0),
-                                "25": (0.00, 5.08, "left", 0),
+                                "25": (0.00, 5.08, "right", 90),
                             }
                             override = u1_top_labels.get(pin["number"])
                             if override is not None:
@@ -1254,11 +1264,8 @@ def generate_reference_schematic(destination: Path) -> Path:
     )
     add_route("GND", [c2_ground, c3_ground], "c2-c3-shared-ground-rail")
     add_junction(shared_ground_junction, "GND:C2-C3-shared-branch")
-    add_route(
-        "GND", [shared_ground_junction, shared_ground_port],
-        "c2-c3-shared-ground-port",
-    )
-    label_points[shared_ground_port] = (
+    # Generate the single hierarchical port as a short label twig from the branch.
+    label_points[shared_ground_junction] = (
         "GND", "hier", "passive",
         shared_ground_port[0], shared_ground_port[1], "right", 90,
     )
@@ -1325,17 +1332,17 @@ def generate_reference_schematic(destination: Path) -> Path:
     c3_vreg_2v7 = pin_world_points[("C3", "1")]
     vreg_2v7_branch = (u1_vreg_2v7[0], 90.17)
     c3_vreg_2v7_branch = (c3_vreg_2v7[0], 90.17)
+    # Extend the trunk to C3; C2 branches into the same physical supply rail.
     add_route("VREG_2V7", [
         u1_vreg_2v7, vreg_2v7_branch,
-        (c2_vreg_2v7[0], 90.17), c2_vreg_2v7,
-    ], "u1-vreg-2v7-to-c2")
-    # C3 joins the interior of the shared rail. One main segment plus one
-    # branch and an explicit junction avoids duplicated overlapping wires.
+        c3_vreg_2v7_branch, c3_vreg_2v7,
+    ], "u1-vreg-2v7-to-c3")
+    c2_vreg_2v7_branch = (c2_vreg_2v7[0], 90.17)
     add_route(
-        "VREG_2V7", [c3_vreg_2v7_branch, c3_vreg_2v7],
-        "vreg-2v7-rail-to-c3",
+        "VREG_2V7", [c2_vreg_2v7_branch, c2_vreg_2v7],
+        "vreg-2v7-rail-to-c2",
     )
-    add_junction(c3_vreg_2v7_branch, "VREG_2V7:C3-bypass-branch")
+    add_junction(c2_vreg_2v7_branch, "VREG_2V7:C2-bypass-branch")
     remove_local_label("C2", "1", "VREG_2V7")
     remove_local_label("C3", "1", "VREG_2V7")
 

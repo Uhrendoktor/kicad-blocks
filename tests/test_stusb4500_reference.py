@@ -80,7 +80,7 @@ class STUSB4500ReferenceTests(unittest.TestCase):
         self.assertNotIn('(label "GND"', content)
         self.assertGreaterEqual(
             sum(1 for label in _all(tree, "hierarchical_label") if str(label[1]) == "GND"),
-            15,
+            14,
         )
         # CC1/CC2 are inside this block: connector -> ESD -> controller.
         self.assertNotIn('(hierarchical_label "CC1"', content)
@@ -558,12 +558,12 @@ class STUSB4500ReferenceTests(unittest.TestCase):
         self.assertEqual(delta("D4", "C4"), (12.70, 3.81))
         self.assertEqual(delta("C4", "R1"), (12.70, 0.0))
         self.assertEqual(delta("R1", "R4"), (5.08, 0.0))
-        self.assertEqual(delta("U1", "C1"), (-20.32, -35.56))
-        self.assertEqual(delta("U1", "C2"), (0.0, -35.56))
+        self.assertEqual(delta("U1", "C1"), (5.08, -35.56))
+        self.assertEqual(delta("U1", "C2"), (15.24, -35.56))
         self.assertEqual(delta("C2", "C3"), (5.08, 0.0))
         self.assertEqual(delta("R51", "R52"), (0.0, 12.70))
         self.assertEqual(delta("R51", "R53"), (20.32, 0.0))
-        self.assertEqual(delta("T4", "T1"), (40.64, 0.0))
+        self.assertEqual(delta("T4", "T1"), (25.40, 0.0))
         t4, t1, r10 = origin("T4"), origin("T1"), origin("R10")
         self.assertAlmostEqual(r10[0], (t4[0] + t1[0]) / 2, places=3)
         self.assertAlmostEqual(r10[1] - t4[1], 17.78, places=3)
@@ -616,7 +616,7 @@ class STUSB4500ReferenceTests(unittest.TestCase):
 
     def test_style_linter_exposes_stable_rule_ids(self) -> None:
         rule_ids = tuple(STYLE_RULES)
-        self.assertEqual(rule_ids, tuple(f"SCH{index:03d}" for index in range(1, 19)))
+        self.assertEqual(rule_ids, tuple(f"SCH{index:03d}" for index in range(1, 20)))
         self.assertTrue(all(rule["severity"] in {"error", "warning"} for rule in STYLE_RULES.values()))
         self.assertTrue(all(rule["name"] and rule["description"] for rule in STYLE_RULES.values()))
 
