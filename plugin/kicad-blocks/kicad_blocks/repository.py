@@ -150,6 +150,99 @@ def _symbol_definition_digest_from_file(path: Path, symbol_name: str) -> str:
     return _symbol_definition_digest(_named_symbol_node(tree, symbol_name, Path(path)))
 
 
+def synchronize_project_symbol_catalog(
+    project_catalog: Path,
+    source_symbol_file: Path,
+    symbol_name: str,
+    *,
+    baseline_digest: str | None = None,
+) -> bool:
+    """Refresh one unchanged project-catalog symbol from its library source.
+
+    A small sidecar records the source digest last synchronized into this
+    project. If the project symbol differs from that digest, it is treated as
+    a project-local edit and is never overwritten. Older catalogs without a
+    sidecar use the block manifest's published digest as their baseline.
+    """
+    project_catalog = Path(project_catalog).expanduser().resolve()
+    source_symbol_file = Path(source_symbol_file).expanduser().resolve()
+    if project_catalog.name != LIBRARY_CATALOG_NAME:
+        raise ValueError(
+            f"Project symbol catalog must be named {LIBRARY_CATALOG_NAME!r}."
+        )
+    if not source_symbol_file.is_file():
+        raise FileNotFoundError(source_symbol_file)
+
+    source_tree = parse_sexpr(source_symbol_file.read_text(encoding="utf-8"))
+    source_symbol = _named_symbol_node(source_tree, symbol_name, source_symbol_file)
+    source_digest = _symbol_definition_digest(source_symbol)
+
+    state_file = project_catalog.with_name(f"{project_catalog.stem}.sync.json")
+    if state_file.is_file():
+        try:
+            state = json.loads(state_file.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            raise ValueError(
+                f"Invalid project symbol synchronization state: {state_file}"
+            ) from exc
+        if not isinstance(state, dict) or not isinstance(state.get("symbols"), dict):
+            raise ValueError(
+                f"Invalid project symbol synchronization state: {state_file}"
+            )
+    else:
+        state = {"schema_version": 1, "symbols": {}}
+    synchronized = state["symbols"]
+
+    def save_state() -> None:
+        atomic_write(
+            state_file,
+            json.dumps(state, indent=2, ensure_ascii=False) + "\\n",
+        )
+
+    if not project_catalog.is_file():
+        merge_symbol_catalog(project_catalog.parent, source_symbol_file)
+        synchronized[symbol_name] = source_digest
+        save_state()
+        return True
+
+    catalog_tree = parse_sexpr(project_catalog.read_text(encoding="utf-8"))
+    project_matches = [
+        item for item in _all(catalog_tree, "symbol")
+        if len(item) >= 2 and str(item[1]) == symbol_name
+    ]
+    if not project_matches:
+        merge_symbol_catalog(project_catalog.parent, source_symbol_file)
+        synchronized[symbol_name] = source_digest
+        save_state()
+        return True
+    if len(project_matches) != 1:
+        raise ValueError(
+            f"Expected exactly one {symbol_name!r} symbol in {project_catalog}; "
+            f"found {len(project_matches)}."
+        )
+
+    project_digest = _symbol_definition_digest(project_matches[0])
+    if project_digest == source_digest:
+        if synchronized.get(symbol_name) != source_digest:
+            synchronized[symbol_name] = source_digest
+            save_state()
+        return False
+
+    previous_digest = synchronized.get(symbol_name)
+    if previous_digest is None:
+        previous_digest = baseline_digest
+    if previous_digest and project_digest == str(previous_digest):
+        # Only this symbol is replaced; other project-local symbols remain intact.
+        merge_symbol_catalog(project_catalog.parent, source_symbol_file)
+        synchronized[symbol_name] = source_digest
+        save_state()
+        return True
+
+    # The project entry diverged from the last synchronized definition. Keep
+    # that project-local edit; a later publish can make it the new source.
+    return False
+
+
 def _import_catalog_facade_edit(block: BlockRecord, manifest: dict) -> bool:
     """Import a Symbol Editor catalog edit into the block's revisioned facade asset.
 
