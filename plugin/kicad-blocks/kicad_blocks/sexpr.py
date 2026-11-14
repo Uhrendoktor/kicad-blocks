@@ -10,6 +10,8 @@ from __future__ import annotations
 import json
 from collections.abc import Iterator
 
+from .model import sexpr_quote
+
 type SExpr = str | list[SExpr]
 type SExprList = list[SExpr]
 
