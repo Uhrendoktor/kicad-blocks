@@ -1585,7 +1585,7 @@ def _choose_block_layout(
     )
     if selected is None:
         return None
-    for item, label in zip(layouts, labels):
+    for item, label in zip(layouts, labels, strict=True):
         if selected.strip().casefold() in {
             label.casefold(),
             str(item.get("name", "")).casefold(),
@@ -2851,7 +2851,7 @@ def _save_block_layouts(
     seen_names = set()
     seen_files = set()
 
-    for index, item in enumerate(layouts, start=1):
+    for item in layouts:
         name = str(item.get("name", "")).strip()
         layout_id = str(item.get("id") or slugify(name)).casefold()
         source_value = item.get("source")
