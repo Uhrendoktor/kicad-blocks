@@ -400,7 +400,7 @@ class _TkTransientWindow(Protocol):
 
 def load_tkinter() -> None:
     """Load the optional desktop UI toolkit when the manager is run."""
-    global tk, ttk, filedialog, messagebox, simpledialog
+    global tk, ttk, filedialog, messagebox, simpledialog, tkinter_types
     if tk is not None:
         return
 
@@ -411,10 +411,14 @@ def load_tkinter() -> None:
     from tkinter import ttk as ttk_module
 
     tk = tkinter_module
+    tkinter_types = tkinter_module
     ttk = ttk_module
     filedialog = filedialog_module
     messagebox = messagebox_module
     simpledialog = simpledialog_module
+
+
+_load_tkinter = load_tkinter
 
 
 def _system_prefers_dark_theme() -> bool | None:
@@ -2603,7 +2607,7 @@ def _ensure_project_facade_catalog(
 def _edit_facade_symbol(
     record: BlockRecord,
     kicad: _KiCadApp,
-    editor_window_id: str | None,
+    editor_window_id: str | None = None,
     *,
     project_catalog: Path | None = None,
     close_browser: Callable[[], None] | None = None,
@@ -6378,10 +6382,12 @@ def run_action(action: str, *, editor_window_id: str | None = None) -> None:
     if action not in valid_actions:
         raise ValueError(f"Unknown KiCad Blocks action: {action!r}")
 
-    # KiCad desktop integrations do not expose portable cross-process window IDs.
-    load_tkinter()
+    # KiCad IPC is bound to the editor instance that launched this action.
+    # No native cross-process window handle is needed for these operations.
+    del editor_window_id
+    editor_window_id = None
+    _load_tkinter()
     root = tk.Tk()
-    root._kicad_blocks_editor_window_id = editor_window_id
     _configure_tk_theme(root)
     root.title("KiCad Blocks — Tasks" if action == "open-hub" else "KiCad Blocks")
     _attach_tk_window_to_editor(root, editor_window_id)
@@ -6436,7 +6442,22 @@ def run_action(action: str, *, editor_window_id: str | None = None) -> None:
                 parent=root,
             )
         elif action == "edit-facade":
-            _edit_facade_symbol(library_paths, schematic, project_dir, editor_window_id, root)
+            record = _pick_record(_list_library_records(library_paths), root, "Edit Facade")
+            if record is not None:
+                project_catalog = _ensure_project_facade_catalog(project_dir, record, kicad)
+                _edit_facade_symbol(
+                    record,
+                    kicad,
+                    project_catalog=project_catalog,
+                    close_browser=root.destroy,
+                )
+                messagebox.showinfo(
+                    "Edit facade",
+                    "Symbol Editor handoff requested. In its library tree, search for "
+                    + f"{LIBRARY_NICKNAME}:{record.manifest['symbol_name']}"
+                    + " and select the result. Saved facade edits are imported by Publish implementation.",
+                    parent=root,
+                )
         elif action == "publish-block":
             _publish_block(library_paths, kicad, project_dir, root)
         elif action == "recursive-bom":
