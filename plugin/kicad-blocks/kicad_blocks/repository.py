@@ -5,6 +5,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import logging
 import math
 import os
 import re
@@ -39,6 +40,39 @@ LIBRARY_NICKNAME = "KBlocks"
 LIBRARY_CATALOG_NAME = "KBlocks.kicad_sym"
 LOCAL_NICKNAME_PREFIX = "KBLocal_"  # Reserved for migration of pre-catalog projects.
 INSTANCE_LINKS_NAME = "instances.json"
+
+_LIBRARY_GITIGNORE_BEGIN = "# BEGIN KiCad Blocks generated-file exclusions"
+_LIBRARY_GITIGNORE_END = "# END KiCad Blocks generated-file exclusions"
+_LIBRARY_GITIGNORE_BLOCK = """# BEGIN KiCad Blocks generated-file exclusions
+# KiCad Blocks previews, caches, and generated validation/ERC output.
+.cache/
+cache/
+preview/
+previews/
+reports/
+erc/
+library-validation.json
+*.erc.json
+*.cache
+
+# KiCad project-local settings, lock files, and backups.
+*.kicad_prl
+*.lck
+*-backups/
+
+# Temporary editor and operating-system files.
+*.bak
+*.tmp
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
+# END KiCad Blocks generated-file exclusions
+"""
+
+_LOG = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -88,6 +122,26 @@ def atomic_write(path: Path, content: str) -> None:
         except OSError:
             pass
         raise
+
+
+def ensure_library_gitignore(library_root: Path) -> Path:
+    """Install managed cache exclusions without replacing a library's own rules."""
+    root = Path(library_root).expanduser().resolve()
+    if not root.is_dir():
+        raise NotADirectoryError(f"Functional-block library directory does not exist: {root}")
+
+    ignore_file = root / ".gitignore"
+    try:
+        existing = ignore_file.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        existing = ""
+
+    if _LIBRARY_GITIGNORE_BEGIN in existing and _LIBRARY_GITIGNORE_END in existing:
+        return ignore_file
+
+    separator = "" if not existing or existing.endswith("\n") else "\n"
+    atomic_write(ignore_file, existing + separator + _LIBRARY_GITIGNORE_BLOCK)
+    return ignore_file
 
 
 def _merge_symbol_node(
@@ -762,6 +816,7 @@ def create_block(
     """
     root = Path(root).expanduser().resolve()
     root.mkdir(parents=True, exist_ok=True)
+    ensure_library_gitignore(root)
     if not name.strip():
         raise ValueError("Block name cannot be empty.")
     block_id = str(uuid.uuid4())
@@ -1150,6 +1205,7 @@ def make_local_copy(source: BlockRecord, project_dir: Path) -> BlockRecord:
     project_dir = Path(project_dir).expanduser().resolve()
     local_root = project_dir / ".kicad_blocks" / "local"
     local_root.mkdir(parents=True, exist_ok=True)
+    ensure_library_gitignore(local_root.parent)
     local_id = str(uuid.uuid4())
     suffix = local_id.replace("-", "")[:8].upper()
     folder = local_root / f"{source.manifest['slug']}_{suffix}.kicad_block"
@@ -2317,6 +2373,19 @@ def library_roots() -> list[Path]:
         if key not in seen:
             seen.add(key)
             result.append(resolved)
+
+    # Backfill libraries that were registered before automatic ignore-file
+    # initialization was introduced. Read-only roots remain usable.
+    for root in result:
+        if root.is_dir():
+            try:
+                ensure_library_gitignore(root)
+            except (OSError, UnicodeError):
+                _LOG.warning(
+                    "Could not install the KiCad Blocks .gitignore in %s",
+                    root,
+                    exc_info=True,
+                )
     return result
 
 
@@ -2356,6 +2425,7 @@ def add_library_root(path: Path, *, make_default: bool = False) -> list[Path]:
     path = Path(path).expanduser().resolve()
     if not path.is_dir():
         raise NotADirectoryError(f"Functional-block library directory does not exist: {path}")
+    ensure_library_gitignore(path)
     settings = _read_library_settings()
     roots = _normalized_library_settings_roots(settings)
     if path not in roots:
@@ -2396,6 +2466,7 @@ def set_library_root(path: Path) -> Path:
     """Register a folder and make it default unless an environment override is active."""
     path = Path(path).expanduser().resolve()
     path.mkdir(parents=True, exist_ok=True)
+    ensure_library_gitignore(path)
     settings = _read_library_settings()
     roots = _normalized_library_settings_roots(settings)
     if path not in roots:
