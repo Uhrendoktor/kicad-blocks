@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import importlib
 import sys
 from collections import Counter
 from itertools import pairwise
@@ -54,7 +55,7 @@ def _load_stusb4500_profile() -> None:
     example_root = str(ROOT / "examples" / "stusb4500")
     if example_root not in sys.path:
         sys.path.insert(0, example_root)
-    import generate_reference as profile
+    profile = importlib.import_module("generate_reference")
 
     ADJACENT_COMPONENT_PAIRS = profile.ADJACENT_COMPONENT_PAIRS
     COMMON_PIN_NET_GROUPS = profile.COMMON_PIN_NET_GROUPS
