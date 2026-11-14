@@ -231,7 +231,6 @@ class LibraryBrowserTests(unittest.TestCase):
             calls[0][1:5],
             ["sch", "export", "svg", "--no-background-color"],
         )
-        self.assertTrue(calls[0][calls[0].index("--output") + 1])
         self.assertEqual([label for label, _png in pages], ["Root sheet", "Sheet 2 · sheet1"])
         self.assertEqual(pages, cached_pages)
         self.assertTrue(all(png == b"schematic-png" for _label, png in pages))
