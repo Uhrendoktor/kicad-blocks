@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import contextlib
 import logging
+import math
 import os
 import re
 import shutil
@@ -2165,16 +2166,108 @@ def _edit_block_implementation(root, schematic, kicad, project_dir, parent) -> N
 
 
 
+_SCHEMATIC_PAGE_SIZES_MM: dict[int, tuple[float, float]] = {
+    # KiCad PageSize enum values; dimensions are default landscape sizes.
+    1: (210.0, 148.0),       # A5
+    2: (297.0, 210.0),       # A4
+    3: (420.0, 297.0),       # A3
+    4: (594.0, 420.0),       # A2
+    5: (841.0, 594.0),       # A1
+    6: (1189.0, 841.0),      # A0
+    7: (279.4, 215.9),       # ANSI A
+    8: (431.8, 279.4),       # ANSI B
+    9: (558.8, 431.8),       # ANSI C
+    10: (863.6, 558.8),      # ANSI D
+    11: (1117.6, 863.6),     # ANSI E
+    12: (812.8, 812.8),      # Gerber
+    13: (279.4, 215.9),      # US Letter
+    14: (355.6, 215.9),      # US Legal
+    15: (431.8, 279.4),      # US Ledger
+}
+_SCHEMATIC_GRID_MM = 1.27
+
+
+def _schematic_page_center_mm(schematic) -> tuple[float, float]:
+    """Return the active sheet's page center, snapped to KiCad's 50 mil grid."""
+    settings_getter = getattr(schematic, "get_page_settings", None)
+    if not callable(settings_getter):
+        raise RuntimeError("The active schematic does not expose page settings.")
+    settings = settings_getter()
+    page_size = int(getattr(settings, "page_size", 0) or 0)
+
+    if page_size == 16:  # PS_USER
+        custom = getattr(settings, "user_page_size", None)
+        if custom is None:
+            raise RuntimeError("The custom schematic page size is unavailable.")
+        # KiCad IPC Vector2 coordinates are expressed in nanometres.
+        width_mm = float(custom.x) / 1_000_000
+        height_mm = float(custom.y) / 1_000_000
+    else:
+        try:
+            width_mm, height_mm = _SCHEMATIC_PAGE_SIZES_MM[page_size]
+        except KeyError as exc:
+            raise RuntimeError(
+                f"Unsupported KiCad schematic page-size enum: {page_size}."
+            ) from exc
+        if int(getattr(settings, "orientation", 0) or 0) == 2:  # PO_PORTRAIT
+            width_mm, height_mm = height_mm, width_mm
+
+    if (
+        not math.isfinite(width_mm)
+        or not math.isfinite(height_mm)
+        or width_mm <= 0
+        or height_mm <= 0
+    ):
+        raise RuntimeError("KiCad returned invalid schematic page dimensions.")
+
+    def snap(value: float) -> float:
+        return round(round(value / _SCHEMATIC_GRID_MM) * _SCHEMATIC_GRID_MM, 2)
+
+    return snap(width_mm / 2), snap(height_mm / 2)
+
+
+def _focus_schematic_items_in_editor(schematic, items):
+    """Navigate to the owning sheet and center the supplied items in Eeschema."""
+    if not items:
+        return schematic
+    sheet_path = getattr(items[0], "path", None)
+    if sheet_path is None or not callable(getattr(schematic, "for_sheet", None)):
+        raise RuntimeError("KiCad did not expose the new symbol's owning sheet path.")
+    target_schematic = schematic.for_sheet(sheet_path)
+    path_proto = getattr(sheet_path, "proto", None)
+    if path_proto is None:
+        raise RuntimeError(
+            "The KiCad Python binding did not expose the sheet-path protobuf "
+            "required by FocusOnItems."
+        )
+
+    from google.protobuf.empty_pb2 import Empty
+    from kipy.proto.common.commands import editor_commands_pb2
+
+    command = editor_commands_pb2.FocusOnItems()
+    command.document.CopyFrom(target_schematic.document)
+    command.document.sheet_path.CopyFrom(path_proto)
+    for item in items:
+        identifier = getattr(getattr(item, "id", None), "value", None)
+        if not identifier:
+            identifier = str(getattr(item, "id", "") or "")
+        if not identifier:
+            raise RuntimeError("KiCad did not return an instance ID for the placed symbol.")
+        command.items.add().value = str(identifier)
+    target_schematic.client.send(command, Empty)
+    return target_schematic
+
+
 def _start_native_symbol_placement(
     kicad,
     _editor_window_id: str | None,
     symbol_name: str,
 ):
-    """Place a block near the centre of an A4 sheet and select the new symbol.
+    """Place a block at the actual sheet center, focus it, and select it.
 
-    Eeschema IPC currently supports explicit-coordinate placement and selection,
-    but not starting the interactive move tool. The A4 centre is therefore a
-    predictable staging point until the schematic interactive-move API exists.
+    Page dimensions and orientation come from Eeschema's page settings. The
+    coordinate is snapped to the schematic grid. FocusOnItems then brings the
+    placed symbol into the viewport before it is selected.
     """
     if not symbol_name or any(char.isspace() for char in symbol_name):
         raise ValueError("The selected block has an invalid KiCad symbol name.")
@@ -2185,13 +2278,23 @@ def _start_native_symbol_placement(
 
     from kipy.geometry import Vector2
 
+    x_mm, y_mm = _schematic_page_center_mm(schematic)
     symbol_id = f"{LIBRARY_NICKNAME}:{symbol_name}"
     instance = schematic.place_symbol_from_library(
-        symbol_id, Vector2.from_xy_mm(148.5, 105.0)
+        symbol_id, Vector2.from_xy_mm(x_mm, y_mm)
     )
-    schematic.clear_selection()
-    schematic.add_to_selection(instance)
-    schematic.save()
+    target_schematic = _focus_schematic_items_in_editor(schematic, [instance])
+    target_schematic.clear_selection()
+    target_schematic.add_to_selection([instance])
+    selected = _safe_schematic_selection(target_schematic)
+    instance_id = str(getattr(getattr(instance, "id", None), "value", None) or instance.id)
+    if not any(
+        str(getattr(getattr(item, "id", None), "value", None) or item.id)
+        == instance_id
+        for item in selected
+    ):
+        raise RuntimeError("KiCad did not confirm selection of the newly placed block.")
+    target_schematic.save()
     return instance
 
 
