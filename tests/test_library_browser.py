@@ -6,9 +6,9 @@ import os
 import sys
 import tempfile
 import unittest
+from collections.abc import Callable, Sequence
 from pathlib import Path
 from types import SimpleNamespace
-from collections.abc import Callable, Sequence
 from typing import Protocol, TypeVar, cast
 from unittest.mock import Mock, patch
 
