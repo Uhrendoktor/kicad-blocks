@@ -27,6 +27,7 @@ from validate_schematic_style import (
     group_comment_outline_issues,
     required_no_connect_issues,
     symbol_field_clearance_issues,
+    text_box_issues,
     wire_compactness_issues,
     wire_obstacle_issues,
 )
@@ -93,6 +94,19 @@ assert "generate_reference" not in sys.modules
         self.assertTrue(any(
             "multiline annotation" in issue
             for issue in block_annotation_issues(tree)
+        ))
+
+    def test_unbordered_title_box_must_have_single_line_render_reserve(self) -> None:
+        tree = self.fresh_tree()
+        title = next(
+            node for node in _all(tree, "text_box")
+            if str(node[1]) == "VSNK OUTPUT"
+        )
+        size = _direct(title, "size")
+        size[1] = f"{float(size[1]) - 3.0:.3f}"
+        self.assertTrue(any(
+            "cannot reliably render on one line" in issue
+            for issue in text_box_issues(tree)
         ))
 
     def test_group_comment_requires_its_own_outline(self) -> None:
