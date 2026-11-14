@@ -31,7 +31,7 @@ from kicad_blocks.repository import (
 from kipy import KiCad
 from kipy.errors import ApiError
 from pynng.exceptions import NNGException
-from test_plugin_registration import _close_editor, _find_executable, _launch
+from test_plugin_registration import _close_editor, _find_executable, _launch, _windows
 
 
 def _find_cli() -> str:
