@@ -2318,7 +2318,7 @@ def _edit_facade_symbol(
         # menu action; Ctrl+L is the documented library-tree search shortcut.
         commands = [
             [executable, "-M", "alt", "-k", "t", "-m", "alt"],
-            [executable, "-d", "120", "Symbol Editor"],
+            [executable, "-k", "s"],
             [executable, "-k", "Return"],
         ]
         for arguments in commands:
@@ -2389,9 +2389,10 @@ def _edit_facade_symbol(
         send("windowfocus", "--sync", str(editor_window_id))
         send("key", "--clearmodifiers", "alt+t")
         pause(0.25)
-        # Use wxWidgets' menu type-to-select rather than assuming a mnemonic
-        # letter: translations and user menu customizations can change it.
-        send("type", "--clearmodifiers", "--delay", "35", "Symbol Editor")
+        # The Tools menu exposes Symbol Editor as its S mnemonic. Selecting
+        # by the mnemonic avoids typing a phrase into the schematic canvas if
+        # wxWidgets did not open the menu.
+        send("key", "--clearmodifiers", "s")
         send("key", "--clearmodifiers", "Return")
         deadline = time.monotonic() + 5.0
         while time.monotonic() < deadline:
