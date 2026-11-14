@@ -86,6 +86,7 @@ from .repository import library_roots as configured_library_roots
 
 LOG = logging.getLogger("kicad_blocks")
 
+
 class _KeepDefaultVariant:
     """Sentinel distinguishing an omitted default variant from an explicit None."""
 
@@ -990,7 +991,12 @@ def _reload_symbol_library(kicad: _KiCadApp, nickname: str) -> bool:
         return False
 
 
-def _register_block(project_dir: Path, record: BlockRecord, kicad: _KiCadApp, library_paths: list[Path] | None = None) -> BlockRecord:
+def _register_block(
+    project_dir: Path,
+    record: BlockRecord,
+    kicad: _KiCadApp,
+    library_paths: list[Path] | None = None,
+) -> BlockRecord:
     """Refresh the project's unified catalog from every registered block library."""
     record = ensure_stable_block_identity(record)
     roots = [
@@ -1009,7 +1015,9 @@ def _register_block(project_dir: Path, record: BlockRecord, kicad: _KiCadApp, li
     return record
 
 
-def place_block(schematic: _Schematic, record: BlockRecord, x_mm: float, y_mm: float) -> _SchematicSymbol:
+def place_block(
+    schematic: _Schematic, record: BlockRecord, x_mm: float, y_mm: float
+) -> _SchematicSymbol:
     from kipy.geometry import Vector2
 
     symbol_id = f"{record.manifest['library_nickname']}:{record.manifest['symbol_name']}"
@@ -1115,7 +1123,9 @@ def _list_library_records(library_paths: Path | Sequence[Path] | None = None) ->
     )
 
 
-def _library_record_for_instance(library_root: Path | list[Path], instance: _SchematicSymbol) -> BlockRecord:
+def _library_record_for_instance(
+    library_root: Path | list[Path], instance: _SchematicSymbol
+) -> BlockRecord:
     library_nickname, symbol_name = _symbol_identifier(instance)
     matches = [
         record
@@ -1141,7 +1151,9 @@ def _library_record_for_instance(library_root: Path | list[Path], instance: _Sch
     return matches[0]
 
 
-def make_selected_local(schematic: _Schematic, kicad: _KiCadApp, project_dir: Path, library_root: Path) -> Path:
+def make_selected_local(
+    schematic: _Schematic, kicad: _KiCadApp, project_dir: Path, library_root: Path
+) -> Path:
     """Create an independent implementation copy bound to this symbol KIID."""
     instance = _selected_symbol(schematic)
     library_roots = _library_roots_for(library_root)
@@ -1152,7 +1164,9 @@ def make_selected_local(schematic: _Schematic, kicad: _KiCadApp, project_dir: Pa
     return local.path
 
 
-def _parameter_values_for_instance(instance: _SchematicSymbol, block: BlockRecord) -> dict[str, str]:
+def _parameter_values_for_instance(
+    instance: _SchematicSymbol, block: BlockRecord
+) -> dict[str, str]:
     """Read editable KB_PARAM_* user fields from one placed facade symbol."""
     parameters = block.manifest.get("parameters", [])
     overrides = {}
@@ -1208,7 +1222,9 @@ def _update_schematic_item_checked(
         raise RuntimeError(message)
 
 
-def _write_instance_configuration(schematic: _SchematicForItemUpdate, instance: _ProtoBackedSchematicItem, values: dict[str, str]) -> None:
+def _write_instance_configuration(
+    schematic: _SchematicForItemUpdate, instance: _ProtoBackedSchematicItem, values: dict[str, str]
+) -> None:
     """Write validated facade fields through KiCad IPC as one undoable edit."""
     fields = {
         str(getattr(field, "name", "")): field for field in getattr(instance, "user_fields", ())
@@ -1603,7 +1619,9 @@ def sync_selected_local(schematic, kicad, project_dir: Path) -> dict:
     return result
 
 
-def _pick_block_for_placement(records: list[BlockRecord], parent: tkinter_types.Misc) -> BlockRecord | None:
+def _pick_block_for_placement(
+    records: list[BlockRecord], parent: tkinter_types.Misc
+) -> BlockRecord | None:
     """Choose, inspect and configure a functional block before native placement."""
     if not records:
         raise ValueError("No blocks were found in the registered functional-block libraries.")
@@ -1841,7 +1859,9 @@ def _pick_block_for_placement(records: list[BlockRecord], parent: tkinter_types.
     return chosen[0]
 
 
-def _pick_record(records: list[BlockRecord], parent: tkinter_types.Misc, title: str) -> BlockRecord | None:
+def _pick_record(
+    records: list[BlockRecord], parent: tkinter_types.Misc, title: str
+) -> BlockRecord | None:
     """Show a searchable modal picker for manager actions that need a library block."""
     if not records:
         raise ValueError("No blocks were found in the configured library.")
@@ -2028,7 +2048,10 @@ def _layout_choices(block: BlockRecord) -> list[ResolvedBlockLayout]:
 
 
 def _choose_block_layout(
-    block: BlockRecord, parent: tkinter_types.Misc, title: str = "Select PCB Layout", instance: _SchematicSymbol | None = None
+    block: BlockRecord,
+    parent: tkinter_types.Misc,
+    title: str = "Select PCB Layout",
+    instance: _SchematicSymbol | None = None,
 ) -> ResolvedBlockLayout | None:
     """Resolve the instance's explicit or implementation-linked PCB layout."""
     layouts = _layout_choices(block)
@@ -2108,7 +2131,9 @@ def _choose_library_root(parent: tkinter_types.Misc) -> Path:
     return set_library_root(Path(selected))
 
 
-def _parse_profile_parameter_overrides(text: str, parameters: list[BlockParameter]) -> dict[str, str]:
+def _parse_profile_parameter_overrides(
+    text: str, parameters: list[BlockParameter]
+) -> dict[str, str]:
     """Parse typed NAME=VALUE overrides entered for one configuration profile."""
     declarations = {item["name"]: item for item in parameters}
     raw_values = {}
@@ -2128,7 +2153,12 @@ def _parse_profile_parameter_overrides(text: str, parameters: list[BlockParamete
     return {name: normalized[name] for name in raw_values}
 
 
-def _collect_block_profiles(parent: tkinter_types.Misc, parameters: list[BlockParameter], variants: list[BlockVariantManifest], layouts: list[ResolvedBlockLayout]) -> list[BlockProfileInput] | None:
+def _collect_block_profiles(
+    parent: tkinter_types.Misc,
+    parameters: list[BlockParameter],
+    variants: list[BlockVariantManifest],
+    layouts: list[ResolvedBlockLayout],
+) -> list[BlockProfileInput] | None:
     """Collect optional linked variant/parameter/layout presets during block creation."""
     if not (parameters or variants or layouts):
         return []
@@ -2337,7 +2367,9 @@ def _active_sheet_source(schematic: _Schematic, project_dir: Path) -> tuple[Path
     return source, sheet_uuid
 
 
-def _ask_create_block_details(parent: tkinter_types.Misc, source_sheet: Path) -> tuple[str, str] | None:
+def _ask_create_block_details(
+    parent: tkinter_types.Misc, source_sheet: Path
+) -> tuple[str, str] | None:
     """Collect the block name and description in one creation dialog."""
     dialog = tkinter_types.Toplevel(parent)
     dialog.title("Create Functional Block")
@@ -2629,7 +2661,13 @@ def _edit_facade_symbol(root, schematic, project_dir, editor_window_id, parent) 
         raise
 
 
-def _place_existing(root: Path | list[Path], schematic: _Schematic, kicad: _KiCadApp, project_dir: Path, parent: tkinter_types.Misc) -> None:
+def _place_existing(
+    root: Path | list[Path],
+    schematic: _Schematic,
+    kicad: _KiCadApp,
+    project_dir: Path,
+    parent: tkinter_types.Misc,
+) -> None:
     """Open the searchable browser; placement is handed to KiCad's native cursor tool."""
     editor_window_id = getattr(parent, "_kicad_blocks_editor_window_id", None)
     browser = tkinter_types.Toplevel(parent)
@@ -2644,7 +2682,13 @@ def _place_existing(root: Path | list[Path], schematic: _Schematic, kicad: _KiCa
     )
 
 
-def _edit_block_implementation(root: Path | list[Path], schematic: _Schematic, kicad: _KiCadApp, project_dir: Path, parent: tkinter_types.Misc) -> None:
+def _edit_block_implementation(
+    root: Path | list[Path],
+    schematic: _Schematic,
+    kicad: _KiCadApp,
+    project_dir: Path,
+    parent: tkinter_types.Misc,
+) -> None:
     """Compatibility helper for opening a library implementation from the manager."""
     selected = _safe_schematic_selection(schematic)
     if len(selected) == 1 and hasattr(selected[0], "definition"):
@@ -2924,7 +2968,9 @@ def _filter_library_records(records: list[BlockRecord], query: str) -> list[Bloc
     return [record for record in records if needle in _library_record_search_text(record)]
 
 
-def _preferred_library_selection(visible_records: list[BlockRecord], selected_record: BlockRecord | None) -> BlockRecord | None:
+def _preferred_library_selection(
+    visible_records: list[BlockRecord], selected_record: BlockRecord | None
+) -> BlockRecord | None:
     """Keep the current block selected while it remains visible after filtering."""
     if not visible_records:
         return None
@@ -3708,7 +3754,9 @@ def _new_blank_pcb_source() -> Path:
     return path
 
 
-def _ask_layout_details(parent: tkinter_types.Misc, record: BlockRecord) -> _LayoutDialogChoice | None:
+def _ask_layout_details(
+    parent: tkinter_types.Misc, record: BlockRecord
+) -> _LayoutDialogChoice | None:
     """Choose an existing board or create a blank starting point for a named layout."""
     dialog = tkinter_types.Toplevel(parent)
     dialog.title("Add PCB layout")
@@ -4838,7 +4886,12 @@ def _show_library_roots_dialog(parent: tkinter_types.Misc) -> bool:
     return changed[0]
 
 
-def _bind_mousewheel(widget: tkinter_types.Misc, scroll_command: Callable[[int], None], *, include_children: bool = False) -> None:
+def _bind_mousewheel(
+    widget: tkinter_types.Misc,
+    scroll_command: Callable[[int], None],
+    *,
+    include_children: bool = False,
+) -> None:
     """Bind wheel and high-resolution trackpad scrolling to a scrollable pane."""
     remainder = [0.0]
 
@@ -5523,7 +5576,9 @@ def _field_value(instance: _SchematicSymbol, field_name: str) -> str:
     return ""
 
 
-def _sheet_variables_for_symbol(schematic: _Schematic, instance: _SchematicSymbol) -> dict[str, str]:
+def _sheet_variables_for_symbol(
+    schematic: _Schematic, instance: _SchematicSymbol
+) -> dict[str, str]:
     """Collect custom fields on hierarchical sheet symbols containing this occurrence."""
     sheet_path = list(getattr(getattr(instance, "path", None), "path", ()))
     if not sheet_path:
@@ -5551,7 +5606,9 @@ def _sheet_variables_for_symbol(schematic: _Schematic, instance: _SchematicSymbo
     return variables
 
 
-def _resolve_variant_text(raw_value: str, project: _SchematicProject, sheet_variables: dict[str, str]) -> str:
+def _resolve_variant_text(
+    raw_value: str, project: _SchematicProject, sheet_variables: dict[str, str]
+) -> str:
     """Expand sheet custom fields and normal KiCad project text variables."""
     import re
 
@@ -5753,7 +5810,9 @@ def _validate_recursive_erc(
     )
 
 
-def _publish_block(root: Path | list[Path], kicad: _KiCadApp, project_dir: Path, parent: tkinter_types.Misc) -> None:
+def _publish_block(
+    root: Path | list[Path], kicad: _KiCadApp, project_dir: Path, parent: tkinter_types.Misc
+) -> None:
     library_paths = _library_roots_for(root)
     record = _pick_record(_list_library_records(library_paths), parent, "Publish Library Block")
     if record is None:
@@ -5774,7 +5833,9 @@ def _publish_block(root: Path | list[Path], kicad: _KiCadApp, project_dir: Path,
     )
 
 
-def _block_record_for_instance(library_root: Path | list[Path], project_dir: Path, instance: _SchematicSymbol) -> BlockRecord:
+def _block_record_for_instance(
+    library_root: Path | list[Path], project_dir: Path, instance: _SchematicSymbol
+) -> BlockRecord:
     """Resolve the selected instance to its local copy or any registered shared library."""
     local_record = local_copy_for_instance(project_dir, str(instance.id))
     if local_record is not None:
