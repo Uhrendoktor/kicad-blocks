@@ -47,7 +47,16 @@ from kicad_blocks.plugin import (
     _start_native_symbol_placement,
     _system_prefers_dark_theme,
 )
-from kicad_blocks.repository import LIBRARY_NICKNAME, create_block, read_manifest
+from kicad_blocks.pcb_layout import parse_sexpr
+from kicad_blocks.repository import (
+    LIBRARY_NICKNAME,
+    _named_symbol_node,
+    _symbol_definition_digest,
+    create_block,
+    merge_symbol_catalog,
+    read_manifest,
+    synchronize_project_symbol_catalog,
+)
 
 
 class LibraryBrowserTests(unittest.TestCase):
@@ -135,6 +144,125 @@ class LibraryBrowserTests(unittest.TestCase):
         self.assertNotEqual(
             calls[0][-1],
             str(self.block.symbol_library.resolve()),
+        )
+
+    def test_project_catalog_sync_updates_only_the_changed_library_facade(self):
+        project_catalog = self.root / "project" / "KBlocks.kicad_sym"
+        merge_symbol_catalog(
+            project_catalog.parent,
+            self.block.path / self.block.manifest["symbol_file"],
+        )
+        merge_symbol_catalog(
+            project_catalog.parent,
+            self.filter_block.path / self.filter_block.manifest["symbol_file"],
+        )
+        original_catalog = parse_sexpr(
+            project_catalog.read_text(encoding="utf-8")
+        )
+        filter_name = self.filter_block.manifest["symbol_name"]
+        filter_digest_before = _symbol_definition_digest(
+            _named_symbol_node(original_catalog, filter_name, project_catalog)
+        )
+
+        source_symbol = self.block.path / self.block.manifest["symbol_file"]
+        source_content = source_symbol.read_text(encoding="utf-8")
+        self.assertIn('"Buck Converter"', source_content)
+        source_symbol.write_text(
+            source_content.replace(
+                '"Buck Converter"', '"Buck Converter Updated"', 1
+            ),
+            encoding="utf-8",
+        )
+
+        self.assertTrue(
+            synchronize_project_symbol_catalog(
+                project_catalog,
+                source_symbol,
+                self.block.manifest["symbol_name"],
+                baseline_digest=self.block.manifest["catalog_symbol_hash"],
+            )
+        )
+        updated_catalog = parse_sexpr(
+            project_catalog.read_text(encoding="utf-8")
+        )
+        updated_symbol = _named_symbol_node(
+            updated_catalog,
+            self.block.manifest["symbol_name"],
+            project_catalog,
+        )
+        filter_digest_after = _symbol_definition_digest(
+            _named_symbol_node(updated_catalog, filter_name, project_catalog)
+        )
+        self.assertEqual(
+            _symbol_definition_digest(
+                _named_symbol_node(
+                    parse_sexpr(source_symbol.read_text(encoding="utf-8")),
+                    self.block.manifest["symbol_name"],
+                    source_symbol,
+                )
+            ),
+            _symbol_definition_digest(updated_symbol),
+        )
+        self.assertEqual(filter_digest_after, filter_digest_before)
+        self.assertFalse(
+            synchronize_project_symbol_catalog(
+                project_catalog,
+                source_symbol,
+                self.block.manifest["symbol_name"],
+                baseline_digest=self.block.manifest["catalog_symbol_hash"],
+            )
+        )
+
+        source_symbol.write_text(
+            source_symbol.read_text(encoding="utf-8").replace(
+                '"Buck Converter Updated"', '"Buck Converter Final"', 1
+            ),
+            encoding="utf-8",
+        )
+        self.assertTrue(
+            synchronize_project_symbol_catalog(
+                project_catalog,
+                source_symbol,
+                self.block.manifest["symbol_name"],
+                baseline_digest=self.block.manifest["catalog_symbol_hash"],
+            )
+        )
+
+    def test_project_catalog_sync_preserves_a_project_local_facade_edit(self):
+        project_catalog = self.root / "project" / "KBlocks.kicad_sym"
+        merge_symbol_catalog(
+            project_catalog.parent,
+            self.block.path / self.block.manifest["symbol_file"],
+        )
+        merge_symbol_catalog(
+            project_catalog.parent,
+            self.filter_block.path / self.filter_block.manifest["symbol_file"],
+        )
+        project_text = project_catalog.read_text(encoding="utf-8")
+        self.assertIn('"Buck Converter"', project_text)
+        project_override = project_text.replace(
+            '"Buck Converter"', '"Project Specific Facade"', 1
+        )
+        project_catalog.write_text(project_override, encoding="utf-8")
+
+        source_symbol = self.block.path / self.block.manifest["symbol_file"]
+        source_text = source_symbol.read_text(encoding="utf-8")
+        source_symbol.write_text(
+            source_text.replace('"Buck Converter"', '"Library Facade Update"', 1),
+            encoding="utf-8",
+        )
+
+        self.assertFalse(
+            synchronize_project_symbol_catalog(
+                project_catalog,
+                source_symbol,
+                self.block.manifest["symbol_name"],
+                baseline_digest=self.block.manifest["catalog_symbol_hash"],
+            )
+        )
+        self.assertEqual(
+            project_catalog.read_text(encoding="utf-8"),
+            project_override,
         )
 
     def test_native_save_dialog_uses_tk_initial_name_filters_and_suffix(self):
