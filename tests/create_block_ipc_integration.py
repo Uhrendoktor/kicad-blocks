@@ -32,7 +32,7 @@ from kicad_blocks.repository import (
 from kipy import KiCad
 from kipy.errors import ApiError
 from pynng.exceptions import NNGException
-from test_plugin_registration import _close_editor, _find_executable, _launch
+from test_plugin_registration import _close_editor, _find_executable, _launch, _windows
 
 
 def _find_cli() -> str:
@@ -424,20 +424,16 @@ def main() -> None:
                     try:
                         deadline = time.monotonic() + 12.0
                         while time.monotonic() < deadline:
-                            search = subprocess.run(
-                                [
-                                    xdotool,
-                                    "search",
-                                    "--onlyvisible",
-                                    "--name",
-                                    "^Create Functional Block$",
-                                ],
-                                capture_output=True,
-                                text=True,
-                                check=False,
+                            dialog_window = next(
+                                (
+                                    (window_id, title)
+                                    for window_id, title, _window_class in _windows(xdotool)
+                                    if title.strip() == "Create Functional Block"
+                                ),
+                                None,
                             )
-                            if search.returncode == 0 and search.stdout.strip():
-                                window_id = search.stdout.strip().splitlines()[-1]
+                            if dialog_window is not None:
+                                window_id, _title = dialog_window
                                 subprocess.run(
                                     [xdotool, "windowactivate", "--sync", window_id],
                                     check=True,
@@ -471,9 +467,38 @@ def main() -> None:
                                 )
                                 return
                             time.sleep(0.05)
+                        # Unblock the UI action on failure. This also
+                        # catches the original regression where a transient
+                        # child existed but was hidden by a withdrawn root.
+                        hidden = subprocess.run(
+                            [
+                                xdotool,
+                                "search",
+                                "--name",
+                                "Create Functional Block",
+                            ],
+                            capture_output=True,
+                            text=True,
+                            check=False,
+                        )
+                        if hidden.returncode == 0 and hidden.stdout.strip():
+                            hidden_id = hidden.stdout.strip().splitlines()[-1]
+                            subprocess.run(
+                                [xdotool, "windowactivate", hidden_id],
+                                check=False,
+                                capture_output=True,
+                                text=True,
+                            )
+                            subprocess.run(
+                                [xdotool, "key", "--clearmodifiers", "Escape"],
+                                check=False,
+                                capture_output=True,
+                                text=True,
+                            )
                         raise TimeoutError(
                             "The registered Create Block action did not show its visible "
-                            "Create Functional Block window."
+                            "Create Functional Block window. "
+                            f"Visible windows: {_windows(xdotool)!r}"
                         )
                     except Exception as exc:
                         ui_driver_errors.append(exc)
