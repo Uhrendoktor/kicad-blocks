@@ -83,6 +83,14 @@ class _GifFrameCount(Protocol):
     def close(self) -> None: ...
 
 
+class _TaskHubNotebook(Protocol):
+    """Notebook operations needed to capture all task-hub tabs."""
+
+    def tabs(self) -> tuple[str, ...]: ...
+
+    def select(self, tab_id: str) -> object: ...
+
+
 plugin_api = cast(_PluginActions, plugin_actions)
 
 
@@ -106,7 +114,7 @@ show_library_browser = cast(
 show_library_roots_dialog = cast(
     Callable[[tk.Misc], bool], _private_action("_show_library_roots_dialog")
 )
-show_action_hub = cast(Callable[[tk.Misc], ttk.Notebook], _private_action("_show_action_hub"))
+show_action_hub = cast(Callable[[tk.Misc], _TaskHubNotebook], _private_action("_show_action_hub"))
 show_block_variant_editor = cast(
     Callable[[BlockRecord, tk.Misc], Path | None],
     _private_action("_show_block_variant_editor"),
@@ -330,7 +338,7 @@ def capture_picker(records: list[BlockRecord], output_dir: Path) -> PlacementSel
 
     for path in frame_paths:
         with Image.open(path) as image:
-            sample = cast(Image.Image, image.convert("RGB").resize((48, 32)))
+            sample = image.convert("RGB")
             if max(ImageStat.Stat(sample).stddev) < 2.0:
                 raise AssertionError(f"Screenshot appears blank or uniform: {path.name}")
     if len({hashlib.sha256(path.read_bytes()).hexdigest() for path in frame_paths}) != 3:
@@ -945,7 +953,7 @@ def main() -> int:
         if not path.is_file() or not path.stat().st_size:
             raise FileNotFoundError(f"Expected generated asset is missing: {name}")
         assets[name] = hashlib.sha256(path.read_bytes()).hexdigest()
-    manifest: dict[str, str | int | dict[str, str]] = {
+    bundle_manifest: dict[str, str | int | dict[str, str]] = {
         "schema_version": 1,
         "source_sha": os.environ.get("GITHUB_SHA", "local"),
         "generator": "tests/capture_visual_docs.py",
@@ -964,12 +972,12 @@ def main() -> int:
         "assets": assets,
     }
     (output_dir / "manifest.json").write_text(
-        json.dumps(manifest, indent=2, sort_keys=True) + "\n",
+        json.dumps(bundle_manifest, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )
     print(
         f"kicad-visual-docs=passed asset_count={len(assets)} "
-        f"source_sha={manifest['source_sha']} output={output_dir}"
+        f"source_sha={bundle_manifest['source_sha']} output={output_dir}"
     )
     return 0
 
