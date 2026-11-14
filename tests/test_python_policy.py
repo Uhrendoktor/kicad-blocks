@@ -111,7 +111,10 @@ def test_pyright_inventory_requires_each_core_module_to_be_included_or_reviewed(
     config.write_text('{"include":["scripts"] ,"exclude":[]}', encoding="utf-8")
     errors = policy._check_pyright_inventory()
     assert any("model.py" in error for error in errors)
-    assert any("plugin.py" in error and "must remain explicitly excluded" in error for error in errors)
+    assert any(
+        "plugin.py" in error and "must remain explicitly excluded" in error
+        for error in errors
+    )
 
     config.write_text(
         '{"include":["plugin/kicad-blocks/kicad_blocks"],'
@@ -120,7 +123,10 @@ def test_pyright_inventory_requires_each_core_module_to_be_included_or_reviewed(
         encoding="utf-8",
     )
     errors = policy._check_pyright_inventory()
-    assert any("model.py" in error and "no reviewed migration rationale" in error for error in errors)
+    assert any(
+        "model.py" in error and "no reviewed migration rationale" in error
+        for error in errors
+    )
 
 
 def test_rejects_unreviewed_nested_object_annotations(tmp_path, monkeypatch):
