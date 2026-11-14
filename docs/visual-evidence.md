@@ -40,7 +40,7 @@ The selected STUSB4500 entry exposes its description, external pins, parameters,
   <img src="https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/library-browser-details-light.png" alt="Functional Block Library showing the STUSB4500 block, its ten external pins, parameter and implementation choices" width="1000">
 </p>
 
-The schematic view previews the editable implementation itself, independently of the facade. The selector starts at **Default** and can switch to a named variant; hierarchical designs expose their child sheets in the **Sheet** selector.
+The schematic view previews the editable implementation itself, independently of the facade, on a paper-white drawing surface so native KiCad colors stay legible in both UI themes. The selector starts at **Default** and can switch to a named variant; hierarchical designs expose their child sheets in the **Sheet** selector.
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/library-browser-schematic-light.png" alt="Functional Block Library with the Schematic tab selected, showing the STUSB4500 implementation rendered by KiCad" width="1000">
