@@ -221,12 +221,12 @@ def import_project_catalog_facade_edit(
     block: BlockRecord,
     project_catalog: Path,
 ) -> bool:
-    """Stage a Symbol Editor edit from the project's KBlocks snapshot into one block asset.
+    """Import a project Symbol Editor edit into one block's revisioned facade asset.
 
-    The project catalog is the editable copy registered with the consuming
-    schematic. The shared catalog and per-block facade asset are the published
-    source of truth. Import only a project-only edit based on the manifest's
-    last-published catalog digest; reject stale or concurrent edits.
+    KiCad edits the consuming project's combined KBlocks catalog. The shared
+    library catalog and per-block symbol file are the published source of truth.
+    Compare both against the last-published baseline and reject stale or
+    concurrent edits rather than silently overwriting either side.
     """
     project_catalog = Path(project_catalog).expanduser().resolve()
     if not project_catalog.is_file():
@@ -265,8 +265,8 @@ def import_project_catalog_facade_edit(
             return False
         raise RuntimeError(
             "Cannot safely import the edited project facade because this block "
-            "has no published catalog baseline. Publish or reconcile the facade "
-            "manually before continuing."
+            "has no published catalog baseline. Reconcile the project catalog, "
+            "shared catalog, and standalone facade asset manually before publishing."
         )
 
     baseline_catalog_digest = str(baseline_catalog_digest)
@@ -276,7 +276,6 @@ def import_project_catalog_facade_edit(
 
     if not project_changed:
         return False
-
     if shared_changed and project_digest != shared_digest:
         raise RuntimeError(
             "Facade symbol conflict: the project catalog and shared library both "
@@ -298,6 +297,7 @@ def import_project_catalog_facade_edit(
     standalone.append(copy.deepcopy(project_symbol))
     atomic_write(asset_path, _dump(standalone) + "\n")
     return True
+
 
 
 def _save_catalog_symbol_baseline(block: BlockRecord, manifest: dict) -> None:
