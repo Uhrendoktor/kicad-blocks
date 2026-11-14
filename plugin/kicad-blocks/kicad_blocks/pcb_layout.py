@@ -29,21 +29,19 @@ from .pcb_types import (
     ProjectSettingsMergeResult,
     ResolvedBlockLayout,
 )
-
-if TYPE_CHECKING:
-    from .repository import BlockRecord
-
-
 from .sexpr import (
+    QuotedSExpr as _Quoted,
     SExpr,
     SExprList,
-    QuotedSExpr as _Quoted,
     dump_sexpr as _dump,
     parse_sexpr,
     sexpr_all as _all,
     sexpr_direct as _direct,
     sexpr_head as _head,
 )
+
+if TYPE_CHECKING:
+    from .repository import BlockRecord
 
 def _num(value: str) -> float:
     try:
