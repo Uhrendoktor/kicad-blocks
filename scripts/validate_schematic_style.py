@@ -335,7 +335,7 @@ def _advance(char: str) -> float:
 def _required_size(value: str, font: float, pad: float):
     lines = value.splitlines() or [""]
     width = max((sum(_advance(ch) for ch in line) for line in lines), default=0.0)
-    return 2 * pad + max(width * font * 1.12, font), 2 * pad + len(lines) * font * 1.55
+    return 2 * pad + max(width * font * 1.30, font), 2 * pad + len(lines) * font * 1.55
 
 
 def _overlap(a, b):
