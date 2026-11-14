@@ -1351,9 +1351,7 @@ def synchronize_facade_pins_from_implementation(block: BlockRecord) -> list[str]
     }
 
     used_numbers = {
-        str(item.get("number"))
-        for item in previous
-        if str(item.get("number", "")).strip()
+        str(item.get("number")) for item in previous if str(item.get("number", "")).strip()
     }
     next_number = 1
     normalized_pins: list[BlockPin] = []
@@ -1882,9 +1880,7 @@ def add_dependency(
     if _depends_on(child.path, parent.manifest["block_id"], set()):
         raise ValueError("This dependency would create a cycle.")
 
-    dependencies: list[BlockDependencyManifest] = list(
-        parent.manifest.get("dependencies", [])
-    )
+    dependencies: list[BlockDependencyManifest] = list(parent.manifest.get("dependencies", []))
     used_references = {
         str(item.get("reference", "")).casefold() for item in dependencies if item.get("reference")
     }
