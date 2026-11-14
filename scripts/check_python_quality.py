@@ -25,9 +25,13 @@ IGNORED_DIRECTORY_NAMES = frozenset(
     }
 )
 REVIEWED_MODULES = (
-    Path("plugin/kicad-blocks/kicad_blocks/json_types.py"),
+    Path("plugin/kicad-blocks/kicad_blocks/manifest_types.py"),
     Path("plugin/kicad-blocks/kicad_blocks/model.py"),
+    Path("plugin/kicad-blocks/kicad_blocks/pcb_layout.py"),
     Path("plugin/kicad-blocks/kicad_blocks/pcb_placement.py"),
+    Path("plugin/kicad-blocks/kicad_blocks/pcb_types.py"),
+    Path("plugin/kicad-blocks/kicad_blocks/report_types.py"),
+    Path("plugin/kicad-blocks/kicad_blocks/repository.py"),
 )
 PURE_MODULE_IMPORTS = {
     Path("plugin/kicad-blocks/kicad_blocks/model.py"): frozenset(

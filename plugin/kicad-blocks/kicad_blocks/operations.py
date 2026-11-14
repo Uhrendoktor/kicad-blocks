@@ -211,6 +211,7 @@ def validate_block_library(
     for block_path in discovered:
         item: BlockValidationItem = {
             "path": str(block_path),
+            "dependency_count": 0,
             "name": block_path.stem,
             "block_id": "",
             "status": "passed",

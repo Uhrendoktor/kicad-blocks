@@ -301,7 +301,7 @@ def ensure_stable_block_identity(block: BlockRecord) -> BlockRecord:
 def read_manifest(block_path: Path) -> BlockManifest:
     manifest_path = block_path / MANIFEST_NAME
     try:
-        raw_manifest: object = json.loads(manifest_path.read_text(encoding="utf-8"))
+        raw_manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     except FileNotFoundError as exc:
         raise ValueError(f"Block manifest not found: {manifest_path}") from exc
     except json.JSONDecodeError as exc:

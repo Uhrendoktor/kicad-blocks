@@ -584,7 +584,7 @@ def _merge_project_net_settings(
         return None
 
     if target_project.is_file():
-        raw_target_data: object = json.loads(target_project.read_text(encoding="utf-8"))
+        raw_target_data = json.loads(target_project.read_text(encoding="utf-8"))
         if not isinstance(raw_target_data, dict):
             raise ValueError(f"Invalid KiCad project JSON: {target_project}")
         target_data = cast(KiCadProjectData, raw_target_data)
@@ -595,7 +595,7 @@ def _merge_project_net_settings(
         }
 
     if source_project is not None and source_project.is_file():
-        raw_source_data: object = json.loads(source_project.read_text(encoding="utf-8"))
+        raw_source_data = json.loads(source_project.read_text(encoding="utf-8"))
         if not isinstance(raw_source_data, dict):
             raise ValueError(f"Invalid block project-settings JSON: {source_project}")
         source_data = cast(KiCadProjectData, raw_source_data)

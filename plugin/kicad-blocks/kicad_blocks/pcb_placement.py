@@ -142,7 +142,7 @@ def read_pcb_placement_manifest(board_path: Path) -> PCBPlacementManifest:
             f"No KiCad Blocks placement manifest was found next to this board: {sidecar}"
         )
     try:
-        raw_payload: object = json.loads(sidecar.read_text(encoding="utf-8"))
+        raw_payload = json.loads(sidecar.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
         raise ValueError(f"Could not read PCB placement manifest {sidecar}: {exc}") from exc
     if not isinstance(raw_payload, dict):
