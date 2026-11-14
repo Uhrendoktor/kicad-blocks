@@ -379,7 +379,7 @@ Visual documentation inventory completeness, source-commit freshness, asset hash
 | `test_rejects_modified_generated_asset` | rejects modified generated asset. |
 | `test_rejects_incomplete_asset_inventory` | rejects incomplete asset inventory. |
 
-**Pytest inventory total: 202 test cases across 23 modules.**
+**Pytest inventory total: 205 test cases across 24 modules.**
 
 ## Host-driven KiCad acceptance scripts
 
