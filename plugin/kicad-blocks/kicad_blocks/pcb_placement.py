@@ -9,26 +9,35 @@ from typing import Protocol
 
 from .json_types import JsonObject
 
+
 class BoardItemId(Protocol):
     """Minimal KIID surface consumed by PCB placement."""
 
     @property
-    def value(self) -> str: ...
+    def value(self) -> str:
+        """Return the textual UUID value used to identify this board item."""
+        ...
 
 
 class BoardItem(Protocol):
     """Minimal board-item surface consumed by PCB placement."""
 
     @property
-    def id(self) -> BoardItemId: ...
+    def id(self) -> BoardItemId:
+        """Return the native KiCad identifier assigned to this item."""
+        ...
 
 
 class Board(Protocol):
     """Minimal PCB IPC surface used to resolve and move imported item groups."""
 
-    def get_items(self) -> Sequence[BoardItem]: ...
+    def get_items(self) -> Sequence[BoardItem]:
+        """Return the board items currently exposed by the KiCad IPC server."""
+        ...
 
-    def interactive_move(self, item_ids: Sequence[BoardItemId]) -> None: ...
+    def interactive_move(self, item_ids: Sequence[BoardItemId]) -> None:
+        """Start KiCad native interactive movement for the supplied identifiers."""
+        ...
 
 
 PLACEMENT_SCHEMA_VERSION = 1
