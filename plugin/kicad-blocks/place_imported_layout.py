@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+
+from kicad_blocks.json_types import JsonObject, JsonValue
 
 from kicad_blocks.pcb_placement import (
     move_placement_at_cursor,
@@ -30,7 +31,7 @@ def _active_board_path(board) -> Path:
     return (Path(project_path).expanduser() / candidate).resolve()
 
 
-def _choose_placement(placements: list[dict[str, Any]]) -> dict[str, Any] | None:
+def _choose_placement(placements: list[JsonObject]) -> dict[str, JsonValue] | None:
     if len(placements) == 1:
         return placements[0]
 
@@ -41,7 +42,7 @@ def _choose_placement(placements: list[dict[str, Any]]) -> dict[str, Any] | None
     root.title("Place Imported Block Layout")
     root.resizable(False, False)
     root.geometry("520x150")
-    selected: dict[str, Any] = {"placement": None}
+    selected: dict[str, JsonValue] = {"placement": None}
     labels = [
         f"{item['instance_reference']} — {item.get('block', 'Block')} / {item.get('layout_name', 'Layout')} "
         f"({len(item['item_uuids'])} board objects)"
