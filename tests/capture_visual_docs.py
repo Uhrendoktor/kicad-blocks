@@ -199,9 +199,7 @@ def capture_window(
     image.save(destination, format="PNG")
 
 
-def capture_picker(
-    records: list[BlockRecord], output_dir: Path
-) -> PlacementSelection:
+def capture_picker(records: list[BlockRecord], output_dir: Path) -> PlacementSelection:
     """Capture initial, filtered and profile-selected states of the production chooser."""
     from PIL import Image, ImageStat
 
@@ -254,9 +252,7 @@ def capture_picker(
                 if item.winfo_class() in ("TEntry", "Entry")
             ]
             combos = [
-                cast(ttk.Combobox, item)
-                for item in widgets
-                if item.winfo_class() == "TCombobox"
+                cast(ttk.Combobox, item) for item in widgets if item.winfo_class() == "TCombobox"
             ]
             if not entries or len(combos) < 2:
                 raise RuntimeError(
@@ -363,20 +359,14 @@ def _capture_modal(
     """Capture a real modal window and close it without invoking an action."""
     errors: list[str] = []
     existing_windows = {
-        child.winfo_id()
-        for child in parent.winfo_children()
-        if isinstance(child, tk.Toplevel)
+        child.winfo_id() for child in parent.winfo_children() if isinstance(child, tk.Toplevel)
     }
 
     def capture_and_close() -> None:
         dialog = None
         try:
             parent.update_idletasks()
-            windows = [
-                child
-                for child in parent.winfo_children()
-                if isinstance(child, tk.Toplevel)
-            ]
+            windows = [child for child in parent.winfo_children() if isinstance(child, tk.Toplevel)]
             dialog = next(
                 (child for child in windows if child.title() == title),
                 None,
@@ -569,9 +559,7 @@ def capture_ui_workflows(
         for theme in ("light", "dark"):
             root = _make_themed_root(theme, "Functional Block Library")
             try:
-                plugin_api._show_library_browser(
-                    root, schematic, kicad, project_dir, roots, "0x1"
-                )
+                plugin_api._show_library_browser(root, schematic, kicad, project_dir, roots, "0x1")
                 root.update_idletasks()
                 root.update()
                 _capture_visible_window(
@@ -881,9 +869,7 @@ def main() -> int:
             {"value": "9V", "path": reference_source},
             {"value": "12V", "path": reference_source},
         ]
-        layout_files: list[BlockLayoutInput] = [
-            {"name": "Reference PCB", "path": layout_source}
-        ]
+        layout_files: list[BlockLayoutInput] = [{"name": "Reference PCB", "path": layout_source}]
         profiles: list[BlockProfileInput] = [
             {
                 "id": "pdo1_5v_2a4",
