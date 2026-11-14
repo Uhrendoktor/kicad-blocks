@@ -225,6 +225,16 @@ class BlockModelTests(unittest.TestCase):
             self.assertIn('(property "KB_PARAM_MODE" "fast"', rendered)
             self.assertIn('(property "KB_PARAM_MODE" "normal"', block.symbol_library.read_text(encoding="utf-8"))
 
+    def test_library_settings_use_platformdirs_user_config_path(self):
+        from unittest.mock import patch
+
+        expected = Path("/portable/user-config/kicad-blocks")
+        with patch("kicad_blocks.repository.user_config_path", return_value=expected) as user_config:
+            result = settings_file()
+        user_config.assert_called_once_with("kicad-blocks", appauthor=False)
+        self.assertEqual(result, expected / "settings.json")
+
+
     def test_registered_block_libraries_build_one_project_symbol_catalog(self):
         import os
         from unittest.mock import patch
