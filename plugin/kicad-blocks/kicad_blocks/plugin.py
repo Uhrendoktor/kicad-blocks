@@ -107,7 +107,7 @@ class _LayoutDialogChoice(TypedDict):
 class _TkMinimizableWindow(Protocol):
     """Window operations required for the native symbol-placement handoff."""
 
-    master: _TkMinimizableWindow | None
+    master: tkinter_types.Misc | None
 
     def state(self) -> str: ...
 
@@ -333,6 +333,24 @@ class _KiCadApp(Protocol):
     def run_action(self, action: str) -> None: ...
 
     def close(self) -> None: ...
+
+
+class _TkTagConfigurable(Protocol):
+    """Treeview style operation not included in Tk's bundled type stubs."""
+
+    def tag_configure(self, tagname: str, **options: TkOption) -> None: ...
+
+
+class _TkTreeNavigator(Protocol):
+    """Treeview item visibility operation used after keyboard selection."""
+
+    def see(self, item: str) -> None: ...
+
+
+class _TkEntryCursor(Protocol):
+    """Entry cursor operation used when focusing the search field."""
+
+    def icursor(self, index: str | int) -> None: ...
 
 
 class _TkLayoutOptions(TypedDict, total=False):
@@ -2532,16 +2550,16 @@ def _create_and_place(
 
 def _ensure_project_facade_catalog(
     project_dir: Path,
-    record,
-    kicad,
+    record: BlockRecord,
+    kicad: _KiCadApp,
 ) -> Path:
     """Ensure the highlighted symbol exists in the already-registered KBlocks project catalog.
 
     Do not rebuild an existing catalog here: a user may have unsaved or
     unpublished edits to another facade in that same project library.
     """
-    from .pcb_layout import parse_sexpr
-    from .repository import _named_symbol_node, merge_symbol_catalog
+    from .repository import merge_symbol_catalog
+    from .sexpr import parse_sexpr, sexpr_all
 
     project_dir = Path(project_dir).expanduser().resolve()
     catalog = project_dir / ".kicad_blocks" / LIBRARY_CATALOG_NAME
@@ -2554,9 +2572,12 @@ def _ensure_project_facade_catalog(
         catalog_changed = True
     else:
         tree = parse_sexpr(catalog.read_text(encoding="utf-8"))
-        try:
-            _named_symbol_node(tree, symbol_name, catalog)
-        except ValueError:
+        matching_symbols = [
+            node
+            for node in sexpr_all(tree, "symbol")
+            if len(node) >= 2 and str(node[1]) == symbol_name
+        ]
+        if len(matching_symbols) != 1:
             # Merge only the missing symbol. Never rebuild the whole project
             # catalog here, because that would discard edits to other symbols.
             merge_symbol_catalog(catalog.parent, record.path / record.manifest["symbol_file"])
@@ -2602,11 +2623,19 @@ def _edit_facade_symbol(
     if not catalog_path.is_file():
         raise FileNotFoundError(f"The project facade catalog is missing: {catalog_path}")
 
-    from .pcb_layout import parse_sexpr
-    from .repository import _named_symbol_node
+    from .sexpr import parse_sexpr, sexpr_all
 
     catalog = parse_sexpr(catalog_path.read_text(encoding="utf-8"))
-    _named_symbol_node(catalog, symbol_name, catalog_path)
+    matching_symbols = [
+        node
+        for node in sexpr_all(catalog, "symbol")
+        if len(node) >= 2 and str(node[1]) == symbol_name
+    ]
+    if len(matching_symbols) != 1:
+        raise ValueError(
+            f"Expected exactly one {symbol_name!r} entry in {catalog_path}; "
+            f"found {len(matching_symbols)}."
+        )
     lib_id = f"{LIBRARY_NICKNAME}:{symbol_name}"
     raise RuntimeError(
         "Edit Facade is not available through the supported KiCad IPC API yet. "
@@ -3132,7 +3161,6 @@ def _save_block_variants(
     from .model import slugify
     from .repository import (
         MANIFEST_NAME,
-        _record,
         atomic_write,
         read_manifest,
         refresh_library_block,
@@ -3292,7 +3320,7 @@ def _save_block_variants(
         block_path / MANIFEST_NAME,
         json.dumps(manifest, indent=2, ensure_ascii=False) + "\n",
     )
-    updated = _record(block_path)
+    updated = BlockRecord(path=block_path, manifest=read_manifest(block_path))
     result = refresh_library_block(updated)
     if not result.get("changed"):
         manifest = read_manifest(block_path)
@@ -3320,7 +3348,6 @@ def _save_block_layouts(
     from .model import slugify
     from .repository import (
         MANIFEST_NAME,
-        _record,
         atomic_write,
         read_manifest,
         refresh_library_block,
@@ -4026,7 +4053,7 @@ def _show_block_layout_editor(
 
 
 def _pick_save_file(
-    parent,
+    parent: tkinter_types.Misc,
     *,
     title: str,
     initial_path: str | Path,
