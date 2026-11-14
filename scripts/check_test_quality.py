@@ -16,9 +16,7 @@ def _collect_cases(
     tree: ast.Module,
 ) -> list[tuple[str, str, ast.FunctionDef | ast.AsyncFunctionDef, list[ast.stmt]]]:
     """Collect only test locations pytest discovers at module/class scope."""
-    cases: list[
-        tuple[str, str, ast.FunctionDef | ast.AsyncFunctionDef, list[ast.stmt]]
-    ] = []
+    cases: list[tuple[str, str, ast.FunctionDef | ast.AsyncFunctionDef, list[ast.stmt]]] = []
     for node in tree.body:
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name.startswith(
             "test_"
@@ -35,9 +33,7 @@ def _collect_cases(
                     body = list(member.body)
                     if body and _is_docstring(body[0]):
                         body = body[1:]
-                    cases.append(
-                        (node.name, f"{node.name}.{member.name}", member, body)
-                    )
+                    cases.append((node.name, f"{node.name}.{member.name}", member, body))
     return cases
 
 def _is_docstring(statement: ast.stmt) -> bool:
@@ -61,9 +57,7 @@ def _fingerprint(
             ast.dump(decorator, include_attributes=False) for decorator in node.decorator_list
         ],
         "returns": (
-            ast.dump(node.returns, include_attributes=False)
-            if node.returns is not None
-            else None
+            ast.dump(node.returns, include_attributes=False) if node.returns is not None else None
         ),
         "body": ast.dump(
             ast.Module(body=body, type_ignores=[]),
@@ -94,7 +88,9 @@ def scan_tests(root: Path) -> tuple[int, list[str]]:
         for scope, qualified_name, node, body in _collect_cases(tree):
             count += 1
             if not body or all(isinstance(statement, ast.Pass) for statement in body):
-                errors.append(f"{relative}:{node.lineno}: {qualified_name} has no executable test body")
+                errors.append(
+                    f"{relative}:{node.lineno}: {qualified_name} has no executable test body"
+                )
             duplicates[(scope, _fingerprint(node, body))].append(qualified_name)
 
         for names in duplicates.values():
