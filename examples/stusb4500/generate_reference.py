@@ -34,7 +34,7 @@ PROJECT = "functional-block-implementation"
 # titles and descriptions are derived from member pin geometry.
 GROUP_GAP_MM = 2.54
 GROUP_X_PADDING_MM = 13.97
-GROUP_TOP_PADDING_MM = 30.48
+GROUP_TOP_PADDING_MM = 20.32
 GROUP_BOTTOM_PADDING_MM = 7.62
 FRAME_CONTENT_PADDING_MM = 2.54
 FIELD_SYMBOL_MAX_GAP_MM = 9.00
@@ -81,6 +81,7 @@ SCHEMATIC_GROUPS = (
         "description": "VBUS filter and fast-charge path.\nR1/R4 form the VBUS_VS_DISCH monitor divider; verify D4 rating.",
         "members": ("D4", "C4", "R1", "R4"),
         "documentation_members": ("R1", "R4"), "lane": "main", "order": 2,
+        "extra_top_padding_mm": 10.16,
         "layout": {
             "anchor": "D4", "anchor_y_mm": 111.76,
             "constraints": (
@@ -1449,7 +1450,9 @@ def generate_reference_schematic(destination: Path) -> Path:
             raise ValueError(f"Cannot derive bounds for empty group {group['id']}.")
         left = min(point[0] for point in points) - GROUP_X_PADDING_MM
         right = max(point[0] for point in points) + GROUP_X_PADDING_MM
-        top = min(point[1] for point in points) - GROUP_TOP_PADDING_MM
+        top = min(point[1] for point in points) - (
+            GROUP_TOP_PADDING_MM + float(group.get("extra_top_padding_mm", 0.0))
+        )
         bottom = max(point[1] for point in points) + GROUP_BOTTOM_PADDING_MM
         right = max(right, left + _group_text_width(group))
         rules.extend(_functional_group(group, (left, top, right, bottom)))
