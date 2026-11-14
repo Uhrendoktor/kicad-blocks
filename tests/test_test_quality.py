@@ -19,15 +19,15 @@ def test_reports_exact_duplicate_test_bodies_even_when_docstrings_differ(tmp_pat
     test_root = tmp_path / "tests"
     test_root.mkdir()
     (test_root / "test_duplicates.py").write_text(
-        'def test_first():\n'
+        "def test_first():\n"
         '    """First description."""\n'
-        '    result = 3\n'
-        '    assert result == 3\n'
-        '\n'
-        'def test_second():\n'
+        "    result = 3\n"
+        "    assert result == 3\n"
+        "\n"
+        "def test_second():\n"
         '    """Different description."""\n'
-        '    result = 3\n'
-        '    assert result == 3\n',
+        "    result = 3\n"
+        "    assert result == 3\n",
         encoding="utf-8",
     )
 
