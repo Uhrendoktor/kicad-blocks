@@ -766,25 +766,39 @@ class LibraryBrowserTests(unittest.TestCase):
         self.assertEqual(browser.events, [])
         self.assertEqual(manager.events, ["iconify"])
 
-    def test_place_block_reports_missing_supported_interactive_ipc_without_automation(self):
-        run_action = Mock()
-        with (
-            patch("kicad_blocks.plugin.subprocess.run") as run_process,
-            patch("kicad_blocks.plugin.shutil.which") as find_command,
-            self.assertRaisesRegex(RuntimeError, "schematic equivalent of Board.interactive_move"),
-        ):
-            _start_native_symbol_placement(
-                SimpleNamespace(run_action=run_action), None, "buck_converter_ab12cd34"
-            )
-        run_action.assert_not_called()
-        run_process.assert_not_called()
-        find_command.assert_not_called()
+    def test_place_block_creates_at_sheet_centre_and_selects_only_new_symbol(self):
+        from kipy.geometry import Vector2
 
-    def test_place_block_rejects_invalid_symbol_id_before_reporting_capability_gap(self):
-        run_action = Mock()
+        symbol = SimpleNamespace(id="placed-symbol-id")
+        schematic = Mock()
+        schematic.place_symbol_from_library.return_value = symbol
+        kicad = SimpleNamespace(get_schematic=Mock(return_value=schematic))
+
+        result = _start_native_symbol_placement(
+            kicad, None, "buck_converter_ab12cd34"
+        )
+
+        self.assertIs(result, symbol)
+        args, kwargs = schematic.place_symbol_from_library.call_args
+        self.assertEqual(args[0], f"{LIBRARY_NICKNAME}:buck_converter_ab12cd34")
+        self.assertEqual(args[1], Vector2.from_xy_mm(148.5, 105.0))
+        schematic.clear_selection.assert_called_once_with()
+        schematic.add_to_selection.assert_called_once_with(symbol)
+        schematic.save.assert_called_once_with()
+
+    def test_place_block_rejects_invalid_symbol_id_before_connecting(self):
+        get_schematic = Mock()
         with self.assertRaisesRegex(ValueError, "invalid KiCad symbol name"):
-            _start_native_symbol_placement(SimpleNamespace(run_action=run_action), None, "bad symbol id")
-        run_action.assert_not_called()
+            _start_native_symbol_placement(
+                SimpleNamespace(get_schematic=get_schematic), None, "bad symbol id"
+            )
+        get_schematic.assert_not_called()
+
+    def test_place_block_requires_an_active_schematic(self):
+        with self.assertRaisesRegex(RuntimeError, "No active schematic"):
+            _start_native_symbol_placement(
+                SimpleNamespace(get_schematic=lambda: None), None, "valid_symbol"
+            )
 
 if __name__ == "__main__":
     unittest.main()
