@@ -395,10 +395,10 @@ def _create_action_icon(parent, name: str):
         '</svg>'
     )
     try:
-        import cairosvg
+        import resvg_py
 
-        png = cairosvg.svg2png(
-            bytestring=svg.encode("utf-8"), output_width=20, output_height=20
+        png = resvg_py.svg_to_bytes(
+            svg_string=svg, width=20, height=20
         )
         image = tk.PhotoImage(
             data=base64.b64encode(png).decode("ascii"), master=parent
@@ -2398,16 +2398,16 @@ def _native_symbol_preview_photo(
                 svg_file = candidates[0]
 
             try:
-                import cairosvg
+                import resvg_py
             except ImportError as exc:
                 raise RuntimeError(
                     "The native KiCad preview rasterizer is missing. Reinstall KiCad Blocks "
-                    "so its CairoSVG dependency is installed."
+                    "so its resvg_py dependency is installed."
                 ) from exc
 
             svg_file = _clean_facade_preview_svg(svg_file, record, output_dir)
-            png_data = cairosvg.svg2png(
-                url=str(svg_file), output_width=int(width)
+            png_data = resvg_py.svg_to_bytes(
+                svg_path=str(svg_file), width=int(width)
             )
             try:
                 from io import BytesIO
