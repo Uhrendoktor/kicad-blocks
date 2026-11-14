@@ -64,9 +64,7 @@ INSTANCE_LINKS_NAME = "instances.json"
 type _RawJsonScalar = str | int | float | bool | None
 type _RawManifestVariant = dict[str, _RawJsonScalar]
 type _RawManifestPin = dict[str, _RawJsonScalar]
-type _RawManifestLayoutValue = (
-    _RawJsonScalar | list[_RawJsonScalar] | dict[str, _RawJsonScalar]
-)
+type _RawManifestLayoutValue = _RawJsonScalar | list[_RawJsonScalar] | dict[str, _RawJsonScalar]
 type _RawManifestLayout = dict[str, _RawManifestLayoutValue]
 type _RawInstanceLinkValue = _RawJsonScalar | dict[str, _RawJsonScalar]
 type _RawInstanceLinksValue = _RawJsonScalar | dict[str, _RawInstanceLinkValue]
@@ -382,9 +380,7 @@ def read_manifest(block_path: Path) -> BlockManifest:
             "expected 'manual' or 'hierarchical_labels'."
         )
     manifest["interface_source"] = interface_source
-    variants_container = cast(
-        list[str | _RawManifestVariant] | str, manifest["variants"]
-    )
+    variants_container = cast(list[str | _RawManifestVariant] | str, manifest["variants"])
     if not isinstance(variants_container, list):
         raise TypeError("Block manifest variants must be a list.")
     variants_value = variants_container
@@ -438,16 +434,12 @@ def read_manifest(block_path: Path) -> BlockManifest:
     else:
         manifest.pop("default_variant", None)
 
-    layouts_container = cast(
-        list[str | _RawManifestLayout] | str, manifest["layouts"]
-    )
+    layouts_container = cast(list[str | _RawManifestLayout] | str, manifest["layouts"])
     if not isinstance(layouts_container, list):
         raise TypeError("Block manifest layouts must be a list.")
     layouts_value = layouts_container
     layouts: list[BlockLayoutManifest] = []
-    pin_items_container = cast(
-        list[str | _RawManifestPin] | str, manifest.get("pins", [])
-    )
+    pin_items_container = cast(list[str | _RawManifestPin] | str, manifest.get("pins", []))
     if not isinstance(pin_items_container, list) or not pin_items_container:
         raise ValueError("Block manifest pins must be a non-empty list of named pin objects.")
     pin_items_value = pin_items_container
