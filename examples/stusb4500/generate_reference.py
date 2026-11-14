@@ -51,37 +51,90 @@ SCHEMATIC_GROUPS = (
         "id": "usb-port", "title": "USB-C PORT / CC PROTECTION",
         "description": "Type-C receptacle and dual CC-line ESD protection.",
         "members": ("J1", "D1"), "lane": "main", "order": 0,
+        "layout": {
+            "anchor": "J1", "anchor_y_mm": 139.70,
+            "constraints": (
+                {"kind": "offset", "component": "D1", "to": "J1", "dx_mm": 33.02, "dy_mm": 0.0},
+            ),
+        },
     },
     {
         "id": "vbus-bulk", "title": "VBUS BULK PROTECTION",
         "description": "Input bulk capacitance and VBUS transient clamp.",
         "members": ("C50", "D50"), "lane": "main", "order": 1,
+        "layout": {
+            "anchor": "C50", "anchor_y_mm": 132.08,
+            "constraints": (
+                {"kind": "offset", "component": "D50", "to": "C50", "dx_mm": 20.32, "dy_mm": 0.0},
+            ),
+        },
     },
     {
         "id": "vbus-monitor", "title": "VBUS MONITOR / FILTER",
         "description": "VBUS filter, fast-charge path and VBUS_VS_DISCH divider. D4 part is unspecified; verify its rating.",
         "members": ("D4", "C4", "R1", "R4"), "lane": "main", "order": 2,
+        "layout": {
+            "anchor": "D4", "anchor_y_mm": 111.76,
+            "constraints": (
+                {"kind": "offset", "component": "C4", "to": "D4", "dx_mm": 12.70, "dy_mm": 3.81},
+                {"kind": "offset", "component": "R1", "to": "C4", "dx_mm": 12.70, "dy_mm": 0.0},
+                {"kind": "offset", "component": "R4", "to": "R1", "dx_mm": 5.08, "dy_mm": 0.0},
+            ),
+        },
     },
     {
         "id": "controller", "title": "STUSB4500 CONTROLLER",
         "description": "USB-PD controller with directly wired VREG_1V2 and VREG_2V7 bypass capacitors.",
         "members": ("U1", "C1", "C2", "C3", "R55"), "lane": "main", "order": 3,
+        "layout": {
+            "anchor": "U1", "anchor_y_mm": 137.16,
+            "constraints": (
+                {"kind": "offset", "component": "C1", "to": "U1", "dx_mm": -20.32, "dy_mm": -35.56},
+                {"kind": "offset", "component": "C2", "to": "U1", "dx_mm": 0.0, "dy_mm": -35.56},
+                {"kind": "offset", "component": "C3", "to": "C2", "dx_mm": 5.08, "dy_mm": 0.0},
+                {"kind": "pin_offset", "component": "R55", "to": "U1", "pin": "6", "dx_mm": -7.62, "dy_mm": 7.62},
+            ),
+        },
     },
     {
         "id": "address-straps", "title": "I2C ADDRESS STRAPS",
         "description": "Selectable ADDR0/ADDR1 pull-up and pull-down networks.",
         "members": ("R51", "R52", "R53", "R54"), "lane": "secondary",
         "align_to": "controller", "y_offset_mm": 25.40,
+        "layout": {
+            "anchor": "R51", "anchor_y_mm": 177.80,
+            "constraints": (
+                {"kind": "offset", "component": "R52", "to": "R51", "dx_mm": 0.0, "dy_mm": 12.70},
+                {"kind": "offset", "component": "R53", "to": "R51", "dx_mm": 20.32, "dy_mm": 0.0},
+                {"kind": "offset", "component": "R54", "to": "R53", "dx_mm": 0.0, "dy_mm": 12.70},
+            ),
+        },
     },
     {
         "id": "power-switch", "title": "BACK-TO-BACK PMOS SWITCH",
         "description": "Back-to-back P-channel switches with a direct common-source control network.",
         "members": ("T4", "T1", "R10", "R11", "R13"), "lane": "main", "order": 4,
+        "layout": {
+            "anchor": "T4", "anchor_y_mm": 104.14,
+            "constraints": (
+                {"kind": "offset", "component": "T1", "to": "T4", "dx_mm": 40.64, "dy_mm": 0.0},
+                {"kind": "midpoint_offset", "component": "R10", "between": ("T4", "T1"), "dx_mm": 0.0, "dy_mm": 27.94},
+                {"kind": "offset", "component": "R11", "to": "R10", "dx_mm": 7.62, "dy_mm": 7.62},
+                {"kind": "offset", "component": "R13", "to": "R11", "dx_mm": 20.32, "dy_mm": 0.0},
+            ),
+        },
     },
     {
         "id": "vsnk-output", "title": "VSNK OUTPUT",
         "description": "Protected sink output with local bypass and TVS components.",
         "members": ("R2", "C10", "D11"), "lane": "main", "order": 5,
+        "layout": {
+            "anchor": "C10", "anchor_y_mm": 99.06,
+            "constraints": (
+                {"kind": "offset", "component": "D11", "to": "C10", "dx_mm": 0.0, "dy_mm": 25.40},
+                {"kind": "offset", "component": "R2", "to": "C10", "dx_mm": 0.0, "dy_mm": 46.99},
+            ),
+        },
     },
 )
 DIRECT_DECOUPLERS = (
@@ -518,28 +571,114 @@ def _group_text_width(group: dict) -> float:
     return max(title_width + 2.54, description_width + 2.54)
 
 
+def _resolve_group_component_positions(
+    specs: list[tuple], loaded: dict[tuple[str, str], list],
+) -> dict[str, list[float]]:
+    """Resolve component origins from group anchors and relative constraints.
+
+    Layout metadata uses offsets, midpoint relations and library-pin-relative
+    relations. Sheet coordinates are deliberately absent from symbol specs.
+    """
+    by_ref = {spec[0]: spec for spec in specs}
+    positions: dict[str, list[float]] = {}
+    for group in SCHEMATIC_GROUPS:
+        layout = group.get("layout")
+        if not isinstance(layout, dict):
+            raise ValueError(f"Group {group['id']} has no component layout metadata.")
+        anchor = str(layout.get("anchor", ""))
+        if anchor not in group["members"] or anchor not in by_ref:
+            raise ValueError(f"Group {group['id']} has an invalid layout anchor {anchor!r}.")
+        positions[anchor] = [0.0, float(layout["anchor_y_mm"])]
+        pending = list(layout.get("constraints", ()))
+        while pending:
+            unresolved = []
+            progressed = False
+            for rule in pending:
+                kind = str(rule["kind"])
+                component = str(rule["component"])
+                if component not in group["members"] or component in positions:
+                    raise ValueError(
+                        f"Invalid or duplicate layout target {component!r} in {group['id']}."
+                    )
+                if kind == "offset":
+                    reference = str(rule["to"])
+                    if reference not in positions:
+                        unresolved.append(rule)
+                        continue
+                    base = positions[reference]
+                    point = (
+                        base[0] + float(rule["dx_mm"]),
+                        base[1] + float(rule["dy_mm"]),
+                    )
+                elif kind == "midpoint_offset":
+                    first_ref, second_ref = (str(item) for item in rule["between"])
+                    if first_ref not in positions or second_ref not in positions:
+                        unresolved.append(rule)
+                        continue
+                    first, second = positions[first_ref], positions[second_ref]
+                    point = (
+                        (first[0] + second[0]) / 2 + float(rule.get("dx_mm", 0.0)),
+                        (first[1] + second[1]) / 2 + float(rule.get("dy_mm", 0.0)),
+                    )
+                elif kind == "pin_offset":
+                    reference = str(rule["to"])
+                    if reference not in positions:
+                        unresolved.append(rule)
+                        continue
+                    reference_spec = by_ref[reference]
+                    definition = loaded[(reference_spec[1], reference_spec[2])]
+                    pin_number = str(rule["pin"])
+                    pin = next(
+                        (
+                            item for item in _pin_data(definition)
+                            if item["number"] == pin_number
+                        ),
+                        None,
+                    )
+                    if pin is None:
+                        raise ValueError(
+                            f"Layout constraint for {component} references "
+                            f"missing pin {reference}.{pin_number}."
+                        )
+                    reference_rotation = _symbol_rotation(reference)
+                    pin_point = _world_pin(
+                        *positions[reference], reference_rotation, pin,
+                    )
+                    point = (
+                        pin_point[0] + float(rule["dx_mm"]),
+                        pin_point[1] + float(rule["dy_mm"]),
+                    )
+                else:
+                    raise ValueError(
+                        f"Unsupported layout relation {kind!r} in group {group['id']}."
+                    )
+                positions[component] = [round(point[0], 3), round(point[1], 3)]
+                progressed = True
+            if not progressed and unresolved:
+                raise ValueError(
+                    f"Unresolved component layout constraints in {group['id']}: "
+                    + ", ".join(str(rule["component"]) for rule in unresolved)
+                )
+            pending = unresolved
+        unresolved_members = set(group["members"]) - set(positions)
+        if unresolved_members:
+            raise ValueError(
+                f"Group {group['id']} has no layout constraints for "
+                + ", ".join(sorted(unresolved_members))
+            )
+
+    expected = {spec[0] for spec in specs}
+    if set(positions) != expected:
+        raise ValueError("Every component must resolve from exactly one group layout.")
+    return positions
+
+
 def _pack_component_groups(
     specs: list[tuple], loaded: dict[tuple[str, str], list],
 ) -> dict[str, tuple[float, float]]:
-    """Pack declared groups on a fixed-gap horizontal flow lane.
-
-    Component coordinates inside a group remain relative layout hints.  Each
-    group is translated as a unit after measuring its symbol pins.
-    """
+    """Resolve local constraints, then pack derived group bounds left-to-right."""
     by_ref = {spec[0]: spec for spec in specs}
-    positions = {spec[0]: [float(spec[4][0]), float(spec[4][1])] for spec in specs}
-    # Local constraints for adjacent divider and decoupling components.
-    positions["R4"] = [positions["R1"][0] + 5.08, positions["R1"][1]]
-    positions["C3"] = [positions["C2"][0] + 5.08, positions["C2"][1]]
-
-    # R55 is constrained relative to U1.6 rather than independently placed.
-    u1_spec = by_ref["U1"]
-    u1_pin = next(
-        pin for pin in _pin_data(loaded[(u1_spec[1], u1_spec[2])])
-        if pin["number"] == "6"
-    )
-    reset_point = _world_pin(*positions["U1"], 0, u1_pin)
-    positions["R55"] = [reset_point[0] - 7.62, reset_point[1] + 7.62]
+    positions = _resolve_group_component_positions(specs, loaded)
 
     def raw_bounds(group: dict) -> tuple[float, float, float, float]:
         points = []
@@ -631,8 +770,9 @@ def generate_reference_schematic(destination: Path) -> Path:
     """Write the editable, datasheet-derived STUSB4500 implementation sheet."""
     root = _symbol_root()
     specs = [
-        # ref, library, symbol, value, position, pin-number -> (net, kind, shape)
-        ("U1", "Interface_USB", "STUSB4500QTR", "STUSB4500QTR", (246.38, 137.16), {
+        # ref, library, symbol, value, unused position slot, pin-number -> (net, kind, shape).
+        # Component origins are resolved exclusively from SCHEMATIC_GROUPS layout constraints.
+        ("U1", "Interface_USB", "STUSB4500QTR", "STUSB4500QTR", None, {
             "1": ("CC1", "local", ""), "2": ("CC1", "local", ""),
             "3": ("NC", "nc", ""), "4": ("CC2", "local", ""),
             "5": ("CC2", "local", ""), "6": ("RESET", "hier", "input"),
@@ -647,83 +787,83 @@ def generate_reference_schematic(destination: Path) -> Path:
             "23": ("VREG_2V7", "local", ""), "24": ("VBUS", "local", ""),
             "25": ("GND", "local", ""),
         }),
-        ("J1", "Connector", "USB_C_Receptacle", "USB 3.1 Type-C receptacle", (45.72, 139.70), {
+        ("J1", "Connector", "USB_C_Receptacle", "USB 3.1 Type-C receptacle", None, {
             "A1": ("GND", "local", ""), "A4": ("VBUS", "local", ""),
             "A5": ("CC1", "local", ""), "A9": ("VBUS", "local", ""),
             "A12": ("GND", "local", ""), "B1": ("GND", "local", ""),
             "B4": ("VBUS", "local", ""), "B5": ("CC2", "local", ""),
             "B9": ("VBUS", "local", ""), "B12": ("GND", "local", ""),
         }),
-        ("C50", "Device", "C", "4.7uF", (97.79, 132.08), {
+        ("C50", "Device", "C", "4.7uF", None, {
             "1": ("VBUS", "local", ""), "2": ("GND", "local", ""),
         }),
-        ("D50", "Device", "D_TVS", "ESDA25P35-1U1M", (118.11, 132.08), {
+        ("D50", "Device", "D_TVS", "ESDA25P35-1U1M", None, {
             "1": ("VBUS", "local", ""), "2": ("GND", "local", ""),
         }),
-        ("D1", "STUSB4500_Custom", "ESDA25W", "ESDA25W", (78.74, 139.70), {
+        ("D1", "STUSB4500_Custom", "ESDA25W", "ESDA25W", None, {
             "1": ("CC1", "local", ""), "2": ("CC2", "local", ""),
             "3": ("GND", "local", ""),
         }),
-        ("D4", "Device", "D", "D4 (part not specified)", (160.02, 111.76), {
+        ("D4", "Device", "D", "D4 (part not specified)", None, {
             "1": ("VBUS_FILTERED", "local", ""), "2": ("VBUS", "local", ""),
         }),
-        ("C4", "Device", "C", "1uF", (172.72, 115.57), {
+        ("C4", "Device", "C", "1uF", None, {
             "1": ("VBUS_FILTERED", "local", ""), "2": ("GND", "local", ""),
         }),
-        ("R1", "Device", "R", "470", (185.42, 115.57), {
+        ("R1", "Device", "R", "470", None, {
             "1": ("VBUS_FILTERED", "local", ""), "2": ("VBUS_VS_DISCH", "local", ""),
         }),
-        ("R4", "Device", "R", "1k", (203.20, 115.57), {
+        ("R4", "Device", "R", "1k", None, {
             "1": ("VREG_2V7", "local", ""), "2": ("VBUS_VS_DISCH", "local", ""),
         }),
-        ("C1", "Device", "C", "1uF", (226.06, 101.60), {
+        ("C1", "Device", "C", "1uF", None, {
             "1": ("VREG_1V2", "local", ""), "2": ("GND", "local", ""),
         }),
-        ("C2", "Device", "C", "1uF", (246.38, 101.60), {
+        ("C2", "Device", "C", "1uF", None, {
             "1": ("VREG_2V7", "local", ""), "2": ("GND", "local", ""),
         }),
-        ("C3", "Device", "C", "1uF", (266.70, 101.60), {
+        ("C3", "Device", "C", "1uF", None, {
             "1": ("VREG_2V7", "local", ""), "2": ("GND", "local", ""),
         }),
-        ("R51", "Device", "R", "100k", (236.22, 177.80), {
+        ("R51", "Device", "R", "100k", None, {
             "1": ("VREG_2V7", "local", ""), "2": ("ADDR1", "local", ""),
         }),
-        ("R52", "Device", "R", "100k", (236.22, 190.50), {
+        ("R52", "Device", "R", "100k", None, {
             "1": ("VREG_2V7", "local", ""), "2": ("ADDR0", "local", ""),
         }),
-        ("R53", "Device", "R", "100k", (256.54, 177.80), {
+        ("R53", "Device", "R", "100k", None, {
             "1": ("ADDR1", "local", ""), "2": ("GND", "local", ""),
         }),
-        ("R54", "Device", "R", "100k", (256.54, 190.50), {
+        ("R54", "Device", "R", "100k", None, {
             "1": ("ADDR0", "local", ""), "2": ("GND", "local", ""),
         }),
-        ("R55", "Device", "R", "10k", (279.40, 165.10), {
+        ("R55", "Device", "R", "10k", None, {
             "1": ("RESET", "local", ""), "2": ("GND", "local", ""),
         }),
-        ("T4", "Transistor_FET", "Q_PMOS_GSD", "STL6P3LLH6", (317.50, 104.14), {
+        ("T4", "Transistor_FET", "Q_PMOS_GSD", "STL6P3LLH6", None, {
             "1": ("VBUS_EN_SNK", "local", ""), "2": ("VBUS", "local", ""),
             "3": ("FET_MID", "local", ""),
         }),
-        ("T1", "Transistor_FET", "Q_PMOS_GSD", "STL6P3LLH6", (358.14, 104.14), {
+        ("T1", "Transistor_FET", "Q_PMOS_GSD", "STL6P3LLH6", None, {
             "1": ("VSNK_GATE", "local", ""), "2": ("FET_MID", "local", ""),
             "3": ("VSNK", "hier", "output"),
         }),
-        ("R10", "Device", "R", "100k", (337.82, 132.08), {
+        ("R10", "Device", "R", "100k", None, {
             "1": ("FET_MID", "local", ""), "2": ("VSNK_GATE", "local", ""),
         }),
-        ("R11", "Device", "R", "22k", (345.44, 139.70), {
+        ("R11", "Device", "R", "22k", None, {
             "1": ("VSNK_GATE", "local", ""), "2": ("GND", "local", ""),
         }),
-        ("R13", "Device", "R", "100", (365.76, 139.70), {
+        ("R13", "Device", "R", "100", None, {
             "1": ("VSNK_GATE", "local", ""), "2": ("VBUS_EN_SNK", "local", ""),
         }),
-        ("R2", "Device", "R", "1k", (391.16, 146.05), {
+        ("R2", "Device", "R", "1k", None, {
             "1": ("DISCH", "local", ""), "2": ("VSNK", "local", ""),
         }),
-        ("C10", "Device", "C", "100nF", (391.16, 99.06), {
+        ("C10", "Device", "C", "100nF", None, {
             "1": ("VSNK", "local", ""), "2": ("GND", "local", ""),
         }),
-        ("D11", "Device", "D_TVS", "ESDA25P35-1U1M", (391.16, 124.46), {
+        ("D11", "Device", "D_TVS", "ESDA25P35-1U1M", None, {
             "1": ("VSNK", "local", ""), "2": ("GND", "local", ""),
         }),
     ]
