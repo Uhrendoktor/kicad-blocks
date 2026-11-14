@@ -12,6 +12,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Protocol, cast
 
@@ -194,7 +195,7 @@ def _system_prefers_dark_theme() -> bool:
     return False
 
 
-def _configure_tk_theme(root) -> None:
+def _configure_tk_theme(root: tk.Misc) -> None:
     """Apply a compact KiCad-compatible palette to themed and classic Tk widgets."""
     dark = _system_prefers_dark_theme()
     colors = (
@@ -457,10 +458,10 @@ def _configure_tk_theme(root) -> None:
     root._kicad_blocks_palette = colors
 
 
-def _editor_window_id_for_widget(window) -> str | None:
+def _editor_window_id_for_widget(window: tk.Misc) -> str | None:
     """Find the invoking KiCad editor XID stored on a Tk parent chain."""
-    current = window
-    seen = set()
+    current: tk.Misc | None = window
+    seen: set[int] = set()
     while current is not None and id(current) not in seen:
         seen.add(id(current))
         owner = getattr(current, "_kicad_blocks_editor_window_id", None)
@@ -622,11 +623,11 @@ def _attach_process_window_to_editor(
     return False
 
 
-def _add_tooltip(widget, text: str) -> None:
+def _add_tooltip(widget: tk.Misc, text: str) -> None:
     """Attach a small themed tooltip to a compact icon button."""
-    tooltip = [None]
+    tooltip: list[tk.Toplevel | None] = [None]
 
-    def show(_event=None):
+    def show(_event: tk.Event | None = None) -> None:
         if tooltip[0] is not None or not widget.winfo_exists():
             return
         palette = getattr(widget.winfo_toplevel(), "_kicad_blocks_palette", {})
@@ -654,7 +655,7 @@ def _add_tooltip(widget, text: str) -> None:
         popup.geometry(f"+{x}+{y}")
         tooltip[0] = popup
 
-    def hide(_event=None):
+    def hide(_event: tk.Event | None = None) -> None:
         popup = tooltip[0]
         tooltip[0] = None
         if popup is not None:
@@ -666,7 +667,7 @@ def _add_tooltip(widget, text: str) -> None:
     widget.bind("<ButtonPress>", hide, add="+")
 
 
-def _create_action_icon(parent, name: str):
+def _create_action_icon(parent: tk.Misc, name: str) -> tk.PhotoImage | None:
     """Render one semantic 20px toolbar icon using the current KiCad palette."""
     drawings = {
         "place": '<rect x="4" y="4" width="12" height="12" rx="2"/><path d="M16 16l4 4M10 7v6M7 10h6"/>',
@@ -704,7 +705,7 @@ def _create_action_icon(parent, name: str):
     return image
 
 
-def _action_button(parent, text: str, command, icon: str, tooltip: str):
+def _action_button(parent: tk.Misc, text: str, command: Callable[[], None], icon: str, tooltip: str) -> ttk.Button:
     """Create a consistently padded, semantic icon-and-label action button."""
     image = _create_action_icon(parent, icon)
     options = {"text": text, "command": command, "padding": (9, 6)}
