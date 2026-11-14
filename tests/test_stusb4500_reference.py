@@ -581,7 +581,7 @@ class STUSB4500ReferenceTests(unittest.TestCase):
             content,
         )
         self.assertIn(
-            '(wire (pts (xy 223.520 119.380) (xy 223.520 121.920))',
+            '(wire (pts (xy 223.520 119.380) (xy 223.520 123.190))',
             content,
         )
         self.assertAlmostEqual(float(_direct(instances["R55"], "at")[1]), 223.520, places=3)
