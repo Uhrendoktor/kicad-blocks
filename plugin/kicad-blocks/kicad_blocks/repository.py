@@ -41,8 +41,8 @@ from .model import (
     slugify,
 )
 from .sexpr import (
-    SExprList,
     QuotedSExpr as _Quoted,
+    SExprList,
     dump_sexpr as _dump,
     parse_sexpr,
     sexpr_all as _all,
