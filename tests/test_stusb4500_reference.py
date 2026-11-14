@@ -339,7 +339,7 @@ class STUSB4500ReferenceTests(unittest.TestCase):
         self.assertNotIn('(text "REFERENCE ONLY', content)
         header_title = next(
             node for node in _all(tree, "text_box")
-            if "header:sheet:title" in str(_direct(node, "uuid")[1])
+            if str(node[1]) == "STUSB4500 USB-C / POWER DELIVERY SINK"
         )
         self.assertGreater(float(_direct(header_title, "size")[1]), 350.0)
         self.assertIn('(text_box "VSNK OUTPUT"', content)
