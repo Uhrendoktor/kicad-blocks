@@ -11,7 +11,7 @@ A block can store multiple named pre-routed PCB layouts. A layout can be associa
 5. Choose **Create a new empty board** or **Choose an existing PCB file**.
 6. When using an existing file, choose the `.kicad_pcb` source file.
 7. Set **Use for implementation** to **Default** or a named variant.
-8. Choose **Add layout**, then save the layout manager.
+8. Choose **Add layout**. The new board is saved to the block library immediately and is opened in PCB Editor when you close the manager.
 
 In blank-board mode, the PCB file entry and **Choose file** button are hidden. They appear only when you choose an existing PCB file.
 
@@ -22,12 +22,13 @@ An optional matching `.kicad_pro` project-settings sidecar can be imported with 
 The PCB layout manager shows each stored board, its linked implementation, and its PCB filename.
 
 1. Select a layout row.
-2. Set **Assign selected layout to** to **Default**, a named variant, or **No variant link**.
-3. Choose **Link selected**.
+2. Set **Make selected layout available to** to **Default** or a named variant.
+3. Choose **Assign**.
 4. Use **Set default** when the selected layout should be the fallback for the block.
-5. Choose **Save layouts**.
 
-**Default** is used when no `KB_VARIANT` is set. A named variant can use its own linked layout. **No variant link** clears that layout's variant-specific links; it does not clear the block's default-layout selection.
+Each accepted Add, Remove, Assign, or Set default operation is saved to the library immediately. **Save & close** retries any operation that could not be saved and then closes the manager. A layout always remains associated with at least one implementation; there is no unlink option.
+
+**Default** is used when no `KB_VARIANT` is set. A named variant can use its own linked layout.
 
 The browser's **Open PCB layout** action opens a stored board for inspection. **Manage PCB layouts** changes the library's stored files and implementation links. These are separate operations.
 

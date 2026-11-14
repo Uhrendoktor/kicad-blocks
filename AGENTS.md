@@ -23,11 +23,14 @@ This file is the durable design contract for UI changes. It consolidates the rev
 - The implementation manager must make the default implementation explicit and editable. Empty `KB_VARIANT` resolves to that selected implementation; an explicit unknown selector remains an error.
 - Editing or renaming an implementation must preserve associated PCB layout metadata or require the user to resolve it explicitly.
 - Every stored PCB layout must be associated with at least one implementation. There must be no "No link", "Not linked", or unlink option in the UI.
+- Accepted Add/Remove/Assign/default operations in the PCB layout and implementation managers must persist immediately. A visible **Save & close** action may retry a failed write; it must not be the normal commit step.
+- The default library root must not be unregisterable. Changing its location must use the explicit default-folder migration path.
 - Creating a PCB layout must have a visible, complete workflow: choose or create a board, save it to the block, update the list, and open the saved board. Validate generated board files with KiCad CLI or IPC, not only string assertions.
 
 ## Create Block from Sheet regression contract
 
 - Test the registered `create-block` action through `run_action("create-block")`, not only the private helper.
+- Exercise the actual visible Create Block form from that registered action. The form must have a mapped owner; do not withdraw the Tk root and then create a transient child of it. The GUI test harness may drive the visible form, but production must not use global input automation.
 - Exercise a real KiCad IPC `SheetSymbol` selection and run the production Create Block workflow against it. A mocked selection parser is not sufficient.
 - Also test an empty selection while a child sheet is active; the created block must come from that active sheet, not silently from the root.
 - Verify the new block manifest, extracted hierarchical-label pins, project symbol catalog, symbol-library table registration, and KiCad CLI exports. Assert the original project sheets remain unchanged.

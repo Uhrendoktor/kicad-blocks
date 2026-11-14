@@ -56,17 +56,17 @@ The PCB Editor provides a separate **Place Imported Block Layout** action for a 
 
 The Functional Block Library browser presents these primary actions:
 
-- **Place block** — starts KiCad's native symbol chooser and placement tool. Select the displayed `KBlocks:<symbol>` entry in KiCad's chooser, then place it on the schematic.
+- **Place block** — creates the selected facade at the active sheet's grid-snapped page centre, focuses it in Eeschema, and leaves it selected. This is fixed-coordinate placement, not cursor-attached movement; KiCad's supported schematic IPC API does not yet expose the interactive-move request available in PCB Editor.
 - **Open implementation** — opens the default or selected implementation schematic.
-- **Edit facade** — validates the generated library symbol shown in the preview, opens KiCad's native Symbol Editor, and displays its exact `KBlocks:<symbol>` identifier for selection in the library tree. No placed schematic instance is required. KiCad edits the project's existing **KBlocks** catalog, which is refreshed from the registered shared libraries before the editor opens. Save the symbol, then use **Publish implementation** to import the project-catalog edit into the block's revisioned facade asset and update the shared catalog. Conflicting project/shared edits are rejected rather than overwritten.
+- **Edit facade** — validates the generated library symbol shown in the preview. The tested KiCad build does not expose a supported cross-platform IPC operation to open Symbol Editor and load that exact library item from Eeschema. The plugin reports this capability gap; the edit workflow remains incomplete until KiCad exposes the API.
 - **Implementations** — opens the default and named implementation list.
 - **Open PCB layout** — opens a stored board file for inspection.
 - **Manage PCB layouts** — edits stored boards, implementation links, and the default layout.
 - **Refresh** — reloads the registered library list.
 
-The Implementations dialog contains a **Default** row and any named variants. Selecting **Default** enables **Edit default**, which opens the default schematic. Named rows enable **Edit variant**. A variant can be added from an existing schematic, a new blank schematic, or a copy of another library implementation.
+The Implementations dialog contains a **Default** row and any named variants. Selecting **Default** enables **Edit default**, which opens the default schematic. Named rows enable **Edit variant**. A variant can be added from an existing schematic, a new blank schematic, or a copy of another library implementation. Each accepted Add, Edit, Remove, or Set as default operation is saved immediately. **Save & close** retries a failed write before closing.
 
-The PCB layout manager separates the layout table, assignment controls, and Save/Cancel footer. The **Assign selected layout to** selector can choose **Default**, a named variant, or **No variant link**.
+The PCB layout manager separates the layout table, assignment controls, and **Save & close** retry/close action. The **Make selected layout available to** selector can choose **Default** or a named variant. Each accepted Add, Remove, Assign, or Set default operation is saved immediately; every stored layout stays associated with at least one implementation.
 
 The **Add PCB layout** dialog supports two starting modes: **Create a new empty board** and **Choose an existing PCB file**. The file entry and **Choose file** button are visible only in the existing-file mode. **Use for implementation** associates the new board with **Default** or a named variant.
 

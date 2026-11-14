@@ -936,7 +936,8 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
         create_from_sheet.assert_called_once_with(
             self.library, self.schematic, kicad, self.project, root, None
         )
-        root.withdraw.assert_called_once_with()
+        self.assertTrue(root._kicad_blocks_reuse_for_create)
+        root.withdraw.assert_not_called()
         root.destroy.assert_called_once_with()
 
     def test_run_action_does_not_capture_native_windows_before_creating_tk(self):
