@@ -26,9 +26,9 @@ if TYPE_CHECKING:
 
     from google.protobuf.message import Message
     from kipy.common_types import Commit
-    from kipy.proto.common.types.base_types_pb2 import KIID
     from kipy.geometry import Vector2
     from kipy.proto.common.types import DocumentSpecifier
+    from kipy.proto.common.types.base_types_pb2 import KIID
 else:
     tk = None
     ttk = None
