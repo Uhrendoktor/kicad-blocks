@@ -23,10 +23,10 @@ from kicad_blocks.pcb_layout import parse_sexpr
 from kicad_blocks.plugin import (
     _attach_tk_window_to_editor,
     _bind_mousewheel,
-    _configure_tk_theme,
     _block_overview_text,
     _choose_block_layout,
     _clean_facade_preview_svg,
+    _configure_tk_theme,
     _filter_library_records,
     _layout_choices,
     _library_record_for_instance,
