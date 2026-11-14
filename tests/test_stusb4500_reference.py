@@ -333,10 +333,16 @@ class STUSB4500ReferenceTests(unittest.TestCase):
         margins = _direct(notes[0], "margins")
         self.assertAlmostEqual(float(at[1]), 151.13, places=3)
         self.assertAlmostEqual(float(at[2]), 137.16, places=3)
-        self.assertLess(float(size[1]), 40.0)
+        self.assertAlmostEqual(float(size[1]), 55.88, places=2)
         self.assertLess(float(size[2]), 8.0)
         self.assertEqual([float(value) for value in margins[1:]], [1.27] * 4)
         self.assertNotIn('(text "REFERENCE ONLY', content)
+        header_title = next(
+            node for node in _all(tree, "text_box")
+            if "header:sheet:title" in str(_direct(node, "uuid")[1])
+        )
+        self.assertGreater(float(_direct(header_title, "size")[1]), 350.0)
+        self.assertIn('(text_box "VSNK OUTPUT"', content)
 
     def test_no_label_glyph_is_replaced_by_a_global_label(self) -> None:
         with tempfile.TemporaryDirectory(prefix="stusb4500-no-globals-") as temporary:
