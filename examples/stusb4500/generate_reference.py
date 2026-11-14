@@ -34,10 +34,10 @@ PROJECT = "functional-block-implementation"
 # titles and descriptions are derived from member pin geometry.
 GROUP_GAP_MM = 2.54
 GROUP_X_PADDING_MM = 13.97
-GROUP_TOP_PADDING_MM = 20.32
+GROUP_TOP_PADDING_MM = 30.48
 GROUP_BOTTOM_PADDING_MM = 7.62
 FRAME_CONTENT_PADDING_MM = 2.54
-FIELD_SYMBOL_MAX_GAP_MM = 8.00
+FIELD_SYMBOL_MAX_GAP_MM = 9.00
 WIRE_LENGTH_BUDGETS_MM = {"power-switch": 105.00}
 COMMON_PIN_NET_GROUPS = (
     {"name": "GND", "pins": (("C2", "2"), ("C3", "2"))},
