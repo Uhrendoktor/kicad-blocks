@@ -12,13 +12,17 @@ import os
 import subprocess
 import sys
 import uuid
+from collections.abc import Iterator
 from pathlib import Path
+from typing import TypedDict
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "plugin" / "kicad-blocks"))
 
 from kicad_blocks.sexpr import (
     QuotedSExpr,
+    SExpr,
+    SExprList,
     dump_sexpr,
     parse_sexpr,
     sexpr_all,
@@ -29,6 +33,16 @@ from kicad_blocks.sexpr import (
 DATASHEET = "https://www.st.com/resource/en/datasheet/stusb4500.pdf"
 ROOT_UUID = str(uuid.uuid5(uuid.NAMESPACE_URL, "kicad-blocks:stusb4500-reference:root"))
 PROJECT = "functional-block-implementation"
+
+
+class _PinData(TypedDict):
+    """Electrical and geometric data extracted from one library pin."""
+
+    number: str
+    name: str
+    x: float
+    y: float
+    angle: int
 
 
 def _uid(key: str) -> str:
@@ -62,7 +76,7 @@ def _symbol_root() -> Path:
     raise FileNotFoundError("Cannot locate the installed KiCad symbol libraries.")
 
 
-def _custom_esda25w() -> list:
+def _custom_esda25w() -> SExprList:
     """Three-terminal ESDA25W array: CC1, CC2 and common ground."""
     return [
         "symbol",
@@ -146,7 +160,7 @@ def _custom_esda25w() -> list:
     ]
 
 
-def _strip_embedded_font_flags(node: list) -> None:
+def _strip_embedded_font_flags(node: SExprList) -> None:
     """Remove per-library font flags; the schematic carries one root-level flag."""
     node[:] = [
         child
@@ -158,7 +172,7 @@ def _strip_embedded_font_flags(node: list) -> None:
             _strip_embedded_font_flags(child)
 
 
-def _load_symbol(root: Path, library: str, name: str) -> list:
+def _load_symbol(root: Path, library: str, name: str) -> SExprList:
     if library == "STUSB4500_Custom" and name == "ESDA25W":
         return _custom_esda25w()
     packed = root / f"{library}.kicad_sym"
@@ -175,7 +189,7 @@ def _load_symbol(root: Path, library: str, name: str) -> list:
     raise LookupError(f"Symbol {library}:{name} is not in {path}.")
 
 
-def _walk(node):
+def _walk(node: SExpr) -> Iterator[SExprList]:
     if isinstance(node, list):
         if sexpr_head(node) == "pin":
             yield node
@@ -183,9 +197,9 @@ def _walk(node):
             yield from _walk(child)
 
 
-def _pin_data(symbol: list) -> list[dict]:
-    result = []
-    seen = set()
+def _pin_data(symbol: SExprList) -> list[_PinData]:
+    result: list[_PinData] = []
+    seen: set[str] = set()
     for pin in _walk(symbol):
         number_node = sexpr_direct(pin, "number")
         name_node = sexpr_direct(pin, "name")
@@ -200,15 +214,15 @@ def _pin_data(symbol: list) -> list[dict]:
             {
                 "number": number,
                 "name": str(name_node[1]) if name_node else "",
-                "x": float(at_node[1]),
-                "y": float(at_node[2]),
-                "angle": int(float(at_node[3])),
+                "x": float(str(at_node[1])),
+                "y": float(str(at_node[2])),
+                "angle": int(float(str(at_node[3]))),
             }
         )
     return result
 
 
-def _wire(start: tuple[float, float], end: tuple[float, float], key: str) -> list:
+def _wire(start: tuple[float, float], end: tuple[float, float], key: str) -> SExprList:
     """Create one orthogonal two-point KiCad wire segment."""
     if start == end:
         raise ValueError(f"Zero-length wire segment for {key}.")
@@ -231,7 +245,7 @@ def _wire(start: tuple[float, float], end: tuple[float, float], key: str) -> lis
     ]
 
 
-def _prop(name: str, value: str, number: int, x: float, y: float, hidden: bool = False) -> list:
+def _prop(name: str, value: str, number: int, x: float, y: float, hidden: bool = False) -> SExprList:
     effects = ["effects", ["font", ["size", "1.27", "1.27"]]]
     if hidden:
         effects.append("hide")
@@ -255,7 +269,7 @@ def _label(
     justify: str = "left",
     angle: int = 0,
     key: str,
-) -> list:
+) -> SExprList:
     effects = ["effects", ["font", ["size", "1.0", "1.0"]], ["justify", justify, "bottom"]]
     node = ["hierarchical_label" if hierarchical else "label", QuotedSExpr(name)]
     if hierarchical:
