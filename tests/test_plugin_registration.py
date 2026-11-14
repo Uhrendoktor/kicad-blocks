@@ -21,7 +21,11 @@ sys.path.insert(0, str(PLUGIN_SOURCE))
 
 from kicad_blocks import plugin as plugin_actions
 from kicad_blocks.model import parse_pins
-from kicad_blocks.repository import create_block, register_project_symbol_library
+from kicad_blocks.repository import (
+    LIBRARY_CATALOG_NAME,
+    create_block,
+    register_project_symbol_library,
+)
 from kipy import KiCad
 
 
