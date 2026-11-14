@@ -3,8 +3,33 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Any
+from typing import Protocol
+
+from .json_types import JsonObject
+
+class BoardItemId(Protocol):
+    """Minimal KIID surface consumed by PCB placement."""
+
+    @property
+    def value(self) -> str: ...
+
+
+class BoardItem(Protocol):
+    """Minimal board-item surface consumed by PCB placement."""
+
+    @property
+    def id(self) -> BoardItemId: ...
+
+
+class Board(Protocol):
+    """Minimal PCB IPC surface used to resolve and move imported item groups."""
+
+    def get_items(self) -> Sequence[BoardItem]: ...
+
+    def interactive_move(self, item_ids: Sequence[BoardItemId]) -> None: ...
+
 
 PLACEMENT_SCHEMA_VERSION = 1
 PLACEMENT_SIDECAR_SUFFIX = ".kicad-blocks-placement.json"
@@ -16,14 +41,14 @@ def placement_manifest_path(board_path: Path) -> Path:
     return Path(str(board_path) + PLACEMENT_SIDECAR_SUFFIX)
 
 
-def _merge_entries(result: dict[str, Any]) -> list[dict[str, Any]]:
+def _merge_entries(result: JsonObject) -> list[JsonObject]:
     entries = result.get("placements")
     if entries is None:
         entries = [result]
     if not isinstance(entries, list) or not entries:
         raise ValueError("PCB merge result does not contain any block placements.")
 
-    normalized: list[dict[str, Any]] = []
+    normalized: list[JsonObject] = []
     references: set[str] = set()
     item_ids: set[str] = set()
     for entry in entries:
@@ -64,7 +89,7 @@ def _merge_entries(result: dict[str, Any]) -> list[dict[str, Any]]:
     return normalized
 
 
-def write_pcb_placement_manifest(board_path: Path, merge_result: dict[str, Any]) -> Path:
+def write_pcb_placement_manifest(board_path: Path, merge_result: JsonObject) -> Path:
     """Write an exclusive sidecar binding each imported block to its root item IDs."""
     board_path = Path(board_path).expanduser().resolve()
     if not board_path.is_file():
@@ -87,7 +112,7 @@ def write_pcb_placement_manifest(board_path: Path, merge_result: dict[str, Any])
     return sidecar
 
 
-def read_pcb_placement_manifest(board_path: Path) -> dict[str, Any]:
+def read_pcb_placement_manifest(board_path: Path) -> JsonObject:
     """Load and validate a sidecar only when it belongs to the active board."""
     board_path = Path(board_path).expanduser().resolve()
     sidecar = placement_manifest_path(board_path)
@@ -134,7 +159,7 @@ def read_pcb_placement_manifest(board_path: Path) -> dict[str, Any]:
     return payload
 
 
-def resolve_placement_item_ids(board, placement: dict[str, Any]) -> list[Any]:
+def resolve_placement_item_ids(board: Board, placement: JsonObject) -> list[BoardItemId]:
     """Resolve one block's recorded UUIDs to KIID objects on the active board."""
     requested = placement.get("item_uuids")
     if not isinstance(requested, list) or not requested:
@@ -145,7 +170,7 @@ def resolve_placement_item_ids(board, placement: dict[str, Any]) -> list[Any]:
     if len({value.casefold() for value in requested_ids}) != len(requested_ids):
         raise ValueError("Selected PCB block placement contains duplicate board-item UUIDs.")
 
-    available: dict[str, Any] = {}
+    available: JsonObject = {}
     for item in board.get_items():
         item_id = getattr(item, "id", None)
         value = getattr(item_id, "value", None)
@@ -163,7 +188,7 @@ def resolve_placement_item_ids(board, placement: dict[str, Any]) -> list[Any]:
     return [available[value.casefold()] for value in requested_ids]
 
 
-def move_placement_at_cursor(board, placement: dict[str, Any]) -> int:
+def move_placement_at_cursor(board: Board, placement: JsonObject) -> int:
     """Start KiCad's native interactive move for exactly one imported block group."""
     item_ids = resolve_placement_item_ids(board, placement)
     board.interactive_move(item_ids)
