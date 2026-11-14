@@ -627,17 +627,17 @@ class LibraryBrowserTests(unittest.TestCase):
 
     def test_tk_transient_uses_only_the_in_process_parent(self) -> None:
         class FakeWindow:
-            def __init__(self, master: object) -> None:
+            def __init__(self, master: SimpleNamespace) -> None:
                 self.master = master
-                self.transient_parent: object | None = None
+                self.transient_parent: SimpleNamespace | None = None
 
-            def transient(self, parent: object) -> None:
+            def transient(self, parent: SimpleNamespace) -> None:
                 self.transient_parent = parent
 
             def update_idletasks(self) -> None:
                 pass
 
-        master = object()
+        master = SimpleNamespace()
         window = FakeWindow(master)
         with patch("kicad_blocks.plugin.tk", SimpleNamespace(TclError=RuntimeError)):
             self.assertTrue(_attach_tk_window_to_editor(window))
@@ -864,28 +864,30 @@ class LibraryBrowserTests(unittest.TestCase):
             _schematic_page_center_mm(invalid_custom)
 
     def test_place_block_creates_at_page_centre_focuses_and_selects_new_symbol(self) -> None:
-        symbol = SimpleNamespace(id="placed-symbol-id", path=object())
+        symbol = SimpleNamespace(id="placed-symbol-id", path=SimpleNamespace())
 
         class Schematic:
             def __init__(self) -> None:
-                self.selected: list[object] = []
-                self.placement: tuple[str, object] | None = None
+                self.selected: list[SimpleNamespace] = []
+                self.placement: tuple[str, tuple[float, float]] | None = None
                 self.saved = False
 
             def get_page_settings(self):
                 return SimpleNamespace(page_size=2, orientation=1)
 
-            def place_symbol_from_library(self, symbol_id, position):
+            def place_symbol_from_library(
+                self, symbol_id: str, position: tuple[float, float]
+            ) -> SimpleNamespace:
                 self.placement = (symbol_id, position)
                 return symbol
 
             def clear_selection(self) -> None:
                 self.selected.clear()
 
-            def add_to_selection(self, items) -> None:
+            def add_to_selection(self, items: list[SimpleNamespace]) -> None:
                 self.selected.extend(items)
 
-            def get_selection(self):
+            def get_selection(self) -> list[SimpleNamespace]:
                 return self.selected
 
             def save(self) -> None:
