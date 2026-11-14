@@ -211,6 +211,7 @@ jobs:
           PY="${RUNNER_TEMP}/kicad-blocks-venv/bin/python"
           "$PY" scripts/check_python_policy.py --base origin/main
           "$PY" scripts/generate_test_inventory.py --check
+          "$PY" scripts/check_test_quality.py
           "$PY" -m pyright --project pyrightconfig.json
 
       - name: High-confidence dead-code scan
