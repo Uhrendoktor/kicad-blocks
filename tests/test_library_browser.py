@@ -33,6 +33,7 @@ from kicad_blocks.plugin import (
     _library_record_for_tree_row,
     _minimize_placement_windows,
     _native_run_action_status,
+    _native_symbol_preview_photo,
     _new_blank_pcb_source,
     _pick_directory,
     _pick_kicad_file,
@@ -89,6 +90,49 @@ class LibraryBrowserTests(unittest.TestCase):
         self.assertEqual(_filter_library_records(records, "1v8")[0].name, "Buck Converter")
         self.assertEqual(_filter_library_records(records, "vout")[0].name, "Buck Converter")
         self.assertEqual(_filter_library_records(records, ""), records)
+
+    def test_native_facade_preview_exports_from_the_project_catalog_override(self):
+        symbol_name = self.block.manifest["symbol_name"]
+        project_catalog = self.root / "project" / "KBlocks.kicad_sym"
+        project_catalog.parent.mkdir(parents=True)
+        project_catalog.write_text(
+            self.block.symbol_library.read_text(encoding="utf-8"),
+            encoding="utf-8",
+        )
+        calls = []
+
+        def export(arguments, **kwargs):
+            calls.append(arguments)
+            output_dir = Path(arguments[arguments.index("--output") + 1])
+            output_dir.mkdir(parents=True, exist_ok=True)
+            (output_dir / f"{symbol_name}.svg").write_text(
+                '<svg xmlns="http://www.w3.org/2000/svg"><g><text>VIN</text></g></svg>',
+                encoding="utf-8",
+            )
+            return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+        with (
+            patch("kicad_blocks.plugin.find_kicad_cli", return_value="/usr/bin/kicad-cli"),
+            patch("kicad_blocks.plugin.subprocess.run", side_effect=export),
+            patch(
+                "kicad_blocks.plugin._clean_facade_preview_svg",
+                side_effect=lambda svg_file, _record, _output: svg_file,
+            ),
+            patch("cairosvg.svg2png", return_value=b"not-a-png"),
+            patch("kicad_blocks.plugin.tk.PhotoImage", return_value=object()),
+            patch("kicad_blocks.plugin._NATIVE_PREVIEW_CACHE", {}),
+        ):
+            _native_symbol_preview_photo(
+                self.block,
+                library_file=project_catalog,
+            )
+
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(calls[0][-1], str(project_catalog.resolve()))
+        self.assertNotEqual(
+            calls[0][-1],
+            str(self.block.symbol_library.resolve()),
+        )
 
     def test_native_facade_preview_removes_reference_and_component_name(self):
         from xml.etree import ElementTree as ET
