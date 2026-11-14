@@ -370,14 +370,14 @@ def read_manifest(block_path: Path) -> BlockManifest:
             "expected 'manual' or 'hierarchical_labels'."
         )
     manifest["interface_source"] = interface_source
-    variants_value: object = manifest["variants"]
+    variants_value = manifest["variants"]
     if not isinstance(variants_value, list):
         raise TypeError("Block manifest variants must be a list.")
     variants: list[BlockVariantManifest] = []
     seen_variant_values: set[str] = set()
     seen_variant_files: set[str] = set()
     for raw_variant in variants_value:
-        variant_value: object = raw_variant
+        variant_value = raw_variant
         if not isinstance(variant_value, dict):
             raise TypeError("Each block variant must be an object.")
         variant = cast(BlockVariantManifest, variant_value)
@@ -423,16 +423,16 @@ def read_manifest(block_path: Path) -> BlockManifest:
     else:
         manifest.pop("default_variant", None)
 
-    layouts_value: object = manifest["layouts"]
+    layouts_value = manifest["layouts"]
     if not isinstance(layouts_value, list):
         raise TypeError("Block manifest layouts must be a list.")
     layouts: list[BlockLayoutManifest] = []
-    pin_items_value: object = manifest.get("pins", [])
+    pin_items_value = manifest.get("pins", [])
     if not isinstance(pin_items_value, list) or not pin_items_value:
         raise ValueError("Block manifest pins must be a non-empty list of named pin objects.")
     pin_items: list[BlockPinManifest] = []
     for raw_pin in pin_items_value:
-        pin_value: object = raw_pin
+        pin_value = raw_pin
         if not isinstance(pin_value, dict):
             raise ValueError("Block manifest pins must be a non-empty list of named pin objects.")
         pin = cast(BlockPinManifest, pin_value)
@@ -444,7 +444,7 @@ def read_manifest(block_path: Path) -> BlockManifest:
     seen_layout_names: set[str] = set()
     seen_layout_files: set[str] = set()
     for raw_layout in layouts_value:
-        layout_value: object = raw_layout
+        layout_value = raw_layout
         if not isinstance(layout_value, dict):
             raise TypeError("Each block layout must be an object.")
         layout = cast(BlockLayoutManifest, layout_value)
@@ -469,7 +469,7 @@ def read_manifest(block_path: Path) -> BlockManifest:
         seen_layout_ids.add(layout_id.casefold())
         seen_layout_names.add(layout_name.casefold())
         seen_layout_files.add(layout_file.casefold())
-        project_file_value: object = layout.get("project_file")
+        project_file_value = layout.get("project_file")
         if project_file_value:
             if not isinstance(project_file_value, str):
                 raise ValueError(f"Invalid project-settings file name for layout {layout_id!r}.")
@@ -479,7 +479,7 @@ def read_manifest(block_path: Path) -> BlockManifest:
                 or Path(project_file).suffix.casefold() != ".kicad_pro"
             ):
                 raise ValueError(f"Invalid project-settings file name for layout {layout_id!r}.")
-        ports_value: object = layout.get("ports")
+        ports_value = layout.get("ports")
         if ports_value is not None:
             if not isinstance(ports_value, dict):
                 raise ValueError(
@@ -524,7 +524,7 @@ def read_manifest(block_path: Path) -> BlockManifest:
                 for item in variants
                 if str(item.get("layout_id", "")).casefold() == layout_id
             )
-            raw_links: object = layout.get("implementations")
+            raw_links = layout.get("implementations")
             if raw_links is None:
                 links = derived_links
             else:
@@ -1061,7 +1061,7 @@ def _instance_links_path(project_dir: Path) -> Path:
 def _read_instance_links(path: Path) -> InstanceLinks:
     """Read and validate the project-local KIID-to-block lookup document."""
     try:
-        raw_value: object = json.loads(path.read_text(encoding="utf-8"))
+        raw_value = json.loads(path.read_text(encoding="utf-8"))
     except FileNotFoundError:
         return {"schema_version": 1, "instances": {}}
     except json.JSONDecodeError as error:
@@ -1070,15 +1070,15 @@ def _read_instance_links(path: Path) -> InstanceLinks:
     if not isinstance(raw_value, dict):
         raise ValueError(f"Invalid project block-link metadata: {path}")
     raw = cast(dict[str, object], raw_value)
-    raw_instances_value: object = raw.get("instances", {})
+    raw_instances_value = raw.get("instances", {})
     if not isinstance(raw_instances_value, dict):
         raise ValueError(f"Invalid project block-link instance map: {path}")
     raw_instances = cast(dict[object, object], raw_instances_value)
 
     instances: dict[str, InstanceLink] = {}
     for raw_instance_id, raw_entry_value in raw_instances.items():
-        instance_id: object = raw_instance_id
-        raw_entry: object = raw_entry_value
+        instance_id = raw_instance_id
+        raw_entry = raw_entry_value
         if not isinstance(instance_id, str) or not isinstance(raw_entry, dict):
             raise ValueError(f"Invalid project block-link entry in {path}")
         entry = cast(dict[str, object], raw_entry)
@@ -1097,7 +1097,7 @@ def _read_instance_links(path: Path) -> InstanceLinks:
             "updated_at": updated_at,
         }
 
-    schema_version: object = raw.get("schema_version", 1)
+    schema_version = raw.get("schema_version", 1)
     if not isinstance(schema_version, int):
         raise ValueError(f"Invalid project block-link schema version in {path}")
     return {"schema_version": schema_version, "instances": instances}
@@ -2173,7 +2173,7 @@ def _read_library_settings() -> LibrarySettings:
     if not settings_path.is_file():
         return {}
     try:
-        raw_value: object = json.loads(settings_path.read_text(encoding="utf-8"))
+        raw_value = json.loads(settings_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return {}
     if not isinstance(raw_value, dict):
@@ -2181,14 +2181,14 @@ def _read_library_settings() -> LibrarySettings:
     raw = cast(dict[str, object], raw_value)
 
     settings: LibrarySettings = {}
-    library_root: object = raw.get("library_root")
+    library_root = raw.get("library_root")
     if isinstance(library_root, str):
         settings["library_root"] = library_root
-    library_roots: object = raw.get("library_roots")
+    library_roots = raw.get("library_roots")
     if isinstance(library_roots, list):
         normalized_roots: list[str] = []
         for item_value in library_roots:
-            item: object = item_value
+            item = item_value
             if isinstance(item, str):
                 normalized_roots.append(item)
         settings["library_roots"] = normalized_roots
