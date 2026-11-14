@@ -15,6 +15,7 @@ from typing import cast
 
 from .manifest_types import (
     BlockLayoutManifest,
+    BlockPinManifest,
     BlockManifest,
     BlockParameter,
     BlockParameterInput,
@@ -44,7 +45,7 @@ class BlockPin:
     electrical_type: str = "passive"
     number: str = ""
 
-    def as_manifest(self, index: int) -> dict[str, str]:
+    def as_manifest(self, index: int) -> BlockPinManifest:
         """Serialize this pin using its stable KiCad symbol pin number."""
         return {
             "name": self.name,
