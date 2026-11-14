@@ -43,7 +43,6 @@ from .manifest_types import (
     BlockVariantEditInput,
     BlockVariantManifest,
 )
-from .pcb_types import ResolvedBlockLayout
 from .model import (
     LAYOUT_FIELD_NAME,
     PARAMETER_FIELD_PREFIX,
@@ -62,6 +61,7 @@ from .operations import (
 )
 from .pcb_layout import BlockLayoutPlacement, merge_block_layout, merge_block_layouts
 from .pcb_placement import placement_manifest_path, write_pcb_placement_manifest
+from .pcb_types import ResolvedBlockLayout
 from .repository import (
     LIBRARY_CATALOG_NAME,
     LIBRARY_NICKNAME,
