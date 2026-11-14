@@ -13,7 +13,7 @@ The current full integration target is KiCad **10.99.0 development nightly**, Li
 | CPython 3.12 | Full unit, GUI, plugin, schematic, and PCB integration |
 | CPython 3.13 and 3.14 | Plugin discovery and managed-environment smoke tests on Linux x86_64; not the full KiCad integration matrix |
 | Tkinter | Required by the plugin's dialogs |
-| `xdotool` | Required for the Linux native Add Symbol focus and placement handoff |
+| X11 automation | Used only by the Linux GUI test harness; not required by production plugin runtime |
 | KiCad API | Enable the IPC API in Eeschema; enable it in PCB Editor for PCB actions |
 
 Stable KiCad 10.x does not provide the Schematic Editor IPC plugin surface used by KiCad Blocks. KiCad 11 adds that surface, but a stable KiCad 11 build has not yet been validated by this repository's full CI matrix. Windows, macOS, ARM, and non-CPython-3.12 full integration are also unvalidated. See [compatibility and test coverage](explanation/compatibility.md) for the evidence and boundaries.
@@ -92,7 +92,7 @@ Before creating or placing a block, confirm that:
 - The correct KiCad 10.99 nightly build is running.
 - The Schematic Editor API is enabled.
 - The selected CPython interpreter is supported and has Tkinter.
-- `xdotool` is available and the Add Symbol shortcut is still `A`.
+- The native KiCad Place Symbol action opens its chooser; select the displayed `KBlocks:<symbol>` entry there.
 - At least one shared library folder is registered, or the default destination is writable.
 
 Continue with the [first-block tutorial](tutorials/first-block.md).
@@ -141,9 +141,9 @@ for the current logging details.
 
 Use **Manage Libraries** to check registered folders. Select a library that contains a `KBlocks.kicad_sym` catalog and `.kicad_block` directories. Run **Validate registered libraries** to inspect manifest and asset errors.
 
-### Native symbol placement cannot take focus
+### Native symbol chooser does not open
 
-On Linux, install `xdotool` and make sure Eeschema is still open. Keep the default Add Symbol shortcut bound to `A`. The browser cannot safely type the facade name into the native chooser if it cannot identify and focus the Eeschema window.
+Confirm that the KiCad API is enabled for the Schematic Editor and that the supported KiCad IPC plugin is running. Place Block invokes KiCad's native Place Symbol action; it does not use global keyboard injection, X11 utilities, or a particular Add Symbol shortcut.
 
 ### PCB actions are unavailable
 
