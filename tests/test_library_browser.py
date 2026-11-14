@@ -673,6 +673,14 @@ class LibraryBrowserTests(unittest.TestCase):
         with patch.dict(os.environ, {"KICAD_BLOCKS_THEME": "light"}):
             self.assertFalse(_system_prefers_dark_theme())
 
+    def test_system_theme_keeps_native_tk_theme_without_os_probes(self):
+        with (
+            patch.dict(os.environ, {"KICAD_BLOCKS_THEME": "system"}),
+            patch("kicad_blocks.plugin.subprocess.run") as run_process,
+        ):
+            self.assertIsNone(_system_prefers_dark_theme())
+        run_process.assert_not_called()
+
     def test_record_picker_returns_single_choice_without_opening_a_dialog(self):
         self.assertIs(_pick_record([self.block], object(), "Pick Block"), self.block)
 
