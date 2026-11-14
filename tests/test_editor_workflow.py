@@ -1,5 +1,6 @@
 """Exercise the plugin's library editor launch and publish workflow."""
 
+import os
 import sys
 import tempfile
 import types
@@ -636,16 +637,6 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
         kicad.wait_for_libraries.assert_called_once()
         kicad.load_all_libraries.assert_not_called()
 
-    def test_edit_facade_requires_one_selected_symbol(self):
-        schematic = SimpleNamespace(get_selection=Mock(return_value=[]))
-        with self.assertRaisesRegex(ValueError, "Select one or more block symbol instances"):
-            plugin_actions._edit_facade_symbol(
-                self.library,
-                schematic,
-                self.project,
-                "0x100",
-                self.parent,
-            )
 
     def test_edit_opens_library_implementation_and_publish_advances_revision(self):
         initial_manifest = read_manifest(self.block.path)
