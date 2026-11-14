@@ -5,12 +5,12 @@ from __future__ import annotations
 import hashlib
 import json
 import math
-from pathlib import Path
 import re
 import unicodedata
 import uuid
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
+from pathlib import Path
 
 from .json_types import JsonValue
 
