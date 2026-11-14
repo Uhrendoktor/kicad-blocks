@@ -44,8 +44,7 @@ Use `python3.13` or `python3.14` only when you understand the coverage distincti
 2. In Eeschema, open **Preferences → Plugins**.
 3. Enable the KiCad API for the Schematic Editor.
 4. Set **Path to Python interpreter** to the supported CPython executable. Use the same interpreter minor version that you used to run the installer.
-5. Confirm that the system has Tkinter and `xdotool` available.
-6. Keep KiCad's **Add Symbol** shortcut bound to `A`. KiCad Blocks uses the native Add Symbol command after you select a facade.
+5. Confirm that the system has Tkinter available. KiCad Blocks uses KiCad's native IPC actions to open the Symbol Editor and Place Symbol chooser; no X11 automation utility or particular Add Symbol shortcut is required.
 7. Restart KiCad so the plugin environment can be created and its actions can be registered.
 
 The plugin identifier is `org.uhrendoktor.kicadblocks`. KiCad creates a managed Python environment for the plugin and installs the pinned dependencies there. Do not manually install dependencies into that managed environment during normal setup.
