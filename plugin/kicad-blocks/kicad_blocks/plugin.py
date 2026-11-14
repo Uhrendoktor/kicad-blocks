@@ -2047,6 +2047,7 @@ def _ensure_project_facade_catalog(
         catalog,
         record.path / record.manifest["symbol_file"],
         symbol_name,
+        shared_catalog_file=record.symbol_library,
         baseline_digest=record.manifest.get("catalog_symbol_hash"),
     )
 
