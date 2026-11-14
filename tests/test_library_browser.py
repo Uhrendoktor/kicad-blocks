@@ -7,6 +7,7 @@ import sys
 import tempfile
 import unittest
 from collections.abc import Callable, Sequence
+from importlib import import_module
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Protocol, TypeVar, cast
@@ -16,7 +17,8 @@ ROOT = Path(__file__).resolve().parents[1]
 PLUGIN = ROOT / "plugin" / "kicad-blocks"
 sys.path.insert(0, str(PLUGIN))
 
-import kicad_blocks.plugin as plugin_actions
+plugin_actions = import_module("kicad_blocks.plugin")
+
 from kicad_blocks.model import (
     parse_parameters,
     parse_pins,
