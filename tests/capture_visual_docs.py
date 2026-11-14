@@ -202,10 +202,8 @@ def window_id(
         for line in geometry.stdout.splitlines():
             if "=" in line:
                 key, value = line.split("=", 1)
-                try:
+                with contextlib.suppress(ValueError):
                     values[key] = int(value)
-                except ValueError:
-                    pass
         width = values.get("WIDTH", 0)
         height = values.get("HEIGHT", 0)
         if width <= 0 or height <= 0:
