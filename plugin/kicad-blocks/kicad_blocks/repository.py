@@ -61,6 +61,18 @@ LOCAL_NICKNAME_PREFIX = "KBLocal_"  # Reserved for migration of pre-catalog proj
 INSTANCE_LINKS_NAME = "instances.json"
 
 
+type _RawJsonScalar = str | int | float | bool | None
+type _RawManifestVariant = dict[str, _RawJsonScalar]
+type _RawManifestPin = dict[str, _RawJsonScalar]
+type _RawManifestLayoutValue = (
+    _RawJsonScalar | list[_RawJsonScalar] | dict[str, _RawJsonScalar]
+)
+type _RawManifestLayout = dict[str, _RawManifestLayoutValue]
+type _RawInstanceLinkValue = _RawJsonScalar | dict[str, _RawJsonScalar]
+type _RawInstanceLinksValue = _RawJsonScalar | dict[str, _RawInstanceLinkValue]
+type _RawLibrarySettingValue = _RawJsonScalar | list[_RawJsonScalar]
+
+
 @dataclass(frozen=True, slots=True)
 class BlockOccurrence:
     """One specific occurrence of a block in a nested implementation tree."""
@@ -370,14 +382,17 @@ def read_manifest(block_path: Path) -> BlockManifest:
             "expected 'manual' or 'hierarchical_labels'."
         )
     manifest["interface_source"] = interface_source
-    variants_value = manifest["variants"]
-    if not isinstance(variants_value, list):
+    variants_container = cast(
+        list[str | _RawManifestVariant] | str, manifest["variants"]
+    )
+    if not isinstance(variants_container, list):
         raise TypeError("Block manifest variants must be a list.")
+    variants_value = variants_container
     variants: list[BlockVariantManifest] = []
     seen_variant_values: set[str] = set()
     seen_variant_files: set[str] = set()
     for raw_variant in variants_value:
-        variant_value = raw_variant
+        variant_value: str | _RawManifestVariant = raw_variant
         if not isinstance(variant_value, dict):
             raise TypeError("Each block variant must be an object.")
         variant = cast(BlockVariantManifest, variant_value)
@@ -423,16 +438,22 @@ def read_manifest(block_path: Path) -> BlockManifest:
     else:
         manifest.pop("default_variant", None)
 
-    layouts_value = manifest["layouts"]
-    if not isinstance(layouts_value, list):
+    layouts_container = cast(
+        list[str | _RawManifestLayout] | str, manifest["layouts"]
+    )
+    if not isinstance(layouts_container, list):
         raise TypeError("Block manifest layouts must be a list.")
+    layouts_value = layouts_container
     layouts: list[BlockLayoutManifest] = []
-    pin_items_value = manifest.get("pins", [])
-    if not isinstance(pin_items_value, list) or not pin_items_value:
+    pin_items_container = cast(
+        list[str | _RawManifestPin] | str, manifest.get("pins", [])
+    )
+    if not isinstance(pin_items_container, list) or not pin_items_container:
         raise ValueError("Block manifest pins must be a non-empty list of named pin objects.")
+    pin_items_value = pin_items_container
     pin_items: list[BlockPinManifest] = []
     for raw_pin in pin_items_value:
-        pin_value = raw_pin
+        pin_value: str | _RawManifestPin = raw_pin
         if not isinstance(pin_value, dict):
             raise ValueError("Block manifest pins must be a non-empty list of named pin objects.")
         pin = cast(BlockPinManifest, pin_value)
@@ -444,7 +465,7 @@ def read_manifest(block_path: Path) -> BlockManifest:
     seen_layout_names: set[str] = set()
     seen_layout_files: set[str] = set()
     for raw_layout in layouts_value:
-        layout_value = raw_layout
+        layout_value: str | _RawManifestLayout = raw_layout
         if not isinstance(layout_value, dict):
             raise TypeError("Each block layout must be an object.")
         layout = cast(BlockLayoutManifest, layout_value)
@@ -1069,22 +1090,18 @@ def _read_instance_links(path: Path) -> InstanceLinks:
 
     if not isinstance(raw_value, dict):
         raise ValueError(f"Invalid project block-link metadata: {path}")
-    raw = cast(dict[str, object], raw_value)
+    raw = cast(dict[str, _RawInstanceLinksValue], raw_value)
     raw_instances_value = raw.get("instances", {})
     if not isinstance(raw_instances_value, dict):
         raise ValueError(f"Invalid project block-link instance map: {path}")
-    raw_instances = cast(dict[object, object], raw_instances_value)
 
     instances: dict[str, InstanceLink] = {}
-    for raw_instance_id, raw_entry_value in raw_instances.items():
-        instance_id = raw_instance_id
-        raw_entry = raw_entry_value
+    for instance_id, raw_entry in raw_instances_value.items():
         if not isinstance(instance_id, str) or not isinstance(raw_entry, dict):
             raise ValueError(f"Invalid project block-link entry in {path}")
-        entry = cast(dict[str, object], raw_entry)
-        local_path = entry.get("local_path")
-        source_block_id = entry.get("source_block_id")
-        updated_at = entry.get("updated_at", "")
+        local_path = raw_entry.get("local_path")
+        source_block_id = raw_entry.get("source_block_id")
+        updated_at = raw_entry.get("updated_at", "")
         if (
             not isinstance(local_path, str)
             or not isinstance(updated_at, str)
@@ -2174,7 +2191,7 @@ def _read_library_settings() -> LibrarySettings:
         return {}
     if not isinstance(raw_value, dict):
         return {}
-    raw = cast(dict[str, object], raw_value)
+    raw = cast(dict[str, _RawLibrarySettingValue], raw_value)
 
     settings: LibrarySettings = {}
     library_root = raw.get("library_root")
