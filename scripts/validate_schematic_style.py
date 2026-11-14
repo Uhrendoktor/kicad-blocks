@@ -54,36 +54,22 @@ def _load_stusb4500_profile() -> None:
     example_root = str(ROOT / "examples" / "stusb4500")
     if example_root not in sys.path:
         sys.path.insert(0, example_root)
-    from generate_reference import (
-        ADJACENT_COMPONENT_PAIRS as adjacent_component_pairs,
-        COMMON_PIN_NET_GROUPS as common_pin_net_groups,
-        COMPONENT_PROPERTY_LIMITS_MM as component_property_limits_mm,
-        DIRECT_DECOUPLERS as direct_decouplers,
-        FIELD_SYMBOL_MAX_GAP_MM as field_symbol_max_gap_mm,
-        FORBIDDEN_LOCAL_LABELS as forbidden_local_labels,
-        FRAME_CONTENT_PADDING_MM as frame_content_padding_mm,
-        GROUND_PINS_DOWN as ground_pins_down,
-        GROUP_EVIDENCE as group_evidence,
-        GROUP_GAP_MM as group_gap_mm,
-        REQUIRED_NO_CONNECT_PINS as required_no_connect_pins,
-        SCHEMATIC_GROUPS as schematic_groups,
-        WIRE_LENGTH_BUDGETS_MM as wire_length_budgets_mm,
-        _uid as uid_factory,
-    )
-    ADJACENT_COMPONENT_PAIRS = adjacent_component_pairs
-    COMMON_PIN_NET_GROUPS = common_pin_net_groups
-    COMPONENT_PROPERTY_LIMITS_MM = component_property_limits_mm
-    DIRECT_DECOUPLERS = direct_decouplers
-    FIELD_SYMBOL_MAX_GAP_MM = field_symbol_max_gap_mm
-    FORBIDDEN_LOCAL_LABELS = forbidden_local_labels
-    FRAME_CONTENT_PADDING_MM = frame_content_padding_mm
-    GROUND_PINS_DOWN = ground_pins_down
-    GROUP_EVIDENCE = group_evidence
-    GROUP_GAP_MM = group_gap_mm
-    REQUIRED_NO_CONNECT_PINS = required_no_connect_pins
-    SCHEMATIC_GROUPS = schematic_groups
-    WIRE_LENGTH_BUDGETS_MM = wire_length_budgets_mm
-    _uid = uid_factory
+    import generate_reference as profile
+
+    ADJACENT_COMPONENT_PAIRS = profile.ADJACENT_COMPONENT_PAIRS
+    COMMON_PIN_NET_GROUPS = profile.COMMON_PIN_NET_GROUPS
+    COMPONENT_PROPERTY_LIMITS_MM = profile.COMPONENT_PROPERTY_LIMITS_MM
+    DIRECT_DECOUPLERS = profile.DIRECT_DECOUPLERS
+    FIELD_SYMBOL_MAX_GAP_MM = profile.FIELD_SYMBOL_MAX_GAP_MM
+    FORBIDDEN_LOCAL_LABELS = profile.FORBIDDEN_LOCAL_LABELS
+    FRAME_CONTENT_PADDING_MM = profile.FRAME_CONTENT_PADDING_MM
+    GROUND_PINS_DOWN = profile.GROUND_PINS_DOWN
+    GROUP_EVIDENCE = profile.GROUP_EVIDENCE
+    GROUP_GAP_MM = profile.GROUP_GAP_MM
+    REQUIRED_NO_CONNECT_PINS = profile.REQUIRED_NO_CONNECT_PINS
+    SCHEMATIC_GROUPS = profile.SCHEMATIC_GROUPS
+    WIRE_LENGTH_BUDGETS_MM = profile.WIRE_LENGTH_BUDGETS_MM
+    _uid = profile._uid
     ZONES = {group["id"]: set(group["members"]) for group in SCHEMATIC_GROUPS}
     FLOW = tuple(
         group["id"] for group in sorted(
@@ -553,8 +539,8 @@ def label_wire_overlap_issues(tree: list) -> list[str]:
 
 
 def physical_topology_issues(tree: list) -> list[str]:
-    _load_stusb4500_profile()
     """Require decouplers and the back-to-back FET midpoint to be wire-connected."""
+    _load_stusb4500_profile()
     issues = []
     dsu, pin_info = _wire_networks(tree)
     pairs = list(DIRECT_DECOUPLERS) + [
@@ -587,8 +573,8 @@ def physical_topology_issues(tree: list) -> list[str]:
 
 
 def pin_orientation_issues(tree: list) -> list[str]:
-    _load_stusb4500_profile()
     """Check declared ground pins face down (global pin angle 90 degrees)."""
+    _load_stusb4500_profile()
     issues = []
     pin_info = _pin_world_info(tree)
     for key in GROUND_PINS_DOWN:
@@ -604,8 +590,8 @@ def pin_orientation_issues(tree: list) -> list[str]:
 
 
 def component_spacing_issues(tree: list) -> list[str]:
-    _load_stusb4500_profile()
     """Enforce declared adjacency and short component property offsets."""
+    _load_stusb4500_profile()
     issues = []
     instances = _instances(tree)
     positions = {}
@@ -658,8 +644,8 @@ def component_spacing_issues(tree: list) -> list[str]:
 
 
 def group_metadata_issues(tree: list) -> list[str]:
-    _load_stusb4500_profile()
     """Every declarative group must emit its generated title and description."""
+    _load_stusb4500_profile()
     issues = []
     text_uuids = {
         str(uid[1]) for node in _all(tree, "text_box")
@@ -713,6 +699,7 @@ def _rect_inside(inner, outer) -> bool:
     )
 
 def frame_and_component_issues(tree: list) -> list[str]:
+    """Validate frame containment, field placement and optional population."""
     _load_stusb4500_profile()
     issues, instances, frames = [], _instances(tree), {}
     for ref, instance in instances.items():
@@ -1014,8 +1001,8 @@ def _rect_inside_margin(inner, outer, margin: float) -> bool:
 
 
 def frame_content_clearance_issues(tree: list) -> list[str]:
-    _load_stusb4500_profile()
     """Keep visible labels and group comment panels inset from their owning frame."""
+    _load_stusb4500_profile()
     issues = []
     frames = {zone: _frame_bounds(tree, zone) for zone in ZONES}
     description_uuids = {
@@ -1087,8 +1074,8 @@ def wire_obstacle_issues(tree: list) -> list[str]:
 
 
 def common_pin_net_issues(tree: list) -> list[str]:
-    _load_stusb4500_profile()
     """Check configured pin groups against a common named logical net."""
+    _load_stusb4500_profile()
     issues = []
     dsu, pin_info = _wire_networks(tree)
     names_by_root = {}
@@ -1121,8 +1108,8 @@ def common_pin_net_issues(tree: list) -> list[str]:
 
 
 def required_no_connect_issues(tree: list) -> list[str]:
-    _load_stusb4500_profile()
     """Require explicit no-connect markers at configured intentionally-unused pins."""
+    _load_stusb4500_profile()
     issues = []
     pin_info = _pin_world_info(tree)
     markers = {
@@ -1140,8 +1127,8 @@ def required_no_connect_issues(tree: list) -> list[str]:
 
 
 def wire_compactness_issues(tree: list, budgets: dict | None = None) -> list[str]:
-    _load_stusb4500_profile()
     """Score total internal wire length in each group against a configurable budget."""
+    _load_stusb4500_profile()
     issues = []
     active_budgets = WIRE_LENGTH_BUDGETS_MM if budgets is None else budgets
     for zone, limit in active_budgets.items():
@@ -1166,8 +1153,8 @@ def wire_compactness_issues(tree: list, budgets: dict | None = None) -> list[str
 
 
 def circuit_documentation_issues(tree: list) -> list[str]:
-    _load_stusb4500_profile()
     """Require non-trivial circuit groups to identify purpose and source evidence."""
+    _load_stusb4500_profile()
     issues = []
     text_by_uuid = {
         str(uid[1]): str(node[1])
