@@ -123,7 +123,7 @@ class LibraryBrowserTests(unittest.TestCase):
     def test_overview_contains_pin_types_parameters_variants_and_layouts(self):
         overview = _block_overview_text(self.block)
         self.assertIn("VIN", overview)
-        self.assertIn("input", overview)
+        self.assertIn("Input", overview)
         self.assertIn("OUTPUT_VOLTAGE  ·  number  ·  default: 3.3", overview)
         self.assertIn("1V8", overview)
         self.assertIn("3V3", overview)
