@@ -13,8 +13,8 @@ sys.path.insert(0, str(ROOT / "examples" / "stusb4500"))
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from generate_reference import _uid, generate_reference_schematic
-from validate_schematic_style import check_schematic_style
 from kicad_blocks.pcb_layout import _all, _direct, parse_sexpr
+from validate_schematic_style import check_schematic_style
 
 
 def _instance_map(tree: list) -> dict[str, list]:
@@ -590,7 +590,7 @@ class STUSB4500ReferenceTests(unittest.TestCase):
 
     def test_native_text_boxes_have_uniform_padding_and_style_audit_passes(self) -> None:
         with tempfile.TemporaryDirectory(prefix="stusb4500-style-audit-") as temporary:
-            content, tree, _ = self._generate(temporary)
+            _content, tree, _ = self._generate(temporary)
 
         self.assertEqual(_all(tree, "text"), [])
         self.assertGreater(len(_all(tree, "text_box")), 0)
