@@ -196,7 +196,7 @@ def synchronize_project_symbol_catalog(
     def save_state() -> None:
         atomic_write(
             state_file,
-            json.dumps(state, indent=2, ensure_ascii=False) + "\\n",
+            json.dumps(state, indent=2, ensure_ascii=False) + "\n",
         )
 
     if not project_catalog.is_file():
