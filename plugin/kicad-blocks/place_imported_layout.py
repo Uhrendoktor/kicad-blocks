@@ -3,25 +3,47 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Protocol
 
 from kicad_blocks.pcb_placement import (
+    Board,
     move_placement_at_cursor,
     read_pcb_placement_manifest,
 )
+from kicad_blocks.pcb_types import PCBPlacementEntry, PCBPlacementManifest
 
 
-def _active_board_path(board) -> Path:
+class _Project(Protocol):
+    """KiCad project metadata needed to resolve a relative board path."""
+
+    path: str
+
+
+class _ProjectDocument(Protocol):
+    """Document metadata exposed by the active KiCad PCB board."""
+
+    board_filename: str
+    project: _Project | None
+
+
+class _ActiveBoard(Board, Protocol):
+    """Active PCB board with the document metadata exposed by KiCad IPC."""
+
+    document: _ProjectDocument
+    name: str
+
+
+def _active_board_path(board: _ActiveBoard) -> Path:
     document = board.document
-    filename = str(getattr(document, "board_filename", "") or getattr(board, "name", "")).strip()
+    filename = str(document.board_filename or board.name).strip()
     if not filename:
         raise RuntimeError("KiCad did not report a file name for the active PCB board.")
     candidate = Path(filename).expanduser()
     if candidate.is_absolute():
         return candidate.resolve()
 
-    project = getattr(document, "project", None)
-    project_path = str(getattr(project, "path", "") or "").strip()
+    project = document.project
+    project_path = str(project.path if project is not None else "").strip()
     if not project_path:
         raise RuntimeError(
             "KiCad did not report the project directory for the active PCB board. "
@@ -30,7 +52,7 @@ def _active_board_path(board) -> Path:
     return (Path(project_path).expanduser() / candidate).resolve()
 
 
-def _choose_placement(placements: list[dict[str, Any]]) -> dict[str, Any] | None:
+def _choose_placement(placements: list[PCBPlacementEntry]) -> PCBPlacementEntry | None:
     if len(placements) == 1:
         return placements[0]
 
@@ -41,7 +63,7 @@ def _choose_placement(placements: list[dict[str, Any]]) -> dict[str, Any] | None
     root.title("Place Imported Block Layout")
     root.resizable(False, False)
     root.geometry("520x150")
-    selected: dict[str, Any] = {"placement": None}
+    selected: dict[str, PCBPlacementEntry | None] = {"placement": None}
     labels = [
         f"{item['instance_reference']} — {item.get('block', 'Block')} / {item.get('layout_name', 'Layout')} "
         f"({len(item['item_uuids'])} board objects)"
@@ -103,7 +125,7 @@ def main() -> None:
             raise RuntimeError("No PCB board is open in PCB Editor.")
 
         board_path = _active_board_path(board)
-        manifest = read_pcb_placement_manifest(board_path)
+        manifest: PCBPlacementManifest = read_pcb_placement_manifest(board_path)
         placement = _choose_placement(manifest["placements"])
         if placement is None:
             return

@@ -8,14 +8,14 @@ import hashlib
 import io
 import json
 import os
-from pathlib import Path
 import re
 import sys
 import tempfile
+import zipfile
+from pathlib import Path
 from urllib.error import HTTPError
 from urllib.parse import quote
 from urllib.request import Request, urlopen
-import zipfile
 
 API_VERSION = "2022-11-28"
 SUPPORTED_PYTHON_MINOR_VERSIONS = frozenset({12, 13, 14})
@@ -55,14 +55,18 @@ def _api_get_release(repo: str, tag: str, token: str) -> dict | None:
     try:
         result = json.loads(payload.decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-        raise RuntimeError("GitHub returned invalid JSON for the pinned KiCad IPC release.") from exc
+        raise RuntimeError(
+            "GitHub returned invalid JSON for the pinned KiCad IPC release."
+        ) from exc
     if not isinstance(result, dict):
         raise RuntimeError("GitHub returned an unexpected pinned KiCad IPC release response.")
     return result
 
 
 def _download_asset(url: str) -> bytes:
-    request = Request(url, headers={"Accept": "application/octet-stream", "User-Agent": "kicad-blocks-ci"})
+    request = Request(
+        url, headers={"Accept": "application/octet-stream", "User-Agent": "kicad-blocks-ci"}
+    )
     with urlopen(request, timeout=90) as response:
         return response.read()
 
@@ -87,7 +91,9 @@ def download_pinned_wheel(
     if release is None:
         return None
     if release.get("tag_name") != tag:
-        raise RuntimeError(f"GitHub returned a different release than the requested immutable tag {tag!r}.")
+        raise RuntimeError(
+            f"GitHub returned a different release than the requested immutable tag {tag!r}."
+        )
 
     matches = [asset for asset in release.get("assets", []) if asset.get("name") == wheel_name]
     if not matches:
@@ -100,8 +106,14 @@ def download_pinned_wheel(
     url = asset.get("browser_download_url")
     expected_digest = asset.get("digest")
     expected_size = asset.get("size")
-    if not url or not isinstance(expected_digest, str) or not re.fullmatch(r"sha256:[0-9a-f]{64}", expected_digest):
-        raise RuntimeError(f"Pinned wheel release asset is missing its URL or SHA-256 digest: {asset!r}.")
+    if (
+        not url
+        or not isinstance(expected_digest, str)
+        or not re.fullmatch(r"sha256:[0-9a-f]{64}", expected_digest)
+    ):
+        raise RuntimeError(
+            f"Pinned wheel release asset is missing its URL or SHA-256 digest: {asset!r}."
+        )
 
     payload = _download_asset(url)
     actual_digest = f"sha256:{hashlib.sha256(payload).hexdigest()}"
@@ -116,7 +128,9 @@ def download_pinned_wheel(
             f"expected {expected_size}, received {len(payload)}."
         )
     if not zipfile.is_zipfile(io.BytesIO(payload)):
-        raise RuntimeError(f"Downloaded KiCad IPC asset is not a valid wheel archive: {wheel_name}.")
+        raise RuntimeError(
+            f"Downloaded KiCad IPC asset is not a valid wheel archive: {wheel_name}."
+        )
 
     wheelhouse = Path(wheelhouse).expanduser().resolve()
     wheelhouse.mkdir(parents=True, exist_ok=True)
@@ -127,7 +141,9 @@ def download_pinned_wheel(
             raise RuntimeError(f"Refusing to overwrite a different local wheel at {destination}.")
         return destination
 
-    with tempfile.NamedTemporaryFile(dir=wheelhouse, prefix=f".{wheel_name}.", delete=False) as temporary:
+    with tempfile.NamedTemporaryFile(
+        dir=wheelhouse, prefix=f".{wheel_name}.", delete=False
+    ) as temporary:
         temporary_path = Path(temporary.name)
         temporary.write(payload)
     temporary_path.replace(destination)
