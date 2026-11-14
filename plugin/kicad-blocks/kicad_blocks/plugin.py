@@ -25,7 +25,8 @@ if TYPE_CHECKING:
     from tkinter import filedialog, messagebox, simpledialog, ttk
 
     from google.protobuf.message import Message
-    from kipy.common_types import KIID, Commit
+    from kipy.common_types import Commit
+    from kipy.proto.common.types.base_types_pb2 import KIID
     from kipy.geometry import Vector2
     from kipy.proto.common.types import DocumentSpecifier
 else:
@@ -399,7 +400,7 @@ class _TkTransientWindow(Protocol):
 
 def load_tkinter() -> None:
     """Load the optional desktop UI toolkit when the manager is run."""
-    global tk, ttk, filedialog, messagebox, simpledialog, tkinter_types
+    global tk, ttk, filedialog, messagebox, simpledialog
     if tk is not None:
         return
 
@@ -410,7 +411,6 @@ def load_tkinter() -> None:
     from tkinter import ttk as ttk_module
 
     tk = tkinter_module
-    tkinter_types = tkinter_module
     ttk = ttk_module
     filedialog = filedialog_module
     messagebox = messagebox_module
