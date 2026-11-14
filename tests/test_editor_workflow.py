@@ -146,6 +146,15 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
                     stdout="0x200" if search_count[0] > 1 else "",
                     returncode=0,
                 )
+            if arguments[1:3] == ["getwindowname", "0x100"]:
+                return SimpleNamespace(
+                    stdout="placement-test — Schematic Editor",
+                    returncode=0,
+                )
+            if arguments[1:3] == ["getwindowclassname", "0x100"]:
+                return SimpleNamespace(stdout="eeschema", returncode=0)
+            if arguments[1:2] == ["getwindowfocus"]:
+                return SimpleNamespace(stdout="0x100", returncode=0)
             if arguments[1:3] == ["getwindowname", "0x200"]:
                 return SimpleNamespace(
                     stdout=f"Symbol Editor — {self.block.manifest['symbol_name']}",
@@ -164,6 +173,8 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
         )
 
         self.assertTrue(opened)
+        self.assertIn(["/usr/bin/xdotool", "windowraise", "0x100"], calls)
+        self.assertIn(["/usr/bin/xdotool", "windowactivate", "--sync", "0x100"], calls)
         self.assertIn(["/usr/bin/xdotool", "windowfocus", "--sync", "0x100"], calls)
         self.assertIn(["/usr/bin/xdotool", "key", "--clearmodifiers", "alt+t"], calls)
         self.assertIn(
@@ -171,6 +182,68 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
             calls,
         )
         self.assertGreaterEqual(search_count[0], 2)
+
+    def test_edit_facade_never_sends_menu_keys_to_pcb_editor(self):
+        from kicad_blocks.repository import build_project_symbol_catalog
+
+        project_catalog = build_project_symbol_catalog(self.project, [self.library])
+        calls = []
+        def command_runner(arguments, **kwargs):
+            calls.append(arguments)
+            if arguments[1:4] == ["search", "--onlyvisible", "--name"]:
+                return SimpleNamespace(stdout="", returncode=0)
+            if arguments[1:3] == ["getwindowname", "0x100"]:
+                return SimpleNamespace(stdout="board — PCB Editor", returncode=0)
+            if arguments[1:3] == ["getwindowclassname", "0x100"]:
+                return SimpleNamespace(stdout="pcbnew", returncode=0)
+            return SimpleNamespace(stdout="", returncode=0)
+
+        with self.assertRaisesRegex(RuntimeError, "not Eeschema"):
+            plugin_actions._edit_facade_symbol(
+                self.block,
+                SimpleNamespace(),
+                "0x100",
+                project_catalog=project_catalog,
+                xdotool="/usr/bin/xdotool",
+                command_runner=command_runner,
+                pause=lambda _seconds: None,
+            )
+        self.assertFalse(any(
+            call[1:2] == ["key"] for call in calls
+        ))
+
+    def test_edit_facade_stops_when_eeschema_cannot_take_keyboard_focus(self):
+        from kicad_blocks.repository import build_project_symbol_catalog
+
+        project_catalog = build_project_symbol_catalog(self.project, [self.library])
+        calls = []
+        def command_runner(arguments, **kwargs):
+            calls.append(arguments)
+            if arguments[1:4] == ["search", "--onlyvisible", "--name"]:
+                return SimpleNamespace(stdout="", returncode=0)
+            if arguments[1:3] == ["getwindowname", "0x100"]:
+                return SimpleNamespace(stdout="placement-test — Schematic Editor", returncode=0)
+            if arguments[1:3] == ["getwindowclassname", "0x100"]:
+                return SimpleNamespace(stdout="eeschema", returncode=0)
+            if arguments[1:2] == ["getwindowfocus"]:
+                return SimpleNamespace(stdout="0x300", returncode=0)
+            if arguments[1:3] == ["getwindowname", "0x300"]:
+                return SimpleNamespace(stdout="PCB Editor", returncode=0)
+            return SimpleNamespace(stdout="", returncode=0)
+
+        with self.assertRaisesRegex(RuntimeError, "Focus remains on 'PCB Editor'"):
+            plugin_actions._edit_facade_symbol(
+                self.block,
+                SimpleNamespace(),
+                "0x100",
+                project_catalog=project_catalog,
+                xdotool="/usr/bin/xdotool",
+                command_runner=command_runner,
+                pause=lambda _seconds: None,
+            )
+        self.assertFalse(any(
+            call[1:2] == ["key"] for call in calls
+        ))
 
     def test_wayland_edit_facade_uses_native_action_before_wtype_search(self):
         from kicad_blocks.repository import build_project_symbol_catalog
