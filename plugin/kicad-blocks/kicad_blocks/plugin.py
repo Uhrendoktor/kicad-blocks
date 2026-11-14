@@ -104,8 +104,15 @@ def _configure_tk_theme(root) -> None:
     """Apply a compact KiCad-compatible palette to themed and classic Tk widgets."""
     dark = _system_prefers_dark_theme()
     if dark is None:
-        # Keep the toolkit/host native appearance for the system setting.
+        # Keep the toolkit/host native colors, but preserve the shared control
+        # geometry/accessibility contract. Returning before this style setup
+        # used to drop the fixed Treeview row height and clip table text.
         root._kicad_blocks_palette = {}
+        style = ttk.Style(root)
+        style.configure("Treeview", rowheight=36, padding=(4, 3))
+        style.configure("Treeview.Heading", padding=(8, 8))
+        style.configure("Vertical.TScrollbar", width=12)
+        style.configure("Horizontal.TScrollbar", width=12)
         return
     colors = ({
         "background": "#202326", "surface": "#292d31", "surface_alt": "#33383d",
@@ -1035,13 +1042,9 @@ def _show_selected_block_configuration(
             messagebox.showerror("Invalid Block Configuration", str(exc), parent=dialog)
             return
 
-        messagebox.showinfo(
-            "Block Instance Updated",
-            f"Saved configuration for {instance.reference}.\n\n"
+        LOG.info("%s: %s", "Block Instance Updated", f"Saved configuration for {instance.reference}.\n\n"
             "The schematic was updated through KiCad IPC as one undoable change. "
-            "The shared library block was not modified.",
-            parent=dialog,
-        )
+            "The shared library block was not modified.")
         dialog.destroy()
 
     _action_button(footer, "Cancel", dialog.destroy, "cancel", "Discard instance edits").pack(side="right", padx=(8, 0))
@@ -1790,10 +1793,12 @@ def _active_sheet_source(schematic, project_dir: Path) -> tuple[Path, str | None
 
 
 def _ask_create_block_details(parent, source_sheet: Path) -> tuple[str, str] | None:
-    """Collect the block name and description in one creation dialog."""
-    dialog = tk.Toplevel(parent)
+    """Collect block details in a mapped owner window, not a child of a withdrawn root."""
+    reuse_parent = bool(getattr(parent, "_kicad_blocks_reuse_for_create", False))
+    dialog = parent if reuse_parent else tk.Toplevel(parent)
     dialog.title("Create Functional Block")
-    dialog.transient(parent)
+    if not reuse_parent:
+        dialog.transient(parent)
     frame = ttk.Frame(dialog, padding=18)
     frame.pack(fill="both", expand=True)
     ttk.Label(
@@ -1824,6 +1829,13 @@ def _ask_create_block_details(parent, source_sheet: Path) -> tuple[str, str] | N
         highlightcolor=palette.get("accent", "#4c789f"),
     )
     result = [None]
+    completed = tk.BooleanVar(master=dialog, value=False) if reuse_parent else None
+
+    def finish():
+        if completed is not None:
+            completed.set(True)
+        else:
+            dialog.destroy()
 
     def accept():
         value = name.get().strip()
@@ -1832,14 +1844,15 @@ def _ask_create_block_details(parent, source_sheet: Path) -> tuple[str, str] | N
             name_entry.focus_set()
             return
         result[0] = (value, description.get("1.0", "end-1c").strip())
-        dialog.destroy()
+        finish()
+
+    def cancel():
+        finish()
 
     buttons = ttk.Frame(frame)
     buttons.pack(fill="x")
-    _action_button(buttons, "Cancel", dialog.destroy, "cancel", "Cancel block creation").pack(side="right")
+    _action_button(buttons, "Cancel", cancel, "cancel", "Cancel block creation").pack(side="right")
     _action_button(buttons, "Create Block", accept, "create", "Create the reusable block from this sheet").pack(side="right", padx=(0, 8))
-    def cancel():
-        dialog.destroy()
 
     dialog.bind("<Return>", lambda _event: accept())
     dialog.bind("<Escape>", lambda _event: cancel())
@@ -1847,7 +1860,12 @@ def _ask_create_block_details(parent, source_sheet: Path) -> tuple[str, str] | N
     _set_window_geometry(dialog, 660, 390, 580, 340)
     dialog.grab_set()
     name_entry.focus_set()
-    dialog.wait_window()
+    if completed is not None:
+        dialog.wait_variable(completed)
+        with contextlib.suppress(tk.TclError):
+            dialog.grab_release()
+    else:
+        dialog.wait_window()
     return result[0]
 
 
@@ -2012,9 +2030,7 @@ def _create_and_place(
         f"  • {pin['name']} — {pin['electrical_type']}"
         for pin in record.manifest.get("pins", [])
     )
-    messagebox.showinfo(
-        "Block Created",
-        f"Created {name} from hierarchical sheet {source_sheet.name}.\\n\\n"
+    LOG.info("%s: %s", "Block Created", f"Created {name} from hierarchical sheet {source_sheet.name}.\\n\\n"
         f"Facade pins were generated from hierarchical labels and their shapes:\\n"
         f"{pins_summary}\\n\\n"
         f"Implementation: {record.implementation}\\n"
@@ -2023,9 +2039,7 @@ def _create_and_place(
         "normal Symbol Editor, then use Publish Library Block. When the "
         "implementation's hierarchical labels change, Publish synchronizes "
         "facade pin names and electrical types automatically."
-        + (f"\\n\\nLibrary reload note: {_LAST_LIBRARY_RELOAD_WARNING}" if _LAST_LIBRARY_RELOAD_WARNING else ""),
-        parent=parent,
-    )
+        + (f"\\n\\nLibrary reload note: {_LAST_LIBRARY_RELOAD_WARNING}" if _LAST_LIBRARY_RELOAD_WARNING else ""))
 
 
 
@@ -2145,13 +2159,9 @@ def _edit_block_implementation(root, schematic, kicad, project_dir, parent) -> N
         "implementation schematic",
         editor_window_id=getattr(parent, "_kicad_blocks_editor_window_id", None),
     )
-    messagebox.showinfo(
-        "Block Implementation",
-        f"Opened {record.name} implementation in Eeschema.\n\n"
+    LOG.info("%s: %s", "Block Implementation", f"Opened {record.name} implementation in Eeschema.\n\n"
         "After editing a shared library block, run Publish. "
-        "A project-local implementation remains independent until explicitly synchronized.",
-        parent=parent,
-    )
+        "A project-local implementation remains independent until explicitly synchronized.")
     return process
 
 
@@ -3460,8 +3470,9 @@ def _show_block_layout_editor(
 
     changed = [False]
     added_ids = []
+    created_layout_to_open = [None]
     status_value = tk.StringVar(
-        value="Each saved PCB layout is associated with at least one implementation."
+        value="Each layout remains assigned to one or more implementations."
     )
 
     def assigned_to(layout_id: str) -> str:
@@ -3521,10 +3532,9 @@ def _show_block_layout_editor(
         else:
             variant_layouts[linked_implementation] = layout_id
         changed[0] = True
-        status_value.set(
-            f"Added {name}."
-        )
+        status_value.set(f"Added {name}; saving to the library.")
         render(layout_id)
+        persist_layout_changes()
 
     def remove_layout():
         item = selected_layout()
@@ -3565,10 +3575,9 @@ def _show_block_layout_editor(
                 else:
                     variant_layouts.pop(value)
         changed[0] = True
-        status_value.set(
-            f"Removed {item['name']}."
-        )
+        status_value.set(f"Removed {item['name']}; saving to the library.")
         render(replacement_id)
+        persist_layout_changes()
 
     def make_default():
         item = selected_layout()
@@ -3579,8 +3588,9 @@ def _show_block_layout_editor(
         if "Default" not in links:
             links.append("Default")
         changed[0] = True
-        status_value.set(f"Default: {item['name']}.")
+        status_value.set(f"Default: {item['name']}; saving to the library.")
         render(item["id"])
+        persist_layout_changes()
 
     implementation_values = ["Default"] + [
         str(item["value"]) for item in record.manifest.get("variants", [])
@@ -3600,15 +3610,16 @@ def _show_block_layout_editor(
         else:
             variant_layouts[selected] = item["id"]
         changed[0] = True
-        status_value.set(f"Assigned {item['name']} to {selected}.")
+        status_value.set(f"Assigned {item['name']} to {selected}; saving to the library.")
         render(item["id"])
+        persist_layout_changes()
 
     def update_actions(_event=None):
         has_selection = selected_layout() is not None
         remove_button.configure(state="normal" if has_selection else "disabled")
         default_button.configure(state="normal" if has_selection else "disabled")
         link_button.configure(state="normal" if has_selection else "disabled")
-        save_button.configure(state="normal" if changed[0] else "disabled")
+        save_button.configure(state="normal")
 
     palette = getattr(parent, "_kicad_blocks_palette", {})
     ttk.Label(
@@ -3656,19 +3667,18 @@ def _show_block_layout_editor(
     footer = ttk.Frame(frame)
     footer.grid(row=5, column=0, sticky="ew", pady=(12, 0))
     _action_button(
-        footer, "Cancel", cancel_layout_edits, "cancel",
-        "Close without saving layout changes",
+        footer, "Close", cancel_layout_edits, "cancel",
+        "Close the PCB layout manager",
     ).pack(side="right")
     save_button = _action_button(
-        footer, "Save layouts", lambda: None, "save", "Save PCB layout changes", state="disabled"
+        footer, "Save & close", lambda: None, "save",
+        "Save any pending changes and close the PCB layout manager",
     )
     save_button.pack(side="right", padx=(0, 8))
-    created_layout_to_open = [None]
 
-    def save_and_close():
+    def persist_layout_changes() -> bool:
         if not changed[0]:
-            dialog.destroy()
-            return
+            return True
         try:
             _save_block_layouts(
                 record, layouts,
@@ -3683,8 +3693,20 @@ def _show_block_layout_editor(
                     if item["id"] == added_ids[-1]
                 )
                 created_layout_to_open[0] = Path(record.path) / new_item["file"]
+            else:
+                created_layout_to_open[0] = None
         except (OSError, RuntimeError, TypeError, ValueError, KeyError, StopIteration) as exc:
+            status_value.set("Save failed; use Save & close to retry.")
             messagebox.showerror("Save PCB layouts", str(exc), parent=dialog)
+            update_actions()
+            return False
+        changed[0] = False
+        status_value.set("Saved.")
+        update_actions()
+        return True
+
+    def save_and_close():
+        if not persist_layout_changes():
             return
         dialog.destroy()
 
@@ -3973,9 +3995,12 @@ def _show_block_variant_editor(
     ttk.Label(
         frame, text="Circuit implementations", font=("TkDefaultFont", 12, "bold")
     ).grid(row=0, column=0, sticky="w")
+    status_value = tk.StringVar(
+        value="Empty KB_VARIANT uses the default implementation."
+    )
     ttk.Label(
         frame,
-        text="Empty KB_VARIANT uses the default implementation.",
+        textvariable=status_value,
         foreground=palette.get("muted", "#5f6871"),
         font=("TkDefaultFont", 8),
     ).grid(row=1, column=0, sticky="w", pady=(3, 8))
@@ -4071,7 +4096,7 @@ def _show_block_variant_editor(
             )
         else:
             default_button.configure(text="Set as default", state="disabled")
-        save_button.configure(state="normal" if dirty[0] else "disabled")
+        save_button.configure(state="normal")
 
     def add_variant():
         details = _ask_implementation_details(dialog, record=record, allow_create=True)
@@ -4086,6 +4111,7 @@ def _show_block_variant_editor(
         variants.append({"value": value, "source": source, "open_after_save": True})
         dirty[0] = True
         render(len(variants))
+        persist_variant_changes()
 
     def edit_variant():
         row_index = selected_index()
@@ -4124,6 +4150,7 @@ def _show_block_variant_editor(
         variants[index] = updated
         dirty[0] = True
         render(row_index)
+        persist_variant_changes()
 
     def remove_variant():
         row_index = selected_index()
@@ -4161,10 +4188,14 @@ def _show_block_variant_editor(
         ):
             return
         variants.pop(index)
+        removed_file = candidate.get("file")
+        if removed_file and new_implementation_to_open[0] == Path(record.path) / removed_file:
+            new_implementation_to_open[0] = None
         if is_default:
             default_variant[0] = ""
         dirty[0] = True
         render(min(row_index, len(variants)) if variants else 0)
+        persist_variant_changes()
 
     def make_default():
         row_index = selected_index()
@@ -4176,13 +4207,11 @@ def _show_block_variant_editor(
         default_variant[0] = selected
         dirty[0] = True
         render(row_index)
+        persist_variant_changes()
 
-    def save_and_close(open_path: Path | None = None):
+    def persist_variant_changes() -> bool:
         if not dirty[0]:
-            if open_path is not None:
-                new_implementation_to_open[0] = open_path
-            dialog.destroy()
-            return
+            return True
         open_value = next(
             (str(item["value"]) for item in variants if item.get("open_after_save")),
             None,
@@ -4191,20 +4220,42 @@ def _show_block_variant_editor(
             _save_block_variants(
                 record, variants, default_variant=default_variant[0] or None
             )
-            if open_value:
-                from .repository import read_manifest
+            from .repository import read_manifest
 
-                saved = read_manifest(Path(record.path))
+            saved = read_manifest(Path(record.path))
+            variants[:] = [
+                {
+                    "value": str(item["value"]),
+                    "file": str(item["file"]),
+                    **(
+                        {"layout_id": str(item["layout_id"]).casefold()}
+                        if item.get("layout_id") else {}
+                    ),
+                }
+                for item in saved.get("variants", [])
+            ]
+            default_variant[0] = str(saved.get("default_variant") or "")
+            if open_value:
                 selected = next(
                     item for item in saved.get("variants", [])
                     if str(item["value"]).casefold() == open_value.casefold()
                 )
                 new_implementation_to_open[0] = Path(record.path) / selected["file"]
-            if open_path is not None:
-                new_implementation_to_open[0] = open_path
         except (OSError, RuntimeError, TypeError, ValueError, KeyError, StopIteration) as exc:
+            status_value.set("Save failed; use Save & close to retry.")
             messagebox.showerror("Save implementations", str(exc), parent=dialog)
+            update_actions()
+            return False
+        dirty[0] = False
+        status_value.set("Saved.")
+        update_actions()
+        return True
+
+    def save_and_close(open_path: Path | None = None):
+        if not persist_variant_changes():
             return
+        if open_path is not None:
+            new_implementation_to_open[0] = open_path
         dialog.destroy()
 
     actions = ttk.Frame(frame)
@@ -4232,12 +4283,12 @@ def _show_block_variant_editor(
         dialog.destroy()
 
     _action_button(
-        actions, "Cancel", cancel_variant_edits, "cancel",
-        "Close without saving implementation changes",
+        actions, "Close", cancel_variant_edits, "cancel",
+        "Close the implementation manager",
     ).pack(side="right")
     save_button = _action_button(
-        actions, "Save changes", save_and_close, "save",
-        "Save implementation changes", state="disabled"
+        actions, "Save & close", save_and_close, "save",
+        "Save any pending changes and close the implementation manager"
     )
     save_button.pack(side="right", padx=(0, 8))
 
@@ -5486,7 +5537,7 @@ def _open_selected_block_implementation(root, schematic, kicad, project_dir, par
             if record.manifest.get("variants")
             else f"Opened {record.name} implementation."
         )
-        messagebox.showinfo("Block Implementation", detail, parent=parent)
+        LOG.info("%s: %s", "Block Implementation", detail)
     return process
 
 
@@ -5526,12 +5577,8 @@ def _export_recursive_bom(root: Path | list[Path], parent, schematic=None, proje
     result = export_block_bom(
         record, Path(output), find_kicad_cli(), library_root, parameter_values=parameter_values
     )
-    messagebox.showinfo(
-        "Block BOM Exported",
-        f"Exported {result['row_count']} rows from {result['block_count']} block(s):\n"
-        f"{result['output']}",
-        parent=parent,
-    )
+    LOG.info("%s: %s", "Block BOM Exported", f"Exported {result['row_count']} rows from {result['block_count']} block(s):\n"
+        f"{result['output']}")
 
 
 def _validate_shared_library(root: Path | list[Path], parent) -> None:
@@ -5581,7 +5628,7 @@ def _validate_shared_library(root: Path | list[Path], parent) -> None:
     elif warnings:
         messagebox.showwarning("Block Library Validation — ERC warnings", message, parent=parent)
     else:
-        messagebox.showinfo("Block Library Validation Passed", message, parent=parent)
+        LOG.info("%s: %s", "Block Library Validation Passed", message)
 
 
 def _validate_recursive_erc(root: Path | list[Path], parent, schematic=None, project_dir: Path | None = None) -> None:
@@ -5616,12 +5663,8 @@ def _validate_recursive_erc(root: Path | list[Path], parent, schematic=None, pro
         f"{item['block']}: {'violations found' if item['violations'] else 'no violations'}"
         for item in reports
     )
-    messagebox.showinfo(
-        "Recursive Block ERC",
-        f"Checked {len(reports)} block implementation(s); "
-        f"{len(failed)} reported violations.\n\n{details}\n\nReports: {output}",
-        parent=parent,
-    )
+    LOG.info("%s: %s", "Recursive Block ERC", f"Checked {len(reports)} block implementation(s); "
+        f"{len(failed)} reported violations.\n\n{details}\n\nReports: {output}")
 
 
 def _publish_block(root, kicad, project_dir, parent) -> None:
@@ -5638,15 +5681,11 @@ def _publish_block(root, kicad, project_dir, parent) -> None:
     result = refresh_library_block(record)
     if result["changed"]:
         _register_block(project_dir, record, kicad, library_paths)
-    messagebox.showinfo(
-        "Library Block Published",
-        f"Version: {result['version']}\n"
+    LOG.info("%s: %s", "Library Block Published", f"Version: {result['version']}\n"
         f"Changed files: {', '.join(result['changed']) or 'none'}\n"
         f"Automatically detected {dependency_result['count']} child block(s)"
         + ("; dependency manifest updated.\n" if dependency_result["changed"] else ".\n")
-        + "Local copies can now synchronize from this revision.",
-        parent=parent,
-    )
+        + "Local copies can now synchronize from this revision.")
 
 
 def _block_record_for_instance(library_root: Path | list[Path], project_dir: Path, instance):
@@ -5830,7 +5869,7 @@ def _apply_block_pcb_layout(
             "in the stored PCB: "
             + (", ".join(result["unmatched_project_chains"]) or "unknown")
         )
-    messagebox.showinfo("PCB Block Layout Applied", message, parent=parent)
+    LOG.info("%s: %s", "PCB Block Layout Applied", message)
 
 
 def _apply_selected_block_pcb_layouts(
@@ -5941,9 +5980,7 @@ def _apply_selected_block_pcb_layouts(
     ):
         _open_generated_pcb_copy(kicad, Path(result["output"]))
 
-    messagebox.showinfo(
-        "PCB Block Layouts Applied",
-        f"Created board copy: {result['output']}\n"
+    LOG.info("%s: %s", "PCB Block Layouts Applied", f"Created board copy: {result['output']}\n"
         f"Block instances: {result['block_count']}\n"
         f"Footprints added: {result['footprint_count']}\n"
         f"Board objects added: {result['object_count']}\n"
@@ -5951,9 +5988,7 @@ def _apply_selected_block_pcb_layouts(
         f"PCB net chains added: {', '.join(result['merged_board_chains']) or 'none'}\n"
         f"Interactive placement manifest: {placement_sidecar}\n"
         "Open the output in PCB Editor and choose Place Imported Block Layout once for each block instance. "
-        "The original board and project settings were not modified.",
-        parent=parent,
-    )
+        "The original board and project settings were not modified.")
 
 
 def _show_action_hub(root):
@@ -6153,12 +6188,17 @@ def run_action(action: str, *, editor_window_id: str | None = None) -> None:
             root.mainloop()
             return
 
-        root.withdraw()
         if action == "create-block":
+            # The creation form is hosted by the Tk root itself. Keeping this
+            # owner mapped avoids a transient modal becoming hidden behind
+            # KiCad when its parent has already been withdrawn.
+            root._kicad_blocks_reuse_for_create = True
             _create_and_place(
                 library_root, schematic, kicad, project_dir, root, editor_window_id
             )
-        elif action == "open-implementation":
+        else:
+            root.withdraw()
+        if action == "open-implementation":
             _open_selected_block_implementation(
                 library_paths, schematic, kicad, project_dir, root
             )
@@ -6170,20 +6210,12 @@ def run_action(action: str, *, editor_window_id: str | None = None) -> None:
             path = make_selected_local(
                 schematic, kicad, project_dir, library_paths
             )
-            messagebox.showinfo(
-                "Local Copy Created",
-                f"The selected instance now uses an independent project-local block:\n{path}",
-                parent=root,
-            )
+            LOG.info("%s: %s", "Local Copy Created", f"The selected instance now uses an independent project-local block:\n{path}")
         elif action == "synchronize-local-copy":
             result = sync_selected_local(schematic, kicad, project_dir)
-            messagebox.showinfo(
-                "Local Block Synchronized",
-                "Published local edits: " + (", ".join(result["published"]) or "none") +
+            LOG.info("%s: %s", "Local Block Synchronized", "Published local edits: " + (", ".join(result["published"]) or "none") +
                 "\\nPulled library edits: " + (", ".join(result["pulled"]) or "none") +
-                "\\nConverged edits: " + (", ".join(result["converged"]) or "none"),
-                parent=root,
-            )
+                "\\nConverged edits: " + (", ".join(result["converged"]) or "none"))
         elif action == "edit-facade":
             record = _pick_record(
                 _list_library_records(library_paths), root, "Edit Facade"
@@ -6192,18 +6224,17 @@ def run_action(action: str, *, editor_window_id: str | None = None) -> None:
                 project_catalog = _ensure_project_facade_catalog(
                     project_dir, record, kicad
                 )
-                _edit_facade_symbol(
+                opened = _edit_facade_symbol(
                     record,
                     kicad,
                     project_catalog=project_catalog,
                     close_browser=root.destroy,
                 )
-                messagebox.showinfo(
-                    "Edit facade",
-                    "Symbol Editor handoff requested. In its library tree, search for "
-                    + f"{LIBRARY_NICKNAME}:{record.manifest['symbol_name']}"
-                    + " and select the result. Saved facade edits are imported by Publish implementation.",
-                )
+                if opened:
+                    LOG.info(
+                        "Edit facade: opened %s in Symbol Editor.",
+                        f"{LIBRARY_NICKNAME}:{record.manifest['symbol_name']}",
+                    )
         elif action == "publish-block":
             _publish_block(library_paths, kicad, project_dir, root)
         elif action == "recursive-bom":

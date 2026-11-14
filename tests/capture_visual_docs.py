@@ -428,7 +428,7 @@ def _select_existing_pcb_file(dialog) -> None:
 
 
 def _assert_layout_manager_footer(dialog) -> None:
-    labels = {"Save layouts", "Cancel"}
+    labels = {"Save & close", "Close"}
     visible = {
         widget.cget("text")
         for widget in walk_widgets(dialog)

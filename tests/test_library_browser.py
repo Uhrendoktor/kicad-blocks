@@ -26,6 +26,7 @@ from kicad_blocks.plugin import (
     _block_overview_text,
     _choose_block_layout,
     _clean_facade_preview_svg,
+    _configure_tk_theme,
     _filter_library_records,
     _layout_choices,
     _library_record_for_instance,
@@ -919,6 +920,18 @@ class LibraryBrowserTests(unittest.TestCase):
         ):
             self.assertIsNone(_system_prefers_dark_theme())
         run_process.assert_not_called()
+
+    def test_system_theme_keeps_fixed_treeview_geometry_without_changing_native_colors(self):
+        style = Mock()
+        root = SimpleNamespace()
+        with (
+            patch.dict(os.environ, {"KICAD_BLOCKS_THEME": "system"}),
+            patch("kicad_blocks.plugin.ttk", SimpleNamespace(Style=Mock(return_value=style))),
+        ):
+            _configure_tk_theme(root)
+        self.assertEqual(root._kicad_blocks_palette, {})
+        style.configure.assert_any_call("Treeview", rowheight=36, padding=(4, 3))
+        style.configure.assert_any_call("Treeview.Heading", padding=(8, 8))
 
     def test_record_picker_returns_single_choice_without_opening_a_dialog(self):
         self.assertIs(_pick_record([self.block], object(), "Pick Block"), self.block)
