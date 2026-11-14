@@ -439,7 +439,27 @@ def capture_ui_workflows(library_roots, record, project_dir: Path, output_dir: P
     plugin_actions.configured_library_roots = lambda: roots
     plugin_actions.default_library_root = lambda: roots[0]
     schematic = SimpleNamespace(get_selection=list)
-    kicad = SimpleNamespace()
+
+    def reload_library(*, type: int, scope: int, nicknames: list[str]) -> None:
+        if type != 1 or scope != 2 or not nicknames:
+            raise AssertionError(
+                f"Unexpected visual-capture library reload request: {(type, scope, nicknames)!r}"
+            )
+
+    def wait_for_libraries(*, types: list[int], scope: int, timeout_s: float):
+        if types != [1] or scope != 2:
+            raise AssertionError(
+                f"Unexpected visual-capture library wait request: {(types, scope)!r}"
+            )
+        return [
+            SimpleNamespace(nickname=nickname, error_message=None)
+            for nickname in ()
+        ]
+
+    kicad = SimpleNamespace(
+        reload_library=reload_library,
+        wait_for_libraries=wait_for_libraries,
+    )
 
     try:
         for theme in ("light", "dark"):
