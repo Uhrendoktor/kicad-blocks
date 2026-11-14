@@ -529,9 +529,12 @@ def main() -> None:
                     f"stdout: {picker_probe.stdout}; stderr: {picker_probe.stderr}"
                 )
 
+            # Run the additional GUI smoke test in the same managed plugin
+            # environment as KiCad's installed entrypoints so every declared
+            # runtime dependency is available.
             configuration_probe = subprocess.run(
                 [
-                    python_interpreter,
+                    str(env_python),
                     str(ROOT / "tests" / "test_instance_configuration_gui.py"),
                 ],
                 env=env,
