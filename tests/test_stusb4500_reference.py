@@ -185,6 +185,10 @@ class STUSB4500ReferenceTests(unittest.TestCase):
             content,
         )
         self.assertIn(
+            '(wire (pts (xy 337.820 99.060) (xy 337.820 111.760))',
+            content,
+        )
+        self.assertNotIn(
             '(wire (pts (xy 337.820 99.060) (xy 337.820 128.270))',
             content,
         )
@@ -192,7 +196,7 @@ class STUSB4500ReferenceTests(unittest.TestCase):
             '(wire (pts (xy 363.220 104.140) (xy 365.760 104.140))',
             content,
         )
-        self.assertIn(
+        self.assertNotIn(
             '(wire (pts (xy 365.760 104.140) (xy 365.760 135.890))',
             content,
         )
@@ -204,7 +208,7 @@ class STUSB4500ReferenceTests(unittest.TestCase):
             (float(_direct(instances["R13"], "at")[1]), float(_direct(instances["R13"], "at")[2])),
             (365.760, 139.700),
         )
-        self.assertNotIn('(label "FET_MID"', content)
+        self.assertEqual(content.count('(label "FET_MID"'), 2)
 
     def test_power_path_is_split_into_switch_and_compact_output_stage(self) -> None:
         with tempfile.TemporaryDirectory(prefix="stusb4500-power-stages-") as temporary:
@@ -417,11 +421,15 @@ class STUSB4500ReferenceTests(unittest.TestCase):
         )
         for segment in (
             '(wire (pts (xy 163.830 111.760) (xy 172.720 111.760))',
-            '(wire (pts (xy 172.720 111.760) (xy 185.420 111.760))',
             '(wire (pts (xy 185.420 119.380) (xy 203.200 119.380))',
         ):
             self.assertIn(segment, content)
         self.assertNotIn("(global_label", content)
+        self.assertNotIn(
+            '(wire (pts (xy 172.720 111.760) (xy 185.420 111.760))',
+            content,
+            "C4.1 and R1.1 are separate physical islands coupled by two VBUS_FILTERED labels.",
+        )
 
     def test_esd_cc_labels_are_perpendicular_to_the_connector_traces(self) -> None:
         with tempfile.TemporaryDirectory(prefix="stusb4500-esd-labels-") as temporary:
