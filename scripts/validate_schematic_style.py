@@ -25,6 +25,54 @@ from generate_reference import (
 )
 from kicad_blocks.pcb_layout import _all, _direct, _head, parse_sexpr
 
+STYLE_RULES = {
+    "SCH001": {
+        "name": "wire-geometry",
+        "severity": "error",
+        "description": "No diagonal, crossing, overlapping or unmarked-branch wires.",
+    },
+    "SCH002": {
+        "name": "label-topology",
+        "severity": "error",
+        "description": "Local labels must join distinct wire islands and hierarchical labels must terminate a twig.",
+    },
+    "SCH003": {
+        "name": "label-wire-clearance",
+        "severity": "error",
+        "description": "No wire may pass through a label's visible glyph rectangle.",
+    },
+    "SCH004": {
+        "name": "physical-net-connectivity",
+        "severity": "error",
+        "description": "Declared decouplers and FET midpoint networks must be physically wired without labels.",
+    },
+    "SCH005": {
+        "name": "pin-orientation",
+        "severity": "warning",
+        "description": "Ground pins that can face down should use a downward symbol orientation.",
+    },
+    "SCH006": {
+        "name": "component-spacing",
+        "severity": "warning",
+        "description": "Enforce adjacency limits and short reference/value offsets.",
+    },
+    "SCH007": {
+        "name": "group-metadata",
+        "severity": "error",
+        "description": "Every declared circuit group must emit a title and description.",
+    },
+    "SCH008": {
+        "name": "annotation-layout",
+        "severity": "error",
+        "description": "Use correctly sized native text boxes with consistent padding and no overlaps.",
+    },
+    "SCH009": {
+        "name": "group-containment",
+        "severity": "error",
+        "description": "Pins, fields, labels, wires and annotations must remain inside their assigned group frame.",
+    },
+}
+
 TOL = 0.001
 PADDING = 1.27
 FRAME_GAP = GROUP_GAP_MM
@@ -588,16 +636,29 @@ def frame_and_component_issues(tree: list) -> list[str]:
                 continue
             if _line_hits_box(a, b, rect):
                 issues.append(f"wire {a}->{b} crosses the {zone} frame boundary")
-    # Every visible label glyph must remain within one generated component
-    # group. The pin and wire checks above make the group association explicit.
+    # A label belongs to the group containing its anchor. Its whole visible
+    # glyph must fit that same frame; being inside a neighbouring frame is not
+    # a valid containment exception.
     for kind in ("label", "hierarchical_label"):
         for node in _all(tree, kind):
             bounds = _text_visual_bounds(str(node[1]), node)
-            if bounds is not None and not any(_rect_inside(bounds, rect) for rect in frames.values()):
-                at = _direct(node, "at")
+            at = _direct(node, "at")
+            if bounds is None or at is None:
+                continue
+            anchor = (float(at[1]), float(at[2]))
+            owners = [
+                (zone, rect) for zone, rect in frames.items()
+                if _inside(anchor, rect)
+            ]
+            if len(owners) != 1:
                 issues.append(
-                    f"{kind} {str(node[1])!r} at ({float(at[1]):.3f}, {float(at[2]):.3f}) "
-                    "is outside every group frame"
+                    f"{kind} {str(node[1])!r} at ({anchor[0]:.3f}, {anchor[1]:.3f}) "
+                    f"belongs to {len(owners)} group frames; expected exactly one"
+                )
+            elif not _rect_inside(bounds, owners[0][1]):
+                issues.append(
+                    f"{kind} {str(node[1])!r} at ({anchor[0]:.3f}, {anchor[1]:.3f}) "
+                    f"extends outside its owning group frame {owners[0][0]}"
                 )
     for node in _all(tree, "text_box"):
         uid_node = _direct(node, "uuid")
@@ -617,17 +678,23 @@ def frame_and_component_issues(tree: list) -> list[str]:
 
 
 def check_schematic_style(tree: list) -> list[str]:
-    return (
-        wire_geometry_issues(tree)
-        + label_network_issues(tree)
-        + label_wire_overlap_issues(tree)
-        + physical_topology_issues(tree)
-        + pin_orientation_issues(tree)
-        + component_spacing_issues(tree)
-        + group_metadata_issues(tree)
-        + text_box_issues(tree)
-        + frame_and_component_issues(tree)
+    """Run every registered lint rule and return Clippy-style diagnostics."""
+    checks = (
+        ("SCH001", wire_geometry_issues),
+        ("SCH002", label_network_issues),
+        ("SCH003", label_wire_overlap_issues),
+        ("SCH004", physical_topology_issues),
+        ("SCH005", pin_orientation_issues),
+        ("SCH006", component_spacing_issues),
+        ("SCH007", group_metadata_issues),
+        ("SCH008", text_box_issues),
+        ("SCH009", frame_and_component_issues),
     )
+    return [
+        f"{rule_id}: {issue}"
+        for rule_id, checker in checks
+        for issue in checker(tree)
+    ]
 
 
 def validate_schematic_style(path: Path) -> dict[str, int]:
@@ -641,7 +708,7 @@ def validate_schematic_style(path: Path) -> dict[str, int]:
         "hierarchical_labels": len(_all(tree, "hierarchical_label")),
         "text_boxes": len(_all(tree, "text_box")),
         "functional_frames": len(ZONES),
-        "style_rules": 9,
+        "style_rules": len(STYLE_RULES),
     }
 
 
