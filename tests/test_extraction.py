@@ -9,12 +9,18 @@ PLUGIN = Path(__file__).resolve().parents[1] / "plugin" / "kicad-blocks"
 sys.path.insert(0, str(PLUGIN))
 
 from kicad_blocks.extraction import selected_sheet_file, selected_sheet_instance_uuid
-from kicad_blocks.pcb_layout import _all, _direct, _dump, _head, parse_sexpr
 from kicad_blocks.repository import create_block, read_manifest, refresh_library_block
+from kicad_blocks.sexpr import (
+    dump_sexpr,
+    parse_sexpr,
+    sexpr_all,
+    sexpr_direct,
+    sexpr_head,
+)
 
 
 def _source_sheet(path: Path) -> Path:
-    source = '''(kicad_sch
+    source = """(kicad_sch
       (version 20250114)
       (generator "eeschema")
       (uuid "11111111-1111-4111-8111-111111111111")
@@ -56,7 +62,7 @@ def _source_sheet(path: Path) -> Path:
       )
       (sheet_instances (path "/root/sheet" (page "2")))
     )
-    '''
+    """
     path.write_text(source, encoding="utf-8")
     return path
 
@@ -73,13 +79,13 @@ class HierarchicalSheetExtractionTests(unittest.TestCase):
         self.temp.cleanup()
 
     def test_selected_hierarchical_sheet_resolves_its_sheetfile(self):
-        fragment = '''(sheet
+        fragment = """(sheet
             (at 100 100)
             (size 40 30)
             (property "Sheetname" "Power Stage" (at 100 100 0) (effects (font (size 1 1))))
             (property "Sheetfile" "power_stage.kicad_sch" (at 100 100 0) (effects (font (size 1 1))))
             (uuid "dddddddd-dddd-4ddd-8ddd-dddddddddddd")
-        )'''
+        )"""
         self.assertEqual(
             selected_sheet_file(fragment, self.project),
             self.source.resolve(),
@@ -109,18 +115,18 @@ class HierarchicalSheetExtractionTests(unittest.TestCase):
         self.assertIn("(pin output line", facade)
 
         implementation = parse_sexpr(record.implementation.read_text(encoding="utf-8"))
-        self.assertEqual(len(_all(implementation, "hierarchical_label")), 3)
-        self.assertEqual(len(_all(implementation, "sheet")), 0)
+        self.assertEqual(len(sexpr_all(implementation, "hierarchical_label")), 3)
+        self.assertEqual(len(sexpr_all(implementation, "sheet")), 0)
         self.assertEqual(
-            str(_direct(_direct(implementation, "sheet_instances"), "path")[1]),
+            str(sexpr_direct(sexpr_direct(implementation, "sheet_instances"), "path")[1]),
             "/",
         )
-        resistor = _all(implementation, "symbol")[0]
-        instances = _direct(resistor, "instances")
-        project = next(item for item in instances[1:] if _head(item) == "project")
-        path = next(item for item in project[1:] if _head(item) == "path")
+        resistor = sexpr_all(implementation, "symbol")[0]
+        instances = sexpr_direct(resistor, "instances")
+        project = next(item for item in instances[1:] if sexpr_head(item) == "project")
+        path = next(item for item in project[1:] if sexpr_head(item) == "path")
         self.assertEqual(str(path[1]), "/")
-        self.assertEqual(str(_direct(path, "reference")[1]), "R7")
+        self.assertEqual(str(sexpr_direct(path, "reference")[1]), "R7")
         self.assertEqual(str(project[1]), "TestProject")
 
         # Extracting a block must not modify the original project subsheet.
@@ -140,7 +146,7 @@ class HierarchicalSheetExtractionTests(unittest.TestCase):
         implementation = implementation.replace(
             '(hierarchical_label "VIN"',
             '(hierarchical_label "VCC"',
-        ).replace('(shape input)', '(shape bidirectional)')
+        ).replace("(shape input)", "(shape bidirectional)")
         record.implementation.write_text(implementation, encoding="utf-8")
 
         result = refresh_library_block(record)
@@ -165,22 +171,21 @@ class HierarchicalSheetExtractionTests(unittest.TestCase):
         )
 
         facade = parse_sexpr(record.symbol_library.read_text(encoding="utf-8"))
-        symbol = _all(facade, "symbol")[0]
+        symbol = sexpr_all(facade, "symbol")[0]
         graphic_unit = next(
-            child for child in _all(symbol, "symbol")
-            if str(child[1]).endswith("_0_1")
+            child for child in sexpr_all(symbol, "symbol") if str(child[1]).endswith("_0_1")
         )
-        rectangle = _all(graphic_unit, "rectangle")[0]
-        stroke = _direct(rectangle, "stroke")
-        width = _direct(stroke, "width")
+        rectangle = sexpr_all(graphic_unit, "rectangle")[0]
+        stroke = sexpr_direct(rectangle, "stroke")
+        width = sexpr_direct(stroke, "width")
         width[1] = "0.500"
-        record.symbol_library.write_text(_dump(facade) + "\n", encoding="utf-8")
+        record.symbol_library.write_text(dump_sexpr(facade) + "\n", encoding="utf-8")
 
         implementation = record.implementation.read_text(encoding="utf-8")
         implementation = implementation.replace(
             '(hierarchical_label "VIN"',
             '(hierarchical_label "VCC"',
-        ).replace('(shape input)', '(shape bidirectional)')
+        ).replace("(shape input)", "(shape bidirectional)")
         record.implementation.write_text(implementation, encoding="utf-8")
 
         refresh_library_block(record)
@@ -204,14 +209,13 @@ class HierarchicalSheetExtractionTests(unittest.TestCase):
 
         def change_body_width(path: Path, value: str) -> None:
             tree = parse_sexpr(path.read_text(encoding="utf-8"))
-            symbol = _all(tree, "symbol")[0]
+            symbol = sexpr_all(tree, "symbol")[0]
             graphic_unit = next(
-                child for child in _all(symbol, "symbol")
-                if str(child[1]).endswith("_0_1")
+                child for child in sexpr_all(symbol, "symbol") if str(child[1]).endswith("_0_1")
             )
-            rectangle = _all(graphic_unit, "rectangle")[0]
-            _direct(_direct(rectangle, "stroke"), "width")[1] = value
-            path.write_text(_dump(tree) + "\n", encoding="utf-8")
+            rectangle = sexpr_all(graphic_unit, "rectangle")[0]
+            sexpr_direct(sexpr_direct(rectangle, "stroke"), "width")[1] = value
+            path.write_text(dump_sexpr(tree) + "\n", encoding="utf-8")
 
         change_body_width(asset_path, "0.300")
         change_body_width(catalog_path, "0.500")
@@ -223,7 +227,6 @@ class HierarchicalSheetExtractionTests(unittest.TestCase):
 
         self.assertEqual(asset_path.read_bytes(), asset_before)
         self.assertEqual(catalog_path.read_bytes(), catalog_before)
-
 
     def test_publish_rejects_an_extracted_block_with_no_hierarchical_labels(self):
         record = create_block(
@@ -237,10 +240,9 @@ class HierarchicalSheetExtractionTests(unittest.TestCase):
 
         implementation = parse_sexpr(record.implementation.read_text(encoding="utf-8"))
         implementation[:] = [
-            child for child in implementation
-            if _head(child) != "hierarchical_label"
+            child for child in implementation if sexpr_head(child) != "hierarchical_label"
         ]
-        record.implementation.write_text(_dump(implementation) + "\n", encoding="utf-8")
+        record.implementation.write_text(dump_sexpr(implementation) + "\n", encoding="utf-8")
 
         with self.assertRaisesRegex(ValueError, "implementation has none"):
             refresh_library_block(record)
@@ -280,7 +282,8 @@ class HierarchicalSheetExtractionTests(unittest.TestCase):
         self.source.write_text(root_source, encoding="utf-8")
 
         nested_source = self.project / "nested.kicad_sch"
-        nested_source.write_text(f'''(kicad_sch
+        nested_source.write_text(
+            f'''(kicad_sch
             (version 20250114)
             (generator "eeschema")
             (uuid "22222222-2222-4222-8222-222222222222")
@@ -311,10 +314,13 @@ class HierarchicalSheetExtractionTests(unittest.TestCase):
                     (path "/root/sheet/{root_sheet_uuid}" (page "4"))))
             )
             (sheet_instances (path "/root/sheet/{root_sheet_uuid}" (page "3")))
-        )''', encoding="utf-8")
+        )''',
+            encoding="utf-8",
+        )
 
         leaf_source = self.project / "leaf.kicad_sch"
-        leaf_source.write_text(f'''(kicad_sch
+        leaf_source.write_text(
+            f"""(kicad_sch
             (version 20250114)
             (generator "eeschema")
             (uuid "33333333-3333-4333-8333-333333333333")
@@ -329,7 +335,9 @@ class HierarchicalSheetExtractionTests(unittest.TestCase):
             (sheet_instances
                 (path "/root/sheet/{root_sheet_uuid}/{leaf_sheet_uuid}" (page "4"))
             )
-        )''', encoding="utf-8")
+        )""",
+            encoding="utf-8",
+        )
 
         original_root = self.source.read_bytes()
         original_nested = nested_source.read_bytes()
@@ -342,33 +350,41 @@ class HierarchicalSheetExtractionTests(unittest.TestCase):
         )
 
         manifest = read_manifest(record.path)
-        nested_files = [name for name in manifest["files"] if name.startswith("implementation_sheet_")]
+        nested_files = [
+            name for name in manifest["files"] if name.startswith("implementation_sheet_")
+        ]
         self.assertEqual(len(nested_files), 2)
         self.assertTrue(all((record.path / name).is_file() for name in nested_files))
 
         root_tree = parse_sexpr(record.implementation.read_text(encoding="utf-8"))
-        root_sheets = [node for node in root_tree[1:] if _head(node) == "sheet"]
+        root_sheets = [node for node in root_tree[1:] if sexpr_head(node) == "sheet"]
         self.assertEqual(len(root_sheets), 1)
         root_sheet = root_sheets[0]
-        root_child_file = str(next(p for p in _all(root_sheet, "property") if str(p[1]) == "Sheetfile")[2])
-        root_child_uuid = str(_direct(root_sheet, "uuid")[1])
+        root_child_file = str(
+            next(p for p in sexpr_all(root_sheet, "property") if str(p[1]) == "Sheetfile")[2]
+        )
+        root_child_uuid = str(sexpr_direct(root_sheet, "uuid")[1])
         self.assertTrue((record.path / root_child_file).is_file())
-        self.assertEqual(str(_direct(_direct(root_tree, "sheet_instances"), "path")[1]), "/")
+        self.assertEqual(
+            str(sexpr_direct(sexpr_direct(root_tree, "sheet_instances"), "path")[1]), "/"
+        )
 
         child_tree = parse_sexpr((record.path / root_child_file).read_text(encoding="utf-8"))
-        child_sheets = [node for node in child_tree[1:] if _head(node) == "sheet"]
+        child_sheets = [node for node in child_tree[1:] if sexpr_head(node) == "sheet"]
         self.assertEqual(len(child_sheets), 1)
         child_sheet = child_sheets[0]
-        leaf_file = str(next(p for p in _all(child_sheet, "property") if str(p[1]) == "Sheetfile")[2])
-        leaf_uuid = str(_direct(child_sheet, "uuid")[1])
+        leaf_file = str(
+            next(p for p in sexpr_all(child_sheet, "property") if str(p[1]) == "Sheetfile")[2]
+        )
+        leaf_uuid = str(sexpr_direct(child_sheet, "uuid")[1])
         self.assertTrue((record.path / leaf_file).is_file())
         self.assertEqual(
-            str(_direct(_direct(child_tree, "sheet_instances"), "path")[1]),
+            str(sexpr_direct(sexpr_direct(child_tree, "sheet_instances"), "path")[1]),
             "/" + root_child_uuid,
         )
         leaf_tree = parse_sexpr((record.path / leaf_file).read_text(encoding="utf-8"))
         self.assertEqual(
-            str(_direct(_direct(leaf_tree, "sheet_instances"), "path")[1]),
+            str(sexpr_direct(sexpr_direct(leaf_tree, "sheet_instances"), "path")[1]),
             "/" + root_child_uuid + "/" + leaf_uuid,
         )
 
@@ -376,8 +392,8 @@ class HierarchicalSheetExtractionTests(unittest.TestCase):
             [pin["name"] for pin in manifest["pins"]],
             ["VIN", "GND", "VOUT"],
         )
-        self.assertEqual(len(_all(child_tree, "hierarchical_label")), 1)
-        self.assertEqual(len(_all(leaf_tree, "hierarchical_label")), 1)
+        self.assertEqual(len(sexpr_all(child_tree, "hierarchical_label")), 1)
+        self.assertEqual(len(sexpr_all(leaf_tree, "hierarchical_label")), 1)
 
         self.assertEqual(self.source.read_bytes(), original_root)
         self.assertEqual(nested_source.read_bytes(), original_nested)
