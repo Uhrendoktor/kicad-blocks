@@ -78,7 +78,10 @@ class SchematicStyleRuleTests(unittest.TestCase):
                    for prop in _all(node, "property"))
         )
         value = next(prop for prop in _all(d1, "property") if str(prop[1]) == "Value")
-        _direct(value, "at")[2] = "135.890"
+        d1_at = _direct(d1, "at")
+        value_at = _direct(value, "at")
+        value_at[1] = f"{float(d1_at[1]) + 2.54:.3f}"
+        value_at[2] = str(d1_at[2])
         self.assertTrue(
             any("D1 Value partially straddles" in issue
                 for issue in symbol_field_clearance_issues(tree))
