@@ -1,58 +1,60 @@
 # STUSB4500 schematic style and electrical checklist
 
-This checklist consolidates the visual conventions, electrical-routing lessons, review observations, and explicit requirements gathered while refining PR #20. It applies to the STUSB4500 reference implementation and to similar functional-block schematics.
+This is the review and acceptance checklist for the generated STUSB4500 child-block schematic. The machine-checkable rules are enforced by scripts/validate_schematic_style.py and invoked from tests/validate_kicad_cli.py. KiCad CLI netlist/ERC checks remain authoritative for electrical connectivity; SVG/Eeschema review remains authoritative for visual legibility.
 
-## Page composition and functional blocks
+## Page composition and logical flow
 
 - [ ] Use an A3 landscape sheet; keep the formal KiCad title block in the lower-right corner.
-- [ ] Put a restrained title and source subtitle in the reserved top margin. Do not place a large decorative title over the circuit field.
-- [ ] Group functions in thin, unfilled blue rectangular frames with a small attached tab/header on the top edge.
-- [ ] Use small, purposeful functional blocks: USB-C connector/CC protection, VBUS bulk protection, VBUS monitor/filter, controller/decoupling, address straps, PMOS switch, and protected output.
-- [ ] Keep tabs attached to frames, titles inside the tab, and notes inside the relevant block. Avoid floating captions.
-- [ ] Keep whitespace between unrelated blocks. Frames should not touch, overlap, or cut through components, labels, wires, or note boxes.
-- [ ] Align component rows and shared rails to the KiCad grid. Keep related passives on common axes.
-- [ ] Use sparse notes that explain a specific design choice or unresolved part selection; size note boxes from their actual text.
+- [ ] Put the sheet title and source subtitle in the reserved top margin. Keep both inside native KiCad text boxes.
+- [ ] Group related components in thin, unfilled functional frames with an attached title tab.
+- [ ] Keep tabs attached to their frames and put their titles inside the tab, not as floating text.
+- [ ] Make each functional frame just large enough for its member components, their references/values, required labels, and intentional local notes, with a consistent minimum clearance.
+- [ ] Do not let a wire, label, text box, symbol field, or unrelated symbol penetrate a functional-frame border. A border crossing requires a documented exception and a specific test.
+- [ ] Functional frames must not overlap one another.
+- [ ] Arrange the primary electrical stages left-to-right and keep their horizontal frame-to-frame gap uniform. The reference implementation uses a 2.54 mm gap.
+- [ ] Keep secondary frames (such as address straps) close to the component group they describe without colliding with adjacent frames.
+- [ ] Align components, rows, and shared rails to the KiCad grid. Keep related passives on common axes and minimize unnecessary whitespace inside each frame.
 
-## Symbols, references, values, and labels
+## Symbols, references, values, and component population
 
-- [ ] Keep reference and value fields close to their symbols. Keep resistor values centered in the resistor body.
-- [ ] Rotate reference/value fields on vertical resistors by 90 degrees so they follow the symbol orientation; counter-rotate fields on symbol-rotated horizontal resistor banks so the text stays readable.
-- [ ] Place net labels close to the component/pin they name, but offset them perpendicular to pin names and wire corridors when necessary.
-- [ ] Reuse local labels at least twice. A one-off local label is usually a hidden wire; replace it with a short wire or give the net a second intentional local-label use.
-- [ ] Hierarchical labels are the exception: they are real block interfaces and may be used once at the child boundary.
-- [ ] Do not use global labels in this block. Use local labels for internal nets and hierarchical labels only for true parent interfaces.
-- [ ] Do not solve visual clutter by deleting all labels. Balance short physical wires and reused labels to minimize both wire length and label count.
+- [ ] Keep reference and value fields close to their symbols and outside symbol bodies unless a passive value is intentionally centered inside its body.
+- [ ] Keep resistor values centered in the resistor body. Rotate reference/value fields on vertical resistors to follow the symbol; counter-rotate fields on symbol-rotated horizontal resistor banks so the text remains readable.
+- [ ] Place each symbol's reference/value pair on the nearest clear side of that symbol. Do not place fields under a neighboring component, on a wire corridor, or inside another component's frame tab.
+- [ ] Do not write NC, DNP, or NOT FITTED into a component's Value field when it is a real optional component. Give it the value it would have when populated and mark the instance with KiCad's DNP option.
+- [ ] For this address strap, R51 and R52 are optional 100 kΩ pull-ups: retain Value=100k and set DNP=yes. R53/R54 remain the populated 100 kΩ pull-downs.
+- [ ] Check that every functional group contains the intended components and that the frame's clearance is consistent; do not use one oversized enclosing frame to mask bad spacing.
 
-## Electrical topology and routing
+## Labels and electrical topology
 
-- [ ] Keep the USB-C receptacle and its CC ESD array together; CC1 and CC2 must route independently to the correct receptacle and controller pins.
-- [ ] Place the VBUS bulk capacitor and TVS physically beside the USB-C receptacle and connect them to its VBUS/GND entry.
-- [ ] Orient D4 so incoming VBUS enters from the connector side and the filtered output faces the downstream filter/sense circuit.
-- [ ] Physically connect D4, C4, R1, and R4 as one compact VBUS filter/sense circuit. Avoid traces through diode bodies or across the opposite diode terminal.
-- [ ] Connect C1, C2, and C3 directly to the U1 regulator pins they decouple. Use short orthogonal routes and keep the cap-to-pin association visually obvious.
-- [ ] Keep U1 address straps close to the controller and close the pull-up / address / pull-down chain gaps. Keep the two address nets separate.
-- [ ] Connect R55.1 directly to U1 RESET with a short wire; retain RESET as the hierarchical parent interface at U1.
-- [ ] Keep the two PMOS devices facing one another. Their common-source node must be one physical wire with a branch to the bias resistor; route the second gate to the bias bus.
-- [ ] Keep MCU connectors, MCU I2C pull-ups, and other parent-level application circuitry outside this controller block.
-- [ ] Keep U1.22 on its own VSYS hierarchical input. Do not tie VSYS to GND.
-- [ ] Use hierarchical GND ports for all ground endpoints in the child implementation.
-- [ ] Preserve the datasheet-derived signal assignment for CC1/CC2, VBUS, VBUS_VS_DISCH, DISCH, FET_MID, VSNK_GATE, VSNK, VREG_1V2, VREG_2V7, ADDR0, ADDR1, and RESET.
-
-## Routing and geometry safeguards
-
-- [ ] Prefer short, visible, orthogonal wires for local relationships. Use matching local labels for long or remote internal nets instead of long loops across blocks.
+- [ ] Keep local labels near the pin or component they identify. Move label text away from pin-name text, symbol references/values, and wire corridors; use a short perpendicular label twig when required.
+- [ ] Each local label name must occur at least twice, on two or more distinct physical wire networks. If a net is completely wired as one visible network, do not add duplicate labels merely to satisfy a count.
+- [ ] A physical wire network may carry at most one instance of a given local label name. Never place IC — LABEL — LABEL — IC on one connected network.
+- [ ] Use labels to connect separate wire islands, not to decorate every pin of a continuous routed network.
+- [ ] Hierarchical labels are the single-use exception for real child-sheet interfaces. Put each one at the end of a short wire twig; do not put it inline on a wire between two components.
+- [ ] A hierarchical port must not split a component-to-component wire. For a branching node, create a visible branch twig and put the hierarchical label at the twig's free end.
+- [ ] Do not use global labels in this child block. Use local labels for internal disconnected networks and hierarchical labels only for parent interfaces.
+- [ ] Prefer short, visible, orthogonal wires for local relationships. Use matching local labels for long or remote internal nets rather than long loops across the sheet.
+- [ ] Do not route wires diagonally. Do not allow wires to cross one another. Intentional T-branches must terminate at an existing wire endpoint or be marked with an explicit junction; a four-way crossing is not an acceptable substitute for a branch.
 - [ ] Keep wires outside symbol bodies except where they terminate on the intended pin. Never route a net across the opposite terminal of a polarized/diode symbol.
-- [ ] Derive pin and rail coordinates from the loaded library symbol. Do not guess a rail height: a prior VBUS placement overlapped the embedded PMOS FET_MID pin.
-- [ ] Keep CC lanes, VBUS rails, PMOS common-source wiring, and block borders on separate corridors.
-- [ ] Check every label stub as well as every main wire: labels must not cover pin names, values, component references, or block tabs.
-- [ ] Check for overlap between text, symbols, wires, junctions, notes, tabs, and frame lines in the rendered KiCad SVG. A passing parser is not a visual pass.
-- [ ] Keep address and similar repeated networks compact; reduce spacing when the circuit remains readable and electrical nodes stay distinct.
+- [ ] Derive pin and rail coordinates from the loaded library symbol. Do not guess rail heights or pin offsets.
 
-## Validation gate
+## Annotation boxes and UI/layout overlap
 
-- [ ] Run the Python/unit tests and Ruff.
+- [ ] Every explanatory/annotating text item must be a native KiCad text_box, not a free-standing text item.
+- [ ] Use the shared _graphic_text / _note_box helper. It measures the text, sets the box dimensions, and applies equal physical padding on all four sides.
+- [ ] Keep a note box visually adjacent to its subject circuit and inside the subject's functional frame when practical. A reader should identify the described part without tracing a distant caption.
+- [ ] Use borderless native text boxes for titles/captions only when the attached functional-frame tab or another nearby frame supplies the visual grouping.
+- [ ] No text box may overlap another text box, a visible symbol reference/value, a local or hierarchical label, a symbol/pin, a wire, a junction, or a frame border.
+- [ ] No wire may pass through a text box. No symbol field, net label, title, or note may sit on top of another UI element.
+- [ ] Check all label stubs as well as main wires. Label glyphs must not cover pin names, values, component references, nearby notes, or block tabs.
+- [ ] Recheck the rendered KiCad SVG at readable zoom after every position, orientation, font-size, or frame change. Passing the S-expression parser is not a visual pass.
+
+## Automated and visual validation gate
+
+- [ ] Run unit tests, Ruff, and compileall, including the schematic style checker.
+- [ ] Run scripts/validate_schematic_style.py PATH_TO_SCHEMATIC. It must reject wire crossings/overlaps, unmarked T-junctions, multiple same-name local labels on one wire island, single-use local labels, non-terminal hierarchical labels, free-standing annotation text, insufficient/non-uniform text-box padding, overlapping text boxes, frame overlap, non-uniform stage gaps, and wires/text boxes that penetrate frame borders.
 - [ ] Export the schematic netlist with KiCad CLI and verify all critical pin-to-net assignments against the datasheet-derived map.
-- [ ] Run KiCad ERC with the standalone child-block validation profile. Suppress only expected root-sheet hierarchical ports, externally driven input/power pins, isolated hierarchical port labels, and absent project library tables; all internal pin conflicts, dangling wire/label checks, and all other ERC rules remain enabled. Require zero unignored violations and inspect the report.
-- [ ] Export a fresh SVG from the exact tested commit and visually inspect the whole page and dense regions at readable zoom.
+- [ ] Run KiCad ERC with the standalone child-block validation profile. Suppress only expected root-sheet hierarchical ports, externally driven input/power pins, isolated hierarchical port labels, and absent project library tables. Internal shorts, pin conflicts, dangling wires/local labels, and all other ERC rules remain enabled; require zero unignored violations.
+- [ ] Export a fresh SVG from the exact tested commit and inspect the full page and dense regions. Confirm the boxes fit the text and remain close to the circuits they describe.
 - [ ] Open/save the exact-head schematic in Eeschema when the GUI runner is available.
-- [ ] Verify the rendered frame geometry and all wiring after any coordinate or orientation change.
+- [ ] Re-export the netlist and rerun all geometry checks after any wire, label, frame, component, or field movement.
