@@ -13,8 +13,10 @@ ROOT = Path(__file__).resolve().parents[1]
 PLUGIN = ROOT / "plugin" / "kicad-blocks"
 sys.path.insert(0, str(PLUGIN))
 sys.path.insert(0, str(ROOT / "examples" / "stusb4500"))
+sys.path.insert(0, str(ROOT / "scripts"))
 
 from generate_reference import ROOT_UUID, generate_reference_schematic
+from validate_schematic_style import validate_schematic_style
 from kicad_blocks.model import parse_pins
 from kicad_blocks.operations import export_block_bom, validate_block_tree
 from kicad_blocks.pcb_layout import _all, _direct, _dump, _Quoted, parse_sexpr
@@ -37,6 +39,11 @@ def _find_kicad_cli() -> str:
 
 def _validate_stusb4500_netlist(cli: str, output_dir: Path) -> None:
     schematic = generate_reference_schematic(output_dir / "stusb4500.kicad_sch")
+    style_counts = validate_schematic_style(schematic)
+    print(
+        "STUSB4500 schematic style audit passed: "
+        + ", ".join(f"{key}={value}" for key, value in style_counts.items())
+    )
     schematic_text = schematic.read_text(encoding="utf-8")
     if "(global_label" in schematic_text:
         raise RuntimeError("The STUSB4500 block must not contain global labels.")
