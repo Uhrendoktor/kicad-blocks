@@ -1788,10 +1788,12 @@ def _active_sheet_source(schematic, project_dir: Path) -> tuple[Path, str | None
 
 
 def _ask_create_block_details(parent, source_sheet: Path) -> tuple[str, str] | None:
-    """Collect the block name and description in one creation dialog."""
-    dialog = tk.Toplevel(parent)
+    """Collect block details in a mapped owner window, not a child of a withdrawn root."""
+    reuse_parent = bool(getattr(parent, "_kicad_blocks_reuse_for_create", False))
+    dialog = parent if reuse_parent else tk.Toplevel(parent)
     dialog.title("Create Functional Block")
-    dialog.transient(parent)
+    if not reuse_parent:
+        dialog.transient(parent)
     frame = ttk.Frame(dialog, padding=18)
     frame.pack(fill="both", expand=True)
     ttk.Label(
@@ -1822,6 +1824,13 @@ def _ask_create_block_details(parent, source_sheet: Path) -> tuple[str, str] | N
         highlightcolor=palette.get("accent", "#4c789f"),
     )
     result = [None]
+    completed = tk.BooleanVar(master=dialog, value=False) if reuse_parent else None
+
+    def finish():
+        if completed is not None:
+            completed.set(True)
+        else:
+            dialog.destroy()
 
     def accept():
         value = name.get().strip()
@@ -1830,14 +1839,15 @@ def _ask_create_block_details(parent, source_sheet: Path) -> tuple[str, str] | N
             name_entry.focus_set()
             return
         result[0] = (value, description.get("1.0", "end-1c").strip())
-        dialog.destroy()
+        finish()
+
+    def cancel():
+        finish()
 
     buttons = ttk.Frame(frame)
     buttons.pack(fill="x")
-    _action_button(buttons, "Cancel", dialog.destroy, "cancel", "Cancel block creation").pack(side="right")
+    _action_button(buttons, "Cancel", cancel, "cancel", "Cancel block creation").pack(side="right")
     _action_button(buttons, "Create Block", accept, "create", "Create the reusable block from this sheet").pack(side="right", padx=(0, 8))
-    def cancel():
-        dialog.destroy()
 
     dialog.bind("<Return>", lambda _event: accept())
     dialog.bind("<Escape>", lambda _event: cancel())
@@ -1845,7 +1855,12 @@ def _ask_create_block_details(parent, source_sheet: Path) -> tuple[str, str] | N
     _set_window_geometry(dialog, 660, 390, 580, 340)
     dialog.grab_set()
     name_entry.focus_set()
-    dialog.wait_window()
+    if completed is not None:
+        dialog.wait_variable(completed)
+        with contextlib.suppress(tk.TclError):
+            dialog.grab_release()
+    else:
+        dialog.wait_window()
     return result[0]
 
 
@@ -5655,12 +5670,17 @@ def run_action(action: str, *, editor_window_id: str | None = None) -> None:
             root.mainloop()
             return
 
-        root.withdraw()
         if action == "create-block":
+            # The creation form is hosted by the Tk root itself. Keeping this
+            # owner mapped avoids a transient modal becoming hidden behind
+            # KiCad when its parent has already been withdrawn.
+            root._kicad_blocks_reuse_for_create = True
             _create_and_place(
                 library_root, schematic, kicad, project_dir, root, editor_window_id
             )
-        elif action == "open-implementation":
+        else:
+            root.withdraw()
+        if action == "open-implementation":
             _open_selected_block_implementation(
                 library_paths, schematic, kicad, project_dir, root
             )
