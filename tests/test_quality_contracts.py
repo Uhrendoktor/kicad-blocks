@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import subprocess
 import sys
 from collections import Counter
 from pathlib import Path
@@ -15,7 +16,11 @@ sys.path.insert(0, str(PLUGIN))
 
 from kicad_blocks.model import parse_parameters, sexpr_quote, substitute_parameter_templates
 from kicad_blocks.pcb_layout import parse_sexpr
-from scripts.check_python_quality import annotation_debt, python_policy_violations
+from scripts.check_python_quality import (
+    annotation_debt,
+    annotation_ratchet_violations,
+    python_policy_violations,
+)
 
 
 def test_rejects_imported_any_alias_in_nested_annotations() -> None:
@@ -81,3 +86,38 @@ def test_parameter_values_remain_one_quoted_sexpr_field(value: str) -> None:
     parsed = parse_sexpr(rendered)
     assert parsed[1][2] == value
     assert len(parsed) == 2
+
+def test_changed_file_ratchet_rejects_increased_annotation_debt(tmp_path: Path) -> None:
+    """Rejects a changed Python file that adds unannotated parameters and returns."""
+    def run_git(*arguments: str) -> None:
+        subprocess.run(
+            ("git", *arguments),
+            cwd=tmp_path,
+            check=True,
+            capture_output=True,
+            timeout=30,
+        )
+
+    run_git("init")
+    run_git("config", "user.name", "Quality Contract Test")
+    run_git("config", "user.email", "quality-contract@example.invalid")
+    source = tmp_path / "module.py"
+    source.write_text(
+        "def stable(value: str) -> str:\\n    return value\\n",
+        encoding="utf-8",
+    )
+    run_git("add", "module.py")
+    run_git("commit", "-m", "base")
+    run_git("branch", "quality-base")
+    source.write_text(
+        "def stable(value: str) -> str:\\n    return value\\n\\n"
+        "def introduced(value):\\n    return value\\n",
+        encoding="utf-8",
+    )
+    run_git("add", "module.py")
+    run_git("commit", "-m", "introduce annotation debt")
+
+    violations = annotation_ratchet_violations("quality-base", root=tmp_path)
+    assert len(violations) == 2
+    assert any("missing-parameter-annotation increased" in item for item in violations)
+    assert any("missing-return-annotation increased" in item for item in violations)
