@@ -349,7 +349,8 @@ class STUSB4500ReferenceTests(unittest.TestCase):
         expected = {
             ("VBUS", 243.840, 111.760, 0.0),
             ("VSYS", 243.840, 109.220, 0.0),
-            ("VREG_1V2", 256.540, 109.220, 0.0),
+            ("VREG_1V2", 251.460, 111.760, 0.0),
+            ("VREG_1V2", 228.600, 97.790, 0.0),
             ("VREG_2V7", 254.000, 95.250, 0.0),
         }
         actual = {
@@ -499,10 +500,16 @@ class STUSB4500ReferenceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="stusb4500-decouplers-") as temporary:
             content, _tree, _instances = self._generate(temporary)
 
-        for segment in (
+        labels = [
+            node for node in _all(parse_sexpr(content), "label")
+            if len(node) > 1 and str(node[1]) == "VREG_1V2"
+        ]
+        self.assertEqual(len(labels), 2, "VREG_1V2 is linked by two endpoint labels without a crossing wire")
+        self.assertNotIn(
             '(wire (pts (xy 251.460 114.300) (xy 251.460 92.710))',
-            '(wire (pts (xy 251.460 92.710) (xy 226.060 92.710))',
-            '(wire (pts (xy 226.060 92.710) (xy 226.060 97.790))',
+            content,
+        )
+        for segment in (
             '(wire (pts (xy 254.000 114.300) (xy 254.000 90.170))',
             '(wire (pts (xy 254.000 90.170) (xy 246.380 90.170))',
             '(wire (pts (xy 246.380 90.170) (xy 246.380 97.790))',
@@ -587,7 +594,10 @@ class STUSB4500ReferenceTests(unittest.TestCase):
 
         self.assertEqual(_all(tree, "text"), [])
         self.assertGreater(len(_all(tree, "text_box")), 0)
-        self.assertEqual(check_schematic_style(tree), [], content[:1000])
+        style_issues = check_schematic_style(tree)
+        for issue in style_issues:
+            print(f"SCHEMATIC_STYLE: {issue}")
+        self.assertEqual(style_issues, [], "Generated schematic style violations")
 
     def test_r55_ground_label_stub_does_not_cross_u1_cc2_pin4(self) -> None:
         with tempfile.TemporaryDirectory(prefix="stusb4500-u1-gnd-cc2-") as temporary:
