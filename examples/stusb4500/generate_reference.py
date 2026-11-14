@@ -7,7 +7,7 @@ Figure 10.  Symbols are loaded from the installed official KiCad libraries.
 from __future__ import annotations
 
 import copy
-from itertools import pairwise
+import itertools
 import os
 import subprocess
 import sys
@@ -460,7 +460,7 @@ def generate_reference_schematic(destination: Path) -> Path:
         if len(anchors) != 1:
             raise ValueError(f"{net_name} wire group must contain one label anchor: {label_anchor}")
         anchor_point = anchors[0]
-        for (key_a, point_a), (key_b, point_b) in pairwise(ordered):
+        for (key_a, point_a), (key_b, point_b) in itertools.pairwise(ordered):
             wires.append(_wire(point_a, point_b, f"{net_name}:{key_a[0]}.{key_a[1]}-{key_b[0]}.{key_b[1]}"))
         for _, point in ordered[1:-1]:
             junctions.append([
@@ -495,7 +495,7 @@ def generate_reference_schematic(destination: Path) -> Path:
         fet_end_track,
         fet_t1_source,
     ]
-    for index, (start, end) in enumerate(pairwise(fet_route)):
+    for index, (start, end) in enumerate(itertools.pairwise(fet_route)):
         wires.append(_wire(start, end, f"FET_MID:power-trunk:{index}"))
     wires.append(_wire(fet_tee, fet_r10_node, "FET_MID:R10-branch"))
     junctions.append([
@@ -531,7 +531,7 @@ def generate_reference_schematic(destination: Path) -> Path:
         (gate_out[0], gate_target[1]),
         gate_target,
     ]
-    for index, (start, end) in enumerate(pairwise(gate_route)):
+    for index, (start, end) in enumerate(itertools.pairwise(gate_route)):
         wires.append(_wire(start, end, f"VSNK_GATE:T1-to-R10:{index}"))
     gate_label = label_points.get(fet_gate)
     if gate_label is None or gate_label[0] != "VSNK_GATE" or gate_label[1] != "local":
@@ -544,7 +544,7 @@ def generate_reference_schematic(destination: Path) -> Path:
     def add_route(net: str, points: list[tuple[float, float]], key: str) -> None:
         if len(points) < 2:
             raise ValueError(f"{net} route {key} needs at least two points.")
-        for index, (start, end) in enumerate(pairwise(points)):
+        for index, (start, end) in enumerate(itertools.pairwise(points)):
             wires.append(_wire(start, end, f"{net}:{key}:{index}"))
 
     def add_junction(point: tuple[float, float], key: str) -> None:
