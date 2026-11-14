@@ -190,9 +190,7 @@ def _check_pyright_inventory() -> list[str]:
     excluded = set(config.get("exclude", []))
     errors: list[str] = []
     core = ROOT / "plugin/kicad-blocks/kicad_blocks"
-    discovered = {
-        path.relative_to(ROOT).as_posix(): path for path in sorted(core.glob("*.py"))
-    }
+    discovered = {path.relative_to(ROOT).as_posix(): path for path in sorted(core.glob("*.py"))}
     for relative, path in discovered.items():
         if relative in REVIEWED_PYRIGHT_EXCLUSIONS:
             if relative not in excluded:
