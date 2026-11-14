@@ -12,36 +12,33 @@ ROOT = Path(__file__).resolve().parents[1]
 TEST_ROOT = ROOT / "tests"
 
 
-class _TestCaseCollector(ast.NodeVisitor):
-    """Collect pytest test functions together with their class/fixture scope."""
-
-    def __init__(self) -> None:
-        self.class_path: list[str] = []
-        self.cases: list[
-            tuple[str, str, ast.FunctionDef | ast.AsyncFunctionDef, list[ast.stmt]]
-        ] = []
-
-    def visit_ClassDef(self, node: ast.ClassDef) -> None:
-        self.class_path.append(node.name)
-        self.generic_visit(node)
-        self.class_path.pop()
-
-    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
-        self._collect(node)
-
-    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
-        self._collect(node)
-
-    def _collect(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> None:
-        if node.name.startswith("test_"):
+def _collect_cases(
+    tree: ast.Module,
+) -> list[tuple[str, str, ast.FunctionDef | ast.AsyncFunctionDef, list[ast.stmt]]]:
+    """Collect only test locations pytest discovers at module/class scope."""
+    cases: list[
+        tuple[str, str, ast.FunctionDef | ast.AsyncFunctionDef, list[ast.stmt]]
+    ] = []
+    for node in tree.body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name.startswith(
+            "test_"
+        ):
             body = list(node.body)
             if body and _is_docstring(body[0]):
                 body = body[1:]
-            scope = ".".join(self.class_path)
-            qualified_name = ".".join((*self.class_path, node.name))
-            self.cases.append((scope, qualified_name, node, body))
-        self.generic_visit(node)
-
+            cases.append(("", node.name, node, body))
+        elif isinstance(node, ast.ClassDef):
+            for member in node.body:
+                if isinstance(
+                    member, (ast.FunctionDef, ast.AsyncFunctionDef)
+                ) and member.name.startswith("test_"):
+                    body = list(member.body)
+                    if body and _is_docstring(body[0]):
+                        body = body[1:]
+                    cases.append(
+                        (node.name, f"{node.name}.{member.name}", member, body)
+                    )
+    return cases
 
 def _is_docstring(statement: ast.stmt) -> bool:
     """Return whether a statement is a Python docstring expression."""
@@ -93,10 +90,8 @@ def scan_tests(root: Path) -> tuple[int, list[str]]:
             errors.append(f"{relative}: cannot parse test source: {exc}")
             continue
 
-        collector = _TestCaseCollector()
-        collector.visit(tree)
         duplicates: dict[tuple[str, str], list[str]] = defaultdict(list)
-        for scope, qualified_name, node, body in collector.cases:
+        for scope, qualified_name, node, body in _collect_cases(tree):
             count += 1
             if not body or all(isinstance(statement, ast.Pass) for statement in body):
                 errors.append(f"{relative}:{node.lineno}: {qualified_name} has no executable test body")
