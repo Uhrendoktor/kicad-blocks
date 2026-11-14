@@ -45,7 +45,7 @@ The current full integration target is **KiCad 10.99.0 development nightly on Li
 
 Stable KiCad 10.x does not expose the Schematic Editor IPC plugin surface that this project requires. The current 10.99.0 nightly target is a development build; stable KiCad 11 is not yet validated by this repository's integration suite. See the [KiCad IPC API support matrix](https://dev-docs.kicad.org/en/apis-and-binding/ipc-api/for-addon-developers/).
 
-On Linux, native symbol-placement handoff also uses `xdotool` and KiCad's default Add Symbol shortcut, `A`.
+Place Block and Edit Facade invoke KiCad's native editor actions through IPC. Select the generated `KBlocks:<symbol>` entry in KiCad's native chooser or Symbol Editor; the plugin does not synthesize global keyboard input. X11 automation is used only by the Linux GUI test harness, not by the production plugin.
 
 See the [compatibility and test-coverage guide](docs/explanation/compatibility.md) before installing.
 
