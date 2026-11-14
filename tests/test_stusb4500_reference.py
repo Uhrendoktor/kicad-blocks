@@ -10,8 +10,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "plugin" / "kicad-blocks"))
 sys.path.insert(0, str(ROOT / "examples" / "stusb4500"))
+sys.path.insert(0, str(ROOT / "scripts"))
 
 from generate_reference import _uid, generate_reference_schematic
+from validate_schematic_style import check_schematic_style
 from kicad_blocks.pcb_layout import _all, _direct, parse_sexpr
 
 
@@ -121,7 +123,7 @@ class STUSB4500ReferenceTests(unittest.TestCase):
             "VSNK OUTPUT / DISCHARGE",
         )
         for title in titles:
-            self.assertIn(f'(text "{title}"', content)
+            self.assertIn(f'(text_box "{title}"', content)
         self.assertNotIn("OPTIONAL MCU / I2C INTERFACE", content)
         self.assertNotIn("ADDRESS / RESET STRAPS", content)
 
@@ -202,14 +204,14 @@ class STUSB4500ReferenceTests(unittest.TestCase):
             (float(_direct(instances["R13"], "at")[1]), float(_direct(instances["R13"], "at")[2])),
             (365.760, 139.700),
         )
-        self.assertIn('(label "FET_MID"', content)
+        self.assertNotIn('(label "FET_MID"', content)
 
     def test_power_path_is_split_into_switch_and_compact_output_stage(self) -> None:
         with tempfile.TemporaryDirectory(prefix="stusb4500-power-stages-") as temporary:
             content, tree, instances = self._generate(temporary)
 
-        self.assertIn('(text "BACK-TO-BACK PMOS SWITCH"', content)
-        self.assertIn('(text "VSNK OUTPUT / DISCHARGE"', content)
+        self.assertIn('(text_box "BACK-TO-BACK PMOS SWITCH"', content)
+        self.assertIn('(text_box "VSNK OUTPUT / DISCHARGE"', content)
 
         positions = {
             reference: _direct(instances[reference], "at")
@@ -240,7 +242,7 @@ class STUSB4500ReferenceTests(unittest.TestCase):
                 )
         self.assertEqual(
             frames[_uid("graphic:rectangle:zone:power-switch")],
-            ((297.18, 86.36), (372.11, 175.26)),
+            ((294.64, 86.36), (372.11, 175.26)),
         )
         self.assertEqual(
             frames[_uid("graphic:rectangle:zone:vsnk-output")],
@@ -253,10 +255,10 @@ class STUSB4500ReferenceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="stusb4500-vbus-groups-") as temporary:
             content, _, _ = self._generate(temporary)
 
-        self.assertIn('(text "VBUS BULK PROTECTION"', content)
-        self.assertIn('(text "VBUS CLAMP + FILTER"', content)
-        self.assertIn('(text "VBUS_VS_DISCH SENSE DIVIDER"', content)
-        self.assertIn('(text "VBUS MONITOR / FILTER"', content)
+        self.assertIn('(text_box "VBUS BULK PROTECTION"', content)
+        self.assertIn('(text_box "VBUS CLAMP + FILTER"', content)
+        self.assertIn('(text_box "VBUS_VS_DISCH SENSE DIVIDER"', content)
+        self.assertIn('(text_box "VBUS MONITOR / FILTER"', content)
 
     def test_resistor_values_are_centered_inside_their_symbol_bodies(self) -> None:
         with tempfile.TemporaryDirectory(prefix="stusb4500-resistor-fields-") as temporary:
@@ -313,19 +315,23 @@ class STUSB4500ReferenceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="stusb4500-note-") as temporary:
             content, tree, _ = self._generate(temporary)
 
-        self.assertIn('(text "D4 is unspecified; verify its VBUS rating."', content)
-        self.assertNotIn('(text "USB 3.1 Type-C receptacle"', content)
-        self.assertNotIn('(text "STUSB4500QTR"', content)
-        note_uuid = _uid("graphic:rectangle:note:d4-selection")
+        self.assertIn('(text_box "D4 is unspecified; verify its VBUS rating."', content)
+        self.assertNotIn('(text_box "USB 3.1 Type-C receptacle"', content)
+        self.assertNotIn('(text_box "STUSB4500QTR"', content)
+        note_uuid = _uid("graphic:text:d4-selection")
         notes = [
-            rectangle for rectangle in _all(tree, "rectangle")
-            if _direct(rectangle, "uuid") and str(_direct(rectangle, "uuid")[1]) == note_uuid
+            node for node in _all(tree, "text_box")
+            if _direct(node, "uuid") and str(_direct(node, "uuid")[1]) == note_uuid
         ]
         self.assertEqual(len(notes), 1)
-        start = _direct(notes[0], "start")
-        end = _direct(notes[0], "end")
-        self.assertLess(float(end[1]) - float(start[1]), 40.0)
-        self.assertLess(float(end[2]) - float(start[2]), 8.0)
+        at = _direct(notes[0], "at")
+        size = _direct(notes[0], "size")
+        margins = _direct(notes[0], "margins")
+        self.assertAlmostEqual(float(at[1]), 151.13, places=3)
+        self.assertAlmostEqual(float(at[2]), 137.16, places=3)
+        self.assertLess(float(size[1]), 40.0)
+        self.assertLess(float(size[2]), 8.0)
+        self.assertEqual([float(value) for value in margins[1:]], [1.27] * 4)
         self.assertNotIn('(text "REFERENCE ONLY', content)
 
     def test_no_label_glyph_is_replaced_by_a_global_label(self) -> None:
@@ -380,9 +386,8 @@ class STUSB4500ReferenceTests(unittest.TestCase):
             content, _, _ = self._generate(temporary)
 
         for name in (
-            "VBUS", "CC1", "CC2", "VBUS_FILTERED", "VBUS_VS_DISCH",
-            "VBUS_EN_SNK", "FET_MID", "VSNK_GATE", "DISCH",
-            "VREG_1V2", "VREG_2V7", "ADDR0", "ADDR1",
+            "VBUS", "CC1", "CC2", "VBUS_VS_DISCH",
+            "VBUS_EN_SNK", "DISCH", "VREG_2V7", "ADDR0", "ADDR1",
         ):
             self.assertIn(f'(label "{name}"', content)
         self.assertNotIn('(global_label "', content)
@@ -396,23 +401,17 @@ class STUSB4500ReferenceTests(unittest.TestCase):
             if len(node) > 1 and str(node[1]) == "VBUS_FILTERED"
         ]
         self.assertEqual(
-            len(filtered_labels), 2,
-            "D4.1 and R1.1 are the two reused labels on the wired filtered rail",
+            filtered_labels, [],
+            "D4.1, C4.1 and R1.1 are connected by one explicit physical wire rail",
         )
         self.assertEqual(float(_direct(instances["D4"], "at")[3]), 180.0)
         sense_labels = [
             node for node in _all(tree, "label")
             if len(node) > 1 and str(node[1]) == "VBUS_VS_DISCH"
         ]
-        self.assertIn(
-            (194.310, 127.000),
-            {
-                (
-                    round(float(_direct(label, "at")[1]), 3),
-                    round(float(_direct(label, "at")[2]), 3),
-                )
-                for label in sense_labels
-            },
+        self.assertEqual(
+            len(sense_labels), 2,
+            "U1.18 and the R1/R4 divider island use one label each",
         )
         for segment in (
             '(wire (pts (xy 163.830 111.760) (xy 172.720 111.760))',
@@ -530,9 +529,9 @@ class STUSB4500ReferenceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="stusb4500-header-") as temporary:
             content, tree, _instances = self._generate(temporary)
 
-        self.assertIn('(text "STUSB4500 USB-C / POWER DELIVERY SINK"', content)
-        self.assertIn('(text "DATASHEET-BASED REFERENCE', content)
-        titles = {str(node[1]) for node in _all(tree, "text")}
+        self.assertIn('(text_box "STUSB4500 USB-C / POWER DELIVERY SINK"', content)
+        self.assertIn('(text_box "DATASHEET-BASED REFERENCE', content)
+        titles = {str(node[1]) for node in _all(tree, "text_box")}
         self.assertTrue({
             "USB-C PORT / CC PROTECTION", "VBUS BULK PROTECTION",
             "VBUS MONITOR / FILTER", "STUSB4500 CONTROLLER",
@@ -572,6 +571,23 @@ class STUSB4500ReferenceTests(unittest.TestCase):
                     f"Functional frames overlap: {first[0]} / {second[0]}",
                 )
 
+
+    def test_r51_r52_use_populated_values_with_dnp_flags(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="stusb4500-dnp-") as temporary:
+            _, _, instances = self._generate(temporary)
+
+        for reference in ("R51", "R52"):
+            instance = instances[reference]
+            self.assertEqual(str(_property(instance, "Value")[2]), "100k")
+            self.assertEqual(str(_direct(instance, "dnp")[1]).lower(), "yes")
+
+    def test_native_text_boxes_have_uniform_padding_and_style_audit_passes(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="stusb4500-style-audit-") as temporary:
+            content, tree, _ = self._generate(temporary)
+
+        self.assertEqual(_all(tree, "text"), [])
+        self.assertGreater(len(_all(tree, "text_box")), 0)
+        self.assertEqual(check_schematic_style(tree), [], content[:1000])
 
     def test_r55_ground_label_stub_does_not_cross_u1_cc2_pin4(self) -> None:
         with tempfile.TemporaryDirectory(prefix="stusb4500-u1-gnd-cc2-") as temporary:
