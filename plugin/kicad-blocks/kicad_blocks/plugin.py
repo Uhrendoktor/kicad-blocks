@@ -19,7 +19,8 @@ from typing import TYPE_CHECKING, Protocol, cast
 # The core block model and IPC helpers must remain importable in headless
 # environments. Load Tkinter only when the interactive manager is invoked.
 if TYPE_CHECKING:
-    import tkinter as tk
+    import tkinter as tkinter_types
+    import tkinter.ttk as ttk_types
     from tkinter import filedialog, messagebox, simpledialog, ttk
 
     from google.protobuf.message import Message
@@ -195,7 +196,7 @@ def _system_prefers_dark_theme() -> bool:
     return False
 
 
-def _configure_tk_theme(root: tk.Misc) -> None:
+def _configure_tk_theme(root: tkinter_types.Misc) -> None:
     """Apply a compact KiCad-compatible palette to themed and classic Tk widgets."""
     dark = _system_prefers_dark_theme()
     colors = (
@@ -458,9 +459,9 @@ def _configure_tk_theme(root: tk.Misc) -> None:
     root._kicad_blocks_palette = colors
 
 
-def _editor_window_id_for_widget(window: tk.Misc) -> str | None:
+def _editor_window_id_for_widget(window: tkinter_types.Misc) -> str | None:
     """Find the invoking KiCad editor XID stored on a Tk parent chain."""
-    current: tk.Misc | None = window
+    current: tkinter_types.Misc | None = window
     seen: set[int] = set()
     while current is not None and id(current) not in seen:
         seen.add(id(current))
@@ -623,17 +624,17 @@ def _attach_process_window_to_editor(
     return False
 
 
-def _add_tooltip(widget: tk.Misc, text: str) -> None:
+def _add_tooltip(widget: tkinter_types.Misc, text: str) -> None:
     """Attach a small themed tooltip to a compact icon button."""
-    tooltip: list[tk.Toplevel | None] = [None]
+    tooltip: list[tkinter_types.Toplevel | None] = [None]
 
-    def show(_event: tk.Event | None = None) -> None:
+    def show(_event: tkinter_types.Event | None = None) -> None:
         if tooltip[0] is not None or not widget.winfo_exists():
             return
         palette = getattr(widget.winfo_toplevel(), "_kicad_blocks_palette", {})
         background = palette.get("surface_alt", "#e8eaed")
         foreground = palette.get("foreground", "#20252a")
-        popup = tk.Toplevel(widget)
+        popup = tkinter_types.Toplevel(widget)
         popup.wm_overrideredirect(True)
         with contextlib.suppress(tk.TclError):
             popup.wm_attributes("-topmost", True)
@@ -655,7 +656,7 @@ def _add_tooltip(widget: tk.Misc, text: str) -> None:
         popup.geometry(f"+{x}+{y}")
         tooltip[0] = popup
 
-    def hide(_event: tk.Event | None = None) -> None:
+    def hide(_event: tkinter_types.Event | None = None) -> None:
         popup = tooltip[0]
         tooltip[0] = None
         if popup is not None:
@@ -667,7 +668,7 @@ def _add_tooltip(widget: tk.Misc, text: str) -> None:
     widget.bind("<ButtonPress>", hide, add="+")
 
 
-def _create_action_icon(parent: tk.Misc, name: str) -> tk.PhotoImage | None:
+def _create_action_icon(parent: tkinter_types.Misc, name: str) -> tkinter_types.PhotoImage | None:
     """Render one semantic 20px toolbar icon using the current KiCad palette."""
     drawings = {
         "place": '<rect x="4" y="4" width="12" height="12" rx="2"/><path d="M16 16l4 4M10 7v6M7 10h6"/>',
@@ -694,7 +695,7 @@ def _create_action_icon(parent: tk.Misc, name: str) -> tk.PhotoImage | None:
         import cairosvg
 
         png = cairosvg.svg2png(bytestring=svg.encode("utf-8"), output_width=20, output_height=20)
-        image = tk.PhotoImage(data=base64.b64encode(png).decode("ascii"), master=parent)
+        image = tkinter_types.PhotoImage(data=base64.b64encode(png).decode("ascii"), master=parent)
     except (ImportError, OSError, tk.TclError, ValueError):
         LOG.debug("Could not render toolbar icon %s", name, exc_info=True)
         return None
@@ -706,8 +707,8 @@ def _create_action_icon(parent: tk.Misc, name: str) -> tk.PhotoImage | None:
 
 
 def _action_button(
-    parent: tk.Misc, text: str, command: Callable[[], None], icon: str, tooltip: str
-) -> ttk.Button:
+    parent: tkinter_types.Misc, text: str, command: Callable[[], None], icon: str, tooltip: str
+) -> ttk_types.Button:
     """Create a consistently padded, semantic icon-and-label action button."""
     image = _create_action_icon(parent, icon)
     options = {"text": text, "command": command, "padding": (9, 6)}
@@ -1049,7 +1050,7 @@ def _show_selected_block_configuration(
             + ". Reload the facade from the block library and replace the instance."
         )
 
-    dialog = tk.Toplevel(parent)
+    dialog = tkinter_types.Toplevel(parent)
     dialog.title(f"Configure {instance.reference} — {block.name}")
     dialog.geometry("700x720")
     dialog.minsize(580, 500)
@@ -1385,7 +1386,7 @@ def _pick_block_for_placement(records, parent):
     if not records:
         raise ValueError("No blocks were found in the registered functional-block libraries.")
 
-    dialog = tk.Toplevel(parent)
+    dialog = tkinter_types.Toplevel(parent)
     dialog.title("Place Functional Block")
     _set_window_geometry(dialog, 1200, 800, 980, 640)
     dialog.transient(parent)
@@ -1625,7 +1626,7 @@ def _pick_record(records, parent, title: str):
     if len(records) == 1:
         return records[0]
 
-    dialog = tk.Toplevel(parent)
+    dialog = tkinter_types.Toplevel(parent)
     dialog.title(title)
     _set_window_geometry(dialog, 920, 640, 760, 480)
     dialog.transient(parent)
@@ -2116,7 +2117,7 @@ def _active_sheet_source(schematic, project_dir: Path) -> tuple[Path, str | None
 
 def _ask_create_block_details(parent, source_sheet: Path) -> tuple[str, str] | None:
     """Collect the block name and description in one creation dialog."""
-    dialog = tk.Toplevel(parent)
+    dialog = tkinter_types.Toplevel(parent)
     dialog.title("Create Functional Block")
     dialog.transient(parent)
     _set_window_geometry(dialog, 660, 390, 580, 340)
@@ -2409,7 +2410,7 @@ def _edit_facade_symbol(root, schematic, project_dir, editor_window_id, parent) 
 def _place_existing(root, schematic, kicad, project_dir, parent) -> None:
     """Open the searchable browser; placement is handed to KiCad's native cursor tool."""
     editor_window_id = getattr(parent, "_kicad_blocks_editor_window_id", None)
-    browser = tk.Toplevel(parent)
+    browser = tkinter_types.Toplevel(parent)
     _attach_tk_window_to_editor(browser, editor_window_id)
     _show_library_browser(
         browser,
@@ -2879,7 +2880,7 @@ def _native_symbol_preview_photo(
         _NATIVE_PREVIEW_CACHE[cache_key] = png_data
 
     # Tk images belong to a particular Tcl interpreter, so cache only PNG bytes.
-    return tk.PhotoImage(data=base64.b64encode(png_data).decode("ascii"))
+    return tkinter_types.PhotoImage(data=base64.b64encode(png_data).decode("ascii"))
 
 
 _NATIVE_PREVIEW_CACHE: dict[tuple[str, int, str, int, int], bytes] = {}
@@ -3484,7 +3485,7 @@ def _new_blank_pcb_source() -> Path:
 
 def _ask_layout_details(parent, record) -> dict | None:
     """Choose an existing board or create a blank starting point for a named layout."""
-    dialog = tk.Toplevel(parent)
+    dialog = tkinter_types.Toplevel(parent)
     dialog.title("Add PCB layout")
     dialog.transient(parent)
     _set_window_geometry(dialog, 860, 620, 760, 560)
@@ -3604,7 +3605,7 @@ def _show_block_layout_editor(
     from .model import slugify
     from .repository import read_manifest
 
-    dialog = tk.Toplevel(parent)
+    dialog = tkinter_types.Toplevel(parent)
     dialog.title(f"PCB layouts — {record.name}")
     dialog.transient(parent)
     frame = ttk.Frame(dialog, padding=14)
@@ -3942,7 +3943,7 @@ def _new_blank_schematic_source() -> Path:
 
 
 def _ask_implementation_details(
-    parent: tk.Misc,
+    parent: tkinter_types.Misc,
     *,
     value: str = "",
     source: str = "",
@@ -3952,7 +3953,7 @@ def _ask_implementation_details(
     """Collect an implementation selector and its starting schematic."""
     if allow_create and record is None:
         raise ValueError("An existing block record is required to copy an implementation.")
-    dialog = tk.Toplevel(parent)
+    dialog = tkinter_types.Toplevel(parent)
     dialog.title("Implementation details")
     dialog.transient(parent)
     _set_window_geometry(dialog, 860, 540, 740, 460)
@@ -4118,7 +4119,7 @@ def _show_block_variant_editor(
     record, parent, *, kicad=None, editor_window_id: str | None = None
 ) -> Path | None:
     """Manage named implementations and select which one empty KB_VARIANT uses."""
-    dialog = tk.Toplevel(parent)
+    dialog = tkinter_types.Toplevel(parent)
     dialog.title(f"Implementations — {record.name}")
     dialog.transient(parent)
 
@@ -4363,7 +4364,7 @@ def _show_block_variant_editor(
 
 def _show_library_roots_dialog(parent) -> bool:
     """Manage registered library folders with explicit add/create/edit actions."""
-    dialog = tk.Toplevel(parent)
+    dialog = tkinter_types.Toplevel(parent)
     dialog.title("Manage Libraries")
     _set_window_geometry(dialog, 1280, 800, 1060, 660)
     dialog.transient(parent)
@@ -4970,7 +4971,7 @@ def _show_library_browser(
             except (OSError, RuntimeError, ValueError) as exc:
                 messagebox.showerror("Open implementation", str(exc), parent=window)
             return
-        chooser = tk.Toplevel(window)
+        chooser = tkinter_types.Toplevel(window)
         chooser.title(f"Open implementation — {record.name}")
         chooser.transient(window)
         chooser.grab_set()
@@ -5088,7 +5089,7 @@ def _show_library_browser(
         layouts = _layout_choices(record)
         if not layouts:
             return
-        chooser = tk.Toplevel(window)
+        chooser = tkinter_types.Toplevel(window)
         chooser.title(f"Open PCB layout — {record.name}")
         chooser.transient(window)
         chooser.grab_set()
