@@ -4943,17 +4943,14 @@ def _show_library_browser(
     panes.add(right, weight=4)
 
     left.columnconfigure(0, weight=1)
-    left.rowconfigure(3, weight=1)
+    left.rowconfigure(2, weight=1)
     ttk.Label(left, text="Search blocks").grid(row=0, column=0, sticky="w")
     search = tk.StringVar()
     search_entry = ttk.Entry(left, textvariable=search)
-    search_entry.grid(row=1, column=0, sticky="ew", pady=(4, 3))
-    ttk.Label(
-        left,
-        text="Type to filter · ↓ browse results · Enter place",
-    ).grid(row=2, column=0, sticky="w", pady=(0, 6))
+    search_entry.grid(row=1, column=0, sticky="ew", pady=(4, 8))
+    _add_tooltip(search_entry, "Filter blocks · ↑/↓ browse · Enter place")
     tree_frame = ttk.Frame(left)
-    tree_frame.grid(row=3, column=0, sticky="nsew")
+    tree_frame.grid(row=2, column=0, sticky="nsew")
     tree_frame.columnconfigure(0, weight=1)
     tree_frame.rowconfigure(0, weight=1)
     tree = ttk.Treeview(
