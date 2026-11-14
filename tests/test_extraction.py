@@ -12,9 +12,9 @@ from kicad_blocks.extraction import selected_sheet_file, selected_sheet_instance
 from kicad_blocks.sexpr import (
     dump_sexpr,
     parse_sexpr,
-    sexprsexpr_all,
-    sexprsexpr_direct,
-    sexprsexpr_head,
+    sexpr_all,
+    sexpr_direct,
+    sexpr_head,
 )
 from kicad_blocks.repository import create_block, read_manifest, refresh_library_block
 
@@ -95,7 +95,7 @@ class HierarchicalSheetExtractionTests(unittest.TestCase):
             "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
         )
 
-    def test_create_block_derives_facade_pins_fromsexpr_all_hierarchical_labels(self):
+    def test_create_block_derives_facade_pins_from_all_hierarchical_labels(self):
         source_before = self.source.read_bytes()
         record = create_block(
             self.root,

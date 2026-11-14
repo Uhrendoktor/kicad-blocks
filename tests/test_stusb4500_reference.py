@@ -13,7 +13,7 @@ sys.path.insert(0, str(ROOT / "plugin" / "kicad-blocks"))
 sys.path.insert(0, str(ROOT / "examples" / "stusb4500"))
 
 from generate_reference import generate_reference_schematic
-from kicad_blocks.sexpr import parse_sexpr, sexprsexpr_all, sexprsexpr_direct
+from kicad_blocks.sexpr import parse_sexpr, sexpr_all, sexpr_direct
 
 
 class STUSB4500ReferenceTests(unittest.TestCase):

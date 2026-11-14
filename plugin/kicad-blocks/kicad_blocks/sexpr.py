@@ -68,10 +68,12 @@ def _lex(source: str) -> Iterator[str | QuotedSExpr]:
             if index >= len(source):
                 raise ValueError("Unterminated quoted string in KiCad S-expression.")
             try:
-                value = json.loads('"' + "".join(output) + '"')
+                decoded: object = json.loads('"' + "".join(output) + '"')
             except json.JSONDecodeError as error:
                 raise ValueError(f"Invalid quoted string in KiCad S-expression: {error}") from error
-            yield QuotedSExpr(value)
+            if not isinstance(decoded, str):
+                raise ValueError("A quoted KiCad S-expression atom must decode to text.")
+            yield QuotedSExpr(decoded)
             index += 1
             continue
 
@@ -106,8 +108,6 @@ def dump_sexpr(value: SExpr) -> str:
     if isinstance(value, list):
         return "(" + " ".join(dump_sexpr(item) for item in value) + ")"
     if isinstance(value, QuotedSExpr):
-        from .model import sexpr_quote
-
         return sexpr_quote(str(value))
     return value
 

@@ -18,10 +18,10 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "plugin" / "kicad-blocks"))
 
 from kicad_blocks.sexpr import (
-    sexprsexpr_all,
-    sexprsexpr_direct,
+    sexpr_all,
+    sexpr_direct,
     dump_sexpr,
-    sexprsexpr_head,
+    sexpr_head,
     QuotedSExpr,
     parse_sexpr,
 )
