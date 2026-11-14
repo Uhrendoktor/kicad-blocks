@@ -2018,8 +2018,12 @@ def _ask_create_block_details(parent, source_sheet: Path) -> tuple[str, str] | N
     buttons.pack(fill="x")
     _action_button(buttons, "Cancel", dialog.destroy, "cancel", "Cancel block creation").pack(side="right")
     _action_button(buttons, "Create Block", accept, "create", "Create the reusable block from this sheet").pack(side="right", padx=(0, 8))
+    def cancel():
+        dialog.destroy()
+
     dialog.bind("<Return>", lambda _event: accept())
-    dialog.bind("<Escape>", lambda _event: dialog.destroy())
+    dialog.bind("<Escape>", lambda _event: cancel())
+    dialog.protocol("WM_DELETE_WINDOW", cancel)
     dialog.grab_set()
     name_entry.focus_set()
     dialog.wait_window()
@@ -3395,16 +3399,7 @@ def _ask_layout_details(parent, record) -> dict | None:
         state="readonly",
     )
     link_combo.grid(row=6, column=0, columnspan=3, sticky="ew", pady=(4, 4))
-    ttk.Label(
-        frame,
-        text=(
-            "The selected implementation uses this PCB layout when you apply "
-            "the block to a board. Named variant options appear after you add "
-            "them under Implementations."
-        ),
-        wraplength=620,
-        justify="left",
-    ).grid(row=7, column=0, columnspan=3, sticky="w", pady=(0, 12))
+    _add_tooltip(link_combo, "This layout is available when applying the selected implementation to a board.")
     frame.columnconfigure(0, weight=1)
     result = [None]
 
@@ -3458,7 +3453,7 @@ def _ask_layout_details(parent, record) -> dict | None:
         dialog.destroy()
 
     buttons = ttk.Frame(frame)
-    buttons.grid(row=8, column=0, columnspan=3, sticky="ew", pady=(4, 0))
+    buttons.grid(row=7, column=0, columnspan=3, sticky="ew", pady=(8, 0))
     _action_button(buttons, "Cancel", dialog.destroy, "cancel", "Cancel layout creation").pack(side="right")
     _action_button(buttons, "Add layout", accept, "create", "Add this PCB layout to the block").pack(side="right", padx=(0, 8))
     dialog.bind("<Return>", lambda _event: accept())
@@ -3772,6 +3767,7 @@ def _show_block_layout_editor(
 
     save_button.configure(command=save_and_close)
     tree.bind("<<TreeviewSelect>>", update_actions)
+    dialog.bind("<Escape>", lambda _event: cancel_layout_edits())
     render(layouts[0]["id"] if layouts else None)
     dialog.protocol("WM_DELETE_WINDOW", cancel_layout_edits)
     _set_window_geometry(dialog, 1120, 800, 980, 650)
@@ -4469,6 +4465,7 @@ def _show_block_variant_editor(
     tree.bind("<<TreeviewSelect>>", update_actions)
     tree.bind("<Double-1>", lambda _event: edit_variant())
     tree.bind("<Delete>", lambda _event: remove_variant())
+    dialog.bind("<Escape>", lambda _event: cancel_variant_edits())
     render(0)
     dialog.protocol("WM_DELETE_WINDOW", cancel_variant_edits)
     _set_window_geometry(dialog, 1080, 740, 900, 620)
