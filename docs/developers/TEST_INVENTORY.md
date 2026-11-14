@@ -334,7 +334,6 @@ Regression tests for the AST-based Any/object policy, annotation-debt ratchet, a
 | test_different_bodies_and_class_fixture_scopes_are_not_duplicates | Exercises different bodies and class fixture scopes are not duplicates. |
 | test_reports_empty_and_pass_only_test_bodies | Reports empty and pass only test bodies. |
 
-
 ### tests/test_release_package.py
 
 Deterministic release archive contents, installation from the extracted package, user-data path selection, and pinned binding URL consistency.
