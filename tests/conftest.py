@@ -32,10 +32,7 @@ def pytest_collection_finish(session: pytest.Session) -> None:
             module
             for module in discovered_modules
             if any(
-                candidate == root
-                or candidate == test_root
-                or candidate == module
-                or candidate in module.parents
+                candidate in (root, test_root, module) or candidate in module.parents
                 for candidate in requested
             )
         )
