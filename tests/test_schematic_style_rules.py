@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -59,6 +60,24 @@ class SchematicStyleRuleTests(unittest.TestCase):
         )
         title[1] = str(title[1]) + "\nWRAPPED"
         self.assertTrue(any("single line" in issue for issue in block_annotation_issues(tree)))
+
+    def test_generic_checker_does_not_import_example_generator(self) -> None:
+        script = """
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path.cwd() / "scripts"))
+from validate_schematic_style import check_generic_schematic_style
+assert check_generic_schematic_style(["kicad_sch"]) == []
+assert "generate_reference" not in sys.modules
+"""
+        completed = subprocess.run(
+            [sys.executable, "-c", script],
+            cwd=ROOT,
+            capture_output=True,
+            check=False,
+            text=True,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
 
     def test_generic_multiline_unbordered_text_is_rejected(self) -> None:
         tree = [
