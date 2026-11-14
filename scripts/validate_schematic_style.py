@@ -141,8 +141,8 @@ STYLE_RULES = {
     "SCH011": {
         "name": "block-annotation-structure",
         "severity": "error",
-        "description": "Block titles are single-line and descriptive comment boxes have visible outlines.",
-        "scope": "generic",
+        "description": "Titles are single-line; multiline notes and declared block comments have visible outlines.",
+        "scope": "generic+profile",
     },
     "SCH012": {
         "name": "frame-content-clearance",
