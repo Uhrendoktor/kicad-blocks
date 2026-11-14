@@ -18,6 +18,7 @@ from kicad_blocks.pcb_layout import _all, _direct, parse_sexpr
 from validate_schematic_style import (
     STYLE_RULES,
     _pin_world_info,
+    _wire_networks,
     block_annotation_issues,
     check_generic_schematic_style,
     check_schematic_style,
@@ -54,7 +55,7 @@ class SchematicStyleRuleTests(unittest.TestCase):
         tree = self.fresh_tree()
         title = next(
             node for node in _all(tree, "text_box")
-            if "zone-title:" in str(_direct(node, "uuid")[1])
+            if str(node[1]) == "USB-C PORT / CC PROTECTION"
         )
         title[1] = str(title[1]) + "\nWRAPPED"
         self.assertTrue(any("single line" in issue for issue in block_annotation_issues(tree)))
@@ -63,7 +64,7 @@ class SchematicStyleRuleTests(unittest.TestCase):
         tree = self.fresh_tree()
         note = next(
             node for node in _all(tree, "text_box")
-            if "group-description:" in str(_direct(node, "uuid")[1])
+            if str(node[1]).startswith("Type-C receptacle and dual CC-line ESD protection.")
         )
         width = _direct(_direct(note, "stroke"), "width")
         width[1] = "-1"
@@ -107,14 +108,21 @@ class SchematicStyleRuleTests(unittest.TestCase):
 
     def test_common_ground_contract_detects_a_wrong_decoupler_net(self) -> None:
         tree = self.fresh_tree()
-        point = _pin_world_info(tree)[("C3", "2")]["point"]
-        label = next(
-            node for node in _all(tree, "hierarchical_label")
-            if str(node[1]) == "GND"
-            and _direct(node, "at") is not None
-            and (round(float(_direct(node, "at")[1]), 3),
-                 round(float(_direct(node, "at")[2]), 3)) == point
-        )
+        dsu, pin_info = _wire_networks(tree)
+        root = dsu.find(pin_info[("C3", "2")]["point"])
+        label = None
+        for kind in ("label", "hierarchical_label", "global_label"):
+            for node in _all(tree, kind):
+                at = _direct(node, "at")
+                if at is None:
+                    continue
+                point = (round(float(at[1]), 3), round(float(at[2]), 3))
+                if str(node[1]) == "GND" and dsu.find(point) == root:
+                    label = node
+                    break
+            if label is not None:
+                break
+        self.assertIsNotNone(label)
         label[1] = "GND_LOCAL"
         self.assertTrue(any("common net GND" in issue for issue in common_pin_net_issues(tree)))
 
