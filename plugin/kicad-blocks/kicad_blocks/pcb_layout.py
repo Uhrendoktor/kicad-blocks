@@ -19,6 +19,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
+from .model import sexpr_quote
 from .pcb_types import (
     AppliedNetclassPattern,
     BatchBlockLayoutMergeResult,
@@ -28,7 +29,6 @@ from .pcb_types import (
     ProjectSettingsMergeResult,
     ResolvedBlockLayout,
 )
-from .model import sexpr_quote
 
 if TYPE_CHECKING:
     from .repository import BlockRecord
