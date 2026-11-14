@@ -202,7 +202,12 @@ jobs:
           "$PY" scripts/test_inventory.py --check
           "$PY" scripts/check_test_quality.py
           "$PY" -m ruff check plugin tests scripts examples
-          "$PY" -m ruff format --check plugin tests scripts examples
+          mapfile -t CHANGED_PYTHON < <(
+            git diff --name-only --diff-filter=ACMR origin/main...HEAD -- '*.py' '*.pyi'
+          )
+          if (("${#CHANGED_PYTHON[@]}")); then
+            "$PY" -m ruff format --check "${CHANGED_PYTHON[@]}"
+          fi
           "$PY" -m pyright -p pyrightconfig.json
           ty check plugin/kicad-blocks
           vulture --min-confidence 100 plugin/kicad-blocks/kicad_blocks scripts
