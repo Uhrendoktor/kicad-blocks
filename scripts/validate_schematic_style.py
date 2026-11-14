@@ -730,10 +730,14 @@ def frame_and_component_issues(tree: list) -> list[str]:
                     f"{kind} {str(node[1])!r} at ({anchor[0]:.3f}, {anchor[1]:.3f}) "
                     f"extends outside its owning group frame {owners[0][0]}"
                 )
+    title_uuids = {
+        _uid(f"graphic:text:zone-title:{group['id']}")
+        for group in SCHEMATIC_GROUPS
+    }
     for node in _all(tree, "text_box"):
         uid_node = _direct(node, "uuid")
         uid = str(uid_node[1]) if uid_node is not None else ""
-        if "zone-title:" in uid:
+        if uid in title_uuids:
             continue
         at, size = _direct(node, "at"), _direct(node, "size")
         if at is None or size is None:
@@ -912,13 +916,21 @@ def symbol_field_clearance_issues(tree: list) -> list[str]:
 def block_annotation_issues(tree: list) -> list[str]:
     """Require one-line block titles and bordered description/comment boxes."""
     issues = []
+    title_uuids = {
+        _uid(f"graphic:text:zone-title:{group['id']}")
+        for group in SCHEMATIC_GROUPS
+    }
+    description_uuids = {
+        _uid(f"graphic:text:group-description:{group['id']}")
+        for group in SCHEMATIC_GROUPS
+    }
     for node in _all(tree, "text_box"):
         uid_node = _direct(node, "uuid")
         uid = str(uid_node[1]) if uid_node is not None else ""
         value = str(node[1])
-        if "zone-title:" in uid and ("\n" in value or "\r" in value):
+        if uid in title_uuids and ("\n" in value or "\r" in value):
             issues.append(f"block title {uid} must be a single line")
-        if "group-description:" in uid:
+        if uid in description_uuids:
             stroke = _direct(node, "stroke")
             width = _direct(stroke, "width") if stroke is not None else None
             if width is None or float(width[1]) <= 0:
@@ -941,6 +953,10 @@ def frame_content_clearance_issues(tree: list) -> list[str]:
     """Keep visible labels and group comment panels inset from their owning frame."""
     issues = []
     frames = {zone: _frame_bounds(tree, zone) for zone in ZONES}
+    description_uuids = {
+        _uid(f"graphic:text:group-description:{group['id']}"): group["id"]
+        for group in SCHEMATIC_GROUPS
+    }
     for kind in ("label", "hierarchical_label", "global_label"):
         for node in _all(tree, kind):
             bounds = _text_visual_bounds(str(node[1]), node)
@@ -962,14 +978,14 @@ def frame_content_clearance_issues(tree: list) -> list[str]:
     for node in _all(tree, "text_box"):
         uid_node = _direct(node, "uuid")
         uid = str(uid_node[1]) if uid_node is not None else ""
-        if "group-description:" not in uid:
+        if uid not in description_uuids:
             continue
         at, size = _direct(node, "at"), _direct(node, "size")
         if at is None or size is None:
             continue
         box = (float(at[1]), float(at[2]), float(size[1]), float(size[2]))
-        zone = next((z for z in ZONES if f"group-description:{z}" in uid), None)
-        rect = frames.get(zone) if zone is not None else None
+        zone = description_uuids[uid]
+        rect = frames.get(zone)
         if rect is not None and not _rect_inside_margin(box, rect, FRAME_CONTENT_PADDING_MM):
             issues.append(f"group comment {uid} violates frame content padding")
     return issues
