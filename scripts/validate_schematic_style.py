@@ -1016,7 +1016,7 @@ def _symbol_primitives(tree: list) -> dict[str, list[dict]]:
 
 def _primitive_edges(primitive: dict):
     points = primitive["points"]
-    yield from zip(points, points[1:])
+    yield from pairwise(points)
     if primitive.get("closed") and len(points) > 2:
         yield points[-1], points[0]
 
@@ -1164,15 +1164,14 @@ def _box_inside_symbol(box, primitives) -> bool:
                 for corner in corners
             ):
                 return True
-        elif primitive.get("closed"):
-            if (
-                all(_point_in_polygon(corner, primitive["points"]) for corner in corners)
-                and not any(
-                    _segment_intersects_box(start, end, box)
-                    for start, end in _primitive_edges(primitive)
-                )
-            ):
-                return True
+        elif primitive.get("closed") and (
+            all(_point_in_polygon(corner, primitive["points"]) for corner in corners)
+            and not any(
+                _segment_intersects_box(start, end, box)
+                for start, end in _primitive_edges(primitive)
+            )
+        ):
+            return True
     return False
 
 
