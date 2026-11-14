@@ -92,7 +92,7 @@ Editor action semantics, native KiCad API usage, configuration transactions, rol
 
 | Test | Purpose |
 | --- | --- |
-| `test_edit_facade_uses_native_eeschema_library_symbol_hotkey` | edit facade uses native eeschema library symbol hotkey. |
+| `test_edit_facade_uses_native_eeschema_library_symbol_hotkey` | edit facade uses native Eeschema library symbol hotkey. |
 | `test_create_block_from_selected_sheet_never_prompts_for_manual_pins` | create block from selected sheet never prompts for manual pins. |
 | `test_create_block_without_selection_uses_the_current_hierarchical_sheet` | create block without selection uses the current hierarchical sheet. |
 | `test_reload_symbol_library_uses_gui_supported_reload_only` | reload symbol library uses gui supported reload only. |
@@ -145,7 +145,7 @@ Installer runtime/platform gating, safe replacement, dry-run behavior, manifest 
 | `test_installer_accepts_supported_cpython_minors` | installer accepts supported cpython minors. |
 | `test_install_and_reinstall_replace_the_complete_plugin_folder` | install and reinstall replace the complete plugin folder. |
 | `test_dry_run_does_not_create_installation_directory` | dry run does not create installation directory. |
-| `test_plugin_runtime_minimum_matches_published_wheel_python_abi` | plugin runtime minimum matches published wheel python abi. |
+| `test_plugin_runtime_minimum_matches_published_wheel_python_abi` | plugin runtime minimum matches published wheel Python abi. |
 | `test_plugin_requirements_use_a_published_binary_wheel` | plugin requirements use a published binary wheel. |
 | `test_installer_rejects_non_reverse_dns_plugin_identifier` | installer rejects non reverse dns plugin identifier. |
 | `test_installer_rejects_kicad_10_stable_because_it_has_no_schematic_ipc_addons` | installer rejects KiCad 10 stable because it has no schematic IPC addons. |
@@ -276,7 +276,7 @@ Immutable revision-addressed wheel publication, digest idempotency, no-overwrite
 | `test_existing_identical_asset_is_idempotent_and_never_uploaded_again` | existing identical asset is idempotent and never uploaded again. |
 | `test_existing_asset_with_different_digest_is_not_overwritten` | existing asset with different digest is not overwritten. |
 | `test_new_asset_upload_is_verified_against_the_release_digest` | new asset upload is verified against the release digest. |
-| `test_publisher_selects_the_matching_tag_for_each_supported_python` | publisher selects the matching tag for each supported python. |
+| `test_publisher_selects_the_matching_tag_for_each_supported_python` | publisher selects the matching tag for each supported Python. |
 | `test_invalid_source_sha_is_rejected` | invalid source SHA is rejected. |
 
 ### `tests/test_publish_release.py`
