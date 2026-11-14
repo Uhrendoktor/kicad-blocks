@@ -117,13 +117,6 @@ def test_rejects_unreviewed_nested_object_annotations(tmp_path, monkeypatch):
 
     errors = policy._check_file(path)
 
-    assert any(
-        "generic object annotation needs an explicit reviewed boundary" in error
-        for error in errors
-    )
-    assert any(
-        "generic object return annotation is not allowed" in error for error in errors
-    )
-    assert any(
-        "generic object variable annotation is not allowed" in error for error in errors
-    )
+    assert any("generic object annotation needs an explicit reviewed boundary" in error for error in errors)
+    assert any("generic object return annotation is not allowed" in error for error in errors)
+    assert any("generic object variable annotation is not allowed" in error for error in errors)
