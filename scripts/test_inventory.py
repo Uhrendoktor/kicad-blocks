@@ -265,9 +265,7 @@ def render_inventory(root: Path = ROOT) -> str:
             )
         cases: list[tuple[str, str]] = []
         for function in functions:
-            docstring = ast.get_docstring(function)
-            purpose = docstring.strip().splitlines()[0] if docstring else _purpose_from_name(function.name)
-            cases.append((function.name, purpose))
+            cases.append((function.name, _purpose_from_name(function.name)))
         pytest_modules.append((relative, _module_purpose(relative, tree), cases))
 
     actual_standalone = set(STANDALONE_TESTS)
@@ -336,7 +334,7 @@ def render_inventory(root: Path = ROOT) -> str:
     for relative, purpose in sorted(AUXILIARY_RUNNERS.items()):
         lines.append(f"| {relative} | {_escape_cell(purpose)} |")
     lines.append("")
-    return "\\n".join(lines)
+    return "\n".join(lines)
 
 
 def main() -> int:
