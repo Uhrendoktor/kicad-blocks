@@ -359,7 +359,9 @@ def _select_existing_pcb_file(dialog) -> None:
     combos[0].set("Choose an existing PCB file")
     combos[0].event_generate("<<ComboboxSelected>>")
     dialog.update_idletasks()
-    fields = [widget for widget in walk_widgets(dialog) if widget.winfo_class() in {"TEntry", "Entry"}]
+    fields = [
+        widget for widget in walk_widgets(dialog) if widget.winfo_class() in {"TEntry", "Entry"}
+    ]
     choose_button = next(
         (
             widget
@@ -393,18 +395,20 @@ def _assert_layout_manager_footer(dialog) -> None:
 
 def _assert_blank_pcb_file_picker_hidden(dialog) -> None:
     fields = [
-        widget for widget in walk_widgets(dialog)
-        if widget.winfo_class() in {"TEntry", "Entry"}
+        widget for widget in walk_widgets(dialog) if widget.winfo_class() in {"TEntry", "Entry"}
     ]
     choose_button = next(
         (
-            widget for widget in walk_widgets(dialog)
+            widget
+            for widget in walk_widgets(dialog)
             if widget.winfo_class() == "TButton" and widget.cget("text") == "Choose file…"
         ),
         None,
     )
-    if len(fields) < 2 or fields[1].winfo_ismapped() or (
-        choose_button is not None and choose_button.winfo_ismapped()
+    if (
+        len(fields) < 2
+        or fields[1].winfo_ismapped()
+        or (choose_button is not None and choose_button.winfo_ismapped())
     ):
         raise RuntimeError(
             "The blank-board mode should hide its PCB file entry and Choose file button."
@@ -421,9 +425,7 @@ def _assert_add_layout_footer(dialog) -> None:
     }
     missing = sorted(labels - visible)
     if missing:
-        raise RuntimeError(
-            "Add PCB layout footer buttons are not visible: " + ", ".join(missing)
-        )
+        raise RuntimeError("Add PCB layout footer buttons are not visible: " + ", ".join(missing))
 
 
 def capture_ui_workflows(library_roots, record, project_dir: Path, output_dir: Path) -> None:
