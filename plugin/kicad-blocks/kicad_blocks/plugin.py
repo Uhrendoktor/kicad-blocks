@@ -2279,11 +2279,10 @@ def _edit_facade_symbol(
 ) -> bool:
     """Open the highlighted KBlocks library symbol in KiCad's native Symbol Editor.
 
-    The Eeschema IPC implementation in supported KiCad builds does not handle
-    RunAction, so the GUI action is invoked through the documented Tools menu.
-    X11 is verified by window title. Wayland uses wtype only after the invoking
-    browser is closed and Eeschema is returned to the foreground; the compositor
-    does not expose a portable window-enumeration API to this plugin.
+    Prefer KiCad's global show-Symbol-Editor tool action when the connected
+    Eeschema build exposes it. Use the X11 menu route only if KiCad rejects
+    that action. On Wayland, do not send global key events unless KiCad has
+    confirmed that it opened the target editor.
     """
     nickname = LIBRARY_NICKNAME
     symbol_name = str(record.manifest.get("symbol_name") or "").strip()
@@ -2307,29 +2306,46 @@ def _edit_facade_symbol(
     wayland = bool(os.environ.get("WAYLAND_DISPLAY")) or (
         os.environ.get("XDG_SESSION_TYPE", "").casefold() == "wayland"
     )
+    action_started = False
+    action_error = None
+    run_action = getattr(kicad, "run_action", None)
+    if callable(run_action):
+        try:
+            response = run_action("common.Control.showSymbolEditor")
+            action_status = _native_run_action_status(response)
+            action_started = action_status == 1
+            if not action_started:
+                action_error = (
+                    "KiCad rejected the native Symbol Editor action"
+                    if action_status is not None
+                    else "KiCad returned an unknown status for the native Symbol Editor action"
+                )
+                LOG.info("%s; checking the desktop menu fallback", action_error)
+        except Exception as exc:
+            action_error = f"KiCad's native Symbol Editor action failed: {exc}"
+            LOG.debug("%s", action_error, exc_info=True)
+
     if wayland:
-        executable = wtype or shutil.which("wtype")
-        if not executable:
+        if not action_started:
+            # wtype injects into whichever surface owns keyboard focus. Without
+            # an acknowledged native action there is no safe way to prove that
+            # the focused surface is Eeschema rather than this browser or a
+            # different application, so leave the browser open for manual use.
+            LOG.info(
+                "%s; not injecting keys into an unverified Wayland window",
+                action_error or "Native Symbol Editor action is unavailable",
+            )
             return False
         if close_browser is not None:
             close_browser()
-        # Closing the transient library browser returns focus to the Eeschema
-        # window that launched it. Tools -> Symbol Editor is a native KiCad
-        # menu action; Ctrl+L is the documented library-tree search shortcut.
-        commands = [
-            [executable, "-M", "alt", "-k", "t", "-m", "alt"],
-            [executable, "-k", "s"],
-            [executable, "-k", "Return"],
-        ]
-        for arguments in commands:
-            command_runner(
-                arguments,
-                capture_output=True,
-                text=True,
-                check=True,
-                timeout=5,
+        executable = wtype or shutil.which("wtype")
+        if not executable:
+            LOG.info(
+                "Symbol Editor was opened for %s; wtype is unavailable for automatic library search",
+                lib_id,
             )
-        pause(0.65)
+            return False
+        pause(0.35)
         for arguments in (
             [executable, "-M", "ctrl", "-k", "l", "-m", "ctrl"],
             [executable, "-M", "ctrl", "-k", "a", "-m", "ctrl"],
@@ -2343,19 +2359,20 @@ def _edit_facade_symbol(
                 check=True,
                 timeout=5,
             )
-        LOG.info(
-            "Sent the native Symbol Editor menu/search sequence for %s via Wayland",
-            lib_id,
-        )
-        # The keyboard sequence has been dispatched to the editor that
-        # owned the transient browser. Wayland does not expose a portable API
-        # for this process to verify the resulting native window/title.
-        LOG.info("Dispatched Edit Facade keyboard handoff for %s on Wayland", lib_id)
+        LOG.info("Dispatched library-tree search for %s through KiCad's native editor action", lib_id)
+        # KiCad acknowledged the target frame, but Wayland does not provide a
+        # portable public API for querying another application's window title.
         return True
 
     executable = xdotool or shutil.which("xdotool")
     if not executable:
-        return False
+        if action_started:
+            return False
+        raise RuntimeError(
+            (f"{action_error}. " if action_error else "")
+            + "KiCad could not open Symbol Editor automatically. Open Tools → Symbol Editor "
+            + f"and search for {lib_id}."
+        )
 
     def send(*arguments: str, check: bool = True) -> str:
         result = command_runner(
@@ -2372,7 +2389,7 @@ def _edit_facade_symbol(
     if not editor_window_id:
         raise RuntimeError(
             "Could not identify the active Eeschema window. Open Symbol Editor "
-            "from Eeschema's Tools menu and search for " + lib_id + "."
+            f"manually and search for {lib_id}."
         )
 
     def visible_symbol_editor() -> str | None:
@@ -2384,14 +2401,22 @@ def _edit_facade_symbol(
                 return window_id
         return None
 
-    symbol_editor_id = visible_symbol_editor()
-    if symbol_editor_id is None:
+    symbol_editor_id = None
+    deadline = time.monotonic() + 5.0
+    while time.monotonic() < deadline:
+        symbol_editor_id = visible_symbol_editor()
+        if symbol_editor_id is not None:
+            break
+        if not action_started:
+            break
+        pause(0.1)
+
+    if symbol_editor_id is None and not action_started:
+        # Runtime action support varies between KiCad nightly builds. The
+        # documented Eeschema Tools menu is the fallback for those builds.
         send("windowfocus", "--sync", str(editor_window_id))
         send("key", "--clearmodifiers", "alt+t")
         pause(0.25)
-        # The Tools menu exposes Symbol Editor as its S mnemonic. Selecting
-        # by the mnemonic avoids typing a phrase into the schematic canvas if
-        # wxWidgets did not open the menu.
         send("key", "--clearmodifiers", "s")
         send("key", "--clearmodifiers", "Return")
         deadline = time.monotonic() + 5.0
@@ -2408,10 +2433,12 @@ def _edit_facade_symbol(
             for item in visible.splitlines()
             if item.strip()
         ]
+        detail = f"{action_error}. " if action_error else ""
         raise RuntimeError(
-            "Eeschema did not open Symbol Editor from Tools. "
-            f"Visible window titles: {visible_titles!r}. "
-            f"Open Tools → Symbol Editor manually, then search for {lib_id}."
+            detail
+            + "Eeschema did not open Symbol Editor. "
+            + f"Visible window titles: {visible_titles!r}. "
+            + f"Open Tools → Symbol Editor manually, then search for {lib_id}."
         )
 
     send("windowfocus", "--sync", symbol_editor_id)
