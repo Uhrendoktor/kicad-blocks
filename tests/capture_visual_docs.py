@@ -322,10 +322,7 @@ def _make_themed_root(theme: str, title: str):
 
 def _select_default_implementation(dialog) -> None:
     tree = next(
-        (
-            widget for widget in walk_widgets(dialog)
-            if widget.winfo_class() == "Treeview"
-        ),
+        (widget for widget in walk_widgets(dialog) if widget.winfo_class() == "Treeview"),
         None,
     )
     if tree is None or "0" not in tree.get_children():
@@ -337,7 +334,8 @@ def _select_default_implementation(dialog) -> None:
     dialog.update()
 
     buttons = [
-        widget for widget in walk_widgets(dialog)
+        widget
+        for widget in walk_widgets(dialog)
         if widget.winfo_class() == "TButton"
         and widget.cget("text") in {"Edit default", "Edit variant"}
     ]
@@ -347,10 +345,7 @@ def _select_default_implementation(dialog) -> None:
     )
     if edit_button is None or not edit_button.instate(["!disabled"]):
         selection = tree.selection()
-        state = [
-            (widget.cget("text"), widget.cget("state"))
-            for widget in buttons
-        ]
+        state = [(widget.cget("text"), widget.cget("state")) for widget in buttons]
         raise RuntimeError(
             "The Default row edit action is unavailable: "
             f"rows={tree.get_children()!r}, selection={selection!r}, buttons={state!r}."
@@ -358,22 +353,17 @@ def _select_default_implementation(dialog) -> None:
 
 
 def _select_existing_pcb_file(dialog) -> None:
-    combos = [
-        widget for widget in walk_widgets(dialog)
-        if widget.winfo_class() == "TCombobox"
-    ]
+    combos = [widget for widget in walk_widgets(dialog) if widget.winfo_class() == "TCombobox"]
     if len(combos) < 2:
         raise RuntimeError("Add PCB layout is missing its source and implementation selectors.")
     combos[0].set("Choose an existing PCB file")
     combos[0].event_generate("<<ComboboxSelected>>")
     dialog.update_idletasks()
-    fields = [
-        widget for widget in walk_widgets(dialog)
-        if widget.winfo_class() in {"TEntry", "Entry"}
-    ]
+    fields = [widget for widget in walk_widgets(dialog) if widget.winfo_class() in {"TEntry", "Entry"}]
     choose_button = next(
         (
-            widget for widget in walk_widgets(dialog)
+            widget
+            for widget in walk_widgets(dialog)
             if widget.winfo_class() == "TButton" and widget.cget("text") == "Choose file…"
         ),
         None,
@@ -396,7 +386,9 @@ def _assert_layout_manager_footer(dialog) -> None:
     }
     missing = sorted(labels - visible)
     if missing:
-        raise RuntimeError("PCB layout manager footer buttons are not visible: " + ", ".join(missing))
+        raise RuntimeError(
+            "PCB layout manager footer buttons are not visible: " + ", ".join(missing)
+        )
 
 
 def _assert_blank_pcb_file_picker_hidden(dialog) -> None:
@@ -414,7 +406,9 @@ def _assert_blank_pcb_file_picker_hidden(dialog) -> None:
     if len(fields) < 2 or fields[1].winfo_ismapped() or (
         choose_button is not None and choose_button.winfo_ismapped()
     ):
-        raise RuntimeError("The blank-board mode should hide its PCB file entry and Choose file button.")
+        raise RuntimeError(
+            "The blank-board mode should hide its PCB file entry and Choose file button."
+        )
     _assert_add_layout_footer(dialog)
 
 
@@ -427,7 +421,9 @@ def _assert_add_layout_footer(dialog) -> None:
     }
     missing = sorted(labels - visible)
     if missing:
-        raise RuntimeError("Add PCB layout footer buttons are not visible: " + ", ".join(missing))
+        raise RuntimeError(
+            "Add PCB layout footer buttons are not visible: " + ", ".join(missing)
+        )
 
 
 def capture_ui_workflows(library_roots, record, project_dir: Path, output_dir: Path) -> None:
