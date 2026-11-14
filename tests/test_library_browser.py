@@ -10,7 +10,7 @@ from collections.abc import Callable, Sequence
 from importlib import import_module
 from pathlib import Path
 from types import SimpleNamespace
-from typing import TYPE_CHECKING, Protocol, TypeVar, cast
+from typing import Protocol, TypeVar, TypedDict, cast
 from unittest.mock import Mock, patch
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -26,10 +26,6 @@ from kicad_blocks.model import (
 from kicad_blocks.repository import BlockRecord, create_block, read_manifest
 
 plugin_actions = import_module("kicad_blocks.plugin")
-
-if TYPE_CHECKING:
-    from kicad_blocks.pcb_types import ResolvedBlockLayout
-
 
 _HookResult = TypeVar("_HookResult")
 
@@ -58,6 +54,15 @@ class _CommandOutput(Protocol):
     returncode: int
 
 
+class _LayoutChoice(TypedDict):
+    """Minimal layout descriptor shape consumed by the library-browser tests."""
+
+    id: str | None
+    name: str
+    file: str
+    project_file: str | None
+
+
 def _command_output(stdout: str = "", returncode: int = 0) -> _CommandOutput:
     return cast(_CommandOutput, SimpleNamespace(stdout=stdout, returncode=returncode))
 
@@ -68,10 +73,10 @@ _attach_tk_window_to_editor = cast(Callable[..., bool], _private_hook("_attach_t
 _bind_mousewheel = cast(Callable[..., None], _private_hook("_bind_mousewheel"))
 _block_overview_text = cast(Callable[..., str], _private_hook("_block_overview_text"))
 _capture_eeschema_window_id = cast(Callable[..., str | None], _private_hook("_capture_eeschema_window_id"))
-_choose_block_layout = cast(Callable[..., ResolvedBlockLayout | None], _private_hook("_choose_block_layout"))
+_choose_block_layout = cast(Callable[..., _LayoutChoice | None], _private_hook("_choose_block_layout"))
 _clean_facade_preview_svg = cast(Callable[..., Path], _private_hook("_clean_facade_preview_svg"))
 _filter_library_records = cast(Callable[..., list[BlockRecord]], _private_hook("_filter_library_records"))
-_layout_choices = cast(Callable[..., list[ResolvedBlockLayout]], _private_hook("_layout_choices"))
+_layout_choices = cast(Callable[..., list[_LayoutChoice]], _private_hook("_layout_choices"))
 _library_record_for_instance = cast(Callable[..., BlockRecord], _private_hook("_library_record_for_instance"))
 _library_record_for_tree_row = cast(Callable[..., BlockRecord | None], _private_hook("_library_record_for_tree_row"))
 _minimize_placement_windows = cast(Callable[..., list[_MinimizableWindow]], _private_hook("_minimize_placement_windows"))
