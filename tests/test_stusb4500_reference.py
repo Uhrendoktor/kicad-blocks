@@ -333,7 +333,7 @@ class STUSB4500ReferenceTests(unittest.TestCase):
         margins = _direct(notes[0], "margins")
         self.assertAlmostEqual(float(at[1]), 151.13, places=3)
         self.assertAlmostEqual(float(at[2]), 137.16, places=3)
-        self.assertAlmostEqual(float(size[1]), 55.88, places=2)
+        self.assertAlmostEqual(float(size[1]), 40.64, places=2)
         self.assertLess(float(size[2]), 8.0)
         self.assertEqual([float(value) for value in margins[1:]], [1.27] * 4)
         self.assertNotIn('(text "REFERENCE ONLY', content)
@@ -342,6 +342,12 @@ class STUSB4500ReferenceTests(unittest.TestCase):
             if str(node[1]) == "STUSB4500 USB-C / POWER DELIVERY SINK"
         )
         self.assertGreater(float(_direct(header_title, "size")[1]), 350.0)
+        self.assertEqual(
+            float(_direct(_direct(header_title, "stroke"), "width")[1]), 0.0,
+        )
+        for caption_text in ("VBUS CLAMP + FILTER", "VBUS_VS_DISCH SENSE DIVIDER"):
+            caption = next(node for node in _all(tree, "text_box") if str(node[1]) == caption_text)
+            self.assertEqual(float(_direct(_direct(caption, "stroke"), "width")[1]), 0.0)
         self.assertIn('(text_box "VSNK OUTPUT"', content)
 
     def test_no_label_glyph_is_replaced_by_a_global_label(self) -> None:
