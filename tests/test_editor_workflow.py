@@ -151,7 +151,7 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
                 pause=lambda _seconds: None,
             )
 
-        self.assertFalse(opened)
+        self.assertTrue(opened)
         self.assertEqual(closed, [True])
         self.assertEqual(
             calls,
@@ -213,9 +213,15 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
         runner.assert_not_called()
 
     def test_ensure_project_facade_catalog_preserves_existing_unsaved_edits(self):
-        from kicad_blocks.repository import build_project_symbol_catalog
+        from kicad_blocks.repository import (
+            build_project_symbol_catalog,
+            register_project_symbol_library,
+        )
 
         project_catalog = build_project_symbol_catalog(self.project, [self.library])
+        register_project_symbol_library(
+            self.project, plugin_actions.LIBRARY_NICKNAME, project_catalog
+        )
         original = project_catalog.read_text(encoding="utf-8")
         edited = original.replace(
             f'(property "Value" "{self.block.name}"',
