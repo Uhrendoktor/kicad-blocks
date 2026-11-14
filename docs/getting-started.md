@@ -4,7 +4,7 @@ This guide installs the current source version, enables the KiCad IPC plugin, an
 
 ## Check the supported environment
 
-The current full integration target is KiCad **10.99.0 development nightly**, Linux **x86_64**, and **CPython 3.12**. Tkinter dialogs and the non-interactive schematic IPC workflows are exercised. Place Block and Edit Facade are currently blocked because the tested Eeschema server does not expose the required editor-action and symbol-selection IPC handlers.
+The current full integration target is KiCad **10.99.0 development nightly**, Linux **x86_64**, and **CPython 3.12**. Tkinter dialogs and supported schematic IPC workflows are exercised. Place Block creates the facade at the active page center, focuses and selects it; cursor-attached placement and direct Symbol Editor handoff still need upstream IPC operations.
 
 | Component | Current evidence |
 | --- | --- |
@@ -14,7 +14,7 @@ The current full integration target is KiCad **10.99.0 development nightly**, Li
 | CPython 3.13 and 3.14 | Plugin discovery and managed-environment smoke tests on Linux x86_64; not the full KiCad integration matrix |
 | Tkinter | Required by the plugin's dialogs |
 | X11 automation | Used only by the Linux GUI test harness; not required by production plugin runtime |
-| KiCad API | Enable the IPC API in Eeschema; enable it in PCB Editor for PCB actions. Enabling IPC does not add the currently missing interactive placement or Symbol Editor selection APIs. |
+| KiCad API | Enable the IPC API in Eeschema; enable it in PCB Editor for PCB actions. Enabling IPC does not add the missing interactive-move or Symbol Editor selection APIs. |
 
 Stable KiCad 10.x does not provide the Schematic Editor IPC plugin surface used by KiCad Blocks. KiCad 11 adds that surface, but a stable KiCad 11 build has not yet been validated by this repository's full CI matrix. Windows, macOS, ARM, and non-CPython-3.12 full integration are also unvalidated. See [compatibility and test coverage](explanation/compatibility.md) for the evidence and boundaries.
 
@@ -44,7 +44,7 @@ Use `python3.13` or `python3.14` only when you understand the coverage distincti
 2. In Eeschema, open **Preferences → Plugins**.
 3. Enable the KiCad API for the Schematic Editor.
 4. Set **Path to Python interpreter** to the supported CPython executable. Use the same interpreter minor version that you used to run the installer.
-5. Confirm that the system has Tkinter available. The browsing and dialog workflows use Tk's cross-platform APIs. Place Block and Edit Facade will report their current KiCad IPC capability limitation; they do not fall back to X11, Wayland, shell utilities, or manual-only selection.
+5. Confirm that the system has Tkinter available. The browsing and dialog workflows use Tk's cross-platform APIs. Place Block inserts the facade at the active sheet center and selects it; cursor-attached placement and direct Edit Facade handoff still require KiCad IPC APIs that are not currently exposed. The plugin does not fall back to X11, Wayland, shell utilities, or manual-only selection.
 6. Restart KiCad so the plugin environment can be created and its actions can be registered.
 
 The plugin identifier is `org.uhrendoktor.kicadblocks`. KiCad creates a managed Python environment for the plugin and installs the pinned dependencies there. Do not manually install dependencies into that managed environment during normal setup.
@@ -143,7 +143,7 @@ Use **Manage Libraries** to check registered folders. Select a library that cont
 
 ### Native symbol chooser does not open
 
-Confirm that the KiCad API is enabled for the Schematic Editor and that the supported KiCad IPC plugin is running. The current upstream API does not expose the interactive symbol-placement operation required by Place Block. Enabling IPC alone cannot resolve this; a supported KiCad API addition is required.
+Confirm that the KiCad API is enabled for the Schematic Editor and that the supported KiCad IPC plugin is running. Place Block can create and select the symbol at the active sheet center, but it cannot attach the symbol to the cursor until KiCad adds a supported schematic interactive-move API.
 
 ### PCB actions are unavailable
 
