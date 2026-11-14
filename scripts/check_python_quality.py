@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-import argparse
 import ast
 import subprocess
 import sys
-from collections import Counter
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -239,68 +237,6 @@ def python_policy_violations(source: str, filename: str = "<memory>") -> tuple[s
     return tuple(sorted(set(violations)))
 
 
-def annotation_debt(source: str, filename: str = "<memory>") -> Counter[str]:
-    """Count missing parameter and return annotations per file."""
-    tree = ast.parse(source, filename=filename, type_comments=True)
-    debt: Counter[str] = Counter()
-    for node in ast.walk(tree):
-        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            continue
-        parameters = [
-            *node.args.posonlyargs,
-            *node.args.args,
-            *node.args.kwonlyargs,
-        ]
-        if node.args.vararg is not None:
-            parameters.append(node.args.vararg)
-        if node.args.kwarg is not None:
-            parameters.append(node.args.kwarg)
-        debt["missing-parameter-annotation"] += sum(
-            parameter.annotation is None and parameter.arg not in {"self", "cls"}
-            for parameter in parameters
-        )
-        debt["missing-return-annotation"] += node.returns is None
-    return debt
-
-
-def _merge_base(base_ref: str, root: Path = ROOT) -> str:
-    """Resolve the common ancestor used by the changed-file annotation ratchet."""
-    return _git_output(("merge-base", base_ref, "HEAD"), root).strip()
-
-
-def annotation_ratchet_violations(base_ref: str, root: Path = ROOT) -> tuple[str, ...]:
-    """Prevent per-file annotation debt from increasing relative to the merge base."""
-    base_sha = _merge_base(base_ref, root)
-    changed = _git_output(
-        ("diff", "--name-only", "--diff-filter=ACMR", f"{base_sha}...HEAD", "--", "*.py", "*.pyi"),
-        root,
-    )
-    violations: list[str] = []
-    for relative in sorted(item for item in changed.splitlines() if item.endswith((".py", ".pyi"))):
-        path = root / relative
-        if not path.is_file():
-            continue
-        previous = subprocess.run(
-            ("git", "show", f"{base_sha}:{relative}"),
-            cwd=root,
-            check=False,
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
-        before = Counter() if previous.returncode else annotation_debt(previous.stdout, relative)
-        current = annotation_debt(path.read_text(encoding="utf-8"), relative)
-        violations.extend(
-            [
-                f"{relative}: {rule} increased from {before[rule]} to {current[rule]} "
-                f"relative to {base_sha[:12]}"
-                for rule in sorted(set(before) | set(current))
-                if current[rule] > before[rule]
-            ]
-        )
-    return tuple(violations)
-
-
 def _public_documentation_violations(path: Path, root: Path) -> list[str]:
     """Require module and public API documentation on the reviewed production surface."""
     relative = path.relative_to(root).as_posix()
@@ -352,15 +288,7 @@ def architecture_violations(root: Path = ROOT) -> tuple[str, ...]:
 
 
 def main() -> int:
-    """Run the repository-wide Python policy and optional changed-file annotation ratchet."""
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "--base-ref",
-        default="",
-        help="Git ref used for the changed-file annotation ratchet (for example origin/main).",
-    )
-    args = parser.parse_args()
-
+    """Run repository-wide annotation, documentation, and architecture policy checks."""
     files = tracked_python_files()
     violations: list[str] = []
     for path in files:
@@ -377,12 +305,6 @@ def main() -> int:
         else:
             violations.extend(_public_documentation_violations(path, ROOT))
     violations.extend(architecture_violations())
-
-    if args.base_ref:
-        try:
-            violations.extend(annotation_ratchet_violations(args.base_ref))
-        except (OSError, subprocess.SubprocessError) as error:
-            violations.append(f"annotation ratchet could not inspect {args.base_ref!r}: {error}")
 
     if violations:
         print("python-quality-contract=failed", file=sys.stderr)
