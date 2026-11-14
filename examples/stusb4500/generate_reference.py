@@ -318,8 +318,8 @@ def _graphic_text(
             ["justify", "left", "top"]],
         ["uuid", _Quoted(_uid(f"graphic:text:{key}"))],
     ]
-    if border:
-        result.insert(5, ["stroke", ["width", "0.1524"], ["type", "default"]])
+    stroke_width = "0.1524" if border else "-1"
+    result.insert(5, ["stroke", ["width", stroke_width], ["type", "default"]])
     return result
 
 
