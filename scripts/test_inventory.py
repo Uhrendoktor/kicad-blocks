@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import difflib
 import sys
 from pathlib import Path
 
@@ -354,6 +355,18 @@ def main() -> int:
                 "Test inventory is stale. Run python scripts/test_inventory.py and commit the result.",
                 file=sys.stderr,
             )
+            diff = difflib.unified_diff(
+                actual.splitlines(),
+                expected.splitlines(),
+                fromfile="committed inventory",
+                tofile="generated inventory",
+                lineterm="",
+            )
+            for index, line in enumerate(diff):
+                if index >= 240:
+                    print("... inventory diff truncated after 240 lines ...", file=sys.stderr)
+                    break
+                print(line, file=sys.stderr)
             return 1
         print("test-inventory=passed")
         return 0
