@@ -53,124 +53,162 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
         self._dependency_patch.stop()
         self.temp.cleanup()
 
-    def test_edit_facade_uses_native_eeschema_library_symbol_hotkey(self):
-        instance = SimpleNamespace(
-            definition=SimpleNamespace(
-                id=SimpleNamespace(
-                    library=self.block.manifest["library_nickname"],
-                    name=self.block.manifest["symbol_name"],
-                )
+    def test_edit_facade_targets_the_highlighted_library_symbol_without_selection(self):
+        actions = []
+        kicad = SimpleNamespace(
+            run_action=lambda action: (
+                actions.append(action) or SimpleNamespace(status=1)
             )
         )
-        schematic = SimpleNamespace(get_selection=Mock(return_value=[instance]))
-        focus_result = SimpleNamespace(returncode=0, stdout="0x200\\n", stderr="")
-        run_results = [
-            SimpleNamespace(returncode=0, stdout="", stderr=""),
-            SimpleNamespace(returncode=0, stdout="", stderr=""),
-            focus_result,
-        ]
-
         with (
-            patch.object(plugin_actions.shutil, "which", return_value="/usr/bin/xdotool"),
-            patch.object(
-                plugin_actions, "_block_record_for_instance", return_value=self.block
-            ) as resolve_block,
-            patch.object(
-                plugin_actions, "_minimize_placement_windows", return_value=[self.parent]
-            ) as minimize,
-            patch.object(plugin_actions, "_restore_placement_windows") as restore,
-            patch.object(
-                plugin_actions.subprocess, "run", side_effect=run_results
-            ) as run_command,
+            patch.object(plugin_actions.shutil, "which", return_value=None),
+            patch.dict(os.environ, {"WAYLAND_DISPLAY": "wayland-0", "XDG_SESSION_TYPE": "wayland"}),
         ):
             opened = plugin_actions._edit_facade_symbol(
-                self.library,
-                schematic,
-                self.project,
+                self.block,
+                kicad,
                 "0x100",
-                self.parent,
+                wtype=None,
+                pause=lambda _seconds: None,
             )
 
-        self.assertIsNone(opened)
-        resolve_block.assert_called_once_with(self.library, self.project, instance)
-        minimize.assert_called_once_with(self.parent)
-        restore.assert_not_called()
+        self.assertFalse(opened)
         self.assertEqual(
-            run_command.call_args_list[0].args[0],
-            ["/usr/bin/xdotool", "windowfocus", "--sync", "0x100"],
+            actions,
+            [
+                "common.Control.showSymbolEditor",
+                "common.Control.showLibraryTree",
+                "common.Control.libraryTreeSearch",
+            ],
         )
         self.assertEqual(
-            run_command.call_args_list[1].args[0],
-            ["/usr/bin/xdotool", "key", "--clearmodifiers", "ctrl+shift+e"],
+            self.block.manifest["library_nickname"],
+            "KBlocks",
         )
-        self.assertEqual(
-            run_command.call_args_list[2].args[0],
-            ["/usr/bin/xdotool", "getwindowfocus"],
+        self.assertIn(
+            self.block.manifest["symbol_name"],
+            self.block.symbol_library.read_text(encoding="utf-8"),
         )
 
-    def test_edit_facade_uses_native_kicad_action_without_xdotool(self):
-        instance = SimpleNamespace(
-            id="dddddddd-dddd-4ddd-8ddd-dddddddddddd",
-            definition=SimpleNamespace(
-                id=SimpleNamespace(
-                    library=self.block.manifest["library_nickname"],
-                    name=self.block.manifest["symbol_name"],
-                )
-            ),
-        )
-        schematic = SimpleNamespace(get_selection=Mock(return_value=[instance]))
+    def test_edit_facade_selects_the_exact_generated_symbol_through_wayland_search(self):
+        calls = []
+        def command_runner(arguments, **kwargs):
+            calls.append(arguments)
+            return SimpleNamespace(stdout="", returncode=0)
+        actions = []
         kicad = SimpleNamespace(
-            run_action=Mock(return_value=SimpleNamespace(status=1))
-        )
-        with (
-            patch.object(
-                plugin_actions, "_block_record_for_instance", return_value=self.block
-            ),
-            patch.object(plugin_actions.shutil, "which", return_value=None),
-            patch.object(plugin_actions.subprocess, "run") as run_command,
-        ):
-            plugin_actions._edit_facade_symbol(
-                self.library,
-                schematic,
-                self.project,
-                None,
-                self.parent,
-                kicad=kicad,
-                expected_block_id=self.block.manifest["block_id"],
+            run_action=lambda action: (
+                actions.append(action) or SimpleNamespace(status=1)
             )
-        kicad.run_action.assert_called_once_with(
-            "eeschema.EditorControl.editLibSymbolWithSymbolEditor"
         )
-        run_command.assert_not_called()
-
-    def test_edit_facade_rejects_a_changed_or_mismatched_selection(self):
-        instance = SimpleNamespace(
-            id="dddddddd-dddd-4ddd-8ddd-dddddddddddd",
-            definition=SimpleNamespace(
-                id=SimpleNamespace(
-                    library=self.block.manifest["library_nickname"],
-                    name=self.block.manifest["symbol_name"],
-                )
-            ),
-        )
-        schematic = SimpleNamespace(get_selection=Mock(return_value=[instance]))
-        kicad = SimpleNamespace(run_action=Mock())
         with (
-            patch.object(
-                plugin_actions, "_block_record_for_instance", return_value=self.block
-            ),
-            self.assertRaisesRegex(ValueError, "selection changed"),
+            patch.object(plugin_actions.shutil, "which", return_value=None),
+            patch.dict(os.environ, {"WAYLAND_DISPLAY": "wayland-0", "XDG_SESSION_TYPE": "wayland"}),
         ):
+            opened = plugin_actions._edit_facade_symbol(
+                self.block,
+                kicad,
+                "0x100",
+                wtype="/usr/bin/wtype",
+                command_runner=command_runner,
+                pause=lambda _seconds: None,
+            )
+
+        self.assertTrue(opened)
+        self.assertEqual(
+            calls,
+            [
+                ["/usr/bin/wtype", "-M", "ctrl", "-k", "a"],
+                ["/usr/bin/wtype", "-d", "12", self.block.manifest["symbol_name"]],
+                ["/usr/bin/wtype", "-k", "Return"],
+            ],
+        )
+        self.assertEqual(
+            actions,
+            [
+                "common.Control.showSymbolEditor",
+                "common.Control.showLibraryTree",
+                "common.Control.libraryTreeSearch",
+            ],
+        )
+
+    def test_edit_facade_uses_verified_x11_symbol_editor_focus(self):
+        calls = []
+        def command_runner(arguments, **kwargs):
+            calls.append(arguments)
+            if arguments[-2:] == ["getwindowpid", "0x100"]:
+                return SimpleNamespace(stdout="1001", returncode=0)
+            if arguments[-1:] == ["getwindowfocus"]:
+                return SimpleNamespace(stdout="0x200", returncode=0)
+            if arguments[-2:] == ["getwindowpid", "0x200"]:
+                return SimpleNamespace(stdout="1001", returncode=0)
+            return SimpleNamespace(stdout="", returncode=0)
+        actions = []
+        kicad = SimpleNamespace(
+            run_action=lambda action: (
+                actions.append(action) or SimpleNamespace(status=1)
+            )
+        )
+        with (
+            patch.object(plugin_actions.shutil, "which", return_value="/usr/bin/xdotool"),
+            patch.dict(os.environ, {"WAYLAND_DISPLAY": "", "XDG_SESSION_TYPE": "x11"}),
+        ):
+            opened = plugin_actions._edit_facade_symbol(
+                self.block,
+                kicad,
+                "0x100",
+                xdotool="/usr/bin/xdotool",
+                command_runner=command_runner,
+                pause=lambda _seconds: None,
+            )
+
+        self.assertTrue(opened)
+        self.assertIn(
+            ["/usr/bin/xdotool", "type", "--clearmodifiers", "--delay", "12", self.block.manifest["symbol_name"]],
+            calls,
+        )
+        self.assertIn(
+            ["/usr/bin/xdotool", "key", "--clearmodifiers", "Return"],
+            calls,
+        )
+        self.assertIn(
+            ["/usr/bin/xdotool", "key", "--clearmodifiers", "ctrl+a"],
+            calls,
+        )
+
+    def test_edit_facade_rejects_a_missing_generated_catalog_symbol(self):
+        broken = SimpleNamespace(
+            manifest={
+                **self.block.manifest,
+                "symbol_name": "missing_generated_facade",
+            },
+            symbol_library=self.block.symbol_library,
+        )
+        kicad = SimpleNamespace(run_action=Mock())
+        with self.assertRaisesRegex(ValueError, "Expected exactly one"):
             plugin_actions._edit_facade_symbol(
-                self.library,
-                schematic,
-                self.project,
-                None,
-                self.parent,
-                kicad=kicad,
-                expected_block_id="different-block-id",
+                broken,
+                kicad,
+                "0x100",
+                pause=lambda _seconds: None,
             )
         kicad.run_action.assert_not_called()
+
+    def test_edit_facade_reports_rejected_native_symbol_editor_action(self):
+        actions = []
+        kicad = SimpleNamespace(
+            run_action=lambda action: (
+                actions.append(action) or SimpleNamespace(status=2)
+            )
+        )
+        with self.assertRaisesRegex(RuntimeError, "common.Control.showSymbolEditor"):
+            plugin_actions._edit_facade_symbol(
+                self.block,
+                kicad,
+                "0x100",
+                pause=lambda _seconds: None,
+            )
+        self.assertEqual(actions, ["common.Control.showSymbolEditor"])
 
     def test_create_block_from_selected_sheet_never_prompts_for_manual_pins(self):
         source = self.project / "power_stage.kicad_sch"
