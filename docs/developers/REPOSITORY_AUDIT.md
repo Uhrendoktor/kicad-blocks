@@ -24,7 +24,6 @@ The high-confidence dead-code check is intentionally restricted to production/pl
 
 - Every pytest test function is listed in the generated inventory with a purpose derived from its descriptive test name.
 - Every test_*.py module must either collect pytest tests or be registered as a main()-based acceptance runner.
-- New Python changes may not increase missing parameter/return annotations per rule and file relative to the merge base. New Python files therefore start with fully annotated functions.
 - Explicit typing.Any and generic object annotations are prohibited in tracked Python sources, including quoted forward references and type comments.
 - The pure model and PCB placement boundary are part of the reviewed static-type inventory; their collaborators use structured types and narrow Protocols rather than broad escape hatches.
 - A separate AST test-quality gate rejects no-op/pass-only tests and identical test bodies within the same module and fixture scope; it deliberately does not compare tests across different runtime boundaries.
