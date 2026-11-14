@@ -2286,21 +2286,15 @@ def _edit_facade_symbol(
         wayland = bool(os.environ.get("WAYLAND_DISPLAY")) or (
             os.environ.get("XDG_SESSION_TYPE", "").casefold() == "wayland"
         )
-        wtype = shutil.which("wtype") if wayland else None
-        if wtype:
-            subprocess.run(
-                [wtype, "-M", "ctrl", "-M", "shift", "-k", "e"],
-                capture_output=True,
-                text=True,
-                check=True,
-                timeout=5,
-            )
-            return
-
         raise RuntimeError(
-            "KiCad did not accept its native Edit Library Symbol action and no "
-            "supported desktop shortcut helper is available. In Eeschema, select "
-            "this block and press Ctrl+Shift+E."
+            "KiCad did not accept its native Edit Library Symbol action. "
+            + (
+                "On Wayland, select this block in Eeschema and press Ctrl+Shift+E; "
+                "automatic key injection was not attempted because the editor window "
+                "could not be identified."
+                if wayland
+                else "In Eeschema, select this block and press Ctrl+Shift+E."
+            )
         )
     except Exception:
         _restore_placement_windows(minimized_windows)
@@ -2491,25 +2485,6 @@ def _start_native_symbol_placement(
         wayland = bool(os.environ.get("WAYLAND_DISPLAY")) or (
             os.environ.get("XDG_SESSION_TYPE", "").casefold() == "wayland"
         )
-        wtype = shutil.which("wtype") if wayland else None
-        if wtype:
-            try:
-                command_runner(
-                    [wtype, "-k", "a"],
-                    capture_output=True,
-                    text=True,
-                    check=True,
-                    timeout=5,
-                )
-                # Wayland deliberately leaves symbol selection to the native
-                # chooser. Global window enumeration/focus injection is not
-                # portable or safe across Wayland compositors.
-                pause(0.2)
-                LOG.info("Opened the Eeschema Add Symbol chooser through the Wayland virtual keyboard")
-                return
-            except (OSError, subprocess.SubprocessError) as exc:
-                LOG.warning("Wayland Add Symbol handoff failed: %s", exc)
-
         detail = f"{action_error}. " if action_error else ""
         if wayland:
             raise RuntimeError(
@@ -2537,29 +2512,13 @@ def _start_native_symbol_placement(
             wayland = bool(os.environ.get("WAYLAND_DISPLAY")) or (
                 os.environ.get("XDG_SESSION_TYPE", "").casefold() == "wayland"
             )
-            wtype = shutil.which("wtype") if wayland else None
-            if wtype:
-                try:
-                    command_runner(
-                        [wtype, "-k", "a"],
-                        capture_output=True,
-                        text=True,
-                        check=True,
-                        timeout=5,
-                    )
-                    pause(0.2)
-                    LOG.info(
-                        "Opened the Eeschema Add Symbol chooser through the Wayland virtual keyboard"
-                    )
-                    return
-                except (OSError, subprocess.SubprocessError) as exc:
-                    LOG.warning("Wayland Add Symbol handoff failed: %s", exc)
             raise RuntimeError(
                 (f"{action_error}. " if action_error else "")
                 + "Could not identify the active Schematic Editor. "
                 + (
-                    "On Wayland, activate Eeschema before retrying; if the chooser does not open, "
-                    "press A and choose the block from KBlocks."
+                    "On Wayland, activate Eeschema and press A, then choose the block from KBlocks. "
+                    "Automatic key injection was not attempted because the target window could not "
+                    "be verified."
                     if wayland
                     else "Keep the project schematic open and launch the library from Eeschema."
                 )
