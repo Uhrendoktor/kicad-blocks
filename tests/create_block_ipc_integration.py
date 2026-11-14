@@ -409,11 +409,27 @@ def main() -> None:
                 return lambda _parent, _source: (name, description)
 
             def run_creation(parent_schematic, name: str, description: str):
+                """Run the registered production action against the live IPC selection."""
+                ui_errors = []
+                messages = SimpleNamespace(
+                    showinfo=lambda *args, **kwargs: None,
+                    showwarning=lambda title, message, **kwargs: ui_errors.append(
+                        (title, message)
+                    ),
+                    showerror=lambda title, message, **kwargs: ui_errors.append(
+                        (title, message)
+                    ),
+                )
                 with (
                     patch.object(
                         plugin_actions,
                         "configured_library_roots",
                         return_value=[library_root],
+                    ),
+                    patch.object(
+                        plugin_actions,
+                        "default_library_root",
+                        return_value=library_root,
                     ),
                     patch.object(
                         plugin_actions, "_reload_symbol_library", return_value=True
@@ -423,14 +439,15 @@ def main() -> None:
                         "_ask_create_block_details",
                         side_effect=create_details(name, description),
                     ),
-                    patch.object(
-                        plugin_actions,
-                        "messagebox",
-                        SimpleNamespace(showinfo=lambda *args, **kwargs: None),
-                    ),
+                    patch.object(plugin_actions, "messagebox", messages),
+                    patch.object(kicad, "get_schematic", return_value=parent_schematic),
+                    patch("kipy.KiCad", return_value=kicad),
                 ):
-                    plugin_actions._create_and_place(
-                        library_root, parent_schematic, kicad, project_dir, object()
+                    plugin_actions.run_action("create-block")
+                if ui_errors:
+                    raise AssertionError(
+                        "The registered Create Block action reported an error: "
+                        + "; ".join(f"{title}: {message}" for title, message in ui_errors)
                     )
 
             run_creation(
