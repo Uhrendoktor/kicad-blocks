@@ -27,8 +27,6 @@ if TYPE_CHECKING:
     from google.protobuf.message import Message
 else:
     tk = None
-    tkinter_types = None
-    ttk_types = None
     ttk = None
     filedialog = None
     messagebox = None
@@ -315,7 +313,7 @@ class _TkTransientWindow(Protocol):
 
 def load_tkinter() -> None:
     """Load the optional desktop UI toolkit when the manager is run."""
-    global tk, tkinter_types, ttk, filedialog, messagebox, simpledialog
+    global tk, ttk, filedialog, messagebox, simpledialog
     if tk is not None:
         return
 
@@ -326,7 +324,6 @@ def load_tkinter() -> None:
     from tkinter import ttk as ttk_module
 
     tk = tkinter_module
-    tkinter_types = tkinter_module
     ttk = ttk_module
     filedialog = filedialog_module
     messagebox = messagebox_module
@@ -1288,7 +1285,7 @@ def _show_selected_block_configuration(
             + ". Reload the facade from the block library and replace the instance."
         )
 
-    dialog = tkinter_types.Toplevel(parent)
+    dialog = tk.Toplevel(parent)
     dialog.title(f"Configure {instance.reference} — {block.name}")
     dialog.geometry("700x720")
     dialog.minsize(580, 500)
@@ -1628,7 +1625,7 @@ def _pick_block_for_placement(
     if not records:
         raise ValueError("No blocks were found in the registered functional-block libraries.")
 
-    dialog = tkinter_types.Toplevel(parent)
+    dialog = tk.Toplevel(parent)
     dialog.title("Place Functional Block")
     _set_window_geometry(dialog, 1200, 800, 980, 640)
     dialog.transient(parent)
@@ -1870,7 +1867,7 @@ def _pick_record(
     if len(records) == 1:
         return records[0]
 
-    dialog = tkinter_types.Toplevel(parent)
+    dialog = tk.Toplevel(parent)
     dialog.title(title)
     _set_window_geometry(dialog, 920, 640, 760, 480)
     dialog.transient(parent)
@@ -2373,7 +2370,7 @@ def _ask_create_block_details(
     parent: tkinter_types.Misc, source_sheet: Path
 ) -> tuple[str, str] | None:
     """Collect the block name and description in one creation dialog."""
-    dialog = tkinter_types.Toplevel(parent)
+    dialog = tk.Toplevel(parent)
     dialog.title("Create Functional Block")
     dialog.transient(parent)
     _set_window_geometry(dialog, 660, 390, 580, 340)
@@ -2678,7 +2675,7 @@ def _place_existing(
 ) -> None:
     """Open the searchable browser; placement is handed to KiCad's native cursor tool."""
     editor_window_id = getattr(parent, "_kicad_blocks_editor_window_id", None)
-    browser = tkinter_types.Toplevel(parent)
+    browser = tk.Toplevel(parent)
     _attach_tk_window_to_editor(browser, editor_window_id)
     _show_library_browser(
         browser,
@@ -3156,7 +3153,7 @@ def _native_symbol_preview_photo(
         _NATIVE_PREVIEW_CACHE[cache_key] = png_data
 
     # Tk images belong to a particular Tcl interpreter, so cache only PNG bytes.
-    return tkinter_types.PhotoImage(data=base64.b64encode(png_data).decode("ascii"))
+    return tk.PhotoImage(data=base64.b64encode(png_data).decode("ascii"))
 
 
 _NATIVE_PREVIEW_CACHE: dict[tuple[str, int, str, int, int], bytes] = {}
@@ -3765,7 +3762,7 @@ def _ask_layout_details(
     parent: tkinter_types.Misc, record: BlockRecord
 ) -> _LayoutDialogChoice | None:
     """Choose an existing board or create a blank starting point for a named layout."""
-    dialog = tkinter_types.Toplevel(parent)
+    dialog = tk.Toplevel(parent)
     dialog.title("Add PCB layout")
     dialog.transient(parent)
     _set_window_geometry(dialog, 860, 620, 760, 560)
@@ -3888,7 +3885,7 @@ def _show_block_layout_editor(
     from .model import slugify
     from .repository import read_manifest
 
-    dialog = tkinter_types.Toplevel(parent)
+    dialog = tk.Toplevel(parent)
     dialog.title(f"PCB layouts — {record.name}")
     dialog.transient(parent)
     frame = ttk.Frame(dialog, padding=14)
@@ -4238,7 +4235,7 @@ def _ask_implementation_details(
     """Collect an implementation selector and its starting schematic."""
     if allow_create and record is None:
         raise ValueError("An existing block record is required to copy an implementation.")
-    dialog = tkinter_types.Toplevel(parent)
+    dialog = tk.Toplevel(parent)
     dialog.title("Implementation details")
     dialog.transient(parent)
     _set_window_geometry(dialog, 860, 540, 740, 460)
@@ -4408,7 +4405,7 @@ def _show_block_variant_editor(
     editor_window_id: str | None = None,
 ) -> Path | None:
     """Manage named implementations and select which one empty KB_VARIANT uses."""
-    dialog = tkinter_types.Toplevel(parent)
+    dialog = tk.Toplevel(parent)
     dialog.title(f"Implementations — {record.name}")
     dialog.transient(parent)
 
@@ -4653,7 +4650,7 @@ def _show_block_variant_editor(
 
 def _show_library_roots_dialog(parent: tkinter_types.Misc) -> bool:
     """Manage registered library folders with explicit add/create/edit actions."""
-    dialog = tkinter_types.Toplevel(parent)
+    dialog = tk.Toplevel(parent)
     dialog.title("Manage Libraries")
     _set_window_geometry(dialog, 1280, 800, 1060, 660)
     dialog.transient(parent)
@@ -5267,7 +5264,7 @@ def _show_library_browser(
             except (OSError, RuntimeError, ValueError) as exc:
                 messagebox.showerror("Open implementation", str(exc), parent=window)
             return
-        chooser = tkinter_types.Toplevel(window)
+        chooser = tk.Toplevel(window)
         chooser.title(f"Open implementation — {record.name}")
         chooser.transient(window)
         chooser.grab_set()
@@ -5385,7 +5382,7 @@ def _show_library_browser(
         layouts = _layout_choices(record)
         if not layouts:
             return
-        chooser = tkinter_types.Toplevel(window)
+        chooser = tk.Toplevel(window)
         chooser.title(f"Open PCB layout — {record.name}")
         chooser.transient(window)
         chooser.grab_set()
