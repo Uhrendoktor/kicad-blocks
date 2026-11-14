@@ -13,14 +13,19 @@ import sys
 import tempfile
 import time
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 # The core block model and IPC helpers must remain importable in headless
 # environments. Load Tkinter only when the interactive manager is invoked.
-tk = None
-ttk = None
-filedialog = None
-messagebox = None
-simpledialog = None
+if TYPE_CHECKING:
+    import tkinter as tk
+    from tkinter import filedialog, messagebox, simpledialog, ttk
+else:
+    tk = None
+    ttk = None
+    filedialog = None
+    messagebox = None
+    simpledialog = None
 
 from .auto_dependencies import synchronize_block_dependencies
 from .extraction import selected_sheet_file, selected_sheet_instance_uuid
@@ -917,7 +922,7 @@ def _update_schematic_item_checked(schematic, instance) -> None:
     Any, so inspect the documented status fields directly instead.
     """
     from kipy.proto.common.commands import editor_commands_pb2
-    from kipy.util import pack_any
+    from kipy.util.proto import pack_any
 
     command = editor_commands_pb2.UpdateItems()
     command.header.document.CopyFrom(schematic.document)
