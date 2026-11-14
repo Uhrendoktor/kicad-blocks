@@ -10,6 +10,11 @@
   ],
   "exclude": [
     "plugin/kicad-blocks/kicad_blocks/plugin.py",
+    "plugin/kicad-blocks/kicad_blocks/composition.py",
+    "plugin/kicad-blocks/kicad_blocks/extraction.py",
+    "plugin/kicad-blocks/kicad_blocks/operations.py",
+    "plugin/kicad-blocks/kicad_blocks/pcb_layout.py",
+    "plugin/kicad-blocks/kicad_blocks/pcb_placement.py",
     "examples/**",
     "tests/**"
   ],
