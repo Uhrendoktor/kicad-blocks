@@ -43,14 +43,13 @@ def _explicit_any_lines(tree: ast.AST) -> list[int]:
     lines: set[int] = set()
     for node in ast.walk(tree):
         if (
-            isinstance(node, ast.Name) and node.id == "Any"
-            or isinstance(node, ast.Attribute) and node.attr == "Any"
+            isinstance(node, ast.Name)
+            and node.id == "Any"
+            or isinstance(node, ast.Attribute)
+            and node.attr == "Any"
             or (
                 isinstance(node, (ast.ImportFrom, ast.Import))
-                and any(
-                    alias.name == "Any" or alias.name.endswith(".Any")
-                    for alias in node.names
-                )
+                and any(alias.name == "Any" or alias.name.endswith(".Any") for alias in node.names)
             )
         ):
             lines.add(node.lineno)
@@ -100,10 +99,7 @@ def _check_file(path: Path) -> list[str]:
                 f"{relative}:{token.start[0]}: inline diagnostic suppression is not allowed"
             )
 
-    errors.extend(
-        f"{relative}:{line}: explicit Any is prohibited"
-        for line in _explicit_any_lines(tree)
-    )
+    errors.extend(f"{relative}:{line}: explicit Any is prohibited" for line in _explicit_any_lines(tree))
 
     for node in ast.walk(tree):
         if isinstance(node, ast.Call):
@@ -202,7 +198,8 @@ def _annotation_metrics(source: str, path: str) -> tuple[int, int]:
     annotations: list[ast.expr] = []
     for node in ast.walk(tree):
         if (
-            isinstance(node, ast.arg) and node.annotation is not None
+            isinstance(node, ast.arg)
+            and node.annotation is not None
             or isinstance(node, ast.AnnAssign)
         ):
             annotations.append(node.annotation)
