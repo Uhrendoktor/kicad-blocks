@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import difflib
 import sys
 from pathlib import Path
 
@@ -241,6 +242,14 @@ def main() -> int:
             print(
                 f"{OUTPUT.relative_to(ROOT)} is stale; run: python scripts/generate_test_inventory.py --write"
             )
+            diff = difflib.unified_diff(
+                actual.splitlines(),
+                expected.splitlines(),
+                fromfile="committed test inventory",
+                tofile="generated test inventory",
+                lineterm="",
+            )
+            print("\\n".join(list(diff)[:160]))
             return 1
         print("test-inventory=passed")
         return 0
