@@ -1695,7 +1695,7 @@ def _pick_block_for_placement(
     updating_config = [False]
     preview_size = [None]
 
-    def preview_resized(event) -> None:
+    def preview_resized(event: tkinter_types.Event[tkinter_types.Misc]) -> None:
         # The chooser builds its widgets before the window is mapped. The first
         # preview render can therefore see a 1 px canvas and be permanently
         # clipped until the user changes the search or selection. Re-render only
@@ -1974,7 +1974,7 @@ def _pick_record(
         )
         select_button.configure(state="normal")
 
-    def selection_changed(_event=None):
+    def selection_changed(_event: tkinter_types.Event[tkinter_types.Misc] | None = None):
         selection = tree.selection()
         record = records_by_id.get(selection[0]) if selection else None
         selected_record[0] = record
@@ -4484,7 +4484,7 @@ def _show_block_variant_editor(
         selection = tree.selection()
         return int(selection[0]) if selection else None
 
-    def update_actions(_event=None):
+    def update_actions(_event: tkinter_types.Event[tkinter_types.Misc] | None = None):
         row_index = selected_index()
         has_selection = row_index is not None
         edit_button.configure(state="normal" if has_selection else "disabled")
@@ -5440,7 +5440,7 @@ def _show_library_browser(
 
     search.trace_add("write", render_records)
 
-    def focus_results(_event=None):
+    def focus_results(_event: tkinter_types.Event[tkinter_types.Misc] | None = None):
         children = tree.get_children()
         if children:
             selection = tree.selection()
