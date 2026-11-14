@@ -1526,8 +1526,17 @@ def _pick_record(records, parent, title: str):
         justify="left",
     )
     description.pack(fill="x", anchor="w", pady=(8, 0))
-    count_label = ttk.Label(outer)
-    count_label.pack(anchor="w", pady=(4, 0))
+    palette = getattr(parent, "_kicad_blocks_palette", {})
+    count_label = ttk.Label(
+        outer,
+        foreground=palette.get("muted", "#5f6871"),
+        font=("TkDefaultFont", 8),
+    )
+    count_label.pack(anchor="w", pady=(3, 0))
+
+    def short_description(record) -> str:
+        value = " ".join(str(record.manifest.get("description", "") or "").split())
+        return value[:177].rstrip() + "…" if len(value) > 180 else value
 
     records_by_id: dict[str, object] = {}
     selected_record = [None]
@@ -1574,9 +1583,7 @@ def _pick_record(records, parent, title: str):
         tree.selection_set(preferred_id)
         tree.focus(preferred_id)
         selected_record[0] = preferred
-        description.configure(
-            text=str(preferred.manifest.get("description", "") or "No description provided.")
-        )
+        description.configure(text=short_description(preferred))
         select_button.configure(state="normal")
 
     def selection_changed(_event=None):
@@ -1587,9 +1594,7 @@ def _pick_record(records, parent, title: str):
             description.configure(text="")
             select_button.configure(state="disabled")
         else:
-            description.configure(
-                text=str(record.manifest.get("description", "") or "No description provided.")
-            )
+            description.configure(text=short_description(record))
             select_button.configure(state="normal")
 
     def choose_selected(_event=None):
@@ -4036,19 +4041,24 @@ def _ask_implementation_details(
         modes = ["Choose a schematic file"]
         mode_combo = None
 
+    source_row = 5 if allow_create else 3
     source_label = ttk.Label(frame, text="Source schematic (.kicad_sch)")
-    source_label.grid(row=5, column=0, columnspan=3, sticky="w")
+    source_label.grid(row=source_row, column=0, columnspan=3, sticky="w")
     source_entry = ttk.Entry(frame, textvariable=source_value)
-    source_entry.grid(row=6, column=0, columnspan=2, sticky="ew", pady=(4, 14))
-    browse_button = _action_button(frame, "Choose file…", lambda: None, "file", "Choose an implementation schematic")
-    browse_button.grid(row=6, column=2, sticky="ew", padx=(8, 0), pady=(4, 14))
+    source_entry.grid(row=source_row + 1, column=0, columnspan=2, sticky="ew", pady=(4, 14))
+    browse_button = _action_button(
+        frame, "Choose file…", lambda: None, "file", "Choose an implementation schematic"
+    )
+    browse_button.grid(row=source_row + 1, column=2, sticky="ew", padx=(8, 0), pady=(4, 14))
     copy_combo = ttk.Combobox(
         frame,
         textvariable=copy_value,
         values=(),
         state="readonly",
     )
-    copy_combo.grid(row=6, column=0, columnspan=3, sticky="ew", pady=(4, 14))
+    copy_combo.grid(
+        row=source_row + 1, column=0, columnspan=3, sticky="ew", pady=(4, 14)
+    )
     copy_combo.grid_remove()
 
     def browse():
@@ -4138,7 +4148,7 @@ def _ask_implementation_details(
         dialog.destroy()
 
     buttons = ttk.Frame(frame)
-    buttons.grid(row=7, column=0, columnspan=3, sticky="ew", pady=(16, 8))
+    buttons.grid(row=source_row + 2, column=0, columnspan=3, sticky="ew", pady=(12, 4))
     _action_button(buttons, "Cancel", dialog.destroy, "cancel", "Cancel implementation setup").pack(side="right")
     _action_button(
         buttons, "Use implementation", accept, "select", "Use the selected implementation",
@@ -4859,26 +4869,17 @@ def _show_library_browser(
             spacing1=8,
             spacing3=2,
         )
-        details.tag_configure(
-            "muted",
-            foreground=palette.get("muted", "#5f6871"),
-            font=("TkDefaultFont", 8),
-        )
         overview = _block_overview_text(record)
         details.insert("1.0", overview)
         for line_number, line in enumerate(overview.splitlines(), start=1):
             if line.startswith((
-                "Purpose",
                 "Connections",
-                "Configurable settings",
+                "Parameters",
                 "Circuit implementations",
-                "PCB layout options",
-                "Ready-made configurations",
-                "Library ·",
+                "PCB layouts",
+                "Profiles",
             )):
                 details.tag_add("section", f"{line_number}.0", f"{line_number}.end")
-            elif line.startswith("Version ·"):
-                details.tag_add("muted", f"{line_number}.0", f"{line_number}.end")
         details.configure(state="disabled")
         _draw_facade_preview(preview, record)
 
