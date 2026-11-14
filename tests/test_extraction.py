@@ -9,6 +9,7 @@ PLUGIN = Path(__file__).resolve().parents[1] / "plugin" / "kicad-blocks"
 sys.path.insert(0, str(PLUGIN))
 
 from kicad_blocks.extraction import selected_sheet_file, selected_sheet_instance_uuid
+from kicad_blocks.repository import create_block, read_manifest, refresh_library_block
 from kicad_blocks.sexpr import (
     dump_sexpr,
     parse_sexpr,
@@ -16,7 +17,6 @@ from kicad_blocks.sexpr import (
     sexpr_direct,
     sexpr_head,
 )
-from kicad_blocks.repository import create_block, read_manifest, refresh_library_block
 
 
 def _source_sheet(path: Path) -> Path:
