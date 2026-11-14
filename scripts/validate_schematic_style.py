@@ -935,13 +935,16 @@ def block_annotation_issues(tree: list) -> list[str]:
         uid_node = _direct(node, "uuid")
         uid = str(uid_node[1]) if uid_node is not None else ""
         value = str(node[1])
-        if uid in title_uuids and ("\n" in value or "\r" in value):
+        multiline = "\n" in value or "\r" in value
+        stroke = _direct(node, "stroke")
+        width = _direct(stroke, "width") if stroke is not None else None
+        outlined = width is not None and float(width[1]) > 0
+        if uid in title_uuids and multiline:
             issues.append(f"block title {uid} must be a single line")
-        if uid in description_uuids:
-            stroke = _direct(node, "stroke")
-            width = _direct(stroke, "width") if stroke is not None else None
-            if width is None or float(width[1]) <= 0:
-                issues.append(f"group comment {uid} must have its own visible box outline")
+        elif multiline and not outlined:
+            issues.append(f"multiline annotation {uid} must have its own visible box outline")
+        if uid in description_uuids and not outlined:
+            issues.append(f"group comment {uid} must have its own visible box outline")
     return issues
 
 
