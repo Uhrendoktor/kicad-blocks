@@ -13,13 +13,14 @@ import sys
 import tempfile
 import time
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Protocol, cast
 
 # The core block model and IPC helpers must remain importable in headless
 # environments. Load Tkinter only when the interactive manager is invoked.
 if TYPE_CHECKING:
     import tkinter as tk
     from tkinter import filedialog, messagebox, simpledialog, ttk
+    from google.protobuf.message import Message
 else:
     tk = None
     ttk = None
@@ -74,7 +75,31 @@ LOG = logging.getLogger("kicad_blocks")
 _KEEP_DEFAULT_VARIANT = object()
 
 
-def _load_tkinter() -> None:
+class _ProtoBackedSchematicItem(Protocol):
+    """Minimal protobuf surface required for an atomic schematic item update."""
+
+    @property
+    def proto(self) -> Message:
+        """Return the native KiCad protobuf payload for this item."""
+        ...
+
+
+class _SchematicIpcClient(Protocol):
+    """Minimal schematic IPC client surface used by checked item updates."""
+
+    def send(self, command: Message, response_type: type[Message]) -> Message:
+        """Send one protobuf request and deserialize the expected response type."""
+        ...
+
+
+class _SchematicForItemUpdate(Protocol):
+    """Schematic document/client pair consumed by the checked update helper."""
+
+    document: Message
+    client: _SchematicIpcClient
+
+
+def load_tkinter() -> None:
     """Load the optional desktop UI toolkit when the manager is run."""
     global tk, ttk, filedialog, messagebox, simpledialog
     if tk is not None:
@@ -914,7 +939,10 @@ def _parameter_values_for_instance(instance, block) -> dict[str, str]:
     return resolve_parameter_values(parameters, overrides)
 
 
-def _update_schematic_item_checked(schematic, instance) -> None:
+def _update_schematic_item_checked(
+    schematic: _SchematicForItemUpdate,
+    instance: _ProtoBackedSchematicItem,
+) -> None:
     """Update one schematic item and inspect KiCad's per-item IPC status.
 
     The current kipy update_items() wrapper unconditionally unwraps the
@@ -927,7 +955,10 @@ def _update_schematic_item_checked(schematic, instance) -> None:
     command = editor_commands_pb2.UpdateItems()
     command.header.document.CopyFrom(schematic.document)
     command.items.append(pack_any(instance.proto))
-    response = schematic.client.send(command, editor_commands_pb2.UpdateItemsResponse)
+    response = cast(
+        editor_commands_pb2.UpdateItemsResponse,
+        schematic.client.send(command, editor_commands_pb2.UpdateItemsResponse),
+    )
 
     if int(response.status) != 1:
         raise RuntimeError(
@@ -987,7 +1018,7 @@ def _show_selected_block_configuration(
     schematic, project_dir: Path, library_root: Path, parent
 ) -> None:
     """Edit instance-local profile, variant, parameters and PCB layout."""
-    _load_tkinter()
+    load_tkinter()
     instance = _selected_symbol(schematic)
     block = _block_record_for_instance(library_root, project_dir, instance)
     parameters = block.manifest.get("parameters", [])
@@ -3907,14 +3938,16 @@ def _new_blank_schematic_source() -> Path:
 
 
 def _ask_implementation_details(
-    parent,
+    parent: tk.Misc,
     *,
     value: str = "",
     source: str = "",
-    record=None,
+    record: BlockRecord | None = None,
     allow_create: bool = False,
 ) -> tuple[str, str] | None:
     """Collect an implementation selector and its starting schematic."""
+    if allow_create and record is None:
+        raise ValueError("An existing block record is required to copy an implementation.")
     dialog = tk.Toplevel(parent)
     dialog.title("Implementation details")
     dialog.transient(parent)
@@ -4019,7 +4052,8 @@ def _ask_implementation_details(
             }
         )
         copy_combo.configure(values=list(copy_sources))
-        mode_combo.bind("<<ComboboxSelected>>", update_source_mode)
+        if mode_combo is not None:
+            mode_combo.bind("<<ComboboxSelected>>", update_source_mode)
     else:
         copy_sources.clear()
 
@@ -6035,7 +6069,7 @@ def run_action(action: str, *, editor_window_id: str | None = None) -> None:
     # the Tk root first changes focus and can otherwise capture the browser itself.
     if editor_window_id is None:
         editor_window_id = _capture_eeschema_window_id()
-    _load_tkinter()
+    load_tkinter()
     root = tk.Tk()
     root._kicad_blocks_editor_window_id = editor_window_id
     _configure_tk_theme(root)

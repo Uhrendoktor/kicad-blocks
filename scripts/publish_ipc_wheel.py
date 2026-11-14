@@ -202,6 +202,10 @@ def publish_wheel(wheelhouse: Path, repo: str, token: str) -> str:
         if uploaded is None:
             raise
 
+    if uploaded is None:
+        raise RuntimeError(
+            "GitHub did not return a release asset matching the uploaded KiCad IPC wheel."
+        )
     if uploaded.get("name") != wheel.name or uploaded.get("size") != wheel_size:
         raise RuntimeError(f"GitHub release asset verification failed: {uploaded!r}.")
     download_url = uploaded.get("browser_download_url")

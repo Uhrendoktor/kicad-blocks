@@ -7,6 +7,7 @@ import shutil
 import tempfile
 import uuid
 from pathlib import Path
+from typing import Protocol, cast
 
 from .manifest_types import BlockDependencyManifest
 from .model import (
@@ -29,6 +30,12 @@ from .repository import (
     refresh_library_block,
     register_project_symbol_library,
 )
+
+
+class _LabelWithSpinStyle(Protocol):
+    """KiCad label property surface omitted by the generated wrapper stub."""
+
+    spin_style: int
 
 
 def _child_record(
@@ -201,7 +208,7 @@ def _compose_direct_children(
                 label = GlobalLabel()
                 label.position = point
                 label.text.value = net_name
-                label.spin_style = spin_style
+                cast(_LabelWithSpinStyle, label).spin_style = spin_style
                 new_labels.append(label)
                 labels_by_position[key] = label
 
