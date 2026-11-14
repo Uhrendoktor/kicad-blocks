@@ -9,7 +9,7 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 from collections.abc import Callable
-from typing import cast
+from typing import Protocol, cast
 from unittest.mock import Mock, patch
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -26,6 +26,18 @@ from kicad_blocks.pcb_types import ResolvedBlockLayout
 from kicad_blocks.repository import BlockRecord, create_block, read_manifest
 
 
+class _MinimizableWindow(Protocol):
+    """Window protocol used by the placement handoff tests."""
+
+    master: _MinimizableWindow | None
+
+    def state(self) -> str: ...
+
+    def iconify(self) -> None: ...
+
+    def deiconify(self) -> None: ...
+
+
 # These tests exercise UI implementation details directly. Resolve the private
 # hooks by name and give each one the narrow return contract used by the tests.
 _attach_tk_window_to_editor = cast(Callable[..., bool], getattr(plugin_actions, "_attach_tk_window_to_editor"))
@@ -38,7 +50,7 @@ _filter_library_records = cast(Callable[..., list[BlockRecord]], getattr(plugin_
 _layout_choices = cast(Callable[..., list[ResolvedBlockLayout]], getattr(plugin_actions, "_layout_choices"))
 _library_record_for_instance = cast(Callable[..., BlockRecord], getattr(plugin_actions, "_library_record_for_instance"))
 _library_record_for_tree_row = cast(Callable[..., BlockRecord | None], getattr(plugin_actions, "_library_record_for_tree_row"))
-_minimize_placement_windows = cast(Callable[..., list[object]], getattr(plugin_actions, "_minimize_placement_windows"))
+_minimize_placement_windows = cast(Callable[..., list[_MinimizableWindow]], getattr(plugin_actions, "_minimize_placement_windows"))
 _new_blank_pcb_source = cast(Callable[..., Path], getattr(plugin_actions, "_new_blank_pcb_source"))
 _pick_directory = cast(Callable[..., str | None], getattr(plugin_actions, "_pick_directory"))
 _pick_kicad_file = cast(Callable[..., str | None], getattr(plugin_actions, "_pick_kicad_file"))
