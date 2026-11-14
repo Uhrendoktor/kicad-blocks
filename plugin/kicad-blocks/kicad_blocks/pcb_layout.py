@@ -27,6 +27,7 @@ from .pcb_types import (
     KiCadNetclassDefinition,
     KiCadNetSettings,
     KiCadProjectData,
+    KiCadProjectMetadata,
     ProjectSettingsMergeResult,
     ResolvedBlockLayout,
 )
@@ -382,7 +383,6 @@ def _normalise_class_assignment(value: str | list[str] | None) -> list[str]:
     if isinstance(value, str):
         return [value] if value else []
     return list(value)
-    raise ValueError(f"Invalid KiCad netclass assignment value: {value!r}")
 
 
 def _netclass_signature(netclass: KiCadNetclassDefinition) -> str:
@@ -566,7 +566,7 @@ def _merge_project_net_settings(
                 desired_name = f"{base_name}_{suffix}"
                 suffix += 1
         if desired_name not in class_by_name:
-            copied = dict(source_class)
+            copied = cast(KiCadNetclassDefinition, dict(source_class))
             copied.pop("nets", None)
             copied["name"] = desired_name
             copied["priority"] = next_priority
@@ -674,10 +674,10 @@ def _merge_project_net_settings(
     target_settings["netclass_assignments"] = target_assignments
     raw_metadata = target_data.get("meta")
     if raw_metadata is None:
-        metadata: dict[str, str | int] = {}
+        metadata: KiCadProjectMetadata = {}
         target_data["meta"] = metadata
     elif type(raw_metadata) is dict:
-        metadata = cast(dict[str, str | int], raw_metadata)
+        metadata = cast(KiCadProjectMetadata, raw_metadata)
     else:
         raise TypeError("KiCad project meta section must be an object.")
     metadata["filename"] = output_project.name
@@ -1016,7 +1016,7 @@ def merge_block_layout(
     existing_references = {
         reference.casefold()
         for item in target[1:]
-        if _head(item) == "footprint"
+        if isinstance(item, list) and _head(item) == "footprint"
         if (reference := _reference(item))
     }
     supported = {
