@@ -963,14 +963,6 @@ def _show_selected_block_configuration(
         outer,
         text=f"{instance.reference}  ·  {block.name}",
     ).pack(anchor="w")
-    ttk.Label(
-        outer,
-        text="Choose a profile to load a matching circuit variant, parameter set and PCB layout. "
-        "You can then customize individual values for this instance.",
-        wraplength=640,
-        justify="left",
-    ).pack(anchor="w", pady=(4, 14))
-
     content = ttk.Frame(outer)
     content.pack(fill="both", expand=True)
 
@@ -993,12 +985,6 @@ def _show_selected_block_configuration(
             "Custom (manual settings)",
         )
         profile_var = tk.StringVar(value=current_profile_label)
-        ttk.Label(
-            section,
-            text="A profile is a reusable preset. Selecting one fills all linked fields below.",
-            wraplength=620,
-            justify="left",
-        ).pack(anchor="w", pady=(0, 6))
         profile_combo = ttk.Combobox(
             section,
             textvariable=profile_var,
@@ -1006,6 +992,7 @@ def _show_selected_block_configuration(
             state="readonly",
         )
         profile_combo.pack(fill="x")
+        _add_tooltip(profile_combo, "A profile fills the linked variant, parameters and PCB layout.")
 
     variant_var = None
     variant_combo = None
@@ -1013,12 +1000,6 @@ def _show_selected_block_configuration(
         section = ttk.LabelFrame(content, text="Implementation variant", padding=10)
         section.pack(fill="x", pady=(0, 10))
         variant_var = tk.StringVar(value=_field_value(instance, VARIANT_FIELD_NAME))
-        ttk.Label(
-            section,
-            text="Select a declared implementation, or enter a KiCad text-variable reference.",
-            wraplength=620,
-            justify="left",
-        ).pack(anchor="w", pady=(0, 6))
         variant_combo = ttk.Combobox(
             section,
             textvariable=variant_var,
@@ -1026,6 +1007,7 @@ def _show_selected_block_configuration(
             state="normal",
         )
         variant_combo.pack(fill="x")
+        _add_tooltip(variant_combo, "Choose a declared variant or enter a KiCad text-variable reference.")
 
     parameter_vars = {}
     if parameters:
@@ -1051,12 +1033,7 @@ def _show_selected_block_configuration(
                 widget = ttk.Entry(section, textvariable=variable)
             widget.grid(row=row * 2, column=1, sticky="ew", pady=(5, 0))
             description = parameter.get("description") or f"Default: {parameter['default']}"
-            ttk.Label(
-                section,
-                text=description,
-                wraplength=600,
-                justify="left",
-            ).grid(row=row * 2 + 1, column=0, columnspan=2, sticky="w", pady=(0, 4))
+            _add_tooltip(widget, description)
 
     layout_var = None
     layout_ids = {}
@@ -1099,10 +1076,6 @@ def _show_selected_block_configuration(
                 f"layout {current_layout!r}. Refresh the block or select a valid layout."
             )
         layout_var = tk.StringVar(value=current_label or next(iter(layout_ids)))
-        ttk.Label(
-            section,
-            text="The selected layout is used by the PCB apply actions.",
-        ).pack(anchor="w", pady=(0, 6))
         layout_combo = ttk.Combobox(
             section,
             textvariable=layout_var,
@@ -1110,6 +1083,7 @@ def _show_selected_block_configuration(
             state="readonly",
         )
         layout_combo.pack(fill="x")
+        _add_tooltip(layout_combo, "PCB layout used when applying this block to a board.")
 
         def update_layout_for_variant(_event=None):
             if variant_var is None:
@@ -1517,11 +1491,6 @@ def _pick_record(records, parent, title: str):
     search = tk.StringVar()
     search_entry = ttk.Entry(outer, textvariable=search)
     search_entry.pack(fill="x", pady=(4, 3))
-    ttk.Label(
-        outer,
-        text="Type to filter · ↓ browse results · Enter select · Esc cancel",
-    ).pack(anchor="w", pady=(0, 6))
-
     results_frame = ttk.Frame(outer)
     results_frame.pack(fill="both", expand=True)
     results_frame.columnconfigure(0, weight=1)
@@ -1552,7 +1521,7 @@ def _pick_record(records, parent, title: str):
 
     description = ttk.Label(
         outer,
-        text="Select a block to see its description.",
+        text="",
         wraplength=700,
         justify="left",
     )
@@ -1615,7 +1584,7 @@ def _pick_record(records, parent, title: str):
         record = records_by_id.get(selection[0]) if selection else None
         selected_record[0] = record
         if record is None:
-            description.configure(text="Select a block to see its description.")
+            description.configure(text="")
             select_button.configure(state="disabled")
         else:
             description.configure(
@@ -2893,35 +2862,25 @@ def _draw_facade_preview(canvas, record) -> None:
 
 
 def _block_overview_text(record) -> str:
-    """Summarize a block in terms useful to circuit designers."""
+    """Summarize the block's interface and available circuit choices."""
     manifest = record.manifest
-    description = str(manifest.get("description", "") or "").strip()
     pins = manifest.get("pins", [])
     parameters = manifest.get("parameters", [])
     variants = manifest.get("variants", [])
     layouts = _layout_choices(record)
     profiles = manifest.get("profiles", [])
-    lines = [
-        "Purpose",
-        description or "No description has been added yet.",
-        "",
-        f"Connections · {len(pins)}",
-    ]
+    lines = [f"Connections · {len(pins)}"]
     if pins:
         lines.extend(
             f"  {pin.get('name', 'Unnamed')}  ·  {str(pin.get('electrical_type', 'passive')).replace('_', ' ').title()}"
             for pin in pins
         )
-    else:
-        lines.append("  No external connections")
-    lines.extend(["", "Configurable settings"])
     if parameters:
+        lines.extend(["", "Parameters"])
         lines.extend(
             f"  {item.get('name')}  ·  {item.get('type', 'text')}  ·  default: {item.get('default', '')}"
             for item in parameters
         )
-    else:
-        lines.append("  No configurable settings declared")
     lines.extend(["", f"Circuit implementations · {len(variants) + 1}"])
     lines.append(f"  Default · {resolve_variant_implementation(manifest, '')}")
     lines.extend(
@@ -2929,29 +2888,19 @@ def _block_overview_text(record) -> str:
         + (f"  ·  PCB: {item['layout_id']}" if item.get("layout_id") else "")
         for item in variants
     )
-    lines.extend(["", f"PCB layout options · {len(layouts)}"])
     if layouts:
+        lines.extend(["", f"PCB layouts · {len(layouts)}"])
         lines.extend(
             f"  {item.get('name', item.get('id'))}"
             + ("  ·  default" if str(item.get("id")) == str(manifest.get("default_layout")) else "")
             for item in layouts
         )
-    else:
-        lines.append("  No stored PCB layout")
-    lines.extend(["", f"Ready-made configurations · {len(profiles)}"])
     if profiles:
+        lines.extend(["", f"Profiles · {len(profiles)}"])
         lines.extend(
             f"  {item.get('name', item.get('id'))}"
-            + (f"  ·  {item.get('description')}" if item.get("description") else "")
             for item in profiles
         )
-    else:
-        lines.append("  No named configurations")
-    lines.extend([
-        "",
-        f"Library · {record.path.parent.name}",
-        f"Version · {manifest.get('version', 1)}",
-    ])
     return "\n".join(lines)
 
 
@@ -3792,14 +3741,6 @@ def _show_block_layout_editor(
     )
     link_button.pack(side="left", padx=(8, 0))
 
-    ttk.Label(
-        frame,
-        text=(
-            "A layout always remains linked to at least one implementation. "
-            "Assigning another implementation adds an association; there is no unlink state."
-        ),
-        wraplength=980, justify="left",
-    ).grid(row=5, column=0, sticky="ew", pady=(8, 0))
 
     footer = ttk.Frame(frame)
     footer.grid(row=6, column=0, sticky="ew", pady=(14, 0))
@@ -4069,16 +4010,10 @@ def _ask_implementation_details(
     ttk.Label(frame, text="Variant value").grid(
         row=1, column=0, columnspan=3, sticky="w"
     )
-    ttk.Label(
-        frame,
-        text="Stored in KB_VARIANT to select this circuit on each placed block.",
-        wraplength=720,
-        justify="left",
-        font=("TkDefaultFont", 8),
-    ).grid(row=2, column=0, columnspan=3, sticky="w", pady=(2, 4))
     selector_value = tk.StringVar(value=value)
     selector_entry = ttk.Entry(frame, textvariable=selector_value)
-    selector_entry.grid(row=3, column=0, columnspan=3, sticky="ew", pady=(2, 12))
+    selector_entry.grid(row=2, column=0, columnspan=3, sticky="ew", pady=(2, 12))
+    _add_tooltip(selector_entry, "Stored in KB_VARIANT on the placed facade.")
 
     mode_value = tk.StringVar(value="Choose a schematic file")
     source_value = tk.StringVar(value=source)
@@ -4086,7 +4021,7 @@ def _ask_implementation_details(
     copy_sources: dict[str, Path] = {}
     if allow_create:
         ttk.Label(frame, text="Starting point").grid(
-            row=4, column=0, columnspan=3, sticky="w"
+            row=3, column=0, columnspan=3, sticky="w"
         )
         modes = [
             "Choose a schematic file",
@@ -4096,24 +4031,24 @@ def _ask_implementation_details(
         mode_combo = ttk.Combobox(
             frame, textvariable=mode_value, values=modes, state="readonly"
         )
-        mode_combo.grid(row=5, column=0, columnspan=3, sticky="ew", pady=(4, 12))
+        mode_combo.grid(row=4, column=0, columnspan=3, sticky="ew", pady=(4, 12))
     else:
         modes = ["Choose a schematic file"]
         mode_combo = None
 
     source_label = ttk.Label(frame, text="Source schematic (.kicad_sch)")
-    source_label.grid(row=6, column=0, columnspan=3, sticky="w")
+    source_label.grid(row=5, column=0, columnspan=3, sticky="w")
     source_entry = ttk.Entry(frame, textvariable=source_value)
-    source_entry.grid(row=7, column=0, columnspan=2, sticky="ew", pady=(4, 14))
+    source_entry.grid(row=6, column=0, columnspan=2, sticky="ew", pady=(4, 14))
     browse_button = _action_button(frame, "Choose file…", lambda: None, "file", "Choose an implementation schematic")
-    browse_button.grid(row=7, column=2, sticky="ew", padx=(8, 0), pady=(4, 14))
+    browse_button.grid(row=6, column=2, sticky="ew", padx=(8, 0), pady=(4, 14))
     copy_combo = ttk.Combobox(
         frame,
         textvariable=copy_value,
         values=(),
         state="readonly",
     )
-    copy_combo.grid(row=7, column=0, columnspan=3, sticky="ew", pady=(4, 14))
+    copy_combo.grid(row=6, column=0, columnspan=3, sticky="ew", pady=(4, 14))
     copy_combo.grid_remove()
 
     def browse():
@@ -4203,7 +4138,7 @@ def _ask_implementation_details(
         dialog.destroy()
 
     buttons = ttk.Frame(frame)
-    buttons.grid(row=8, column=0, columnspan=3, sticky="ew", pady=(16, 8))
+    buttons.grid(row=7, column=0, columnspan=3, sticky="ew", pady=(16, 8))
     _action_button(buttons, "Cancel", dialog.destroy, "cancel", "Cancel implementation setup").pack(side="right")
     _action_button(
         buttons, "Use implementation", accept, "select", "Use the selected implementation",
@@ -4237,14 +4172,10 @@ def _show_block_variant_editor(
     ).grid(row=0, column=0, sticky="w")
     ttk.Label(
         frame,
-        text=(
-            "The base implementation is the fallback. Set a named implementation as default "
-            "to use it whenever KB_VARIANT is empty; explicit KB_VARIANT values still select "
-            "their matching circuit."
-        ),
-        wraplength=960,
-        justify="left",
-    ).grid(row=1, column=0, sticky="ew", pady=(4, 12))
+        text="Empty KB_VARIANT uses the default implementation.",
+        foreground=palette.get("muted", "#5f6871"),
+        font=("TkDefaultFont", 8),
+    ).grid(row=1, column=0, sticky="w", pady=(3, 8))
 
     table_frame = ttk.Frame(frame)
     table_frame.grid(row=2, column=0, sticky="nsew")
