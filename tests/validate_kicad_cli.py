@@ -16,12 +16,12 @@ sys.path.insert(0, str(ROOT / "examples" / "stusb4500"))
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from generate_reference import ROOT_UUID, generate_reference_schematic
-from validate_schematic_style import validate_schematic_style
 from kicad_blocks.model import parse_pins
 from kicad_blocks.operations import export_block_bom, validate_block_tree
 from kicad_blocks.pcb_layout import _all, _direct, _dump, _Quoted, parse_sexpr
 from kicad_blocks.plugin import _new_blank_pcb_source
 from kicad_blocks.repository import add_dependency, create_block
+from validate_schematic_style import validate_schematic_style
 
 
 def _find_kicad_cli() -> str:
