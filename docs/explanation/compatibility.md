@@ -23,11 +23,11 @@ The production runtime now uses cross-platform libraries and APIs for these shar
 | --- | --- | --- |
 | Python Tkinter / ttk / `filedialog` | Windows, macOS, and Unix-like systems | The same toolkit API is used on all OS families. Native appearance and Linux portal integration still require real desktop verification. |
 | `platformdirs` | Windows, macOS, Linux and other Unix-like systems | Resolves the host's standard user configuration directory; Linux keeps the existing XDG location. |
-| CairoSVG + Cairo | Windows, macOS, Linux | CairoSVG is cross-platform, but its native Cairo/FFI prerequisites must be installed using the upstream instructions for each OS. |
+| `resvg_py` | Windows, macOS, Linux, Android | Prebuilt wheels for the supported project Python versions; Rust renderer is bundled in the wheel, with no system Cairo dependency. |
 | Pillow | Windows, macOS, Linux | Cross-platform image API; actual wheel availability depends on the Python ABI and architecture. |
 | KiCad Python IPC API | KiCad supports Windows, macOS, Linux | The IPC transport is cross-platform. This repository's current published Python IPC wheels are still Linux x86_64 only, as an explicit temporary packaging exception. |
 
-Upstream references: [Python Tkinter](https://docs.python.org/3/library/tkinter.html), [platformdirs supported platforms](https://platformdirs.readthedocs.io/en/latest/index.html), [CairoSVG supported platforms and native prerequisites](https://cairosvg.org/documentation/), [Pillow platform support](https://pillow.readthedocs.io/en/stable/), and [KiCad IPC API](https://dev-docs.kicad.org/en/apis-and-binding/ipc-api/).
+Upstream references: [Python Tkinter](https://docs.python.org/3/library/tkinter.html), [platformdirs supported platforms](https://platformdirs.readthedocs.io/en/latest/index.html), [resvg_py supported OS/architecture and Python wheel matrix](https://resvg-py.readthedocs.io/en/latest/installation.html), [Pillow platform support](https://pillow.readthedocs.io/en/stable/), and [KiCad IPC API](https://dev-docs.kicad.org/en/apis-and-binding/ipc-api/).
 
 This table documents upstream library capability, not validated KiCad Blocks compatibility. Windows/macOS integration remains untested until the packaging limitation is lifted and representative runs are performed.
 
