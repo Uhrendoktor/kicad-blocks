@@ -130,7 +130,7 @@ def _write_source_sheets(project_dir: Path) -> tuple[Path, dict[str, Path]]:
         f'  (title_block (title "{project_name}"))',
         "  (lib_symbols)",
     ]
-    for spec, sheet_uuid in sheet_entries:
+    for spec, _sheet_uuid in sheet_entries:
         name, relative_path, _pin_spec, pins, page, x = spec
         parent_content.append(
             _schematic_sheet(
