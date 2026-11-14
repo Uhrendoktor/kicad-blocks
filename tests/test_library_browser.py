@@ -911,17 +911,15 @@ class LibraryBrowserTests(unittest.TestCase):
             )
         kicad.run_action.assert_called_once_with("eeschema.InteractiveDrawing.placeSymbol")
 
-    def test_native_placement_uses_wtype_when_wayland_has_no_xdotool_or_ipc_action(self):
-        calls = []
-        def command_runner(arguments, **kwargs):
-            calls.append(arguments)
-            return SimpleNamespace(stdout="", returncode=0)
+    def test_native_placement_does_not_send_global_wayland_keys_without_verified_editor(self):
+        command_runner = Mock()
         with (
             patch("kicad_blocks.plugin.shutil.which", side_effect=lambda name: {
                 "xdotool": None,
                 "wtype": "/usr/bin/wtype",
             }.get(name)),
             patch.dict(os.environ, {"WAYLAND_DISPLAY": "wayland-0", "XDG_SESSION_TYPE": "wayland"}),
+            self.assertRaisesRegex(RuntimeError, "automatic key injection was not attempted"),
         ):
             _start_native_symbol_placement(
                 SimpleNamespace(),
@@ -931,13 +929,10 @@ class LibraryBrowserTests(unittest.TestCase):
                 command_runner=command_runner,
                 pause=lambda _seconds: None,
             )
-        self.assertEqual(calls, [["/usr/bin/wtype", "-k", "a"]])
+        command_runner.assert_not_called()
 
-    def test_wayland_placement_uses_wtype_when_xdotool_cannot_find_native_editor(self):
-        calls = []
-        def command_runner(arguments, **kwargs):
-            calls.append(arguments)
-            return SimpleNamespace(stdout="", returncode=0)
+    def test_wayland_placement_does_not_inject_keys_when_xdotool_cannot_identify_editor(self):
+        command_runner = Mock()
         with (
             patch(
                 "kicad_blocks.plugin.shutil.which",
@@ -951,6 +946,7 @@ class LibraryBrowserTests(unittest.TestCase):
                 os.environ,
                 {"WAYLAND_DISPLAY": "wayland-0", "XDG_SESSION_TYPE": "wayland"},
             ),
+            self.assertRaisesRegex(RuntimeError, "automatic key injection was not attempted"),
         ):
             _start_native_symbol_placement(
                 SimpleNamespace(),
@@ -959,7 +955,7 @@ class LibraryBrowserTests(unittest.TestCase):
                 command_runner=command_runner,
                 pause=lambda _seconds: None,
             )
-        self.assertEqual(calls, [["/usr/bin/wtype", "-k", "a"]])
+        command_runner.assert_not_called()
 
     def test_native_placement_requires_editor_when_ipc_is_unavailable(self):
         with (
