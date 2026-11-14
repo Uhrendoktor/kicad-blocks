@@ -499,14 +499,22 @@ def main() -> None:
                         "Edit Facade GUI regression requires an empty schematic selection; "
                         f"found {len(live_selection)} selected item(s)."
                     )
-                edit_nickname = plugin_actions._register_facade_edit_library(
-                    project, block, facade_editor_client
-                )
-                opened = plugin_actions._edit_facade_symbol(
+                refreshed_record = plugin_actions._register_block(
+                    project,
                     block,
                     facade_editor_client,
+                    [block.path.parent],
+                )
+                if not plugin_actions._LAST_LIBRARY_RELOAD_OK:
+                    raise RuntimeError(
+                        "Could not reload the generated KBlocks project catalog before "
+                        "opening Edit Facade: "
+                        + str(plugin_actions._LAST_LIBRARY_RELOAD_WARNING)
+                    )
+                opened = plugin_actions._edit_facade_symbol(
+                    refreshed_record,
+                    facade_editor_client,
                     window_id,
-                    edit_library_nickname=edit_nickname,
                     xdotool=xdotool,
                 )
                 if not opened:
@@ -531,7 +539,7 @@ def main() -> None:
                     )
                 print(
                     "Edit Facade opened the generated shared library symbol "
-                    f"{edit_nickname}:{placement_symbol_name} with no placed schematic instance."
+                    f"{refreshed_record.manifest['library_nickname']}:{placement_symbol_name} with no placed schematic instance."
                 )
             finally:
                 facade_editor_client.close()
