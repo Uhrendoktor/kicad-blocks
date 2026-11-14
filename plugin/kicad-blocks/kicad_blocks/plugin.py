@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import base64
-from importlib import import_module
 import contextlib
 import logging
 import os
@@ -14,6 +13,7 @@ import sys
 import tempfile
 import time
 from collections.abc import Callable, Iterator, Sequence
+from importlib import import_module
 from pathlib import Path
 from typing import TYPE_CHECKING, Protocol, TypedDict, cast
 
