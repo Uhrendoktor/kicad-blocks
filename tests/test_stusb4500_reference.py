@@ -14,7 +14,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 from generate_reference import SCHEMATIC_GROUPS, _uid, generate_reference_schematic
 from kicad_blocks.pcb_layout import _all, _direct, parse_sexpr
-from validate_schematic_style import _pin_world_info, _wire_networks, check_schematic_style
+from validate_schematic_style import _wire_networks, check_schematic_style
 
 
 def _instance_map(tree: list) -> dict[str, list]:
