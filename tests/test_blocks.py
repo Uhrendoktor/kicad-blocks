@@ -625,7 +625,6 @@ class BlockRepositoryTests(unittest.TestCase):
     def test_publish_imports_symbol_editor_project_catalog_edit(self):
         record = create_block(self.root, "Project Edited Facade", self.pins)
         project_catalog = build_project_symbol_catalog(self.project, [self.root])
-        symbol_name = record.manifest["symbol_name"]
         original_asset = (record.path / record.manifest["symbol_file"]).read_text(encoding="utf-8")
         original_shared = record.symbol_library.read_text(encoding="utf-8")
         value_marker = f'(property "Value" "{record.name}"'
