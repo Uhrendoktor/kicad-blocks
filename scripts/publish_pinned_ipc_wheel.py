@@ -92,12 +92,15 @@ def _get_or_create_release(repo: str, tag: str, source_sha: str, token: str) -> 
             + "Targets: CPython 3.12, 3.13 and 3.14, Linux x86_64."
         )
         if release.get("body") != target_body:
-            release = _request(
+            updated_release = _request(
                 "PATCH",
                 f"{root}/repos/{repo}/releases/{release['id']}",
                 token,
                 payload={"body": target_body},
             )
+            if updated_release is None:
+                raise RuntimeError(f"Could not update pinned wheel release {tag!r}.")
+            release = updated_release
         return release
 
     payload = {
