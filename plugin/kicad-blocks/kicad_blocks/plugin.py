@@ -27,7 +27,7 @@ if TYPE_CHECKING:
 
     from google.protobuf.message import Message
     from kipy.geometry import Vector2
-    from kipy.common_types import Commit, KIID
+    from kipy.common_types import KIID, Commit
     from kipy.proto.common.types import DocumentSpecifier
 else:
     tk = None
@@ -2730,7 +2730,7 @@ def _ensure_project_facade_catalog(
         kicad, LIBRARY_NICKNAME
     ):
         raise RuntimeError(
-            _LAST_LIBRARY_RELOAD_WARNING
+            _last_library_reload_warning
             or "Eeschema could not reload the project KBlocks symbol catalog."
         )
 
