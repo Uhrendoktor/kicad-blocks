@@ -528,13 +528,30 @@ def main() -> None:
                         "opening Edit Facade: "
                         + str(plugin_actions._LAST_LIBRARY_RELOAD_WARNING)
                     )
-                opened = plugin_actions._edit_facade_symbol(
-                    refreshed_record,
-                    facade_editor_client,
-                    window_id,
-                    project_catalog=project / ".kicad_blocks" / LIBRARY_CATALOG_NAME,
-                    xdotool=xdotool,
-                )
+                try:
+                    opened = plugin_actions._edit_facade_symbol(
+                        refreshed_record,
+                        facade_editor_client,
+                        window_id,
+                        project_catalog=project / ".kicad_blocks" / LIBRARY_CATALOG_NAME,
+                        xdotool=xdotool,
+                    )
+                except Exception:
+                    debug_image = (
+                        Path(os.environ.get("RUNNER_TEMP", tempfile.gettempdir()))
+                        / "edit-facade-gui-debug.xwd"
+                    )
+                    capture = subprocess.run(
+                        ["xwd", "-root", "-silent", "-out", str(debug_image)],
+                        capture_output=True,
+                        text=True,
+                        check=False,
+                    )
+                    print(
+                        "Edit Facade failure screenshot: "
+                        + (str(debug_image) if capture.returncode == 0 else capture.stderr)
+                    )
+                    raise
                 if not opened:
                     raise AssertionError(
                         "Edit Facade opened Symbol Editor but could not complete the "
