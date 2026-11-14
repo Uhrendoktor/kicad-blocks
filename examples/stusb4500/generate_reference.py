@@ -940,7 +940,7 @@ def generate_reference_schematic(destination: Path) -> Path:
             # opposite outer sides of the pair, away from gate/source wires.
             dx = -5.08 if reference == "T4" else 8.89
             reference_x, reference_y = sx + dx, sy - 6.35
-            value_x, value_y = sx + dx, sy - 8.89
+            value_x, value_y = sx + (6.35 if reference == "T1" else dx), sy - 8.89
             reference_justify = "right" if reference == "T4" else "left"
             value_justify = reference_justify
         elif reference.startswith("R"):
@@ -1087,7 +1087,7 @@ def generate_reference_schematic(destination: Path) -> Path:
                         if reference in {"R1", "R4"} and net in {"VBUS_FILTERED", "VREG_2V7"}:
                             # These two VBUS monitor net names are adjacent;
                             # rotate them along the vertical resistor axis.
-                            label_x = px - 5.08
+                            label_x = px - 10.16
                             label_y = py - 5.08
                             justify = "left"
                             label_angle = 90
