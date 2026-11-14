@@ -641,7 +641,10 @@ def generate_reference_schematic(destination: Path) -> Path:
                             # text clear of the vertical pin names.
                             u1_top_labels = {
                                 "24": (0.00, -2.54, "right", 0),
-                                "22": (0.00, -5.08, "left", 0),
+                                # Move VSYS left of the vertical pin rail and
+                                # align it with VBUS; this separates it from
+                                # the nearby C2 GND label.
+                                "22": (-2.54, -5.08, "right", 0),
                                 "25": (0.00, 5.08, "left", 0),
                             }
                             override = u1_top_labels.get(pin["number"])
