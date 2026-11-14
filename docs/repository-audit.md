@@ -32,6 +32,15 @@ classify tests as redundant solely because they use similar fixtures or exercise
 workflows. A test is removable only when its protected invariant is already asserted by
 another test at the same or a stronger runtime boundary.
 
+A separate high-confidence AST audit (scripts/check_test_quality.py) rejects empty or
+pass-only pytest tests and exact body-identical tests within the same module and
+class/fixture scope. It normalizes test names and docstrings but retains argument
+signatures, decorators, and executable statements. It deliberately does not compare
+across modules or class fixture scopes, and it does not infer semantic redundancy from
+similar test names, assertions, input data, or shared mocks. The audit has regression
+coverage for positive duplicates, false-positive boundaries, and no-op tests. CI runs
+this check independently from the source-generated inventory.
+
 ## Code cleanup
 
 - Removed the unreferenced `plugin/kicad-blocks/actions.py` and
