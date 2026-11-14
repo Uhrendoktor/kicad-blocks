@@ -9,7 +9,7 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 from collections.abc import Callable, Sequence
-from typing import Protocol, cast
+from typing import Protocol, TypeVar, cast
 from unittest.mock import Mock, patch
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -24,6 +24,14 @@ from kicad_blocks.model import (
 )
 from kicad_blocks.pcb_types import ResolvedBlockLayout
 from kicad_blocks.repository import BlockRecord, create_block, read_manifest
+
+
+_HookResult = TypeVar("_HookResult")
+
+
+def _private_hook(name: str) -> Callable[..., _HookResult]:
+    """Resolve a private UI test hook without importing its private symbol."""
+    return cast(Callable[..., _HookResult], getattr(plugin_actions, name))
 
 
 class _MinimizableWindow(Protocol):
@@ -51,28 +59,28 @@ def _command_output(stdout: str = "", returncode: int = 0) -> _CommandOutput:
 
 # These tests exercise UI implementation details directly. Resolve the private
 # hooks by name and give each one the narrow return contract used by the tests.
-_attach_tk_window_to_editor = cast(Callable[..., bool], getattr(plugin_actions, "_attach_tk_window_to_editor"))
-_bind_mousewheel = cast(Callable[..., None], getattr(plugin_actions, "_bind_mousewheel"))
-_block_overview_text = cast(Callable[..., str], getattr(plugin_actions, "_block_overview_text"))
-_capture_eeschema_window_id = cast(Callable[..., str | None], getattr(plugin_actions, "_capture_eeschema_window_id"))
-_choose_block_layout = cast(Callable[..., ResolvedBlockLayout | None], getattr(plugin_actions, "_choose_block_layout"))
-_clean_facade_preview_svg = cast(Callable[..., Path], getattr(plugin_actions, "_clean_facade_preview_svg"))
-_filter_library_records = cast(Callable[..., list[BlockRecord]], getattr(plugin_actions, "_filter_library_records"))
-_layout_choices = cast(Callable[..., list[ResolvedBlockLayout]], getattr(plugin_actions, "_layout_choices"))
-_library_record_for_instance = cast(Callable[..., BlockRecord], getattr(plugin_actions, "_library_record_for_instance"))
-_library_record_for_tree_row = cast(Callable[..., BlockRecord | None], getattr(plugin_actions, "_library_record_for_tree_row"))
-_minimize_placement_windows = cast(Callable[..., list[_MinimizableWindow]], getattr(plugin_actions, "_minimize_placement_windows"))
-_new_blank_pcb_source = cast(Callable[..., Path], getattr(plugin_actions, "_new_blank_pcb_source"))
-_pick_directory = cast(Callable[..., str | None], getattr(plugin_actions, "_pick_directory"))
-_pick_kicad_file = cast(Callable[..., str | None], getattr(plugin_actions, "_pick_kicad_file"))
-_pick_record = cast(Callable[..., BlockRecord | None], getattr(plugin_actions, "_pick_record"))
-_preferred_library_selection = cast(Callable[..., BlockRecord | None], getattr(plugin_actions, "_preferred_library_selection"))
-_restore_placement_windows = cast(Callable[..., None], getattr(plugin_actions, "_restore_placement_windows"))
-_save_block_layouts = cast(Callable[..., BlockRecord], getattr(plugin_actions, "_save_block_layouts"))
-_save_block_variants = cast(Callable[..., None], getattr(plugin_actions, "_save_block_variants"))
-_set_window_geometry = cast(Callable[..., None], getattr(plugin_actions, "_set_window_geometry"))
-_start_native_symbol_placement = cast(Callable[..., None], getattr(plugin_actions, "_start_native_symbol_placement"))
-_system_prefers_dark_theme = cast(Callable[..., bool], getattr(plugin_actions, "_system_prefers_dark_theme"))
+_attach_tk_window_to_editor = cast(Callable[..., bool], _private_hook("_attach_tk_window_to_editor"))
+_bind_mousewheel = cast(Callable[..., None], _private_hook("_bind_mousewheel"))
+_block_overview_text = cast(Callable[..., str], _private_hook("_block_overview_text"))
+_capture_eeschema_window_id = cast(Callable[..., str | None], _private_hook("_capture_eeschema_window_id"))
+_choose_block_layout = cast(Callable[..., ResolvedBlockLayout | None], _private_hook("_choose_block_layout"))
+_clean_facade_preview_svg = cast(Callable[..., Path], _private_hook("_clean_facade_preview_svg"))
+_filter_library_records = cast(Callable[..., list[BlockRecord]], _private_hook("_filter_library_records"))
+_layout_choices = cast(Callable[..., list[ResolvedBlockLayout]], _private_hook("_layout_choices"))
+_library_record_for_instance = cast(Callable[..., BlockRecord], _private_hook("_library_record_for_instance"))
+_library_record_for_tree_row = cast(Callable[..., BlockRecord | None], _private_hook("_library_record_for_tree_row"))
+_minimize_placement_windows = cast(Callable[..., list[_MinimizableWindow]], _private_hook("_minimize_placement_windows"))
+_new_blank_pcb_source = cast(Callable[..., Path], _private_hook("_new_blank_pcb_source"))
+_pick_directory = cast(Callable[..., str | None], _private_hook("_pick_directory"))
+_pick_kicad_file = cast(Callable[..., str | None], _private_hook("_pick_kicad_file"))
+_pick_record = cast(Callable[..., BlockRecord | None], _private_hook("_pick_record"))
+_preferred_library_selection = cast(Callable[..., BlockRecord | None], _private_hook("_preferred_library_selection"))
+_restore_placement_windows = cast(Callable[..., None], _private_hook("_restore_placement_windows"))
+_save_block_layouts = cast(Callable[..., BlockRecord], _private_hook("_save_block_layouts"))
+_save_block_variants = cast(Callable[..., None], _private_hook("_save_block_variants"))
+_set_window_geometry = cast(Callable[..., None], _private_hook("_set_window_geometry"))
+_start_native_symbol_placement = cast(Callable[..., None], _private_hook("_start_native_symbol_placement"))
+_system_prefers_dark_theme = cast(Callable[..., bool], _private_hook("_system_prefers_dark_theme"))
 
 
 class LibraryBrowserTests(unittest.TestCase):
