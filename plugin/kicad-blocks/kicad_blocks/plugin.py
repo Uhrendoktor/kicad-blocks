@@ -241,9 +241,7 @@ class _Schematic(Protocol):
 
     def get_hierarchy(self) -> _SheetHierarchy: ...
 
-    def place_symbol_from_library(
-        self, symbol_id: str, position: Vector2
-    ) -> _SchematicSymbol: ...
+    def place_symbol_from_library(self, symbol_id: str, position: Vector2) -> _SchematicSymbol: ...
 
     def begin_commit(self) -> Message: ...
 
@@ -946,9 +944,7 @@ def _create_action_icon(parent: tkinter_types.Misc, name: str) -> tkinter_types.
     )
     try:
         cairosvg = cast(_CairoSVG, import_module("cairosvg"))
-        png = cairosvg.svg2png(
-            bytestring=svg.encode("utf-8"), output_width=20, output_height=20
-        )
+        png = cairosvg.svg2png(bytestring=svg.encode("utf-8"), output_width=20, output_height=20)
         if png is None:
             raise ValueError("CairoSVG did not return PNG data for the toolbar icon.")
         image = tk.PhotoImage(data=base64.b64encode(png).decode("ascii"), master=parent)
