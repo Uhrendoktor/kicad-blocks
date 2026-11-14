@@ -123,7 +123,13 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
         self.assertTrue(opened)
         self.assertIn(["/usr/bin/xdotool", "windowfocus", "--sync", "0x100"], calls)
         self.assertIn(["/usr/bin/xdotool", "key", "--clearmodifiers", "alt+t"], calls)
-        self.assertIn(["/usr/bin/xdotool", "key", "--clearmodifiers", "s"], calls)
+        self.assertIn(
+            [
+                "/usr/bin/xdotool", "type", "--clearmodifiers", "--delay",
+                "35", "Symbol Editor",
+            ],
+            calls,
+        )
         self.assertGreaterEqual(search_count[0], 2)
 
     def test_wayland_edit_facade_closes_browser_and_sends_native_menu_search(self):
