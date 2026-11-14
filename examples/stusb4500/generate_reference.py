@@ -292,14 +292,22 @@ def _measure_text_box(
 def _graphic_text(
     value: str, x: float, y: float, size: float, key: str,
     *, padding: float = 1.27, border: bool = True,
+    box_width: float | None = None,
 ) -> list:
     """Create a native KiCad text_box with measured size and uniform margins.
 
     Coordinates identify the top-left box corner. KiCad lays out/reflows text
     inside the native text_box; this helper supplies conservative dimensions
-    and identical physical padding on all four sides.
+    and identical physical padding on all four sides. Callers may widen the
+    box to a known tab or page region to prevent KiCad from wrapping a title.
     """
-    width, height = _measure_text_box(value, size, padding)
+    measured_width, height = _measure_text_box(value, size, padding)
+    width = measured_width if box_width is None else box_width
+    if width + 0.001 < measured_width:
+        raise ValueError(
+            f"Text box width {width:.3f} mm is smaller than measured width "
+            f"{measured_width:.3f} mm for {value!r}."
+        )
     stroke = (
         ["stroke", ["width", "0.1524"], ["type", "default"]]
         if border else ["stroke", ["width", "0"], ["type", "default"]]
@@ -324,7 +332,8 @@ def _note_box(
     if not lines or any(not line.strip() for line in lines):
         raise ValueError(f"Note {key!r} must contain non-empty lines.")
     return [_graphic_text(
-        "\n".join(lines), x, y, 0.90, key, padding=1.27, border=True,
+        "\n".join(lines), x, y, 0.90, key,
+        padding=1.27, border=True, box_width=55.88,
     )]
 
 
@@ -349,8 +358,14 @@ def _sheet_header(
     if title_y + 17.78 >= 81.28:
         raise ValueError("Sheet header must remain above the functional-block tabs.")
     return [
-        _graphic_text(title, x, title_y, 3.20, f"header:{key}:title"),
-        _graphic_text(subtitle, x, title_y + 7.62, 1.05, f"header:{key}:subtitle"),
+        _graphic_text(
+            title, x, title_y, 3.20, f"header:{key}:title",
+            box_width=rule_right - x,
+        ),
+        _graphic_text(
+            subtitle, x, title_y + 7.62, 1.05, f"header:{key}:subtitle",
+            box_width=rule_right - x,
+        ),
         _graphic_rule(x, title_y + 13.97, rule_right, title_y + 13.97, f"header:{key}:rule"),
     ]
 
@@ -376,6 +391,7 @@ def _functional_block(
         _graphic_text(
             title, x + 1.27, y - 4.83, 1.27,
             f"zone-title:{key}", padding=1.27, border=False,
+            box_width=tab_width - 2.54,
         ),
     ]
 
@@ -964,7 +980,7 @@ def generate_reference_schematic(destination: Path) -> Path:
     ))
     rules.extend(_functional_zone(
         374.65, 86.36, 411.48, 175.26,
-        "VSNK OUTPUT / DISCHARGE", 33.02, "vsnk-output",
+        "VSNK OUTPUT", 33.02, "vsnk-output",
     ))
     rules.extend(_note_box(
         151.13, 137.16,
@@ -972,10 +988,12 @@ def generate_reference_schematic(destination: Path) -> Path:
         "d4-selection",
     ))
     rules.append(_graphic_text(
-        "VBUS CLAMP + FILTER", 153.035, 96.52, 0.85, "vbus-clamp-caption",
+        "VBUS CLAMP + FILTER", 153.035, 96.52, 0.85,
+        "vbus-clamp-caption", box_width=55.88,
     ))
     rules.append(_graphic_text(
-        "VBUS_VS_DISCH SENSE DIVIDER", 153.035, 132.08, 0.85, "vbus-divider-caption",
+        "VBUS_VS_DISCH SENSE DIVIDER", 153.035, 132.08, 0.85,
+        "vbus-divider-caption", box_width=55.88,
     ))
 
     # Every local label must be intentionally reused; use a short physical
