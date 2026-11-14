@@ -30,7 +30,6 @@ from kicad_blocks.plugin import (
     _library_record_for_instance,
     _library_record_for_tree_row,
     _minimize_placement_windows,
-    _native_run_action_status,
     _native_symbol_preview_photo,
     _new_blank_pcb_source,
     _pick_directory,
@@ -767,32 +766,21 @@ class LibraryBrowserTests(unittest.TestCase):
         self.assertEqual(browser.events, [])
         self.assertEqual(manager.events, ["iconify"])
 
-    def test_native_run_action_status_is_checked_not_treated_as_truthy(self):
-        self.assertEqual(_native_run_action_status(SimpleNamespace(status=1)), 1)
-        self.assertEqual(_native_run_action_status(SimpleNamespace(status=2)), 2)
-        self.assertIsNone(_native_run_action_status(SimpleNamespace(status=None)))
-
-    def test_native_placement_uses_only_the_native_kicad_ipc_action(self):
-        kicad = SimpleNamespace(run_action=Mock(return_value=SimpleNamespace(status=1)))
+    def test_place_block_reports_missing_supported_interactive_ipc_without_automation(self):
+        run_action = Mock()
         with (
             patch("kicad_blocks.plugin.subprocess.run") as run_process,
             patch("kicad_blocks.plugin.shutil.which") as find_command,
         ):
-            _start_native_symbol_placement(kicad, None, "buck_converter_ab12cd34")
-        kicad.run_action.assert_called_once_with("eeschema.InteractiveDrawing.placeSymbol")
+            with self.assertRaisesRegex(RuntimeError, "supported KiCad IPC API yet"):
+                _start_native_symbol_placement(
+                    SimpleNamespace(run_action=run_action), None, "buck_converter_ab12cd34"
+                )
+        run_action.assert_not_called()
         run_process.assert_not_called()
         find_command.assert_not_called()
 
-    def test_native_placement_reports_ipc_rejection(self):
-        kicad = SimpleNamespace(run_action=Mock(return_value=SimpleNamespace(status=2)))
-        with self.assertRaisesRegex(RuntimeError, "RunActionStatus=2"):
-            _start_native_symbol_placement(kicad, None, "buck_converter_ab12cd34")
-
-    def test_native_placement_requires_native_ipc_action(self):
-        with self.assertRaisesRegex(TypeError, "does not expose native editor actions"):
-            _start_native_symbol_placement(SimpleNamespace(), None, "buck_converter_ab12cd34")
-
-    def test_native_placement_rejects_invalid_symbol_id_before_ipc(self):
+    def test_place_block_rejects_invalid_symbol_id_before_reporting_capability_gap(self):
         run_action = Mock()
         with self.assertRaisesRegex(ValueError, "invalid KiCad symbol name"):
             _start_native_symbol_placement(SimpleNamespace(run_action=run_action), None, "bad symbol id")
