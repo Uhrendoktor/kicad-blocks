@@ -990,8 +990,27 @@ def generate_reference_schematic(destination: Path) -> Path:
                         return True
         return False
 
+    def segment_is_already_wired(
+        start: tuple[float, float], end: tuple[float, float],
+    ) -> bool:
+        """Avoid duplicating a route segment when a label branches from it."""
+        target = frozenset((start, end))
+        for existing in (*wires, *label_stubs):
+            points_node = _direct(existing, "pts")
+            if points_node is None:
+                continue
+            points = [
+                (round(float(point[1]), 3), round(float(point[2]), 3))
+                for point in _all(points_node, "xy")
+            ]
+            if any(frozenset((a, b)) == target for a, b in zip(points, points[1:])):
+                return True
+        return False
+
     # Emit only surviving labels after local wires have consumed their
     # intermediate endpoint labels. This avoids duplicate flags on wire ends.
+    # Offset labels use orthogonal two-point segments. Prefer a vertical-first
+    # bend so an existing pin-to-rail wire can be reused without duplication.
     for point, (net, kind, shape_name, x, y, justify, angle) in sorted(label_points.items()):
         px, py = point
         labels.append(
@@ -1000,16 +1019,23 @@ def generate_reference_schematic(destination: Path) -> Path:
                 justify=justify, angle=angle, key=f"label:{kind}:{net}:{px:.3f}:{py:.3f}",
             )
         )
-        if (
-            (round(x, 3), round(y, 3)) != point
-            and not label_position_is_on_wire(x, y)
-        ):
-            label_stubs.append([
-                "wire",
-                ["pts", ["xy", f"{px:.3f}", f"{py:.3f}"], ["xy", f"{x:.3f}", f"{y:.3f}"]],
-                ["stroke", ["width", "0"], ["type", "default"]],
-                ["uuid", _Quoted(_uid(f"label-stub:{kind}:{net}:{px:.3f}:{py:.3f}"))],
-            ])
+        target = (round(x, 3), round(y, 3))
+        start = (round(px, 3), round(py, 3))
+        if target != start and not label_position_is_on_wire(*target):
+            path = [start]
+            if start[0] != target[0] and start[1] != target[1]:
+                path.append((start[0], target[1]))
+            path.append(target)
+            for segment_index, (segment_start, segment_end) in enumerate(zip(path, path[1:])):
+                if segment_start == segment_end or segment_is_already_wired(segment_start, segment_end):
+                    continue
+                label_stubs.append(
+                    _wire(
+                        segment_start,
+                        segment_end,
+                        f"label-stub:{kind}:{net}:{px:.3f}:{py:.3f}:{segment_index}",
+                    )
+                )
 
     schematic = [
         "kicad_sch", ["version", "20250114"], ["generator", _Quoted("kicad-blocks")],
