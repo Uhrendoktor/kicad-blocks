@@ -939,7 +939,7 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
         ):
             plugin_actions.run_action("open-hub")
         self.assertEqual(events, ["load tkinter", "tk.Tk"])
-        self.assertFalse(hasattr(root, "_kicad_blocks_editor_window_id"))
+        self.assertNotIn("_kicad_blocks_editor_window_id", root.__dict__)
 
 if __name__ == "__main__":
     unittest.main()
