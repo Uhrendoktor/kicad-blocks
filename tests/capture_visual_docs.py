@@ -183,18 +183,17 @@ def window_id(
             check=False,
             timeout=5,
         )
-        found.extend(
-            item.strip()
-            for item in result.stdout.splitlines()
-            if item.strip().isdigit()
-        )
+        found.extend(item.strip() for item in result.stdout.splitlines() if item.strip().isdigit())
         # If an exact title returned one result, still examine it together
         # with other matches. Do not assume the final ID is the real client.
     ranked: list[tuple[int, int, str]] = []
     for identifier in dict.fromkeys(found):
         geometry = subprocess.run(
             [xdotool, "getwindowgeometry", "--shell", identifier],
-            capture_output=True, text=True, check=False, timeout=5,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=5,
         )
         if geometry.returncode != 0:
             continue
@@ -621,10 +620,7 @@ def capture_ui_workflows(
             raise AssertionError(
                 f"Unexpected visual-capture library wait request: {(types, scope)!r}"
             )
-        return [
-            SimpleNamespace(nickname=nickname, error_message=None)
-            for nickname in ()
-        ]
+        return [SimpleNamespace(nickname=nickname, error_message=None) for nickname in ()]
 
     kicad = SimpleNamespace(
         reload_library=reload_library,

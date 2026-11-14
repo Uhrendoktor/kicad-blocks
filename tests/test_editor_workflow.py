@@ -157,7 +157,14 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
         self.assertIn(["/usr/bin/xdotool", "windowfocus", "--sync", "0x200"], calls)
         self.assertNotIn(["/usr/bin/xdotool", "key", "--clearmodifiers", "alt+t"], calls)
         self.assertIn(
-            ["/usr/bin/xdotool", "type", "--clearmodifiers", "--delay", "12", self.block.manifest["symbol_name"]],
+            [
+                "/usr/bin/xdotool",
+                "type",
+                "--clearmodifiers",
+                "--delay",
+                "12",
+                self.block.manifest["symbol_name"],
+            ],
             calls,
         )
 
@@ -228,11 +235,17 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
         self.assertNotIn(["/usr/bin/xdotool", "key", "--clearmodifiers", "s"], calls)
         self.assertIn(["/usr/bin/xdotool", "key", "--clearmodifiers", "ctrl+l"], calls)
         self.assertIn(
-            ["/usr/bin/xdotool", "type", "--clearmodifiers", "--delay", "12", self.block.manifest["symbol_name"]],
+            [
+                "/usr/bin/xdotool",
+                "type",
+                "--clearmodifiers",
+                "--delay",
+                "12",
+                self.block.manifest["symbol_name"],
+            ],
             calls,
         )
         self.assertIn(0.35, pauses)
-
 
     def test_edit_facade_opens_symbol_editor_from_eeschema_tools_menu(self):
         from kicad_blocks.repository import build_project_symbol_catalog
@@ -301,11 +314,17 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
         self.assertNotIn(["/usr/bin/xdotool", "key", "--clearmodifiers", "s"], calls)
         self.assertIn(["/usr/bin/xdotool", "key", "--clearmodifiers", "ctrl+l"], calls)
         self.assertIn(
-            ["/usr/bin/xdotool", "type", "--clearmodifiers", "--delay", "12", self.block.manifest["symbol_name"]],
+            [
+                "/usr/bin/xdotool",
+                "type",
+                "--clearmodifiers",
+                "--delay",
+                "12",
+                self.block.manifest["symbol_name"],
+            ],
             calls,
         )
         self.assertIn(0.35, pauses)
-
 
     def test_symbol_editor_menu_down_count_matches_standalone_and_manager_hosted_modes(self):
         with patch.object(
@@ -399,7 +418,9 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
         close_browser.assert_called_once_with()
         runner.assert_not_called()
 
-    def test_edit_facade_uses_verified_menu_if_native_action_acknowledges_but_does_not_open_editor(self):
+    def test_edit_facade_uses_verified_menu_if_native_action_acknowledges_but_does_not_open_editor(
+        self,
+    ):
         from kicad_blocks.repository import build_project_symbol_catalog
 
         project_catalog = build_project_symbol_catalog(self.project, [self.library])
@@ -441,7 +462,9 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
         with patch.object(plugin_actions.os, "readlink", return_value="/usr/bin/eeschema-nightly"):
             opened = plugin_actions._edit_facade_symbol(
                 self.block,
-                SimpleNamespace(run_action=run_action, get_open_documents=self._open_symbol_documents),
+                SimpleNamespace(
+                    run_action=run_action, get_open_documents=self._open_symbol_documents
+                ),
                 "0x100",
                 project_catalog=project_catalog,
                 xdotool="/usr/bin/xdotool",
@@ -467,6 +490,7 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
 
         project_catalog = build_project_symbol_catalog(self.project, [self.library])
         calls = []
+
         def command_runner(arguments, **kwargs):
             calls.append(arguments)
             if arguments[1:4] == ["search", "--onlyvisible", "--name"]:
@@ -487,15 +511,14 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
                 command_runner=command_runner,
                 pause=lambda _seconds: None,
             )
-        self.assertFalse(any(
-            call[1:2] == ["key"] for call in calls
-        ))
+        self.assertFalse(any(call[1:2] == ["key"] for call in calls))
 
     def test_edit_facade_stops_when_eeschema_cannot_take_keyboard_focus(self):
         from kicad_blocks.repository import build_project_symbol_catalog
 
         project_catalog = build_project_symbol_catalog(self.project, [self.library])
         calls = []
+
         def command_runner(arguments, **kwargs):
             calls.append(arguments)
             if arguments[1:4] == ["search", "--onlyvisible", "--name"]:
@@ -520,9 +543,7 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
                 command_runner=command_runner,
                 pause=lambda _seconds: None,
             )
-        self.assertFalse(any(
-            call[1:2] == ["key"] for call in calls
-        ))
+        self.assertFalse(any(call[1:2] == ["key"] for call in calls))
 
     def test_wayland_edit_facade_does_not_inject_without_verified_search_focus(self):
         from kicad_blocks.repository import build_project_symbol_catalog
@@ -978,7 +999,6 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
         kicad.reload_library.assert_called_once_with(type=1, scope=2, nicknames=["KBlocks"])
         kicad.wait_for_libraries.assert_called_once()
         kicad.load_all_libraries.assert_not_called()
-
 
     def test_edit_opens_library_implementation_and_publish_advances_revision(self):
         initial_manifest = read_manifest(self.block.path)

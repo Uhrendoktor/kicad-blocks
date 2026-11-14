@@ -278,9 +278,7 @@ def import_project_catalog_facade_edit(
         manifest.get("catalog_file", LIBRARY_CATALOG_NAME)
     )
     if not shared_catalog_path.is_file():
-        raise FileNotFoundError(
-            f"Shared facade catalog does not exist: {shared_catalog_path}"
-        )
+        raise FileNotFoundError(f"Shared facade catalog does not exist: {shared_catalog_path}")
     if not asset_path.is_file():
         raise FileNotFoundError(f"Block facade asset does not exist: {asset_path}")
 
@@ -288,9 +286,7 @@ def import_project_catalog_facade_edit(
     shared_tree = parse_sexpr(shared_catalog_path.read_text(encoding="utf-8"))
     asset_tree = parse_sexpr(asset_path.read_text(encoding="utf-8"))
     project_symbol = _named_symbol_node(project_tree, symbol_name, project_catalog)
-    shared_symbol = _named_symbol_node(
-        shared_tree, symbol_name, shared_catalog_path
-    )
+    shared_symbol = _named_symbol_node(shared_tree, symbol_name, shared_catalog_path)
     asset_symbol = _named_symbol_node(asset_tree, symbol_name, asset_path)
     project_digest = _symbol_definition_digest(project_symbol)
     shared_digest = _symbol_definition_digest(shared_symbol)
@@ -328,14 +324,10 @@ def import_project_catalog_facade_edit(
         )
 
     standalone = copy.deepcopy(project_tree)
-    standalone[:] = [
-        child for child in standalone
-        if _head(child) != "symbol"
-    ]
+    standalone[:] = [child for child in standalone if _head(child) != "symbol"]
     standalone.append(copy.deepcopy(project_symbol))
     atomic_write(asset_path, _dump(standalone) + "\n")
     return True
-
 
 
 def _save_catalog_symbol_baseline(block: BlockRecord, manifest: BlockManifest) -> None:

@@ -238,16 +238,22 @@ class LibraryBrowserTests(unittest.TestCase):
             ),
         ):
             selected_file = _pick_kicad_file(
-                object(), title="Open board", suffix=".kicad_pcb",
+                object(),
+                title="Open board",
+                suffix=".kicad_pcb",
                 initial_path=self.board,
             )
             selected_directory = _pick_directory(
-                object(), title="Choose library", initial_path=self.root,
+                object(),
+                title="Choose library",
+                initial_path=self.root,
             )
             selected_save = _pick_save_file(
-                object(), title="Save BOM",
+                object(),
+                title="Save BOM",
                 initial_path=Path("/tmp") / "bom.csv",
-                defaultextension=".csv", filetypes=[("CSV", "*.csv")],
+                defaultextension=".csv",
+                filetypes=[("CSV", "*.csv")],
             )
         self.assertIsNone(selected_file)
         self.assertIsNone(selected_directory)
@@ -970,9 +976,7 @@ class LibraryBrowserTests(unittest.TestCase):
         self.assertIsNone(_native_run_action_status(SimpleNamespace(status=None)))
 
     def test_native_placement_uses_kicad_ipc_without_xdotool_or_captured_xid(self) -> None:
-        kicad = SimpleNamespace(
-            run_action=Mock(return_value=SimpleNamespace(status=1))
-        )
+        kicad = SimpleNamespace(run_action=Mock(return_value=SimpleNamespace(status=1)))
         with patch("kicad_blocks.plugin.shutil.which", return_value=None):
             _start_native_symbol_placement(
                 kicad,
@@ -985,9 +989,7 @@ class LibraryBrowserTests(unittest.TestCase):
         kicad.run_action.assert_called_once_with("eeschema.InteractiveDrawing.placeSymbol")
 
     def test_native_placement_rejected_by_kicad_reports_real_status_without_xdotool(self):
-        kicad = SimpleNamespace(
-            run_action=Mock(return_value=SimpleNamespace(status=2))
-        )
+        kicad = SimpleNamespace(run_action=Mock(return_value=SimpleNamespace(status=2)))
         with (
             patch("kicad_blocks.plugin.shutil.which", return_value=None),
             patch.dict(os.environ, {"WAYLAND_DISPLAY": "", "XDG_SESSION_TYPE": "x11"}),
@@ -1006,10 +1008,13 @@ class LibraryBrowserTests(unittest.TestCase):
     def test_native_placement_does_not_send_global_wayland_keys_without_verified_editor(self):
         command_runner = Mock()
         with (
-            patch("kicad_blocks.plugin.shutil.which", side_effect=lambda name: {
-                "xdotool": None,
-                "wtype": "/usr/bin/wtype",
-            }.get(name)),
+            patch(
+                "kicad_blocks.plugin.shutil.which",
+                side_effect=lambda name: {
+                    "xdotool": None,
+                    "wtype": "/usr/bin/wtype",
+                }.get(name),
+            ),
             patch.dict(os.environ, {"WAYLAND_DISPLAY": "wayland-0", "XDG_SESSION_TYPE": "wayland"}),
             self.assertRaisesRegex(RuntimeError, "No supported Wayland input helper is available"),
         ):
