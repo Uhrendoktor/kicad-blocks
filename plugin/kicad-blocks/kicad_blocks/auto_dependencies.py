@@ -12,7 +12,7 @@ import tempfile
 import xml.etree.ElementTree as ET
 from collections.abc import Sequence
 from pathlib import Path
-from typing import TYPE_CHECKING, Protocol, SupportsFloat, TypedDict
+from typing import TYPE_CHECKING, Protocol, SupportsFloat, TypedDict, cast
 
 if TYPE_CHECKING:
     from .repository import BlockRecord
@@ -72,6 +72,36 @@ class BlockDependency(TypedDict):
     position_mm: tuple[float, float]
     orientation: int
     pin_map: dict[str, str | None]
+
+
+class DependencySynchronizationResult(TypedDict):
+    """Updated block record and whether dependency metadata changed."""
+
+    block: BlockRecord
+    changed: bool
+    count: int
+
+
+class _SchematicSheetReference(Protocol):
+    """Sheet identifier accepted by the KiCad per-sheet schematic selector."""
+
+    def __str__(self) -> str: ...
+
+
+class _SchematicSheet(Protocol):
+    """Symbol-query surface for one sheet in the implementation hierarchy."""
+
+    def get_symbols(self) -> Sequence[_PlacedSymbol]: ...
+
+
+class _SchematicForDependencyScan(Protocol):
+    """Schematic hierarchy methods needed to find placed child block facades."""
+
+    def iter_sheets(self) -> Sequence[_SchematicSheetReference]: ...
+
+    def for_sheet(self, sheet: _SchematicSheetReference) -> _SchematicSheet: ...
+
+    def get_symbols(self) -> Sequence[_PlacedSymbol]: ...
 
 
 def parse_kicad_xml_netlist(path: Path) -> KiCadNetlist:
@@ -247,7 +277,7 @@ def discover_block_dependencies(
     return sorted(occurrences, key=lambda item: item["reference"].casefold())
 
 
-def _all_sheet_symbols(schematic) -> list:
+def _all_sheet_symbols(schematic: _SchematicForDependencyScan) -> list[_PlacedSymbol]:
     """Collect facade symbols from every sheet in the implementation hierarchy."""
     try:
         sheets = list(schematic.iter_sheets())
@@ -259,7 +289,7 @@ def _all_sheet_symbols(schematic) -> list:
     return symbols or list(schematic.get_symbols())
 
 
-def synchronize_block_dependencies(parent, library_roots: list[Path], kicad_cli: str):
+def synchronize_block_dependencies(parent: BlockRecord, library_roots: list[Path], kicad_cli: str) -> DependencySynchronizationResult:
     """Rebuild a block's dependency manifest from its saved default implementation."""
     from kipy import KiCad
 
@@ -308,10 +338,11 @@ def synchronize_block_dependencies(parent, library_roots: list[Path], kicad_cli:
         schematic = kicad.get_schematic()
         if schematic is None:
             raise RuntimeError(f"KiCad could not open {parent.name!r} for dependency discovery.")
+        typed_schematic = cast(_SchematicForDependencyScan, schematic)
         occurrences = discover_block_dependencies(
             parent,
             records,
-            _all_sheet_symbols(schematic),
+            _all_sheet_symbols(typed_schematic),
             netlist,
         )
     finally:
