@@ -93,6 +93,9 @@ SUPPORT_SCRIPTS = [
 ACRONYMS = {
     "kicad": "KiCad",
     "kiCad": "KiCad",
+    "eeschema": "Eeschema",
+    "any": "Any",
+    "python": "Python",
     "ipc": "IPC",
     "pcb": "PCB",
     "erc": "ERC",
