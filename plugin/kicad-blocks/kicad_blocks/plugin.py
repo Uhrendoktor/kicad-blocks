@@ -3753,7 +3753,7 @@ def _save_block_layouts(
         block_path / MANIFEST_NAME,
         json.dumps(manifest, indent=2, ensure_ascii=False) + "\n",
     )
-    updated_record = _record(block_path)
+    updated_record = BlockRecord(path=block_path, manifest=read_manifest(block_path))
     result = refresh_library_block(updated_record)
     if not result.get("changed"):
         manifest = read_manifest(block_path)
@@ -3764,7 +3764,7 @@ def _save_block_layouts(
         )
     for filename in removed_files:
         (block_path / filename).unlink(missing_ok=True)
-    return _record(block_path)
+    return BlockRecord(path=block_path, manifest=read_manifest(block_path))
 
 
 def _new_blank_pcb_source() -> Path:

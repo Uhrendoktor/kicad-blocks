@@ -12,7 +12,6 @@ import os
 import subprocess
 import sys
 import uuid
-from typing import TypedDict
 from collections.abc import Iterator
 from pathlib import Path
 from typing import TypedDict
@@ -422,9 +421,9 @@ def _label(
             )
         effects.append(["justify", justify, "bottom"])
     if hierarchical:
-        node = ["hierarchical_label", _Quoted(name), ["shape", shape]]
+        node = ["hierarchical_label", QuotedSExpr(name), ["shape", shape]]
     else:
-        node = ["label", _Quoted(name)]
+        node = ["label", QuotedSExpr(name)]
     node.extend(
         [
             ["at", f"{x:.3f}", f"{y:.3f}", str(angle)],
@@ -445,7 +444,7 @@ def _graphic_rectangle(
         ["end", f"{x2:.3f}", f"{y2:.3f}"],
         ["stroke", ["width", "0.254"], ["type", "default"]],
         ["fill", ["type", "none"]],
-        ["uuid", _Quoted(_uid(f"graphic:rectangle:{key}"))],
+        ["uuid", QuotedSExpr(_uid(f"graphic:rectangle:{key}"))],
     ]
 
 
@@ -463,7 +462,7 @@ def _graphic_tab(x: float, y: float, width: float, key: str) -> list:
         ],
         ["stroke", ["width", "0.254"], ["type", "default"]],
         ["fill", ["type", "none"]],
-        ["uuid", _Quoted(_uid(f"graphic:tab:{key}"))],
+        ["uuid", QuotedSExpr(_uid(f"graphic:tab:{key}"))],
     ]
 
 
@@ -516,14 +515,14 @@ def _graphic_text(
             f"{measured_width:.3f} mm for {value!r}."
         )
     result = [
-        "text_box", _Quoted(value),
+        "text_box", QuotedSExpr(value),
         ["at", f"{x:.3f}", f"{y:.3f}", "0"],
         ["size", f"{width:.3f}", f"{height:.3f}"],
         ["margins", *(f"{padding:.3f}" for _ in range(4))],
         ["fill", ["type", "none"]],
         ["effects", ["font", ["size", f"{size:.3f}", f"{size:.3f}"]],
             ["justify", "left", "top"]],
-        ["uuid", _Quoted(_uid(f"graphic:text:{key}"))],
+        ["uuid", QuotedSExpr(_uid(f"graphic:text:{key}"))],
     ]
     stroke_width = "0.1524" if border else "-1"
     result.insert(5, ["stroke", ["width", stroke_width], ["type", "default"]])
@@ -551,7 +550,7 @@ def _graphic_rule(x1: float, y1: float, x2: float, y2: float, key: str) -> list:
         ["pts", ["xy", f"{x1:.3f}", f"{y1:.3f}"], ["xy", f"{x2:.3f}", f"{y2:.3f}"]],
         ["stroke", ["width", "0.254"], ["type", "default"]],
         ["fill", ["type", "none"]],
-        ["uuid", _Quoted(_uid(f"graphic:rule:{key}"))],
+        ["uuid", QuotedSExpr(_uid(f"graphic:rule:{key}"))],
     ]
 
 
@@ -1075,10 +1074,10 @@ def generate_reference_schematic(destination: Path) -> Path:
         # address resistors are counter-rotated so that their text stays legible.
         field_angle = 90 if reference.startswith("R") else 0
         instance = [
-            "symbol", ["lib_id", _Quoted(lib_id)], ["at", f"{sx:.3f}", f"{sy:.3f}", str(rotation)],
+            "symbol", ["lib_id", QuotedSExpr(lib_id)], ["at", f"{sx:.3f}", f"{sy:.3f}", str(rotation)],
             ["unit", "1"], ["in_bom", "yes"], ["on_board", "yes"],
             ["dnp", "yes" if reference in {"R51", "R52"} else "no"],
-            ["uuid", _Quoted(symbol_uuid)],
+            ["uuid", QuotedSExpr(symbol_uuid)],
             _prop(
                 "Reference", reference, 0, reference_x, reference_y,
                 font_size=0.95 if reference.startswith("R") else 1.10,
@@ -1613,15 +1612,15 @@ def generate_reference_schematic(destination: Path) -> Path:
         rules.extend(_functional_group(group, (left, top, right, bottom)))
 
     schematic = [
-        "kicad_sch", ["version", "20250114"], ["generator", _Quoted("kicad-blocks")],
-        ["uuid", _Quoted(ROOT_UUID)], ["paper", _Quoted("A3")],
+        "kicad_sch", ["version", "20250114"], ["generator", QuotedSExpr("kicad-blocks")],
+        ["uuid", QuotedSExpr(ROOT_UUID)], ["paper", QuotedSExpr("A3")],
         ["title_block",
-            ["title", _Quoted("STUSB4500 USB Type-C / USB Power Delivery Sink")],
-            ["date", _Quoted("2026-11-14")],
-            ["rev", _Quoted("Electrical and layout refinement 6")],
-            ["company", _Quoted("KiCad Blocks — Reference design")],
-            ["comment", "1", _Quoted("Source: ST DS12499 Rev. 8, Figure 10")],
-            ["comment", "2", _Quoted("Reference only: verify component ratings, footprints and thermal design before production.")],
+            ["title", QuotedSExpr("STUSB4500 USB Type-C / USB Power Delivery Sink")],
+            ["date", QuotedSExpr("2026-11-14")],
+            ["rev", QuotedSExpr("Electrical and layout refinement 6")],
+            ["company", QuotedSExpr("KiCad Blocks — Reference design")],
+            ["comment", "1", QuotedSExpr("Source: ST DS12499 Rev. 8, Figure 10")],
+            ["comment", "2", QuotedSExpr("Reference only: verify component ratings, footprints and thermal design before production.")],
         ],
         ["lib_symbols", *library_symbols],
         *instances, *wires, *label_stubs, *labels, *no_connects, *junctions, *rules,
