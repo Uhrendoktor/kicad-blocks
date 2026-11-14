@@ -954,7 +954,6 @@ def _show_selected_block_configuration(
     dialog = tk.Toplevel(parent)
     dialog.title(f"Configure {instance.reference} — {block.name}")
     dialog.transient(parent)
-    dialog.grab_set()
 
     outer = ttk.Frame(dialog, padding=18)
     outer.pack(fill="both", expand=True)
@@ -1229,6 +1228,7 @@ def _show_selected_block_configuration(
     dialog.bind("<Escape>", lambda _event: dialog.destroy())
     dialog.protocol("WM_DELETE_WINDOW", dialog.destroy)
     _set_window_geometry(dialog, 700, 720, 580, 500)
+    dialog.grab_set()
     dialog.wait_window()
 
 
@@ -1257,7 +1257,6 @@ def _pick_block_for_placement(records, parent):
     dialog = tk.Toplevel(parent)
     dialog.title("Place Functional Block")
     dialog.transient(parent)
-    dialog.grab_set()
 
     outer = ttk.Frame(dialog, padding=12)
     outer.pack(fill="both", expand=True)
@@ -1467,6 +1466,7 @@ def _pick_block_for_placement(records, parent):
     _action_button(buttons, "Place Block", choose, "place", "Start native symbol placement with this block").pack(side="right", padx=(0, 8))
     render_results()
     _set_window_geometry(dialog, 1200, 800, 980, 640)
+    dialog.grab_set()
     search_entry.focus_set()
     dialog.wait_window()
     return chosen[0]
@@ -1482,7 +1482,6 @@ def _pick_record(records, parent, title: str):
     dialog = tk.Toplevel(parent)
     dialog.title(title)
     dialog.transient(parent)
-    dialog.grab_set()
 
     outer = ttk.Frame(dialog, padding=12)
     outer.pack(fill="both", expand=True)
@@ -1634,6 +1633,7 @@ def _pick_record(records, parent, title: str):
     search.trace_add("write", render_results)
     render_results()
     _set_window_geometry(dialog, 920, 640, 760, 480)
+    dialog.grab_set()
     search_entry.focus_set()
     dialog.wait_window()
     return chosen_record[0]
@@ -4507,7 +4507,6 @@ def _show_library_roots_dialog(parent) -> bool:
     dialog = tk.Toplevel(parent)
     dialog.title("Manage Libraries")
     dialog.transient(parent)
-    dialog.grab_set()
 
     outer = ttk.Frame(dialog, padding=14)
     outer.pack(fill="both", expand=True)
@@ -4775,6 +4774,7 @@ def _show_library_roots_dialog(parent) -> bool:
     render()
     update_selection_actions()
     _set_window_geometry(dialog, 1120, 680, 880, 500)
+    dialog.grab_set()
     dialog.wait_window()
     return changed[0]
 
