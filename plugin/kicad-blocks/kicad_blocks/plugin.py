@@ -3862,7 +3862,11 @@ def _desktop_file_dialog(
         # KDialog supports embedding in an X11 parent. Its --embed option
         # cannot express the Wayland xdg-foreign surface handle, so do not
         # pass an XID while running under a Wayland compositor.
-        if parent is not None and os.environ.get("XDG_SESSION_TYPE", "").casefold() != "wayland":
+        if (
+            parent is not None
+            and not os.environ.get("WAYLAND_DISPLAY")
+            and os.environ.get("XDG_SESSION_TYPE", "").casefold() != "wayland"
+        ):
             try:
                 parent_id = str(parent.winfo_id())
             except (AttributeError, tk.TclError):
