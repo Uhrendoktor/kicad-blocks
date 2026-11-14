@@ -605,7 +605,7 @@ def main() -> None:
                         project_catalog=project / ".kicad_blocks" / LIBRARY_CATALOG_NAME,
                     )
                 except RuntimeError as exc:
-                    if "no supported KiCad IPC operation" not in str(exc):
+                    if "no supported IPC operation" not in str(exc):
                         raise
                 else:
                     raise AssertionError(
