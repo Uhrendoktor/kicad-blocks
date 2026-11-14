@@ -41,23 +41,63 @@ def walk_widgets(widget):
         yield from walk_widgets(child)
 
 
-def window_id(xdotool: str, title: str = "Place Functional Block") -> str | None:
-    # X11 window managers may normalize or omit Unicode punctuation in titles.
-    # Match the distinctive suffix/prefix as a fallback.
-    candidates = [title]
+def window_id(
+    xdotool: str,
+    title: str = "Place Functional Block",
+    *,
+    minimum_size: tuple[int, int] = (600, 400),
+) -> str | None:
+    """Find the largest visible window matching a title, not a title-bar child.
+
+    WM_NAME substring queries can return more than one X11 surface. In
+    particular, a short suffix such as "Tasks" may also match decoration or
+    transient helper windows. Rank every candidate by its actual client
+    geometry and prefer a candidate that can satisfy the requested capture.
+    """
+    title_candidates = [title]
     for separator in ("—", "–", "-"):
         parts = [part.strip() for part in title.split(separator) if part.strip()]
         if len(parts) > 1:
-            candidates.extend((parts[-1], parts[0]))
-    for candidate in dict.fromkeys(candidates):
+            title_candidates.extend((parts[-1], parts[0]))
+
+    found: list[str] = []
+    for candidate in dict.fromkeys(title_candidates):
         result = subprocess.run(
             [xdotool, "search", "--onlyvisible", "--name", candidate],
             capture_output=True, text=True, check=False, timeout=5,
         )
-        ids = [line for line in result.stdout.splitlines() if line.strip().isdigit()]
-        if ids:
-            return ids[-1]
-    return None
+        found.extend(
+            item.strip()
+            for item in result.stdout.splitlines()
+            if item.strip().isdigit()
+        )
+        # If an exact title returned one result, still examine it together
+        # with other matches. Do not assume the final ID is the real client.
+    ranked: list[tuple[int, int, str]] = []
+    for identifier in dict.fromkeys(found):
+        geometry = subprocess.run(
+            [xdotool, "getwindowgeometry", "--shell", identifier],
+            capture_output=True, text=True, check=False, timeout=5,
+        )
+        if geometry.returncode != 0:
+            continue
+        values = {}
+        for line in geometry.stdout.splitlines():
+            if "=" in line:
+                key, value = line.split("=", 1)
+                try:
+                    values[key] = int(value)
+                except ValueError:
+                    pass
+        width = values.get("WIDTH", 0)
+        height = values.get("HEIGHT", 0)
+        if width <= 0 or height <= 0:
+            continue
+        meets_minimum = width >= minimum_size[0] and height >= minimum_size[1]
+        ranked.append((int(meets_minimum), width * height, identifier))
+    if not ranked:
+        return None
+    return max(ranked)[2]
 
 
 def capture_window(
@@ -222,7 +262,11 @@ def _capture_visible_window(
     *,
     minimum_size: tuple[int, int] = (600, 400),
 ) -> None:
-    identifier = window_id(xdotool, title)
+    identifier = window_id(
+        xdotool,
+        title,
+        minimum_size=minimum_size,
+    )
     if identifier is None:
         raise TimeoutError(f"Window {title!r} was not visible for capture.")
     time.sleep(0.3)
