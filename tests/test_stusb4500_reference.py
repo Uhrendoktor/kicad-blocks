@@ -5,6 +5,7 @@ from __future__ import annotations
 import sys
 import tempfile
 import unittest
+from itertools import pairwise
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -453,7 +454,7 @@ class STUSB4500ReferenceTests(unittest.TestCase):
 
     def test_decouplers_are_directly_wired_to_u1_supply_pins(self) -> None:
         with tempfile.TemporaryDirectory(prefix="stusb4500-decouplers-") as temporary:
-            content, tree, _instances = self._generate(temporary)
+            _content, tree, _instances = self._generate(temporary)
 
         labels = {str(node[1]) for node in _all(tree, "label")}
         self.assertNotIn("VREG_1V2", labels)
@@ -508,7 +509,7 @@ class STUSB4500ReferenceTests(unittest.TestCase):
             (group for group in SCHEMATIC_GROUPS if group["lane"] == "main"),
             key=lambda group: int(group["order"]),
         )
-        for first, second in zip(main, main[1:]):
+        for first, second in pairwise(main):
             gap = frames[second["id"]][0] - frames[first["id"]][2]
             self.assertAlmostEqual(gap, 2.54, places=3)
         for i, first in enumerate(SCHEMATIC_GROUPS):
