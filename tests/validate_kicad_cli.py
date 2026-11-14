@@ -254,7 +254,7 @@ def _validate_stusb4500_netlist(cli: str, output_dir: Path) -> None:
         ("U1", "16"): "VBUS_EN_SNK",
         ("U1", "18"): "VBUS_VS_DISCH",
         ("U1", "19"): "ALERT#",
-        ("U1", "21"): "VREG_1V2",
+        ("U1", "21"): None,
         ("U1", "22"): "VSYS",
         ("U1", "23"): "VREG_2V7",
         ("U1", "24"): "VBUS",
@@ -288,7 +288,7 @@ def _validate_stusb4500_netlist(cli: str, output_dir: Path) -> None:
         ("R4", "1"): "VREG_2V7",
         ("R4", "2"): "VBUS_VS_DISCH",
         # Controller bypass capacitors and address/reset straps.
-        ("C1", "1"): "VREG_1V2",
+        ("C1", "1"): None,
         ("C1", "2"): "GND",
         ("C2", "1"): "VREG_2V7",
         ("C2", "2"): "GND",
@@ -307,11 +307,11 @@ def _validate_stusb4500_netlist(cli: str, output_dir: Path) -> None:
         # Back-to-back PMOS power path and local discharge/output parts.
         ("T4", "1"): "VBUS_EN_SNK",
         ("T4", "2"): "VBUS",
-        ("T4", "3"): "FET_MID",
+        ("T4", "3"): None,
         ("T1", "1"): "VSNK_GATE",
-        ("T1", "2"): "FET_MID",
+        ("T1", "2"): None,
         ("T1", "3"): "VSNK",
-        ("R10", "1"): "FET_MID",
+        ("R10", "1"): None,
         ("R10", "2"): "VSNK_GATE",
         ("R11", "1"): "VSNK_GATE",
         ("R11", "2"): "GND",
@@ -327,8 +327,25 @@ def _validate_stusb4500_netlist(cli: str, output_dir: Path) -> None:
     mismatches = {
         pin: (expected_name, actual.get(pin))
         for pin, expected_name in expected.items()
-        if actual.get(pin) != expected_name
+        if expected_name is not None and actual.get(pin) != expected_name
     }
+    # These nets are intentionally physical-only: the style rules require no
+    # labels on regulator decouplers or the back-to-back FET midpoint. Compare
+    # their component memberships rather than demanding a synthetic net name.
+    physical_nets = {
+        "VREG_1V2": (("U1", "21"), ("C1", "1")),
+        "FET common-source midpoint": (("T4", "3"), ("T1", "2"), ("R10", "1")),
+    }
+    for net_description, pins in physical_nets.items():
+        names = {actual.get(pin) for pin in pins}
+        if None in names or len(names) != 1:
+            mismatches[("physical-net", net_description)] = (
+                "all pins share one physical net", sorted(str(name) for name in names),
+            )
+        elif next(iter(names)) in {"VREG_1V2", "FET_MID"}:
+            mismatches[("physical-net", net_description)] = (
+                "unnamed physical net", next(iter(names)),
+            )
     if mismatches:
         schematic_tree = parse_sexpr(schematic_text)
         all_wires = []
