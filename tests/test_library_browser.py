@@ -898,7 +898,7 @@ class LibraryBrowserTests(unittest.TestCase):
             patch("kicad_blocks.plugin.shutil.which", return_value="/usr/bin/xdotool"),
             patch("kicad_blocks.plugin._capture_eeschema_window_id", return_value=None),
             self.assertRaisesRegex(
-                RuntimeError, "could not identify the active Schematic Editor"
+                RuntimeError, "(?i)could not identify the active Schematic Editor"
             ),
         ):
             _start_native_symbol_placement(
