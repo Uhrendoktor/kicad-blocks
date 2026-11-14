@@ -23,7 +23,6 @@ from kicad_blocks.plugin import (
     _attach_tk_window_to_editor,
     _bind_mousewheel,
     _block_overview_text,
-    _capture_eeschema_window_id,
     _choose_block_layout,
     _clean_facade_preview_svg,
     _filter_library_records,
@@ -576,34 +575,20 @@ class LibraryBrowserTests(unittest.TestCase):
         self.assertEqual(window.requested_geometry, "1286x668+40+50")
         self.assertEqual(window.minimum, (1160, 668))
 
-    def test_tk_transient_uses_client_window_and_editor_owner(self):
+    def test_tk_transient_uses_only_the_in_process_parent(self):
         class FakeWindow:
-            def __init__(self):
-                self.classes = None
-                self.attributes = None
+            def __init__(self, master=None):
+                self.master = master
+                self.transient_parent = None
 
-            def wm_class(self, *arguments):
-                self.classes = arguments
+            def transient(self, parent):
+                self.transient_parent = parent
 
-            def wm_attributes(self, *arguments):
-                self.attributes = arguments
-
-            def update_idletasks(self):
-                pass
-
-            def winfo_id(self):
-                return "0x222"
-
-        window = FakeWindow()
-        with (
-            patch("kicad_blocks.plugin.tk", SimpleNamespace(TclError=RuntimeError)),
-            patch("kicad_blocks.plugin._set_x11_transient_owner", return_value=True) as set_owner,
-        ):
-            self.assertTrue(_attach_tk_window_to_editor(window, "0x111"))
-        set_owner.assert_called_once_with("0x222", "0x111")
-        self.assertEqual(window.classes, ("eeschema", "eeschema"))
-        self.assertEqual(window.attributes, ("-type", "dialog"))
-
+        master = object()
+        window = FakeWindow(master)
+        with patch("kicad_blocks.plugin.tk", SimpleNamespace(TclError=RuntimeError)):
+            self.assertTrue(_attach_tk_window_to_editor(window))
+        self.assertIs(window.transient_parent, master)
 
     def test_record_lookup_finds_a_block_in_another_registered_library(self):
         second_root = Path(self.temp.name) / "second-library"
@@ -656,8 +641,7 @@ class LibraryBrowserTests(unittest.TestCase):
 
         widget = FakeWidget()
         scrolls = []
-        with patch("kicad_blocks.plugin.sys.platform", "darwin"):
-            _bind_mousewheel(widget, scrolls.append)
+        _bind_mousewheel(widget, scrolls.append)
         handler = widget.bindings["<MouseWheel>"]
         handler(SimpleNamespace(delta=0.25, num=None))
         handler(SimpleNamespace(delta=0.25, num=None))
@@ -773,229 +757,36 @@ class LibraryBrowserTests(unittest.TestCase):
         self.assertEqual(browser.events, [])
         self.assertEqual(manager.events, ["iconify"])
 
-    def test_editor_capture_finds_eeschema_when_browser_has_focus(self):
-        def command_runner(arguments, **kwargs):
-            command = arguments[1:]
-            if command == ["getwindowfocus"]:
-                return SimpleNamespace(stdout="0x222", returncode=0)
-            if command == ["search", "--onlyvisible", "--class", "eeschema"]:
-                return SimpleNamespace(stdout="0x111\n", returncode=0)
-            if command == ["search", "--onlyvisible", "--name", "[Ss]chematic [Ee]ditor"]:
-                return SimpleNamespace(stdout="0x111\n", returncode=0)
-            if command == ["getwindowclassname", "0x222"]:
-                return SimpleNamespace(stdout="eeschema", returncode=0)
-            if command == ["getwindowname", "0x222"]:
-                return SimpleNamespace(stdout="Functional Block Library", returncode=0)
-            if command == ["getwindowclassname", "0x111"]:
-                return SimpleNamespace(stdout="eeschema", returncode=0)
-            if command == ["getwindowname", "0x111"]:
-                return SimpleNamespace(stdout="Schematic Editor — project", returncode=0)
-            if arguments[0] == "/usr/bin/xprop":
-                return SimpleNamespace(stdout="WM_TRANSIENT_FOR: not found.", returncode=0)
-            return SimpleNamespace(stdout="", returncode=0)
-
-        with (
-            patch(
-                "kicad_blocks.plugin.shutil.which",
-                side_effect=lambda name: {
-                    "xdotool": "/usr/bin/xdotool",
-                    "xprop": "/usr/bin/xprop",
-                }.get(name),
-            ),
-            patch("kicad_blocks.plugin.subprocess.run", side_effect=command_runner),
-        ):
-            self.assertEqual(_capture_eeschema_window_id(), "0x111")
-
-    def test_editor_capture_does_not_treat_plugin_browser_as_eeschema(self):
-        def command_runner(arguments, **kwargs):
-            command = arguments[1:]
-            if command == ["getwindowfocus"]:
-                return SimpleNamespace(stdout="0x222", returncode=0)
-            if command == ["search", "--onlyvisible", "--class", "eeschema"]:
-                return SimpleNamespace(stdout="", returncode=1)
-            if command == ["search", "--onlyvisible", "--name", "[Ss]chematic [Ee]ditor"]:
-                return SimpleNamespace(stdout="", returncode=1)
-            if command == ["getwindowclassname", "0x222"]:
-                return SimpleNamespace(stdout="eeschema", returncode=0)
-            if command == ["getwindowname", "0x222"]:
-                return SimpleNamespace(stdout="Functional Block Library", returncode=0)
-            if arguments[0] == "/usr/bin/xprop":
-                return SimpleNamespace(stdout="WM_TRANSIENT_FOR: not found.", returncode=0)
-            return SimpleNamespace(stdout="", returncode=0)
-
-        with (
-            patch(
-                "kicad_blocks.plugin.shutil.which",
-                side_effect=lambda name: {
-                    "xdotool": "/usr/bin/xdotool",
-                    "xprop": "/usr/bin/xprop",
-                }.get(name),
-            ),
-            patch("kicad_blocks.plugin.subprocess.run", side_effect=command_runner),
-        ):
-            self.assertIsNone(_capture_eeschema_window_id())
-
-    def test_native_placement_handoff_uses_add_symbol_hotkey_and_exact_library_name(self):
-        calls = []
-        focus_values = iter(("0x222", "0x111"))
-
-        def command_runner(arguments, **kwargs):
-            calls.append((arguments, kwargs))
-            if arguments[1] == "getwindowfocus":
-                return SimpleNamespace(stdout=next(focus_values))
-            if arguments[1] == "getwindowpid":
-                return SimpleNamespace(stdout="4242")
-            if arguments[1] == "getwindowname":
-                return SimpleNamespace(stdout="Choose Symbol" if arguments[2] == "0x222" else "Schematic Editor")
-            return SimpleNamespace(stdout="")
-
-        pauses = []
-        _start_native_symbol_placement(
-            SimpleNamespace(),
-            "0x111",
-            "buck_converter_ab12cd34",
-            xdotool="/usr/bin/xdotool",
-            command_runner=command_runner,
-            pause=pauses.append,
-        )
-        commands = [item[0][1:] for item in calls]
-        self.assertEqual(commands[0], ["getwindowpid", "0x111"])
-        self.assertIn(["windowfocus", "--sync", "0x111"], commands)
-        self.assertIn(["key", "--clearmodifiers", "a"], commands)
-        self.assertIn(
-            ["type", "--clearmodifiers", "--delay", "12", "buck_converter_ab12cd34"],
-            commands,
-        )
-        self.assertIn(["key", "--clearmodifiers", "Return"], commands)
-        self.assertNotIn("position", " ".join(" ".join(command) for command in commands).casefold())
-        self.assertTrue(pauses)
-
-    def test_native_placement_refuses_to_type_when_choose_symbol_dialog_is_absent(self):
-        calls = []
-
-        def command_runner(arguments, **kwargs):
-            calls.append(arguments)
-            if arguments[1] == "getwindowfocus":
-                return SimpleNamespace(stdout="0x111")
-            if arguments[1] == "getwindowpid":
-                return SimpleNamespace(stdout="4242")
-            if arguments[1] == "getwindowname":
-                return SimpleNamespace(stdout="Schematic Editor")
-            return SimpleNamespace(stdout="")
-
-        with self.assertRaisesRegex(RuntimeError, "did not open its native symbol chooser"):
-            _start_native_symbol_placement(
-                SimpleNamespace(),
-                "0x111",
-                "buck_converter_ab12cd34",
-                xdotool="/usr/bin/xdotool",
-                command_runner=command_runner,
-                pause=lambda _seconds: None,
-            )
-        self.assertFalse(any(command[1] == "type" for command in calls))
-        self.assertIn(["key", "--clearmodifiers", "Escape"], [command[1:] for command in calls])
-
     def test_native_run_action_status_is_checked_not_treated_as_truthy(self):
         self.assertEqual(_native_run_action_status(SimpleNamespace(status=1)), 1)
         self.assertEqual(_native_run_action_status(SimpleNamespace(status=2)), 2)
         self.assertIsNone(_native_run_action_status(SimpleNamespace(status=None)))
 
-    def test_native_placement_uses_kicad_ipc_without_xdotool_or_captured_xid(self):
-        kicad = SimpleNamespace(
-            run_action=Mock(return_value=SimpleNamespace(status=1))
-        )
-        with patch("kicad_blocks.plugin.shutil.which", return_value=None):
-            _start_native_symbol_placement(
-                kicad,
-                None,
-                "buck_converter_ab12cd34",
-                xdotool=None,
-                command_runner=Mock(),
-                pause=lambda _seconds: None,
-            )
+    def test_native_placement_uses_only_the_native_kicad_ipc_action(self):
+        kicad = SimpleNamespace(run_action=Mock(return_value=SimpleNamespace(status=1)))
+        with (
+            patch("kicad_blocks.plugin.subprocess.run") as run_process,
+            patch("kicad_blocks.plugin.shutil.which") as find_command,
+        ):
+            _start_native_symbol_placement(kicad, None, "buck_converter_ab12cd34")
         kicad.run_action.assert_called_once_with("eeschema.InteractiveDrawing.placeSymbol")
+        run_process.assert_not_called()
+        find_command.assert_not_called()
 
-    def test_native_placement_rejected_by_kicad_reports_real_status_without_xdotool(self):
-        kicad = SimpleNamespace(
-            run_action=Mock(return_value=SimpleNamespace(status=2))
-        )
-        with (
-            patch("kicad_blocks.plugin.shutil.which", return_value=None),
-            patch.dict(os.environ, {"WAYLAND_DISPLAY": "", "XDG_SESSION_TYPE": "x11"}),
-            self.assertRaisesRegex(RuntimeError, "RunActionStatus=2"),
-        ):
-            _start_native_symbol_placement(
-                kicad,
-                None,
-                "buck_converter_ab12cd34",
-                xdotool=None,
-                command_runner=Mock(),
-                pause=lambda _seconds: None,
-            )
-        kicad.run_action.assert_called_once_with("eeschema.InteractiveDrawing.placeSymbol")
+    def test_native_placement_reports_ipc_rejection(self):
+        kicad = SimpleNamespace(run_action=Mock(return_value=SimpleNamespace(status=2)))
+        with self.assertRaisesRegex(RuntimeError, "RunActionStatus=2"):
+            _start_native_symbol_placement(kicad, None, "buck_converter_ab12cd34")
 
-    def test_native_placement_does_not_send_global_wayland_keys_without_verified_editor(self):
-        command_runner = Mock()
-        with (
-            patch("kicad_blocks.plugin.shutil.which", side_effect=lambda name: {
-                "xdotool": None,
-                "wtype": "/usr/bin/wtype",
-            }.get(name)),
-            patch.dict(os.environ, {"WAYLAND_DISPLAY": "wayland-0", "XDG_SESSION_TYPE": "wayland"}),
-            self.assertRaisesRegex(RuntimeError, "No supported Wayland input helper is available"),
-        ):
-            _start_native_symbol_placement(
-                SimpleNamespace(),
-                None,
-                "buck_converter_ab12cd34",
-                xdotool=None,
-                command_runner=command_runner,
-                pause=lambda _seconds: None,
-            )
-        command_runner.assert_not_called()
+    def test_native_placement_requires_native_ipc_action(self):
+        with self.assertRaisesRegex(RuntimeError, "does not expose native editor actions"):
+            _start_native_symbol_placement(SimpleNamespace(), None, "buck_converter_ab12cd34")
 
-    def test_wayland_placement_does_not_inject_keys_when_xdotool_cannot_identify_editor(self):
-        command_runner = Mock()
-        with (
-            patch(
-                "kicad_blocks.plugin.shutil.which",
-                side_effect=lambda name: {
-                    "xdotool": "/usr/bin/xdotool",
-                    "wtype": "/usr/bin/wtype",
-                }.get(name),
-            ),
-            patch("kicad_blocks.plugin._capture_eeschema_window_id", return_value=None),
-            patch.dict(
-                os.environ,
-                {"WAYLAND_DISPLAY": "wayland-0", "XDG_SESSION_TYPE": "wayland"},
-            ),
-            self.assertRaisesRegex(RuntimeError, "(?i)automatic key injection was not attempted"),
-        ):
-            _start_native_symbol_placement(
-                SimpleNamespace(),
-                None,
-                "buck_converter_ab12cd34",
-                command_runner=command_runner,
-                pause=lambda _seconds: None,
-            )
-        command_runner.assert_not_called()
-
-    def test_native_placement_requires_editor_when_ipc_is_unavailable(self):
-        with (
-            patch("kicad_blocks.plugin.shutil.which", return_value="/usr/bin/xdotool"),
-            patch("kicad_blocks.plugin._capture_eeschema_window_id", return_value=None),
-            self.assertRaisesRegex(
-                RuntimeError, "(?i)could not identify the active Schematic Editor"
-            ),
-        ):
-            _start_native_symbol_placement(
-                SimpleNamespace(),
-                None,
-                "buck_converter_ab12cd34",
-                xdotool="/usr/bin/xdotool",
-                command_runner=Mock(),
-                pause=lambda _seconds: None,
-            )
+    def test_native_placement_rejects_invalid_symbol_id_before_ipc(self):
+        run_action = Mock()
+        with self.assertRaisesRegex(ValueError, "invalid KiCad symbol name"):
+            _start_native_symbol_placement(SimpleNamespace(run_action=run_action), None, "bad symbol id")
+        run_action.assert_not_called()
 
 if __name__ == "__main__":
     unittest.main()
