@@ -87,10 +87,10 @@ def wire_geometry_issues(tree: list) -> list[str]:
             if not _on_segment(cross, hs, he) or not _on_segment(cross, vs, ve):
                 continue
             h_end, v_end = cross in (hs, he), cross in (vs, ve)
-            if not h_end and not v_end:
-                issues.append(f"wire crossing at {cross}: {a}->{b} intersects {c}->{d}")
+            if h_end and v_end:
                 continue
             if not h_end and not v_end:
+                issues.append(f"wire crossing at {cross}: {a}->{b} intersects {c}->{d}")
                 continue
             if cross not in junctions:
                 issues.append(f"unmarked T-junction at {cross}: {a}->{b} intersects {c}->{d}")
