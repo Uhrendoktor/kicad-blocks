@@ -8,7 +8,7 @@ programs rather than pytest modules are listed separately and must remain explic
 registered in STANDALONE_TESTS in scripts/test_inventory.py.
 
 - Pytest modules: **23**
-- Individually inventoried pytest cases: **211**
+- Individually inventoried pytest cases: **227**
 - Standalone acceptance runners: **7**
 - Additional CI validation runners: **2**
 
@@ -116,6 +116,15 @@ Schematic editor action routing, selected-sheet behavior, facade editing, transa
 | --- | --- |
 | test_edit_facade_uses_native_eeschema_library_symbol_hotkey | Exercises edit facade uses native eeschema library symbol hotkey. |
 | test_create_block_from_selected_sheet_never_prompts_for_manual_pins | Creates block from selected sheet never prompts for manual pins. |
+| test_create_block_rolls_back_new_block_when_project_registration_fails | Creates block rolls back new block when project registration fails. |
+| test_create_block_prefers_typed_sheet_symbol_over_serialized_selection | Creates block prefers typed sheet symbol over serialized selection. |
+| test_create_block_rejects_multiple_selected_items_without_falling_back | Creates block rejects multiple selected items without falling back. |
+| test_create_block_rejects_non_sheet_selection_instead_of_using_open_sheet | Creates block rejects non sheet selection instead of using open sheet. |
+| test_create_block_normalizes_no_items_selected_ipc_error | Creates block normalizes no items selected ipc error. |
+| test_create_block_rejects_empty_sheetfile_before_creating_anything | Creates block rejects empty sheetfile before creating anything. |
+| test_create_block_rejects_selected_sheet_without_uuid | Creates block rejects selected sheet without uuid. |
+| test_create_block_does_not_fallback_when_typed_selection_ipc_fails | Creates block does not fallback when typed selection ipc fails. |
+| test_create_block_fails_before_dialog_when_selected_sheetfile_is_missing | Creates block fails before dialog when selected sheetfile is missing. |
 | test_create_block_without_selection_uses_the_current_hierarchical_sheet | Creates block without selection uses the current hierarchical sheet. |
 | test_reload_symbol_library_uses_gui_supported_reload_only | Exercises reload symbol library uses gui supported reload only. |
 | test_edit_facade_requires_one_selected_symbol | Exercises edit facade requires one selected symbol. |
@@ -131,6 +140,7 @@ Schematic editor action routing, selected-sheet behavior, facade editing, transa
 | test_local_implementation_edit_opens_project_copy_not_library_source | Exercises local implementation edit opens project copy not library source. |
 | test_create_block_empty_selection_ipc_error_uses_active_sheet | Creates block empty selection ipc error uses active sheet. |
 | test_create_block_uses_selected_sheet_symbol_relative_to_active_sheet | Creates block uses selected sheet symbol relative to active sheet. |
+| test_run_action_dispatches_create_block_to_sheet_creation_workflow | Exercises run action dispatches create block to sheet creation workflow. |
 | test_run_action_captures_kicad_window_before_creating_tk | Exercises run action captures kicad window before creating tk. |
 
 ### tests/test_extraction.py
@@ -175,15 +185,20 @@ Library search and selection, native previews, variants/profiles/layouts, cross-
 | test_native_facade_preview_removes_reference_and_component_name | Exercises native facade preview removes reference and component name. |
 | test_overview_contains_pin_types_parameters_variants_and_layouts | Exercises overview contains pin types parameters variants and layouts. |
 | test_new_pcb_layout_is_created_as_default_and_saved_in_block | Exercises new pcb layout is created as default and saved in block. |
+| test_each_pcb_layout_keeps_multiple_implementation_associations | Exercises each pcb layout keeps multiple implementation associations. |
+| test_removing_all_pcb_layouts_clears_obsolete_variant_layout_ids | Exercises removing all pcb layouts clears obsolete variant layout ids. |
+| test_native_file_and_directory_choosers_use_system_filedialog | Exercises native file and directory choosers use system filedialog. |
 | test_layout_linked_to_implementation_is_used_when_instance_has_default | Exercises layout linked to implementation is used when instance has default. |
 | test_implementation_link_supersedes_implicit_default_layout | Exercises implementation link supersedes implicit default layout. |
 | test_manifest_rejects_variant_link_to_unknown_layout | Exercises manifest rejects variant link to unknown layout. |
 | test_editing_implementation_variants_preserves_pcb_layout_links | Exercises editing implementation variants preserves pcb layout links. |
+| test_default_implementation_is_persisted_and_used_for_empty_selector | Exercises default implementation is persisted and used for empty selector. |
 | test_variant_metadata_can_be_added_edited_and_removed_from_library | Exercises variant metadata can be added edited and removed from library. |
 | test_variant_can_be_edited_without_copying_its_file_onto_itself | Exercises variant can be edited without copying its file onto itself. |
 | test_invalid_profile_change_does_not_copy_new_variant_files | Exercises invalid profile change does not copy new variant files. |
 | test_variant_editor_refuses_to_remove_an_implementation_used_by_a_profile | Exercises variant editor refuses to remove an implementation used by a profile. |
 | test_window_geometry_respects_display_bounds | Exercises window geometry respects display bounds. |
+| test_tk_transient_uses_client_window_and_editor_owner | Exercises tk transient uses client window and editor owner. |
 | test_record_lookup_finds_a_block_in_another_registered_library | Exercises record lookup finds a block in another registered library. |
 | test_mousewheel_scrolls_without_dragging_the_scrollbar | Exercises mousewheel scrolls without dragging the scrollbar. |
 | test_mousewheel_accumulates_high_resolution_trackpad_deltas | Exercises mousewheel accumulates high resolution trackpad deltas. |
@@ -200,7 +215,8 @@ Library search and selection, native previews, variants/profiles/layouts, cross-
 | test_editor_capture_does_not_treat_plugin_browser_as_eeschema | Exercises editor capture does not treat plugin browser as eeschema. |
 | test_native_placement_handoff_uses_add_symbol_hotkey_and_exact_library_name | Exercises native placement handoff uses add symbol hotkey and exact library name. |
 | test_native_placement_refuses_to_type_when_choose_symbol_dialog_is_absent | Exercises native placement refuses to type when choose symbol dialog is absent. |
-| test_native_placement_requires_xdotool_and_editor_window | Exercises native placement requires xdotool and editor window. |
+| test_native_placement_uses_kicad_ipc_without_xdotool_or_captured_xid | Exercises native placement uses kicad ipc without xdotool or captured xid. |
+| test_native_placement_requires_editor_when_ipc_is_unavailable | Exercises native placement requires editor when ipc is unavailable. |
 
 ### tests/test_library_validation.py
 
@@ -313,10 +329,10 @@ Regression tests for the AST-based Any/object policy, annotation-debt ratchet, a
 | test_annotation_debt_counts_parameters_and_returns_separately | Exercises annotation debt counts parameters and returns separately. |
 | test_quoted_sexpr_values_round_trip | Exercises quoted sexpr values round trip. |
 | test_parameter_values_remain_one_quoted_sexpr_field | Exercises parameter values remain one quoted sexpr field. |
-| `test_changed_file_ratchet_rejects_increased_annotation_debt` | Exercises changed file ratchet rejects increased annotation debt. |
-| `test_reports_exact_duplicate_test_bodies_even_when_docstrings_differ` | Reports exact duplicate test bodies even when docstrings differ. |
-| `test_different_bodies_and_class_fixture_scopes_are_not_duplicates` | Exercises different bodies and class fixture scopes are not duplicates. |
-| `test_reports_empty_and_pass_only_test_bodies` | Reports empty and pass only test bodies. |
+| test_changed_file_ratchet_rejects_increased_annotation_debt | Exercises changed file ratchet rejects increased annotation debt. |
+| test_reports_exact_duplicate_test_bodies_even_when_docstrings_differ | Reports exact duplicate test bodies even when docstrings differ. |
+| test_different_bodies_and_class_fixture_scopes_are_not_duplicates | Exercises different bodies and class fixture scopes are not duplicates. |
+| test_reports_empty_and_pass_only_test_bodies | Reports empty and pass only test bodies. |
 
 
 ### tests/test_release_package.py
@@ -357,7 +373,7 @@ Exact implementation-variant selection, invalid and duplicate variant handling, 
 | Test | Purpose |
 | --- | --- |
 | test_variant_value_maps_to_copied_schematic | Exercises variant value maps to copied schematic. |
-| test_unknown_or_empty_variant_never_falls_back | Exercises unknown or empty variant never falls back. |
+| test_empty_selector_uses_configured_default_and_explicit_selector_wins | Exercises empty selector uses configured default and explicit selector wins. |
 | test_non_variant_block_keeps_single_implementation | Exercises non variant block keeps single implementation. |
 | test_duplicate_values_are_rejected | Exercises duplicate values are rejected. |
 | test_project_and_sheet_text_variables_are_expanded | Exercises project and sheet text variables are expanded. |
