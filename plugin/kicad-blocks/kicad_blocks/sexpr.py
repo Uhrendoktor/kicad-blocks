@@ -70,7 +70,7 @@ def _lex(source: str) -> Iterator[str | QuotedSExpr]:
             if index >= len(source):
                 raise ValueError("Unterminated quoted string in KiCad S-expression.")
             try:
-                decoded: object = json.loads('"' + "".join(output) + '"')
+                decoded = json.loads('"' + "".join(output) + '"')
             except json.JSONDecodeError as error:
                 raise ValueError(f"Invalid quoted string in KiCad S-expression: {error}") from error
             if not isinstance(decoded, str):
