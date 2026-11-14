@@ -630,8 +630,15 @@ def _text_visual_bounds(value: str, node: list) -> tuple[float, float, float, fl
     justify_node = _direct(effects, "justify") if effects is not None else None
     justify = str(justify_node[1]) if justify_node is not None else "center"
     left = x if justify == "left" else x - width if justify == "right" else x - width / 2
-    if angle in {90, 270}:
-        return x - height / 2, y - width / 2, height, width
+    if angle == 90:
+        # A rotated left-justified label extends upward from its anchor;
+        # right-justified text extends downward. This lets a wire terminate
+        # at the text baseline without being treated as crossing its glyphs.
+        top = y - width if justify == "left" else y if justify == "right" else y - width / 2
+        return x - height / 2, top, height, width
+    if angle == 270:
+        top = y if justify == "left" else y - width if justify == "right" else y - width / 2
+        return x - height / 2, top, height, width
     if justify_node is not None and len(justify_node) > 2 and str(justify_node[2]) == "top":
         return left, y, width, height
     return left, y - height, width, height
