@@ -6224,15 +6224,17 @@ def run_action(action: str, *, editor_window_id: str | None = None) -> None:
                 project_catalog = _ensure_project_facade_catalog(
                     project_dir, record, kicad
                 )
-                _edit_facade_symbol(
+                opened = _edit_facade_symbol(
                     record,
                     kicad,
                     project_catalog=project_catalog,
                     close_browser=root.destroy,
                 )
-                LOG.info("%s: %s", "Edit facade", "Symbol Editor handoff requested. In its library tree, search for "
-                    + f"{LIBRARY_NICKNAME}:{record.manifest['symbol_name']}"
-                    + " and select the result. Saved facade edits are imported by Publish implementation.")
+                if opened:
+                    LOG.info(
+                        "Edit facade: opened %s in Symbol Editor.",
+                        f"{LIBRARY_NICKNAME}:{record.manifest['symbol_name']}",
+                    )
         elif action == "publish-block":
             _publish_block(library_paths, kicad, project_dir, root)
         elif action == "recursive-bom":
