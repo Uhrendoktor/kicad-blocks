@@ -43,8 +43,8 @@ from .operations import (
 from .pcb_layout import BlockLayoutPlacement, merge_block_layout, merge_block_layouts
 from .pcb_placement import placement_manifest_path, write_pcb_placement_manifest
 from .repository import (
-    BlockRecord,
     LIBRARY_NICKNAME,
+    BlockRecord,
     add_dependency,
     add_library_root,
     build_project_symbol_catalog,
