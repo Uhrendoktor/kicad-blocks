@@ -2863,10 +2863,14 @@ def _native_symbol_preview_photo(
     record,
     width: int = 680,
     max_height: int = 260,
+    *,
+    library_file: str | Path | None = None,
 ):
-    """Render a clean, centered KiCad facade within the available preview height."""
+    """Render the exact catalog symbol used by the current preview/editor workflow."""
     symbol_name = str(record.manifest["symbol_name"])
-    library_file = Path(record.symbol_library).expanduser().resolve()
+    library_file = Path(
+        library_file or record.symbol_library
+    ).expanduser().resolve()
     if not library_file.is_file():
         raise FileNotFoundError(f"Facade symbol library is missing: {library_file}")
 
@@ -2959,14 +2963,21 @@ def _native_symbol_preview_photo(
 _NATIVE_PREVIEW_CACHE: dict[tuple, object] = {}
 
 
-def _draw_facade_preview(canvas, record) -> None:
+def _draw_facade_preview(
+    canvas,
+    record,
+    *,
+    library_file: str | Path | None = None,
+) -> None:
     """Display a faithful KiCad-rendered facade preview; never approximate it."""
     canvas.delete("all")
     height = max(int(canvas.winfo_height()), 250)
     max_preview_height = max(160, min(280, height - 24))
     try:
         photo = _native_symbol_preview_photo(
-            record, max_height=max_preview_height
+            record,
+            max_height=max_preview_height,
+            library_file=library_file,
         )
     except Exception as exc:
         LOG.exception("Native facade preview failed for %s", record.name)
@@ -5079,11 +5090,13 @@ def _show_library_browser(
     details.configure(state="disabled")
     _bind_mousewheel(details, lambda amount: details.yview_scroll(amount, "units"))
     selected_record = [None]
+    selected_project_catalog = [None]
     facade_button = [None]
     open_layout_button = [None]
 
     def set_details(record):
         selected_record[0] = record
+        selected_project_catalog[0] = None
         if record is None:
             name_label.configure(
                 text="No matching blocks" if search.get().strip() else "No blocks in registered libraries"
@@ -5124,7 +5137,31 @@ def _show_library_browser(
             )):
                 details.tag_add("section", f"{line_number}.0", f"{line_number}.end")
         details.configure(state="disabled")
-        _draw_facade_preview(preview, record)
+        try:
+            project_catalog = _ensure_project_facade_catalog(
+                project_dir, record, kicad
+            )
+            selected_project_catalog[0] = project_catalog
+            _draw_facade_preview(
+                preview,
+                record,
+                library_file=project_catalog,
+            )
+        except (OSError, RuntimeError, ValueError, LookupError) as exc:
+            LOG.exception(
+                "Could not resolve the project facade catalog for %s",
+                record.name,
+            )
+            preview.delete("all")
+            style = ttk.Style(preview)
+            preview.create_text(
+                max(int(preview.winfo_width()), 480) / 2,
+                max(int(preview.winfo_height()), 250) / 2,
+                text=f"Project facade unavailable\\n{exc}",
+                fill=style.lookup("TLabel", "foreground") or preview.cget("foreground"),
+                justify="center",
+                width=max(int(preview.winfo_width()), 480) - 32,
+            )
 
     def render_records(*_args):
         visible = _filter_library_records(records, search.get())
@@ -5193,7 +5230,11 @@ def _show_library_browser(
             )
         if facade_button[0] is not None:
             facade_button[0].configure(
-                state="normal" if record is not None else "disabled"
+                state=(
+                    "normal"
+                    if record is not None and selected_project_catalog[0] is not None
+                    else "disabled"
+                )
             )
 
     def place_selected(_event=None):
@@ -5309,9 +5350,11 @@ def _show_library_browser(
         if record is None:
             return
         try:
-            project_catalog = _ensure_project_facade_catalog(
-                project_dir, record, kicad
-            )
+            project_catalog = selected_project_catalog[0]
+            if project_catalog is None:
+                raise RuntimeError(
+                    "The project facade preview is unavailable. Refresh the library and retry Edit Facade."
+                )
             opened = _edit_facade_symbol(
                 record,
                 kicad,
