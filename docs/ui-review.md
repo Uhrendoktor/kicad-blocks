@@ -62,7 +62,7 @@ Do not mark the UI review complete until:
 
 - Every production window above has a fresh light/dark screenshot inspected at a normal and constrained size.
 - Every visible primary button has a test proving the intended side effect or its correct disabled/prerequisite state.
-- Place Block and Edit Facade are not yet end-to-end validated. The integration test currently detects the missing RunAction handler and stops before selection/placement; no platform-specific or manual-only substitution is counted as a pass.
+- Place Block's fixed-coordinate page-centre creation, viewport focus, and exact-instance selection are covered by the live Eeschema integration test. Cursor-attached movement remains unimplemented because the schematic IPC API lacks an interactive-move request. Edit Facade remains incomplete pending a supported Symbol Editor open/select API.
 - Ubuntu Wayland behavior has been exercised on a real Wayland session; Xvfb is not accepted as a substitute.
 - File chooser open/save/directory/cancel/filter/path cases have been run against the actual desktop portal/theme.
 - The entire CI suite passes, including documentation, KiCad CLI, editor GUI, PCB IPC, visual audit, and supported Python compatibility checks.
