@@ -4644,20 +4644,37 @@ def _show_library_roots_dialog(parent) -> bool:
         new_path = Path(selected).expanduser().resolve()
         if new_path == old_path:
             return
+        registered_before = set(configured_library_roots())
+        was_default = environment_root is None and old_path == default_library_root()
+        default_changed = False
         try:
-            was_default = environment_root is None and old_path == default_library_root()
             add_library_root(new_path)
             if was_default:
                 set_library_root(new_path)
+                default_changed = True
             remove_library_root(old_path)
             changed[0] = True
             render(new_path)
         except (OSError, ValueError) as exc:
+            # Revert any completed registration/default changes if replacing
+            # the selected root fails part-way through.
+            if default_changed:
+                with contextlib.suppress(OSError, ValueError):
+                    set_library_root(old_path)
+            if new_path not in registered_before:
+                with contextlib.suppress(OSError, ValueError):
+                    remove_library_root(new_path)
             messagebox.showerror("Change registered folder", str(exc), parent=dialog)
 
     def remove_library() -> None:
         path = selected_path()
         if path is None or path == environment_root:
+            return
+        if not messagebox.askyesno(
+            "Unregister library",
+            f"Unregister {path.name}? Its files remain on disk, but its blocks will no longer appear in the browser.",
+            parent=dialog,
+        ):
             return
         try:
             remove_library_root(path)
@@ -4718,8 +4735,13 @@ def _show_library_roots_dialog(parent) -> bool:
         fixed = path is None or path == environment_root
         change_button.configure(state="disabled" if fixed else "normal")
         remove_button.configure(state="disabled" if fixed else "normal")
+        already_default = path is not None and path == default_library_root()
         default_button.configure(
-            state="disabled" if path is None or environment_root is not None else "normal"
+            state=(
+                "disabled"
+                if path is None or environment_root is not None or already_default
+                else "normal"
+            )
         )
 
     tree.bind("<<TreeviewSelect>>", update_selection_actions)
