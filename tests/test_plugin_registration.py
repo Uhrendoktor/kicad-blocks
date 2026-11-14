@@ -583,7 +583,7 @@ def main() -> None:
                 live_selection = plugin_actions._safe_schematic_selection(live_schematic)
                 if live_selection:
                     raise AssertionError(
-                        "Edit Facade GUI regression requires an empty schematic selection; "
+                        "Edit Facade capability test requires an empty schematic selection; "
                         f"found {len(live_selection)} selected item(s)."
                     )
                 refreshed_record = plugin_actions._register_block(
@@ -595,35 +595,20 @@ def main() -> None:
                 if not plugin_actions._LAST_LIBRARY_RELOAD_OK:
                     raise RuntimeError(
                         "Could not reload the generated KBlocks project catalog before "
-                        "opening Edit Facade: "
+                        "checking Edit Facade capability: "
                         + str(plugin_actions._LAST_LIBRARY_RELOAD_WARNING)
                     )
-                opened = plugin_actions._edit_facade_symbol(
-                    refreshed_record,
-                    facade_editor_client,
-                    project_catalog=project / ".kicad_blocks" / LIBRARY_CATALOG_NAME,
-                )
-                if opened:
-                    raise AssertionError(
-                        "Edit Facade must leave library-tree selection to KiCad's native UI; "
-                        "the plugin must not use platform-specific keyboard injection."
-                    )
-                _select_facade_in_test_harness(xdotool, placement_symbol_name)
-                expected_facade_id = f"{refreshed_record.manifest['library_nickname']}:{placement_symbol_name}"
-                _wait_for_symbol_document(facade_editor_client, expected_facade_id)
-                editor_windows = _windows(xdotool)
-                matching_editor = [
-                    item for item in editor_windows
-                    if item[0] != window_id and "symbol editor" in item[1].casefold()
-                ]
-                if not matching_editor:
-                    raise AssertionError(
-                        "Edit Facade did not leave a Symbol Editor window open for "
-                        f"{expected_facade_id}; visible_windows={editor_windows!r}"
+                with self.assertRaisesRegex(
+                    RuntimeError, "no supported KiCad IPC operation"
+                ):
+                    plugin_actions._edit_facade_symbol(
+                        refreshed_record,
+                        facade_editor_client,
+                        project_catalog=project / ".kicad_blocks" / LIBRARY_CATALOG_NAME,
                     )
                 print(
-                    "Edit Facade opened the generated project library symbol "
-                    f"{refreshed_record.manifest['library_nickname']}:{placement_symbol_name} with no placed schematic instance."
+                    "Edit Facade correctly reports the missing supported Symbol Editor "
+                    "open/select API without injecting desktop input."
                 )
             finally:
                 facade_editor_client.close()
