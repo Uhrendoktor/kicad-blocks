@@ -178,10 +178,8 @@ def _configure_tk_theme(root) -> None:
         "accent": "#4c789f", "scroll_thumb": "#c0c7ce", "scroll_trough": "#e4e7ea",
     })
     style = ttk.Style(root)
-    try:
+    with contextlib.suppress(tk.TclError):
         style.theme_use("clam")
-    except tk.TclError:
-        pass
     root.configure(background=colors["background"], highlightthickness=0)
     for option, value in {
         "*Background": colors["background"], "*Foreground": colors["foreground"],
@@ -404,8 +402,7 @@ def _attach_tk_window_to_editor(window, editor_window_id: str | None) -> bool:
         # Do not set it on the reparenting window manager's decoration frame:
         # ICCCM window managers read the hint from the client window itself.
         window_id = str(window.winfo_id())
-        attached = _set_x11_transient_owner(window_id, str(editor_window_id))
-        return attached
+        return _set_x11_transient_owner(window_id, str(editor_window_id))
     except (AttributeError, tk.TclError, OSError):
         LOG.debug("Could not associate the Tk window with KiCad", exc_info=True)
         return False
@@ -1707,7 +1704,7 @@ def _choose_block_layout(
     )
     if selected is None:
         return None
-    for item, label in zip(layouts, labels):
+    for item, label in zip(layouts, labels, strict=True):
         if selected.strip().casefold() in {
             label.casefold(),
             str(item.get("name", "")).casefold(),
@@ -3851,13 +3848,15 @@ def _ask_implementation_details(
             browse_button.grid()
 
     if allow_create:
-        for label, path in [
-            ("Default", Path(record.path) / resolve_variant_implementation(record.manifest, ""))
-        ] + [
-            (str(item["value"]), Path(record.path) / str(item["file"]))
-            for item in record.manifest.get("variants", [])
-        ]:
-            copy_sources[label] = path
+        copy_sources.update({
+            label: path
+            for label, path in [
+                ("Default", Path(record.path) / resolve_variant_implementation(record.manifest, ""))
+            ] + [
+                (str(item["value"]), Path(record.path) / str(item["file"]))
+                for item in record.manifest.get("variants", [])
+            ]
+        })
         copy_combo.configure(values=list(copy_sources))
         mode_combo.bind("<<ComboboxSelected>>", update_source_mode)
     else:
