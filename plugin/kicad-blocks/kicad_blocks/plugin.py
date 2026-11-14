@@ -87,21 +87,25 @@ def _load_tkinter() -> None:
     simpledialog = simpledialog_module
 
 
-def _system_prefers_dark_theme() -> bool:
-    """Read an explicit application theme preference without OS-specific probes."""
+def _system_prefers_dark_theme() -> bool | None:
+    """Return an explicit theme override, or None to keep Tk’s native theme."""
     override = os.environ.get("KICAD_BLOCKS_THEME", "system").strip().casefold()
     if override in {"dark", "true", "1", "yes", "on"}:
         return True
     if override in {"light", "false", "0", "no", "off"}:
         return False
-    # Tk has no portable API for querying the host OS dark-mode preference.
-    # Use a consistent default and keep native file dialogs under the host OS.
-    return False
+    # Tk does not expose a portable query for the host OS dark-mode preference.
+    # Preserve the toolkit's native theme rather than probing OS-specific settings.
+    return None
 
 
 def _configure_tk_theme(root) -> None:
     """Apply a compact KiCad-compatible palette to themed and classic Tk widgets."""
     dark = _system_prefers_dark_theme()
+    if dark is None:
+        # Keep the toolkit/host native appearance for the system setting.
+        root._kicad_blocks_palette = {}
+        return
     colors = ({
         "background": "#202326", "surface": "#292d31", "surface_alt": "#33383d",
         "field": "#191c1f", "hover": "#3b4249", "selected": "#344b62",
