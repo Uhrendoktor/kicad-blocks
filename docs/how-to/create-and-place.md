@@ -31,11 +31,12 @@ The browser searches all registered libraries. A folder that contains no valid `
 2. Choose **Browse and Place Functional Blocks**.
 3. Type in the search field. Search covers the block name, description, pin names, declared parameters, variants, and layout names.
 4. Select a result to inspect its description, facade, pins, configurable settings, implementations, profiles, and PCB layout options.
-5. Review the intended implementation and configuration.
+5. Choose the intended implementation and configuration.
+6. Choose **Place block**. KiCad Blocks creates the facade at the active sheet's page centre, snaps it to the schematic grid, focuses the Eeschema viewport on it, and leaves the new symbol selected.
 
 The project receives a combined `KBlocks.kicad_sym` catalog and `.kicad_blocks/` metadata when the library entry is registered. The shared library stays in its original folder; implementation schematics are not copied into the parent project.
 
-**Interactive placement limitation:** on the tested KiCad build, the supported schematic IPC API does not expose a way for the plugin to attach the selected library symbol to KiCad's interactive placement cursor. The Place block action reports this capability gap instead of opening an unrelated chooser or injecting desktop input. This part of the workflow remains unavailable until KiCad exposes the required API.
+**Movement limitation:** this is fixed-coordinate placement, not a cursor-attached move operation. The tested KiCad schematic IPC API does not expose the interactive-move request available in PCB Editor. The new symbol is left selected so it can be repositioned with Eeschema's normal editing tools; the plugin does not inject desktop input or call the unstable `RunAction` API.
 
 ## Open or manage a stored PCB layout
 
