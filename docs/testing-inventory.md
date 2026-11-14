@@ -322,6 +322,16 @@ Generated STUSB4500 reference design structure, electrical pin shapes, grid alig
 | `test_external_ports_use_standard_kicad_electrical_shapes` | external ports use standard KiCad electrical shapes. |
 | `test_layout_is_grid_aligned_and_functionally_zoned` | layout is grid aligned and functionally zoned. |
 
+### `tests/test_test_quality.py`
+
+High-confidence AST checks for no-op tests and exact duplicate test bodies within the same module and class/fixture scope; similar tests across distinct runtime boundaries are not conflated.
+
+| Test | Purpose |
+| --- | --- |
+| `test_reports_exact_duplicate_test_bodies_even_when_docstrings_differ` | reports exact duplicate test bodies even when docstrings differ. |
+| `test_different_bodies_and_class_fixture_scopes_are_not_duplicates` | different bodies and class fixture scopes are not duplicates. |
+| `test_reports_empty_and_pass_only_test_bodies` | reports empty and pass only test bodies. |
+
 ### `tests/test_validate_docs.py`
 
 Checks Markdown and HTML links, heading anchors, image alt text, and ignores fenced code blocks while validating documentation.
