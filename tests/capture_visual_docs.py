@@ -868,6 +868,45 @@ def main() -> int:
         generate_reference_schematic(reference_source)
         layout_source = Path(temporary) / "stusb4500-reference.kicad_pcb"
         layout_source.write_text("(kicad_pcb)\n", encoding="utf-8")
+        parameters: list[BlockParameterInput] = [
+            {
+                "name": "PDO_CURRENT_A",
+                "type": "number",
+                "default": "2.4",
+                "description": "Current rating of the selected sink PDO in amperes.",
+            }
+        ]
+        variant_files: list[BlockVariantInput] = [
+            {"value": "5V", "path": reference_source},
+            {"value": "9V", "path": reference_source},
+            {"value": "12V", "path": reference_source},
+        ]
+        layout_files: list[BlockLayoutInput] = [
+            {"name": "Reference PCB", "path": layout_source}
+        ]
+        profiles: list[BlockProfileInput] = [
+            {
+                "id": "pdo1_5v_2a4",
+                "name": "5 V / 2.4 A (PDO1)",
+                "description": "Datasheet Table 19 example: fixed 5 V sink PDO.",
+                "variant": "5V",
+                "parameters": {"PDO_CURRENT_A": "2.4"},
+            },
+            {
+                "id": "pdo2_9v_1a33",
+                "name": "9 V / 1.33 A (PDO2)",
+                "description": "Datasheet Table 19 example: 9 V sink PDO.",
+                "variant": "9V",
+                "parameters": {"PDO_CURRENT_A": "1.33"},
+            },
+            {
+                "id": "pdo3_12v_1a",
+                "name": "12 V / 1.0 A (PDO3)",
+                "description": "Datasheet Table 19 example: 12 V sink PDO.",
+                "variant": "12V",
+                "parameters": {"PDO_CURRENT_A": "1.0"},
+            },
+        ]
         target = create_block(
             library,
             "STUSB4500 USB-PD Sink",
@@ -879,43 +918,10 @@ def main() -> int:
                 "STUSB4500QTR USB Type-C PD sink reference circuit based on "
                 "ST DS12499 Rev. 8 Figure 10."
             ),
-            parameters=[
-                {
-                    "name": "PDO_CURRENT_A",
-                    "type": "number",
-                    "default": "2.4",
-                    "description": "Current rating of the selected sink PDO in amperes.",
-                }
-            ],
-            variant_files=[
-                {"value": "5V", "path": reference_source},
-                {"value": "9V", "path": reference_source},
-                {"value": "12V", "path": reference_source},
-            ],
-            layout_files=[{"name": "Reference PCB", "path": layout_source}],
-            profiles=[
-                {
-                    "id": "pdo1_5v_2a4",
-                    "name": "5 V / 2.4 A (PDO1)",
-                    "description": "Datasheet Table 19 example: fixed 5 V sink PDO.",
-                    "variant": "5V",
-                    "parameters": {"PDO_CURRENT_A": "2.4"},
-                },
-                {
-                    "id": "pdo2_9v_1a33",
-                    "name": "9 V / 1.33 A (PDO2)",
-                    "description": "Datasheet Table 19 example: 9 V sink PDO.",
-                    "variant": "9V",
-                    "parameters": {"PDO_CURRENT_A": "1.33"},
-                },
-                {
-                    "id": "pdo3_12v_1a",
-                    "name": "12 V / 1.0 A (PDO3)",
-                    "description": "Datasheet Table 19 example: 12 V sink PDO.",
-                    "variant": "12V",
-                    "parameters": {"PDO_CURRENT_A": "1.0"},
-                },
-            ],
+            parameters=parameters,
+            variant_files=variant_files,
+            layout_files=layout_files,
+            profiles=profiles,
         )
         shutil.copy2(reference_source, target.implementation)
         manifest_path = target.path / "manifest.json"
