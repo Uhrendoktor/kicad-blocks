@@ -522,7 +522,9 @@ def _add_tooltip(widget, text: str) -> None:
                 popup.destroy()
 
     widget.bind("<Enter>", show, add="+")
+    widget.bind("<FocusIn>", show, add="+")
     widget.bind("<Leave>", hide, add="+")
+    widget.bind("<FocusOut>", hide, add="+")
     widget.bind("<ButtonPress>", hide, add="+")
 
 
@@ -537,6 +539,12 @@ def _create_action_icon(parent, name: str):
         "layouts": '<rect x="2" y="5" width="15" height="15" rx="2"/><path d="M7 2h13v14M5 10h9M5 14h6"/>',
         "refresh": '<path d="M20 7v5h-5M4 17v-5h5"/><path d="M5.5 9A7 7 0 0 1 18 6l2 6M4 12l2 6a7 7 0 0 0 12.5-3"/>',
         "libraries": '<path d="M3 6h18M5 11h14M7 16h10M9 21h6"/><path d="M4 3h16v20H4z"/>',
+        "add": '<circle cx="12" cy="12" r="9"/><path d="M12 7v10M7 12h10"/>',
+        "create": '<path d="M3 7h7l2 2h9v11H3z"/><path d="M12 11v6M9 14h6"/>',
+        "change": '<path d="M3 7h7l2 2h9v11H3z"/><path d="m14 16 5-5 2 2-5 5-3 1z"/>',
+        "remove": '<path d="M3 7h18M8 7V4h8v3M6 7l1 14h10l1-14"/><path d="M10 11v6M14 11v6"/>',
+        "default": '<path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2L12 17.3l-5.6 2.9 1.1-6.2L3 9.6l6.2-.9z"/>',
+        "close": '<path d="m6 6 12 12M18 6 6 18"/>',
     }
     path_data = drawings.get(name)
     if not path_data:
@@ -2377,6 +2385,24 @@ def _capture_eeschema_window_id() -> str | None:
     return None
 
 
+def _native_run_action_status(response) -> int | None:
+    """Return KiCad's RunActionStatus value without assuming a truthy response means success."""
+    status = getattr(response, "status", None)
+    if status is None:
+        return None
+    try:
+        return int(status)
+    except (TypeError, ValueError):
+        name = str(getattr(status, "name", status)).strip().upper()
+        if name in {"RAS_OK", "OK"}:
+            return 1
+        if name in {"RAS_INVALID", "INVALID"}:
+            return 2
+        if name in {"RAS_FRAME_NOT_OPEN", "FRAME_NOT_OPEN"}:
+            return 3
+        return None
+
+
 def _start_native_symbol_placement(
     _kicad,
     editor_window_id: str | None,
@@ -2386,19 +2412,30 @@ def _start_native_symbol_placement(
     command_runner=subprocess.run,
     pause=time.sleep,
 ) -> None:
-    """Open KiCad's native symbol chooser and select the exact block facade."""
+    """Start Eeschema's Add Symbol tool and, on X11, choose the requested facade."""
     if not symbol_name or any(char.isspace() for char in symbol_name):
         raise ValueError("The selected block has an invalid KiCad symbol name.")
 
     executable = xdotool or shutil.which("xdotool")
     run_action = getattr(_kicad, "run_action", None)
     action_started = False
+    action_status = None
+    action_error = None
     if callable(run_action):
         try:
-            run_action("eeschema.InteractiveDrawing.placeSymbol")
-            action_started = True
-        except Exception:
-            LOG.debug("KiCad IPC run_action was unavailable; trying the X11 hotkey fallback", exc_info=True)
+            response = run_action("eeschema.InteractiveDrawing.placeSymbol")
+            action_status = _native_run_action_status(response)
+            action_started = action_status == 1
+            if not action_started:
+                action_error = (
+                    "KiCad did not accept the Place Symbol action"
+                    if action_status is None
+                    else f"KiCad rejected the Place Symbol action (RunActionStatus={action_status})"
+                )
+                LOG.warning("%s", action_error)
+        except Exception as exc:
+            action_error = f"KiCad IPC Place Symbol action failed: {exc}"
+            LOG.debug("KiCad IPC run_action failed; trying the desktop input fallback", exc_info=True)
 
     def send(*arguments: str) -> str:
         result = command_runner(
@@ -2408,16 +2445,45 @@ def _start_native_symbol_placement(
         return str(getattr(result, "stdout", "") or "").strip()
 
     if action_started and not executable:
-        # The native chooser is already open. Let the user choose the symbol
-        # manually rather than failing placement because an optional X11 tool
-        # is not installed.
-        LOG.info("Opened KiCad native symbol chooser; xdotool unavailable for automatic filtering")
+        # The IPC action has already opened KiCad's own chooser. Do not require
+        # an optional desktop automation utility merely to complete the handoff.
+        LOG.info("KiCad accepted Place Symbol; choose %s in the native chooser", symbol_name)
         return
 
-    if not executable:
+    if not executable and not action_started:
+        wayland = bool(os.environ.get("WAYLAND_DISPLAY")) or (
+            os.environ.get("XDG_SESSION_TYPE", "").casefold() == "wayland"
+        )
+        wtype = shutil.which("wtype") if wayland else None
+        if wtype:
+            try:
+                command_runner(
+                    [wtype, "-k", "a"],
+                    capture_output=True,
+                    text=True,
+                    check=True,
+                    timeout=5,
+                )
+                # Wayland deliberately leaves symbol selection to the native
+                # chooser. Global window enumeration/focus injection is not
+                # portable or safe across Wayland compositors.
+                pause(0.2)
+                LOG.info("Opened the Eeschema Add Symbol chooser through the Wayland virtual keyboard")
+                return
+            except (OSError, subprocess.SubprocessError) as exc:
+                LOG.warning("Wayland Add Symbol handoff failed: %s", exc)
+
+        detail = f"{action_error}. " if action_error else ""
+        if wayland:
+            raise RuntimeError(
+                detail
+                + "No supported Wayland input helper is available. In Eeschema, press A "
+                + f"and choose KBlocks:{symbol_name}; no files have been changed yet."
+            )
         raise RuntimeError(
-            "This KiCad IPC version does not expose the native Place Symbol action, "
-            "and xdotool is not installed. Install xdotool or update KiCad, then retry."
+            detail
+            + "Automatic placement needs KiCad's Place Symbol IPC action or xdotool. "
+            + f"As a manual fallback, activate Eeschema, press A, and choose KBlocks:{symbol_name}."
         )
 
     editor_pid = ""
@@ -2432,7 +2498,8 @@ def _start_native_symbol_placement(
             editor_window_id = _capture_eeschema_window_id()
         if not editor_window_id:
             raise RuntimeError(
-                "KiCad could not identify the active Schematic Editor. "
+                (f"{action_error}. " if action_error else "")
+                + "Could not identify the active Schematic Editor. "
                 "Keep the project schematic open and launch the library from Eeschema."
             )
         editor_pid = send("getwindowpid", str(editor_window_id))
@@ -2462,8 +2529,8 @@ def _start_native_symbol_placement(
             with contextlib.suppress(Exception):
                 send("key", "--clearmodifiers", "Escape")
         raise RuntimeError(
-            "KiCad did not open its native symbol chooser. Confirm the schematic editor "
-            "is active and that Add Symbol is available in Eeschema."
+            "KiCad did not open its native symbol chooser. Confirm that the schematic "
+            "editor is active and that Add Symbol is available in Eeschema."
         )
 
     send("windowfocus", "--sync", chooser_id)
@@ -4187,24 +4254,15 @@ def _show_library_roots_dialog(parent) -> bool:
     outer = ttk.Frame(dialog, padding=14)
     outer.pack(fill="both", expand=True)
     outer.columnconfigure(0, weight=1)
-    outer.rowconfigure(2, weight=1)
+    outer.rowconfigure(1, weight=1)
     ttk.Label(
         outer,
-        text="Registered block libraries",
+        text="Registered libraries",
         font=("TkDefaultFont", 12, "bold"),
-    ).grid(row=0, column=0, sticky="w")
-    ttk.Label(
-        outer,
-        text=(
-            "Register or create libraries. Changing or unregistering a path "
-            "does not move or delete the library files."
-        ),
-        wraplength=900,
-        justify="left",
-    ).grid(row=1, column=0, sticky="ew", pady=(4, 12))
+    ).grid(row=0, column=0, sticky="w", pady=(0, 8))
 
     table_frame = ttk.Frame(outer)
-    table_frame.grid(row=2, column=0, sticky="nsew")
+    table_frame.grid(row=1, column=0, sticky="nsew")
     table_frame.columnconfigure(0, weight=1)
     table_frame.rowconfigure(0, weight=1)
     tree = ttk.Treeview(
@@ -4236,9 +4294,11 @@ def _show_library_roots_dialog(parent) -> bool:
     _bind_mousewheel(tree, lambda amount: tree.yview_scroll(amount, "units"))
 
     status = tk.StringVar()
-    ttk.Label(outer, textvariable=status, wraplength=900).grid(
-        row=3, column=0, sticky="ew", pady=(8, 0)
-    )
+    ttk.Label(
+        outer,
+        textvariable=status,
+        foreground=getattr(parent, "_kicad_blocks_palette", {}).get("muted", "#5f6871"),
+    ).grid(row=2, column=0, sticky="w", pady=(6, 0))
 
     changed = [False]
     environment_value = os.environ.get("KICAD_BLOCKS_LIBRARY")
@@ -4282,14 +4342,7 @@ def _show_library_roots_dialog(parent) -> bool:
                 tree.selection_set(str(index))
                 tree.focus(str(index))
                 tree.see(str(index))
-        status.set(
-            f"{len(roots)} registered folders. "
-            + (
-                "KICAD_BLOCKS_LIBRARY overrides the default destination."
-                if environment_root is not None
-                else "The row marked Default receives newly created blocks."
-            )
-        )
+        status.set(f"{len(roots)} registered libraries")
         update_selection_actions()
 
     def add_library() -> None:
@@ -4393,20 +4446,41 @@ def _show_library_roots_dialog(parent) -> bool:
         except (OSError, ValueError) as exc:
             messagebox.showerror("Set default library", str(exc), parent=dialog)
 
-    actions = ttk.Frame(outer, padding=(0, 10, 0, 0))
-    actions.grid(row=4, column=0, sticky="ew")
-    add_button = ttk.Button(actions, text="Add library", command=add_library)
-    add_button.pack(side="left")
-    create_button = ttk.Button(actions, text="Create library", command=create_library)
-    create_button.pack(side="left", padx=(8, 0))
-    change_button = ttk.Button(actions, text="Change folder", command=change_library_folder)
-    change_button.pack(side="left", padx=(8, 0))
-    remove_button = ttk.Button(actions, text="Unregister", command=remove_library)
+    library_actions = ttk.Frame(outer, padding=(0, 9, 0, 6))
+    library_actions.grid(row=3, column=0, sticky="ew")
+    _action_button(
+        library_actions, "Add library", add_library, "add",
+        "Register an existing block-library folder",
+    ).pack(side="left")
+    _action_button(
+        library_actions, "Create library", create_library, "create",
+        "Create and register a new block-library folder",
+    ).pack(side="left", padx=(8, 0))
+
+    ttk.Separator(outer, orient="horizontal").grid(
+        row=4, column=0, sticky="ew", pady=(2, 2)
+    )
+    selected_actions = ttk.Frame(outer, padding=(0, 6, 0, 0))
+    selected_actions.grid(row=5, column=0, sticky="ew")
+    change_button = _action_button(
+        selected_actions, "Change folder", change_library_folder, "change",
+        "Replace the selected registered folder without moving its files",
+    )
+    change_button.pack(side="left")
+    remove_button = _action_button(
+        selected_actions, "Unregister", remove_library, "remove",
+        "Remove the selected folder from the registered list; files remain on disk",
+    )
     remove_button.pack(side="left", padx=(8, 0))
-    default_button = ttk.Button(actions, text="Set default", command=make_default)
+    default_button = _action_button(
+        selected_actions, "Set default", make_default, "default",
+        "Use the selected library for newly created blocks",
+    )
     default_button.pack(side="left", padx=(8, 0))
-    close_button = ttk.Button(actions, text="Close", command=dialog.destroy)
-    close_button.pack(side="right")
+    _action_button(
+        selected_actions, "Close", dialog.destroy, "close",
+        "Close Manage Libraries",
+    ).pack(side="right")
 
     def update_selection_actions(_event=None) -> None:
         path = selected_path()
@@ -4420,7 +4494,7 @@ def _show_library_roots_dialog(parent) -> bool:
     tree.bind("<<TreeviewSelect>>", update_selection_actions)
     render()
     update_selection_actions()
-    _set_window_geometry(dialog, 1280, 800, 1060, 660)
+    _set_window_geometry(dialog, 1120, 680, 880, 500)
     dialog.wait_window()
     return changed[0]
 
@@ -4709,7 +4783,7 @@ def _show_library_browser(
             )
         if facade_button[0] is not None:
             facade_button[0].configure(
-                state="normal" if record is not None else "disabled"
+                state="normal" if selected_facade_instance(record) is not None else "disabled"
             )
 
     def place_selected(_event=None):
@@ -4820,33 +4894,40 @@ def _show_library_browser(
         _set_window_geometry(chooser, 500, 190, 440, 160)
         combo.focus_set()
 
-    def edit_facade(_event=None):
-        record = selected_record[0]
+    def selected_facade_instance(record):
         if record is None:
-            return
+            return None
         selection = _safe_schematic_selection(schematic)
         if len(selection) != 1 or not hasattr(selection[0], "definition"):
-            messagebox.showinfo(
-                "Edit facade symbol",
-                "No placed instance of the highlighted block is selected in Eeschema. "
-                "Select that instance in the schematic, then reopen the Functional Block Library "
-                "to edit its library symbol.",
-                parent=window,
-            )
-            return
+            return None
         try:
             selected_record_for_instance = _block_record_for_instance(
                 current_roots[0], project_dir, selection[0]
             )
-            if selected_record_for_instance.manifest.get("block_id") != record.manifest.get("block_id"):
-                raise ValueError(
-                    "The selected schematic symbol is not the block highlighted in the library browser."
-                )
+        except (OSError, RuntimeError, ValueError, LookupError):
+            return None
+        if selected_record_for_instance.manifest.get("block_id") != record.manifest.get("block_id"):
+            return None
+        return selection[0]
+
+    def edit_facade(_event=None):
+        record = selected_record[0]
+        if record is None:
+            return
+        instance = selected_facade_instance(record)
+        if instance is None:
+            messagebox.showinfo(
+                "Edit facade",
+                "Select one placed instance of this block in Eeschema, then reopen the library.",
+                parent=window,
+            )
+            return
+        try:
             _edit_facade_symbol(
                 current_roots[0], schematic, project_dir, editor_window_id, window
             )
         except (OSError, RuntimeError, ValueError, LookupError, subprocess.SubprocessError) as exc:
-            messagebox.showerror("Edit facade symbol", str(exc), parent=window)
+            messagebox.showerror("Edit facade", str(exc), parent=window)
 
     def manage_layouts(_event=None):
         record = selected_record[0]
@@ -5011,17 +5092,6 @@ def _show_library_browser(
         ),
     )
 
-    ttk.Label(
-        right,
-        text=(
-            "To edit a facade, select its placed block instance in Eeschema "
-            "before opening this browser."
-        ),
-        wraplength=560,
-        justify="left",
-        font=("TkDefaultFont", 8),
-    ).grid(row=4, column=0, sticky="ew", pady=(8, 0))
-
     action_toolbar = ttk.Frame(outer, padding=(0, 10, 0, 0))
     action_toolbar.pack(fill="x")
     place_button = _action_button(
@@ -5036,7 +5106,7 @@ def _show_library_browser(
     implementation_button.pack(side="left", padx=(6, 0))
     facade_button[0] = _action_button(
         action_toolbar, "Edit facade", edit_facade, "facade",
-        "Edit the highlighted block's placed facade symbol in Symbol Editor",
+        "Edit the library facade for the matching block instance selected in Eeschema",
     )
     facade_button[0].pack(side="left", padx=(6, 0))
     variants_button = _action_button(
@@ -5067,6 +5137,7 @@ def _show_library_browser(
     refresh_records()
     selection_changed()
     _set_window_geometry(window, 1600, 1000, 1200, 720)
+    window.bind("<FocusIn>", lambda _event: selection_changed(), add="+")
     search_entry.focus_set()
 
 def run_library_browser() -> None:
