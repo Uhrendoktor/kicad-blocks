@@ -1,6 +1,6 @@
 # Repository quality and redundancy audit
 
-**Reference standard:** Uhrendoktor/freecad-cloth PR 2751, specifically its staged Python quality contract. This audit does not apply FreeCAD-specific GUI, geometry, or solver checks to KiCad Blocks.
+**Reference standard:** Uhrendoktor/freecad-cloth PR 2842, particularly its documented Ruff exceptions and repository-wide strict-quality structure. This audit adapts the reference policy to KiCad's plugin, IPC, GUI, and PCB boundaries.
 
 ## Scope reviewed
 
