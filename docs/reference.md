@@ -58,7 +58,7 @@ The Functional Block Library browser presents these primary actions:
 
 - **Place block** — starts KiCad's native symbol chooser and placement tool for the selected block.
 - **Open implementation** — opens the default or selected implementation schematic.
-- **Edit selected facade** — edits the library symbol in Symbol Editor. This action is enabled only when one placed instance of the highlighted block is selected in Eeschema.
+- **Edit facade** — opens the generated library symbol shown in the preview directly in Symbol Editor. No placed schematic instance is required. The source catalog is registered under a project-scoped edit alias so Symbol Editor edits the shared library file, not the project's placement snapshot. Save the symbol, then use **Publish implementation** to reconcile the edited catalog symbol with the block's revisioned facade asset.
 - **Implementations** — opens the default and named implementation list.
 - **Open PCB layout** — opens a stored board file for inspection.
 - **Manage PCB layouts** — edits stored boards, implementation links, and the default layout.
