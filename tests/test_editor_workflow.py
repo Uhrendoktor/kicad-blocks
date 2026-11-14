@@ -432,7 +432,7 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
             call[1:2] == ["key"] for call in calls
         ))
 
-    def test_wayland_edit_facade_uses_native_action_before_wtype_search(self):
+    def test_wayland_edit_facade_does_not_inject_without_verified_search_focus(self):
         from kicad_blocks.repository import build_project_symbol_catalog
 
         project_catalog = build_project_symbol_catalog(self.project, [self.library])
@@ -457,24 +457,18 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
                 SimpleNamespace(run_action=run_action),
                 None,
                 project_catalog=project_catalog,
-                wtype="/usr/bin/wtype",
                 close_browser=lambda: closed.append(True),
                 command_runner=command_runner,
                 pause=lambda _seconds: None,
             )
 
-        self.assertTrue(opened)
+        # IPC accepted the request, but Wayland does not expose a portable way
+        # to verify that Symbol Editor's library-tree search owns keyboard focus.
+        # Keep the user-facing manual search path and never inject global keys.
+        self.assertFalse(opened)
         self.assertEqual(actions, ["common.Control.showSymbolEditor"])
         self.assertEqual(closed, [True])
-        self.assertEqual(
-            calls,
-            [
-                ["/usr/bin/wtype", "-M", "ctrl", "-k", "l", "-m", "ctrl"],
-                ["/usr/bin/wtype", "-M", "ctrl", "-k", "a", "-m", "ctrl"],
-                ["/usr/bin/wtype", "-d", "12", self.block.manifest["symbol_name"]],
-                ["/usr/bin/wtype", "-k", "Return"],
-            ],
-        )
+        self.assertEqual(calls, [])
 
     def test_wayland_edit_facade_does_not_inject_when_wtype_is_missing(self):
         from kicad_blocks.repository import build_project_symbol_catalog
