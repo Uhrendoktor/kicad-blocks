@@ -31,13 +31,11 @@ The browser searches all registered libraries. A folder that contains no valid `
 2. Choose **Browse and Place Functional Blocks**.
 3. Type in the search field. Search covers the block name, description, pin names, declared parameters, variants, and layout names.
 4. Select a result to inspect its description, facade, pins, configurable settings, implementations, profiles, and PCB layout options.
-5. Choose an implementation variant or named profile when the block provides one.
-6. Choose **Place block** or double-click the selected row.
-7. Confirm the facade in KiCad's native **Choose Symbol** dialog and place it with the normal KiCad tool.
+5. Review the intended implementation and configuration.
 
-The browser minimizes before placement so the Eeschema canvas remains visible. Restore it from the taskbar after placement or cancellation.
+The project receives a combined `KBlocks.kicad_sym` catalog and `.kicad_blocks/` metadata when the library entry is registered. The shared library stays in its original folder; implementation schematics are not copied into the parent project.
 
-The project receives a combined `KBlocks.kicad_sym` catalog and `.kicad_blocks/` metadata. The shared library stays in its original folder; implementation schematics are not copied into the parent project.
+**Interactive placement limitation:** on the tested KiCad build, the supported schematic IPC API does not expose a way for the plugin to attach the selected library symbol to KiCad's interactive placement cursor. The Place block action reports this capability gap instead of opening an unrelated chooser or injecting desktop input. This part of the workflow remains unavailable until KiCad exposes the required API.
 
 ## Open or manage a stored PCB layout
 
