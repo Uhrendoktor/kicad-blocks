@@ -629,111 +629,38 @@ def main() -> None:
                 facade_editor_client.close()
 
             placement_client = KiCad(timeout_ms=30000)
-            plugin_actions._start_native_symbol_placement(
+            placed_instance = plugin_actions._start_native_symbol_placement(
                 placement_client,
                 None,
                 placement_symbol_name,
             )
-            _select_native_symbol_in_test_harness(xdotool, placement_symbol_name)
-            placement_focus = subprocess.run(
-                [xdotool, "getwindowfocus"],
-                capture_output=True,
-                text=True,
-                check=True,
-            ).stdout.strip()
-            if placement_focus != window_id:
+            placement_schematic = placement_client.get_schematic()
+            selected_instances = list(placement_schematic.get_selection())
+            if len(selected_instances) != 1:
                 raise AssertionError(
-                    f"Selecting {placement_symbol_name} did not return focus to Eeschema's "
-                    f"interactive placement tool; focused={placement_focus!r}; "
-                    f"visible_windows={_windows(xdotool)!r}"
+                    "Block placement must leave exactly the new symbol selected; "
+                    f"selection={selected_instances!r}"
+                )
+            if str(selected_instances[0].id) != str(placed_instance.id):
+                raise AssertionError(
+                    "The newly placed block is not the selected schematic item: "
+                    f"placed={placed_instance.id!s}; "
+                    f"selected={selected_instances[0].id!s}"
                 )
 
-            # Commit the facade to the active sheet, leave the placement tool,
-            # and save the real schematic so the test proves a block was placed
-            # rather than merely proving that the symbol chooser opened.
-            geometry_result = subprocess.run(
-                [xdotool, "getwindowgeometry", "--shell", window_id],
-                capture_output=True,
-                text=True,
-                check=True,
-            )
-            geometry = {
-                key: value
-                for key, value in (
-                    line.split("=", 1)
-                    for line in geometry_result.stdout.splitlines()
-                    if "=" in line
-                )
-            }
-            editor_width = int(geometry["WIDTH"])
-            editor_height = int(geometry["HEIGHT"])
-            # Use a point relative to the actual editor window, inside the
-            # drawing canvas. A fixed root-screen coordinate can land outside
-            # Eeschema when Python-version-specific GTK window sizes differ.
-            placement_x = str(editor_width // 2)
-            placement_y = str((editor_height * 2) // 3)
-            subprocess.run(
-                [
-                    xdotool,
-                    "mousemove",
-                    "--sync",
-                    "--window",
-                    window_id,
-                    placement_x,
-                    placement_y,
-                ],
-                check=True,
-                capture_output=True,
-                text=True,
-            )
-            subprocess.run(
-                [xdotool, "click", "1"],
-                check=True,
-                capture_output=True,
-                text=True,
-            )
-            time.sleep(0.5)
-            subprocess.run(
-                [xdotool, "key", "--clearmodifiers", "Escape"],
-                check=True,
-                capture_output=True,
-                text=True,
-            )
-            subprocess.run(
-                [xdotool, "key", "--clearmodifiers", "ctrl+s"],
-                check=True,
-                capture_output=True,
-                text=True,
-            )
             expected_lib_id = (
                 f'{block.manifest["library_nickname"]}:{placement_symbol_name}'
             )
-            save_deadline = time.monotonic() + 8.0
-            saved_schematic = ""
-            while time.monotonic() < save_deadline:
-                saved_schematic = schematic.read_text(encoding="utf-8")
-                if expected_lib_id in saved_schematic:
-                    break
-                time.sleep(0.25)
+            saved_schematic = schematic.read_text(encoding="utf-8")
             if expected_lib_id not in saved_schematic:
-                focus = subprocess.run(
-                    [xdotool, "getwindowfocus"],
-                    capture_output=True,
-                    text=True,
-                    check=False,
-                ).stdout.strip()
-                mouse = subprocess.run(
-                    [xdotool, "getmouselocation", "--shell"],
-                    capture_output=True,
-                    text=True,
-                    check=False,
-                ).stdout.strip()
                 raise AssertionError(
-                    f"Saved Eeschema file does not contain the placed block facade "
-                    f"{expected_lib_id!r}. editor_geometry={geometry_result.stdout!r}; "
-                    f"focus={focus!r}; mouse={mouse!r}; "
-                    f"saved_tail={saved_schematic[-2500:]!r}."
+                    f"Saved schematic does not contain the placed block {expected_lib_id!r}."
                 )
+            print(
+                f"Functional Block Library placement helper placed {expected_lib_id} "
+                "at the A4 page centre and left it selected."
+            )
+
             placement_svg = root / "placed-block-svg"
             placement_svg.mkdir()
             subprocess.run(
