@@ -3792,6 +3792,7 @@ _DESKTOP_CHOOSER_UNAVAILABLE = object()
 
 def _desktop_file_dialog(
     *,
+    parent=None,
     mode: str,
     title: str,
     initial_path: str | Path = "",
@@ -3864,6 +3865,16 @@ def _desktop_file_dialog(
                 pattern,
                 "--title", title,
             ]
+        # KDialog supports embedding in an X11 parent. Its --embed option
+        # cannot express the Wayland xdg-foreign surface handle, so do not
+        # pass an XID while running under a Wayland compositor.
+        if parent is not None and os.environ.get("XDG_SESSION_TYPE", "").casefold() != "wayland":
+            try:
+                parent_id = str(parent.winfo_id())
+            except (AttributeError, tk.TclError):
+                parent_id = ""
+            if parent_id:
+                command.extend(["--embed", parent_id])
 
     try:
         result = subprocess.run(
@@ -3899,6 +3910,7 @@ def _pick_save_file(
 ) -> str | None:
     """Save-file dialog using the same desktop chooser preference as open dialogs."""
     selected = _desktop_file_dialog(
+        parent=parent,
         mode="save",
         title=title,
         initial_path=initial_path,
@@ -3935,6 +3947,7 @@ def _pick_kicad_file(
         ("All files", "*.*"),
     ]
     selected = _desktop_file_dialog(
+        parent=parent,
         mode="open", title=title, initial_path=initial,
         suffix=suffix, filetypes=filetypes,
     )
@@ -3959,6 +3972,7 @@ def _pick_directory(
     if not initial.is_dir():
         initial = Path.cwd()
     selected = _desktop_file_dialog(
+        parent=parent,
         mode="directory", title=title, initial_path=initial,
     )
     if selected is not _DESKTOP_CHOOSER_UNAVAILABLE:
