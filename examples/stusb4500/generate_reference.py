@@ -1052,8 +1052,7 @@ def generate_reference_schematic(destination: Path) -> Path:
         "FET_MID", [t4_fet_mid, t1_fet_mid, r10_fet_mid],
         "back-to-back-pmos-midpoint-to-r10",
     )
-    add_junction(t4_fet_mid, "FET_MID:T4-common-source")
-    add_junction(r10_fet_mid, "FET_MID:R10-network")
+    add_junction(t1_fet_mid, "FET_MID:common-source-midpoint")
 
     # The VSNK_GATE control bus is physically wired across R10/R11/R13.
     # Keep its one label at R11.1; T1.1 is a separate, matching label island.
@@ -1073,6 +1072,17 @@ def generate_reference_schematic(destination: Path) -> Path:
 
     # All regulator bypass capacitors connect directly to IC supply pins.
     # VREG_1V2 uses a dedicated upper corridor; C2/C3 remain adjacent.
+    u1_vreg_1v2 = pin_world_points[("U1", "21")]
+    c1_vreg_1v2 = pin_world_points[("C1", "1")]
+    remove_local_label("U1", "21", "VREG_1V2")
+    remove_local_label("C1", "1", "VREG_1V2")
+    add_route("VREG_1V2", [
+        u1_vreg_1v2,
+        (u1_vreg_1v2[0], 87.63),
+        (c1_vreg_1v2[0], 87.63),
+        c1_vreg_1v2,
+    ], "u1-vreg-1v2-to-c1")
+
     u1_vreg_2v7 = pin_world_points[("U1", "23")]
     c2_vreg_2v7 = pin_world_points[("C2", "1")]
     c3_vreg_2v7 = pin_world_points[("C3", "1")]
@@ -1091,10 +1101,10 @@ def generate_reference_schematic(destination: Path) -> Path:
     # Keep the reusable VREG_2V7 label on the branch wire, not on a
     # decoupler pin. Decoupler pins themselves remain label-free.
     remove_local_label("U1", "23", "VREG_2V7")
-    vreg_2v7_label_tap = (254.000, 95.250)
+    vreg_2v7_label_tap = (u1_vreg_2v7[0], 95.250)
     label_points[vreg_2v7_label_tap] = (
         "VREG_2V7", "local", None,
-        254.000, 95.250, "left", 0,
+        vreg_2v7_label_tap[0], vreg_2v7_label_tap[1], "left", 0,
     )
 
     # R55.1 is physically wired to U1.6; RESET remains a hierarchical parent port.
