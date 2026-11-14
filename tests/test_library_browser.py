@@ -118,7 +118,10 @@ class LibraryBrowserTests(unittest.TestCase):
                 side_effect=lambda svg_file, _record, _output: svg_file,
             ),
             patch("cairosvg.svg2png", return_value=b"not-a-png"),
-            patch("kicad_blocks.plugin.tk.PhotoImage", return_value=object()),
+            patch(
+                "kicad_blocks.plugin.tk",
+                SimpleNamespace(PhotoImage=Mock(return_value=object())),
+            ),
             patch("kicad_blocks.plugin._NATIVE_PREVIEW_CACHE", {}),
         ):
             _native_symbol_preview_photo(
