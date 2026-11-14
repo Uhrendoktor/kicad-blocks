@@ -946,7 +946,9 @@ def generate_reference_schematic(destination: Path) -> Path:
             # Keep both fields above the MOSFET bodies. The labels sit at
             # opposite outer sides of the pair, away from gate/source wires.
             dx = -5.08 if reference == "T4" else 8.89
-            reference_x, reference_y = sx + dx, sy - 6.35
+            reference_x, reference_y = (
+                sx + dx, sy - (5.08 if reference == "T1" else 6.35)
+            )
             value_x, value_y = (
                 sx + (5.08 if reference == "T1" else dx),
                 sy - (7.62 if reference == "T1" else 8.89),
