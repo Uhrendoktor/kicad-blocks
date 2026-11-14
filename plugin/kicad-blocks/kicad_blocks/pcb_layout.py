@@ -9,6 +9,7 @@ board currently open in PCB Editor.
 from __future__ import annotations
 
 import contextlib
+import json
 import math
 import os
 import re
