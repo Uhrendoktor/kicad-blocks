@@ -1095,8 +1095,8 @@ def generate_reference_schematic(destination: Path) -> Path:
     remove_local_label("C1", "1", "VREG_1V2")
     add_route("VREG_1V2", [
         u1_vreg_1v2,
-        (u1_vreg_1v2[0], 87.63),
-        (c1_vreg_1v2[0], 87.63),
+        (u1_vreg_1v2[0], 102.87),
+        (c1_vreg_1v2[0], 102.87),
         c1_vreg_1v2,
     ], "u1-vreg-1v2-to-c1")
 
