@@ -9,7 +9,6 @@ import io
 import json
 import re
 import subprocess
-import sys
 import tokenize
 from pathlib import Path
 
@@ -43,16 +42,19 @@ def _explicit_any_lines(tree: ast.AST) -> list[int]:
     """Find Any imports and references, including qualified and aliased imports."""
     lines: set[int] = set()
     for node in ast.walk(tree):
-        if isinstance(node, ast.Name) and node.id == "Any":
+        if (
+            isinstance(node, ast.Name) and node.id == "Any"
+            or isinstance(node, ast.Attribute) and node.attr == "Any"
+        ):
             lines.add(node.lineno)
-        elif isinstance(node, ast.Attribute) and node.attr == "Any":
+        elif isinstance(node, ast.ImportFrom) and any(
+            alias.name == "Any" for alias in node.names
+        ):
             lines.add(node.lineno)
-        elif isinstance(node, ast.ImportFrom):
-            if any(alias.name == "Any" for alias in node.names):
-                lines.add(node.lineno)
-        elif isinstance(node, ast.Import):
-            if any(alias.name.endswith(".Any") for alias in node.names):
-                lines.add(node.lineno)
+        elif isinstance(node, ast.Import) and any(
+            alias.name.endswith(".Any") for alias in node.names
+        ):
+            lines.add(node.lineno)
     return sorted(lines)
 
 
@@ -200,9 +202,10 @@ def _annotation_metrics(source: str, path: str) -> tuple[int, int]:
 
     annotations: list[ast.expr] = []
     for node in ast.walk(tree):
-        if isinstance(node, ast.arg) and node.annotation is not None:
-            annotations.append(node.annotation)
-        elif isinstance(node, ast.AnnAssign):
+        if (
+            isinstance(node, ast.arg) and node.annotation is not None
+            or isinstance(node, ast.AnnAssign)
+        ):
             annotations.append(node.annotation)
         elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.returns:
             annotations.append(node.returns)
