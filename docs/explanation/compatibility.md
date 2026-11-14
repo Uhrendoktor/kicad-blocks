@@ -58,6 +58,8 @@ The repository `VERSION` file currently contains `1.1.0`. A packaged KiCad Block
 
 Use the source installation procedure in [Install and enable KiCad Blocks](../getting-started.md). The immutable historical `v1` tag is not a substitute for a current 1.1.0 application package.
 
+The exact per-test and per-acceptance-runner coverage is listed in the [test inventory](../developers/TEST_INVENTORY.md). The repository's quality-policy and overlap decisions are summarized in the [repository audit](../developers/REPOSITORY_AUDIT.md).
+
 ## What CI does not prove
 
 Passing CI is evidence for the scenarios exercised by the current tests. It does not establish compatibility with untested KiCad releases, operating systems, architectures, or hotkey configurations.

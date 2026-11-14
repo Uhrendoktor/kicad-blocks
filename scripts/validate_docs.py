@@ -24,9 +24,7 @@ HTML_ALT_RE = re.compile(
     re.IGNORECASE,
 )
 HEADING_RE = re.compile(r"^ {0,3}#{1,6}\s+(.+?)\s*#*\s*$")
-FENCE_RE = re.compile(
-    r"^ {0,3}(" + re.escape(chr(96)) + r"{3,}|~{3,})"
-)
+FENCE_RE = re.compile(r"^ {0,3}(" + re.escape(chr(96)) + r"{3,}|~{3,})")
 
 
 def markdown_files() -> list[Path]:
@@ -89,7 +87,7 @@ def destination(raw: str) -> str:
     """Normalize a simple Markdown or HTML link destination."""
     value = raw.strip()
     if value.startswith("<") and ">" in value:
-        value = value[1:value.index(">")]
+        value = value[1 : value.index(">")]
     else:
         value = value.split(maxsplit=1)[0]
     return unquote(value)
@@ -137,12 +135,14 @@ def validate_file(path: Path) -> list[str]:
     source = strip_fenced_code(path.read_text(encoding="utf-8"))
     source_slugs = heading_slugs(path)
 
-    for match in IMAGE_RE.finditer(source):
-        if not match.group(1).strip():
-            errors.append(
-                f"{path.relative_to(ROOT)}:{_line_number(source, match.start())}: "
-                "Markdown image is missing alt text"
-            )
+    errors.extend(
+        [
+            f"{path.relative_to(ROOT)}:{_line_number(source, match.start())}: "
+            "Markdown image is missing alt text"
+            for match in IMAGE_RE.finditer(source)
+            if not match.group(1).strip()
+        ]
+    )
 
     for match in HTML_IMAGE_RE.finditer(source):
         attributes = match.group(1)
