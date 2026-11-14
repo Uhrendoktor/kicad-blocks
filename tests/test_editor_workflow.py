@@ -1,6 +1,5 @@
 """Exercise the plugin's library editor launch and publish workflow."""
 
-import os
 import sys
 import tempfile
 import types
@@ -67,490 +66,20 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
             )
         ]
 
-    def test_edit_facade_prefers_native_symbol_editor_action_when_supported(self):
+    def test_edit_facade_reports_missing_supported_editor_selection_api(self):
         from kicad_blocks.repository import build_project_symbol_catalog
 
         project_catalog = build_project_symbol_catalog(self.project, [self.library])
-        actions = []
-        calls = []
-        search_count = [0]
-
-        def run_action(action):
-            actions.append(action)
-            return SimpleNamespace(status=1)
-
-        def command_runner(arguments, **kwargs):
-            calls.append(arguments)
-            if arguments[1:4] == ["search", "--onlyvisible", "--name"]:
-                search_count[0] += 1
-                return SimpleNamespace(
-                    stdout="0x200" if search_count[0] > 1 else "",
-                    returncode=0,
-                )
-            if arguments[1:2] == ["getwindowfocus"]:
-                return SimpleNamespace(stdout="0x200", returncode=0)
-            if arguments[1:3] == ["getwindowname", "0x200"]:
-                return SimpleNamespace(
-                    stdout="Symbol Editor",
-                    returncode=0,
-                )
-            return SimpleNamespace(stdout="", returncode=0)
-
-        opened = plugin_actions._edit_facade_symbol(
-            self.block,
-            SimpleNamespace(run_action=run_action, get_open_documents=self._open_symbol_documents),
-            "0x100",
-            project_catalog=project_catalog,
-            xdotool="/usr/bin/xdotool",
-            command_runner=command_runner,
-            pause=lambda _seconds: None,
-        )
-
-        self.assertTrue(opened)
-        self.assertEqual(actions, ["common.Control.showSymbolEditor"])
-        self.assertIn(["/usr/bin/xdotool", "windowraise", "0x200"], calls)
-        self.assertIn(["/usr/bin/xdotool", "windowactivate", "--sync", "0x200"], calls)
-        self.assertIn(["/usr/bin/xdotool", "windowfocus", "--sync", "0x200"], calls)
-        self.assertNotIn(["/usr/bin/xdotool", "key", "--clearmodifiers", "alt+t"], calls)
-        self.assertIn(
-            ["/usr/bin/xdotool", "type", "--clearmodifiers", "--delay", "12", self.block.manifest["symbol_name"]],
-            calls,
-        )
-
-    def test_edit_facade_targets_preview_symbol_without_schematic_selection(self):
-        from kicad_blocks.repository import build_project_symbol_catalog
-
-        project_catalog = build_project_symbol_catalog(self.project, [self.library])
-        calls = []
-        pauses = []
-        focus_reads = [0]
-        search_count = [0]
-
-        def command_runner(arguments, **kwargs):
-            calls.append(arguments)
-            if arguments[1:4] == ["search", "--onlyvisible", "--name"]:
-                search_count[0] += 1
-                return SimpleNamespace(
-                    stdout="0x200" if search_count[0] > 2 else "",
-                    returncode=0,
-                )
-            if arguments[1:3] == ["getwindowname", "0x100"]:
-                return SimpleNamespace(
-                    stdout="placement-test — Schematic Editor",
-                    returncode=0,
-                )
-            if arguments[1:3] == ["getwindowclassname", "0x100"]:
-                return SimpleNamespace(stdout="eeschema", returncode=0)
-            if arguments[1:2] == ["getwindowfocus"]:
-                focus_reads[0] += 1
-                return SimpleNamespace(
-                    stdout="0x100" if focus_reads[0] == 1 else "0x200",
-                    returncode=0,
-                )
-            if arguments[1:3] == ["getwindowpid", "0x100"]:
-                return SimpleNamespace(stdout="1001", returncode=0)
-            if arguments[1:3] == ["getwindowname", "0x200"]:
-                return SimpleNamespace(
-                    stdout="Symbol Editor",
-                    returncode=0,
-                )
-            return SimpleNamespace(stdout="", returncode=0)
-
-        with patch.object(plugin_actions.os, "readlink", return_value="/usr/bin/eeschema-nightly"):
-            opened = plugin_actions._edit_facade_symbol(
+        run_action = Mock()
+        with self.assertRaisesRegex(RuntimeError, "supported KiCad IPC API yet"):
+            plugin_actions._edit_facade_symbol(
                 self.block,
-                SimpleNamespace(get_open_documents=self._open_symbol_documents),
-                "0x100",
+                SimpleNamespace(run_action=run_action),
                 project_catalog=project_catalog,
-                xdotool="/usr/bin/xdotool",
-                command_runner=command_runner,
-                pause=pauses.append,
             )
-
-        self.assertTrue(opened)
-        self.assertIn(["/usr/bin/xdotool", "windowraise", "0x100"], calls)
-        self.assertIn(["/usr/bin/xdotool", "windowactivate", "--sync", "0x100"], calls)
-        self.assertIn(["/usr/bin/xdotool", "windowfocus", "--sync", "0x100"], calls)
-        self.assertIn(["/usr/bin/xdotool", "windowraise", "0x200"], calls)
-        self.assertIn(["/usr/bin/xdotool", "windowactivate", "--sync", "0x200"], calls)
-        self.assertIn(["/usr/bin/xdotool", "windowfocus", "--sync", "0x200"], calls)
-        self.assertIn(["/usr/bin/xdotool", "key", "--clearmodifiers", "alt+t"], calls)
-        self.assertIn(["/usr/bin/xdotool", "key", "--clearmodifiers", "Home"], calls)
-        self.assertEqual(
-            calls.count(["/usr/bin/xdotool", "key", "--clearmodifiers", "Down"]),
-            2,
-        )
-        self.assertIn(["/usr/bin/xdotool", "key", "--clearmodifiers", "Return"], calls)
-        self.assertNotIn(["/usr/bin/xdotool", "key", "--clearmodifiers", "s"], calls)
-        self.assertIn(["/usr/bin/xdotool", "key", "--clearmodifiers", "ctrl+l"], calls)
-        self.assertIn(
-            ["/usr/bin/xdotool", "type", "--clearmodifiers", "--delay", "12", self.block.manifest["symbol_name"]],
-            calls,
-        )
-        self.assertIn(0.35, pauses)
-
-
-    def test_edit_facade_opens_symbol_editor_from_eeschema_tools_menu(self):
-        from kicad_blocks.repository import build_project_symbol_catalog
-
-        project_catalog = build_project_symbol_catalog(self.project, [self.library])
-        calls = []
-        pauses = []
-        focus_reads = [0]
-        search_count = [0]
-
-        def command_runner(arguments, **kwargs):
-            calls.append(arguments)
-            if arguments[1:4] == ["search", "--onlyvisible", "--name"]:
-                search_count[0] += 1
-                return SimpleNamespace(
-                    stdout="0x200" if search_count[0] > 2 else "",
-                    returncode=0,
-                )
-            if arguments[1:3] == ["getwindowname", "0x100"]:
-                return SimpleNamespace(
-                    stdout="placement-test — Schematic Editor",
-                    returncode=0,
-                )
-            if arguments[1:3] == ["getwindowclassname", "0x100"]:
-                return SimpleNamespace(stdout="eeschema", returncode=0)
-            if arguments[1:2] == ["getwindowfocus"]:
-                focus_reads[0] += 1
-                return SimpleNamespace(
-                    stdout="0x100" if focus_reads[0] == 1 else "0x200",
-                    returncode=0,
-                )
-            if arguments[1:3] == ["getwindowpid", "0x100"]:
-                return SimpleNamespace(stdout="1001", returncode=0)
-            if arguments[1:3] == ["getwindowname", "0x200"]:
-                return SimpleNamespace(
-                    stdout="Symbol Editor",
-                    returncode=0,
-                )
-            return SimpleNamespace(stdout="", returncode=0)
-
-        with patch.object(plugin_actions.os, "readlink", return_value="/usr/bin/eeschema-nightly"):
-            opened = plugin_actions._edit_facade_symbol(
-                self.block,
-                SimpleNamespace(get_open_documents=self._open_symbol_documents),
-                "0x100",
-                project_catalog=project_catalog,
-                xdotool="/usr/bin/xdotool",
-                command_runner=command_runner,
-                pause=pauses.append,
-            )
-
-        self.assertTrue(opened)
-        self.assertIn(["/usr/bin/xdotool", "windowraise", "0x100"], calls)
-        self.assertIn(["/usr/bin/xdotool", "windowactivate", "--sync", "0x100"], calls)
-        self.assertIn(["/usr/bin/xdotool", "windowfocus", "--sync", "0x100"], calls)
-        self.assertIn(["/usr/bin/xdotool", "windowraise", "0x200"], calls)
-        self.assertIn(["/usr/bin/xdotool", "windowactivate", "--sync", "0x200"], calls)
-        self.assertIn(["/usr/bin/xdotool", "windowfocus", "--sync", "0x200"], calls)
-        self.assertIn(["/usr/bin/xdotool", "key", "--clearmodifiers", "alt+t"], calls)
-        self.assertIn(["/usr/bin/xdotool", "key", "--clearmodifiers", "Home"], calls)
-        self.assertEqual(
-            calls.count(["/usr/bin/xdotool", "key", "--clearmodifiers", "Down"]),
-            2,
-        )
-        self.assertIn(["/usr/bin/xdotool", "key", "--clearmodifiers", "Return"], calls)
-        self.assertNotIn(["/usr/bin/xdotool", "key", "--clearmodifiers", "s"], calls)
-        self.assertIn(["/usr/bin/xdotool", "key", "--clearmodifiers", "ctrl+l"], calls)
-        self.assertIn(
-            ["/usr/bin/xdotool", "type", "--clearmodifiers", "--delay", "12", self.block.manifest["symbol_name"]],
-            calls,
-        )
-        self.assertIn(0.35, pauses)
-
-
-    def test_symbol_editor_menu_down_count_matches_standalone_and_manager_hosted_modes(self):
-        with patch.object(
-            plugin_actions.os,
-            "readlink",
-            side_effect=[
-                "/usr/bin/eeschema-nightly",
-                "/usr/bin/kicad-nightly",
-                OSError("process no longer exists"),
-            ],
-        ):
-            self.assertEqual(plugin_actions._symbol_editor_menu_down_count("1001"), 2)
-            self.assertEqual(plugin_actions._symbol_editor_menu_down_count("1002"), 4)
-            self.assertIsNone(plugin_actions._symbol_editor_menu_down_count("1003"))
-        self.assertIsNone(plugin_actions._symbol_editor_menu_down_count("not-a-pid"))
-
-    def test_edit_facade_does_not_disturb_an_already_open_symbol_editor(self):
-        from kicad_blocks.repository import build_project_symbol_catalog
-
-        project_catalog = build_project_symbol_catalog(self.project, [self.library])
-        calls = []
-        run_action = Mock(return_value=SimpleNamespace(status=1))
-
-        def command_runner(arguments, **kwargs):
-            calls.append(arguments)
-            if arguments[1:4] == ["search", "--onlyvisible", "--name"]:
-                return SimpleNamespace(stdout="0x200", returncode=0)
-            if arguments[1:3] == ["getwindowname", "0x200"]:
-                return SimpleNamespace(stdout="Symbol Editor — unsaved edit", returncode=0)
-            return SimpleNamespace(stdout="", returncode=0)
-
-        opened = plugin_actions._edit_facade_symbol(
-            self.block,
-            SimpleNamespace(run_action=run_action),
-            "0x100",
-            project_catalog=project_catalog,
-            xdotool="/usr/bin/xdotool",
-            command_runner=command_runner,
-            pause=lambda _seconds: None,
-        )
-
-        self.assertFalse(opened)
         run_action.assert_not_called()
-        self.assertEqual(len(calls), 2)
-        self.assertFalse(any(call[1:2] in (["key"], ["type"]) for call in calls))
 
-    def test_edit_facade_wayland_rejects_unavailable_native_action_without_global_input(self):
-        from kicad_blocks.repository import build_project_symbol_catalog
-
-        project_catalog = build_project_symbol_catalog(self.project, [self.library])
-        runner = Mock()
-        close_browser = Mock()
-        with (
-            patch.dict(os.environ, {"WAYLAND_DISPLAY": "wayland-0", "XDG_SESSION_TYPE": "wayland"}),
-            self.assertRaisesRegex(RuntimeError, "cannot safely send global menu keys"),
-        ):
-            plugin_actions._edit_facade_symbol(
-                self.block,
-                SimpleNamespace(),
-                None,
-                project_catalog=project_catalog,
-                wtype="/usr/bin/wtype",
-                close_browser=close_browser,
-                command_runner=runner,
-            )
-        runner.assert_not_called()
-        close_browser.assert_not_called()
-
-    def test_edit_facade_wayland_never_types_into_an_unverified_symbol_editor(self):
-        from kicad_blocks.repository import build_project_symbol_catalog
-
-        project_catalog = build_project_symbol_catalog(self.project, [self.library])
-        run_action = Mock(return_value=SimpleNamespace(status=1))
-        runner = Mock()
-        close_browser = Mock()
-        with patch.dict(
-            os.environ,
-            {"WAYLAND_DISPLAY": "wayland-0", "XDG_SESSION_TYPE": "wayland"},
-        ):
-            opened = plugin_actions._edit_facade_symbol(
-                self.block,
-                SimpleNamespace(run_action=run_action),
-                None,
-                project_catalog=project_catalog,
-                wtype="/usr/bin/wtype",
-                close_browser=close_browser,
-                command_runner=runner,
-            )
-        self.assertFalse(opened)
-        run_action.assert_called_once_with("common.Control.showSymbolEditor")
-        close_browser.assert_called_once_with()
-        runner.assert_not_called()
-
-    def test_edit_facade_uses_verified_menu_if_native_action_acknowledges_but_does_not_open_editor(self):
-        from kicad_blocks.repository import build_project_symbol_catalog
-
-        project_catalog = build_project_symbol_catalog(self.project, [self.library])
-        calls = []
-        focus_reads = [0]
-        search_count = [0]
-        run_action = Mock(return_value=SimpleNamespace(status=1))
-
-        def command_runner(arguments, **kwargs):
-            calls.append(arguments)
-            if arguments[1:4] == ["search", "--onlyvisible", "--name"]:
-                search_count[0] += 1
-                return SimpleNamespace(
-                    stdout="0x200" if search_count[0] > 21 else "",
-                    returncode=0,
-                )
-            if arguments[1:3] == ["getwindowname", "0x100"]:
-                return SimpleNamespace(
-                    stdout="placement-test — Schematic Editor",
-                    returncode=0,
-                )
-            if arguments[1:3] == ["getwindowclassname", "0x100"]:
-                return SimpleNamespace(stdout="eeschema", returncode=0)
-            if arguments[1:2] == ["getwindowfocus"]:
-                focus_reads[0] += 1
-                return SimpleNamespace(
-                    stdout="0x100" if focus_reads[0] == 1 else "0x200",
-                    returncode=0,
-                )
-            if arguments[1:3] == ["getwindowpid", "0x100"]:
-                return SimpleNamespace(stdout="1001", returncode=0)
-            if arguments[1:3] == ["getwindowname", "0x200"]:
-                return SimpleNamespace(
-                    stdout="Symbol Editor",
-                    returncode=0,
-                )
-            return SimpleNamespace(stdout="", returncode=0)
-
-        with patch.object(plugin_actions.os, "readlink", return_value="/usr/bin/eeschema-nightly"):
-            opened = plugin_actions._edit_facade_symbol(
-                self.block,
-                SimpleNamespace(run_action=run_action, get_open_documents=self._open_symbol_documents),
-                "0x100",
-                project_catalog=project_catalog,
-                xdotool="/usr/bin/xdotool",
-                command_runner=command_runner,
-                pause=lambda _seconds: None,
-            )
-
-        self.assertTrue(opened)
-        run_action.assert_called_once_with("common.Control.showSymbolEditor")
-        self.assertIn(["/usr/bin/xdotool", "windowraise", "0x200"], calls)
-        self.assertIn(["/usr/bin/xdotool", "windowactivate", "--sync", "0x200"], calls)
-        self.assertIn(["/usr/bin/xdotool", "windowfocus", "--sync", "0x200"], calls)
-        self.assertIn(["/usr/bin/xdotool", "key", "--clearmodifiers", "alt+t"], calls)
-        self.assertIn(["/usr/bin/xdotool", "key", "--clearmodifiers", "Home"], calls)
-        self.assertEqual(
-            calls.count(["/usr/bin/xdotool", "key", "--clearmodifiers", "Down"]),
-            2,
-        )
-        self.assertNotIn(["/usr/bin/xdotool", "key", "--clearmodifiers", "s"], calls)
-
-    def test_edit_facade_never_sends_menu_keys_to_pcb_editor(self):
-        from kicad_blocks.repository import build_project_symbol_catalog
-
-        project_catalog = build_project_symbol_catalog(self.project, [self.library])
-        calls = []
-        def command_runner(arguments, **kwargs):
-            calls.append(arguments)
-            if arguments[1:4] == ["search", "--onlyvisible", "--name"]:
-                return SimpleNamespace(stdout="", returncode=0)
-            if arguments[1:3] == ["getwindowname", "0x100"]:
-                return SimpleNamespace(stdout="board — PCB Editor", returncode=0)
-            if arguments[1:3] == ["getwindowclassname", "0x100"]:
-                return SimpleNamespace(stdout="pcbnew", returncode=0)
-            return SimpleNamespace(stdout="", returncode=0)
-
-        with self.assertRaisesRegex(RuntimeError, "not Eeschema"):
-            plugin_actions._edit_facade_symbol(
-                self.block,
-                SimpleNamespace(),
-                "0x100",
-                project_catalog=project_catalog,
-                xdotool="/usr/bin/xdotool",
-                command_runner=command_runner,
-                pause=lambda _seconds: None,
-            )
-        self.assertFalse(any(
-            call[1:2] == ["key"] for call in calls
-        ))
-
-    def test_edit_facade_stops_when_eeschema_cannot_take_keyboard_focus(self):
-        from kicad_blocks.repository import build_project_symbol_catalog
-
-        project_catalog = build_project_symbol_catalog(self.project, [self.library])
-        calls = []
-        def command_runner(arguments, **kwargs):
-            calls.append(arguments)
-            if arguments[1:4] == ["search", "--onlyvisible", "--name"]:
-                return SimpleNamespace(stdout="", returncode=0)
-            if arguments[1:3] == ["getwindowname", "0x100"]:
-                return SimpleNamespace(stdout="placement-test — Schematic Editor", returncode=0)
-            if arguments[1:3] == ["getwindowclassname", "0x100"]:
-                return SimpleNamespace(stdout="eeschema", returncode=0)
-            if arguments[1:2] == ["getwindowfocus"]:
-                return SimpleNamespace(stdout="0x300", returncode=0)
-            if arguments[1:3] == ["getwindowname", "0x300"]:
-                return SimpleNamespace(stdout="PCB Editor", returncode=0)
-            return SimpleNamespace(stdout="", returncode=0)
-
-        with self.assertRaisesRegex(RuntimeError, "Focus remains on 'PCB Editor'"):
-            plugin_actions._edit_facade_symbol(
-                self.block,
-                SimpleNamespace(),
-                "0x100",
-                project_catalog=project_catalog,
-                xdotool="/usr/bin/xdotool",
-                command_runner=command_runner,
-                pause=lambda _seconds: None,
-            )
-        self.assertFalse(any(
-            call[1:2] == ["key"] for call in calls
-        ))
-
-    def test_wayland_edit_facade_does_not_inject_without_verified_search_focus(self):
-        from kicad_blocks.repository import build_project_symbol_catalog
-
-        project_catalog = build_project_symbol_catalog(self.project, [self.library])
-        calls = []
-        closed = []
-        actions = []
-
-        def command_runner(arguments, **kwargs):
-            calls.append(arguments)
-            return SimpleNamespace(stdout="", returncode=0)
-
-        def run_action(action):
-            actions.append(action)
-            return SimpleNamespace(status=1)
-
-        with patch.dict(
-            os.environ,
-            {"WAYLAND_DISPLAY": "wayland-0", "XDG_SESSION_TYPE": "wayland"},
-        ):
-            opened = plugin_actions._edit_facade_symbol(
-                self.block,
-                SimpleNamespace(run_action=run_action),
-                None,
-                project_catalog=project_catalog,
-                close_browser=lambda: closed.append(True),
-                command_runner=command_runner,
-                pause=lambda _seconds: None,
-            )
-
-        # IPC accepted the request, but Wayland does not expose a portable way
-        # to verify that Symbol Editor's library-tree search owns keyboard focus.
-        # Keep the user-facing manual search path and never inject global keys.
-        self.assertFalse(opened)
-        self.assertEqual(actions, ["common.Control.showSymbolEditor"])
-        self.assertEqual(closed, [True])
-        self.assertEqual(calls, [])
-
-    def test_wayland_edit_facade_does_not_inject_when_wtype_is_missing(self):
-        from kicad_blocks.repository import build_project_symbol_catalog
-
-        project_catalog = build_project_symbol_catalog(self.project, [self.library])
-        runner = Mock()
-        closed = Mock()
-        actions = []
-
-        def run_action(action):
-            actions.append(action)
-            return SimpleNamespace(status=1)
-
-        with (
-            patch.object(plugin_actions.shutil, "which", return_value=None),
-            patch.dict(
-                os.environ,
-                {"WAYLAND_DISPLAY": "wayland-0", "XDG_SESSION_TYPE": "wayland"},
-            ),
-        ):
-            opened = plugin_actions._edit_facade_symbol(
-                self.block,
-                SimpleNamespace(run_action=run_action),
-                None,
-                project_catalog=project_catalog,
-                command_runner=runner,
-                close_browser=closed,
-            )
-        self.assertFalse(opened)
-        self.assertEqual(actions, ["common.Control.showSymbolEditor"])
-        runner.assert_not_called()
-        closed.assert_called_once()
-
-    def test_edit_facade_rejects_missing_symbol_in_project_catalog(self):
+    def test_edit_facade_validates_exact_catalog_entry_before_reporting_capability_gap(self):
         from kicad_blocks.repository import build_project_symbol_catalog
 
         project_catalog = build_project_symbol_catalog(self.project, [self.library])
@@ -559,17 +88,12 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
             path=self.block.path,
             symbol_library=self.block.symbol_library,
         )
-        runner = Mock()
+        run_action = Mock()
         with self.assertRaisesRegex(ValueError, "Expected exactly one"):
             plugin_actions._edit_facade_symbol(
-                broken,
-                SimpleNamespace(),
-                "0x100",
-                project_catalog=project_catalog,
-                xdotool="/usr/bin/xdotool",
-                command_runner=runner,
+                broken, SimpleNamespace(run_action=run_action), project_catalog=project_catalog
             )
-        runner.assert_not_called()
+        run_action.assert_not_called()
 
     def test_ensure_project_facade_catalog_preserves_existing_unsaved_edits(self):
         from kicad_blocks.repository import (
@@ -1350,57 +874,72 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
             description="Selected child sheet",
         )
 
-    def test_run_action_dispatches_create_block_to_sheet_creation_workflow(self):
+    def test_task_hub_edit_facade_uses_native_cross_platform_ipc_handoff(self):
         root = SimpleNamespace(
-            title=Mock(),
-            withdraw=Mock(),
-            destroy=Mock(),
+            title=Mock(), withdraw=Mock(), destroy=Mock(),
         )
-        fake_tk = SimpleNamespace(
-            Tk=Mock(return_value=root),
-            TclError=RuntimeError,
-        )
-        kicad = SimpleNamespace(
-            get_schematic=Mock(return_value=self.schematic),
-        )
+        fake_tk = SimpleNamespace(Tk=Mock(return_value=root), TclError=RuntimeError)
+        kicad = SimpleNamespace(get_schematic=Mock(return_value=self.schematic))
         kicad_module = types.ModuleType("kipy")
         kicad_module.KiCad = Mock(return_value=kicad)
-
+        project_catalog = self.project / ".kicad_blocks" / "KBlocks.kicad_sym"
         with (
             patch.object(plugin_actions, "tk", fake_tk),
             patch.object(plugin_actions, "messagebox", self.messagebox),
             patch.object(plugin_actions, "_load_tkinter"),
-            patch.object(
-                plugin_actions, "_capture_eeschema_window_id", return_value="0x100"
-            ) as capture_editor,
+            patch.object(plugin_actions, "_configure_tk_theme"),
+            patch.object(plugin_actions, "_attach_tk_window_to_editor"),
+            patch.object(plugin_actions, "project_directory", return_value=self.project),
+            patch.object(plugin_actions, "configured_library_roots", return_value=[self.library]),
+            patch.object(plugin_actions, "default_library_root", return_value=self.library),
+            patch.object(plugin_actions, "_list_library_records", return_value=[self.block]),
+            patch.object(plugin_actions, "_pick_record", return_value=self.block) as pick_record,
+            patch.object(plugin_actions, "_ensure_project_facade_catalog", return_value=project_catalog),
+            patch.object(plugin_actions, "_edit_facade_symbol", return_value=False) as edit_facade,
+            patch.dict(sys.modules, {"kipy": kicad_module}),
+        ):
+            plugin_actions.run_action("edit-facade")
+        pick_record.assert_called_once_with([self.block], root, "Edit Facade")
+        edit_facade.assert_called_once_with(
+            self.block,
+            kicad,
+            project_catalog=project_catalog,
+            close_browser=root.destroy,
+        )
+        self.messagebox.showinfo.assert_called_once()
+        self.assertIn(self.block.manifest["symbol_name"], self.messagebox.showinfo.call_args.args[1])
+        root.withdraw.assert_called_once_with()
+        root.destroy.assert_called_once_with()
+
+
+    def test_run_action_does_not_discover_foreign_window_handles(self):
+        root = SimpleNamespace(title=Mock(), withdraw=Mock(), destroy=Mock())
+        fake_tk = SimpleNamespace(Tk=Mock(return_value=root), TclError=RuntimeError)
+        kicad = SimpleNamespace(get_schematic=Mock(return_value=self.schematic))
+        kicad_module = types.ModuleType("kipy")
+        kicad_module.KiCad = Mock(return_value=kicad)
+        with (
+            patch.object(plugin_actions, "tk", fake_tk),
+            patch.object(plugin_actions, "messagebox", self.messagebox),
+            patch.object(plugin_actions, "_load_tkinter"),
             patch.object(plugin_actions, "_configure_tk_theme"),
             patch.object(plugin_actions, "_attach_tk_window_to_editor") as attach_window,
             patch.object(plugin_actions, "project_directory", return_value=self.project),
-            patch.object(
-                plugin_actions, "configured_library_roots", return_value=[self.library]
-            ),
+            patch.object(plugin_actions, "configured_library_roots", return_value=[self.library]),
             patch.object(plugin_actions, "default_library_root", return_value=self.library),
             patch.object(plugin_actions, "_create_and_place") as create_from_sheet,
             patch.dict(sys.modules, {"kipy": kicad_module}),
         ):
             plugin_actions.run_action("create-block")
-
-        capture_editor.assert_called_once_with()
-        attach_window.assert_called_once_with(root, "0x100")
+        attach_window.assert_called_once_with(root, None)
         kicad_module.KiCad.assert_called_once_with()
-        kicad.get_schematic.assert_called_once_with()
         create_from_sheet.assert_called_once_with(
-            self.library,
-            self.schematic,
-            kicad,
-            self.project,
-            root,
-            "0x100",
+            self.library, self.schematic, kicad, self.project, root, None
         )
         root.withdraw.assert_called_once_with()
         root.destroy.assert_called_once_with()
 
-    def test_run_action_captures_kicad_window_before_creating_tk(self):
+    def test_run_action_does_not_capture_native_windows_before_creating_tk(self):
         events = []
         root = Mock()
         fake_tk = SimpleNamespace(
@@ -1408,28 +947,15 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
             TclError=Exception,
         )
         with (
-            patch.object(
-                plugin_actions,
-                "_capture_eeschema_window_id",
-                side_effect=lambda: events.append("capture") or "0x100",
-            ),
-            patch.object(
-                plugin_actions,
-                "_load_tkinter",
-                side_effect=lambda: events.append("load tkinter"),
-            ),
+            patch.object(plugin_actions, "_load_tkinter", side_effect=lambda: events.append("load tkinter")),
             patch.object(plugin_actions, "tk", fake_tk),
             patch.object(plugin_actions, "_configure_tk_theme"),
             patch.object(plugin_actions, "_attach_tk_window_to_editor"),
             patch.object(plugin_actions, "_show_action_hub"),
         ):
             plugin_actions.run_action("open-hub")
-
-        self.assertEqual(events[:3], ["capture", "load tkinter", "tk.Tk"])
-        self.assertEqual(
-            root._kicad_blocks_editor_window_id,
-            "0x100",
-        )
+        self.assertEqual(events, ["load tkinter", "tk.Tk"])
+        self.assertNotIn("_kicad_blocks_editor_window_id", root.__dict__)
 
 if __name__ == "__main__":
     unittest.main()

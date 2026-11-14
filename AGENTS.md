@@ -4,10 +4,10 @@ This file is the durable design contract for UI changes. It consolidates the rev
 
 ## Functional behavior comes first
 
-- Block placement is the primary workflow. The Functional Block Library must register and reload the selected facade in the active project, invoke KiCad's native Place Symbol action, and leave the facade attached to the editor cursor.
-- Do not make placement depend solely on an optional desktop utility when KiCad IPC exposes the native action. If a fallback is used, verify that the native symbol chooser actually opened before sending input.
+- Full interactive placement remains the desired end state: the Functional Block Library should register and reload the selected facade, invoke KiCad's native Place Symbol/move tool, and leave the facade attached to the editor cursor. Until Eeschema exposes a supported schematic interactive-move IPC operation, the agreed interim behavior is to create the facade at the active sheet center, focus it in the viewport, and select it; do not claim this is cursor-attached placement.
+- Place Block and Edit Facade must use documented, supported KiCad schematic IPC operations. Do not call unstable `KiCad.run_action()` unless the corresponding request handler is confirmed in the target Eeschema server and the workflow can address the exact library symbol. Do not synthesize global keyboard input, add X11/Wayland-specific runtime fallbacks, or tell users to complete core workflows manually. If KiCad lacks the required API, report the exact capability gap and keep the feature acceptance requirement open.
 - A test that mocks window discovery and keypresses independently is not an end-to-end placement test. Exercise the hand-off against a real Eeschema process in the GUI test environment.
-- Plugin windows and child document windows must be owned by their invoking KiCad editor. Verify the window-manager transient owner on the actual top-level frame, not only the Tk client child.
+- Tk child dialogs must use the portable Tk parent/transient relationship. Do not mutate foreign native window IDs or use X11/Wayland/OS-specific helpers from production code. KiCad IPC currently exposes no portable cross-process window-owner handle; therefore KiCad taskbar/dock grouping and foreign-window activation remain an explicit unresolved requirement until a dependency/API with documented support on Windows, macOS, and Linux is selected and validated. Do not claim this is solved by an X11-only test.
 
 ## One shared UI system
 

@@ -16,7 +16,7 @@ KiCad Blocks keeps a circuit's editable implementation in a shared library while
 A hierarchical sheet is useful for organizing a design inside one project. KiCad Blocks addresses a different need: keep a complete, editable circuit as a reusable library asset, then expose it in each consuming project through a standard symbol.
 
 - **Create** a block from a selected hierarchical sheet. Root-sheet hierarchical labels define the facade pins and their electrical types.
-- **Browse and place** blocks from registered shared folders. The plugin uses KiCad's native symbol chooser and placement tool.
+- **Browse and place** blocks from registered shared folders. The selected facade is created at the active sheet center, focused in the viewport and selected; cursor-attached placement awaits a supported KiCad schematic IPC operation. See the [compatibility notes](docs/explanation/compatibility.md).
 - **Configure per instance** with a variant, named profile, typed parameter overrides, and optional PCB layout.
 - **Maintain** shared implementations, edit facade artwork, publish revisions, or create project-local copies and synchronize them.
 - **Compose automatically** by placing child block facades inside an implementation and wiring their pins normally; KiCad Blocks derives dependencies from the saved schematic and netlist on publish.
@@ -45,7 +45,7 @@ The current full integration target is **KiCad 10.99.0 development nightly on Li
 
 Stable KiCad 10.x does not expose the Schematic Editor IPC plugin surface that this project requires. The current 10.99.0 nightly target is a development build; stable KiCad 11 is not yet validated by this repository's integration suite. See the [KiCad IPC API support matrix](https://dev-docs.kicad.org/en/apis-and-binding/ipc-api/for-addon-developers/).
 
-On Linux, native symbol-placement handoff also uses `xdotool` and KiCad's default Add Symbol shortcut, `A`.
+Place Block currently creates the selected facade at the active sheet's page center, snaps it to the schematic grid, focuses it in Eeschema, and selects it. KiCad still lacks the supported schematic interactive-move operation needed to attach the symbol to the cursor. Edit Facade remains blocked because the API cannot open and select a library symbol in Symbol Editor. The plugin does not use unstable `RunAction`, global keyboard injection, or X11/Wayland-specific runtime fallbacks. See the [compatibility notes](docs/explanation/compatibility.md).
 
 See the [compatibility and test-coverage guide](docs/explanation/compatibility.md) before installing.
 
@@ -67,8 +67,8 @@ Then enable the KiCad API in Eeschema's plugin preferences, select the supported
 2. **Create a reusable implementation.** In Eeschema, select a hierarchical sheet symbol
    in its parent schematic and run **Create Block from Sheet**. Root-sheet labels
    become the facade pins; the copied implementation stays in the shared library.
-3. **Place the facade in another project.** Use **Browse and Place Functional Blocks**,
-   choose a variant or profile, and confirm the symbol in KiCad's native chooser.
+3. **Browse a facade in another project.** Use **Browse and Place Functional Blocks**
+   to search and preview blocks. Interactive placement remains blocked pending a supported KiCad schematic IPC API.
 4. **Validate the stored circuit.** Run registered-library validation and use
    recursive ERC/BOM for implementation-level results; project-native
    ERC/netlist/BOM see the facade only.

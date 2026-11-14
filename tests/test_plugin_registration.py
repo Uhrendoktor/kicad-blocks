@@ -11,7 +11,6 @@ import sys
 import tempfile
 import time
 from pathlib import Path
-from types import SimpleNamespace
 
 ROOT = Path(__file__).resolve().parents[1]
 PLUGIN_SOURCE = ROOT / "plugin" / "kicad-blocks"
@@ -131,6 +130,77 @@ def _wait_for_editor(
         f"log={log_path.read_text(errors='replace')[-8000:]}"
     )
 
+
+def _dump_accessibility_tree(process_id: int) -> str:
+    """Diagnostic-only probe of KiCad's native accessibility surface."""
+    try:
+        import xa11y
+    except ImportError as exc:
+        result = f"xa11y accessibility probe unavailable: {type(exc).__name__}: {exc}"
+        print(result, flush=True)
+        return result
+    try:
+        app = xa11y.App.by_pid(process_id, timeout=5.0)
+        tree = app.dump(max_depth=14)
+    except xa11y.XA11yError as exc:
+        result = f"xa11y accessibility probe unavailable: {type(exc).__name__}: {exc}"
+        print(result, flush=True)
+        return result
+    print("--- xa11y KiCad accessibility tree ---", flush=True)
+    print(tree[:24000], flush=True)
+    print("--- end xa11y accessibility tree ---", flush=True)
+    return tree
+
+def _wait_for_window_title(xdotool: str, predicate, timeout_s: float = 12.0) -> tuple[str, str, str]:
+    deadline = time.monotonic() + timeout_s
+    last_windows = []
+    while time.monotonic() < deadline:
+        last_windows = _windows(xdotool)
+        match = next((item for item in reversed(last_windows) if predicate(item[1].casefold())), None)
+        if match is not None:
+            return match
+        time.sleep(0.1)
+    raise TimeoutError(f"Expected KiCad window did not appear; windows={last_windows!r}")
+
+
+def _select_native_symbol_in_test_harness(xdotool: str, symbol_name: str) -> None:
+    """Use X11 input only in this GUI-test driver, never in plugin runtime code."""
+    chooser = _wait_for_window_title(
+        xdotool, lambda title: "choose symbol" in title or "select symbol" in title
+    )
+    subprocess.run([xdotool, "windowfocus", "--sync", chooser[0]], check=True, capture_output=True, text=True)
+    subprocess.run([xdotool, "type", "--clearmodifiers", "--delay", "12", symbol_name], check=True, capture_output=True, text=True)
+    subprocess.run([xdotool, "key", "--clearmodifiers", "Return"], check=True, capture_output=True, text=True)
+
+
+def _select_facade_in_test_harness(xdotool: str, symbol_name: str) -> None:
+    """Complete the native Symbol Editor library-tree search in the X11 test session."""
+    editor = _wait_for_window_title(xdotool, lambda title: "symbol editor" in title)
+    subprocess.run([xdotool, "windowfocus", "--sync", editor[0]], check=True, capture_output=True, text=True)
+    subprocess.run([xdotool, "key", "--clearmodifiers", "ctrl+l"], check=True, capture_output=True, text=True)
+    subprocess.run([xdotool, "type", "--clearmodifiers", "--delay", "12", symbol_name], check=True, capture_output=True, text=True)
+    time.sleep(0.35)
+    subprocess.run([xdotool, "key", "--clearmodifiers", "Return"], check=True, capture_output=True, text=True)
+
+
+def _wait_for_symbol_document(kicad, expected_lib_id: str, timeout_s: float = 8.0) -> None:
+    from kipy.proto.common.types import DocumentType
+    deadline = time.monotonic() + timeout_s
+    observed = []
+    while time.monotonic() < deadline:
+        observed = []
+        for document in kicad.get_open_documents(DocumentType.DOCTYPE_SYMBOL):
+            identifier = getattr(document, "lib_id", None)
+            if identifier is None:
+                continue
+            nickname = str(getattr(identifier, "library_nickname", "") or "")
+            name = str(getattr(identifier, "entry_name", "") or "")
+            if nickname and name:
+                observed.append(f"{nickname}:{name}")
+        if expected_lib_id in observed:
+            return
+        time.sleep(0.1)
+    raise AssertionError(f"Symbol Editor did not report {expected_lib_id!r}; observed={observed!r}")
 
 def _close_editor(process: subprocess.Popen, window_id: str, xdotool: str) -> None:
     subprocess.run(
@@ -368,6 +438,7 @@ def main() -> None:
         plugin_json = plugin_manifest_path.resolve()
         log_path = root / "eeschema-plugin-discovery.log"
         process, window_id = _launch(eeschema, schematic, env, xdotool, log_path)
+        placement_client = None
         try:
             environment = (
                 cache_home / "kicad" / version / "python-environments" / PLUGIN_IDENTIFIER
@@ -478,9 +549,12 @@ def main() -> None:
                     f"stdout: {picker_probe.stdout}; stderr: {picker_probe.stderr}"
                 )
 
+            # Run the additional GUI smoke test in the same managed plugin
+            # environment as KiCad's installed entrypoints so every declared
+            # runtime dependency is available.
             configuration_probe = subprocess.run(
                 [
-                    python_interpreter,
+                    str(env_python),
                     str(ROOT / "tests" / "test_instance_configuration_gui.py"),
                 ],
                 env=env,
@@ -506,6 +580,7 @@ def main() -> None:
             # in the browser preview, even when the active schematic contains
             # no placed instance of that block.
             facade_editor_client = KiCad(timeout_ms=30000)
+            _dump_accessibility_tree(process.pid)
             try:
                 live_schematic = facade_editor_client.get_schematic()
                 if live_schematic is None:
@@ -513,7 +588,7 @@ def main() -> None:
                 live_selection = plugin_actions._safe_schematic_selection(live_schematic)
                 if live_selection:
                     raise AssertionError(
-                        "Edit Facade GUI regression requires an empty schematic selection; "
+                        "Edit Facade capability test requires an empty schematic selection; "
                         f"found {len(live_selection)} selected item(s)."
                     )
                 refreshed_record = plugin_actions._register_block(
@@ -525,175 +600,62 @@ def main() -> None:
                 if not plugin_actions._LAST_LIBRARY_RELOAD_OK:
                     raise RuntimeError(
                         "Could not reload the generated KBlocks project catalog before "
-                        "opening Edit Facade: "
+                        "checking Edit Facade capability: "
                         + str(plugin_actions._LAST_LIBRARY_RELOAD_WARNING)
                     )
                 try:
-                    opened = plugin_actions._edit_facade_symbol(
+                    plugin_actions._edit_facade_symbol(
                         refreshed_record,
                         facade_editor_client,
-                        window_id,
                         project_catalog=project / ".kicad_blocks" / LIBRARY_CATALOG_NAME,
-                        xdotool=xdotool,
                     )
-                except Exception:
-                    debug_image = (
-                        Path(os.environ.get("RUNNER_TEMP", tempfile.gettempdir()))
-                        / "edit-facade-gui-debug.xwd"
-                    )
-                    capture = subprocess.run(
-                        ["xwd", "-root", "-silent", "-out", str(debug_image)],
-                        capture_output=True,
-                        text=True,
-                        check=False,
-                    )
-                    print(
-                        "Edit Facade failure screenshot: "
-                        + (str(debug_image) if capture.returncode == 0 else capture.stderr)
-                    )
-                    raise
-                if not opened:
+                except RuntimeError as exc:
+                    if "no supported IPC operation" not in str(exc):
+                        raise
+                else:
                     raise AssertionError(
-                        "Edit Facade opened Symbol Editor but could not complete the "
-                        "native library-tree search for the generated facade."
-                    )
-                editor_windows = _windows(xdotool)
-                matching_editor = [
-                    item for item in editor_windows
-                    if item[0] != window_id
-                    and (
-                        "symbol editor" in item[1].casefold()
-                        or placement_symbol_name.casefold() in item[1].casefold()
-                    )
-                ]
-                if not matching_editor:
-                    raise AssertionError(
-                        "Edit Facade did not leave a Symbol Editor window open for the "
-                        f"generated library symbol {refreshed_record.manifest['library_nickname']}:{placement_symbol_name}; "
-                        f"visible_windows={editor_windows!r}"
+                        "Edit Facade must report the missing supported Symbol Editor API."
                     )
                 print(
-                    "Edit Facade opened the generated project library symbol "
-                    f"{refreshed_record.manifest['library_nickname']}:{placement_symbol_name} with no placed schematic instance."
+                    "Edit Facade correctly reports the missing supported Symbol Editor "
+                    "open/select API without injecting desktop input."
                 )
             finally:
                 facade_editor_client.close()
 
-            subprocess.run(
-                [xdotool, "windowfocus", "--sync", window_id],
-                capture_output=True,
-                text=True,
-                check=True,
-            )
-
-            # Run the same native placement helper used by the Functional
-            # Block Library. This is deliberately a real Eeschema process:
-            # no mocked window IDs, chooser, or keyboard events.
-            plugin_actions._start_native_symbol_placement(
-                SimpleNamespace(),
-                window_id,
+            placement_client = KiCad(timeout_ms=30000)
+            placed_instance = plugin_actions._start_native_symbol_placement(
+                placement_client,
+                None,
                 placement_symbol_name,
-                xdotool=xdotool,
             )
-            placement_focus = subprocess.run(
-                [xdotool, "getwindowfocus"],
-                capture_output=True,
-                text=True,
-                check=True,
-            ).stdout.strip()
-            if placement_focus != window_id:
+            placement_schematic = placement_client.get_schematic()
+            selected_instances = list(placement_schematic.get_selection())
+            if len(selected_instances) != 1:
                 raise AssertionError(
-                    f"Selecting {placement_symbol_name} did not return focus to Eeschema's "
-                    f"interactive placement tool; focused={placement_focus!r}; "
-                    f"visible_windows={_windows(xdotool)!r}"
+                    "Block placement must leave exactly the new symbol selected; "
+                    f"selection={selected_instances!r}"
+                )
+            if str(selected_instances[0].id) != str(placed_instance.id):
+                raise AssertionError(
+                    "The newly placed block is not the selected schematic item: "
+                    f"placed={placed_instance.id!s}; "
+                    f"selected={selected_instances[0].id!s}"
                 )
 
-            # Commit the facade to the active sheet, leave the placement tool,
-            # and save the real schematic so the test proves a block was placed
-            # rather than merely proving that the symbol chooser opened.
-            geometry_result = subprocess.run(
-                [xdotool, "getwindowgeometry", "--shell", window_id],
-                capture_output=True,
-                text=True,
-                check=True,
-            )
-            geometry = {
-                key: value
-                for key, value in (
-                    line.split("=", 1)
-                    for line in geometry_result.stdout.splitlines()
-                    if "=" in line
-                )
-            }
-            editor_width = int(geometry["WIDTH"])
-            editor_height = int(geometry["HEIGHT"])
-            # Use a point relative to the actual editor window, inside the
-            # drawing canvas. A fixed root-screen coordinate can land outside
-            # Eeschema when Python-version-specific GTK window sizes differ.
-            placement_x = str(editor_width // 2)
-            placement_y = str((editor_height * 2) // 3)
-            subprocess.run(
-                [
-                    xdotool,
-                    "mousemove",
-                    "--sync",
-                    "--window",
-                    window_id,
-                    placement_x,
-                    placement_y,
-                ],
-                check=True,
-                capture_output=True,
-                text=True,
-            )
-            subprocess.run(
-                [xdotool, "click", "1"],
-                check=True,
-                capture_output=True,
-                text=True,
-            )
-            time.sleep(0.5)
-            subprocess.run(
-                [xdotool, "key", "--clearmodifiers", "Escape"],
-                check=True,
-                capture_output=True,
-                text=True,
-            )
-            subprocess.run(
-                [xdotool, "key", "--clearmodifiers", "ctrl+s"],
-                check=True,
-                capture_output=True,
-                text=True,
-            )
             expected_lib_id = (
                 f'{block.manifest["library_nickname"]}:{placement_symbol_name}'
             )
-            save_deadline = time.monotonic() + 8.0
-            saved_schematic = ""
-            while time.monotonic() < save_deadline:
-                saved_schematic = schematic.read_text(encoding="utf-8")
-                if expected_lib_id in saved_schematic:
-                    break
-                time.sleep(0.25)
+            saved_schematic = schematic.read_text(encoding="utf-8")
             if expected_lib_id not in saved_schematic:
-                focus = subprocess.run(
-                    [xdotool, "getwindowfocus"],
-                    capture_output=True,
-                    text=True,
-                    check=False,
-                ).stdout.strip()
-                mouse = subprocess.run(
-                    [xdotool, "getmouselocation", "--shell"],
-                    capture_output=True,
-                    text=True,
-                    check=False,
-                ).stdout.strip()
                 raise AssertionError(
-                    f"Saved Eeschema file does not contain the placed block facade "
-                    f"{expected_lib_id!r}. editor_geometry={geometry_result.stdout!r}; "
-                    f"focus={focus!r}; mouse={mouse!r}; "
-                    f"saved_tail={saved_schematic[-2500:]!r}."
+                    f"Saved schematic does not contain the placed block {expected_lib_id!r}."
                 )
+            print(
+                f"Functional Block Library placement helper placed {expected_lib_id} "
+                "at the A4 page centre and left it selected."
+            )
+
             placement_svg = root / "placed-block-svg"
             placement_svg.mkdir()
             subprocess.run(
@@ -722,6 +684,8 @@ def main() -> None:
                 "managed Python environment created, and schematic action marked ready."
             )
         finally:
+            if placement_client is not None:
+                placement_client.close()
             _close_editor(process, window_id, xdotool)
 
 

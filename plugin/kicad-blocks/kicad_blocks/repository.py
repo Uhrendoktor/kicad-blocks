@@ -14,6 +14,8 @@ import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
+from platformdirs import user_config_path
+
 from .extraction import extract_hierarchical_pins, prepare_block_implementation
 from .model import (
     BlockPin,
@@ -2113,7 +2115,8 @@ def resolve_dependency_graph(
 
 
 def settings_file() -> Path:
-    return Path.home() / ".config" / "kicad-blocks" / "settings.json"
+    """Return the per-user config location selected by platformdirs."""
+    return user_config_path("kicad-blocks", appauthor=False) / "settings.json"
 
 
 def _read_library_settings() -> dict:

@@ -7,6 +7,7 @@ on:
   push:
     branches: [main]
   pull_request:
+    types: [opened, reopened, synchronize, ready_for_review]
 
 # Keep only the newest pending validation for each ref. This runner is local
 # and serial; stale commit snapshots must not build an unbounded queue.
@@ -111,7 +112,7 @@ jobs:
           python3 -m venv "${RUNNER_TEMP}/kicad-blocks-venv"
           PY="${RUNNER_TEMP}/kicad-blocks-venv/bin/python"
           "$PY" -m pip install --upgrade pip
-          "$PY" -m pip install pytest ruff cairosvg pillow
+          "$PY" -m pip install pytest ruff resvg_py pillow platformdirs xa11y==0.16.0
           "$PY" --version
           "$PY" -m pip --version
 
@@ -333,6 +334,7 @@ jobs:
           python3 scripts/publish_pinned_ipc_wheel.py \
             "$WHEELHOUSE" --repo "$GITHUB_REPOSITORY" --source-sha "$KIPY_SHA"
           "$PY" -m pip install "$WHEELHOUSE/$EXPECTED"
+          "$PY" -m pip install 'resvg_py>=0.5,<0.6' 'Pillow>=10,<14' 'platformdirs>=4.3,<5'
           "$PY" -c "from kipy import KiCad; from kipy.schematic import Schematic; print('CPython 3.13 KiCad IPC bindings available')"
 
       - name: Verify KiCad plugin discovery on CPython 3.13
@@ -378,6 +380,7 @@ jobs:
           python3 scripts/publish_pinned_ipc_wheel.py \
             "$WHEELHOUSE" --repo "$GITHUB_REPOSITORY" --source-sha "$KIPY_SHA"
           "$PY" -m pip install "$WHEELHOUSE/$EXPECTED"
+          "$PY" -m pip install 'resvg_py>=0.5,<0.6' 'Pillow>=10,<14' 'platformdirs>=4.3,<5'
           "$PY" -c "from kipy import KiCad; from kipy.schematic import Schematic; print('CPython 3.14 KiCad IPC bindings available')"
 
       - name: Verify KiCad plugin discovery on CPython 3.14
@@ -502,7 +505,7 @@ jobs:
           python3 -m venv "${RUNNER_TEMP}/kicad-blocks-visual-venv"
           PY="${RUNNER_TEMP}/kicad-blocks-visual-venv/bin/python"
           "$PY" -m pip install --upgrade pip
-          "$PY" -m pip install cairosvg pillow
+          "$PY" -m pip install resvg_py pillow
 
       - name: Install project dependencies and verify unit tests, compile, and lint
         shell: bash

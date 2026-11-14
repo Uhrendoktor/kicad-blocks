@@ -1,5 +1,6 @@
 kicad-python @ https://github.com/Uhrendoktor/kicad-blocks/releases/download/kicad-python-76b47d25/kicad_python-0.9.0.dev0-cp312-cp312-linux_x86_64.whl ; implementation_name == "cpython" and python_version == "3.12" and sys_platform == "linux" and platform_machine == "x86_64"
 kicad-python @ https://github.com/Uhrendoktor/kicad-blocks/releases/download/kicad-python-76b47d25/kicad_python-0.9.0.dev0-cp313-cp313-linux_x86_64.whl ; implementation_name == "cpython" and python_version == "3.13" and sys_platform == "linux" and platform_machine == "x86_64"
 kicad-python @ https://github.com/Uhrendoktor/kicad-blocks/releases/download/kicad-python-76b47d25/kicad_python-0.9.0.dev0-cp314-cp314-linux_x86_64.whl ; implementation_name == "cpython" and python_version == "3.14" and sys_platform == "linux" and platform_machine == "x86_64"
-cairosvg>=2.7.2,<3
+resvg_py>=0.5,<0.6
 Pillow>=10,<14
+platformdirs>=4.3,<5
