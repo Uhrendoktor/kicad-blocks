@@ -95,6 +95,24 @@ class SchematicStyleRuleTests(unittest.TestCase):
         ])
         self.assertTrue(any("symbol body U1" in issue for issue in wire_obstacle_issues(tree)))
 
+    def test_wire_through_comment_box_is_rejected(self) -> None:
+        tree = self.fresh_tree()
+        note = next(
+            node for node in _all(tree, "text_box")
+            if str(node[1]).startswith("Type-C receptacle and dual CC-line ESD protection.")
+        )
+        at, size = _direct(note, "at"), _direct(note, "size")
+        x = float(at[1]) + float(size[1]) / 2
+        y = float(at[2]) + float(size[2]) / 2
+        tree.append([
+            "wire",
+            ["pts", ["xy", f"{x - 2.0:.3f}", f"{y:.3f}"],
+             ["xy", f"{x + 2.0:.3f}", f"{y:.3f}"]],
+        ])
+        self.assertTrue(any(
+            "annotation text box" in issue for issue in wire_obstacle_issues(tree)
+        ))
+
     def test_shared_decoupler_ground_and_required_nc_marker_are_present(self) -> None:
         tree = self.fresh_tree()
         self.assertEqual(common_pin_net_issues(tree), [])
