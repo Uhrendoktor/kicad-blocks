@@ -930,16 +930,17 @@ def generate_reference_schematic(destination: Path) -> Path:
             reference_x, reference_y = sx + 15.24, sy - 17.78
             value_x, value_y = sx + 15.24, sy - 15.24
             reference_justify = "left"
+            value_justify = "left"
         elif reference == "J1":
             # Put the connector fields immediately above its tall body.
             reference_x, reference_y = sx, sy - 33.02
             value_x, value_y = sx, sy - 30.48
         elif reference in {"T4", "T1"}:
-            # Keep long FET identifiers close to the body, outside the
-            # common-source wire corridor: T4 fields to the left, T1 to right.
-            dx = -5.08 if reference == "T4" else 10.16
-            reference_x, reference_y = sx + dx, sy - 2.54
-            value_x, value_y = sx + dx, sy
+            # Keep both fields above the MOSFET bodies. The labels sit at
+            # opposite outer sides of the pair, away from gate/source wires.
+            dx = -5.08 if reference == "T4" else 8.89
+            reference_x, reference_y = sx + dx, sy - 10.16
+            value_x, value_y = sx + dx, sy - 7.62
             reference_justify = "right" if reference == "T4" else "left"
             value_justify = reference_justify
         elif reference.startswith("R"):
