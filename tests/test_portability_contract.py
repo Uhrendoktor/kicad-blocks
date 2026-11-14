@@ -53,6 +53,8 @@ class ProductionPortabilityContractTests(unittest.TestCase):
         )
         repository = (PLUGIN_PACKAGE / "repository.py").read_text(encoding="utf-8")
         self.assertIn("platformdirs>=4.3,<5", requirements)
+        self.assertIn("resvg_py>=0.5,<0.6", requirements)
+        self.assertNotIn("cairosvg", requirements)
         self.assertIn("user_config_path(\"kicad-blocks\", appauthor=False)", repository)
         self.assertNotIn('Path.home() / ".config"', repository)
 
