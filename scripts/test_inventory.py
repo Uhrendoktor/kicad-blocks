@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import difflib
 import sys
 from pathlib import Path
 
@@ -359,6 +360,15 @@ def main() -> int:
                 "Test inventory is stale. Run python scripts/test_inventory.py and commit the result.",
                 file=sys.stderr,
             )
+            diff = difflib.unified_diff(
+                actual.splitlines(),
+                expected.splitlines(),
+                fromfile=str(INVENTORY_PATH),
+                tofile="generated inventory",
+                lineterm="",
+            )
+            for line in diff:
+                print(line, file=sys.stderr)
             return 1
         print("test-inventory=passed")
         return 0
