@@ -990,6 +990,26 @@ def block_annotation_issues(tree: list) -> list[str]:
     return issues
 
 
+def group_comment_outline_issues(tree: list) -> list[str]:
+    """Require every declared design-block comment panel to have a visible border."""
+    _load_stusb4500_profile()
+    description_uuids = {
+        _uid(f"graphic:text:group-description:{group['id']}")
+        for group in SCHEMATIC_GROUPS
+    }
+    issues = []
+    for node in _all(tree, "text_box"):
+        uid_node = _direct(node, "uuid")
+        uid = str(uid_node[1]) if uid_node is not None else ""
+        if uid not in description_uuids:
+            continue
+        stroke = _direct(node, "stroke")
+        width = _direct(stroke, "width") if stroke is not None else None
+        if width is None or float(width[1]) <= 0:
+            issues.append(f"group comment {uid} must have its own visible box outline")
+    return issues
+
+
 def _rect_inside_margin(inner, outer, margin: float) -> bool:
     ix, iy, iw, ih = inner
     ox, oy, ow, oh = outer
@@ -1240,6 +1260,7 @@ def check_schematic_style(tree: list, generic_only: bool = False) -> list[str]:
         ("SCH015", required_no_connect_issues),
         ("SCH016", wire_compactness_issues),
         ("SCH017", circuit_documentation_issues),
+        ("SCH011", group_comment_outline_issues),
     )
     checks = generic_checks if generic_only else (*generic_checks, *profile_checks)
     return [
