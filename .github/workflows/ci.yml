@@ -334,6 +334,7 @@ jobs:
           python3 scripts/publish_pinned_ipc_wheel.py \
             "$WHEELHOUSE" --repo "$GITHUB_REPOSITORY" --source-sha "$KIPY_SHA"
           "$PY" -m pip install "$WHEELHOUSE/$EXPECTED"
+          "$PY" -m pip install 'resvg_py>=0.5,<0.6' 'Pillow>=10,<14' 'platformdirs>=4.3,<5'
           "$PY" -c "from kipy import KiCad; from kipy.schematic import Schematic; print('CPython 3.13 KiCad IPC bindings available')"
 
       - name: Verify KiCad plugin discovery on CPython 3.13
@@ -379,6 +380,7 @@ jobs:
           python3 scripts/publish_pinned_ipc_wheel.py \
             "$WHEELHOUSE" --repo "$GITHUB_REPOSITORY" --source-sha "$KIPY_SHA"
           "$PY" -m pip install "$WHEELHOUSE/$EXPECTED"
+          "$PY" -m pip install 'resvg_py>=0.5,<0.6' 'Pillow>=10,<14' 'platformdirs>=4.3,<5'
           "$PY" -c "from kipy import KiCad; from kipy.schematic import Schematic; print('CPython 3.14 KiCad IPC bindings available')"
 
       - name: Verify KiCad plugin discovery on CPython 3.14
