@@ -4721,7 +4721,9 @@ def _show_library_browser(
     schematic_preview = tk.Canvas(
         schematic_frame,
         height=230,
-        background=theme_background,
+        # KiCad's SVG uses the traditional light-sheet palette. Keep the
+        # drawing surface paper-white in both UI themes for readable contrast.
+        background="#ffffff",
         highlightthickness=0,
         borderwidth=0,
     )
