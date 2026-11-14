@@ -1093,25 +1093,32 @@ def generate_reference_schematic(destination: Path) -> Path:
     c1_vreg_1v2 = pin_world_points[("C1", "1")]
     remove_local_label("U1", "21", "VREG_1V2")
     remove_local_label("C1", "1", "VREG_1V2")
+    vreg_1v2_escape_x = c1_vreg_1v2[0] + 38.10
     add_route("VREG_1V2", [
         u1_vreg_1v2,
-        (u1_vreg_1v2[0], 102.87),
-        (c1_vreg_1v2[0], 102.87),
+        (u1_vreg_1v2[0], 111.76),
+        (vreg_1v2_escape_x, 111.76),
+        (vreg_1v2_escape_x, 87.63),
+        (c1_vreg_1v2[0], 87.63),
         c1_vreg_1v2,
-    ], "u1-vreg-1v2-to-c1")
+    ], "u1-vreg-1v2-to-c1-around-gnd-pin")
 
     u1_vreg_2v7 = pin_world_points[("U1", "23")]
     c2_vreg_2v7 = pin_world_points[("C2", "1")]
     c3_vreg_2v7 = pin_world_points[("C3", "1")]
     vreg_2v7_branch = (u1_vreg_2v7[0], 90.17)
+    c3_vreg_2v7_branch = (c3_vreg_2v7[0], 90.17)
     add_route("VREG_2V7", [
         u1_vreg_2v7, vreg_2v7_branch,
         (c2_vreg_2v7[0], 90.17), c2_vreg_2v7,
     ], "u1-vreg-2v7-to-c2")
-    add_route("VREG_2V7", [
-        vreg_2v7_branch, (c3_vreg_2v7[0], 90.17), c3_vreg_2v7,
-    ], "u1-vreg-2v7-to-c3")
-    add_junction(vreg_2v7_branch, "VREG_2V7:C2-C3-bypass-branch")
+    # C3 joins the interior of the shared rail. One main segment plus one
+    # branch and an explicit junction avoids duplicated overlapping wires.
+    add_route(
+        "VREG_2V7", [c3_vreg_2v7_branch, c3_vreg_2v7],
+        "vreg-2v7-rail-to-c3",
+    )
+    add_junction(c3_vreg_2v7_branch, "VREG_2V7:C3-bypass-branch")
     remove_local_label("C2", "1", "VREG_2V7")
     remove_local_label("C3", "1", "VREG_2V7")
 
