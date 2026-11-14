@@ -114,19 +114,29 @@ Close KiCad and remove the plugin's cached environment, then start KiCad again:
 
 Alternatively, right-click a KiCad Blocks action in the plugin preferences and choose **Recreate Plugin Environment**.
 
-The path above uses KiCad's default Linux cache directory. The directory name is case-sensitive (`KiCad`, not `kicad`). If `KICAD_CACHE_HOME` is set, use that custom cache root instead. See the [official KiCad add-on developer guide](https://dev-docs.kicad.org/en/apis-and-binding/ipc-api/for-addon-developers/) for the platform-specific cache locations.
+The path above uses KiCad's default Linux cache directory. The directory name is
+case-sensitive (`KiCad`, not `kicad`). If `KICAD_CACHE_HOME` is set, use that
+custom cache root instead. See the [official KiCad add-on developer guide](
+https://dev-docs.kicad.org/en/apis-and-binding/ipc-api/for-addon-developers/)
+for the platform-specific cache locations.
 
 ### Capture startup diagnostics
 
 Use these steps when the plugin environment is created but its actions still fail to load:
 
-1. Check KiCad's warning messages in the editor status bar. On KiCad 10.0.1 and later, plugin action standard output and error output are reported there.
-2. To enable API trace output, set `KICAD_ENABLE_WXTRACE=1` and `WXTRACE=KICAD_API` before launching KiCad.
-3. To record API requests and responses, add `EnableAPILogging=1` to the `kicad_advanced` file in the KiCad configuration directory.
-4. Reproduce the issue and inspect `${KICAD_DOCUMENTS_HOME}/<version>/logs/api.log`.
+1. Check KiCad's warning messages in the editor status bar. On KiCad 10.0.1 and
+   later, plugin action standard output and error output are reported there.
+2. To enable API trace output, set `KICAD_ENABLE_WXTRACE=1` and
+   `WXTRACE=KICAD_API` before launching KiCad.
+3. To record API requests and responses, add `EnableAPILogging=1` to the
+   `kicad_advanced` file in the KiCad configuration directory.
+4. Reproduce the issue and inspect
+   `${KICAD_DOCUMENTS_HOME}/<version>/logs/api.log`.
 5. Remove `EnableAPILogging=1` when finished. The API log can grow large.
 
-See the [KiCad IPC API debugging instructions](https://dev-docs.kicad.org/en/apis-and-binding/ipc-api/for-addon-developers/) for the current logging details.
+See the [KiCad IPC API debugging instructions](
+https://dev-docs.kicad.org/en/apis-and-binding/ipc-api/for-addon-developers/)
+for the current logging details.
 
 ### The block browser opens but contains no blocks
 
