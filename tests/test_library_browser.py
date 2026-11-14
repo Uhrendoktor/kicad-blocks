@@ -19,6 +19,7 @@ from kicad_blocks.model import (
     parse_pins,
     resolve_variant_implementation,
 )
+from kicad_blocks.pcb_layout import parse_sexpr
 from kicad_blocks.plugin import (
     _attach_tk_window_to_editor,
     _bind_mousewheel,
@@ -30,8 +31,10 @@ from kicad_blocks.plugin import (
     _library_record_for_instance,
     _library_record_for_tree_row,
     _minimize_placement_windows,
+    _native_schematic_preview_pages,
     _native_symbol_preview_photo,
     _new_blank_pcb_source,
+    _normalize_schematic_preview_svg,
     _pick_directory,
     _pick_kicad_file,
     _pick_record,
@@ -45,7 +48,15 @@ from kicad_blocks.plugin import (
     _start_native_symbol_placement,
     _system_prefers_dark_theme,
 )
-from kicad_blocks.repository import LIBRARY_NICKNAME, create_block, read_manifest
+from kicad_blocks.repository import (
+    LIBRARY_NICKNAME,
+    _named_symbol_node,
+    _symbol_definition_digest,
+    create_block,
+    merge_symbol_catalog,
+    read_manifest,
+    synchronize_project_symbol_catalog,
+)
 
 
 class LibraryBrowserTests(unittest.TestCase):
@@ -135,6 +146,168 @@ class LibraryBrowserTests(unittest.TestCase):
             str(self.block.symbol_library.resolve()),
         )
 
+    def test_project_catalog_sync_updates_only_the_changed_library_facade(self):
+        project_catalog = self.root / "project" / "KBlocks.kicad_sym"
+        merge_symbol_catalog(
+            project_catalog.parent,
+            self.block.path / self.block.manifest["symbol_file"],
+        )
+        merge_symbol_catalog(
+            project_catalog.parent,
+            self.filter_block.path / self.filter_block.manifest["symbol_file"],
+        )
+        original_catalog = parse_sexpr(
+            project_catalog.read_text(encoding="utf-8")
+        )
+        filter_name = self.filter_block.manifest["symbol_name"]
+        filter_digest_before = _symbol_definition_digest(
+            _named_symbol_node(original_catalog, filter_name, project_catalog)
+        )
+
+        source_symbol = self.block.path / self.block.manifest["symbol_file"]
+        source_content = source_symbol.read_text(encoding="utf-8")
+        self.assertIn('"Buck Converter"', source_content)
+        source_symbol.write_text(
+            source_content.replace(
+                '"Buck Converter"', '"Buck Converter Updated"', 1
+            ),
+            encoding="utf-8",
+        )
+
+        self.assertTrue(
+            synchronize_project_symbol_catalog(
+                project_catalog,
+                source_symbol,
+                self.block.manifest["symbol_name"],
+                shared_catalog_file=self.block.symbol_library,
+                baseline_digest=self.block.manifest["catalog_symbol_hash"],
+            )
+        )
+        updated_catalog = parse_sexpr(
+            project_catalog.read_text(encoding="utf-8")
+        )
+        updated_symbol = _named_symbol_node(
+            updated_catalog,
+            self.block.manifest["symbol_name"],
+            project_catalog,
+        )
+        filter_digest_after = _symbol_definition_digest(
+            _named_symbol_node(updated_catalog, filter_name, project_catalog)
+        )
+        self.assertEqual(
+            _symbol_definition_digest(
+                _named_symbol_node(
+                    parse_sexpr(source_symbol.read_text(encoding="utf-8")),
+                    self.block.manifest["symbol_name"],
+                    source_symbol,
+                )
+            ),
+            _symbol_definition_digest(updated_symbol),
+        )
+        self.assertEqual(filter_digest_after, filter_digest_before)
+        self.assertFalse(
+            synchronize_project_symbol_catalog(
+                project_catalog,
+                source_symbol,
+                self.block.manifest["symbol_name"],
+                shared_catalog_file=self.block.symbol_library,
+                baseline_digest=self.block.manifest["catalog_symbol_hash"],
+            )
+        )
+
+        source_symbol.write_text(
+            source_symbol.read_text(encoding="utf-8").replace(
+                '"Buck Converter Updated"', '"Buck Converter Final"', 1
+            ),
+            encoding="utf-8",
+        )
+        self.assertTrue(
+            synchronize_project_symbol_catalog(
+                project_catalog,
+                source_symbol,
+                self.block.manifest["symbol_name"],
+                shared_catalog_file=self.block.symbol_library,
+                baseline_digest=self.block.manifest["catalog_symbol_hash"],
+            )
+        )
+
+    def test_project_catalog_sync_uses_a_changed_shared_library_symbol(self):
+        project_catalog = self.root / "project" / "KBlocks.kicad_sym"
+        merge_symbol_catalog(
+            project_catalog.parent,
+            self.block.path / self.block.manifest["symbol_file"],
+        )
+        merge_symbol_catalog(
+            project_catalog.parent,
+            self.filter_block.path / self.filter_block.manifest["symbol_file"],
+        )
+        shared_catalog = self.block.symbol_library
+        shared_text = shared_catalog.read_text(encoding="utf-8")
+        self.assertIn('"Buck Converter"', shared_text)
+        shared_catalog.write_text(
+            shared_text.replace(
+                '"Buck Converter"', '"Shared Library Facade"', 1
+            ),
+            encoding="utf-8",
+        )
+        block_symbol = self.block.path / self.block.manifest["symbol_file"]
+
+        self.assertTrue(
+            synchronize_project_symbol_catalog(
+                project_catalog,
+                block_symbol,
+                self.block.manifest["symbol_name"],
+                shared_catalog_file=shared_catalog,
+                baseline_digest=self.block.manifest["catalog_symbol_hash"],
+            )
+        )
+        self.assertIn(
+            '"Shared Library Facade"',
+            project_catalog.read_text(encoding="utf-8"),
+        )
+        self.assertNotIn(
+            '"Shared Library Facade"',
+            block_symbol.read_text(encoding="utf-8"),
+        )
+
+    def test_project_catalog_sync_preserves_a_project_local_facade_edit(self):
+        project_catalog = self.root / "project" / "KBlocks.kicad_sym"
+        merge_symbol_catalog(
+            project_catalog.parent,
+            self.block.path / self.block.manifest["symbol_file"],
+        )
+        merge_symbol_catalog(
+            project_catalog.parent,
+            self.filter_block.path / self.filter_block.manifest["symbol_file"],
+        )
+        project_text = project_catalog.read_text(encoding="utf-8")
+        self.assertIn('"Buck Converter"', project_text)
+        project_override = project_text.replace(
+            '"Buck Converter"', '"Project Specific Facade"', 1
+        )
+        project_catalog.write_text(project_override, encoding="utf-8")
+
+        source_symbol = self.block.path / self.block.manifest["symbol_file"]
+        source_text = source_symbol.read_text(encoding="utf-8")
+        source_symbol.write_text(
+            source_text.replace('"Buck Converter"', '"Library Facade Update"', 1),
+            encoding="utf-8",
+        )
+
+        self.assertFalse(
+            synchronize_project_symbol_catalog(
+                project_catalog,
+                source_symbol,
+                self.block.manifest["symbol_name"],
+                shared_catalog_file=self.block.symbol_library,
+                baseline_digest=self.block.manifest["catalog_symbol_hash"],
+            )
+        )
+        self.assertEqual(
+            project_catalog.read_text(encoding="utf-8"),
+            project_override,
+        )
+
     def test_native_save_dialog_uses_tk_initial_name_filters_and_suffix(self):
         save_dialog = Mock(return_value="/tmp/exported.csv")
         with patch(
@@ -185,6 +358,70 @@ class LibraryBrowserTests(unittest.TestCase):
         self.assertIsNone(selected_file)
         self.assertIsNone(selected_directory)
         self.assertIsNone(selected_save)
+
+    def test_schematic_preview_svg_gets_intrinsic_pixel_dimensions(self):
+        svg = self.root / "schematic.svg"
+        svg.write_text(
+            '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2400 1600"></svg>',
+            encoding="utf-8",
+        )
+
+        normalized = _normalize_schematic_preview_svg(svg, self.root)
+
+        from xml.etree import ElementTree as ET
+
+        root = ET.parse(normalized).getroot()
+        self.assertEqual(root.attrib["width"], "2400px")
+        self.assertEqual(root.attrib["height"], "1600px")
+        self.assertEqual(root.attrib["viewBox"], "0 0 2400 1600")
+
+    def test_native_schematic_preview_exports_selected_implementation_and_all_sheets(self):
+        calls = []
+
+        def export(arguments, **kwargs):
+            calls.append(arguments)
+            output_dir = Path(arguments[arguments.index("--output") + 1])
+            output_dir.mkdir(parents=True, exist_ok=True)
+            schematic_stem = Path(arguments[-1]).stem
+            (output_dir / f"{schematic_stem}.svg").write_text(
+                '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 60"></svg>',
+                encoding="utf-8",
+            )
+            (output_dir / f"{schematic_stem}-sheet1.svg").write_text(
+                '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 60"></svg>',
+                encoding="utf-8",
+            )
+            return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+        with (
+            patch("kicad_blocks.plugin.find_kicad_cli", return_value="/usr/bin/kicad-cli"),
+            patch("kicad_blocks.plugin.subprocess.run", side_effect=export),
+            patch("resvg_py.svg_to_bytes", return_value=b"schematic-png"),
+            patch("kicad_blocks.plugin._SCHEMATIC_PREVIEW_CACHE", {}),
+        ):
+            pages = _native_schematic_preview_pages(
+                self.block,
+                "1V8",
+                width=760,
+            )
+            cached_pages = _native_schematic_preview_pages(
+                self.block,
+                "1V8",
+                width=760,
+            )
+
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(
+            calls[0][-1],
+            str((self.block.path / resolve_variant_implementation(self.block.manifest, "1V8")).resolve()),
+        )
+        self.assertEqual(
+            calls[0][1:5],
+            ["sch", "export", "svg", "--no-background-color"],
+        )
+        self.assertEqual([label for label, _png in pages], ["Root sheet", "Sheet 2 · sheet1"])
+        self.assertEqual(pages, cached_pages)
+        self.assertTrue(all(png == b"schematic-png" for _label, png in pages))
 
     def test_native_facade_preview_removes_reference_and_component_name(self):
         from xml.etree import ElementTree as ET

@@ -60,6 +60,7 @@ from .repository import (
     register_project_symbol_library,
     remove_library_root,
     set_library_root,
+    synchronize_project_symbol_catalog,
 )
 from .repository import library_roots as configured_library_roots
 
@@ -2033,32 +2034,22 @@ def _ensure_project_facade_catalog(
     record,
     kicad,
 ) -> Path:
-    """Ensure the highlighted symbol exists in the already-registered KBlocks project catalog.
+    """Keep this block's project facade current without replacing local edits.
 
-    Do not rebuild an existing catalog here: a user may have unsaved or
-    unpublished edits to another facade in that same project library.
+    Only symbols that still match their last synchronized source digest are
+    refreshed. Other entries in the combined project catalog remain untouched.
     """
-    from .pcb_layout import parse_sexpr
-    from .repository import _named_symbol_node, merge_symbol_catalog
-
     project_dir = Path(project_dir).expanduser().resolve()
     catalog = project_dir / ".kicad_blocks" / LIBRARY_CATALOG_NAME
     catalog.parent.mkdir(parents=True, exist_ok=True)
     symbol_name = str(record.manifest.get("symbol_name") or "")
-    catalog_changed = False
-
-    if not catalog.is_file():
-        merge_symbol_catalog(catalog.parent, record.path / record.manifest["symbol_file"])
-        catalog_changed = True
-    else:
-        tree = parse_sexpr(catalog.read_text(encoding="utf-8"))
-        try:
-            _named_symbol_node(tree, symbol_name, catalog)
-        except ValueError:
-            # Merge only the missing symbol. Never rebuild the whole project
-            # catalog here, because that would discard edits to other symbols.
-            merge_symbol_catalog(catalog.parent, record.path / record.manifest["symbol_file"])
-            catalog_changed = True
+    catalog_changed = synchronize_project_symbol_catalog(
+        catalog,
+        record.path / record.manifest["symbol_file"],
+        symbol_name,
+        shared_catalog_file=record.symbol_library,
+        baseline_digest=record.manifest.get("catalog_symbol_hash"),
+    )
 
     table_path = project_dir / "sym-lib-table"
     previous_table = table_path.read_bytes() if table_path.is_file() else None
@@ -2551,6 +2542,181 @@ def _native_symbol_preview_photo(
     return tk.PhotoImage(data=base64.b64encode(png_data).decode("ascii"))
 
 _NATIVE_PREVIEW_CACHE: dict[tuple, object] = {}
+
+
+def _normalize_schematic_preview_svg(svg_file: Path, output_dir: Path) -> Path:
+    """Give KiCad's SVG export an explicit pixel viewport for resvg."""
+    import xml.etree.ElementTree as ET
+
+    root = ET.parse(svg_file).getroot()
+    view_box = root.attrib.get("viewBox") or root.attrib.get("viewbox") or ""
+    view_box_values = re.findall(
+        r"[-+]?(?:\d*\.\d+|\d+\.?\d*)(?:[eE][-+]?\d+)?",
+        view_box,
+    )
+    if len(view_box_values) == 4:
+        try:
+            view_width = float(view_box_values[2])
+            view_height = float(view_box_values[3])
+        except ValueError:
+            view_width = view_height = 0.0
+        if view_width > 0 and view_height > 0:
+            root.set("width", f"{view_width:g}px")
+            root.set("height", f"{view_height:g}px")
+    else:
+        def valid_dimension(value: str | None) -> bool:
+            if not value:
+                return False
+            match = re.fullmatch(
+                r"\s*([+]?(?:\d+(?:\.\d*)?|\.\d+))(?:px|pt|pc|mm|cm|in)?\s*",
+                value,
+                flags=re.IGNORECASE,
+            )
+            return bool(match and float(match.group(1)) > 0)
+
+        if not valid_dimension(root.attrib.get("width")) or not valid_dimension(
+            root.attrib.get("height")
+        ):
+            root.set("width", "300px")
+            root.set("height", "150px")
+
+    normalized = output_dir / f"{svg_file.stem}-preview.svg"
+    ET.ElementTree(root).write(
+        normalized,
+        encoding="utf-8",
+        xml_declaration=True,
+    )
+    return normalized
+
+
+def _native_schematic_preview_pages(
+    record,
+    implementation: str = "",
+    *,
+    width: int = 900,
+) -> list[tuple[str, bytes]]:
+    """Render every sheet of the selected implementation with KiCad CLI."""
+    implementation_file = resolve_variant_implementation(
+        record.manifest, implementation
+    )
+    schematic_file = (Path(record.path) / implementation_file).resolve()
+    if not schematic_file.is_file():
+        raise FileNotFoundError(
+            f"Implementation schematic is missing: {schematic_file}"
+        )
+
+    block_path = Path(record.path).resolve()
+    schematic_assets = tuple(
+        sorted(
+            (
+                path.relative_to(block_path).as_posix(),
+                path.stat().st_mtime_ns,
+                path.stat().st_size,
+            )
+            for path in block_path.rglob("*.kicad_sch")
+            if path.is_file()
+        )
+    )
+    cache_key = (str(schematic_file), schematic_assets, int(width))
+    cached_pages = _SCHEMATIC_PREVIEW_CACHE.get(cache_key)
+    if cached_pages is not None:
+        return list(cached_pages)
+
+    cli = find_kicad_cli()
+    with tempfile.TemporaryDirectory(prefix="kicad-block-schematic-preview-") as temporary:
+        output_dir = Path(temporary)
+        result = subprocess.run(
+            [
+                cli,
+                "sch",
+                "export",
+                "svg",
+                "--no-background-color",
+                "--output",
+                str(output_dir),
+                str(schematic_file),
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=60,
+        )
+        if result.returncode != 0:
+            detail = (result.stderr or result.stdout).strip()
+            raise RuntimeError(
+                "KiCad could not render the implementation schematic"
+                + (f": {detail}" if detail else ".")
+            )
+
+        svg_files = sorted(output_dir.glob("*.svg"), key=lambda path: path.name.casefold())
+        root_svg = output_dir / f"{schematic_file.stem}.svg"
+        if root_svg in svg_files:
+            svg_files.remove(root_svg)
+            svg_files.insert(0, root_svg)
+        if not svg_files:
+            raise RuntimeError(
+                "KiCad schematic export did not produce any SVG preview pages."
+            )
+
+        try:
+            import resvg_py
+        except ImportError as exc:
+            raise RuntimeError(
+                "The native KiCad preview rasterizer is missing. Reinstall KiCad Blocks "
+                "so its resvg_py dependency is installed."
+            ) from exc
+
+        pages: list[tuple[str, bytes]] = []
+        for index, svg_file in enumerate(svg_files):
+            if index == 0:
+                label = "Root sheet"
+            else:
+                suffix = svg_file.stem
+                prefix = f"{schematic_file.stem}-"
+                if suffix.casefold().startswith(prefix.casefold()):
+                    suffix = suffix[len(prefix):]
+                suffix = re.sub(r"[-_]+", " ", suffix).strip()
+                label = f"Sheet {index + 1}" + (f" · {suffix}" if suffix else "")
+            normalized_svg = _normalize_schematic_preview_svg(
+                svg_file,
+                output_dir,
+            )
+            png_data = resvg_py.svg_to_bytes(
+                svg_path=str(normalized_svg),
+                width=int(width),
+                height=int(width),
+            )
+            pages.append((label, bytes(png_data)))
+
+    # Keep the cache bounded: each entry contains rendered pages for one
+    # implementation and size, not Tk objects tied to a particular window.
+    if len(_SCHEMATIC_PREVIEW_CACHE) >= 24:
+        _SCHEMATIC_PREVIEW_CACHE.pop(next(iter(_SCHEMATIC_PREVIEW_CACHE)))
+    _SCHEMATIC_PREVIEW_CACHE[cache_key] = tuple(pages)
+    return pages
+
+
+_SCHEMATIC_PREVIEW_CACHE: dict[tuple, tuple[tuple[str, bytes], ...]] = {}
+
+
+def _draw_schematic_preview(canvas, pages, page_label: str | None = None) -> None:
+    """Display one KiCad-rendered schematic sheet in a scrollable canvas."""
+    canvas.delete("all")
+    selected = next(
+        (item for item in pages if item[0] == page_label),
+        pages[0] if pages else None,
+    )
+    if selected is None:
+        return
+    _label, png_data = selected
+    photo = tk.PhotoImage(data=base64.b64encode(png_data).decode("ascii"))
+    canvas._native_schematic_preview_photo = photo
+    canvas.create_image(8, 8, image=photo, anchor="nw")
+    canvas.configure(
+        scrollregion=(0, 0, photo.width() + 16, photo.height() + 16)
+    )
+    canvas.xview_moveto(0)
+    canvas.yview_moveto(0)
 
 
 def _draw_facade_preview(
@@ -4471,6 +4637,7 @@ def _show_library_browser(
     _bind_mousewheel(tree, lambda amount: tree.yview_scroll(amount, "units"))
 
     right.columnconfigure(0, weight=1)
+    right.rowconfigure(2, weight=2)
     right.rowconfigure(3, weight=1)
     name_label = ttk.Label(right, text="Select a block")
     name_label.grid(row=0, column=0, sticky="ew")
@@ -4478,24 +4645,99 @@ def _show_library_browser(
         right, text="", wraplength=560, justify="left"
     )
     description_label.grid(row=1, column=0, sticky="ew", pady=(4, 8))
-    preview_box = ttk.LabelFrame(right, text="Facade preview", padding=5)
-    preview_box.grid(row=2, column=0, sticky="ew")
-    preview_frame = ttk.Frame(preview_box)
-    preview_frame.pack(fill="x", expand=True)
+
+    preview_box = ttk.LabelFrame(right, text="Preview", padding=5)
+    preview_box.grid(row=2, column=0, sticky="nsew")
+    preview_notebook = ttk.Notebook(preview_box)
+    preview_notebook.pack(fill="both", expand=True)
+
+    facade_page = ttk.Frame(preview_notebook)
+    preview_notebook.add(facade_page, text="Facade")
+    facade_frame = ttk.Frame(facade_page)
+    facade_frame.pack(fill="both", expand=True)
+    facade_frame.columnconfigure(0, weight=1)
+    facade_frame.rowconfigure(0, weight=1)
     preview = tk.Canvas(
-        preview_frame,
-        height=190,
+        facade_frame,
+        height=180,
         background=theme_background,
         highlightthickness=0,
         borderwidth=0,
     )
-    preview_scroll = ttk.Scrollbar(
-        preview_frame, orient="vertical", command=preview.yview, style="Vertical.TScrollbar"
+    preview_y_scroll = ttk.Scrollbar(
+        facade_frame, orient="vertical", command=preview.yview, style="Vertical.TScrollbar"
     )
-    preview.configure(yscrollcommand=preview_scroll.set)
-    preview.pack(side="left", fill="x", expand=True)
-    preview_scroll.pack(side="right", fill="y")
+    preview_x_scroll = ttk.Scrollbar(
+        facade_frame, orient="horizontal", command=preview.xview, style="Horizontal.TScrollbar"
+    )
+    preview.configure(
+        yscrollcommand=preview_y_scroll.set,
+        xscrollcommand=preview_x_scroll.set,
+    )
+    preview.grid(row=0, column=0, sticky="nsew")
+    preview_y_scroll.grid(row=0, column=1, sticky="ns")
+    preview_x_scroll.grid(row=1, column=0, sticky="ew")
     _bind_mousewheel(preview, lambda amount: preview.yview_scroll(amount, "units"))
+
+    schematic_page = ttk.Frame(preview_notebook)
+    preview_notebook.add(schematic_page, text="Schematic")
+    schematic_page.columnconfigure(0, weight=1)
+    schematic_page.rowconfigure(1, weight=1)
+    schematic_controls = ttk.Frame(schematic_page)
+    schematic_controls.grid(row=0, column=0, sticky="ew", pady=(0, 5))
+    ttk.Label(schematic_controls, text="Circuit").pack(side="left")
+    implementation_choice = tk.StringVar(value="Default")
+    implementation_selector = ttk.Combobox(
+        schematic_controls,
+        textvariable=implementation_choice,
+        values=("Default",),
+        state="disabled",
+        width=22,
+    )
+    implementation_selector.pack(side="left", padx=(5, 0))
+    _add_tooltip(implementation_selector, "Choose the implementation shown in the schematic preview")
+    page_choice = tk.StringVar()
+    page_selector_label = ttk.Label(schematic_controls, text="Sheet")
+    page_selector = ttk.Combobox(
+        schematic_controls,
+        textvariable=page_choice,
+        values=(),
+        state="disabled",
+        width=22,
+    )
+    schematic_frame = ttk.Frame(schematic_page)
+    schematic_frame.grid(row=1, column=0, sticky="nsew")
+    schematic_frame.columnconfigure(0, weight=1)
+    schematic_frame.rowconfigure(0, weight=1)
+    schematic_preview = tk.Canvas(
+        schematic_frame,
+        height=230,
+        # KiCad's SVG uses the traditional light-sheet palette. Keep the
+        # drawing surface paper-white in both UI themes for readable contrast.
+        background="#ffffff",
+        highlightthickness=0,
+        borderwidth=0,
+    )
+    schematic_y_scroll = ttk.Scrollbar(
+        schematic_frame,
+        orient="vertical",
+        command=schematic_preview.yview,
+        style="Vertical.TScrollbar",
+    )
+    schematic_x_scroll = ttk.Scrollbar(
+        schematic_frame,
+        orient="horizontal",
+        command=schematic_preview.xview,
+        style="Horizontal.TScrollbar",
+    )
+    schematic_preview.configure(
+        yscrollcommand=schematic_y_scroll.set,
+        xscrollcommand=schematic_x_scroll.set,
+    )
+    schematic_preview.grid(row=0, column=0, sticky="nsew")
+    schematic_y_scroll.grid(row=0, column=1, sticky="ns")
+    schematic_x_scroll.grid(row=1, column=0, sticky="ew")
+    _bind_mousewheel(schematic_preview, lambda amount: schematic_preview.yview_scroll(amount, "units"))
 
     details_box = ttk.LabelFrame(right, text="Block overview", padding=5)
     details_box.grid(row=3, column=0, sticky="nsew", pady=(8, 0))
@@ -4521,12 +4763,111 @@ def _show_library_browser(
     _bind_mousewheel(details, lambda amount: details.yview_scroll(amount, "units"))
     selected_record = [None]
     selected_project_catalog = [None]
+    schematic_pages = [[]]
+    implementation_choices = [{}]
     facade_button = [None]
     open_layout_button = [None]
+
+    def draw_facade_for_selection():
+        record = selected_record[0]
+        if record is None:
+            preview.delete("all")
+            return
+        try:
+            _draw_facade_preview(
+                preview,
+                record,
+                library_file=selected_project_catalog[0],
+            )
+        except Exception as exc:
+            LOG.exception("Could not render facade preview for %s", record.name)
+            preview.delete("all")
+            style = ttk.Style(preview)
+            preview.create_text(
+                max(int(preview.winfo_width()), 480) / 2,
+                max(int(preview.winfo_height()), 220) / 2,
+                text=f"Facade preview unavailable\n{exc}",
+                fill=style.lookup("TLabel", "foreground") or preview.cget("foreground"),
+                justify="center",
+                width=max(int(preview.winfo_width()), 480) - 32,
+            )
+
+    def render_schematic_for_selection():
+        record = selected_record[0]
+        if record is None:
+            schematic_preview.delete("all")
+            schematic_preview.create_text(
+                max(int(schematic_preview.winfo_width()), 480) / 2,
+                max(int(schematic_preview.winfo_height()), 240) / 2,
+                text="Select a block to preview its implementation.",
+                fill=theme_foreground or schematic_preview.cget("foreground"),
+                justify="center",
+                width=max(int(schematic_preview.winfo_width()), 480) - 32,
+            )
+            schematic_pages[0] = []
+            return
+
+        selector = implementation_choices[0].get(implementation_choice.get(), "")
+        try:
+            width = max(720, min(1200, int(schematic_preview.winfo_width())))
+            pages = _native_schematic_preview_pages(
+                record,
+                selector,
+                width=width,
+            )
+            schematic_pages[0] = pages
+            page_labels = [item[0] for item in pages]
+            page_selector.configure(
+                values=page_labels,
+                state="readonly" if len(page_labels) > 1 else "disabled",
+            )
+            if len(page_labels) > 1:
+                if page_selector_label.winfo_manager() != "pack":
+                    page_selector_label.pack(side="left", padx=(10, 4))
+                if page_selector.winfo_manager() != "pack":
+                    page_selector.pack(side="left")
+            else:
+                page_selector_label.pack_forget()
+                page_selector.pack_forget()
+            page_choice.set(page_labels[0] if page_labels else "")
+            if pages:
+                _draw_schematic_preview(
+                    schematic_preview,
+                    pages,
+                    page_choice.get(),
+                )
+        except Exception as exc:
+            LOG.exception(
+                "Could not render implementation preview for %s",
+                record.name,
+            )
+            schematic_pages[0] = []
+            page_selector.configure(values=(), state="disabled")
+            page_selector_label.pack_forget()
+            page_selector.pack_forget()
+            schematic_preview.delete("all")
+            style = ttk.Style(schematic_preview)
+            schematic_preview.create_text(
+                max(int(schematic_preview.winfo_width()), 480) / 2,
+                max(int(schematic_preview.winfo_height()), 240) / 2,
+                text=f"Schematic preview unavailable\n{exc}",
+                fill=style.lookup("TLabel", "foreground") or schematic_preview.cget("foreground"),
+                justify="center",
+                width=max(int(schematic_preview.winfo_width()), 480) - 32,
+            )
+            schematic_preview.configure(
+                scrollregion=(
+                    0,
+                    0,
+                    max(int(schematic_preview.winfo_width()), 480),
+                    max(int(schematic_preview.winfo_height()), 240),
+                )
+            )
 
     def set_details(record):
         selected_record[0] = record
         selected_project_catalog[0] = None
+        schematic_pages[0] = []
         if record is None:
             name_label.configure(
                 text="No matching blocks" if search.get().strip() else "No blocks in registered libraries"
@@ -4536,7 +4877,16 @@ def _show_library_browser(
             details.delete("1.0", "end")
             details.configure(state="disabled")
             preview.delete("all")
+            schematic_preview.delete("all")
+            implementation_selector.configure(values=(), state="disabled")
+            implementation_choice.set("")
+            implementation_choices[0] = {}
+            page_selector.configure(values=(), state="disabled")
+            page_choice.set("")
+            page_selector_label.pack_forget()
+            page_selector.pack_forget()
             return
+
         name_label.configure(text=record.name)
         description = " ".join(
             str(record.manifest.get("description", "") or "No description provided.").split()
@@ -4567,31 +4917,70 @@ def _show_library_browser(
             )):
                 details.tag_add("section", f"{line_number}.0", f"{line_number}.end")
         details.configure(state="disabled")
+
+        default_variant = str(record.manifest.get("default_variant") or "").strip()
+        default_label = "Default" + (f" · {default_variant}" if default_variant else "")
+        choices = {default_label: ""}
+        for item in record.manifest.get("variants", []):
+            label = str(item.get("value") or "").strip()
+            if label:
+                choices[label] = label
+        implementation_choices[0] = choices
+        implementation_selector.configure(
+            values=tuple(choices),
+            state="readonly",
+        )
+        implementation_choice.set(default_label)
+        page_selector.configure(values=(), state="disabled")
+        page_choice.set("")
+        page_selector_label.pack_forget()
+        page_selector.pack_forget()
+
         try:
-            project_catalog = _ensure_project_facade_catalog(
+            selected_project_catalog[0] = _ensure_project_facade_catalog(
                 project_dir, record, kicad
-            )
-            selected_project_catalog[0] = project_catalog
-            _draw_facade_preview(
-                preview,
-                record,
-                library_file=project_catalog,
             )
         except (OSError, RuntimeError, ValueError, LookupError) as exc:
             LOG.exception(
                 "Could not resolve the project facade catalog for %s",
                 record.name,
             )
+            selected_project_catalog[0] = None
             preview.delete("all")
             style = ttk.Style(preview)
             preview.create_text(
                 max(int(preview.winfo_width()), 480) / 2,
-                max(int(preview.winfo_height()), 250) / 2,
-                text=f"Project facade unavailable\\n{exc}",
+                max(int(preview.winfo_height()), 220) / 2,
+                text=f"Project facade unavailable\n{exc}",
                 fill=style.lookup("TLabel", "foreground") or preview.cget("foreground"),
                 justify="center",
                 width=max(int(preview.winfo_width()), 480) - 32,
             )
+
+        if preview_notebook.index(preview_notebook.select()) == 0:
+            draw_facade_for_selection()
+        else:
+            render_schematic_for_selection()
+
+    def preview_tab_changed(_event=None):
+        if preview_notebook.index(preview_notebook.select()) == 0:
+            draw_facade_for_selection()
+        else:
+            render_schematic_for_selection()
+
+    def implementation_changed(_event=None):
+        render_schematic_for_selection()
+
+    def sheet_changed(_event=None):
+        _draw_schematic_preview(
+            schematic_preview,
+            schematic_pages[0],
+            page_choice.get(),
+        )
+
+    implementation_selector.bind("<<ComboboxSelected>>", implementation_changed)
+    page_selector.bind("<<ComboboxSelected>>", sheet_changed)
+    preview_notebook.bind("<<NotebookTabChanged>>", preview_tab_changed)
 
     def render_records(*_args):
         visible = _filter_library_records(records, search.get())
@@ -4945,8 +5334,10 @@ def _show_library_browser(
     preview.bind(
         "<Configure>",
         lambda _event: (
-            _draw_facade_preview(preview, selected_record[0])
-            if selected_record[0] is not None else None
+            draw_facade_for_selection()
+            if selected_record[0] is not None
+            and preview_notebook.index(preview_notebook.select()) == 0
+            else None
         ),
     )
 
