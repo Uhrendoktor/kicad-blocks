@@ -2441,16 +2441,16 @@ def _edit_facade_symbol(
         return None
 
     symbol_editor_id = None
-    deadline = time.monotonic() + 5.0
-    while time.monotonic() < deadline:
+    for _attempt in range(20):
         symbol_editor_id = visible_symbol_editor()
-        if symbol_editor_id is not None:
-            break
-        if not action_started:
+        if symbol_editor_id is not None or not action_started:
             break
         pause(0.1)
 
-    if symbol_editor_id is None and not action_started:
+    if symbol_editor_id is None:
+        # KiCad can acknowledge a RunAction request without creating the target
+        # frame on some builds. The fallback is safe only after identifying and
+        # focusing the invoking Eeschema window below.
         # The standalone Symbol Editor is a Tools-menu command, not the
         # selection-bound "Edit Library Symbol" action. Raise the exact
         # invoking Eeschema client before sending the menu accelerator; a
@@ -2502,8 +2502,7 @@ def _edit_facade_symbol(
         for _ in range(menu_down_count):
             send("key", "--clearmodifiers", "Down")
         send("key", "--clearmodifiers", "Return")
-        deadline = time.monotonic() + 5.0
-        while time.monotonic() < deadline:
+        for _attempt in range(50):
             symbol_editor_id = visible_symbol_editor()
             if symbol_editor_id is not None:
                 break
