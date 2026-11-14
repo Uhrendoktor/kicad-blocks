@@ -2411,9 +2411,40 @@ def _edit_facade_symbol(
         pause(0.1)
 
     if symbol_editor_id is None and not action_started:
-        # Runtime action support varies between KiCad nightly builds. The
-        # documented Eeschema Tools menu is the fallback for those builds.
+        # The standalone Symbol Editor is a Tools-menu command, not the
+        # selection-bound "Edit Library Symbol" action. Raise the exact
+        # invoking Eeschema client before sending the menu accelerator; a
+        # focused-but-covered X11 window is not sufficient when another KiCad
+        # frame (notably PCB Editor) is active.
+        editor_title = send(
+            "getwindowname", str(editor_window_id), check=False
+        ).casefold()
+        editor_class = send(
+            "getwindowclassname", str(editor_window_id), check=False
+        ).casefold()
+        if "schematic editor" not in editor_title and "eeschema" not in editor_class:
+            raise RuntimeError(
+                "Edit Facade was given a window that is not Eeschema "
+                f"(title={editor_title!r}, class={editor_class!r}). "
+                "Activate the Schematic Editor and retry."
+            )
+
+        send("windowraise", str(editor_window_id), check=False)
+        send("windowactivate", "--sync", str(editor_window_id), check=False)
         send("windowfocus", "--sync", str(editor_window_id))
+        pause(0.15)
+        focused_id = send("getwindowfocus", check=False)
+        if focused_id != str(editor_window_id):
+            focused_title = (
+                send("getwindowname", focused_id, check=False)
+                if focused_id else "<no focused window>"
+            )
+            raise RuntimeError(
+                "Could not activate the invoking Eeschema window for Edit Facade. "
+                f"Focus remains on {focused_title!r}. Close the blocking dialog or "
+                "bring the Schematic Editor to the foreground, then retry."
+            )
+
         send("key", "--clearmodifiers", "alt+t")
         pause(0.25)
         send("key", "--clearmodifiers", "s")
