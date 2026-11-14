@@ -103,6 +103,32 @@ class _SchematicForItemUpdate(Protocol):
     client: _SchematicIpcClient
 
 
+class _TkGeometryWindow(Protocol):
+    """Geometry methods shared by real Tk windows and the lightweight test adapter."""
+
+    def update_idletasks(self) -> None: ...
+
+    def winfo_screenwidth(self) -> int: ...
+
+    def winfo_screenheight(self) -> int: ...
+
+    def geometry(self, value: str) -> None: ...
+
+    def minsize(self, width: int, height: int) -> None: ...
+
+
+class _TkTransientWindow(Protocol):
+    """Transient-window operations used when associating dialogs with Eeschema."""
+
+    def wm_class(self, *arguments: str) -> str | tuple[str, str] | None: ...
+
+    def wm_attributes(self, *arguments: str) -> str | tuple[str, ...] | None: ...
+
+    def update_idletasks(self) -> None: ...
+
+    def winfo_id(self) -> int | str: ...
+
+
 def load_tkinter() -> None:
     """Load the optional desktop UI toolkit when the manager is run."""
     global tk, ttk, filedialog, messagebox, simpledialog
@@ -460,7 +486,7 @@ def _configure_tk_theme(root: tkinter_types.Tk) -> None:
     setattr(root, "_kicad_blocks_palette", colors)
 
 
-def _editor_window_id_for_widget(window: tkinter_types.Misc) -> str | None:
+def _editor_window_id_for_widget(window: tkinter_types.Misc | _TkGeometryWindow) -> str | None:
     """Find the invoking KiCad editor XID stored on a Tk parent chain."""
     current: tkinter_types.Misc | None = window
     seen: set[int] = set()
@@ -473,7 +499,7 @@ def _editor_window_id_for_widget(window: tkinter_types.Misc) -> str | None:
     return None
 
 
-def _set_window_geometry(window, width: int, height: int, min_width: int, min_height: int) -> None:
+def _set_window_geometry(window: _TkGeometryWindow, width: int, height: int, min_width: int, min_height: int) -> None:
     """Size a completed dialog to its content and keep every action visible."""
     window.update_idletasks()
     sw = max(int(window.winfo_screenwidth()), 640)
@@ -481,8 +507,12 @@ def _set_window_geometry(window, width: int, height: int, min_width: int, min_he
     usable_width = max(640, sw - 80)
     usable_height = max(480, sh - 100)
     try:
-        requested_width = int(window.winfo_reqwidth())
-        requested_height = int(window.winfo_reqheight())
+        requested_width_getter = getattr(window, "winfo_reqwidth", None)
+        requested_height_getter = getattr(window, "winfo_reqheight", None)
+        if not callable(requested_width_getter) or not callable(requested_height_getter):
+            raise AttributeError("Window does not expose requested content dimensions.")
+        requested_width = int(requested_width_getter())
+        requested_height = int(requested_height_getter())
     except Exception:
         # Tests and non-GUI callers can provide lightweight window adapters
         # without Tk's measurement methods; actual Tk sizing failures should
@@ -527,7 +557,7 @@ def _set_x11_transient_owner(window_id: str, owner_window_id: str) -> bool:
     return result.returncode == 0
 
 
-def _attach_tk_window_to_editor(window, editor_window_id: str | None) -> bool:
+def _attach_tk_window_to_editor(window: _TkTransientWindow, editor_window_id: str | None) -> bool:
     """Make a Tk top-level a transient dialog of the invoking KiCad editor."""
     if not editor_window_id:
         return False
