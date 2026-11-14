@@ -346,20 +346,60 @@ class STUSB4500ReferenceTests(unittest.TestCase):
         self.assertGreater(float(end[1]) - float(start[1]), 20.0)
 
 
-    def test_internal_vbus_and_power_path_nets_remain_local(self) -> None:
+    def test_internal_nets_and_hierarchical_vsnk_scope_are_consistent(self) -> None:
         with tempfile.TemporaryDirectory(prefix="stusb4500-local-nets-") as temporary:
             content, tree, _ = self._generate(temporary)
 
         labels = {str(node[1]) for node in _all(tree, "label")}
+        hierarchical = {str(node[1]) for node in _all(tree, "hierarchical_label")}
         for name in (
             "VBUS", "CC1", "CC2", "VBUS_FILTERED", "VBUS_VS_DISCH",
             "VBUS_EN_SNK", "VSNK_GATE", "DISCH", "VREG_2V7", "ADDR0", "ADDR1",
         ):
             self.assertIn(name, labels)
+        self.assertNotIn("VSNK", labels)
+        self.assertIn("VSNK", hierarchical)
         self.assertNotIn("VREG_1V2", labels)
         self.assertNotIn("FET_MID", labels)
         self.assertNotIn('(global_label "', content)
 
+
+    def test_decoupler_ground_uses_one_physical_hierarchical_port(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="stusb4500-shared-gnd-") as temporary:
+            content, tree, _instances = self._generate(temporary)
+        dsu, pins = _wire_networks(tree)
+        c2 = pins[("C2", "2")]["point"]
+        c3 = pins[("C3", "2")]["point"]
+        self.assertEqual(dsu.find(c2), dsu.find(c3))
+        ground_labels = []
+        for node in _all(tree, "hierarchical_label"):
+            at = _direct(node, "at")
+            if str(node[1]) == "GND" and at is not None:
+                point = (round(float(at[1]), 3), round(float(at[2]), 3))
+                if dsu.find(point) == dsu.find(c2):
+                    ground_labels.append(node)
+        self.assertEqual(len(ground_labels), 1)
+        self.assertNotIn('(label "GND"', content)
+
+    def test_controller_bypass_caps_are_repositioned_for_short_c1_route(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="stusb4500-bypass-layout-") as temporary:
+            _content, tree, instances = self._generate(temporary)
+        u1_x = float(_direct(instances["U1"], "at")[1])
+        self.assertAlmostEqual(float(_direct(instances["C1"], "at")[1]), u1_x + 5.08, places=3)
+        self.assertAlmostEqual(float(_direct(instances["C2"], "at")[1]), u1_x + 15.24, places=3)
+        self.assertAlmostEqual(float(_direct(instances["C3"], "at")[1]), u1_x + 20.32, places=3)
+        dsu, pins = _wire_networks(tree)
+        c1 = pins[("C1", "1")]["point"]
+        u1 = pins[("U1", "21")]["point"]
+        self.assertEqual(c1[0], u1[0])
+        self.assertEqual(dsu.find(c1), dsu.find(u1))
+
+    def test_back_to_back_fets_are_condensed(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="stusb4500-compact-fets-") as temporary:
+            _content, _tree, instances = self._generate(temporary)
+        t4_x = float(_direct(instances["T4"], "at")[1])
+        t1_x = float(_direct(instances["T1"], "at")[1])
+        self.assertAlmostEqual(t1_x - t4_x, 25.40, places=3)
 
     def test_vbus_filtered_nodes_use_local_labels_without_crossing_d4(self) -> None:
         with tempfile.TemporaryDirectory(prefix="stusb4500-vbus-filter-") as temporary:

@@ -70,18 +70,19 @@ The machine-enforced rules now include:
 - [ ] `SCH010`: visible Reference/Value fields do not straddle symbol bodies, overlap pins/wires/labels/other fields, or sit more than 8.0 mm from their symbol body. Values may be centered wholly inside passive bodies.
 - [ ] `SCH011`: block titles contain no line breaks; every block description/comment panel has its own visible outline.
 - [ ] `SCH012`: labels and descriptive comment panels keep at least 2.54 mm clear of functional-frame borders.
-- [ ] `SCH013`: a wire may end at its intended pin but may not cross a symbol body or an intermediate pin.
-- [ ] `SCH014`: configured paired pins share the declared logical net; C2.2 and C3.2 are both GND.
-- [ ] `SCH015`: U1.3, the unused NC pin immediately below RESET, always has an explicit no-connect marker.
-- [ ] `SCH016`: wire compactness is scored per group as total internal wire length divided by its configured budget. The FET switch budget is 105 mm (score <= 1.0).
+- [ ] `SCH013`: wires may end at intended pins but may not cross actual symbol primitive outlines, visible Reference/Value glyphs, annotation boxes, or intermediate pins. Circles, arcs, and polygonal outlines are checked by their geometry, not by an enclosing rectangle.
+- [ ] `SCH014`: configured paired pins share the declared logical net; C2.2 and C3.2 are physically joined and expose GND through exactly one hierarchical label.
+- [ ] `SCH015`: visible unused pins retain explicit no-connect markers. U1.3 is already a hidden `no_connect` library pin and must not receive an extra floating X.
+- [ ] `SCH016`: wire compactness is scored per group as total internal wire length divided by its configured budget. The condensed FET switch budget is 95 mm (score <= 1.0).
 - [ ] `SCH017`: non-trivial groups identify their member circuits and provide datasheet/page/figure or a reviewed screenshot asset.
 - [ ] `SCH018`: visible label glyphs do not overlap other label glyphs, symbol fields or annotation boxes.
+- [ ] `SCH019`: each label name uses one kind consistently: local, hierarchical, or global. A name must never mix these label types.
 - [ ] `SCH007` / `SCH009`: every declared group emits both a title and a description/source panel. Frames are derived from pin extents and have a fixed 2.54 mm horizontal gap along the primary flow.
 
 ## Automated and visual validation gate
 
 - [ ] Run unit tests, Ruff, and compileall, including the schematic style checker.
-- [ ] Run `scripts/validate_schematic_style.py --list-rules` to inspect rule IDs/severities and scope, then run `scripts/validate_schematic_style.py PATH_TO_SCHEMATIC`. The stable catalogue contains SCH001–SCH018. Run `--generic-only PATH_TO_SCHEMATIC` to use the reusable geometry/presentation subset without the STUSB4500 profile contracts.
+- [ ] Run `scripts/validate_schematic_style.py --list-rules` to inspect rule IDs/severities and scope, then run `scripts/validate_schematic_style.py PATH_TO_SCHEMATIC`. The stable catalogue contains SCH001–SCH019. Run `--generic-only PATH_TO_SCHEMATIC` to use the reusable geometry/presentation subset without the STUSB4500 profile contracts.
 - [ ] Export the schematic netlist with KiCad CLI and verify all critical pin-to-net assignments against the datasheet-derived map.
 - [ ] Run KiCad ERC with the standalone child-block validation profile. Suppress only expected root-sheet hierarchical ports, externally driven input/power pins, isolated hierarchical port labels, and absent project library tables. Internal shorts, pin conflicts, dangling wires/local labels, and all other ERC rules remain enabled; require zero unignored violations.
 - [ ] Export a fresh SVG from the exact tested commit and inspect the full page and dense regions. Confirm the boxes fit the text and remain close to the circuits they describe.

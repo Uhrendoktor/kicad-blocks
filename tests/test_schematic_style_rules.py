@@ -19,12 +19,14 @@ from kicad_blocks.pcb_layout import _all, _direct, parse_sexpr
 from validate_schematic_style import (
     STYLE_RULES,
     _pin_world_info,
+    _text_visual_bounds,
     _wire_networks,
     block_annotation_issues,
     check_generic_schematic_style,
     check_schematic_style,
     common_pin_net_issues,
     group_comment_outline_issues,
+    label_kind_consistency_issues,
     required_no_connect_issues,
     symbol_field_clearance_issues,
     text_box_issues,
@@ -48,8 +50,9 @@ class SchematicStyleRuleTests(unittest.TestCase):
         return copy.deepcopy(self.source)
 
     def test_rule_catalogue_and_generated_reference_pass(self) -> None:
-        self.assertEqual(len(STYLE_RULES), 18)
+        self.assertEqual(len(STYLE_RULES), 19)
         self.assertEqual(STYLE_RULES["SCH010"]["scope"], "generic")
+        self.assertEqual(STYLE_RULES["SCH019"]["scope"], "generic")
         self.assertEqual(STYLE_RULES["SCH014"]["scope"], "profile")
         self.assertEqual(check_schematic_style(self.fresh_tree()), [])
         self.assertEqual(check_generic_schematic_style(self.fresh_tree()), [])
@@ -121,6 +124,72 @@ assert "generate_reference" not in sys.modules
             "visible box outline" in issue for issue in group_comment_outline_issues(tree)
         ))
 
+    def test_label_names_cannot_mix_local_and_hierarchical_kinds(self) -> None:
+        tree = [
+            "kicad_sch",
+            ["label", "VSNK", ["at", "10", "10", "0"]],
+            ["hierarchical_label", "VSNK", ["shape", "output"], ["at", "20", "10", "0"]],
+        ]
+        issues = label_kind_consistency_issues(tree)
+        self.assertEqual(len(issues), 1)
+        self.assertIn("VSNK", issues[0])
+        self.assertIn("local", issues[0])
+        self.assertIn("hierarchical_label", issues[0])
+
+    def test_symbol_obstacles_use_real_outlines_not_rectangular_bounds(self) -> None:
+        tree = [
+            "kicad_sch",
+            ["lib_symbols",
+                ["symbol", "Test:Triangle",
+                    ["symbol", "Triangle_0_1",
+                        ["polyline",
+                            ["pts",
+                                ["xy", "0", "0"], ["xy", "4", "0"],
+                                ["xy", "0", "4"], ["xy", "0", "0"],
+                            ],
+                            ["stroke", ["width", "0.254"]],
+                            ["fill", ["type", "none"]],
+                        ],
+                    ],
+                ],
+            ],
+            ["symbol",
+                ["lib_id", "Test:Triangle"],
+                ["at", "0", "0", "0"],
+                ["property", "Reference", "Q1",
+                    ["at", "10", "10", "0"],
+                    ["effects", ["font", ["size", "1", "1"]]],
+                ],
+            ],
+            ["wire", ["pts", ["xy", "3", "-3"], ["xy", "4", "-4"]]],
+        ]
+        # This is inside the triangle AABB but outside its actual polygon.
+        self.assertFalse(any("symbol body Q1" in issue for issue in wire_obstacle_issues(tree)))
+        tree[-1] = ["wire", ["pts", ["xy", "1", "-1"], ["xy", "3", "-1"]]]
+        self.assertTrue(any("symbol body Q1" in issue for issue in wire_obstacle_issues(tree)))
+
+    def test_wire_through_visible_symbol_field_is_rejected(self) -> None:
+        tree = self.fresh_tree()
+        d50 = next(
+            node for node in _all(tree, "symbol")
+            if any(str(prop[1]) == "Reference" and str(prop[2]) == "D50"
+                   for prop in _all(node, "property"))
+        )
+        value = next(
+            prop for prop in _all(d50, "property")
+            if str(prop[1]) == "Value"
+        )
+        x, y, width, height = _text_visual_bounds(str(value[2]), value)
+        tree.append([
+            "wire", ["pts",
+                ["xy", f"{x - 1.0:.3f}", f"{y + height / 2:.3f}"],
+                ["xy", f"{x + width + 1.0:.3f}", f"{y + height / 2:.3f}"],
+            ],
+        ])
+        self.assertTrue(any(
+            "symbol field D50 Value" in issue for issue in wire_obstacle_issues(tree)
+        ))
+
     def test_symbol_fields_may_not_straddle_their_body(self) -> None:
         tree = self.fresh_tree()
         d1 = next(
@@ -164,19 +233,30 @@ assert "generate_reference" not in sys.modules
             "annotation text box" in issue for issue in wire_obstacle_issues(tree)
         ))
 
-    def test_shared_decoupler_ground_and_required_nc_marker_are_present(self) -> None:
+    def test_shared_decoupler_ground_and_visible_nc_markers_are_present(self) -> None:
         tree = self.fresh_tree()
         self.assertEqual(common_pin_net_issues(tree), [])
         self.assertEqual(required_no_connect_issues(tree), [])
-        point = _pin_world_info(tree)[("U1", "3")]["point"]
+        pins = _pin_world_info(tree)
+        markers = {
+            (round(float(_direct(node, "at")[1]), 3),
+             round(float(_direct(node, "at")[2]), 3))
+            for node in _all(tree, "no_connect")
+            if _direct(node, "at") is not None
+        }
+        # U1.3 is already a hidden no_connect pin in its embedded symbol.
+        self.assertNotIn(pins[("U1", "3")]["point"], markers)
+        for key in ("U1.11", "U1.14", "U1.15", "U1.17", "U1.20"):
+            self.assertIn(pins[key]["point"], markers)
+        marker_point = pins[("U1", "11")]["point"]
         marker = next(
             node for node in _all(tree, "no_connect")
             if _direct(node, "at") is not None
             and (round(float(_direct(node, "at")[1]), 3),
-                 round(float(_direct(node, "at")[2]), 3)) == point
+                 round(float(_direct(node, "at")[2]), 3)) == marker_point
         )
         tree.remove(marker)
-        self.assertTrue(any("U1.3" in issue for issue in required_no_connect_issues(tree)))
+        self.assertTrue(any("U1.11" in issue for issue in required_no_connect_issues(tree)))
 
     def test_common_ground_contract_detects_a_wrong_decoupler_net(self) -> None:
         tree = self.fresh_tree()

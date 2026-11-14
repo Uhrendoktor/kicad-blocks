@@ -38,11 +38,16 @@ GROUP_TOP_PADDING_MM = 20.32
 GROUP_BOTTOM_PADDING_MM = 7.62
 FRAME_CONTENT_PADDING_MM = 2.54
 FIELD_SYMBOL_MAX_GAP_MM = 9.00
-WIRE_LENGTH_BUDGETS_MM = {"power-switch": 105.00}
+WIRE_LENGTH_BUDGETS_MM = {"power-switch": 95.00}
 COMMON_PIN_NET_GROUPS = (
-    {"name": "GND", "pins": (("C2", "2"), ("C3", "2"))},
+    {
+        "name": "GND",
+        "pins": (("C2", "2"), ("C3", "2")),
+        "wire_connected": True,
+        "single_label": True,
+    },
 )
-REQUIRED_NO_CONNECT_PINS = ("U1.3",)
+REQUIRED_NO_CONNECT_PINS = ("U1.11", "U1.14", "U1.15", "U1.17", "U1.20")
 GROUP_DESCRIPTION_FONT_MM = 0.65
 GROUP_EVIDENCE = {
     "datasheet": DATASHEET,
@@ -98,8 +103,8 @@ SCHEMATIC_GROUPS = (
         "layout": {
             "anchor": "U1", "anchor_y_mm": 137.16,
             "constraints": (
-                {"kind": "offset", "component": "C1", "to": "U1", "dx_mm": -20.32, "dy_mm": -35.56},
-                {"kind": "offset", "component": "C2", "to": "U1", "dx_mm": 0.0, "dy_mm": -35.56},
+                {"kind": "offset", "component": "C1", "to": "U1", "dx_mm": 5.08, "dy_mm": -35.56},
+                {"kind": "offset", "component": "C2", "to": "U1", "dx_mm": 15.24, "dy_mm": -35.56},
                 {"kind": "offset", "component": "C3", "to": "C2", "dx_mm": 5.08, "dy_mm": 0.0},
                 {"kind": "pin_offset", "component": "R55", "to": "U1", "pin": "6", "dx_mm": -7.62, "dy_mm": 7.62},
             ),
@@ -126,7 +131,7 @@ SCHEMATIC_GROUPS = (
         "layout": {
             "anchor": "T4", "anchor_y_mm": 104.14,
             "constraints": (
-                {"kind": "offset", "component": "T1", "to": "T4", "dx_mm": 40.64, "dy_mm": 0.0},
+                {"kind": "offset", "component": "T1", "to": "T4", "dx_mm": 25.40, "dy_mm": 0.0},
                 {"kind": "midpoint_offset", "component": "R10", "between": ("T4", "T1"), "dx_mm": 0.0, "dy_mm": 17.78},
                 {"kind": "offset", "component": "R11", "to": "R10", "dx_mm": 7.62, "dy_mm": 7.62},
                 {"kind": "offset", "component": "R13", "to": "R11", "dx_mm": 20.32, "dy_mm": 0.0},
@@ -787,7 +792,7 @@ def generate_reference_schematic(destination: Path) -> Path:
         # Component origins are resolved exclusively from SCHEMATIC_GROUPS layout constraints.
         ("U1", "Interface_USB", "STUSB4500QTR", "STUSB4500QTR", None, {
             "1": ("CC1", "local", ""), "2": ("CC1", "local", ""),
-            "3": ("NC", "nc", ""), "4": ("CC2", "local", ""),
+            "4": ("CC2", "local", ""),
             "5": ("CC2", "local", ""), "6": ("RESET", "hier", "input"),
             "7": ("SCL", "hier", "input"), "8": ("SDA", "hier", "bidirectional"),
             "9": ("DISCH", "local", ""), "10": ("GND", "hier", "passive"),
@@ -871,13 +876,13 @@ def generate_reference_schematic(destination: Path) -> Path:
             "1": ("VSNK_GATE", "local", ""), "2": ("VBUS_EN_SNK", "local", ""),
         }),
         ("R2", "Device", "R", "1k", None, {
-            "1": ("DISCH", "local", ""), "2": ("VSNK", "local", ""),
+            "1": ("DISCH", "local", ""), "2": ("VSNK", "hier", "output"),
         }),
         ("C10", "Device", "C", "100nF", None, {
-            "1": ("VSNK", "local", ""), "2": ("GND", "local", ""),
+            "1": ("VSNK", "hier", "output"), "2": ("GND", "local", ""),
         }),
         ("D11", "Device", "D_TVS", "ESDA25P35-1U1M", None, {
-            "1": ("VSNK", "local", ""), "2": ("GND", "local", ""),
+            "1": ("VSNK", "hier", "output"), "2": ("GND", "local", ""),
         }),
     ]
 
@@ -965,12 +970,14 @@ def generate_reference_schematic(destination: Path) -> Path:
             # Keep the reference above the ESD-array body and the long part
             # name to its right, clear of the two CC-line escape wires.
             reference_x, reference_y = sx, sy - 8.89
-            value_x, value_y = sx + 10.16, sy
+            value_x, value_y = sx + 6.35, sy
             value_justify = "left"
         elif reference.startswith("D"):
             # Keep diode identifiers close to the symbol, not floating above it.
             reference_x, reference_y = sx, sy - 6.35
-            value_x, value_y = sx, sy - 3.81
+            value_x, value_y = (
+                sx, sy + 7.62 if reference == "D50" else sy - 3.81
+            )
         elif reference.startswith("C"):
             # Put references on opposite sides of the decouplers where
             # adjacent bodies would otherwise crowd the field glyphs.
@@ -1058,6 +1065,12 @@ def generate_reference_schematic(destination: Path) -> Path:
                         label_y = py + dy * 2.54
                         justify = "right" if dx < 0 else "left"
                         label_angle = 0
+                        if net == "GND" and kind == "hier":
+                            # Rotate hierarchical GND ports to follow their
+                            # physical wire twig, including downward stubs.
+                            label_angle = {
+                                0: 180, 90: 90, 180: 0, 270: 270,
+                            }[angle]
                         if reference == "D1" and pin["number"] in {"1", "2"}:
                             # D1's ground pin points down; fan CC labels out
                             # above the ESD array so they do not cross wires.
@@ -1087,10 +1100,10 @@ def generate_reference_schematic(destination: Path) -> Path:
                             justify = "right"
                             label_angle = 0
                         if reference in {"R1", "R4"} and net in {"VBUS_FILTERED", "VREG_2V7"}:
-                            # Rotate the two crowded monitor labels and stagger
-                            # their vertical stubs so the routes stay disjoint.
-                            label_x = px - (15.24 if net == "VBUS_FILTERED" else 10.16)
-                            label_y = py - (5.08 if net == "VBUS_FILTERED" else 7.62)
+                            # Keep each monitor label on a short, straight
+                            # vertical twig instead of a long L-shaped detour.
+                            label_x = px
+                            label_y = py - 5.08
                             justify = "left"
                             label_angle = 90
                         if reference == "U1":
@@ -1216,6 +1229,40 @@ def generate_reference_schematic(destination: Path) -> Path:
             raise ValueError(f"Expected {net} local label is missing at {reference}.{pin_number}.")
         label_points.pop(point)
 
+    def remove_hierarchical_label(reference: str, pin_number: str, net: str) -> None:
+        point = pin_world_points[(reference, pin_number)]
+        label = label_points.get(point)
+        if label is None or label[0] != net or label[1] != "hier":
+            raise ValueError(
+                f"Expected {net} hierarchical label is missing at {reference}.{pin_number}."
+            )
+        label_points.pop(point)
+
+    # C2/C3 are parallel bypass parts. Join their GND terminals physically
+    # and expose that shared net through one downward-facing hierarchical port.
+    c2_ground = pin_world_points[("C2", "2")]
+    c3_ground = pin_world_points[("C3", "2")]
+    if abs(c2_ground[1] - c3_ground[1]) > 0.001:
+        raise ValueError(f"C2/C3 ground pins are not aligned: {c2_ground}, {c3_ground}")
+    remove_hierarchical_label("C2", "2", "GND")
+    remove_hierarchical_label("C3", "2", "GND")
+    shared_ground_junction = (
+        round((c2_ground[0] + c3_ground[0]) / 2, 3), c2_ground[1],
+    )
+    shared_ground_port = (
+        shared_ground_junction[0], round(shared_ground_junction[1] + 2.54, 3),
+    )
+    add_route("GND", [c2_ground, c3_ground], "c2-c3-shared-ground-rail")
+    add_junction(shared_ground_junction, "GND:C2-C3-shared-branch")
+    add_route(
+        "GND", [shared_ground_junction, shared_ground_port],
+        "c2-c3-shared-ground-port",
+    )
+    label_points[shared_ground_port] = (
+        "GND", "hier", "passive",
+        shared_ground_port[0], shared_ground_port[1], "left", 90,
+    )
+
     # R1.2 and R4.2 share one physical wire network. Keep one local label on
     # that island; U1.18 carries the matching label on a disconnected island.
     # Connect the PMOS common-source midpoint directly to the resistor
@@ -1263,18 +1310,15 @@ def generate_reference_schematic(destination: Path) -> Path:
     c1_vreg_1v2 = pin_world_points[("C1", "1")]
     remove_local_label("U1", "21", "VREG_1V2")
     remove_local_label("C1", "1", "VREG_1V2")
-    vreg_1v2_guard_x = u1_vreg_1v2[0] - 2.54
-    vreg_1v2_escape_x = c1_vreg_1v2[0] + 6.35
-    add_route("VREG_1V2", [
-        u1_vreg_1v2,
-        (u1_vreg_1v2[0], 113.03),
-        (vreg_1v2_guard_x, 113.03),
-        (vreg_1v2_guard_x, 115.57),
-        (vreg_1v2_escape_x, 115.57),
-        (vreg_1v2_escape_x, 88.90),
-        (c1_vreg_1v2[0], 88.90),
-        c1_vreg_1v2,
-    ], "u1-vreg-1v2-to-c1-around-controller-pins")
+    if abs(u1_vreg_1v2[0] - c1_vreg_1v2[0]) > 0.001:
+        raise ValueError(
+            f"C1.1 must align with U1.21 for a direct bypass route: "
+            f"{c1_vreg_1v2}, {u1_vreg_1v2}"
+        )
+    add_route(
+        "VREG_1V2", [u1_vreg_1v2, c1_vreg_1v2],
+        "u1-vreg-1v2-direct-to-c1",
+    )
 
     u1_vreg_2v7 = pin_world_points[("U1", "23")]
     c2_vreg_2v7 = pin_world_points[("C2", "1")]
@@ -1464,7 +1508,7 @@ def generate_reference_schematic(destination: Path) -> Path:
         ["title_block",
             ["title", _Quoted("STUSB4500 USB Type-C / USB Power Delivery Sink")],
             ["date", _Quoted("2026-11-14")],
-            ["rev", _Quoted("Electrical and layout refinement 5")],
+            ["rev", _Quoted("Electrical and layout refinement 6")],
             ["company", _Quoted("KiCad Blocks — Reference design")],
             ["comment", "1", _Quoted("Source: ST DS12499 Rev. 8, Figure 10")],
             ["comment", "2", _Quoted("Reference only: verify component ratings, footprints and thermal design before production.")],
