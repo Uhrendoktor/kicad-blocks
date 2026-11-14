@@ -64,11 +64,14 @@ class BlockOccurrence:
 
 @dataclass(frozen=True, slots=True)
 class BlockRecord:
+    """Validated block asset directory with the normalized manifest used by the plugin."""
+
     path: Path
     manifest: BlockManifest
 
     @property
     def name(self) -> str:
+        """Return the display name recorded in the block manifest."""
         return str(self.manifest["name"])
 
     @property
@@ -82,10 +85,17 @@ class BlockRecord:
 
     @property
     def implementation(self) -> Path:
+        """Resolve the manifest's default schematic implementation asset."""
         return self.path / resolve_variant_implementation(self.manifest, "")
 
 
 def atomic_write(path: Path, content: str) -> None:
+    """Atomically replace a file after its contents have been flushed to disk.
+
+    The temporary file is created beside the destination so the final rename
+    stays on one filesystem. On failure, the previous destination remains
+    intact and the temporary file is removed.
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, temp_name = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
     try:
@@ -299,6 +309,11 @@ def ensure_stable_block_identity(block: BlockRecord) -> BlockRecord:
 
 
 def read_manifest(block_path: Path) -> BlockManifest:
+    """Load, validate and normalize a shared or project-local block manifest.
+
+    Legacy manifests receive the defaults required by the current schema at
+    this boundary. Callers therefore consume one stable BlockManifest shape.
+    """
     manifest_path = block_path / MANIFEST_NAME
     try:
         raw_manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -518,6 +533,11 @@ def _record(path: Path) -> BlockRecord:
 
 
 def list_blocks(root: Path) -> list[BlockRecord]:
+    """Return valid shared blocks in a library root, sorted by display name.
+
+    Corrupt or incomplete block folders are skipped so one damaged asset does
+    not prevent the library browser from showing other usable blocks.
+    """
     root = Path(root).expanduser().resolve()
     if not root.exists():
         return []
@@ -533,6 +553,7 @@ def list_blocks(root: Path) -> list[BlockRecord]:
 
 
 def find_block_by_id(root: Path, block_id: str) -> BlockRecord:
+    """Find one shared block by its stable UUID, rejecting unknown identities."""
     for record in list_blocks(root):
         if record.manifest["block_id"] == block_id:
             return record
@@ -1040,6 +1061,11 @@ def local_copy_for_instance(project_dir: Path, instance_id: str) -> BlockRecord 
 
 
 def unlink_instance_local_copy(project_dir: Path, instance_id: str) -> None:
+    """Remove the project-side binding for one schematic symbol KIID.
+
+    The project-local block asset itself is retained; only the lookup record
+    connecting this schematic instance to that asset is removed.
+    """
     path = _instance_links_path(project_dir)
     if not path.is_file():
         return
@@ -2071,6 +2097,7 @@ def resolve_dependency_graph(
 
 
 def settings_file() -> Path:
+    """Return the per-user settings file path, independent of the project."""
     return Path.home() / ".config" / "kicad-blocks" / "settings.json"
 
 
