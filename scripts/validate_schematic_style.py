@@ -15,12 +15,18 @@ sys.path.insert(0, str(ROOT / "examples" / "stusb4500"))
 
 from generate_reference import (
     ADJACENT_COMPONENT_PAIRS,
+    COMMON_PIN_NET_GROUPS,
     COMPONENT_PROPERTY_LIMITS_MM,
     DIRECT_DECOUPLERS,
+    FIELD_SYMBOL_MAX_GAP_MM,
+    FRAME_CONTENT_PADDING_MM,
+    GROUP_EVIDENCE,
     FORBIDDEN_LOCAL_LABELS,
     GROUND_PINS_DOWN,
     GROUP_GAP_MM,
+    REQUIRED_NO_CONNECT_PINS,
     SCHEMATIC_GROUPS,
+    WIRE_LENGTH_BUDGETS_MM,
     _uid,
 )
 from kicad_blocks.pcb_layout import _all, _direct, _head, parse_sexpr
@@ -30,16 +36,19 @@ STYLE_RULES = {
         "name": "wire-geometry",
         "severity": "error",
         "description": "No diagonal, crossing, overlapping or unmarked-branch wires.",
+        "scope": "generic",
     },
     "SCH002": {
         "name": "label-topology",
         "severity": "error",
         "description": "Local labels must join distinct wire islands and hierarchical labels must terminate a twig.",
+        "scope": "generic",
     },
     "SCH003": {
         "name": "label-wire-clearance",
         "severity": "error",
         "description": "No wire may pass through a label's visible glyph rectangle.",
+        "scope": "generic",
     },
     "SCH004": {
         "name": "physical-net-connectivity",
@@ -65,11 +74,67 @@ STYLE_RULES = {
         "name": "annotation-layout",
         "severity": "error",
         "description": "Use correctly sized native text boxes with consistent padding and no overlaps.",
+        "scope": "generic",
     },
     "SCH009": {
         "name": "group-containment",
         "severity": "error",
         "description": "Pins, fields, labels, wires and annotations must remain inside their assigned group frame.",
+        "scope": "profile",
+    },
+    "SCH010": {
+        "name": "symbol-field-clearance",
+        "severity": "error",
+        "description": "Reference/value fields must clear symbol bodies, pins, wires and other visible elements.",
+        "scope": "generic",
+    },
+    "SCH011": {
+        "name": "block-annotation-structure",
+        "severity": "error",
+        "description": "Block titles are single-line and descriptive comment boxes have visible outlines.",
+        "scope": "generic",
+    },
+    "SCH012": {
+        "name": "frame-content-clearance",
+        "severity": "error",
+        "description": "Labels and descriptive panels keep a minimum inset from functional frame borders.",
+        "scope": "profile",
+    },
+    "SCH013": {
+        "name": "wire-obstacle-clearance",
+        "severity": "error",
+        "description": "Wires may terminate at intended pins but must not cross symbol bodies or intermediate pins.",
+        "scope": "generic",
+    },
+    "SCH014": {
+        "name": "shared-pin-net-contracts",
+        "severity": "error",
+        "description": "Declared paired pins share the required logical net.",
+        "scope": "profile",
+    },
+    "SCH015": {
+        "name": "required-no-connects",
+        "severity": "error",
+        "description": "Designated unused pins carry explicit no-connect markers.",
+        "scope": "profile",
+    },
+    "SCH016": {
+        "name": "wire-compactness",
+        "severity": "warning",
+        "description": "Per-group total wire length is scored against a configurable routing budget.",
+        "scope": "profile",
+    },
+    "SCH017": {
+        "name": "circuit-documentation",
+        "severity": "error",
+        "description": "Non-trivial circuit groups identify their component function and source evidence.",
+        "scope": "profile",
+    },
+    "SCH018": {
+        "name": "label-text-collision",
+        "severity": "error",
+        "description": "Label glyphs may not overlap other labels, fields or annotation boxes.",
+        "scope": "generic",
     },
 }
 
@@ -381,8 +446,13 @@ def _wire_networks(tree: list):
         for node in _all(tree, "junction") if _direct(node, "at") is not None
     }
     pin_info = _pin_world_info(tree)
+    label_points = {
+        (round(float(_direct(node, "at")[1]), 3), round(float(_direct(node, "at")[2]), 3))
+        for kind in ("label", "hierarchical_label", "global_label")
+        for node in _all(tree, kind) if _direct(node, "at") is not None
+    }
     points = {info["point"] for info in pin_info.values()}
-    points |= junctions | {point for segment in segments for point in segment}
+    points |= junctions | label_points | {point for segment in segments for point in segment}
     dsu = _DSU()
     for start, end in segments:
         axis = 0 if abs(start[1] - end[1]) <= TOL else 1
@@ -677,19 +747,412 @@ def frame_and_component_issues(tree: list) -> list[str]:
     return issues
 
 
-def check_schematic_style(tree: list) -> list[str]:
+
+def _walk_nodes(node: list):
+    """Yield an S-expression node and every nested child."""
+    yield node
+    for child in node[1:]:
+        if isinstance(child, list):
+            yield from _walk_nodes(child)
+
+
+def _local_to_world(sx: float, sy: float, rotation: int, x: float, y: float):
+    if rotation == 0:
+        return sx + x, sy - y
+    if rotation == 90:
+        return sx - y, sy - x
+    if rotation == 180:
+        return sx - x, sy + y
+    if rotation == 270:
+        return sx + y, sy + x
+    raise ValueError(f"Unsupported symbol rotation {rotation}")
+
+
+def _symbol_body_bounds(tree: list) -> dict[str, tuple[float, float, float, float]]:
+    """Approximate symbol body bounds from library rectangles, paths, circles and arcs."""
+    library = _direct(tree, "lib_symbols")
+    definitions = {}
+    if library is not None:
+        definitions = {
+            str(node[1]): node for node in _all(library, "symbol") if len(node) > 1
+        }
+    result = {}
+    for reference, instance in _instances(tree).items():
+        lib_id, at = _direct(instance, "lib_id"), _direct(instance, "at")
+        if lib_id is None or at is None:
+            continue
+        definition = definitions.get(str(lib_id[1]))
+        if definition is None:
+            continue
+        sx, sy, rotation = float(at[1]), float(at[2]), int(float(at[3]))
+        points = []
+        for node in _walk_nodes(definition):
+            kind = _head(node)
+            local_points = []
+            if kind == "rectangle":
+                for field in ("start", "end"):
+                    point = _direct(node, field)
+                    if point is not None:
+                        local_points.append((float(point[1]), float(point[2])))
+            elif kind in {"polyline", "polygon"}:
+                pts = _direct(node, "pts")
+                if pts is not None:
+                    local_points.extend(
+                        (float(point[1]), float(point[2]))
+                        for point in _all(pts, "xy")
+                    )
+            elif kind == "circle":
+                center, radius = _direct(node, "center"), _direct(node, "radius")
+                if center is not None and radius is not None:
+                    cx, cy, r = float(center[1]), float(center[2]), abs(float(radius[1]))
+                    local_points.extend(((cx - r, cy - r), (cx + r, cy + r)))
+            elif kind == "arc":
+                for field in ("start", "mid", "end"):
+                    point = _direct(node, field)
+                    if point is not None:
+                        local_points.append((float(point[1]), float(point[2])))
+            points.extend(
+                _local_to_world(sx, sy, rotation, x, y)
+                for x, y in local_points
+            )
+        if points:
+            xs, ys = [point[0] for point in points], [point[1] for point in points]
+            result[reference] = (
+                min(xs), min(ys), max(xs) - min(xs), max(ys) - min(ys),
+            )
+    return result
+
+
+def _visible_properties(tree: list):
+    fields = []
+    for reference, instance in _instances(tree).items():
+        for name in ("Reference", "Value"):
+            prop = _property(instance, name)
+            if prop is None:
+                continue
+            effects = _direct(prop, "effects")
+            if effects is not None and _direct(effects, "hide") is not None:
+                continue
+            bounds = _text_visual_bounds(str(prop[2]), prop)
+            if bounds is not None:
+                fields.append((reference, name, bounds, prop))
+    return fields
+
+
+def _box_gap(first, second) -> float:
+    ax, ay, aw, ah = first
+    bx, by, bw, bh = second
+    dx = max(0.0, bx - (ax + aw), ax - (bx + bw))
+    dy = max(0.0, by - (ay + ah), ay - (by + bh))
+    return hypot(dx, dy)
+
+
+def symbol_field_clearance_issues(tree: list) -> list[str]:
+    """Check visible fields against wires, pins, symbol bodies and other UI objects."""
+    issues = []
+    bodies = _symbol_body_bounds(tree)
+    fields = _visible_properties(tree)
+    pin_info = _pin_world_info(tree)
+    segments = [segment for segment in _segments(tree) if len(segment) == 2]
+    text_boxes = []
+    for index, node in enumerate(_all(tree, "text_box")):
+        at, size = _direct(node, "at"), _direct(node, "size")
+        if at is not None and size is not None:
+            text_boxes.append((f"text_box {index}", (
+                float(at[1]), float(at[2]), float(size[1]), float(size[2]),
+            )))
+    label_boxes = [
+        (str(node[1]), _text_visual_bounds(str(node[1]), node))
+        for kind in ("label", "hierarchical_label", "global_label")
+        for node in _all(tree, kind)
+    ]
+    label_boxes = [(name, box) for name, box in label_boxes if box is not None]
+
+    for reference, name, bounds, _prop in fields:
+        body = bodies.get(reference)
+        if body is not None and _overlap(bounds, body):
+            if name == "Value" and _rect_inside(bounds, body):
+                pass  # A value may be intentionally centered inside a passive body.
+            elif _rect_inside(bounds, body):
+                issues.append(f"{reference} {name} is embedded inside its symbol body")
+            else:
+                issues.append(f"{reference} {name} partially straddles its symbol body")
+        elif body is not None and _box_gap(bounds, body) > FIELD_SYMBOL_MAX_GAP_MM + TOL:
+            gap = _box_gap(bounds, body)
+            issues.append(
+                f"{reference} {name} is {gap:.2f} mm from its symbol body; "
+                f"maximum is {FIELD_SYMBOL_MAX_GAP_MM:.2f} mm"
+            )
+        for start, end in segments:
+            if _strict_line_hits_box(start, end, bounds):
+                issues.append(f"{reference} {name} overlaps wire {start}->{end}")
+        for (pin_ref, pin_number), info in pin_info.items():
+            if _inside(info["point"], bounds):
+                issues.append(f"{reference} {name} overlaps pin {pin_ref}.{pin_number}")
+        for other_ref, other_body in bodies.items():
+            if other_ref != reference and _overlap(bounds, other_body):
+                issues.append(f"{reference} {name} overlaps symbol body {other_ref}")
+        for title, box in text_boxes:
+            if _overlap(bounds, box):
+                issues.append(f"{reference} {name} overlaps {title}")
+        for label, box in label_boxes:
+            if _overlap(bounds, box):
+                issues.append(f"{reference} {name} overlaps label {label!r}")
+
+    for index, (ref_a, name_a, box_a, _prop_a) in enumerate(fields):
+        for ref_b, name_b, box_b, _prop_b in fields[index + 1:]:
+            if _overlap(box_a, box_b):
+                if ref_a == ref_b:
+                    issues.append(f"{ref_a} {name_a} overlaps its {name_b} field")
+                else:
+                    issues.append(f"{ref_a} {name_a} overlaps {ref_b} {name_b}")
+    return issues
+
+
+def block_annotation_issues(tree: list) -> list[str]:
+    """Require one-line block titles and bordered description/comment boxes."""
+    issues = []
+    for node in _all(tree, "text_box"):
+        uid_node = _direct(node, "uuid")
+        uid = str(uid_node[1]) if uid_node is not None else ""
+        value = str(node[1])
+        if "zone-title:" in uid and ("\n" in value or "\r" in value):
+            issues.append(f"block title {uid} must be a single line")
+        if "group-description:" in uid:
+            stroke = _direct(node, "stroke")
+            width = _direct(stroke, "width") if stroke is not None else None
+            if width is None or float(width[1]) <= 0:
+                issues.append(f"group comment {uid} must have its own visible box outline")
+    return issues
+
+
+def _rect_inside_margin(inner, outer, margin: float) -> bool:
+    ix, iy, iw, ih = inner
+    ox, oy, ow, oh = outer
+    return (
+        ix >= ox + margin - TOL
+        and iy >= oy + margin - TOL
+        and ix + iw <= ox + ow - margin + TOL
+        and iy + ih <= oy + oh - margin + TOL
+    )
+
+
+def frame_content_clearance_issues(tree: list) -> list[str]:
+    """Keep visible labels and group comment panels inset from their owning frame."""
+    issues = []
+    frames = {zone: _frame_bounds(tree, zone) for zone in ZONES}
+    for kind in ("label", "hierarchical_label", "global_label"):
+        for node in _all(tree, kind):
+            bounds = _text_visual_bounds(str(node[1]), node)
+            at = _direct(node, "at")
+            if bounds is None or at is None:
+                continue
+            anchor = (float(at[1]), float(at[2]))
+            owners = [
+                (zone, rect) for zone, rect in frames.items()
+                if rect is not None and _inside(anchor, rect)
+            ]
+            if len(owners) == 1:
+                zone, rect = owners[0]
+                if not _rect_inside_margin(bounds, rect, FRAME_CONTENT_PADDING_MM):
+                    issues.append(
+                        f"{kind} {str(node[1])!r} is closer than "
+                        f"{FRAME_CONTENT_PADDING_MM:.2f} mm to frame {zone}"
+                    )
+    for node in _all(tree, "text_box"):
+        uid_node = _direct(node, "uuid")
+        uid = str(uid_node[1]) if uid_node is not None else ""
+        if "group-description:" not in uid:
+            continue
+        at, size = _direct(node, "at"), _direct(node, "size")
+        if at is None or size is None:
+            continue
+        box = (float(at[1]), float(at[2]), float(size[1]), float(size[2]))
+        zone = next((z for z in ZONES if f"group-description:{z}" in uid), None)
+        rect = frames.get(zone) if zone is not None else None
+        if rect is not None and not _rect_inside_margin(box, rect, FRAME_CONTENT_PADDING_MM):
+            issues.append(f"group comment {uid} violates frame content padding")
+    return issues
+
+
+def wire_obstacle_issues(tree: list) -> list[str]:
+    """Reject wire segments through symbol bodies and intermediate pins."""
+    issues = []
+    bodies = _symbol_body_bounds(tree)
+    pin_info = _pin_world_info(tree)
+    for index, segment in enumerate(_segments(tree)):
+        if len(segment) != 2:
+            continue
+        start, end = segment
+        for reference, bounds in bodies.items():
+            if _strict_line_hits_box(start, end, bounds):
+                issues.append(f"wire {index} penetrates symbol body {reference}")
+        for (reference, number), info in pin_info.items():
+            point = info["point"]
+            if point not in (start, end) and _on_segment(point, start, end):
+                issues.append(f"wire {index} passes through intermediate pin {reference}.{number}")
+    return issues
+
+
+def common_pin_net_issues(tree: list) -> list[str]:
+    """Check configured pin groups against a common named logical net."""
+    issues = []
+    dsu, pin_info = _wire_networks(tree)
+    names_by_root = {}
+    for kind in ("label", "hierarchical_label", "global_label"):
+        for node in _all(tree, kind):
+            at = _direct(node, "at")
+            if at is None:
+                continue
+            point = (round(float(at[1]), 3), round(float(at[2]), 3))
+            names_by_root.setdefault(dsu.find(point), set()).add(str(node[1]))
+    for group in COMMON_PIN_NET_GROUPS:
+        expected = str(group["name"])
+        roots = []
+        for reference, number in group["pins"]:
+            info = pin_info.get((reference, number))
+            if info is None:
+                issues.append(f"common-net rule {expected} references missing pin {reference}.{number}")
+                continue
+            root = dsu.find(info["point"])
+            roots.append(root)
+            if expected not in names_by_root.get(root, set()):
+                issues.append(f"{reference}.{number} must belong to common net {expected}")
+        if len(roots) > 1 and len(set(roots)) > 1:
+            if any(expected not in names_by_root.get(root, set()) for root in roots):
+                issues.append(f"configured pins {group['pins']} do not all share {expected}")
+    return issues
+
+
+def required_no_connect_issues(tree: list) -> list[str]:
+    """Require explicit no-connect markers at configured intentionally-unused pins."""
+    issues = []
+    pin_info = _pin_world_info(tree)
+    markers = {
+        (round(float(_direct(node, "at")[1]), 3), round(float(_direct(node, "at")[2]), 3))
+        for node in _all(tree, "no_connect") if _direct(node, "at") is not None
+    }
+    for key in REQUIRED_NO_CONNECT_PINS:
+        reference, number = key.split(".", 1)
+        info = pin_info.get((reference, number))
+        if info is None:
+            issues.append(f"required NC rule references missing pin {key}")
+        elif info["point"] not in markers:
+            issues.append(f"unused pin {key} must have an explicit no-connect marker")
+    return issues
+
+
+def wire_compactness_issues(tree: list, budgets: dict | None = None) -> list[str]:
+    """Score total internal wire length in each group against a configurable budget."""
+    issues = []
+    active_budgets = WIRE_LENGTH_BUDGETS_MM if budgets is None else budgets
+    for zone, limit in active_budgets.items():
+        frame = _frame_bounds(tree, zone)
+        if frame is None:
+            issues.append(f"wire compactness rule references missing frame {zone}")
+            continue
+        total = 0.0
+        for segment in _segments(tree):
+            if len(segment) != 2:
+                continue
+            start, end = segment
+            if _inside(start, frame) and _inside(end, frame):
+                total += hypot(end[0] - start[0], end[1] - start[1])
+        score = total / float(limit)
+        if score > 1.0 + TOL:
+            issues.append(
+                f"group {zone} wire compactness score is {score:.3f} "
+                f"({total:.2f}/{float(limit):.2f} mm); maximum score is 1.000"
+            )
+    return issues
+
+
+def circuit_documentation_issues(tree: list) -> list[str]:
+    """Require non-trivial circuit groups to identify purpose and source evidence."""
+    issues = []
+    text_by_uuid = {
+        str(uid[1]): str(node[1])
+        for node in _all(tree, "text_box")
+        if (uid := _direct(node, "uuid")) is not None
+    }
+    evidence_ok = bool(GROUP_EVIDENCE.get("datasheet") or GROUP_EVIDENCE.get("screenshot_asset"))
+    if not evidence_ok:
+        issues.append("group evidence must provide a datasheet or reviewed screenshot asset")
+    if not GROUP_EVIDENCE.get("screenshot_asset") and not (
+        GROUP_EVIDENCE.get("document") and GROUP_EVIDENCE.get("page") and GROUP_EVIDENCE.get("figure")
+    ):
+        issues.append("group evidence must identify its document, page and figure")
+    for group in SCHEMATIC_GROUPS:
+        members = tuple(group.get("documentation_members", ()))
+        if not members:
+            continue
+        description_id = _uid(f"graphic:text:group-description:{group['id']}")
+        description = text_by_uuid.get(description_id, "")
+        missing = [reference for reference in members if reference not in description]
+        if missing:
+            issues.append(
+                f"group {group['id']} must describe circuit members: {', '.join(missing)}"
+            )
+    return issues
+
+
+def label_text_collision_issues(tree: list) -> list[str]:
+    """Reject label glyph overlap with other labels, fields and annotation boxes."""
+    issues = []
+    labels = []
+    for kind in ("label", "hierarchical_label", "global_label"):
+        for node in _all(tree, kind):
+            bounds = _text_visual_bounds(str(node[1]), node)
+            at = _direct(node, "at")
+            if bounds is not None and at is not None:
+                labels.append((
+                    kind, str(node[1]),
+                    (float(at[1]), float(at[2])), bounds,
+                ))
+    for index, (kind, name, anchor, bounds) in enumerate(labels):
+        for other_kind, other_name, other_anchor, other_bounds in labels[index + 1:]:
+            if anchor != other_anchor and _overlap(bounds, other_bounds):
+                issues.append(f"{kind} {name!r} overlaps {other_kind} {other_name!r}")
+    visible_fields = _visible_properties(tree)
+    for kind, name, _anchor, bounds in labels:
+        for reference, field_name, field_bounds, _prop in visible_fields:
+            if _overlap(bounds, field_bounds):
+                issues.append(f"{kind} {name!r} overlaps {reference} {field_name}")
+        for index, node in enumerate(_all(tree, "text_box")):
+            at, size = _direct(node, "at"), _direct(node, "size")
+            if at is None or size is None:
+                continue
+            box = (float(at[1]), float(at[2]), float(size[1]), float(size[2]))
+            if _overlap(bounds, box):
+                issues.append(f"{kind} {name!r} overlaps text_box {index}")
+    return issues
+
+
+def check_schematic_style(tree: list, generic_only: bool = False) -> list[str]:
     """Run every registered lint rule and return Clippy-style diagnostics."""
-    checks = (
+    generic_checks = (
         ("SCH001", wire_geometry_issues),
         ("SCH002", label_network_issues),
         ("SCH003", label_wire_overlap_issues),
+        ("SCH008", text_box_issues),
+        ("SCH010", symbol_field_clearance_issues),
+        ("SCH011", block_annotation_issues),
+        ("SCH013", wire_obstacle_issues),
+        ("SCH018", label_text_collision_issues),
+    )
+    profile_checks = (
         ("SCH004", physical_topology_issues),
         ("SCH005", pin_orientation_issues),
         ("SCH006", component_spacing_issues),
         ("SCH007", group_metadata_issues),
-        ("SCH008", text_box_issues),
         ("SCH009", frame_and_component_issues),
+        ("SCH012", frame_content_clearance_issues),
+        ("SCH014", common_pin_net_issues),
+        ("SCH015", required_no_connect_issues),
+        ("SCH016", wire_compactness_issues),
+        ("SCH017", circuit_documentation_issues),
     )
+    checks = generic_checks if generic_only else (*generic_checks, *profile_checks)
     return [
         f"{rule_id}: {issue}"
         for rule_id, checker in checks
@@ -697,9 +1160,14 @@ def check_schematic_style(tree: list) -> list[str]:
     ]
 
 
-def validate_schematic_style(path: Path) -> dict[str, int]:
+def check_generic_schematic_style(tree: list) -> list[str]:
+    """Run only reusable geometry and presentation checks."""
+    return check_schematic_style(tree, generic_only=True)
+
+
+def validate_schematic_style(path: Path, generic_only: bool = False) -> dict[str, int]:
     tree = parse_sexpr(Path(path).read_text(encoding="utf-8"))
-    issues = check_schematic_style(tree)
+    issues = check_schematic_style(tree, generic_only=generic_only)
     if issues:
         raise ValueError("Schematic style validation failed:\n- " + "\n- ".join(issues))
     return {
@@ -719,15 +1187,24 @@ def main() -> None:
         "--list-rules", action="store_true",
         help="list registered schematic lint rules and their severity",
     )
+    parser.add_argument(
+        "--generic-only", action="store_true",
+        help="run reusable geometry/presentation rules without project contracts",
+    )
     args = parser.parse_args()
     if args.list_rules:
         for rule_id, rule in STYLE_RULES.items():
-            print(f"{rule_id} [{rule['severity']}] {rule['name']}: {rule['description']}")
+            scope = rule.get("scope", "profile")
+            print(
+                f"{rule_id} [{rule['severity']}] [{scope}] "
+                f"{rule['name']}: {rule['description']}"
+            )
         return
     if args.schematic is None:
         parser.error("schematic is required unless --list-rules is used")
-    totals = validate_schematic_style(args.schematic)
-    print("Schematic style audit passed: " + ", ".join(f"{k}={v}" for k, v in totals.items()))
+    totals = validate_schematic_style(args.schematic, generic_only=args.generic_only)
+    mode = "generic schematic" if args.generic_only else "schematic profile"
+    print(f"{mode.title()} style audit passed: " + ", ".join(f"{k}={v}" for k, v in totals.items()))
 
 
 if __name__ == "__main__":
