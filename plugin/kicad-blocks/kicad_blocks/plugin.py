@@ -14,7 +14,7 @@ import tempfile
 import time
 from collections.abc import Callable, Iterator, Sequence
 from pathlib import Path
-from typing import TYPE_CHECKING, Protocol, cast
+from typing import TYPE_CHECKING, Protocol, TypedDict, cast
 
 # The core block model and IPC helpers must remain importable in headless
 # environments. Load Tkinter only when the interactive manager is invoked.
@@ -36,7 +36,14 @@ else:
 
 from .auto_dependencies import synchronize_block_dependencies
 from .extraction import selected_sheet_file, selected_sheet_instance_uuid
-from .manifest_types import BlockLayoutInput, BlockParameterInput, BlockVariantInput
+from .manifest_types import (
+    BlockLayoutEditInput,
+    BlockParameter,
+    BlockProfileInput,
+    BlockVariantEditInput,
+    BlockVariantManifest,
+)
+from .pcb_types import ResolvedBlockLayout
 from .model import (
     LAYOUT_FIELD_NAME,
     PARAMETER_FIELD_PREFIX,
@@ -81,6 +88,26 @@ LOG = logging.getLogger("kicad_blocks")
 
 class _KeepDefaultVariant:
     """Sentinel distinguishing an omitted default variant from an explicit None."""
+
+
+class _LayoutDialogChoice(TypedDict):
+    """Result returned by the add-layout dialog before the board is copied."""
+
+    name: str
+    source: str
+    linked_implementation: str
+
+
+class _TkMinimizableWindow(Protocol):
+    """Window operations required for the native symbol-placement handoff."""
+
+    master: _TkMinimizableWindow | None
+
+    def state(self) -> str: ...
+
+    def iconify(self) -> None: ...
+
+    def deiconify(self) -> None: ...
 
 
 _KEEP_DEFAULT_VARIANT = _KeepDefaultVariant()
@@ -1982,9 +2009,9 @@ def _pick_record(records: list[BlockRecord], parent: tkinter_types.Misc, title: 
     return chosen_record[0]
 
 
-def _layout_choices(block) -> list[dict]:
+def _layout_choices(block: BlockRecord) -> list[ResolvedBlockLayout]:
     """Return all stored PCB layouts while adapting legacy one-layout blocks."""
-    layouts = list(block.manifest.get("layouts") or [])
+    layouts = [cast(ResolvedBlockLayout, item) for item in block.manifest.get("layouts", [])]
     if layouts:
         return layouts
     legacy_file = block.manifest.get("layout_file")
@@ -2001,8 +2028,8 @@ def _layout_choices(block) -> list[dict]:
 
 
 def _choose_block_layout(
-    block, parent, title: str = "Select PCB Layout", instance=None
-) -> dict | None:
+    block: BlockRecord, parent: tkinter_types.Misc, title: str = "Select PCB Layout", instance: _SchematicSymbol | None = None
+) -> ResolvedBlockLayout | None:
     """Resolve the instance's explicit or implementation-linked PCB layout."""
     layouts = _layout_choices(block)
     if not layouts:
@@ -2068,7 +2095,7 @@ def _choose_block_layout(
     raise ValueError(f"No PCB layout {selected!r} is defined for block {block.name!r}.")
 
 
-def _choose_library_root(parent) -> Path:
+def _choose_library_root(parent: tkinter_types.Misc) -> Path:
     default = default_library_root()
     default.mkdir(parents=True, exist_ok=True)
     selected = _pick_directory(
@@ -2081,7 +2108,7 @@ def _choose_library_root(parent) -> Path:
     return set_library_root(Path(selected))
 
 
-def _parse_profile_parameter_overrides(text: str, parameters: list[dict]) -> dict[str, str]:
+def _parse_profile_parameter_overrides(text: str, parameters: list[BlockParameter]) -> dict[str, str]:
     """Parse typed NAME=VALUE overrides entered for one configuration profile."""
     declarations = {item["name"]: item for item in parameters}
     raw_values = {}
@@ -2101,7 +2128,7 @@ def _parse_profile_parameter_overrides(text: str, parameters: list[dict]) -> dic
     return {name: normalized[name] for name in raw_values}
 
 
-def _collect_block_profiles(parent, parameters, variants, layouts) -> list[dict] | None:
+def _collect_block_profiles(parent: tkinter_types.Misc, parameters: list[BlockParameter], variants: list[BlockVariantManifest], layouts: list[ResolvedBlockLayout]) -> list[BlockProfileInput] | None:
     """Collect optional linked variant/parameter/layout presets during block creation."""
     if not (parameters or variants or layouts):
         return []
@@ -2897,7 +2924,7 @@ def _filter_library_records(records: list[BlockRecord], query: str) -> list[Bloc
     return [record for record in records if needle in _library_record_search_text(record)]
 
 
-def _preferred_library_selection(visible_records: list, selected_record):
+def _preferred_library_selection(visible_records: list[BlockRecord], selected_record: BlockRecord | None) -> BlockRecord | None:
     """Keep the current block selected while it remains visible after filtering."""
     if not visible_records:
         return None
@@ -2916,10 +2943,10 @@ def _library_record_for_tree_row(records_by_id: dict, row_id: str | None):
     return records_by_id.get(str(row_id))
 
 
-def _minimize_placement_windows(window: tkinter_types.Misc) -> list[tkinter_types.Misc]:
+def _minimize_placement_windows(window: _TkMinimizableWindow) -> list[_TkMinimizableWindow]:
     """Minimize the browser and its manager parent so Eeschema's canvas is visible."""
-    minimized = []
-    current = window
+    minimized: list[_TkMinimizableWindow] = []
+    current: _TkMinimizableWindow | None = cast(_TkMinimizableWindow, window)
     while current is not None:
         state = None
         with contextlib.suppress(Exception):
@@ -2935,7 +2962,7 @@ def _minimize_placement_windows(window: tkinter_types.Misc) -> list[tkinter_type
     return minimized
 
 
-def _restore_placement_windows(windows: list[tkinter_types.Misc]) -> None:
+def _restore_placement_windows(windows: list[_TkMinimizableWindow]) -> None:
     """Restore windows minimized before a placement handoff failed."""
     for window in reversed(windows):
         with contextlib.suppress(Exception):
@@ -2956,7 +2983,7 @@ def _clean_facade_preview_svg(svg_file: Path, record: BlockRecord, output_dir: P
         display_labels.add(f"{reference_prefix}?")
     display_labels.discard("")
 
-    def contained_labels(node) -> set[str]:
+    def contained_labels(node: ET.Element) -> set[str]:
         labels = set()
         for child in node.iter():
             if child.tag.rsplit("}", 1)[-1] not in {"text", "desc"}:
@@ -2979,10 +3006,10 @@ def _clean_facade_preview_svg(svg_file: Path, record: BlockRecord, output_dir: P
 
 
 def _native_symbol_preview_photo(
-    record,
+    record: BlockRecord,
     width: int = 680,
     max_height: int = 260,
-):
+) -> tkinter_types.PhotoImage | None:
     """Render a clean, centered KiCad facade within the available preview height."""
     symbol_name = str(record.manifest["symbol_name"])
     library_file = Path(record.symbol_library).expanduser().resolve()
@@ -3221,7 +3248,10 @@ def _launch_block_asset(
 
 
 def _save_block_variants(
-    record, variants: list[dict], *, default_variant=_KEEP_DEFAULT_VARIANT
+    record: BlockRecord,
+    variants: list[BlockVariantEditInput],
+    *,
+    default_variant: str | None | _KeepDefaultVariant = _KEEP_DEFAULT_VARIANT,
 ) -> None:
     """Publish implementation variants and the explicitly selected default."""
     import json
@@ -3404,13 +3434,13 @@ def _save_block_variants(
 
 
 def _save_block_layouts(
-    record,
-    layouts: list[dict],
+    record: BlockRecord,
+    layouts: list[BlockLayoutEditInput],
     *,
     default_layout_id: str | None,
     variant_layouts: dict[str, str] | None = None,
     layout_implementations: dict[str, list[str]] | None = None,
-):
+) -> BlockRecord:
     """Copy PCB assets and atomically save non-empty implementation associations."""
     import json
     import shutil
@@ -3678,7 +3708,7 @@ def _new_blank_pcb_source() -> Path:
     return path
 
 
-def _ask_layout_details(parent, record) -> dict | None:
+def _ask_layout_details(parent: tkinter_types.Misc, record: BlockRecord) -> _LayoutDialogChoice | None:
     """Choose an existing board or create a blank starting point for a named layout."""
     dialog = tkinter_types.Toplevel(parent)
     dialog.title("Add PCB layout")
