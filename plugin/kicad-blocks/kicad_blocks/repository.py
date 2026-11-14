@@ -369,14 +369,17 @@ def read_manifest(block_path: Path) -> BlockManifest:
             "expected 'manual' or 'hierarchical_labels'."
         )
     manifest["interface_source"] = interface_source
-    variants = manifest["variants"]
-    if not isinstance(variants, list):
+    variants_value: object = manifest["variants"]
+    if not isinstance(variants_value, list):
         raise TypeError("Block manifest variants must be a list.")
+    variants: list[BlockVariantManifest] = []
     seen_variant_values: set[str] = set()
     seen_variant_files: set[str] = set()
-    for variant in variants:
-        if not isinstance(variant, dict):
+    for raw_variant in variants_value:
+        variant_value: object = raw_variant
+        if not isinstance(variant_value, dict):
             raise TypeError("Each block variant must be an object.")
+        variant = cast(BlockVariantManifest, variant_value)
         value = str(variant.get("value", "")).strip()
         file_name = str(variant.get("file", ""))
         if (
@@ -396,6 +399,7 @@ def read_manifest(block_path: Path) -> BlockManifest:
             raise ValueError(f"Duplicate block variant file: {file_name!r}")
         seen_variant_values.add(value.casefold())
         seen_variant_files.add(file_name.casefold())
+        variants.append(variant)
     manifest["variants"] = variants
     default_variant = manifest.get("default_variant")
     if default_variant:
@@ -417,25 +421,32 @@ def read_manifest(block_path: Path) -> BlockManifest:
         manifest["default_variant"] = str(matching_variant["value"])
     else:
         manifest.pop("default_variant", None)
-    layouts = manifest["layouts"]
-    if not isinstance(layouts, list):
+
+    layouts_value: object = manifest["layouts"]
+    if not isinstance(layouts_value, list):
         raise TypeError("Block manifest layouts must be a list.")
-    pin_items = manifest.get("pins", [])
-    if (
-        not isinstance(pin_items, list)
-        or not pin_items
-        or any(
-            not isinstance(pin, dict) or not str(pin.get("name", "")).strip() for pin in pin_items
-        )
-    ):
+    layouts: list[BlockLayoutManifest] = []
+    pin_items_value: object = manifest.get("pins", [])
+    if not isinstance(pin_items_value, list) or not pin_items_value:
         raise ValueError("Block manifest pins must be a non-empty list of named pin objects.")
+    pin_items: list[BlockPinManifest] = []
+    for raw_pin in pin_items_value:
+        pin_value: object = raw_pin
+        if not isinstance(pin_value, dict):
+            raise ValueError("Block manifest pins must be a non-empty list of named pin objects.")
+        pin = cast(BlockPinManifest, pin_value)
+        if not str(pin.get("name", "")).strip():
+            raise ValueError("Block manifest pins must be a non-empty list of named pin objects.")
+        pin_items.append(pin)
     pin_names = {str(pin["name"]) for pin in pin_items}
     seen_layout_ids: set[str] = set()
     seen_layout_names: set[str] = set()
     seen_layout_files: set[str] = set()
-    for layout in layouts:
-        if not isinstance(layout, dict):
+    for raw_layout in layouts_value:
+        layout_value: object = raw_layout
+        if not isinstance(layout_value, dict):
             raise TypeError("Each block layout must be an object.")
+        layout = cast(BlockLayoutManifest, layout_value)
         layout_id = str(layout.get("id", ""))
         layout_name = str(layout.get("name", "")).strip()
         layout_file = str(layout.get("file", ""))
@@ -457,23 +468,29 @@ def read_manifest(block_path: Path) -> BlockManifest:
         seen_layout_ids.add(layout_id.casefold())
         seen_layout_names.add(layout_name.casefold())
         seen_layout_files.add(layout_file.casefold())
-        project_file = layout.get("project_file")
-        if project_file:
-            project_file = str(project_file)
+        project_file_value: object = layout.get("project_file")
+        if project_file_value:
+            if not isinstance(project_file_value, str):
+                raise ValueError(f"Invalid project-settings file name for layout {layout_id!r}.")
+            project_file = project_file_value
             if (
                 Path(project_file).name != project_file
                 or Path(project_file).suffix.casefold() != ".kicad_pro"
             ):
                 raise ValueError(f"Invalid project-settings file name for layout {layout_id!r}.")
-        ports = layout.get("ports")
-        if ports is not None and (
-            not isinstance(ports, dict)
-            or set(ports) != pin_names
-            or any(not isinstance(value, str) or not value.strip() for value in ports.values())
-        ):
-            raise ValueError(
-                f"Layout {layout_id!r} ports must map every facade pin to a non-empty net name."
-            )
+        ports_value: object = layout.get("ports")
+        if ports_value is not None:
+            if not isinstance(ports_value, dict):
+                raise ValueError(
+                    f"Layout {layout_id!r} ports must map every facade pin to a non-empty net name."
+                )
+            ports = cast(dict[str, str], ports_value)
+            if set(ports) != pin_names or any(not value.strip() for value in ports.values()):
+                raise ValueError(
+                    f"Layout {layout_id!r} ports must map every facade pin to a non-empty net name."
+                )
+        layouts.append(layout)
+
     for variant in variants:
         linked_layout = variant.get("layout_id")
         if linked_layout and str(linked_layout).casefold() not in seen_layout_ids:
@@ -498,7 +515,7 @@ def read_manifest(block_path: Path) -> BlockManifest:
         variant_values = {str(item["value"]).casefold(): str(item["value"]) for item in variants}
         for layout in layouts:
             layout_id = str(layout["id"]).casefold()
-            derived_links = []
+            derived_links: list[str] = []
             if str(default_layout).casefold() == layout_id:
                 derived_links.append("Default")
             derived_links.extend(
@@ -506,13 +523,13 @@ def read_manifest(block_path: Path) -> BlockManifest:
                 for item in variants
                 if str(item.get("layout_id", "")).casefold() == layout_id
             )
-            raw_links = layout.get("implementations")
+            raw_links: object = layout.get("implementations")
             if raw_links is None:
                 links = derived_links
             else:
                 if not isinstance(raw_links, list):
                     raise TypeError(f"Layout {layout_id!r} implementation links must be a list.")
-                links = []
+                links: list[str] = []
                 for raw_link in raw_links:
                     key = str(raw_link).strip().casefold()
                     if key == "default":
