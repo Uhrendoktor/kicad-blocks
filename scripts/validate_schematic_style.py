@@ -18,6 +18,7 @@ from kicad_blocks.pcb_layout import _all, _direct, _head, parse_sexpr
 # The generic linter deliberately has no dependency on the STUSB4500 example.
 # These defaults are used only by the reusable geometry/presentation rules.
 FIELD_SYMBOL_MAX_GAP_MM = 9.00
+SINGLE_LINE_TEXT_RESERVE_MM = 5.08
 ADJACENT_COMPONENT_PAIRS: tuple = ()
 COMMON_PIN_NET_GROUPS: tuple = ()
 COMPONENT_PROPERTY_LIMITS_MM: dict[str, float] = {}
@@ -395,6 +396,14 @@ def text_box_issues(tree: list) -> list[str]:
         need_w, need_h = _required_size(str(node[1]), float(font_node[1]), pads[0])
         if w + TOL < need_w or h + TOL < need_h:
             issues.append(f"text_box {index} undersized: {w:.2f}x{h:.2f} mm, needs {need_w:.2f}x{need_h:.2f}")
+        stroke = _direct(node, "stroke")
+        stroke_width = _direct(stroke, "width") if stroke is not None else None
+        unbordered = stroke_width is None or float(stroke_width[1]) <= 0
+        if unbordered and w + TOL < need_w + SINGLE_LINE_TEXT_RESERVE_MM:
+            issues.append(
+                f"unbordered text_box {index} cannot reliably render on one line: "
+                f"needs {need_w + SINGLE_LINE_TEXT_RESERVE_MM:.2f} mm width"
+            )
         uid = _direct(node, "uuid")
         boxes.append((str(uid[1]) if uid is not None else f"box-{index}", (x, y, w, h)))
     segments = [s for s in _segments(tree) if len(s) == 2]
