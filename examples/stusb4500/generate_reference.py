@@ -224,7 +224,9 @@ def _wire(start: tuple[float, float], end: tuple[float, float], key: str) -> lis
         ["stroke", ["width", "0"], ["type", "default"]],
         [
             "uuid",
-            QuotedSExpr(_uid(f"wire:{key}:{start[0]:.3f}:{start[1]:.3f}:{end[0]:.3f}:{end[1]:.3f}")),
+            QuotedSExpr(
+                _uid(f"wire:{key}:{start[0]:.3f}:{start[1]:.3f}:{end[0]:.3f}:{end[1]:.3f}")
+            ),
         ],
     ]
 
@@ -809,7 +811,10 @@ def generate_reference_schematic(destination: Path) -> Path:
                     ["at", f"{point[0]:.3f}", f"{point[1]:.3f}"],
                     ["diameter", "0"],
                     ["color", "0", "0", "0", "0"],
-                    ["uuid", QuotedSExpr(_uid(f"junction:{net_name}:{point[0]:.3f}:{point[1]:.3f}"))],
+                    [
+                        "uuid",
+                        QuotedSExpr(_uid(f"junction:{net_name}:{point[0]:.3f}:{point[1]:.3f}")),
+                    ],
                 ]
             )
         for _, point in ordered:

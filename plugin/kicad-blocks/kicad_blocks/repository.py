@@ -1983,19 +1983,19 @@ def synchronize_dependencies(
             previous is not None and previous["block_id"] == child.manifest["block_id"]
         )
         dependency: BlockDependencyManifest = {
-                "instance_id": (
-                    str(previous.get("instance_id") or uuid.uuid4())
-                    if same_occurrence
-                    else str(uuid.uuid4())
-                ),
-                "reference": reference,
-                "position_mm": [position[0], position[1]],
-                "orientation": orientation,
-                "pin_map": mapping,
-                "block_id": child.manifest["block_id"],
-                "name": child.manifest["name"],
-                "path": os.path.relpath(child.path.resolve(), anchor),
-                "revision": child.manifest.get("revision"),
+            "instance_id": (
+                str(previous.get("instance_id") or uuid.uuid4())
+                if same_occurrence
+                else str(uuid.uuid4())
+            ),
+            "reference": reference,
+            "position_mm": [position[0], position[1]],
+            "orientation": orientation,
+            "pin_map": mapping,
+            "block_id": child.manifest["block_id"],
+            "name": child.manifest["name"],
+            "path": os.path.relpath(child.path.resolve(), anchor),
+            "revision": child.manifest.get("revision"),
         }
         dependencies.append(dependency)
 
@@ -2144,9 +2144,7 @@ def _read_library_settings() -> LibrarySettings:
         settings["library_root"] = library_root
     library_roots = raw.get("library_roots")
     if isinstance(library_roots, list):
-        settings["library_roots"] = [
-            item for item in library_roots if isinstance(item, str)
-        ]
+        settings["library_roots"] = [item for item in library_roots if isinstance(item, str)]
     return settings
 
 

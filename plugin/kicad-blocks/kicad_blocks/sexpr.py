@@ -135,8 +135,4 @@ def sexpr_all(node: SExprList | None, tag: str) -> list[SExprList]:
     """Return all direct child lists with the requested leading atom."""
     if node is None:
         return []
-    return [
-        child
-        for child in node[1:]
-        if isinstance(child, list) and sexpr_head(child) == tag
-    ]
+    return [child for child in node[1:] if isinstance(child, list) and sexpr_head(child) == tag]

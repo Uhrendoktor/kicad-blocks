@@ -39,6 +39,7 @@ from .sexpr import sexpr_head as _head
 if TYPE_CHECKING:
     from .repository import BlockRecord
 
+
 def _num(value: str) -> float:
     try:
         result = float(str(value))
