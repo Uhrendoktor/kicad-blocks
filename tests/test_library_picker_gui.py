@@ -23,7 +23,7 @@ def main() -> None:
     xdotool = shutil.which("xdotool")
     if not xdotool:
         raise FileNotFoundError("xdotool is required for the picker GUI test.")
-    plugin_actions._load_tkinter()
+    plugin_actions.load_tkinter()
     with tempfile.TemporaryDirectory(prefix="kicad-block-picker-") as temp:
         library = Path(temp) / "library"
         first = create_block(

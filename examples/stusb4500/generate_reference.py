@@ -7,8 +7,8 @@ Figure 10.  Symbols are loaded from the installed official KiCad libraries.
 from __future__ import annotations
 
 import copy
+import itertools
 import os
-import shutil
 import subprocess
 import sys
 import uuid
@@ -18,11 +18,11 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "plugin" / "kicad-blocks"))
 
 from kicad_blocks.pcb_layout import (
-    _Quoted,
     _all,
     _direct,
     _dump,
     _head,
+    _Quoted,
     parse_sexpr,
 )
 
@@ -52,7 +52,10 @@ def _symbol_root() -> Path:
             return candidate
     found = subprocess.run(
         ["find", "/usr/share", "-name", "Interface_USB.kicad_sym", "-print", "-quit"],
-        capture_output=True, text=True, check=False, timeout=15,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=15,
     )
     if found.stdout.strip():
         return Path(found.stdout.strip()).parent
@@ -62,39 +65,80 @@ def _symbol_root() -> Path:
 def _custom_esda25w() -> list:
     """Three-terminal ESDA25W array: CC1, CC2 and common ground."""
     return [
-        "symbol", _Quoted("STUSB4500_Custom:ESDA25W"),
-        ["in_bom", "yes"], ["on_board", "yes"],
-        ["property", _Quoted("Reference"), _Quoted("D"),
-            ["id", "0"], ["at", "0", "6.35", "0"],
+        "symbol",
+        _Quoted("STUSB4500_Custom:ESDA25W"),
+        ["in_bom", "yes"],
+        ["on_board", "yes"],
+        [
+            "property",
+            _Quoted("Reference"),
+            _Quoted("D"),
+            ["id", "0"],
+            ["at", "0", "6.35", "0"],
             ["effects", ["font", ["size", "1.27", "1.27"]]],
         ],
-        ["property", _Quoted("Value"), _Quoted("ESDA25W"),
-            ["id", "1"], ["at", "0", "-6.35", "0"],
+        [
+            "property",
+            _Quoted("Value"),
+            _Quoted("ESDA25W"),
+            ["id", "1"],
+            ["at", "0", "-6.35", "0"],
             ["effects", ["font", ["size", "1.27", "1.27"]]],
         ],
-        ["property", _Quoted("Footprint"), _Quoted("Package_TO_SOT_SMD:SOT-323_SC-70"),
-            ["id", "2"], ["at", "0", "0", "0"],
+        [
+            "property",
+            _Quoted("Footprint"),
+            _Quoted("Package_TO_SOT_SMD:SOT-323_SC-70"),
+            ["id", "2"],
+            ["at", "0", "0", "0"],
             ["effects", ["font", ["size", "1.27", "1.27"]], "hide"],
         ],
-        ["property", _Quoted("Datasheet"), _Quoted(""),
-            ["id", "3"], ["at", "0", "0", "0"],
+        [
+            "property",
+            _Quoted("Datasheet"),
+            _Quoted(""),
+            ["id", "3"],
+            ["at", "0", "0", "0"],
             ["effects", ["font", ["size", "1.27", "1.27"]], "hide"],
         ],
-        ["symbol", _Quoted("ESDA25W_0_1"),
-            ["rectangle", ["start", "-5.08", "3.81"], ["end", "5.08", "-3.81"],
-                ["stroke", ["width", "0.254"]], ["fill", ["type", "background"]],
+        [
+            "symbol",
+            _Quoted("ESDA25W_0_1"),
+            [
+                "rectangle",
+                ["start", "-5.08", "3.81"],
+                ["end", "5.08", "-3.81"],
+                ["stroke", ["width", "0.254"]],
+                ["fill", ["type", "background"]],
             ],
         ],
-        ["symbol", _Quoted("ESDA25W_1_1"),
-            ["pin", "passive", "line", ["at", "-7.62", "2.54", "0"], ["length", "2.54"],
+        [
+            "symbol",
+            _Quoted("ESDA25W_1_1"),
+            [
+                "pin",
+                "passive",
+                "line",
+                ["at", "-7.62", "2.54", "0"],
+                ["length", "2.54"],
                 ["name", _Quoted("CC1"), ["effects", ["font", ["size", "1.27", "1.27"]]]],
                 ["number", _Quoted("1"), ["effects", ["font", ["size", "1.27", "1.27"]]]],
             ],
-            ["pin", "passive", "line", ["at", "-7.62", "-2.54", "0"], ["length", "2.54"],
+            [
+                "pin",
+                "passive",
+                "line",
+                ["at", "-7.62", "-2.54", "0"],
+                ["length", "2.54"],
                 ["name", _Quoted("CC2"), ["effects", ["font", ["size", "1.27", "1.27"]]]],
                 ["number", _Quoted("2"), ["effects", ["font", ["size", "1.27", "1.27"]]]],
             ],
-            ["pin", "passive", "line", ["at", "7.62", "0", "180"], ["length", "2.54"],
+            [
+                "pin",
+                "passive",
+                "line",
+                ["at", "7.62", "0", "180"],
+                ["length", "2.54"],
                 ["name", _Quoted("GND"), ["effects", ["font", ["size", "1.27", "1.27"]]]],
                 ["number", _Quoted("3"), ["effects", ["font", ["size", "1.27", "1.27"]]]],
             ],
@@ -105,7 +149,8 @@ def _custom_esda25w() -> list:
 def _strip_embedded_font_flags(node: list) -> None:
     """Remove per-library font flags; the schematic carries one root-level flag."""
     node[:] = [
-        child for child in node
+        child
+        for child in node
         if not (isinstance(child, list) and _head(child) == "embedded_fonts")
     ]
     for child in node:
@@ -117,10 +162,7 @@ def _load_symbol(root: Path, library: str, name: str) -> list:
     if library == "STUSB4500_Custom" and name == "ESDA25W":
         return _custom_esda25w()
     packed = root / f"{library}.kicad_sym"
-    if packed.is_file():
-        path = packed
-    else:
-        path = root / f"{library}.kicad_symdir" / f"{name}.kicad_sym"
+    path = packed if packed.is_file() else root / f"{library}.kicad_symdir" / f"{name}.kicad_sym"
     if not path.is_file():
         raise FileNotFoundError(f"KiCad symbol definition is missing: {path}")
     tree = parse_sexpr(path.read_text(encoding="utf-8"))
@@ -154,13 +196,15 @@ def _pin_data(symbol: list) -> list[dict]:
         if number in seen:
             continue
         seen.add(number)
-        result.append({
-            "number": number,
-            "name": str(name_node[1]) if name_node else "",
-            "x": float(at_node[1]),
-            "y": float(at_node[2]),
-            "angle": int(float(at_node[3])),
-        })
+        result.append(
+            {
+                "number": number,
+                "name": str(name_node[1]) if name_node else "",
+                "x": float(at_node[1]),
+                "y": float(at_node[2]),
+                "angle": int(float(at_node[3])),
+            }
+        )
     return result
 
 
@@ -172,12 +216,16 @@ def _wire(start: tuple[float, float], end: tuple[float, float], key: str) -> lis
         raise ValueError(f"Non-orthogonal wire segment for {key}: {start} -> {end}.")
     return [
         "wire",
-        ["pts",
+        [
+            "pts",
             ["xy", f"{start[0]:.3f}", f"{start[1]:.3f}"],
             ["xy", f"{end[0]:.3f}", f"{end[1]:.3f}"],
         ],
         ["stroke", ["width", "0"], ["type", "default"]],
-        ["uuid", _Quoted(_uid(f"wire:{key}:{start[0]:.3f}:{start[1]:.3f}:{end[0]:.3f}:{end[1]:.3f}"))],
+        [
+            "uuid",
+            _Quoted(_uid(f"wire:{key}:{start[0]:.3f}:{start[1]:.3f}:{end[0]:.3f}:{end[1]:.3f}")),
+        ],
     ]
 
 
@@ -186,7 +234,9 @@ def _prop(name: str, value: str, number: int, x: float, y: float, hidden: bool =
     if hidden:
         effects.append("hide")
     return [
-        "property", _Quoted(name), _Quoted(value),
+        "property",
+        _Quoted(name),
+        _Quoted(value),
         ["id", str(number)],
         ["at", f"{x:.3f}", f"{y:.3f}", "0"],
         effects,
@@ -194,18 +244,27 @@ def _prop(name: str, value: str, number: int, x: float, y: float, hidden: bool =
 
 
 def _label(
-    name: str, x: float, y: float, *, hierarchical: bool = False,
-    shape: str = "passive", justify: str = "left", angle: int = 0, key: str,
+    name: str,
+    x: float,
+    y: float,
+    *,
+    hierarchical: bool = False,
+    shape: str = "passive",
+    justify: str = "left",
+    angle: int = 0,
+    key: str,
 ) -> list:
     effects = ["effects", ["font", ["size", "1.0", "1.0"]], ["justify", justify, "bottom"]]
     node = ["hierarchical_label" if hierarchical else "label", _Quoted(name)]
     if hierarchical:
         node.append(["shape", shape])
-    node.extend([
-        ["at", f"{x:.3f}", f"{y:.3f}", str(angle)],
-        effects,
-        ["uuid", _Quoted(_uid(key))],
-    ])
+    node.extend(
+        [
+            ["at", f"{x:.3f}", f"{y:.3f}", str(angle)],
+            effects,
+            ["uuid", _Quoted(_uid(key))],
+        ]
+    )
     return node
 
 
@@ -214,62 +273,301 @@ def generate_reference_schematic(destination: Path) -> Path:
     root = _symbol_root()
     specs = [
         # ref, library, symbol, value, position, pin-number -> (net, kind, shape)
-        ("U1", "Interface_USB", "STUSB4500QTR", "STUSB4500QTR", (213.36, 157.48), {
-            "1": ("CC1", "local", ""), "2": ("CC1", "local", ""),
-            "3": ("NC", "nc", ""), "4": ("CC2", "local", ""),
-            "5": ("CC2", "local", ""), "6": ("RESET", "local", ""),
-            "7": ("SCL", "local", ""), "8": ("SDA", "local", ""),
-            "9": ("DISCH", "local", ""), "10": ("GND", "local", ""),
-            "11": ("NC", "nc", ""), "12": ("ADDR0", "local", ""),
-            "13": ("ADDR1", "local", ""), "14": ("NC", "nc", ""),
-            "15": ("NC", "nc", ""), "16": ("VBUS_EN_SNK", "local", ""),
-            "17": ("NC", "nc", ""), "18": ("VBUS_VS_DISCH", "local", ""),
-            "19": ("ALERT#", "local", ""), "20": ("NC", "nc", ""),
-            "21": ("VREG_1V2", "local", ""), "22": ("GND", "local", ""),
-            "23": ("VREG_2V7", "local", ""), "24": ("VBUS", "local", ""),
-            "25": ("GND", "local", ""),
-        }),
-        ("J1", "Connector", "USB_C_Receptacle", "USB 3.1 Type-C receptacle", (50.8, 142.24), {
-            "A1": ("GND", "hier", "passive"), "A4": ("VBUS", "hier", "input"),
-            "A5": ("CC1", "hier", "bidirectional"), "A9": ("VBUS", "local", ""),
-            "A12": ("GND", "local", ""), "B1": ("GND", "local", ""),
-            "B4": ("VBUS", "local", ""), "B5": ("CC2", "hier", "bidirectional"),
-            "B9": ("VBUS", "local", ""), "B12": ("GND", "local", ""),
-        }),
-        ("J10", "Connector_Generic", "Conn_01x02", "MPT_0.5_2-2.54", (388.62, 93.98), {
-            "1": ("VSNK", "hier", "output"), "2": ("GND", "hier", "passive"),
-        }),
-        ("J2", "Connector_Generic", "Conn_01x06", "MCU interface", (373.38, 213.36), {
-            "1": ("SCL", "hier", "input"), "2": ("SDA", "hier", "bidirectional"),
-            "3": ("ALERT#", "hier", "output"), "4": ("RESET", "hier", "input"),
-            "5": ("VMCU", "hier", "input"), "6": ("GND", "hier", "passive"),
-        }),
-        ("C50", "Device", "C", "4.7uF", (88.9, 190.5), {"1": ("VBUS", "local", ""), "2": ("GND", "local", "")}),
-        ("C1", "Device", "C", "1uF", (190.5, 96.52), {"1": ("VREG_1V2", "local", ""), "2": ("GND", "local", "")}),
-        ("C2", "Device", "C", "1uF", (213.36, 96.52), {"1": ("VREG_2V7", "local", ""), "2": ("GND", "local", "")}),
-        ("C3", "Device", "C", "1uF", (236.22, 96.52), {"1": ("VREG_2V7", "local", ""), "2": ("GND", "local", "")}),
-        ("C4", "Device", "C", "1uF", (78.74, 96.52), {"1": ("VBUS_FILTERED", "local", ""), "2": ("GND", "local", "")}),
-        ("D4", "Device", "D", "D4 (part not specified)", (93.98, 88.9), {"1": ("VBUS_FILTERED", "local", ""), "2": ("VBUS", "local", "")}),
-        ("C10", "Device", "C", "100nF", (360.68, 93.98), {"1": ("VSNK", "local", ""), "2": ("GND", "local", "")}),
-        ("R1", "Device", "R", "470", (144.78, 127), {"1": ("VBUS_FILTERED", "local", ""), "2": ("VBUS_VS_DISCH", "local", "")}),
-        ("R2", "Device", "R", "1k", (274.32, 175.26), {"1": ("DISCH", "local", ""), "2": ("VSNK", "local", "")}),
-        ("R3", "Device", "R", "4.7k", (309.88, 213.36), {"1": ("VMCU", "local", ""), "2": ("SCL", "local", "")}),
-        ("R4", "Device", "R", "1k", (167.64, 127), {"1": ("VREG_2V7", "local", ""), "2": ("VBUS_VS_DISCH", "local", "")}),
-        ("R5", "Device", "R", "4.7k", (332.74, 213.36), {"1": ("VMCU", "local", ""), "2": ("SDA", "local", "")}),
-        ("R6", "Device", "R", "4.7k", (355.6, 213.36), {"1": ("VMCU", "local", ""), "2": ("ALERT#", "local", "")}),
-        ("R10", "Device", "R", "100k", (297.18, 116.84), {"1": ("FET_MID", "local", ""), "2": ("VSNK_GATE", "local", "")}),
-        ("R11", "Device", "R", "22k", (325.12, 124.46), {"1": ("VSNK_GATE", "local", ""), "2": ("GND", "local", "")}),
-        ("R13", "Device", "R", "100", (353.06, 124.46), {"1": ("VSNK_GATE", "local", ""), "2": ("VBUS_EN_SNK", "local", "")}),
-        ("R51", "Device", "R", "NC", (147.32, 228.6), {"1": ("VREG_2V7", "local", ""), "2": ("ADDR1", "local", "")}),
-        ("R52", "Device", "R", "NC", (172.72, 228.6), {"1": ("VREG_2V7", "local", ""), "2": ("ADDR0", "local", "")}),
-        ("R53", "Device", "R", "100k", (198.12, 228.6), {"1": ("ADDR1", "local", ""), "2": ("GND", "local", "")}),
-        ("R54", "Device", "R", "100k", (223.52, 228.6), {"1": ("ADDR0", "local", ""), "2": ("GND", "local", "")}),
-        ("R55", "Device", "R", "10k", (261.62, 228.6), {"1": ("RESET", "local", ""), "2": ("GND", "local", "")}),
-        ("D1", "STUSB4500_Custom", "ESDA25W", "ESDA25W", (88.9, 139.7), {"1": ("CC1", "local", ""), "2": ("CC2", "local", ""), "3": ("GND", "local", "")}),
-        ("D50", "Device", "D_TVS", "ESDA25P35-1U1M", (106.68, 190.5), {"1": ("VBUS", "local", ""), "2": ("GND", "local", "")}),
-        ("D11", "Device", "D_TVS", "ESDA25P35-1U1M", (373.38, 124.46), {"1": ("VSNK", "local", ""), "2": ("GND", "local", "")}),
-        ("T4", "Transistor_FET", "Q_PMOS_GSD", "STL6P3LLH6", (284.48, 76.2), {"1": ("VBUS_EN_SNK", "local", ""), "2": ("VBUS", "local", ""), "3": ("FET_MID", "local", "")}),
-        ("T1", "Transistor_FET", "Q_PMOS_GSD", "STL6P3LLH6", (337.82, 76.2), {"1": ("VSNK_GATE", "local", ""), "2": ("FET_MID", "local", ""), "3": ("VSNK", "local", "")}),
+        (
+            "U1",
+            "Interface_USB",
+            "STUSB4500QTR",
+            "STUSB4500QTR",
+            (213.36, 157.48),
+            {
+                "1": ("CC1", "local", ""),
+                "2": ("CC1", "local", ""),
+                "3": ("NC", "nc", ""),
+                "4": ("CC2", "local", ""),
+                "5": ("CC2", "local", ""),
+                "6": ("RESET", "local", ""),
+                "7": ("SCL", "local", ""),
+                "8": ("SDA", "local", ""),
+                "9": ("DISCH", "local", ""),
+                "10": ("GND", "local", ""),
+                "11": ("NC", "nc", ""),
+                "12": ("ADDR0", "local", ""),
+                "13": ("ADDR1", "local", ""),
+                "14": ("NC", "nc", ""),
+                "15": ("NC", "nc", ""),
+                "16": ("VBUS_EN_SNK", "local", ""),
+                "17": ("NC", "nc", ""),
+                "18": ("VBUS_VS_DISCH", "local", ""),
+                "19": ("ALERT#", "local", ""),
+                "20": ("NC", "nc", ""),
+                "21": ("VREG_1V2", "local", ""),
+                "22": ("GND", "local", ""),
+                "23": ("VREG_2V7", "local", ""),
+                "24": ("VBUS", "local", ""),
+                "25": ("GND", "local", ""),
+            },
+        ),
+        (
+            "J1",
+            "Connector",
+            "USB_C_Receptacle",
+            "USB 3.1 Type-C receptacle",
+            (50.8, 142.24),
+            {
+                "A1": ("GND", "hier", "passive"),
+                "A4": ("VBUS", "hier", "input"),
+                "A5": ("CC1", "hier", "bidirectional"),
+                "A9": ("VBUS", "local", ""),
+                "A12": ("GND", "local", ""),
+                "B1": ("GND", "local", ""),
+                "B4": ("VBUS", "local", ""),
+                "B5": ("CC2", "hier", "bidirectional"),
+                "B9": ("VBUS", "local", ""),
+                "B12": ("GND", "local", ""),
+            },
+        ),
+        (
+            "J10",
+            "Connector_Generic",
+            "Conn_01x02",
+            "MPT_0.5_2-2.54",
+            (388.62, 93.98),
+            {
+                "1": ("VSNK", "hier", "output"),
+                "2": ("GND", "hier", "passive"),
+            },
+        ),
+        (
+            "J2",
+            "Connector_Generic",
+            "Conn_01x06",
+            "MCU interface",
+            (373.38, 213.36),
+            {
+                "1": ("SCL", "hier", "input"),
+                "2": ("SDA", "hier", "bidirectional"),
+                "3": ("ALERT#", "hier", "output"),
+                "4": ("RESET", "hier", "input"),
+                "5": ("VMCU", "hier", "input"),
+                "6": ("GND", "hier", "passive"),
+            },
+        ),
+        (
+            "C50",
+            "Device",
+            "C",
+            "4.7uF",
+            (88.9, 190.5),
+            {"1": ("VBUS", "local", ""), "2": ("GND", "local", "")},
+        ),
+        (
+            "C1",
+            "Device",
+            "C",
+            "1uF",
+            (190.5, 96.52),
+            {"1": ("VREG_1V2", "local", ""), "2": ("GND", "local", "")},
+        ),
+        (
+            "C2",
+            "Device",
+            "C",
+            "1uF",
+            (213.36, 96.52),
+            {"1": ("VREG_2V7", "local", ""), "2": ("GND", "local", "")},
+        ),
+        (
+            "C3",
+            "Device",
+            "C",
+            "1uF",
+            (236.22, 96.52),
+            {"1": ("VREG_2V7", "local", ""), "2": ("GND", "local", "")},
+        ),
+        (
+            "C4",
+            "Device",
+            "C",
+            "1uF",
+            (78.74, 96.52),
+            {"1": ("VBUS_FILTERED", "local", ""), "2": ("GND", "local", "")},
+        ),
+        (
+            "D4",
+            "Device",
+            "D",
+            "D4 (part not specified)",
+            (93.98, 88.9),
+            {"1": ("VBUS_FILTERED", "local", ""), "2": ("VBUS", "local", "")},
+        ),
+        (
+            "C10",
+            "Device",
+            "C",
+            "100nF",
+            (360.68, 93.98),
+            {"1": ("VSNK", "local", ""), "2": ("GND", "local", "")},
+        ),
+        (
+            "R1",
+            "Device",
+            "R",
+            "470",
+            (144.78, 127),
+            {"1": ("VBUS_FILTERED", "local", ""), "2": ("VBUS_VS_DISCH", "local", "")},
+        ),
+        (
+            "R2",
+            "Device",
+            "R",
+            "1k",
+            (274.32, 175.26),
+            {"1": ("DISCH", "local", ""), "2": ("VSNK", "local", "")},
+        ),
+        (
+            "R3",
+            "Device",
+            "R",
+            "4.7k",
+            (309.88, 213.36),
+            {"1": ("VMCU", "local", ""), "2": ("SCL", "local", "")},
+        ),
+        (
+            "R4",
+            "Device",
+            "R",
+            "1k",
+            (167.64, 127),
+            {"1": ("VREG_2V7", "local", ""), "2": ("VBUS_VS_DISCH", "local", "")},
+        ),
+        (
+            "R5",
+            "Device",
+            "R",
+            "4.7k",
+            (332.74, 213.36),
+            {"1": ("VMCU", "local", ""), "2": ("SDA", "local", "")},
+        ),
+        (
+            "R6",
+            "Device",
+            "R",
+            "4.7k",
+            (355.6, 213.36),
+            {"1": ("VMCU", "local", ""), "2": ("ALERT#", "local", "")},
+        ),
+        (
+            "R10",
+            "Device",
+            "R",
+            "100k",
+            (297.18, 116.84),
+            {"1": ("FET_MID", "local", ""), "2": ("VSNK_GATE", "local", "")},
+        ),
+        (
+            "R11",
+            "Device",
+            "R",
+            "22k",
+            (325.12, 124.46),
+            {"1": ("VSNK_GATE", "local", ""), "2": ("GND", "local", "")},
+        ),
+        (
+            "R13",
+            "Device",
+            "R",
+            "100",
+            (353.06, 124.46),
+            {"1": ("VSNK_GATE", "local", ""), "2": ("VBUS_EN_SNK", "local", "")},
+        ),
+        (
+            "R51",
+            "Device",
+            "R",
+            "NC",
+            (147.32, 228.6),
+            {"1": ("VREG_2V7", "local", ""), "2": ("ADDR1", "local", "")},
+        ),
+        (
+            "R52",
+            "Device",
+            "R",
+            "NC",
+            (172.72, 228.6),
+            {"1": ("VREG_2V7", "local", ""), "2": ("ADDR0", "local", "")},
+        ),
+        (
+            "R53",
+            "Device",
+            "R",
+            "100k",
+            (198.12, 228.6),
+            {"1": ("ADDR1", "local", ""), "2": ("GND", "local", "")},
+        ),
+        (
+            "R54",
+            "Device",
+            "R",
+            "100k",
+            (223.52, 228.6),
+            {"1": ("ADDR0", "local", ""), "2": ("GND", "local", "")},
+        ),
+        (
+            "R55",
+            "Device",
+            "R",
+            "10k",
+            (261.62, 228.6),
+            {"1": ("RESET", "local", ""), "2": ("GND", "local", "")},
+        ),
+        (
+            "D1",
+            "STUSB4500_Custom",
+            "ESDA25W",
+            "ESDA25W",
+            (88.9, 139.7),
+            {"1": ("CC1", "local", ""), "2": ("CC2", "local", ""), "3": ("GND", "local", "")},
+        ),
+        (
+            "D50",
+            "Device",
+            "D_TVS",
+            "ESDA25P35-1U1M",
+            (106.68, 190.5),
+            {"1": ("VBUS", "local", ""), "2": ("GND", "local", "")},
+        ),
+        (
+            "D11",
+            "Device",
+            "D_TVS",
+            "ESDA25P35-1U1M",
+            (373.38, 124.46),
+            {"1": ("VSNK", "local", ""), "2": ("GND", "local", "")},
+        ),
+        (
+            "T4",
+            "Transistor_FET",
+            "Q_PMOS_GSD",
+            "STL6P3LLH6",
+            (284.48, 76.2),
+            {
+                "1": ("VBUS_EN_SNK", "local", ""),
+                "2": ("VBUS", "local", ""),
+                "3": ("FET_MID", "local", ""),
+            },
+        ),
+        (
+            "T1",
+            "Transistor_FET",
+            "Q_PMOS_GSD",
+            "STL6P3LLH6",
+            (337.82, 76.2),
+            {
+                "1": ("VSNK_GATE", "local", ""),
+                "2": ("FET_MID", "local", ""),
+                "3": ("VSNK", "local", ""),
+            },
+        ),
     ]
 
     library_symbols = []
@@ -295,7 +593,9 @@ def generate_reference_schematic(destination: Path) -> Path:
         numbers = {pin["number"] for pin in pins}
         unknown = set(pin_map) - numbers
         if unknown:
-            raise ValueError(f"{reference} maps unknown {library}:{symbol_name} pins: {sorted(unknown)}")
+            raise ValueError(
+                f"{reference} maps unknown {library}:{symbol_name} pins: {sorted(unknown)}"
+            )
         lib_id = f"{library}:{symbol_name}"
         symbol_uuid = _uid(f"symbol:{reference}")
         footprint = ""
@@ -326,8 +626,13 @@ def generate_reference_schematic(destination: Path) -> Path:
         else:
             field_x, ref_y, value_y = sx, sy - 8, sy - 5
         instance = [
-            "symbol", ["lib_id", _Quoted(lib_id)], ["at", f"{sx:.3f}", f"{sy:.3f}", "0"],
-            ["unit", "1"], ["in_bom", "yes"], ["on_board", "yes"], ["dnp", "no"],
+            "symbol",
+            ["lib_id", _Quoted(lib_id)],
+            ["at", f"{sx:.3f}", f"{sy:.3f}", "0"],
+            ["unit", "1"],
+            ["in_bom", "yes"],
+            ["on_board", "yes"],
+            ["dnp", "no"],
             ["uuid", _Quoted(symbol_uuid)],
             _prop("Reference", reference, 0, field_x, ref_y),
             _prop("Value", value, 1, field_x, value_y),
@@ -335,7 +640,13 @@ def generate_reference_schematic(destination: Path) -> Path:
             _prop("Datasheet", datasheet, 3, sx, sy, True),
         ]
         for pin in pins:
-            instance.append(["pin", _Quoted(pin["number"]), ["uuid", _Quoted(_uid(f"pin:{reference}:{pin['number']}"))]])
+            instance.append(
+                [
+                    "pin",
+                    _Quoted(pin["number"]),
+                    ["uuid", _Quoted(_uid(f"pin:{reference}:{pin['number']}"))],
+                ]
+            )
             net_spec = pin_map.get(pin["number"])
             if net_spec:
                 net, kind, *shape = net_spec
@@ -384,7 +695,13 @@ def generate_reference_schematic(destination: Path) -> Path:
                         # Prefer the hierarchical port when it shares a point
                         # with local labels for the same electrical net.
                         label_points[point] = (
-                            net, kind, shape_name, label_x, label_y, justify, label_angle,
+                            net,
+                            kind,
+                            shape_name,
+                            label_x,
+                            label_y,
+                            justify,
+                            label_angle,
                         )
                 elif kind == "nc":
                     no_connect_points.add(point)
@@ -392,14 +709,21 @@ def generate_reference_schematic(destination: Path) -> Path:
                 px = sx + pin["x"]
                 py = sy - pin["y"]
                 no_connect_points.add((round(px, 3), round(py, 3)))
-        instance.append([
-            "instances",
-            ["project", _Quoted(PROJECT),
-                ["path", _Quoted(f"/{ROOT_UUID}"),
-                    ["reference", _Quoted(reference)], ["unit", "1"],
+        instance.append(
+            [
+                "instances",
+                [
+                    "project",
+                    _Quoted(PROJECT),
+                    [
+                        "path",
+                        _Quoted(f"/{ROOT_UUID}"),
+                        ["reference", _Quoted(reference)],
+                        ["unit", "1"],
+                    ],
                 ],
-            ],
-        ])
+            ]
+        )
         instances.append(instance)
 
     label_stubs = []
@@ -407,23 +731,34 @@ def generate_reference_schematic(destination: Path) -> Path:
         px, py = point
         labels.append(
             _label(
-                net, x, y, hierarchical=kind == "hier", shape=shape_name,
-                justify=justify, angle=angle, key=f"label:{kind}:{net}:{px:.3f}:{py:.3f}",
+                net,
+                x,
+                y,
+                hierarchical=kind == "hier",
+                shape=shape_name,
+                justify=justify,
+                angle=angle,
+                key=f"label:{kind}:{net}:{px:.3f}:{py:.3f}",
             )
         )
         if (round(x, 3), round(y, 3)) != point:
-            label_stubs.append([
-                "wire",
-                ["pts", ["xy", f"{px:.3f}", f"{py:.3f}"], ["xy", f"{x:.3f}", f"{y:.3f}"]],
-                ["stroke", ["width", "0"], ["type", "default"]],
-                ["uuid", _Quoted(_uid(f"label-stub:{kind}:{net}:{px:.3f}:{py:.3f}"))],
-            ])
+            label_stubs.append(
+                [
+                    "wire",
+                    ["pts", ["xy", f"{px:.3f}", f"{py:.3f}"], ["xy", f"{x:.3f}", f"{y:.3f}"]],
+                    ["stroke", ["width", "0"], ["type", "default"]],
+                    ["uuid", _Quoted(_uid(f"label-stub:{kind}:{net}:{px:.3f}:{py:.3f}"))],
+                ]
+            )
     for point in sorted(no_connect_points - set(label_points)):
         x, y = point
-        no_connects.append([
-            "no_connect", ["at", f"{x:.3f}", f"{y:.3f}"],
-            ["uuid", _Quoted(_uid(f"nc:{x:.3f}:{y:.3f}"))],
-        ])
+        no_connects.append(
+            [
+                "no_connect",
+                ["at", f"{x:.3f}", f"{y:.3f}"],
+                ["uuid", _Quoted(_uid(f"nc:{x:.3f}:{y:.3f}"))],
+            ]
+        )
 
     # Draw short, local relationships as real wires. Long connections remain
     # named labels so the sheet reads like a circuit rather than a cable map.
@@ -463,17 +798,21 @@ def generate_reference_schematic(destination: Path) -> Path:
         if len(anchors) != 1:
             raise ValueError(f"{net_name} wire group must contain one label anchor: {label_anchor}")
         anchor_point = anchors[0]
-        for (key_a, point_a), (key_b, point_b) in zip(ordered, ordered[1:]):
-            wires.append(_wire(point_a, point_b, f"{net_name}:{key_a[0]}.{key_a[1]}-{key_b[0]}.{key_b[1]}"))
+        for (key_a, point_a), (key_b, point_b) in itertools.pairwise(ordered):
+            wires.append(
+                _wire(point_a, point_b, f"{net_name}:{key_a[0]}.{key_a[1]}-{key_b[0]}.{key_b[1]}")
+            )
         for _, point in ordered[1:-1]:
-            junctions.append([
-                "junction",
-                ["at", f"{point[0]:.3f}", f"{point[1]:.3f}"],
-                ["diameter", "0"],
-                ["color", "0", "0", "0", "0"],
-                ["uuid", _Quoted(_uid(f"junction:{net_name}:{point[0]:.3f}:{point[1]:.3f}"))],
-            ])
-        for key, point in ordered:
+            junctions.append(
+                [
+                    "junction",
+                    ["at", f"{point[0]:.3f}", f"{point[1]:.3f}"],
+                    ["diameter", "0"],
+                    ["color", "0", "0", "0", "0"],
+                    ["uuid", _Quoted(_uid(f"junction:{net_name}:{point[0]:.3f}:{point[1]:.3f}"))],
+                ]
+            )
+        for _, point in ordered:
             if point != anchor_point:
                 label_points.pop(point, None)
 
@@ -498,16 +837,18 @@ def generate_reference_schematic(destination: Path) -> Path:
         fet_end_track,
         fet_t1_source,
     ]
-    for index, (start, end) in enumerate(zip(fet_route, fet_route[1:])):
+    for index, (start, end) in enumerate(itertools.pairwise(fet_route)):
         wires.append(_wire(start, end, f"FET_MID:power-trunk:{index}"))
     wires.append(_wire(fet_tee, fet_r10_node, "FET_MID:R10-branch"))
-    junctions.append([
-        "junction",
-        ["at", f"{fet_tee[0]:.3f}", f"{fet_tee[1]:.3f}"],
-        ["diameter", "0"],
-        ["color", "0", "0", "0", "0"],
-        ["uuid", _Quoted(_uid(f"junction:FET_MID:{fet_tee[0]:.3f}:{fet_tee[1]:.3f}"))],
-    ])
+    junctions.append(
+        [
+            "junction",
+            ["at", f"{fet_tee[0]:.3f}", f"{fet_tee[1]:.3f}"],
+            ["diameter", "0"],
+            ["color", "0", "0", "0", "0"],
+            ["uuid", _Quoted(_uid(f"junction:FET_MID:{fet_tee[0]:.3f}:{fet_tee[1]:.3f}"))],
+        ]
+    )
     # Keep one label on the now-wired island so the exported net retains the
     # stable FET_MID name used by downstream netlist checks.
     for ref, pin_number in (("T4", "3"), ("T1", "2")):
@@ -534,7 +875,7 @@ def generate_reference_schematic(destination: Path) -> Path:
         (gate_out[0], gate_target[1]),
         gate_target,
     ]
-    for index, (start, end) in enumerate(zip(gate_route, gate_route[1:])):
+    for index, (start, end) in enumerate(itertools.pairwise(gate_route)):
         wires.append(_wire(start, end, f"VSNK_GATE:T1-to-R10:{index}"))
     gate_label = label_points.get(fet_gate)
     if gate_label is None or gate_label[0] != "VSNK_GATE" or gate_label[1] != "local":
@@ -547,17 +888,19 @@ def generate_reference_schematic(destination: Path) -> Path:
     def add_route(net: str, points: list[tuple[float, float]], key: str) -> None:
         if len(points) < 2:
             raise ValueError(f"{net} route {key} needs at least two points.")
-        for index, (start, end) in enumerate(zip(points, points[1:])):
+        for index, (start, end) in enumerate(itertools.pairwise(points)):
             wires.append(_wire(start, end, f"{net}:{key}:{index}"))
 
     def add_junction(point: tuple[float, float], key: str) -> None:
-        junctions.append([
-            "junction",
-            ["at", f"{point[0]:.3f}", f"{point[1]:.3f}"],
-            ["diameter", "0"],
-            ["color", "0", "0", "0", "0"],
-            ["uuid", _Quoted(_uid(f"junction:{key}:{point[0]:.3f}:{point[1]:.3f}"))],
-        ])
+        junctions.append(
+            [
+                "junction",
+                ["at", f"{point[0]:.3f}", f"{point[1]:.3f}"],
+                ["diameter", "0"],
+                ["color", "0", "0", "0", "0"],
+                ["uuid", _Quoted(_uid(f"junction:{key}:{point[0]:.3f}:{point[1]:.3f}"))],
+            ]
+        )
 
     def remove_local_label(reference: str, pin_number: str, net: str) -> None:
         point = pin_world_points[(reference, pin_number)]
@@ -569,9 +912,16 @@ def generate_reference_schematic(destination: Path) -> Path:
     # J1 VBUS -> top VBUS spine -> T4 source.
     usb_vbus = pin_world_points[("J1", "A4")]
     t4_vbus = pin_world_points[("T4", "2")]
-    add_route("VBUS", [
-        usb_vbus, (63.5, usb_vbus[1]), (63.5, 81.28), t4_vbus,
-    ], "usb-input-to-power-spine")
+    add_route(
+        "VBUS",
+        [
+            usb_vbus,
+            (63.5, usb_vbus[1]),
+            (63.5, 81.28),
+            t4_vbus,
+        ],
+        "usb-input-to-power-spine",
+    )
     remove_local_label("T4", "2", "VBUS")
 
     # D4 is the VBUS feed for the filter capacitor; bring its input up to the
@@ -587,17 +937,29 @@ def generate_reference_schematic(destination: Path) -> Path:
     # the longer connection back to J1 and the top power spine.
     c50_vbus = pin_world_points[("C50", "1")]
     d50_vbus = pin_world_points[("D50", "1")]
-    add_route("VBUS", [
-        c50_vbus, (d50_vbus[0], c50_vbus[1]), d50_vbus,
-    ], "input-cap-tvss-feed")
+    add_route(
+        "VBUS",
+        [
+            c50_vbus,
+            (d50_vbus[0], c50_vbus[1]),
+            d50_vbus,
+        ],
+        "input-cap-tvss-feed",
+    )
     remove_local_label("D50", "1", "VBUS")
 
     # A single local ground route joins the input capacitor and the TVS cathode.
     c50_gnd = pin_world_points[("C50", "2")]
     d50_gnd = pin_world_points[("D50", "2")]
-    add_route("GND", [
-        c50_gnd, (d50_gnd[0], c50_gnd[1]), d50_gnd,
-    ], "input-protection-ground")
+    add_route(
+        "GND",
+        [
+            c50_gnd,
+            (d50_gnd[0], c50_gnd[1]),
+            d50_gnd,
+        ],
+        "input-protection-ground",
+    )
     remove_local_label("D50", "2", "GND")
 
     # CC1 and CC2 are routed independently from the receptacle to the
@@ -606,12 +968,26 @@ def generate_reference_schematic(destination: Path) -> Path:
     cc2_j1 = pin_world_points[("J1", "B5")]
     cc1_d1 = pin_world_points[("D1", "1")]
     cc2_d1 = pin_world_points[("D1", "2")]
-    add_route("CC1", [
-        cc1_j1, (73.66, cc1_j1[1]), (73.66, cc1_d1[1]), cc1_d1,
-    ], "usb-cc1-to-esd")
-    add_route("CC2", [
-        cc2_j1, (78.74, cc2_j1[1]), (78.74, cc2_d1[1]), cc2_d1,
-    ], "usb-cc2-to-esd")
+    add_route(
+        "CC1",
+        [
+            cc1_j1,
+            (73.66, cc1_j1[1]),
+            (73.66, cc1_d1[1]),
+            cc1_d1,
+        ],
+        "usb-cc1-to-esd",
+    )
+    add_route(
+        "CC2",
+        [
+            cc2_j1,
+            (78.74, cc2_j1[1]),
+            (78.74, cc2_d1[1]),
+            cc2_d1,
+        ],
+        "usb-cc2-to-esd",
+    )
     remove_local_label("D1", "1", "CC1")
     remove_local_label("D1", "2", "CC2")
 
@@ -620,9 +996,15 @@ def generate_reference_schematic(destination: Path) -> Path:
     # R1/U1 monitor net uses one matching local label at each functional end.
     d4_filtered = pin_world_points[("D4", "1")]
     c4_filtered = pin_world_points[("C4", "1")]
-    add_route("VBUS_FILTERED", [
-        d4_filtered, (c4_filtered[0], d4_filtered[1]), c4_filtered,
-    ], "filter-capacitor-connection")
+    add_route(
+        "VBUS_FILTERED",
+        [
+            d4_filtered,
+            (c4_filtered[0], d4_filtered[1]),
+            c4_filtered,
+        ],
+        "filter-capacitor-connection",
+    )
     remove_local_label("D4", "1", "VBUS_FILTERED")
 
     # Protected VSNK runs above the switches to J10. C10 and D11 branch from
@@ -637,11 +1019,18 @@ def generate_reference_schematic(destination: Path) -> Path:
     # Leave T1 pin 3 horizontally to the right before turning up/down to the
     # output spine. A vertical segment directly above the FET body would cross
     # the adjacent FET_MID lead at T1 pin 2 and short the two nets.
-    add_route("VSNK", [
-        t1_vsnk, (output_lane_x, t1_vsnk[1]),
-        (output_lane_x, output_rail_y), (c10_vsnk[0], output_rail_y),
-        (j10_vsnk[0], output_rail_y), j10_vsnk,
-    ], "protected-output-spine")
+    add_route(
+        "VSNK",
+        [
+            t1_vsnk,
+            (output_lane_x, t1_vsnk[1]),
+            (output_lane_x, output_rail_y),
+            (c10_vsnk[0], output_rail_y),
+            (j10_vsnk[0], output_rail_y),
+            j10_vsnk,
+        ],
+        "protected-output-spine",
+    )
     remove_local_label("T1", "3", "VSNK")
     remove_local_label("C10", "1", "VSNK")
     output_tap = (d11_vsnk[0], output_rail_y)
@@ -651,7 +1040,8 @@ def generate_reference_schematic(destination: Path) -> Path:
 
     # Functional-zone separator; avoid decorative boxes around the circuitry.
     rules = [
-        ["polyline",
+        [
+            "polyline",
             ["pts", ["xy", "44.45", "38.1"], ["xy", "398.78", "38.1"]],
             ["stroke", ["width", "0.254"], ["type", "default"]],
             ["fill", ["type", "none"]],
@@ -660,56 +1050,106 @@ def generate_reference_schematic(destination: Path) -> Path:
     ]
 
     schematic = [
-        "kicad_sch", ["version", "20250114"], ["generator", _Quoted("kicad-blocks")],
-        ["uuid", _Quoted(ROOT_UUID)], ["paper", _Quoted("A3")],
-        ["title_block",
+        "kicad_sch",
+        ["version", "20250114"],
+        ["generator", _Quoted("kicad-blocks")],
+        ["uuid", _Quoted(ROOT_UUID)],
+        ["paper", _Quoted("A3")],
+        [
+            "title_block",
             ["title", _Quoted("STUSB4500 USB Type-C / USB Power Delivery Sink")],
             ["date", _Quoted("2026-11-13")],
             ["rev", _Quoted("Layout revision 2")],
             ["company", _Quoted("KiCad Blocks — Reference design")],
             ["comment", "1", _Quoted("Source: ST DS12499 Rev. 8, Figure 10")],
-            ["comment", "2", _Quoted("Reference only: verify component ratings, footprints and thermal design before production.")],
+            [
+                "comment",
+                "2",
+                _Quoted(
+                    "Reference only: verify component ratings, footprints and thermal design before production."
+                ),
+            ],
         ],
         ["lib_symbols", *library_symbols],
-        *instances, *wires, *label_stubs, *labels, *no_connects, *junctions, *rules,
-        ["text", _Quoted("STUSB4500QTR — USB Type-C / USB PD sink controller"),
-            ["at", "50.8", "30.48", "0"], ["effects", ["font", ["size", "2.0", "2.0"]]],
+        *instances,
+        *wires,
+        *label_stubs,
+        *labels,
+        *no_connects,
+        *junctions,
+        *rules,
+        [
+            "text",
+            _Quoted("STUSB4500QTR — USB Type-C / USB PD sink controller"),
+            ["at", "50.8", "30.48", "0"],
+            ["effects", ["font", ["size", "2.0", "2.0"]]],
             ["uuid", _Quoted(_uid("text:title"))],
         ],
-        ["text", _Quoted("USB-C INPUT / CC ESD"),
-            ["at", "50.8", "63.5", "0"], ["effects", ["font", ["size", "1.4", "1.4"]]],
+        [
+            "text",
+            _Quoted("USB-C INPUT / CC ESD"),
+            ["at", "50.8", "63.5", "0"],
+            ["effects", ["font", ["size", "1.4", "1.4"]]],
             ["uuid", _Quoted(_uid("text:input"))],
         ],
-        ["text", _Quoted("VBUS FILTER / SENSE"),
-            ["at", "114.3", "63.5", "0"], ["effects", ["font", ["size", "1.4", "1.4"]]],
+        [
+            "text",
+            _Quoted("VBUS FILTER / SENSE"),
+            ["at", "114.3", "63.5", "0"],
+            ["effects", ["font", ["size", "1.4", "1.4"]]],
             ["uuid", _Quoted(_uid("text:filtering"))],
         ],
-        ["text", _Quoted("PD CONTROLLER / BYPASS"),
-            ["at", "190.5", "63.5", "0"], ["effects", ["font", ["size", "1.4", "1.4"]]],
+        [
+            "text",
+            _Quoted("PD CONTROLLER / BYPASS"),
+            ["at", "190.5", "63.5", "0"],
+            ["effects", ["font", ["size", "1.4", "1.4"]]],
             ["uuid", _Quoted(_uid("text:controller"))],
         ],
-        ["text", _Quoted("OPTIONAL HOST / I2C INTERFACE"),
-            ["at", "304.8", "180.34", "0"], ["effects", ["font", ["size", "1.4", "1.4"]]],
+        [
+            "text",
+            _Quoted("OPTIONAL HOST / I2C INTERFACE"),
+            ["at", "304.8", "180.34", "0"],
+            ["effects", ["font", ["size", "1.4", "1.4"]]],
             ["uuid", _Quoted(_uid("text:mcu"))],
         ],
-        ["text", _Quoted("BACK-TO-BACK POWER SWITCH"),
-            ["at", "281.94", "58.42", "0"], ["effects", ["font", ["size", "1.4", "1.4"]]],
+        [
+            "text",
+            _Quoted("BACK-TO-BACK POWER SWITCH"),
+            ["at", "281.94", "58.42", "0"],
+            ["effects", ["font", ["size", "1.4", "1.4"]]],
             ["uuid", _Quoted(_uid("text:power-path"))],
         ],
-        ["text", _Quoted("PROTECTED VSNK OUTPUT"),
-            ["at", "355.6", "58.42", "0"], ["effects", ["font", ["size", "1.4", "1.4"]]],
+        [
+            "text",
+            _Quoted("PROTECTED VSNK OUTPUT"),
+            ["at", "355.6", "58.42", "0"],
+            ["effects", ["font", ["size", "1.4", "1.4"]]],
             ["uuid", _Quoted(_uid("text:output"))],
         ],
-        ["text", _Quoted("I2C ADDRESS / RESET STRAPS"),
-            ["at", "147.32", "198.12", "0"], ["effects", ["font", ["size", "1.2", "1.2"]]],
+        [
+            "text",
+            _Quoted("I2C ADDRESS / RESET STRAPS"),
+            ["at", "147.32", "198.12", "0"],
+            ["effects", ["font", ["size", "1.2", "1.2"]]],
             ["uuid", _Quoted(_uid("text:address"))],
         ],
-        ["text", _Quoted("D4 order code is not specified by ST; select a part rated for the final VBUS range."),
-            ["at", "50.8", "264.16", "0"], ["effects", ["font", ["size", "1.0", "1.0"]]],
+        [
+            "text",
+            _Quoted(
+                "D4 order code is not specified by ST; select a part rated for the final VBUS range."
+            ),
+            ["at", "50.8", "264.16", "0"],
+            ["effects", ["font", ["size", "1.0", "1.0"]]],
             ["uuid", _Quoted(_uid("text:note"))],
         ],
-        ["text", _Quoted("REFERENCE ONLY — complete component, protection, USB-C compliance and thermal review before release."),
-            ["at", "50.8", "270.51", "0"], ["effects", ["font", ["size", "1.0", "1.0"]]],
+        [
+            "text",
+            _Quoted(
+                "REFERENCE ONLY — complete component, protection, USB-C compliance and thermal review before release."
+            ),
+            ["at", "50.8", "270.51", "0"],
+            ["effects", ["font", ["size", "1.0", "1.0"]]],
             ["uuid", _Quoted(_uid("text:production-note"))],
         ],
         ["sheet_instances", ["path", _Quoted("/"), ["page", _Quoted("1")]]],

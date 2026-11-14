@@ -96,7 +96,7 @@ def capture_picker(records, output_dir: Path) -> dict:
     from PIL import Image, ImageStat
 
     xdotool = find_executable("xdotool")
-    plugin_actions._load_tkinter()
+    plugin_actions.load_tkinter()
     tk = plugin_actions.tk
     parent = tk.Tk()
     parent.title("KiCad Blocks visual fixture host")
@@ -306,7 +306,7 @@ def _capture_modal(
 
 
 def _make_themed_root(theme: str, title: str):
-    plugin_actions._load_tkinter()
+    plugin_actions.load_tkinter()
     root = plugin_actions.tk.Tk()
     os.environ["KICAD_BLOCKS_THEME"] = theme
     plugin_actions._configure_tk_theme(root)

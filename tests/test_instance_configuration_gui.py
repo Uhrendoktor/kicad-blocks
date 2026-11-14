@@ -52,7 +52,7 @@ def _capture_dialog(dialog, destination: Path) -> None:
 
 
 def main(screenshot_path: Path | None = None) -> None:
-    plugin_actions._load_tkinter()
+    plugin_actions.load_tkinter()
     with tempfile.TemporaryDirectory(prefix="kicad-block-config-gui-") as temp:
         root_dir = Path(temp)
         library = root_dir / "library"
