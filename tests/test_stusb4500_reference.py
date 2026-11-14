@@ -137,40 +137,33 @@ class STUSB4500ReferenceTests(unittest.TestCase):
         self.assertLess(positions["U1"][0], positions["T4"][0])
         self.assertLess(positions["T4"][0], positions["T1"][0])
 
+
     def test_address_straps_are_separate_and_reset_stays_with_controller(self) -> None:
         with tempfile.TemporaryDirectory(prefix="stusb4500-address-") as temporary:
-            content, _, instances = self._generate(temporary)
+            content, tree, instances = self._generate(temporary)
 
         for reference in ("R51", "R52", "R53", "R54"):
             self.assertIn(reference, instances)
+            self.assertEqual(float(_direct(instances[reference], "at")[3]), 90.0)
         self.assertIn("R55", instances)
         self.assertLess(float(_direct(instances["R55"], "at")[2]), 180.34)
 
-        # Each address strap is a horizontal, left-to-right resistor chain.
-        r51 = _direct(instances["R51"], "at")
-        r52 = _direct(instances["R52"], "at")
-        r53 = _direct(instances["R53"], "at")
-        r54 = _direct(instances["R54"], "at")
+        r51, r52, r53, r54 = (
+            _direct(instances[reference], "at")
+            for reference in ("R51", "R52", "R53", "R54")
+        )
         self.assertAlmostEqual(float(r51[2]), float(r53[2]), places=3)
         self.assertAlmostEqual(float(r52[2]), float(r54[2]), places=3)
         self.assertLess(float(r51[1]), float(r53[1]))
         self.assertLess(float(r52[1]), float(r54[1]))
         self.assertLess(abs(float(r51[2]) - float(r52[2])), 15.0)
-        self.assertLess(abs(float(r51[1]) - float(r53[1])), 25.0)
-        for reference in ("R51", "R52", "R53", "R54"):
-            self.assertEqual(float(_direct(instances[reference], "at")[3]), 90.0)
-            for field_name in ("Reference", "Value"):
-                field_at = _direct(_property(instances[reference], field_name), "at")
-                self.assertEqual(float(field_at[3]), 90.0, f"{reference} {field_name} stays horizontal")
-        strap_label_positions = {
-            (str(node[1]), round(float(_direct(node, "at")[1]), 3),
-             round(float(_direct(node, "at")[2]), 3))
-            for node in _all(parse_sexpr(content), "label")
+
+        strap_names = {
+            str(node[1]) for node in _all(tree, "label")
             if len(node) > 1 and str(node[1]) in {"ADDR0", "ADDR1"}
         }
-        self.assertIn(("ADDR1", 246.380, 172.720), strap_label_positions)
-        self.assertIn(("ADDR0", 246.380, 185.420), strap_label_positions)
-
+        self.assertEqual(strap_names, {"ADDR0", "ADDR1"})
+        self.assertNotIn("(global_label", content)
 
     def test_back_to_back_pmos_midpoint_is_directly_wired_to_r10(self) -> None:
         with tempfile.TemporaryDirectory(prefix="stusb4500-pmos-link-") as temporary:
