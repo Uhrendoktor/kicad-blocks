@@ -2,6 +2,12 @@
 
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
+PLUGIN = Path(__file__).resolve().parents[1] / "plugin" / "kicad-blocks"
+sys.path.insert(0, str(PLUGIN))
+
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
