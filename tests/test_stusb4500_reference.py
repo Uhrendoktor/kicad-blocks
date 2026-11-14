@@ -305,8 +305,9 @@ class STUSB4500ReferenceTests(unittest.TestCase):
             if field_name == "Reference":
                 self.assertEqual(str(_direct(_direct(prop, "effects"), "justify")[1]), "left")
         r55 = _direct(instances["R55"], "at")
-        self.assertAlmostEqual(float(r55[1]), float(u1[1]) - 15.240, places=3)
+        self.assertAlmostEqual(float(r55[1]), float(u1[1]) - 22.860, places=3)
         self.assertLess(abs(float(r55[2]) - float(u1[2])), 15.0)
+        self.assertAlmostEqual(float(r55[2]), 127.000, places=3)
 
     def test_note_box_is_sized_for_one_short_line(self) -> None:
         with tempfile.TemporaryDirectory(prefix="stusb4500-note-") as temporary:
@@ -492,6 +493,8 @@ class STUSB4500ReferenceTests(unittest.TestCase):
             '(wire (pts (xy 254.000 114.300) (xy 254.000 90.170))',
             '(wire (pts (xy 254.000 90.170) (xy 246.380 90.170))',
             '(wire (pts (xy 246.380 90.170) (xy 246.380 97.790))',
+            '(wire (pts (xy 254.000 90.170) (xy 266.700 90.170))',
+            '(wire (pts (xy 266.700 90.170) (xy 266.700 97.790))',
         ):
             self.assertIn(segment, content)
 
@@ -543,8 +546,11 @@ class STUSB4500ReferenceTests(unittest.TestCase):
                 name, float(start[1]), float(start[2]),
                 float(end[1]), float(end[2]),
             ))
+        bounds = {frame[0]: frame for frame in frames}
+        self.assertAlmostEqual(bounds["vbus-monitor"][3], 213.360, places=3)
+        self.assertAlmostEqual(bounds["controller"][1], 218.440, places=3)
         for index, first in enumerate(frames):
-            for second in frames[index + 1:]:
+            for second in frames[index + 1:
                 overlap_x = min(first[3], second[3]) - max(first[1], second[1])
                 overlap_y = min(first[4], second[4]) - max(first[2], second[2])
                 self.assertFalse(
@@ -557,7 +563,7 @@ class STUSB4500ReferenceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="stusb4500-u1-gnd-cc2-") as temporary:
             _content, tree, _instances = self._generate(temporary)
 
-        ground_pin = (231.140, 130.810)
+        ground_pin = (223.520, 130.810)
         ground_stubs = []
         for wire in _all(tree, "wire"):
             points = _direct(wire, "pts")
@@ -570,8 +576,8 @@ class STUSB4500ReferenceTests(unittest.TestCase):
 
         self.assertEqual(len(ground_stubs), 1)
         start, end = ground_stubs[0]
-        self.assertNotEqual(start[0], end[0], "U1.10 GND label stub must be horizontal.")
-        self.assertEqual(start[1], end[1], "U1.10 GND label stub must not cross U1.4 CC2.")
+        self.assertEqual(start[0], end[0], "R55 GND label stub must be vertical.")
+        self.assertGreater(end[1], start[1], "R55 GND label must point below the resistor.")
 
 
 if __name__ == "__main__":

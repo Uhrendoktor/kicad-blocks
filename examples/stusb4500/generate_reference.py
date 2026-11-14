@@ -477,7 +477,9 @@ def generate_reference_schematic(destination: Path) -> Path:
                 raise ValueError("U1.6 must be placed before the RESET pull-down.")
             # Device:R pin 1 is 5.08 mm above its origin; leave a 2.54 mm
             # physical segment between the RESET pin and the resistor terminal.
-            sx, sy = reset_pin[0], reset_pin[1] + 7.62
+            # Move the vertical pull-down left of U1's CC pins. Its top
+            # terminal is reached by a short two-segment RESET route.
+            sx, sy = reset_pin[0] - 7.62, reset_pin[1] + 7.62
         definition = loaded[(library, symbol_name)]
         pins = _pin_data(definition)
         numbers = {pin["number"] for pin in pins}
@@ -519,7 +521,7 @@ def generate_reference_schematic(destination: Path) -> Path:
                 # Put the reference beside the body instead of on that pin.
                 ref_offsets = {
                     "R1": -5.08, "R2": 5.08, "R4": 5.08,
-                    "R10": -5.08, "R11": 5.08, "R13": -5.08, "R55": -5.08,
+                    "R10": -5.08, "R11": 5.08, "R13": -5.08, "R55": -2.54,
                 }
                 dx = ref_offsets[reference]
                 reference_x, reference_y = sx + dx, sy
@@ -626,12 +628,12 @@ def generate_reference_schematic(destination: Path) -> Path:
                             justify = "left"
                             label_angle = 0
                         if reference == "R55" and pin["number"] == "2":
-                            # R55.2 is immediately above U1.4 CC2. Branch its
-                            # GND label left so the default vertical stub does
-                            # not cross the adjacent controller pin.
-                            label_x = px - 2.54
-                            label_y = py
-                            justify = "left"
+                            # Keep R55's GND label below the body and away
+                            # from U1.4/CC2; the short vertical stub stays in
+                            # the controller's left margin.
+                            label_x = px
+                            label_y = py + 2.54
+                            justify = "right"
                             label_angle = 0
                         if reference == "U1":
                             # Stagger the four tightly pitched top-side supply
@@ -686,7 +688,6 @@ def generate_reference_schematic(destination: Path) -> Path:
     # These groups are deliberately collinear; generation fails if a later
     # placement change breaks the intended geometry.
     wire_groups = [
-        ("VREG_2V7", [("C2", "1"), ("C3", "1")], ("C3", "1")),
         ("VBUS_VS_DISCH", [("R1", "2"), ("R4", "2")], ("R1", "2")),
         ("VREG_2V7", [("R51", "1"), ("R52", "1")], ("R51", "1")),
         ("VSNK_GATE", [("R10", "2"), ("R11", "1"), ("R13", "1")], ("R11", "1")),
@@ -763,7 +764,7 @@ def generate_reference_schematic(destination: Path) -> Path:
     add_junction(sense_tap, "VBUS_VS_DISCH:label-tap")
     label_points[sense_tap] = (
         "VBUS_VS_DISCH", "local", None,
-        sense_tap[0], sense_tap[1] - 10.16, None, 0,
+        sense_tap[0], sense_tap[1] + 7.62, None, 0,
     )
 
     # The two PMOS devices face one another so their common FET_MID node is
@@ -827,16 +828,28 @@ def generate_reference_schematic(destination: Path) -> Path:
     ], "u1-vreg-1v2-to-c1")
     u1_vreg_2v7 = pin_world_points[("U1", "23")]
     c2_vreg_2v7 = pin_world_points[("C2", "1")]
+    c3_vreg_2v7 = pin_world_points[("C3", "1")]
+    vreg_2v7_branch = (u1_vreg_2v7[0], 90.17)
     add_route("VREG_2V7", [
-        u1_vreg_2v7, (u1_vreg_2v7[0], 90.17),
+        u1_vreg_2v7, vreg_2v7_branch,
         (c2_vreg_2v7[0], 90.17), c2_vreg_2v7,
     ], "u1-vreg-2v7-to-c2")
+    add_route("VREG_2V7", [
+        vreg_2v7_branch, (c3_vreg_2v7[0], 90.17), c3_vreg_2v7,
+    ], "u1-vreg-2v7-to-c3")
+    add_junction(vreg_2v7_branch, "VREG_2V7:C2-C3-bypass-branch")
+    remove_local_label("C2", "1", "VREG_2V7")
+    remove_local_label("C3", "1", "VREG_2V7")
 
     # R55.1 is physically wired to U1.6; RESET remains a hierarchical parent port.
     reset_pin = pin_world_points[("U1", "6")]
     reset_pull_down = pin_world_points[("R55", "1")]
     remove_local_label("R55", "1", "RESET")
-    add_route("RESET", [reset_pin, reset_pull_down], "u1-reset-to-r55")
+    add_route("RESET", [
+        reset_pin,
+        (reset_pull_down[0], reset_pin[1]),
+        reset_pull_down,
+    ], "u1-reset-to-r55")
 
     # D4 is reversed so VBUS enters from the connector side and filtered VBUS
     # exits to the right. The local rail ties its output to C4.1 and R1.1.
@@ -893,11 +906,11 @@ def generate_reference_schematic(destination: Path) -> Path:
         "VBUS BULK PROTECTION", 43.18, "vbus-bulk",
     ))
     rules.extend(_functional_block(
-        149.86, 86.36, 215.90, 175.26,
+        149.86, 86.36, 213.36, 175.26,
         "VBUS MONITOR / FILTER", 55.88, "vbus-monitor",
     ))
     rules.extend(_functional_block(
-        220.98, 86.36, 292.10, 160.02,
+        218.44, 86.36, 292.10, 160.02,
         "STUSB4500 CONTROLLER", 53.34, "controller",
     ))
     rules.extend(_functional_block(
