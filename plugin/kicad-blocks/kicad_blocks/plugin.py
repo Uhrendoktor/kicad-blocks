@@ -511,7 +511,9 @@ def _editor_window_id_for_widget(window: tkinter_types.Misc | _TkGeometryWindow)
     return None
 
 
-def _set_window_geometry(window: _TkGeometryWindow, width: int, height: int, min_width: int, min_height: int) -> None:
+def _set_window_geometry(
+    window: _TkGeometryWindow, width: int, height: int, min_width: int, min_height: int
+) -> None:
     """Size a completed dialog to its content and keep every action visible."""
     window.update_idletasks()
     sw = max(int(window.winfo_screenwidth()), 640)
