@@ -353,6 +353,22 @@ class _TkEntryCursor(Protocol):
     def icursor(self, index: str | int) -> None: ...
 
 
+class _TkGridManaged(Protocol):
+    """Grid-managed widget operation used to hide optional editor controls."""
+
+    def grid_remove(self) -> None: ...
+
+
+class _BlockPlacementSelection(TypedDict):
+    """Validated chooser result passed to the placement workflow."""
+
+    record: BlockRecord
+    variant: str
+    profile: str
+    parameters: dict[str, str]
+    layout: str
+
+
 class _TkLayoutOptions(TypedDict, total=False):
     """Subset of Tk layout options used to remove legacy scrollbar arrows."""
 
@@ -443,7 +459,7 @@ def _system_prefers_dark_theme() -> bool | None:
     return None
 
 
-def _configure_tk_theme(root: tkinter_types.Tk | tkinter_types.Toplevel) -> None:
+def _configure_tk_theme(root: tkinter_types.Misc) -> None:
     """Apply a compact KiCad-compatible palette to themed and classic Tk widgets."""
     dark = _system_prefers_dark_theme()
     if dark is None:
@@ -874,11 +890,15 @@ def _action_button(
 ) -> ttk_types.Button:
     """Create a consistently padded, semantic icon-and-label action button."""
     image = _create_action_icon(parent, icon)
-    options: dict[str, TkOption] = {"text": text, "command": command, "padding": (9, 6)}
-    options.update(button_options)
+    button = ttk.Button(
+        parent,
+        text=text,
+        command=cast(TkOption, command),
+        padding=(9, 6),
+        **button_options,
+    )
     if image is not None:
-        options.update({"image": image, "compound": "left"})
-    button = ttk.Button(parent, **options)
+        button.configure(image=image, compound="left")
     _add_tooltip(button, tooltip)
     return button
 
@@ -1580,11 +1600,11 @@ def _pick_block_for_placement(
     tree.heading("library", text="Library")
     tree.column("block", width=220, minwidth=160, stretch=True)
     tree.column("library", width=130, minwidth=100, stretch=False)
-    scroll = ttk.Scrollbar(left, orient="vertical", command=tree.yview, style="Vertical.TScrollbar")
+    scroll = ttk.Scrollbar(left, orient="vertical", command=cast(Callable[..., None], tree.yview), style="Vertical.TScrollbar")
     tree.configure(yscrollcommand=scroll.set)
     palette = getattr(parent, "kicad_blocks_palette", {})
-    tree.tag_configure("even", background=palette.get("surface", "#f4f5f6"))
-    tree.tag_configure("odd", background=palette.get("surface_alt", "#e8eaed"))
+    cast(_TkTagConfigurable, tree).tag_configure("even", background=palette.get("surface", "#f4f5f6"))
+    cast(_TkTagConfigurable, tree).tag_configure("odd", background=palette.get("surface_alt", "#e8eaed"))
     tree.grid(row=0, column=0, sticky="nsew")
     scroll.grid(row=0, column=1, sticky="ns")
     _bind_mousewheel(tree, lambda amount: tree.yview_scroll(amount, "units"))
@@ -1618,7 +1638,7 @@ def _pick_block_for_placement(
     records_by_id: dict[str, BlockRecord] = {}
     visible_records: list[BlockRecord] = []
     selected_record: list[BlockRecord | None] = [None]
-    chosen: list[BlockRecord | None] = [None]
+    chosen: list[_BlockPlacementSelection | None] = [None]
     updating_config = [False]
     preview_size: list[tuple[int, int] | None] = [None]
 
@@ -1832,12 +1852,12 @@ def _pick_record(
     tree.column("variants", width=75, minwidth=60, stretch=False, anchor="center")
     tree.column("layouts", width=65, minwidth=55, stretch=False, anchor="center")
     scrollbar = ttk.Scrollbar(
-        results_frame, orient="vertical", command=tree.yview, style="Vertical.TScrollbar"
+        results_frame, orient="vertical", command=cast(Callable[..., None], tree.yview), style="Vertical.TScrollbar"
     )
     tree.configure(yscrollcommand=scrollbar.set)
     palette = getattr(parent, "kicad_blocks_palette", {})
-    tree.tag_configure("even", background=palette.get("surface", "#f4f5f6"))
-    tree.tag_configure("odd", background=palette.get("surface_alt", "#e8eaed"))
+    cast(_TkTagConfigurable, tree).tag_configure("even", background=palette.get("surface", "#f4f5f6"))
+    cast(_TkTagConfigurable, tree).tag_configure("odd", background=palette.get("surface_alt", "#e8eaed"))
     tree.grid(row=0, column=0, sticky="nsew")
     scrollbar.grid(row=0, column=1, sticky="ns")
 
@@ -3674,8 +3694,8 @@ def _ask_layout_details(
             source_entry.configure(state="normal")
             browse_button.configure(state="normal")
         else:
-            source_entry.grid_remove()
-            browse_button.grid_remove()
+            cast(_TkGridManaged, source_entry).grid_remove()
+            cast(_TkGridManaged, browse_button).grid_remove()
 
     mode_combo.bind("<<ComboboxSelected>>", update_mode)
     update_mode()
@@ -3759,7 +3779,7 @@ def _show_block_layout_editor(
     tree.column("assigned", width=220, minwidth=160, stretch=False)
     tree.column("file", width=470, minwidth=260, stretch=True)
     scroll = ttk.Scrollbar(
-        table_frame, orient="vertical", command=tree.yview, style="Vertical.TScrollbar"
+        table_frame, orient="vertical", command=cast(Callable[..., None], tree.yview), style="Vertical.TScrollbar"
     )
     tree.configure(yscrollcommand=scroll.set)
     tree.grid(row=0, column=0, sticky="nsew")
@@ -4210,7 +4230,7 @@ def _ask_implementation_details(
         state="readonly",
     )
     copy_combo.grid(row=source_row + 1, column=0, columnspan=3, sticky="ew", pady=(4, 14))
-    copy_combo.grid_remove()
+    cast(_TkGridManaged, copy_combo).grid_remove()
 
     def browse():
         selected = _pick_kicad_file(
@@ -4227,15 +4247,15 @@ def _ask_implementation_details(
 
     def update_source_mode(_event: tkinter_types.Event[tkinter_types.Misc] | None = None):
         mode = mode_value.get()
-        copy_combo.grid_remove()
-        source_entry.grid_remove()
-        browse_button.grid_remove()
+        cast(_TkGridManaged, copy_combo).grid_remove()
+        cast(_TkGridManaged, source_entry).grid_remove()
+        cast(_TkGridManaged, browse_button).grid_remove()
         if mode == "Create a new empty schematic":
             source_label.configure(text="The new implementation starts as a blank KiCad schematic.")
         elif mode == "Copy an existing implementation":
             source_label.configure(text="Copy this library implementation:")
-            source_entry.grid_remove()
-            browse_button.grid_remove()
+            cast(_TkGridManaged, source_entry).grid_remove()
+            cast(_TkGridManaged, browse_button).grid_remove()
             copy_combo.grid()
             copy_combo.set(next(iter(copy_sources), ""))
         else:
@@ -4370,15 +4390,15 @@ def _show_block_variant_editor(
     tree.column("file", width=560, minwidth=320, stretch=True)
     tree.column("role", width=150, minwidth=130, stretch=False)
     scroll = ttk.Scrollbar(
-        table_frame, orient="vertical", command=tree.yview, style="Vertical.TScrollbar"
+        table_frame, orient="vertical", command=cast(Callable[..., None], tree.yview), style="Vertical.TScrollbar"
     )
     tree.configure(yscrollcommand=scroll.set)
     tree.grid(row=0, column=0, sticky="nsew")
     scroll.grid(row=0, column=1, sticky="ns")
 
     palette = getattr(parent, "kicad_blocks_palette", {})
-    tree.tag_configure("even", background=palette.get("surface", "#f4f5f6"))
-    tree.tag_configure("odd", background=palette.get("surface_alt", "#e8eaed"))
+    cast(_TkTagConfigurable, tree).tag_configure("even", background=palette.get("surface", "#f4f5f6"))
+    cast(_TkTagConfigurable, tree).tag_configure("odd", background=palette.get("surface_alt", "#e8eaed"))
     variants = [
         {
             "value": str(item["value"]),
@@ -4679,18 +4699,18 @@ def _show_library_roots_dialog(parent: tkinter_types.Misc) -> bool:
     tree.column("role", width=140, minwidth=110, stretch=False, anchor="center")
     tree.column("path", width=500, minwidth=220, stretch=True)
     vertical_scroll = ttk.Scrollbar(
-        table_frame, orient="vertical", command=tree.yview, style="Vertical.TScrollbar"
+        table_frame, orient="vertical", command=cast(Callable[..., None], tree.yview), style="Vertical.TScrollbar"
     )
     horizontal_scroll = ttk.Scrollbar(
-        table_frame, orient="horizontal", command=tree.xview, style="Horizontal.TScrollbar"
+        table_frame, orient="horizontal", command=cast(Callable[..., None], tree.xview), style="Horizontal.TScrollbar"
     )
     tree.configure(
         yscrollcommand=vertical_scroll.set,
         xscrollcommand=horizontal_scroll.set,
     )
     palette = getattr(parent, "kicad_blocks_palette", {})
-    tree.tag_configure("even", background=palette.get("surface", "#f4f5f6"))
-    tree.tag_configure("odd", background=palette.get("surface_alt", "#e8eaed"))
+    cast(_TkTagConfigurable, tree).tag_configure("even", background=palette.get("surface", "#f4f5f6"))
+    cast(_TkTagConfigurable, tree).tag_configure("odd", background=palette.get("surface_alt", "#e8eaed"))
     tree.grid(row=0, column=0, sticky="nsew")
     vertical_scroll.grid(row=0, column=1, sticky="ns")
     horizontal_scroll.grid(row=1, column=0, sticky="ew")
@@ -4746,7 +4766,7 @@ def _show_library_roots_dialog(parent: tkinter_types.Misc) -> bool:
             if previous == library_path:
                 tree.selection_set(str(index))
                 tree.focus(str(index))
-                tree.see(str(index))
+                cast(_TkTreeNavigator, tree).see(str(index))
         status.set(f"{len(roots)} registered libraries")
         update_selection_actions()
 
@@ -5046,10 +5066,10 @@ def _show_library_browser(
     tree.column("variants", width=78, minwidth=72, stretch=False, anchor="center")
     tree.column("layouts", width=52, minwidth=48, stretch=False, anchor="center")
     tree_y_scroll = ttk.Scrollbar(
-        tree_frame, orient="vertical", command=tree.yview, style="Vertical.TScrollbar"
+        tree_frame, orient="vertical", command=cast(Callable[..., None], tree.yview), style="Vertical.TScrollbar"
     )
     tree_x_scroll = ttk.Scrollbar(
-        tree_frame, orient="horizontal", command=tree.xview, style="Horizontal.TScrollbar"
+        tree_frame, orient="horizontal", command=cast(Callable[..., None], tree.xview), style="Horizontal.TScrollbar"
     )
     tree.configure(
         yscrollcommand=tree_y_scroll.set,
@@ -5136,7 +5156,7 @@ def _show_library_browser(
         description_label.configure(text=f"{description}  ·  {record.path.parent.name}")
         details.configure(state="normal")
         details.delete("1.0", "end")
-        details.tag_configure(
+        cast(_TkTagConfigurable, details).tag_configure(
             "section",
             foreground=palette.get("accent", "#4c789f"),
             font=("TkDefaultFont", 9, "bold"),
@@ -5531,7 +5551,7 @@ def _show_library_browser(
 
     def focus_search(_event: tkinter_types.Event[tkinter_types.Misc] | None = None):
         search_entry.focus_set()
-        search_entry.icursor("end")
+        cast(_TkEntryCursor, search_entry).icursor("end")
         return "break"
 
     def place_double_clicked(event: tkinter_types.Event[tkinter_types.Misc]):
