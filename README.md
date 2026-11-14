@@ -43,7 +43,7 @@ Applying a PCB layout creates a **separate board copy**. It does not modify a bo
 
 The current full integration target is **KiCad 10.99.0 development nightly on Linux x86_64 with CPython 3.12**. CI also checks plugin discovery and managed-environment creation with CPython 3.13 and 3.14; it does not yet run the full KiCad integration matrix on those interpreters. Stable KiCad 10.x, KiCad 11 stable, Windows, macOS, ARM, and other combinations are not yet validated.
 
-Stable KiCad 10.x does not expose the Schematic Editor IPC plugin surface that this project requires. The current 10.99.0 nightly target is a development build; stable KiCad 11 is not yet validated by this repository's integration suite. See the [KiCad IPC API support matrix](https://dev-docs.kicad.org/en/apis-and-binding/ipc-api/for-addon-developers/) and the [compatibility and test-coverage guide](docs/explanation/compatibility.md).
+Stable KiCad 10.x does not expose the Schematic Editor IPC plugin surface that this project requires. The current 10.99.0 nightly target is a development build; stable KiCad 11 is not yet validated by this repository's integration suite. See the [KiCad IPC API support matrix](https://dev-docs.kicad.org/en/apis-and-binding/ipc-api/for-addon-developers/).
 
 On Linux, native symbol-placement handoff also uses `xdotool` and KiCad's default Add Symbol shortcut, `A`.
 
@@ -64,11 +64,17 @@ Then enable the KiCad API in Eeschema's plugin preferences, select the supported
 ## First use
 
 1. **Install and enable the plugin.** Register a shared library folder using the [installation guide](docs/getting-started.md).
-2. **Create a reusable implementation.** In Eeschema, select a hierarchical sheet and run **Create Block from Sheet**. Root-sheet hierarchical labels become the facade pins; the copied implementation stays in the shared library.
-3. **Place the facade in another project.** Use **Browse and Place Functional Blocks**, choose a variant or profile, and confirm the symbol in KiCad's native chooser.
-4. **Validate the stored circuit.** Run registered-library validation and use recursive ERC/BOM for implementation-level results; project-native ERC/netlist/BOM see the facade only.
+2. **Create a reusable implementation.** In Eeschema, select a hierarchical sheet symbol
+   in its parent schematic and run **Create Block from Sheet**. Root-sheet labels
+   become the facade pins; the copied implementation stays in the shared library.
+3. **Place the facade in another project.** Use **Browse and Place Functional Blocks**,
+   choose a variant or profile, and confirm the symbol in KiCad's native chooser.
+4. **Validate the stored circuit.** Run registered-library validation and use
+   recursive ERC/BOM for implementation-level results; project-native
+   ERC/netlist/BOM see the facade only.
 
-The [first-block tutorial](docs/tutorials/first-block.md) walks through the complete sequence, including the expected files and per-instance configuration.
+The [first-block tutorial](docs/tutorials/first-block.md) walks through the
+complete sequence, including the expected files and per-instance configuration.
 
 ## Documentation
 
