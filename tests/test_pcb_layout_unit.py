@@ -11,9 +11,7 @@ PLUGIN = Path(__file__).resolve().parents[1] / "plugin" / "kicad-blocks"
 sys.path.insert(0, str(PLUGIN))
 
 from kicad_blocks.pcb_layout import (
-
     _merge_project_net_settings,
-
     _rewrite_nets,
     _transform_item,
     parse_sexpr,
