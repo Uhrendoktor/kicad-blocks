@@ -289,7 +289,9 @@ def _all_sheet_symbols(schematic: _SchematicForDependencyScan) -> list[_PlacedSy
     return symbols or list(schematic.get_symbols())
 
 
-def synchronize_block_dependencies(parent: BlockRecord, library_roots: list[Path], kicad_cli: str) -> DependencySynchronizationResult:
+def synchronize_block_dependencies(
+    parent: BlockRecord, library_roots: list[Path], kicad_cli: str
+) -> DependencySynchronizationResult:
     """Rebuild a block's dependency manifest from its saved default implementation."""
     from kipy import KiCad
 

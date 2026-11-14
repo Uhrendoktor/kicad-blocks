@@ -245,7 +245,9 @@ def _wire(start: tuple[float, float], end: tuple[float, float], key: str) -> SEx
     ]
 
 
-def _prop(name: str, value: str, number: int, x: float, y: float, hidden: bool = False) -> SExprList:
+def _prop(
+    name: str, value: str, number: int, x: float, y: float, hidden: bool = False
+) -> SExprList:
     effects = ["effects", ["font", ["size", "1.27", "1.27"]]]
     if hidden:
         effects.append("hide")

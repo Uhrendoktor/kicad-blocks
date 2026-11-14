@@ -1446,7 +1446,9 @@ def _show_selected_block_configuration(
         )
         layout_combo.pack(fill="x")
 
-        def update_layout_for_variant(_event: tkinter_types.Event[tkinter_types.Misc] | None = None):
+        def update_layout_for_variant(
+            _event: tkinter_types.Event[tkinter_types.Misc] | None = None,
+        ):
             if variant_var is None:
                 return
             selected = next(
@@ -2597,7 +2599,13 @@ def _create_and_place(
     )
 
 
-def _edit_facade_symbol(root: Path | list[Path], schematic: _Schematic, project_dir: Path, editor_window_id: str | None, parent: tkinter_types.Misc) -> None:
+def _edit_facade_symbol(
+    root: Path | list[Path],
+    schematic: _Schematic,
+    project_dir: Path,
+    editor_window_id: str | None,
+    parent: tkinter_types.Misc,
+) -> None:
     """Open the selected library-backed facade through Eeschema's native Symbol Editor action."""
     instance = _selected_symbol(schematic)
     record = _block_record_for_instance(root, project_dir, instance)
@@ -3871,7 +3879,10 @@ def _ask_layout_details(
 
 
 def _show_block_layout_editor(
-    record: BlockRecord, parent: tkinter_types.Misc, kicad: _KiCadApp | None = None, editor_window_id: str | None = None
+    record: BlockRecord,
+    parent: tkinter_types.Misc,
+    kicad: _KiCadApp | None = None,
+    editor_window_id: str | None = None,
 ) -> Path | None:
     """Manage stored PCB boards and keep every board linked to an implementation."""
     from .model import slugify
@@ -4176,7 +4187,9 @@ def _pick_kicad_file(
     return selected or None
 
 
-def _pick_directory(parent: tkinter_types.Misc, *, title: str, initial_path: str | Path | None = None) -> str | None:
+def _pick_directory(
+    parent: tkinter_types.Misc, *, title: str, initial_path: str | Path | None = None
+) -> str | None:
     """Use the operating system directory chooser with a shared parent policy."""
     initial = Path(initial_path).expanduser() if initial_path else Path.cwd()
     if initial.is_file():
@@ -4388,7 +4401,11 @@ def _ask_implementation_details(
 
 
 def _show_block_variant_editor(
-    record: BlockRecord, parent: tkinter_types.Misc, *, kicad: _KiCadApp | None = None, editor_window_id: str | None = None
+    record: BlockRecord,
+    parent: tkinter_types.Misc,
+    *,
+    kicad: _KiCadApp | None = None,
+    editor_window_id: str | None = None,
 ) -> Path | None:
     """Manage named implementations and select which one empty KB_VARIANT uses."""
     dialog = tkinter_types.Toplevel(parent)
@@ -4868,7 +4885,9 @@ def _show_library_roots_dialog(parent: tkinter_types.Misc) -> bool:
     close_button = ttk.Button(actions, text="Close", command=dialog.destroy)
     close_button.pack(side="right")
 
-    def update_selection_actions(_event: tkinter_types.Event[tkinter_types.Misc] | None = None) -> None:
+    def update_selection_actions(
+        _event: tkinter_types.Event[tkinter_types.Misc] | None = None,
+    ) -> None:
         path = selected_path()
         fixed = path is None or path == environment_root
         change_button.configure(state="disabled" if fixed else "normal")
@@ -5636,7 +5655,13 @@ def _resolve_variant_text(
     return value.strip()
 
 
-def _open_selected_block_implementation(root: Path | list[Path], schematic: _Schematic, kicad: _KiCadApp, project_dir: Path, parent: tkinter_types.Misc) -> subprocess.Popen[bytes]:
+def _open_selected_block_implementation(
+    root: Path | list[Path],
+    schematic: _Schematic,
+    kicad: _KiCadApp,
+    project_dir: Path,
+    parent: tkinter_types.Misc,
+) -> subprocess.Popen[bytes]:
     """Open the selected facade's exact variant implementation; never guess a fallback."""
     instance = _selected_symbol(schematic)
     record = _block_record_for_instance(root, project_dir, instance)
@@ -5673,7 +5698,10 @@ def open_selected_implementation_action() -> None:
 
 
 def _export_recursive_bom(
-    root: Path | list[Path], parent: tkinter_types.Misc, schematic: _Schematic | None = None, project_dir: Path | None = None
+    root: Path | list[Path],
+    parent: tkinter_types.Misc,
+    schematic: _Schematic | None = None,
+    project_dir: Path | None = None,
 ) -> None:
     parameter_values = None
     selection = _safe_schematic_selection(schematic)
@@ -5768,7 +5796,10 @@ def _validate_shared_library(root: Path | list[Path], parent: tkinter_types.Misc
 
 
 def _validate_recursive_erc(
-    root: Path | list[Path], parent: tkinter_types.Misc, schematic: _Schematic | None = None, project_dir: Path | None = None
+    root: Path | list[Path],
+    parent: tkinter_types.Misc,
+    schematic: _Schematic | None = None,
+    project_dir: Path | None = None,
 ) -> None:
     parameter_values = None
     selection = _safe_schematic_selection(schematic)
@@ -5873,7 +5904,11 @@ def _open_generated_pcb_copy(kicad: _KiCadApp, board_path: Path) -> subprocess.P
 
 
 def _apply_block_pcb_layout(
-    schematic: _Schematic, kicad: _KiCadApp, project_dir: Path, library_root: Path, parent: tkinter_types.Misc
+    schematic: _Schematic,
+    kicad: _KiCadApp,
+    project_dir: Path,
+    library_root: Path,
+    parent: tkinter_types.Misc,
 ) -> None:
     """Create a new project-board copy with the selected block's stored PCB layout."""
     instance = _selected_symbol(schematic)
@@ -6016,7 +6051,11 @@ def _apply_block_pcb_layout(
 
 
 def _apply_selected_block_pcb_layouts(
-    schematic: _Schematic, kicad: _KiCadApp, project_dir: Path, library_root: Path, parent: tkinter_types.Misc
+    schematic: _Schematic,
+    kicad: _KiCadApp,
+    project_dir: Path,
+    library_root: Path,
+    parent: tkinter_types.Misc,
 ) -> None:
     """Batch-apply the layouts for all selected block facade instances."""
     instances = _selected_symbols(schematic)
@@ -6277,10 +6316,18 @@ def _show_action_hub(root: tkinter_types.Misc) -> ttk_types.Notebook:
         content_id = canvas.create_window((0, 0), window=content, anchor="nw")
         description_labels = []
 
-        def update_scroll_region(_event: tkinter_types.Event[tkinter_types.Misc] | None = None, target: tkinter_types.Canvas = canvas) -> None:
+        def update_scroll_region(
+            _event: tkinter_types.Event[tkinter_types.Misc] | None = None,
+            target: tkinter_types.Canvas = canvas,
+        ) -> None:
             target.configure(scrollregion=target.bbox("all"))
 
-        def fit_content_width(event: tkinter_types.Event[tkinter_types.Misc], target: tkinter_types.Canvas = canvas, item: int = content_id, labels: list[ttk_types.Label] = description_labels) -> None:
+        def fit_content_width(
+            event: tkinter_types.Event[tkinter_types.Misc],
+            target: tkinter_types.Canvas = canvas,
+            item: int = content_id,
+            labels: list[ttk_types.Label] = description_labels,
+        ) -> None:
             target.itemconfigure(item, width=event.width)
             wrap = max(260, min(560, event.width - 390))
             for label in labels:
