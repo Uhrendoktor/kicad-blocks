@@ -8,7 +8,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from typing import Protocol, cast
 from unittest.mock import Mock, patch
 
@@ -38,6 +38,17 @@ class _MinimizableWindow(Protocol):
     def deiconify(self) -> None: ...
 
 
+class _CommandOutput(Protocol):
+    """Subprocess response fixture consumed by the editor-window helpers."""
+
+    stdout: str
+    returncode: int
+
+
+def _command_output(stdout: str = "", returncode: int = 0) -> _CommandOutput:
+    return cast(_CommandOutput, SimpleNamespace(stdout=stdout, returncode=returncode))
+
+
 # These tests exercise UI implementation details directly. Resolve the private
 # hooks by name and give each one the narrow return contract used by the tests.
 _attach_tk_window_to_editor = cast(Callable[..., bool], getattr(plugin_actions, "_attach_tk_window_to_editor"))
@@ -65,7 +76,7 @@ _system_prefers_dark_theme = cast(Callable[..., bool], getattr(plugin_actions, "
 
 
 class LibraryBrowserTests(unittest.TestCase):
-    def setUp(self):
+    def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory()
         self.root = Path(self.temp.name) / "library"
         self.board = Path(self.temp.name) / "compact.kicad_pcb"
@@ -93,10 +104,10 @@ class LibraryBrowserTests(unittest.TestCase):
             description="USB input protection and common-mode filtering",
         )
 
-    def tearDown(self):
+    def tearDown(self) -> None:
         self.temp.cleanup()
 
-    def test_search_matches_description_pins_and_variant_values(self):
+    def test_search_matches_description_pins_and_variant_values(self) -> None:
         records = [self.block, self.filter_block]
         self.assertEqual(_filter_library_records(records, "buck")[0].name, "Buck Converter")
         self.assertEqual(_filter_library_records(records, "common-mode")[0].name, "USB Filter")
@@ -105,7 +116,7 @@ class LibraryBrowserTests(unittest.TestCase):
         self.assertEqual(_filter_library_records(records, "vout")[0].name, "Buck Converter")
         self.assertEqual(_filter_library_records(records, ""), records)
 
-    def test_native_facade_preview_removes_reference_and_component_name(self):
+    def test_native_facade_preview_removes_reference_and_component_name(self) -> None:
         from xml.etree import ElementTree as ET
 
         svg = self.root / "preview-source.svg"
@@ -136,7 +147,7 @@ class LibraryBrowserTests(unittest.TestCase):
         self.assertNotIn("Buck Converter", labels)
         self.assertIn("VIN", labels)
 
-    def test_overview_contains_pin_types_parameters_variants_and_layouts(self):
+    def test_overview_contains_pin_types_parameters_variants_and_layouts(self) -> None:
         overview = _block_overview_text(self.block)
         self.assertIn("VIN", overview)
         self.assertIn("input", overview)
@@ -152,7 +163,7 @@ class LibraryBrowserTests(unittest.TestCase):
         self.assertNotIn(str(self.block.manifest["block_id"]), overview)
 
 
-    def test_new_pcb_layout_is_created_as_default_and_saved_in_block(self):
+    def test_new_pcb_layout_is_created_as_default_and_saved_in_block(self) -> None:
         source = _new_blank_pcb_source()
         try:
             _save_block_layouts(
@@ -172,7 +183,7 @@ class LibraryBrowserTests(unittest.TestCase):
         )
         self.assertEqual(manifest["layouts"][0]["implementations"], ["Default"])
 
-    def test_each_pcb_layout_keeps_multiple_implementation_associations(self):
+    def test_each_pcb_layout_keeps_multiple_implementation_associations(self) -> None:
         layouts = [dict(item) for item in self.block.manifest["layouts"]]
         updated = _save_block_layouts(
             self.block,
@@ -191,7 +202,7 @@ class LibraryBrowserTests(unittest.TestCase):
             "compact",
         )
 
-    def test_removing_all_pcb_layouts_clears_obsolete_variant_layout_ids(self):
+    def test_removing_all_pcb_layouts_clears_obsolete_variant_layout_ids(self) -> None:
         _save_block_layouts(
             self.block,
             _layout_choices(self.block),
@@ -210,7 +221,7 @@ class LibraryBrowserTests(unittest.TestCase):
             all("layout_id" not in item for item in manifest.get("variants", []))
         )
 
-    def test_native_file_and_directory_choosers_use_system_filedialog(self):
+    def test_native_file_and_directory_choosers_use_system_filedialog(self) -> None:
         open_dialog = Mock(return_value="/tmp/block.kicad_sch")
         directory_dialog = Mock(return_value="/tmp/library")
         with patch(
@@ -239,7 +250,7 @@ class LibraryBrowserTests(unittest.TestCase):
         self.assertTrue(directory_dialog.call_args.kwargs["mustexist"])
         self.assertEqual(directory_dialog.call_args.kwargs["initialdir"], str(self.root))
 
-    def test_layout_linked_to_implementation_is_used_when_instance_has_default(self):
+    def test_layout_linked_to_implementation_is_used_when_instance_has_default(self) -> None:
         original_layouts = [dict(item) for item in self.block.manifest["layouts"]]
         updated_block = _save_block_layouts(
             self.block,
@@ -269,7 +280,7 @@ class LibraryBrowserTests(unittest.TestCase):
         resolved = _choose_block_layout(updated_block, object(), instance=instance)
         self.assertEqual(resolved["id"], "compact")
 
-    def test_implementation_link_supersedes_implicit_default_layout(self):
+    def test_implementation_link_supersedes_implicit_default_layout(self) -> None:
         original_layouts = [dict(item) for item in self.block.manifest["layouts"]]
         second_board = Path(self.temp.name) / "standard.kicad_pcb"
         second_board.write_text("(kicad_pcb)", encoding="utf-8")
@@ -300,7 +311,7 @@ class LibraryBrowserTests(unittest.TestCase):
         resolved = _choose_block_layout(updated_block, object(), instance=instance)
         self.assertEqual(resolved["id"], "standard")
 
-    def test_manifest_rejects_variant_link_to_unknown_layout(self):
+    def test_manifest_rejects_variant_link_to_unknown_layout(self) -> None:
         manifest_path = self.block.path / "manifest.json"
         manifest = read_manifest(self.block.path)
         manifest["variants"][0]["layout_id"] = "missing"
@@ -311,7 +322,7 @@ class LibraryBrowserTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "links to unknown PCB layout"):
             read_manifest(self.block.path)
 
-    def test_editing_implementation_variants_preserves_pcb_layout_links(self):
+    def test_editing_implementation_variants_preserves_pcb_layout_links(self) -> None:
         layouts = _layout_choices(self.block)
         linked_block = _save_block_layouts(
             self.block,
@@ -362,7 +373,7 @@ class LibraryBrowserTests(unittest.TestCase):
         )
         self.assertEqual(renamed_implementation["layout_id"], "compact")
 
-    def test_default_implementation_is_persisted_and_used_for_empty_selector(self):
+    def test_default_implementation_is_persisted_and_used_for_empty_selector(self) -> None:
         _save_block_variants(
             self.block,
             [
@@ -382,7 +393,7 @@ class LibraryBrowserTests(unittest.TestCase):
             "implementation_1v8.kicad_sch",
         )
 
-    def test_variant_metadata_can_be_added_edited_and_removed_from_library(self):
+    def test_variant_metadata_can_be_added_edited_and_removed_from_library(self) -> None:
         initial_version = read_manifest(self.filter_block.path)["version"]
 
         _save_block_variants(
@@ -411,7 +422,7 @@ class LibraryBrowserTests(unittest.TestCase):
         self.assertEqual(removed["variants"], [])
         self.assertFalse(variant_file.exists())
 
-    def test_variant_can_be_edited_without_copying_its_file_onto_itself(self):
+    def test_variant_can_be_edited_without_copying_its_file_onto_itself(self) -> None:
         _save_block_variants(
             self.filter_block,
             [{"value": "1V8", "source": str(self.v18)}],
@@ -431,7 +442,7 @@ class LibraryBrowserTests(unittest.TestCase):
             variant_file.name,
         )
 
-    def test_invalid_profile_change_does_not_copy_new_variant_files(self):
+    def test_invalid_profile_change_does_not_copy_new_variant_files(self) -> None:
         profiled = create_block(
             self.root,
             "Profiled Variant Block",
@@ -452,7 +463,7 @@ class LibraryBrowserTests(unittest.TestCase):
             "1V8",
         )
 
-    def test_variant_editor_refuses_to_remove_an_implementation_used_by_a_profile(self):
+    def test_variant_editor_refuses_to_remove_an_implementation_used_by_a_profile(self) -> None:
         profiled = create_block(
             self.root,
             "Profiled Variant Block",
@@ -463,25 +474,25 @@ class LibraryBrowserTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "still use an implementation"):
             _save_block_variants(profiled, [])
 
-    def test_window_geometry_respects_display_bounds(self):
+    def test_window_geometry_respects_display_bounds(self) -> None:
         class FakeWindow:
-            def __init__(self):
-                self.requested_geometry = None
-                self.minimum = None
+            def __init__(self) -> None:
+                self.requested_geometry: str | None = None
+                self.minimum: tuple[int, int] | None = None
 
-            def update_idletasks(self):
+            def update_idletasks(self) -> None:
                 pass
 
-            def winfo_screenwidth(self):
+            def winfo_screenwidth(self) -> int:
                 return 1366
 
-            def winfo_screenheight(self):
+            def winfo_screenheight(self) -> int:
                 return 768
 
-            def geometry(self, value):
+            def geometry(self, value: str) -> None:
                 self.requested_geometry = value
 
-            def minsize(self, width, height):
+            def minsize(self, width: int, height: int) -> None:
                 self.minimum = (width, height)
 
         window = FakeWindow()
@@ -489,22 +500,24 @@ class LibraryBrowserTests(unittest.TestCase):
         self.assertEqual(window.requested_geometry, "1286x668+40+50")
         self.assertEqual(window.minimum, (1160, 668))
 
-    def test_tk_transient_uses_client_window_and_editor_owner(self):
+    def test_tk_transient_uses_client_window_and_editor_owner(self) -> None:
         class FakeWindow:
-            def __init__(self):
-                self.classes = None
-                self.attributes = None
+            def __init__(self) -> None:
+                self.classes: tuple[str, ...] | None = None
+                self.attributes: tuple[str, ...] | None = None
 
-            def wm_class(self, *arguments):
+            def wm_class(self, *arguments: str) -> tuple[str, ...]:
                 self.classes = arguments
+                return arguments
 
-            def wm_attributes(self, *arguments):
+            def wm_attributes(self, *arguments: str) -> tuple[str, ...]:
                 self.attributes = arguments
+                return arguments
 
-            def update_idletasks(self):
+            def update_idletasks(self) -> None:
                 pass
 
-            def winfo_id(self):
+            def winfo_id(self) -> str:
                 return "0x222"
 
         window = FakeWindow()
@@ -518,7 +531,7 @@ class LibraryBrowserTests(unittest.TestCase):
         self.assertEqual(window.attributes, ("-type", "dialog"))
 
 
-    def test_record_lookup_finds_a_block_in_another_registered_library(self):
+    def test_record_lookup_finds_a_block_in_another_registered_library(self) -> None:
         second_root = Path(self.temp.name) / "second-library"
         other_block = create_block(
             second_root,
@@ -537,16 +550,16 @@ class LibraryBrowserTests(unittest.TestCase):
         resolved = _library_record_for_instance([self.root, second_root], instance)
         self.assertEqual(resolved.path, other_block.path)
 
-    def test_mousewheel_scrolls_without_dragging_the_scrollbar(self):
+    def test_mousewheel_scrolls_without_dragging_the_scrollbar(self) -> None:
         class FakeWidget:
-            def __init__(self, children=()):
-                self.bindings = {}
-                self.children = list(children)
+            def __init__(self, children: Sequence[FakeWidget] = ()) -> None:
+                self.bindings: dict[str, Callable[..., str]] = {}
+                self.children: list[FakeWidget] = list(children)
 
-            def bind(self, event, callback, add=None):
+            def bind(self, event: str, callback: Callable[..., str], add: str | None = None) -> None:
                 self.bindings[event] = callback
 
-            def winfo_children(self):
+            def winfo_children(self) -> list[FakeWidget]:
                 return self.children
 
         widget = FakeWidget()
@@ -559,12 +572,12 @@ class LibraryBrowserTests(unittest.TestCase):
 
         self.assertEqual(scrolls, [-1, 1, -1])
 
-    def test_mousewheel_accumulates_high_resolution_trackpad_deltas(self):
+    def test_mousewheel_accumulates_high_resolution_trackpad_deltas(self) -> None:
         class FakeWidget:
-            def __init__(self):
-                self.bindings = {}
+            def __init__(self) -> None:
+                self.bindings: dict[str, Callable[..., str]] = {}
 
-            def bind(self, event, callback, add=None):
+            def bind(self, event: str, callback: Callable[..., str], add: str | None = None) -> None:
                 self.bindings[event] = callback
 
         widget = FakeWidget()
@@ -577,16 +590,16 @@ class LibraryBrowserTests(unittest.TestCase):
         handler(SimpleNamespace(delta=0.5, num=None))
         self.assertEqual(scrolls, [-1])
 
-    def test_mousewheel_binding_can_cover_nested_controls(self):
+    def test_mousewheel_binding_can_cover_nested_controls(self) -> None:
         class FakeWidget:
-            def __init__(self, children=()):
-                self.bindings = {}
-                self.children = list(children)
+            def __init__(self, children: Sequence[FakeWidget] = ()) -> None:
+                self.bindings: dict[str, Callable[..., str]] = {}
+                self.children: list[FakeWidget] = list(children)
 
-            def bind(self, event, callback, add=None):
+            def bind(self, event: str, callback: Callable[..., str], add: str | None = None) -> None:
                 self.bindings[event] = callback
 
-            def winfo_children(self):
+            def winfo_children(self) -> list[FakeWidget]:
                 return self.children
 
         child = FakeWidget()
@@ -596,32 +609,32 @@ class LibraryBrowserTests(unittest.TestCase):
         child.bindings["<MouseWheel>"](SimpleNamespace(delta=120, num=None))
         self.assertEqual(scrolls, [-1])
 
-    def test_dark_theme_can_be_forced_or_disabled(self):
+    def test_dark_theme_can_be_forced_or_disabled(self) -> None:
         with patch.dict(os.environ, {"KICAD_BLOCKS_THEME": "dark"}):
             self.assertTrue(_system_prefers_dark_theme())
         with patch.dict(os.environ, {"KICAD_BLOCKS_THEME": "light"}):
             self.assertFalse(_system_prefers_dark_theme())
 
-    def test_record_picker_returns_single_choice_without_opening_a_dialog(self):
+    def test_record_picker_returns_single_choice_without_opening_a_dialog(self) -> None:
         self.assertIs(_pick_record([self.block], object(), "Pick Block"), self.block)
 
-    def test_record_picker_reports_an_empty_library(self):
+    def test_record_picker_reports_an_empty_library(self) -> None:
         with self.assertRaisesRegex(ValueError, "No blocks were found"):
             _pick_record([], object(), "Pick Block")
 
-    def test_search_keeps_selected_block_when_it_still_matches(self):
+    def test_search_keeps_selected_block_when_it_still_matches(self) -> None:
         records = [self.block, self.filter_block]
         preferred = _preferred_library_selection(
             _filter_library_records(records, "converter"), self.block
         )
         self.assertIs(preferred, self.block)
 
-    def test_search_falls_back_to_first_visible_block_when_selection_disappears(self):
+    def test_search_falls_back_to_first_visible_block_when_selection_disappears(self) -> None:
         visible = _filter_library_records([self.block, self.filter_block], "USB")
         preferred = _preferred_library_selection(visible, self.block)
         self.assertIs(preferred, self.filter_block)
         self.assertIsNone(_preferred_library_selection([], self.block))
-    def test_double_click_row_lookup_never_reuses_a_previous_selection(self):
+    def test_double_click_row_lookup_never_reuses_a_previous_selection(self) -> None:
         records = {
             str(self.block.manifest["block_id"]): self.block,
             str(self.filter_block.manifest["block_id"]): self.filter_block,
@@ -634,21 +647,21 @@ class LibraryBrowserTests(unittest.TestCase):
         self.assertIsNone(_library_record_for_tree_row(records, None))
         self.assertIsNone(_library_record_for_tree_row(records, "not-a-row"))
 
-    def test_placement_minimizes_browser_and_manager_and_restores_on_failure(self):
+    def test_placement_minimizes_browser_and_manager_and_restores_on_failure(self) -> None:
         class FakeWindow:
-            def __init__(self, master=None, initial_state="normal"):
+            def __init__(self, master: _MinimizableWindow | None = None, initial_state: str = "normal") -> None:
                 self.master = master
                 self.current_state = initial_state
-                self.events = []
+                self.events: list[str] = []
 
-            def state(self):
+            def state(self) -> str:
                 return self.current_state
 
-            def iconify(self):
+            def iconify(self) -> None:
                 self.events.append("iconify")
                 self.current_state = "iconic"
 
-            def deiconify(self):
+            def deiconify(self) -> None:
                 self.events.append("deiconify")
                 self.current_state = "normal"
 
@@ -665,17 +678,17 @@ class LibraryBrowserTests(unittest.TestCase):
         self.assertEqual(browser.current_state, "normal")
         self.assertEqual(manager.current_state, "normal")
 
-    def test_minimizer_leaves_already_hidden_windows_unchanged(self):
+    def test_minimizer_leaves_already_hidden_windows_unchanged(self) -> None:
         class FakeWindow:
-            def __init__(self, master=None, initial_state="normal"):
+            def __init__(self, master: _MinimizableWindow | None = None, initial_state: str = "normal") -> None:
                 self.master = master
                 self.current_state = initial_state
-                self.events = []
+                self.events: list[str] = []
 
-            def state(self):
+            def state(self) -> str:
                 return self.current_state
 
-            def iconify(self):
+            def iconify(self) -> None:
                 self.events.append("iconify")
                 self.current_state = "iconic"
 
@@ -686,26 +699,26 @@ class LibraryBrowserTests(unittest.TestCase):
         self.assertEqual(browser.events, [])
         self.assertEqual(manager.events, ["iconify"])
 
-    def test_editor_capture_finds_eeschema_when_browser_has_focus(self):
-        def command_runner(arguments, **kwargs):
+    def test_editor_capture_finds_eeschema_when_browser_has_focus(self) -> None:
+        def command_runner(arguments: list[str], **kwargs: bool | int | str) -> _CommandOutput:
             command = arguments[1:]
             if command == ["getwindowfocus"]:
-                return SimpleNamespace(stdout="0x222", returncode=0)
+                return _command_output(stdout="0x222", returncode=0)
             if command == ["search", "--onlyvisible", "--class", "eeschema"]:
-                return SimpleNamespace(stdout="0x111\n", returncode=0)
+                return _command_output(stdout="0x111\n", returncode=0)
             if command == ["search", "--onlyvisible", "--name", "[Ss]chematic [Ee]ditor"]:
-                return SimpleNamespace(stdout="0x111\n", returncode=0)
+                return _command_output(stdout="0x111\n", returncode=0)
             if command == ["getwindowclassname", "0x222"]:
-                return SimpleNamespace(stdout="eeschema", returncode=0)
+                return _command_output(stdout="eeschema", returncode=0)
             if command == ["getwindowname", "0x222"]:
-                return SimpleNamespace(stdout="Functional Block Library", returncode=0)
+                return _command_output(stdout="Functional Block Library", returncode=0)
             if command == ["getwindowclassname", "0x111"]:
-                return SimpleNamespace(stdout="eeschema", returncode=0)
+                return _command_output(stdout="eeschema", returncode=0)
             if command == ["getwindowname", "0x111"]:
-                return SimpleNamespace(stdout="Schematic Editor — project", returncode=0)
+                return _command_output(stdout="Schematic Editor — project", returncode=0)
             if arguments[0] == "/usr/bin/xprop":
-                return SimpleNamespace(stdout="WM_TRANSIENT_FOR: not found.", returncode=0)
-            return SimpleNamespace(stdout="", returncode=0)
+                return _command_output(stdout="WM_TRANSIENT_FOR: not found.", returncode=0)
+            return _command_output(stdout="", returncode=0)
 
         with (
             patch(
@@ -719,22 +732,22 @@ class LibraryBrowserTests(unittest.TestCase):
         ):
             self.assertEqual(_capture_eeschema_window_id(), "0x111")
 
-    def test_editor_capture_does_not_treat_plugin_browser_as_eeschema(self):
-        def command_runner(arguments, **kwargs):
+    def test_editor_capture_does_not_treat_plugin_browser_as_eeschema(self) -> None:
+        def command_runner(arguments: list[str], **kwargs: bool | int | str) -> _CommandOutput:
             command = arguments[1:]
             if command == ["getwindowfocus"]:
-                return SimpleNamespace(stdout="0x222", returncode=0)
+                return _command_output(stdout="0x222", returncode=0)
             if command == ["search", "--onlyvisible", "--class", "eeschema"]:
-                return SimpleNamespace(stdout="", returncode=1)
+                return _command_output(stdout="", returncode=1)
             if command == ["search", "--onlyvisible", "--name", "[Ss]chematic [Ee]ditor"]:
-                return SimpleNamespace(stdout="", returncode=1)
+                return _command_output(stdout="", returncode=1)
             if command == ["getwindowclassname", "0x222"]:
-                return SimpleNamespace(stdout="eeschema", returncode=0)
+                return _command_output(stdout="eeschema", returncode=0)
             if command == ["getwindowname", "0x222"]:
-                return SimpleNamespace(stdout="Functional Block Library", returncode=0)
+                return _command_output(stdout="Functional Block Library", returncode=0)
             if arguments[0] == "/usr/bin/xprop":
-                return SimpleNamespace(stdout="WM_TRANSIENT_FOR: not found.", returncode=0)
-            return SimpleNamespace(stdout="", returncode=0)
+                return _command_output(stdout="WM_TRANSIENT_FOR: not found.", returncode=0)
+            return _command_output(stdout="", returncode=0)
 
         with (
             patch(
@@ -748,19 +761,19 @@ class LibraryBrowserTests(unittest.TestCase):
         ):
             self.assertIsNone(_capture_eeschema_window_id())
 
-    def test_native_placement_handoff_uses_add_symbol_hotkey_and_exact_library_name(self):
+    def test_native_placement_handoff_uses_add_symbol_hotkey_and_exact_library_name(self) -> None:
         calls = []
         focus_values = iter(("0x222", "0x111"))
 
-        def command_runner(arguments, **kwargs):
+        def command_runner(arguments: list[str], **kwargs: bool | int | str) -> _CommandOutput:
             calls.append((arguments, kwargs))
             if arguments[1] == "getwindowfocus":
-                return SimpleNamespace(stdout=next(focus_values))
+                return _command_output(stdout=next(focus_values))
             if arguments[1] == "getwindowpid":
-                return SimpleNamespace(stdout="4242")
+                return _command_output(stdout="4242")
             if arguments[1] == "getwindowname":
-                return SimpleNamespace(stdout="Choose Symbol" if arguments[2] == "0x222" else "Schematic Editor")
-            return SimpleNamespace(stdout="")
+                return _command_output(stdout="Choose Symbol" if arguments[2] == "0x222" else "Schematic Editor")
+            return _command_output(stdout="")
 
         pauses = []
         _start_native_symbol_placement(
@@ -783,18 +796,18 @@ class LibraryBrowserTests(unittest.TestCase):
         self.assertNotIn("position", " ".join(" ".join(command) for command in commands).casefold())
         self.assertTrue(pauses)
 
-    def test_native_placement_refuses_to_type_when_choose_symbol_dialog_is_absent(self):
+    def test_native_placement_refuses_to_type_when_choose_symbol_dialog_is_absent(self) -> None:
         calls = []
 
-        def command_runner(arguments, **kwargs):
+        def command_runner(arguments: list[str], **kwargs: bool | int | str) -> _CommandOutput:
             calls.append(arguments)
             if arguments[1] == "getwindowfocus":
-                return SimpleNamespace(stdout="0x111")
+                return _command_output(stdout="0x111")
             if arguments[1] == "getwindowpid":
-                return SimpleNamespace(stdout="4242")
+                return _command_output(stdout="4242")
             if arguments[1] == "getwindowname":
-                return SimpleNamespace(stdout="Schematic Editor")
-            return SimpleNamespace(stdout="")
+                return _command_output(stdout="Schematic Editor")
+            return _command_output(stdout="")
 
         with self.assertRaisesRegex(RuntimeError, "did not open its native symbol chooser"):
             _start_native_symbol_placement(
@@ -808,7 +821,7 @@ class LibraryBrowserTests(unittest.TestCase):
         self.assertFalse(any(command[1] == "type" for command in calls))
         self.assertIn(["key", "--clearmodifiers", "Escape"], [command[1:] for command in calls])
 
-    def test_native_placement_uses_kicad_ipc_without_xdotool_or_captured_xid(self):
+    def test_native_placement_uses_kicad_ipc_without_xdotool_or_captured_xid(self) -> None:
         kicad = SimpleNamespace(run_action=Mock())
         with patch("kicad_blocks.plugin.shutil.which", return_value=None):
             _start_native_symbol_placement(
@@ -821,7 +834,7 @@ class LibraryBrowserTests(unittest.TestCase):
             )
         kicad.run_action.assert_called_once_with("eeschema.InteractiveDrawing.placeSymbol")
 
-    def test_native_placement_requires_editor_when_ipc_is_unavailable(self):
+    def test_native_placement_requires_editor_when_ipc_is_unavailable(self) -> None:
         with (
             patch("kicad_blocks.plugin.shutil.which", return_value="/usr/bin/xdotool"),
             patch("kicad_blocks.plugin._capture_eeschema_window_id", return_value=None),
