@@ -21,6 +21,7 @@ from .model import (
     normalize_profiles,
     render_implementation_schematic,
     render_symbol_library,
+    resolve_variant_implementation,
     revision_for_hashes,
     sha256_file,
     slugify,
@@ -67,7 +68,7 @@ class BlockRecord:
 
     @property
     def implementation(self) -> Path:
-        return self.path / str(self.manifest["implementation_file"])
+        return self.path / resolve_variant_implementation(self.manifest, "")
 
 
 def atomic_write(path: Path, content: str) -> None:
@@ -328,6 +329,25 @@ def read_manifest(block_path: Path) -> dict:
         seen_variant_values.add(value.casefold())
         seen_variant_files.add(file_name.casefold())
     manifest["variants"] = variants
+    default_variant = manifest.get("default_variant")
+    if default_variant:
+        default_value = str(default_variant).strip()
+        matching_variant = next(
+            (
+                item for item in variants
+                if str(item["value"]).casefold() == default_value.casefold()
+            ),
+            None,
+        )
+        if matching_variant is None:
+            choices = ", ".join(str(item["value"]) for item in variants)
+            raise ValueError(
+                f"Default implementation {default_value!r} is not declared. "
+                f"Available variants: {choices or 'base implementation only'}. "
+            )
+        manifest["default_variant"] = str(matching_variant["value"])
+    else:
+        manifest.pop("default_variant", None)
     layouts = manifest.get("layouts", [])
     if not isinstance(layouts, list):
         raise TypeError("Block manifest layouts must be a list.")
@@ -391,6 +411,57 @@ def read_manifest(block_path: Path) -> dict:
     default_layout = manifest.get("default_layout")
     if default_layout and str(default_layout).casefold() not in seen_layout_ids:
         raise ValueError(f"Block default layout {default_layout!r} is not defined in layouts.")
+    if layouts:
+        if not default_layout:
+            default_layout = str(layouts[0]["id"])
+            manifest["default_layout"] = default_layout
+        # Older manifests may omit explicit variant links. Use the default
+        # layout as their safe fallback instead of leaving an implementation
+        # without an associated board.
+        for variant in variants:
+            if not variant.get("layout_id"):
+                variant["layout_id"] = default_layout
+
+        # Every stored board is always associated with one or more implementations.
+        variant_values = {
+            str(item["value"]).casefold(): str(item["value"])
+            for item in variants
+        }
+        for layout in layouts:
+            layout_id = str(layout["id"]).casefold()
+            derived_links = []
+            if str(default_layout).casefold() == layout_id:
+                derived_links.append("Default")
+            derived_links.extend(
+                str(item["value"])
+                for item in variants
+                if str(item.get("layout_id", "")).casefold() == layout_id
+            )
+            raw_links = layout.get("implementations")
+            if raw_links is None:
+                links = derived_links
+            else:
+                if not isinstance(raw_links, list):
+                    raise TypeError(
+                        f"Layout {layout_id!r} implementation links must be a list."
+                    )
+                links = []
+                for raw_link in raw_links:
+                    key = str(raw_link).strip().casefold()
+                    if key == "default":
+                        link = "Default"
+                    elif key in variant_values:
+                        link = variant_values[key]
+                    else:
+                        raise ValueError(
+                            f"Layout {layout_id!r} links to unknown implementation {raw_link!r}."
+                        )
+                    if link not in links:
+                        links.append(link)
+            if not links:
+                links = ["Default"]
+            layout["implementations"] = links
+
     manifest["profiles"] = normalize_profiles(
         manifest.get("profiles", []),
         manifest["parameters"],
@@ -1851,7 +1922,7 @@ def synchronize_dependencies(
     return _record(parent.path)
 
 
-def _dependency_anchor(block_path: Path, manifest: dict) -> Path:
+def _dependency_anchor(block_path: Path, manifest: dict) -> Path
     """Return the canonical source directory for resolving relative children."""
     source_path = manifest.get("source_path") if manifest.get("local_copy") else None
     return Path(source_path).expanduser().resolve() if source_path else Path(block_path).resolve()

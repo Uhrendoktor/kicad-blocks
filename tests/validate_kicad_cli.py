@@ -16,6 +16,7 @@ from generate_reference import generate_reference_schematic
 from kicad_blocks.model import parse_pins
 from kicad_blocks.operations import export_block_bom, validate_block_tree
 from kicad_blocks.pcb_layout import _all, _direct, parse_sexpr
+from kicad_blocks.plugin import _new_blank_pcb_source
 from kicad_blocks.repository import add_dependency, create_block
 
 
@@ -226,11 +227,39 @@ def main() -> None:
             Path(item["report"]).is_file() for item in erc_reports
         ):
             raise RuntimeError("Recursive KiCad CLI ERC did not report both block implementations.")
+        # Validate the exact empty-board document used by Add PCB Layout.
+        # A file-copy/unit assertion alone cannot prove that PCBNEW can open it.
+        blank_board = _new_blank_pcb_source()
+        try:
+            blank_board_svg = Path(temp) / "blank-board-svg"
+            blank_board_svg.mkdir()
+            subprocess.run(
+                [
+                    cli,
+                    "pcb",
+                    "export",
+                    "svg",
+                    "--mode-multi",
+                    "--layers",
+                    "F.Cu,B.Cu",
+                    "--output",
+                    str(blank_board_svg),
+                    str(blank_board),
+                ],
+                check=True,
+            )
+            if not list(blank_board_svg.glob("*.svg")):
+                raise RuntimeError(
+                    "KiCad CLI accepted the blank PCB but did not export any board-layer SVGs."
+                )
+        finally:
+            blank_board.unlink(missing_ok=True)
+
         _validate_stusb4500_netlist(cli, Path(temp))
         print(
             f"KiCad CLI validated symbol ({symbol_svgs[0].name}), "
             f"implementation ({schematic_svgs[0].name}), recursive BOM, ERC, "
-            "and the STUSB4500 reference netlist."
+            "and the STUSB4500 reference netlist; the Add PCB Layout blank board also exported successfully."
         )
 
 
