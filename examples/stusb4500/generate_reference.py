@@ -1048,11 +1048,18 @@ def generate_reference_schematic(destination: Path) -> Path:
     remove_local_label("R10", "1", "FET_MID")
     if abs(t4_fet_mid[1] - t1_fet_mid[1]) > 0.001:
         raise ValueError(f"PMOS common-node pins are not aligned: {t4_fet_mid}, {t1_fet_mid}")
-    add_route(
-        "FET_MID", [t4_fet_mid, t1_fet_mid, r10_fet_mid],
-        "back-to-back-pmos-midpoint-to-r10",
+    fet_mid_branch = (
+        round((t4_fet_mid[0] + t1_fet_mid[0]) / 2, 3),
+        t4_fet_mid[1],
     )
-    add_junction(t1_fet_mid, "FET_MID:common-source-midpoint")
+    if abs(fet_mid_branch[0] - r10_fet_mid[0]) > 0.001:
+        raise ValueError("R10.1 must align vertically below the FET midpoint.")
+    add_route("FET_MID", [t4_fet_mid, t1_fet_mid], "back-to-back-pmos-common-source")
+    add_junction(fet_mid_branch, "FET_MID:common-source-midpoint")
+    add_route(
+        "FET_MID", [fet_mid_branch, r10_fet_mid],
+        "common-source-midpoint-to-r10",
+    )
 
     # The VSNK_GATE control bus is physically wired across R10/R11/R13.
     # Keep its one label at R11.1; T1.1 is a separate, matching label island.
