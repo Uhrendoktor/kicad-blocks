@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .json_types import JsonObject, JsonValue
+from .model import sexpr_quote
 
 if TYPE_CHECKING:
     from .repository import BlockRecord
@@ -115,7 +116,7 @@ def _dump(value: SExpr) -> str:
     if isinstance(value, list):
         return "(" + " ".join(_dump(item) for item in value) + ")"
     if isinstance(value, _Quoted):
-        return json.dumps(str(value), ensure_ascii=False)
+        return sexpr_quote(str(value))
     return str(value)
 
 
