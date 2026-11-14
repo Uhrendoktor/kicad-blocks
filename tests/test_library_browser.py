@@ -790,8 +790,15 @@ class LibraryBrowserTests(unittest.TestCase):
         self.assertFalse(any(command[1] == "type" for command in calls))
         self.assertIn(["key", "--clearmodifiers", "Escape"], [command[1:] for command in calls])
 
+    def test_native_run_action_status_is_checked_not_treated_as_truthy(self):
+        self.assertEqual(_native_run_action_status(SimpleNamespace(status=1)), 1)
+        self.assertEqual(_native_run_action_status(SimpleNamespace(status=2)), 2)
+        self.assertIsNone(_native_run_action_status(SimpleNamespace(status=None)))
+
     def test_native_placement_uses_kicad_ipc_without_xdotool_or_captured_xid(self):
-        kicad = SimpleNamespace(run_action=Mock())
+        kicad = SimpleNamespace(
+            run_action=Mock(return_value=SimpleNamespace(status=1))
+        )
         with patch("kicad_blocks.plugin.shutil.which", return_value=None):
             _start_native_symbol_placement(
                 kicad,
@@ -802,6 +809,47 @@ class LibraryBrowserTests(unittest.TestCase):
                 pause=lambda _seconds: None,
             )
         kicad.run_action.assert_called_once_with("eeschema.InteractiveDrawing.placeSymbol")
+
+    def test_native_placement_rejected_by_kicad_reports_real_status_without_xdotool(self):
+        kicad = SimpleNamespace(
+            run_action=Mock(return_value=SimpleNamespace(status=2))
+        )
+        with (
+            patch("kicad_blocks.plugin.shutil.which", return_value=None),
+            patch.dict(os.environ, {"WAYLAND_DISPLAY": "", "XDG_SESSION_TYPE": "x11"}),
+            self.assertRaisesRegex(RuntimeError, "RunActionStatus=2"),
+        ):
+            _start_native_symbol_placement(
+                kicad,
+                None,
+                "buck_converter_ab12cd34",
+                xdotool=None,
+                command_runner=Mock(),
+                pause=lambda _seconds: None,
+            )
+        kicad.run_action.assert_called_once_with("eeschema.InteractiveDrawing.placeSymbol")
+
+    def test_native_placement_uses_wtype_when_wayland_has_no_xdotool_or_ipc_action(self):
+        calls = []
+        def command_runner(arguments, **kwargs):
+            calls.append(arguments)
+            return SimpleNamespace(stdout="", returncode=0)
+        with (
+            patch("kicad_blocks.plugin.shutil.which", side_effect=lambda name: {
+                "xdotool": None,
+                "wtype": "/usr/bin/wtype",
+            }.get(name)),
+            patch.dict(os.environ, {"WAYLAND_DISPLAY": "wayland-0", "XDG_SESSION_TYPE": "wayland"}),
+        ):
+            _start_native_symbol_placement(
+                SimpleNamespace(),
+                None,
+                "buck_converter_ab12cd34",
+                xdotool=None,
+                command_runner=command_runner,
+                pause=lambda _seconds: None,
+            )
+        self.assertEqual(calls, [["/usr/bin/wtype", "-k", "a"]])
 
     def test_native_placement_requires_editor_when_ipc_is_unavailable(self):
         with (
