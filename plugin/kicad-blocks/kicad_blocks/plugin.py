@@ -915,12 +915,11 @@ def _create_action_icon(parent: tkinter_types.Misc, name: str) -> tkinter_types.
         LOG.debug("Could not render toolbar icon %s", name, exc_info=True)
         return None
     owner = parent.winfo_toplevel()
-    images = cast(
-        dict[str, tkinter_types.PhotoImage],
-        getattr(owner, "_kicad_blocks_action_icons", {}),
+    images: dict[str, tkinter_types.PhotoImage] = getattr(
+        owner, "_kicad_blocks_action_icons", {}
     )
     images[name] = image
-    cast(_TkActionIconOwner, owner)._kicad_blocks_action_icons = images
+    setattr(owner, "_kicad_blocks_action_icons", images)
     return image
 
 
