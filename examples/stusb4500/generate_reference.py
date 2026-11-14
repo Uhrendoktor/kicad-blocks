@@ -42,6 +42,9 @@ GROUP_EVIDENCE = {
     "document": "ST DS12499 Rev. 8",
     "page": 26,
     "figure": "Figure 10",
+    # Optional source crop; the group metadata can bind a page/figure image
+    # once a reviewed asset is checked into the example.
+    "screenshot_asset": None,
 }
 SCHEMATIC_GROUPS = (
     {
@@ -495,16 +498,24 @@ def _world_pin(sx: float, sy: float, rotation: int, pin: dict) -> tuple[float, f
     raise ValueError(f"Unsupported symbol rotation: {rotation}.")
 
 
-def _group_text_width(group: dict) -> float:
-    description = (
-        f"{group['description']}\n"
-        "ST DS12499 REV. 8 | PAGE 26 | FIGURE 10"
+def _group_evidence_line(group: dict) -> str:
+    evidence = {**GROUP_EVIDENCE, **group.get("evidence", {})}
+    return (
+        f"{str(evidence['document']).upper()} | "
+        f"PAGE {evidence['page']} | {str(evidence['figure']).upper()}"
     )
+
+
+def _group_description(group: dict) -> str:
+    return f"{group['description']}\n{_group_evidence_line(group)}"
+
+
+def _group_text_width(group: dict) -> float:
     title_width, _ = _measure_text_box(str(group["title"]), 1.27, 1.27)
     description_width, _ = _measure_text_box(
-        description, GROUP_DESCRIPTION_FONT_MM, 1.27,
+        _group_description(group), GROUP_DESCRIPTION_FONT_MM, 1.27,
     )
-    return max(title_width, description_width)
+    return max(title_width + 2.54, description_width + 2.54)
 
 
 def _pack_component_groups(
@@ -596,11 +607,10 @@ def _functional_group(group: dict, bounds: tuple[float, float, float, float]) ->
     left, top, right, bottom = bounds
     title = str(group["title"])
     width = right - left
-    tab_width = min(width, max(12.70, _measure_text_box(title, 1.27, 1.27)[0]))
-    description = (
-        f"{group['description']}\n"
-        "ST DS12499 REV. 8 | PAGE 26 | FIGURE 10"
+    tab_width = min(
+        width, max(12.70, _measure_text_box(title, 1.27, 1.27)[0] + 2.54),
     )
+    description = _group_description(group)
     return [
         _graphic_rectangle(left, top, right, bottom, f"zone:{group['id']}"),
         _graphic_tab(left, top, tab_width, group["id"]),
