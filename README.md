@@ -45,7 +45,7 @@ The current full integration target is **KiCad 10.99.0 development nightly on Li
 
 Stable KiCad 10.x does not expose the Schematic Editor IPC plugin surface that this project requires. The current 10.99.0 nightly target is a development build; stable KiCad 11 is not yet validated by this repository's integration suite. See the [KiCad IPC API support matrix](https://dev-docs.kicad.org/en/apis-and-binding/ipc-api/for-addon-developers/).
 
-Place Block and Edit Facade are currently blocked by missing supported KiCad schematic IPC operations: the stable API does not start interactive placement or select a library symbol in Symbol Editor. The plugin does not use unstable `RunAction`, global keyboard injection, or X11/Wayland-specific runtime fallbacks. See the [compatibility notes](docs/explanation/compatibility.md).
+Place Block currently creates the selected facade at the active sheet's page center, snaps it to the schematic grid, focuses it in Eeschema, and selects it. KiCad still lacks the supported schematic interactive-move operation needed to attach the symbol to the cursor. Edit Facade remains blocked because the API cannot open and select a library symbol in Symbol Editor. The plugin does not use unstable `RunAction`, global keyboard injection, or X11/Wayland-specific runtime fallbacks. See the [compatibility notes](docs/explanation/compatibility.md).
 
 See the [compatibility and test-coverage guide](docs/explanation/compatibility.md) before installing.
 
