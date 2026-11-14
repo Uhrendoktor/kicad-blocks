@@ -895,6 +895,44 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
             description="Selected child sheet",
         )
 
+    def test_task_hub_edit_facade_uses_native_cross_platform_ipc_handoff(self):
+        root = SimpleNamespace(
+            title=Mock(), withdraw=Mock(), destroy=Mock(),
+        )
+        fake_tk = SimpleNamespace(Tk=Mock(return_value=root), TclError=RuntimeError)
+        kicad = SimpleNamespace(get_schematic=Mock(return_value=self.schematic))
+        kicad_module = types.ModuleType("kipy")
+        kicad_module.KiCad = Mock(return_value=kicad)
+        project_catalog = self.project / ".kicad_blocks" / "KBlocks.kicad_sym"
+        with (
+            patch.object(plugin_actions, "tk", fake_tk),
+            patch.object(plugin_actions, "messagebox", self.messagebox),
+            patch.object(plugin_actions, "_load_tkinter"),
+            patch.object(plugin_actions, "_configure_tk_theme"),
+            patch.object(plugin_actions, "_attach_tk_window_to_editor"),
+            patch.object(plugin_actions, "project_directory", return_value=self.project),
+            patch.object(plugin_actions, "configured_library_roots", return_value=[self.library]),
+            patch.object(plugin_actions, "default_library_root", return_value=self.library),
+            patch.object(plugin_actions, "_list_library_records", return_value=[self.block]),
+            patch.object(plugin_actions, "_pick_record", return_value=self.block) as pick_record,
+            patch.object(plugin_actions, "_ensure_project_facade_catalog", return_value=project_catalog),
+            patch.object(plugin_actions, "_edit_facade_symbol", return_value=False) as edit_facade,
+            patch.dict(sys.modules, {"kipy": kicad_module}),
+        ):
+            plugin_actions.run_action("edit-facade")
+        pick_record.assert_called_once_with([self.block], root, "Edit Facade")
+        edit_facade.assert_called_once_with(
+            self.block,
+            kicad,
+            project_catalog=project_catalog,
+            close_browser=root.destroy,
+        )
+        self.messagebox.showinfo.assert_called_once()
+        self.assertIn(self.block.manifest["symbol_name"], self.messagebox.showinfo.call_args.args[1])
+        root.withdraw.assert_called_once_with()
+        root.destroy.assert_called_once_with()
+
+
     def test_run_action_does_not_discover_foreign_window_handles(self):
         root = SimpleNamespace(title=Mock(), withdraw=Mock(), destroy=Mock())
         fake_tk = SimpleNamespace(Tk=Mock(return_value=root), TclError=RuntimeError)
