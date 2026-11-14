@@ -15,6 +15,22 @@ This page separates the product's current test evidence from targets that the in
 
 The post-merge main-branch CI run [#43521663508](https://github.com/Uhrendoktor/kicad-blocks/actions/runs/43521663508) passed both `python-and-kicad` and `visual-ui-audit` on merge commit `d75f0b1f0ef59e14868a84e7730cbc517089e0b7`. It exercised unit tests, lint, KiCad CLI validation, Eeschema GUI editing and publishing, plugin discovery, schematic and PCB IPC, layout merging, and rendered UI evidence.
 
+## Runtime dependency portability
+
+The production runtime now uses cross-platform libraries and APIs for these shared feature paths:
+
+| Dependency/API | Upstream platform support | Integration note |
+| --- | --- | --- |
+| Python Tkinter / ttk / `filedialog` | Windows, macOS, and Unix-like systems | The same toolkit API is used on all OS families. Native appearance and Linux portal integration still require real desktop verification. |
+| `platformdirs` | Windows, macOS, Linux and other Unix-like systems | Resolves the host's standard user configuration directory; Linux keeps the existing XDG location. |
+| CairoSVG + Cairo | Windows, macOS, Linux | CairoSVG is cross-platform, but its native Cairo/FFI prerequisites must be installed using the upstream instructions for each OS. |
+| Pillow | Windows, macOS, Linux | Cross-platform image API; actual wheel availability depends on the Python ABI and architecture. |
+| KiCad Python IPC API | KiCad supports Windows, macOS, Linux | The IPC transport is cross-platform. This repository's current published Python IPC wheels are still Linux x86_64 only, as an explicit temporary packaging exception. |
+
+Upstream references: [Python Tkinter](https://docs.python.org/3/library/tkinter.html), [platformdirs supported platforms](https://platformdirs.readthedocs.io/en/latest/index.html), [CairoSVG supported platforms and native prerequisites](https://cairosvg.org/documentation/), [Pillow platform support](https://pillow.readthedocs.io/en/stable/), and [KiCad IPC API](https://dev-docs.kicad.org/en/apis-and-binding/ipc-api/).
+
+This table documents upstream library capability, not validated KiCad Blocks compatibility. Windows/macOS integration remains untested until the packaging limitation is lifted and representative runs are performed.
+
 ## Interpreter coverage
 
 The supported Linux x86_64 IPC dependency wheels are built for CPython 3.12, 3.13, and 3.14.
