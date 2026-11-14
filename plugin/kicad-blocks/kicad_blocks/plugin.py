@@ -4229,7 +4229,7 @@ def _show_library_roots_dialog(parent) -> bool:
 
     def remove_library() -> None:
         path = selected_path()
-        if path is None or path == environment_root:
+        if path is None or path == environment_root or path == default_library_root():
             return
         if not messagebox.askyesno(
             "Unregister library",
@@ -4294,9 +4294,12 @@ def _show_library_roots_dialog(parent) -> bool:
     def update_selection_actions(_event=None) -> None:
         path = selected_path()
         fixed = path is None or path == environment_root
+        is_default = path is not None and path == default_library_root()
         change_button.configure(state="disabled" if fixed else "normal")
-        remove_button.configure(state="disabled" if fixed else "normal")
-        already_default = path is not None and path == default_library_root()
+        remove_button.configure(
+            state="disabled" if fixed or is_default else "normal"
+        )
+        already_default = is_default
         default_button.configure(
             state=(
                 "disabled"
