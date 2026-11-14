@@ -25,6 +25,7 @@ from .manifest_types import (
     BlockLayoutManifest,
     BlockManifest,
     BlockParameterInput,
+    BlockPinManifest,
     BlockProfileInput,
     BlockVariantInput,
     BlockVariantManifest,
@@ -43,7 +44,7 @@ from .model import (
 from .report_types import BlockRevisionReport, LocalCopyPublishReport, LocalCopySyncReport
 from .settings_types import InstanceLink, InstanceLinks, LibrarySettings
 from .sexpr import QuotedSExpr as _Quoted
-from .sexpr import SExprList, parse_sexpr
+from .sexpr import SExpr, SExprList, parse_sexpr
 from .sexpr import dump_sexpr as _dump
 from .sexpr import sexpr_all as _all
 from .sexpr import sexpr_direct as _direct
@@ -643,18 +644,16 @@ def create_block(
     if layout_files is None:
         if layout_project_file is not None and layout_file is None:
             raise ValueError("A KiCad project-settings sidecar requires a PCB layout.")
-        raw_layouts: list[BlockLayoutInput] = (
-            [
-                {
-                    "name": Path(layout_file).stem,
-                    "path": layout_file,
-                    "project_path": layout_project_file,
-                    "legacy": True,
-                }
-            ]
-            if layout_file is not None
-            else []
-        )
+        raw_layouts: list[BlockLayoutInput] = []
+        if layout_file is not None:
+            legacy_layout: BlockLayoutInput = {
+                "name": Path(layout_file).stem,
+                "path": layout_file,
+                "legacy": True,
+            }
+            if layout_project_file is not None:
+                legacy_layout["project_path"] = layout_project_file
+            raw_layouts.append(legacy_layout)
     else:
         raw_layouts = layout_files
 
@@ -929,8 +928,12 @@ def set_project_symbol_defaults(
     catalog_path = Path(catalog_path).expanduser().resolve()
     tree = parse_sexpr(catalog_path.read_text(encoding="utf-8"))
     symbol = _named_symbol_node(tree, symbol_name, catalog_path)
-    properties = [item for item in symbol[2:] if _head(item) == "property" and len(item) >= 3]
-    found = set()
+    properties = [
+        item
+        for item in symbol[2:]
+        if isinstance(item, list) and _head(item) == "property" and len(item) >= 3
+    ]
+    found: set[str] = set()
     for prop in properties:
         field_name = str(prop[1])
         if field_name in values:
@@ -946,7 +949,7 @@ def set_project_symbol_defaults(
 
 
 def _asset_hashes(block_path: Path, manifest: BlockManifest) -> dict[str, str]:
-    result = {}
+    result: dict[str, str] = {}
     for file_name in manifest.get("files", []):
         path = block_path / file_name
         if path.is_file():
@@ -1058,25 +1061,30 @@ def _instance_links_path(project_dir: Path) -> Path:
 def _read_instance_links(path: Path) -> InstanceLinks:
     """Read and validate the project-local KIID-to-block lookup document."""
     try:
-        raw = json.loads(path.read_text(encoding="utf-8"))
+        raw_value: object = json.loads(path.read_text(encoding="utf-8"))
     except FileNotFoundError:
         return {"schema_version": 1, "instances": {}}
     except json.JSONDecodeError as error:
         raise ValueError(f"Invalid project block-link metadata: {path}") from error
 
-    if not isinstance(raw, dict):
+    if not isinstance(raw_value, dict):
         raise ValueError(f"Invalid project block-link metadata: {path}")
-    raw_instances = raw.get("instances", {})
-    if not isinstance(raw_instances, dict):
+    raw = cast(dict[str, object], raw_value)
+    raw_instances_value: object = raw.get("instances", {})
+    if not isinstance(raw_instances_value, dict):
         raise ValueError(f"Invalid project block-link instance map: {path}")
+    raw_instances = cast(dict[object, object], raw_instances_value)
 
     instances: dict[str, InstanceLink] = {}
-    for instance_id, raw_entry in raw_instances.items():
+    for raw_instance_id, raw_entry_value in raw_instances.items():
+        instance_id: object = raw_instance_id
+        raw_entry: object = raw_entry_value
         if not isinstance(instance_id, str) or not isinstance(raw_entry, dict):
             raise ValueError(f"Invalid project block-link entry in {path}")
-        local_path = raw_entry.get("local_path")
-        source_block_id = raw_entry.get("source_block_id")
-        updated_at = raw_entry.get("updated_at", "")
+        entry = cast(dict[str, object], raw_entry)
+        local_path = entry.get("local_path")
+        source_block_id = entry.get("source_block_id")
+        updated_at = entry.get("updated_at", "")
         if (
             not isinstance(local_path, str)
             or not isinstance(updated_at, str)
@@ -1089,7 +1097,7 @@ def _read_instance_links(path: Path) -> InstanceLinks:
             "updated_at": updated_at,
         }
 
-    schema_version = raw.get("schema_version", 1)
+    schema_version: object = raw.get("schema_version", 1)
     if not isinstance(schema_version, int):
         raise ValueError(f"Invalid project block-link schema version in {path}")
     return {"schema_version": schema_version, "instances": instances}
@@ -1228,7 +1236,7 @@ def synchronize_local_copy(local_block: BlockRecord) -> LocalCopySyncReport:
         conflicts.append("manifest.profiles")
     if layout_conflict:
         conflicts.append("manifest.layouts")
-    copy_files = []
+    copy_files: list[str] = []
     for file_name in sorted(set(base_hashes) | set(local_hashes) | set(source_hashes)):
         base = base_hashes.get(file_name)
         local = local_hashes.get(file_name)
@@ -1868,7 +1876,9 @@ def add_dependency(
     if _depends_on(child.path, parent.manifest["block_id"], set()):
         raise ValueError("This dependency would create a cycle.")
 
-    dependencies = list(parent.manifest.get("dependencies", []))
+    dependencies: list[BlockDependencyManifest] = list(
+        parent.manifest.get("dependencies", [])
+    )
     used_references = {
         str(item.get("reference", "")).casefold() for item in dependencies if item.get("reference")
     }
@@ -1890,13 +1900,13 @@ def add_dependency(
     if position_mm is None:
         index = len(dependencies)
         position_mm = (100.0 + (index % 2) * 65.0, 160.0 + (index // 2) * 50.0)
-    if len(position_mm) != 2 or not all(
-        isinstance(value, (int, float)) and math.isfinite(value) for value in position_mm
-    ):
+    if len(position_mm) != 2 or not all(math.isfinite(value) for value in position_mm):
         raise ValueError("Nested block position must contain two finite millimetre coordinates.")
 
     child_pins = {str(pin["name"]) for pin in child.manifest.get("pins", [])}
-    mapping = dict(pin_map) if pin_map is not None else {name: name for name in child_pins}
+    mapping: dict[str, str | None] = (
+        dict(pin_map) if pin_map is not None else {name: name for name in child_pins}
+    )
     if set(mapping) != child_pins:
         missing = sorted(child_pins - set(mapping))
         extra = sorted(set(mapping) - child_pins)
@@ -1910,22 +1920,21 @@ def add_dependency(
         ):
             raise ValueError(f"Invalid parent net name {net_name!r} for child pin {child_pin!r}.")
 
-    dependencies.append(
-        {
-            "instance_id": str(uuid.uuid4()),
-            "reference": reference,
-            "position_mm": [float(position_mm[0]), float(position_mm[1])],
-            "orientation": orientation,
-            "pin_map": mapping,
-            "block_id": child.manifest["block_id"],
-            "name": child.manifest["name"],
-            "path": os.path.relpath(
-                child.path.resolve(),
-                _dependency_anchor(parent.path, parent.manifest),
-            ),
-            "revision": child.manifest.get("revision"),
-        }
-    )
+    dependency: BlockDependencyManifest = {
+        "instance_id": str(uuid.uuid4()),
+        "reference": reference,
+        "position_mm": [float(position_mm[0]), float(position_mm[1])],
+        "orientation": orientation,
+        "pin_map": mapping,
+        "block_id": child.manifest["block_id"],
+        "name": child.manifest["name"],
+        "path": os.path.relpath(
+            child.path.resolve(),
+            _dependency_anchor(parent.path, parent.manifest),
+        ),
+        "revision": child.manifest.get("revision"),
+    }
+    dependencies.append(dependency)
     updated = dict(parent.manifest)
     updated["dependencies"] = dependencies
     updated["version"] = int(updated.get("version", 1)) + 1
@@ -2160,19 +2169,25 @@ def _read_library_settings() -> LibrarySettings:
     if not settings_path.is_file():
         return {}
     try:
-        raw = json.loads(settings_path.read_text(encoding="utf-8"))
+        raw_value: object = json.loads(settings_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return {}
-    if not isinstance(raw, dict):
+    if not isinstance(raw_value, dict):
         return {}
+    raw = cast(dict[str, object], raw_value)
 
     settings: LibrarySettings = {}
-    library_root = raw.get("library_root")
+    library_root: object = raw.get("library_root")
     if isinstance(library_root, str):
         settings["library_root"] = library_root
-    library_roots = raw.get("library_roots")
+    library_roots: object = raw.get("library_roots")
     if isinstance(library_roots, list):
-        settings["library_roots"] = [item for item in library_roots if isinstance(item, str)]
+        normalized_roots: list[str] = []
+        for item_value in library_roots:
+            item: object = item_value
+            if isinstance(item, str):
+                normalized_roots.append(item)
+        settings["library_roots"] = normalized_roots
     return settings
 
 
@@ -2223,11 +2238,11 @@ def default_library_root() -> Path:
 
 def _normalized_library_settings_roots(settings: LibrarySettings) -> list[Path]:
     """Read the optional library-roots setting without trusting malformed JSON data."""
-    raw_roots = settings.get("library_roots", [])
+    raw_roots: list[str] = settings.get("library_roots", [])
     roots: list[Path] = []
     seen: set[str] = set()
     for item in raw_roots:
-        if not isinstance(item, str) or not item.strip():
+        if not item.strip():
             continue
         resolved = Path(item).expanduser().resolve()
         key = os.path.normcase(str(resolved))
@@ -2296,8 +2311,8 @@ def set_library_root(path: Path) -> Path:
 def build_project_symbol_catalog(project_dir: Path, roots: list[Path]) -> Path:
     """Build the project's single KBlocks catalog from all registered libraries."""
     project_dir = Path(project_dir).expanduser().resolve()
-    symbols_by_name: dict[str, list] = {}
-    header = None
+    symbols_by_name: dict[str, SExprList] = {}
+    header: list[SExpr] | None = None
 
     for root in roots:
         for record in list_blocks(root):
