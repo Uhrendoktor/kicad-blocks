@@ -97,7 +97,7 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
         from kicad_blocks.repository import build_project_symbol_catalog
 
         project_catalog = build_project_symbol_catalog(self.project, [self.library])
-        with self.assertRaisesRegex(RuntimeError, "does not expose native editor actions"):
+        with self.assertRaisesRegex(TypeError, "does not expose native editor actions"):
             plugin_actions._edit_facade_symbol(self.block, SimpleNamespace(), project_catalog=project_catalog)
 
     def test_edit_facade_validates_exact_catalog_entry_before_opening_editor(self):
