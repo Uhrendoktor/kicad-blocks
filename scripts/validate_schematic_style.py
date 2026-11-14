@@ -17,10 +17,28 @@ from kicad_blocks.pcb_layout import _all, _direct, _head, parse_sexpr
 # The generic linter deliberately has no dependency on the STUSB4500 example.
 # These defaults are used only by the reusable geometry/presentation rules.
 FIELD_SYMBOL_MAX_GAP_MM = 9.00
+ADJACENT_COMPONENT_PAIRS: tuple = ()
+COMMON_PIN_NET_GROUPS: tuple = ()
+COMPONENT_PROPERTY_LIMITS_MM: dict[str, float] = {}
+DIRECT_DECOUPLERS: tuple = ()
+FORBIDDEN_LOCAL_LABELS: tuple[str, ...] = ()
+FRAME_CONTENT_PADDING_MM = 2.54
+GROUND_PINS_DOWN: tuple[str, ...] = ()
+GROUP_EVIDENCE: dict[str, str | int | None] = {}
+GROUP_GAP_MM = 2.54
+REQUIRED_NO_CONNECT_PINS: tuple[str, ...] = ()
+SCHEMATIC_GROUPS: tuple = ()
+WIRE_LENGTH_BUDGETS_MM: dict[str, float] = {}
 ZONES: dict[str, set[str]] = {}
 FLOW: tuple[str, ...] = ()
 FRAME_GAP = 2.54
 _PROFILE_LOADED = False
+
+
+def _uid(key: str) -> str:
+    raise RuntimeError(
+        f"Profile-specific UUID requested before loading a design profile: {key}"
+    )
 
 
 def _load_stusb4500_profile() -> None:
@@ -535,6 +553,7 @@ def label_wire_overlap_issues(tree: list) -> list[str]:
 
 
 def physical_topology_issues(tree: list) -> list[str]:
+    _load_stusb4500_profile()
     """Require decouplers and the back-to-back FET midpoint to be wire-connected."""
     issues = []
     dsu, pin_info = _wire_networks(tree)
@@ -568,6 +587,7 @@ def physical_topology_issues(tree: list) -> list[str]:
 
 
 def pin_orientation_issues(tree: list) -> list[str]:
+    _load_stusb4500_profile()
     """Check declared ground pins face down (global pin angle 90 degrees)."""
     issues = []
     pin_info = _pin_world_info(tree)
@@ -584,6 +604,7 @@ def pin_orientation_issues(tree: list) -> list[str]:
 
 
 def component_spacing_issues(tree: list) -> list[str]:
+    _load_stusb4500_profile()
     """Enforce declared adjacency and short component property offsets."""
     issues = []
     instances = _instances(tree)
@@ -637,6 +658,7 @@ def component_spacing_issues(tree: list) -> list[str]:
 
 
 def group_metadata_issues(tree: list) -> list[str]:
+    _load_stusb4500_profile()
     """Every declarative group must emit its generated title and description."""
     issues = []
     text_uuids = {
@@ -691,6 +713,7 @@ def _rect_inside(inner, outer) -> bool:
     )
 
 def frame_and_component_issues(tree: list) -> list[str]:
+    _load_stusb4500_profile()
     issues, instances, frames = [], _instances(tree), {}
     for ref, instance in instances.items():
         dnp_node, value_prop = _direct(instance, "dnp"), _property(instance, "Value")
@@ -973,9 +996,9 @@ def block_annotation_issues(tree: list) -> list[str]:
         width = _direct(stroke, "width") if stroke is not None else None
         outlined = width is not None and float(width[1]) > 0
         if multiline and not outlined:
-            issues.append(f"unbordered block title {uid} must be a single line")
-        elif multiline and not outlined:
-            issues.append(f"multiline annotation {uid} must have its own visible box outline")
+            issues.append(
+                f"multiline annotation {uid} must be a single line or have its own visible box outline"
+            )
     return issues
 
 
@@ -991,6 +1014,7 @@ def _rect_inside_margin(inner, outer, margin: float) -> bool:
 
 
 def frame_content_clearance_issues(tree: list) -> list[str]:
+    _load_stusb4500_profile()
     """Keep visible labels and group comment panels inset from their owning frame."""
     issues = []
     frames = {zone: _frame_bounds(tree, zone) for zone in ZONES}
@@ -1063,6 +1087,7 @@ def wire_obstacle_issues(tree: list) -> list[str]:
 
 
 def common_pin_net_issues(tree: list) -> list[str]:
+    _load_stusb4500_profile()
     """Check configured pin groups against a common named logical net."""
     issues = []
     dsu, pin_info = _wire_networks(tree)
@@ -1096,6 +1121,7 @@ def common_pin_net_issues(tree: list) -> list[str]:
 
 
 def required_no_connect_issues(tree: list) -> list[str]:
+    _load_stusb4500_profile()
     """Require explicit no-connect markers at configured intentionally-unused pins."""
     issues = []
     pin_info = _pin_world_info(tree)
@@ -1114,6 +1140,7 @@ def required_no_connect_issues(tree: list) -> list[str]:
 
 
 def wire_compactness_issues(tree: list, budgets: dict | None = None) -> list[str]:
+    _load_stusb4500_profile()
     """Score total internal wire length in each group against a configurable budget."""
     issues = []
     active_budgets = WIRE_LENGTH_BUDGETS_MM if budgets is None else budgets
@@ -1139,6 +1166,7 @@ def wire_compactness_issues(tree: list, budgets: dict | None = None) -> list[str
 
 
 def circuit_documentation_issues(tree: list) -> list[str]:
+    _load_stusb4500_profile()
     """Require non-trivial circuit groups to identify purpose and source evidence."""
     issues = []
     text_by_uuid = {
