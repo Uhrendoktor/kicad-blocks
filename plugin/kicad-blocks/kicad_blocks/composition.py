@@ -7,8 +7,8 @@ import shutil
 import tempfile
 import uuid
 from pathlib import Path
-
 from .json_types import JsonObject
+
 from .model import (
     BlockPin,
     facade_pin_connection_points,

@@ -9,8 +9,8 @@ import shutil
 import subprocess
 import tempfile
 from pathlib import Path
-
 from .json_types import JsonObject
+
 from .model import (
     resolve_profile_configuration,
     revision_for_hashes,
