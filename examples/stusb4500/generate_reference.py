@@ -1093,15 +1093,15 @@ def generate_reference_schematic(destination: Path) -> Path:
     c1_vreg_1v2 = pin_world_points[("C1", "1")]
     remove_local_label("U1", "21", "VREG_1V2")
     remove_local_label("C1", "1", "VREG_1V2")
-    vreg_1v2_escape_x = c1_vreg_1v2[0] + 38.10
+    vreg_1v2_escape_x = c1_vreg_1v2[0] - 10.16
     add_route("VREG_1V2", [
         u1_vreg_1v2,
-        (u1_vreg_1v2[0], 111.76),
-        (vreg_1v2_escape_x, 111.76),
-        (vreg_1v2_escape_x, 87.63),
-        (c1_vreg_1v2[0], 87.63),
+        (u1_vreg_1v2[0], 113.03),
+        (vreg_1v2_escape_x, 113.03),
+        (vreg_1v2_escape_x, 82.55),
+        (c1_vreg_1v2[0], 82.55),
         c1_vreg_1v2,
-    ], "u1-vreg-1v2-to-c1-around-gnd-pin")
+    ], "u1-vreg-1v2-to-c1-around-controller-pins")
 
     u1_vreg_2v7 = pin_world_points[("U1", "23")]
     c2_vreg_2v7 = pin_world_points[("C2", "1")]
