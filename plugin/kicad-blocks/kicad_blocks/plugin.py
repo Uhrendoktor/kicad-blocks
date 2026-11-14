@@ -2729,9 +2729,7 @@ def _schematic_page_center_mm(schematic: _Schematic) -> tuple[float, float]:
         try:
             width_mm, height_mm = _SCHEMATIC_PAGE_SIZES_MM[page_size]
         except KeyError as exc:
-            raise RuntimeError(
-                f"Unsupported KiCad schematic page-size enum: {page_size}."
-            ) from exc
+            raise RuntimeError(f"Unsupported KiCad schematic page-size enum: {page_size}.") from exc
         if int(getattr(settings, "orientation", 0) or 0) == 2:
             width_mm, height_mm = height_mm, width_mm
     if (
@@ -2741,8 +2739,10 @@ def _schematic_page_center_mm(schematic: _Schematic) -> tuple[float, float]:
         or height_mm <= 0
     ):
         raise RuntimeError("KiCad returned invalid schematic page dimensions.")
+
     def snap(value: float) -> float:
         return round(round(value / _SCHEMATIC_GRID_MM) * _SCHEMATIC_GRID_MM, 2)
+
     return snap(width_mm / 2), snap(height_mm / 2)
 
 
@@ -2764,6 +2764,7 @@ def _focus_schematic_items_in_editor(
         )
     from google.protobuf.empty_pb2 import Empty
     from kipy.proto.common.commands import editor_commands_pb2
+
     command = editor_commands_pb2.FocusOnItems()
     command.document.CopyFrom(target_schematic.document)
     command.document.sheet_path.CopyFrom(path_proto)
@@ -2790,6 +2791,7 @@ def _start_native_symbol_placement(
     if schematic is None:
         raise RuntimeError("No active schematic was found in Eeschema.")
     from kipy.geometry import Vector2
+
     x_mm, y_mm = _schematic_page_center_mm(schematic)
     instance = schematic.place_symbol_from_library(
         f"{LIBRARY_NICKNAME}:{symbol_name}", Vector2.from_xy_mm(x_mm, y_mm)

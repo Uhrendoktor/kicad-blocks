@@ -895,9 +895,7 @@ class LibraryBrowserTests(unittest.TestCase):
         schematic = Schematic()
         kicad = SimpleNamespace(get_schematic=lambda: schematic)
         focus = Mock(return_value=schematic)
-        vector2_module = SimpleNamespace(
-            Vector2=SimpleNamespace(from_xy_mm=lambda x, y: (x, y))
-        )
+        vector2_module = SimpleNamespace(Vector2=SimpleNamespace(from_xy_mm=lambda x, y: (x, y)))
         with (
             patch.dict(
                 sys.modules,
@@ -905,9 +903,7 @@ class LibraryBrowserTests(unittest.TestCase):
             ),
             patch("kicad_blocks.plugin._focus_schematic_items_in_editor", focus),
         ):
-            result = _start_native_symbol_placement(
-                kicad, None, "buck_converter_ab12cd34"
-            )
+            result = _start_native_symbol_placement(kicad, None, "buck_converter_ab12cd34")
 
         self.assertIs(result, symbol)
         self.assertEqual(

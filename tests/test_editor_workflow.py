@@ -123,7 +123,9 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
             )
         run_action.assert_not_called()
 
-    def test_edit_facade_validates_exact_catalog_entry_before_reporting_capability_gap(self) -> None:
+    def test_edit_facade_validates_exact_catalog_entry_before_reporting_capability_gap(
+        self,
+    ) -> None:
         from kicad_blocks.repository import build_project_symbol_catalog
 
         project_catalog = build_project_symbol_catalog(self.project, [self.library])
@@ -875,7 +877,9 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
             patch.object(plugin_actions, "default_library_root", return_value=self.library),
             patch.object(plugin_actions, "_list_library_records", return_value=[self.block]),
             patch.object(plugin_actions, "_pick_record", return_value=self.block) as pick_record,
-            patch.object(plugin_actions, "_ensure_project_facade_catalog", return_value=project_catalog),
+            patch.object(
+                plugin_actions, "_ensure_project_facade_catalog", return_value=project_catalog
+            ),
             patch.object(plugin_actions, "_edit_facade_symbol", return_value=False) as edit_facade,
             patch.dict(sys.modules, {"kipy": kicad_module}),
         ):
@@ -888,7 +892,9 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
             close_browser=root.destroy,
         )
         self.messagebox.showinfo.assert_called_once()
-        self.assertIn(self.block.manifest["symbol_name"], self.messagebox.showinfo.call_args.args[1])
+        self.assertIn(
+            self.block.manifest["symbol_name"], self.messagebox.showinfo.call_args.args[1]
+        )
         root.withdraw.assert_called_once_with()
         root.destroy.assert_called_once_with()
 
@@ -927,7 +933,9 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
             TclError=Exception,
         )
         with (
-            patch.object(plugin_actions, "_load_tkinter", side_effect=lambda: events.append("load tkinter")),
+            patch.object(
+                plugin_actions, "_load_tkinter", side_effect=lambda: events.append("load tkinter")
+            ),
             patch.object(plugin_actions, "tk", fake_tk),
             patch.object(plugin_actions, "_configure_tk_theme"),
             patch.object(plugin_actions, "_attach_tk_window_to_editor"),
