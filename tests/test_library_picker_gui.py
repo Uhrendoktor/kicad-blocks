@@ -87,6 +87,7 @@ def main() -> None:
                         child.destroy()
 
         parent.after(250, drive_picker)
+        print("Picker GUI: opening searchable library dialog.", flush=True)
         try:
             selected = plugin_actions._pick_record(
                 [first, target], parent, picker_title
@@ -103,12 +104,14 @@ def main() -> None:
             raise AssertionError(
                 f"The picker returned {selected.name!r} instead of {target.name!r}."
             )
+        print(f"Picker GUI: selected {selected.name!r}; rendering native preview.", flush=True)
         preview_root = plugin_actions.tk.Tk()
         preview_root.withdraw()
         canvas = plugin_actions.tk.Canvas(preview_root, width=680, height=300)
         canvas.pack()
         try:
             native_image = plugin_actions._native_symbol_preview_photo(target)
+            print("Picker GUI: native symbol preview rendered.", flush=True)
             if native_image.width() <= 0 or native_image.height() <= 0:
                 raise AssertionError("The native KiCad preview image is empty.")
             plugin_actions._draw_facade_preview(canvas, target)
