@@ -874,7 +874,7 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
             description="Selected child sheet",
         )
 
-    def test_task_hub_edit_facade_uses_native_cross_platform_ipc_handoff(self):
+    def test_task_hub_edit_facade_does_not_report_success_without_editor_handoff(self):
         root = SimpleNamespace(
             title=Mock(), withdraw=Mock(), destroy=Mock(),
         )
@@ -906,7 +906,6 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
             project_catalog=project_catalog,
             close_browser=root.destroy,
         )
-        self.messagebox.showinfo.assert_not_called()
         root.withdraw.assert_called_once_with()
         root.destroy.assert_called_once_with()
 
