@@ -1094,8 +1094,8 @@ def _parameter_values_for_instance(
 ) -> dict[str, str]:
     """Read editable KB_PARAM_* user fields from one placed facade symbol."""
     parameters = block.manifest.get("parameters", [])
-    overrides = {}
-    for field in getattr(instance, "user_fields", ()):
+    overrides: dict[str, str] = {}
+    for field in instance.user_fields:
         field_name = str(getattr(field, "name", ""))
         if not field_name.startswith(PARAMETER_FIELD_PREFIX):
             continue
@@ -1405,7 +1405,7 @@ def _show_selected_block_configuration(
         finally:
             profile_application_active[0] = False
 
-    def mark_profile_custom(*_args) -> None:
+    def mark_profile_custom(*_args: str) -> None:
         if profile_var is None or profile_application_active[0]:
             return
         if profile_var.get() != "Custom (manual settings)":
@@ -1431,7 +1431,7 @@ def _show_selected_block_configuration(
                 raw_variant = variant_var.get().strip()
                 resolved_variant = _resolve_variant_text(
                     raw_variant,
-                    schematic.get_project(),
+                    cast(_SchematicProject, schematic.get_project()),
                     _sheet_variables_for_symbol(schematic, instance),
                 )
                 resolve_variant_implementation(block.manifest, resolved_variant)
@@ -1597,12 +1597,12 @@ def _pick_block_for_placement(
     metadata = ttk.Label(right, text="", wraplength=620, justify="left")
     metadata.pack(fill="x", anchor="w", pady=(8, 0))
 
-    records_by_id = {}
-    visible_records = []
+    records_by_id: dict[str, BlockRecord] = {}
+    visible_records: list[BlockRecord] = []
     selected_record: list[BlockRecord | None] = [None]
-    chosen = [None]
+    chosen: list[BlockRecord | None] = [None]
     updating_config = [False]
-    preview_size = [None]
+    preview_size: list[tuple[int, int] | None] = [None]
 
     def preview_resized(event: tkinter_types.Event[tkinter_types.Misc]) -> None:
         # The chooser builds its widgets before the window is mapped. The first
@@ -1619,7 +1619,7 @@ def _pick_block_for_placement(
 
     preview.bind("<Configure>", preview_resized)
 
-    def update_metadata(record: BlockRecord) -> None:
+    def update_metadata(record: BlockRecord | None) -> None:
         if record is None:
             name.configure(text="No matching functional blocks")
             description.configure(text="")
@@ -2243,7 +2243,7 @@ def _active_sheet_instance(schematic: _Schematic) -> _SheetInstance:
         if len(suffix_matches) == 1:
             return suffix_matches[0]
 
-    active_names = []
+    active_names: list[str] = []
     for owner, attributes in (
         (schematic, ("name",)),
         (document, ("schematic_filename", "filename", "path")),
@@ -6380,7 +6380,7 @@ def run_action(action: str, *, editor_window_id: str | None = None) -> None:
 
         from kipy import KiCad
 
-        kicad = KiCad()
+        kicad = cast(_KiCadApp, KiCad())
         schematic = kicad.get_schematic()
         if schematic is None:
             raise ValueError("No active schematic was found. Open and save a project first.")
