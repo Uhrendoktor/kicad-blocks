@@ -43,6 +43,7 @@ from .operations import (
 from .pcb_layout import BlockLayoutPlacement, merge_block_layout, merge_block_layouts
 from .pcb_placement import placement_manifest_path, write_pcb_placement_manifest
 from .repository import (
+    LIBRARY_CATALOG_NAME,
     LIBRARY_NICKNAME,
     add_library_root,
     atomic_write,
