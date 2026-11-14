@@ -25,6 +25,7 @@ from .pcb_types import (
     BatchBlockLayoutMergeResult,
     BlockLayoutMergeResult,
     KiCadNetclassDefinition,
+    KiCadNetSettings,
     KiCadProjectData,
     ProjectSettingsMergeResult,
     ResolvedBlockLayout,
@@ -500,40 +501,48 @@ def _merge_project_net_settings(
         if not isinstance(raw_source_data, dict):
             raise ValueError(f"Invalid block project-settings JSON: {source_project}")
         source_data = cast(KiCadProjectData, raw_source_data)
-        source_settings = source_data.get("net_settings", {})
-        if not isinstance(source_settings, dict):
+        raw_source_settings = source_data.get("net_settings", {})
+        if type(raw_source_settings) is not dict:
             raise ValueError("Block project file has an invalid net_settings section.")
+        source_settings = cast(KiCadNetSettings, raw_source_settings)
     else:
-        source_settings = {}
+        source_settings = cast(KiCadNetSettings, {})
 
-    target_settings = target_data.setdefault("net_settings", {})
-    if not isinstance(target_settings, dict):
+    raw_target_settings = target_data.get("net_settings")
+    if raw_target_settings is None:
+        target_settings: KiCadNetSettings = {"classes": [], "netclass_assignments": {}}
+        target_data["net_settings"] = target_settings
+    elif type(raw_target_settings) is dict:
+        target_settings = cast(KiCadNetSettings, raw_target_settings)
+    else:
         raise TypeError("Target project file has an invalid net_settings section.")
-    target_classes = target_settings.setdefault("classes", [])
-    source_classes = source_settings.get("classes", [])
-    if not isinstance(target_classes, list) or not isinstance(source_classes, list):
-        raise TypeError("KiCad net_settings.classes must be arrays.")
 
-    class_by_name: dict[str, KiCadNetclassDefinition] = {
-        str(item["name"]): item
-        for item in target_classes
-        if isinstance(item, dict) and isinstance(item.get("name"), str)
-    }
-    priorities = [
-        int(item.get("priority", 0))
-        for item in target_classes
-        if isinstance(item, dict)
-        and str(item.get("name", "")).casefold() != "default"
-        and isinstance(item.get("priority", 0), int)
-    ]
+    raw_target_classes = target_settings.get("classes", [])
+    if type(raw_target_classes) is not list:
+        raise TypeError("KiCad target net_settings.classes must be an array.")
+    target_classes = cast(list[KiCadNetclassDefinition], raw_target_classes)
+    raw_source_classes = source_settings.get("classes", [])
+    if type(raw_source_classes) is not list:
+        raise TypeError("KiCad source net_settings.classes must be an array.")
+    source_classes = cast(list[KiCadNetclassDefinition], raw_source_classes)
+
+    class_by_name: dict[str, KiCadNetclassDefinition] = {}
+    priorities: list[int] = []
+    for item in target_classes:
+        class_name = item.get("name")
+        if class_name is not None:
+            class_by_name[class_name] = item
+        priority = item.get("priority")
+        if class_name is not None and class_name.casefold() != "default" and priority is not None:
+            priorities.append(priority)
     next_priority = max(priorities, default=-1) + 1
     class_map: dict[str, str] = {}
     merged_classes: list[str] = []
 
     for source_class in source_classes:
-        if not isinstance(source_class, dict) or not isinstance(source_class.get("name"), str):
+        original_name = source_class.get("name")
+        if original_name is None:
             raise TypeError(f"Malformed block netclass definition: {source_class!r}")
-        original_name = source_class["name"]
         if original_name.casefold() == "default":
             class_map[original_name] = "Default"
             continue
@@ -567,13 +576,16 @@ def _merge_project_net_settings(
             merged_classes.append(desired_name)
         class_map[original_name] = desired_name
 
-    source_assignments = source_settings.get("netclass_assignments") or {}
-    target_assignments = target_settings.get("netclass_assignments") or {}
-    if not isinstance(source_assignments, dict) or not isinstance(target_assignments, dict):
+    raw_source_assignments = source_settings.get("netclass_assignments", {})
+    raw_target_assignments = target_settings.get("netclass_assignments", {})
+    if type(raw_source_assignments) is not dict or type(raw_target_assignments) is not dict:
         raise TypeError("KiCad net_settings.netclass_assignments must be an object.")
-    target_assignments = {
+    source_assignments = cast(dict[str, str | list[str]], raw_source_assignments)
+    target_assignments: dict[str, list[str]] = {
         str(net_name): _normalise_class_assignment(classes)
-        for net_name, classes in target_assignments.items()
+        for net_name, classes in cast(
+            dict[str, str | list[str]], raw_target_assignments
+        ).items()
     }
 
     reverse_ports: dict[str, str] = {}
@@ -612,17 +624,15 @@ def _merge_project_net_settings(
     applied_patterns: list[AppliedNetclassPattern] = []
     unmatched_patterns: list[str] = []
     source_net_map = source_net_to_board_net or {}
-    source_patterns = source_settings.get("netclass_patterns") or []
-    if not isinstance(source_patterns, list):
+    raw_source_patterns = source_settings.get("netclass_patterns", [])
+    if type(raw_source_patterns) is not list:
         raise TypeError("KiCad net_settings.netclass_patterns must be an array.")
+    source_patterns = cast(list[dict[str, str]], raw_source_patterns)
 
     for entry in source_patterns:
-        if not isinstance(entry, dict):
-            unmatched_patterns.append(repr(entry))
-            continue
         pattern = entry.get("pattern")
         class_name = entry.get("netclass")
-        if not isinstance(pattern, str) or not isinstance(class_name, str):
+        if pattern is None or class_name is None:
             unmatched_patterns.append(repr(entry))
             continue
         if class_name not in class_map:
@@ -662,30 +672,29 @@ def _merge_project_net_settings(
             unmatched_patterns.append(pattern)
 
     target_settings["netclass_assignments"] = target_assignments
-    metadata = target_data.setdefault("meta", {})
-    if not isinstance(metadata, dict):
+    raw_metadata = target_data.get("meta")
+    if raw_metadata is None:
+        metadata: dict[str, str | int] = {}
+        target_data["meta"] = metadata
+    elif type(raw_metadata) is dict:
+        metadata = cast(dict[str, str | int], raw_metadata)
+    else:
         raise TypeError("KiCad project meta section must be an object.")
     metadata["filename"] = output_project.name
     metadata.setdefault("version", 3)
 
     ignored_patterns = bool(unmatched_patterns)
     chain_name_map = source_chain_name_map or {}
-    source_chain_classes = source_settings.get("net_chain_classes") or {}
-    source_chain_netclasses = source_settings.get("net_chain_netclasses") or {}
-    target_chain_classes = target_settings.get("net_chain_classes") or {}
-    target_chain_netclasses = target_settings.get("net_chain_netclasses") or {}
+    source_chain_classes = cast(dict[str, str], source_settings.get("net_chain_classes") or {})
+    source_chain_netclasses = cast(
+        dict[str, str], source_settings.get("net_chain_netclasses") or {}
+    )
+    target_chain_classes = cast(dict[str, str], target_settings.get("net_chain_classes") or {})
+    target_chain_netclasses = cast(
+        dict[str, str], target_settings.get("net_chain_netclasses") or {}
+    )
     target_settings["net_chain_classes"] = target_chain_classes
     target_settings["net_chain_netclasses"] = target_chain_netclasses
-    if not all(
-        isinstance(value, dict)
-        for value in (
-            source_chain_classes,
-            source_chain_netclasses,
-            target_chain_classes,
-            target_chain_netclasses,
-        )
-    ):
-        raise TypeError("KiCad net-chain settings must be objects.")
 
     unmatched_chains: list[str] = []
     merged_chain_names: list[str] = []
