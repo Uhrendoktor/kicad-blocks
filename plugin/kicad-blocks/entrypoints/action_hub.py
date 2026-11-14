@@ -48,7 +48,6 @@ def _smoke_test() -> None:
             "Publish implementation",
             "Make selected instance local",
             "Synchronize local copy",
-            "Nest a block",
             "Validate registered libraries",
             "Export recursive BOM",
             "Run recursive ERC",

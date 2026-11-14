@@ -481,6 +481,59 @@ def main() -> None:
         finally:
             parent_kicad.close()
 
+        # Rebuild dependency metadata from the actual placed child facades and
+        # KiCad's exported electrical netlist, without using the manual add action.
+        from kicad_blocks.auto_dependencies import synchronize_block_dependencies
+
+        child_manifest_path = child.path / "manifest.json"
+        child_manifest = json.loads(child_manifest_path.read_text(encoding="utf-8"))
+        child_manifest["dependencies"] = []
+        child_manifest_path.write_text(
+            json.dumps(child_manifest, indent=2, ensure_ascii=False) + "\n",
+            encoding="utf-8",
+        )
+        detected_child = synchronize_block_dependencies(child, [nested_library], cli)
+        child_dependencies = detected_child["block"].manifest["dependencies"]
+        if len(child_dependencies) != 1 or child_dependencies[0]["reference"] != "B9":
+            raise AssertionError(
+                "Automatic dependency discovery did not detect the child's leaf facade: "
+                + repr(child_dependencies)
+            )
+        if child_dependencies[0]["orientation"] != 270:
+            raise AssertionError("Automatic dependency discovery lost the leaf facade rotation.")
+        if child_dependencies[0]["pin_map"] != {"A": "IN", "GND": "GND", "B": "OUT"}:
+            raise AssertionError(
+                "Automatic dependency discovery did not use the child's actual connected nets: "
+                + repr(child_dependencies[0]["pin_map"])
+            )
+
+        parent_manifest_path = parent.path / "manifest.json"
+        parent_manifest = json.loads(parent_manifest_path.read_text(encoding="utf-8"))
+        parent_manifest["dependencies"] = []
+        parent_manifest_path.write_text(
+            json.dumps(parent_manifest, indent=2, ensure_ascii=False) + "\n",
+            encoding="utf-8",
+        )
+        detected_parent = synchronize_block_dependencies(parent, [nested_library], cli)
+        parent_dependencies = detected_parent["block"].manifest["dependencies"]
+        if [item["reference"] for item in parent_dependencies] != ["B1", "B2"]:
+            raise AssertionError(
+                "Automatic dependency discovery did not detect both child occurrences: "
+                + repr(parent_dependencies)
+            )
+        expected_pin_maps = {
+            "B1": {"IN": "VIN_CHILD", "GND": "GND_CHILD", "OUT": "VOUT_CHILD"},
+            "B2": {"IN": "VIN_CHILD2", "GND": "GND_CHILD2", "OUT": "VOUT_CHILD2"},
+        }
+        for dependency in parent_dependencies:
+            if dependency["pin_map"] != expected_pin_maps[dependency["reference"]]:
+                raise AssertionError(
+                    f"Automatic pin-to-net mapping is wrong for {dependency['reference']}: "
+                    + repr(dependency["pin_map"])
+                )
+        if {item["orientation"] for item in parent_dependencies} != {0, 90}:
+            raise AssertionError("Automatic dependency discovery lost child facade orientations.")
+
         parent_schematics = sorted(path.name for path in parent.path.glob("*.kicad_sch"))
         if parent_schematics != ["implementation.kicad_sch"]:
             raise AssertionError(

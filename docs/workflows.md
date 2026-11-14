@@ -10,7 +10,7 @@ These guides start from a specific goal and describe the steps to reach it. They
 ## Maintain a library
 
 - [Edit, publish, and synchronize implementations](how-to/publish-and-sync.md) — update a shared block, edit facade artwork, create project-local copies, and resolve sync conflicts.
-- [Nest blocks and validate libraries](how-to/nesting-and-validation.md) — compose dependencies, validate all registered libraries, and export recursive BOM/ERC results.
+- [Compose block dependencies and validate libraries](how-to/nesting-and-validation.md) — place and wire child facade symbols normally, then let KiCad Blocks detect dependencies during publish, validate libraries, and export recursive BOM/ERC results.
 
 ## Reuse PCB layouts
 

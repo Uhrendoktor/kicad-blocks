@@ -19,7 +19,7 @@ A hierarchical sheet is useful for organizing a design inside one project. KiCad
 - **Browse and place** blocks from registered shared folders. The plugin uses KiCad's native symbol chooser and placement tool.
 - **Configure per instance** with a variant, named profile, typed parameter overrides, and optional PCB layout.
 - **Maintain** shared implementations, edit facade artwork, publish revisions, or create project-local copies and synchronize them.
-- **Compose** blocks as dependencies inside other implementations. Recursive validation, BOM, and ERC traverse the dependency tree.
+- **Compose automatically** by placing child block facades inside an implementation and wiring their pins normally; KiCad Blocks derives dependencies from the saved schematic and netlist on publish.
 - **Reuse PCB work** by storing named board layouts and merging them into a separate copy of a project board.
 
 <p align="center">
@@ -67,7 +67,7 @@ The documentation is organized by reader intent:
 | --- | --- |
 | [Tutorial](docs/tutorials/first-block.md) | You want to create and place your first block from a real hierarchical sheet. |
 | [How-to index](docs/workflows.md) | You already know the task: create, configure, publish, synchronize, validate, or apply a PCB layout. |
-| [Explanations](docs/explanation/architecture.md) | You want to understand the storage model, variants, nested blocks, or product boundaries. |
+| [Explanations](docs/explanation/architecture.md) | You want to understand the storage model, variants, automatic child-block dependencies, or product boundaries. |
 | [Reference](docs/reference.md) | You need exact action names, instance fields, storage paths, or behavior rules. |
 | [Visual evidence](docs/visual-evidence.md) | You want to inspect current production UI screenshots and KiCad-rendered design assets. |
 | [STUSB4500 example](examples/stusb4500/README.md) | You want to study the editable datasheet-derived reference circuit. |

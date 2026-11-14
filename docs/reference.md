@@ -12,7 +12,7 @@ This page describes exact action names, files, instance fields, parameter syntax
 - [Per-instance fields](#per-instance-fields)
 - [Parameters and token expansion](#parameters-and-token-expansion)
 - [Variants and profiles](#variants-and-profiles)
-- [Nested block composition](#nested-block-composition)
+- [Block dependencies and automatic composition](#block-dependencies-and-automatic-composition)
 - [PCB layout descriptors and merge behavior](#pcb-layout-descriptors-and-merge-behavior)
 - [Local-copy synchronization](#local-copy-synchronization)
 - [Validation reports](#validation-reports)
@@ -47,7 +47,7 @@ The task hub groups these operations by tab:
 | Tab | Actions |
 | --- | --- |
 | **Use & build** | Browse and place blocks; create block from sheet; open block implementation. |
-| **Edit & maintain** | Configure selected instance; edit facade symbol; publish implementation; make selected instance local; synchronize local copy; nest a block. |
+| **Edit & maintain** | Configure selected instance; edit facade symbol; publish implementation; make selected instance local; synchronize local copy; publishing rebuilds the automatic child-dependency graph. |
 | **Checks & PCB** | Validate registered libraries; export recursive BOM; run recursive ERC; apply selected PCB layout; apply multiple PCB layouts. |
 
 The PCB Editor provides a separate **Place Imported Block Layout** action for a merged board copy that contains imported block groups and a placement sidecar.
@@ -155,11 +155,15 @@ A named profile is a reusable partial configuration containing a profile name an
 
 Applying a profile writes the profile, variant, parameter, and layout fields to the selected facade in one schematic IPC transaction. Editing a linked field turns the instance into a custom configuration and clears `KB_PROFILE`.
 
-## Nested block composition
+## Block dependencies and automatic composition
 
-Each nested dependency occurrence records a unique instance ID, reference, placement, orientation (0°, 90°, 180°, or 270°), and child-pin-to-parent-net mapping. KiCad Blocks composes the rotated child facade and labels at the transformed pin endpoints in the parent implementation.
+A parent implementation contains child blocks as ordinary facade symbols. Open the parent implementation, use KiCad's normal **Add Symbol** command to place a facade from the registered `KBlocks` catalog, wire it normally, and save. No separate nesting command or manual child-pin mapping is required.
 
-The child remains a separate library asset. Cyclic dependencies are rejected. The child implementation is not created as a native hierarchical sheet; its facade and connection labels are composed into the parent implementation.
+On block creation, publish, local-copy creation or synchronization, and before recursive BOM/ERC export or registered-library validation, KiCad Blocks exports the saved default implementation's KiCad XML netlist and reconciles `manifest.dependencies` against the facade symbols present in that schematic. It identifies each child by its `KBlocks` library symbol ID, then maps manifest pin names to actual net names using the facade pin numbers from the child manifest. It records the child reference, position in millimetres, rotation (0°, 90°, 180°, or 270°), stable occurrence ID, relative library path, revision, and pin map.
+
+A pin absent from the netlist is recorded as `null` and stays electrically unconnected. KiCad Blocks never guesses a net by matching pin names. Removing a child facade removes its dependency on the next reconciliation. Unregistered child facades, unannotated references, mismatched facade pin numbers, and dependency cycles are reported as errors. Existing occurrence IDs are retained when a child block remains at the same reference.
+
+The default implementation is the source of the library-wide dependency graph; named implementation variants are separate schematic assets. Child blocks remain separate library assets. KiCad Blocks does not turn them into hierarchical sheets or generate connection labels over the user's wiring.
 
 ## PCB layout descriptors and merge behavior
 

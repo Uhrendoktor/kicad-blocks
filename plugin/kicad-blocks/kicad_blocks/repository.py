@@ -1661,7 +1661,7 @@ def add_dependency(
     reference: str | None = None,
     position_mm: tuple[float, float] | None = None,
     orientation: int = 0,
-    pin_map: dict[str, str] | None = None,
+    pin_map: dict[str, str | None] | None = None,
 ) -> BlockRecord:
     """Add one nestable block *instance* to a parent implementation.
 
@@ -1714,7 +1714,9 @@ def add_dependency(
             f"Missing: {missing}; unknown: {extra}."
         )
     for child_pin, net_name in mapping.items():
-        if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_./+\\-]*", str(net_name)):
+        if net_name is not None and not re.fullmatch(
+            r"[A-Za-z_][A-Za-z0-9_./+\\-]*", str(net_name)
+        ):
             raise ValueError(
                 f"Invalid parent net name {net_name!r} for child pin {child_pin!r}."
             )
@@ -1742,6 +1744,110 @@ def add_dependency(
         parent.path / MANIFEST_NAME,
         json.dumps(updated, indent=2, ensure_ascii=False) + "\n",
     )
+    return _record(parent.path)
+
+
+def synchronize_dependencies(
+    parent: BlockRecord,
+    occurrences: list[dict],
+) -> BlockRecord:
+    """Replace a block's dependency graph with occurrences found in its schematic.
+
+    The schematic is authoritative: removed facade symbols remove dependencies,
+    while unchanged reference/child pairs keep their stable occurrence IDs.
+    A None pin-map value represents a deliberately unconnected facade pin.
+    """
+    manifest = read_manifest(parent.path)
+    existing_by_reference = {
+        str(item.get("reference", "")).casefold(): item
+        for item in manifest.get("dependencies", [])
+        if item.get("reference")
+    }
+    dependencies: list[dict] = []
+    used_references: set[str] = set()
+    anchor = _dependency_anchor(parent.path, manifest)
+
+    for occurrence in occurrences:
+        child = occurrence["child"]
+        reference = str(occurrence.get("reference", "")).strip()
+        if not re.fullmatch(r"[A-Za-z][A-Za-z0-9]*", reference):
+            raise ValueError(
+                f"Detected child reference {reference!r} is invalid; annotate the schematic."
+            )
+        key = reference.casefold()
+        if key in used_references:
+            raise ValueError(f"Nested block reference {reference!r} is used more than once.")
+        used_references.add(key)
+
+        if child.manifest["block_id"] == manifest["block_id"]:
+            raise ValueError("A block cannot depend on itself.")
+        if _depends_on(child.path, manifest["block_id"], set()):
+            raise ValueError(
+                f"Adding {child.name!r} to {parent.name!r} would create a dependency cycle."
+            )
+
+        orientation = int(occurrence.get("orientation", 0))
+        if orientation not in (0, 90, 180, 270):
+            raise ValueError(
+                "Nested block orientation must be 0, 90, 180 or 270 degrees."
+            )
+        raw_position = occurrence.get("position_mm")
+        if not isinstance(raw_position, (tuple, list)) or len(raw_position) != 2:
+            raise ValueError(f"Invalid placement coordinates for nested block {reference!r}.")
+        position = (float(raw_position[0]), float(raw_position[1]))
+        if not all(math.isfinite(value) for value in position):
+            raise ValueError(f"Placement for nested block {reference!r} must be finite.")
+
+        pin_names = {str(pin["name"]) for pin in child.manifest.get("pins", [])}
+        raw_mapping = occurrence.get("pin_map", {})
+        if not isinstance(raw_mapping, dict) or set(raw_mapping) != pin_names:
+            missing = sorted(pin_names - set(raw_mapping or {}))
+            extra = sorted(set(raw_mapping or {}) - pin_names)
+            raise ValueError(
+                f"Detected pin map for {reference!r} must include every child pin. "
+                f"Missing: {missing}; unknown: {extra}."
+            )
+        mapping: dict[str, str | None] = {}
+        for pin_name, raw_net in raw_mapping.items():
+            if raw_net is None or not str(raw_net).strip():
+                mapping[str(pin_name)] = None
+                continue
+            net_name = str(raw_net).strip()
+            if len(net_name) > 512 or any(ord(char) < 32 for char in net_name):
+                raise ValueError(
+                    f"Net name for {reference}.{pin_name} must be a single-line value "
+                    "of at most 512 characters."
+                )
+            mapping[str(pin_name)] = net_name
+
+        previous = existing_by_reference.get(key, {})
+        same_occurrence = previous.get("block_id") == child.manifest["block_id"]
+        dependencies.append(
+            {
+                "instance_id": (
+                    str(previous.get("instance_id") or uuid.uuid4())
+                    if same_occurrence
+                    else str(uuid.uuid4())
+                ),
+                "reference": reference,
+                "position_mm": [position[0], position[1]],
+                "orientation": orientation,
+                "pin_map": mapping,
+                "block_id": child.manifest["block_id"],
+                "name": child.manifest["name"],
+                "path": os.path.relpath(child.path.resolve(), anchor),
+                "revision": child.manifest.get("revision"),
+            }
+        )
+
+    dependencies.sort(key=lambda item: item["reference"].casefold())
+    if dependencies != manifest.get("dependencies", []):
+        manifest["dependencies"] = dependencies
+        manifest["version"] = int(manifest.get("version", 1)) + 1
+        atomic_write(
+            parent.path / MANIFEST_NAME,
+            json.dumps(manifest, indent=2, ensure_ascii=False) + "\n",
+        )
     return _record(parent.path)
 
 
