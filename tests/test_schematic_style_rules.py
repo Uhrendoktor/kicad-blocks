@@ -21,6 +21,7 @@ from validate_schematic_style import (
     _pin_world_info,
     _wire_networks,
     block_annotation_issues,
+    group_comment_outline_issues,
     check_generic_schematic_style,
     check_schematic_style,
     common_pin_net_issues,
@@ -102,7 +103,9 @@ assert "generate_reference" not in sys.modules
         )
         width = _direct(_direct(note, "stroke"), "width")
         width[1] = "-1"
-        self.assertTrue(any("visible box outline" in issue for issue in block_annotation_issues(tree)))
+        self.assertTrue(any(
+            "visible box outline" in issue for issue in group_comment_outline_issues(tree)
+        ))
 
     def test_symbol_fields_may_not_straddle_their_body(self) -> None:
         tree = self.fresh_tree()
