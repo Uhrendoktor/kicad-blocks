@@ -111,7 +111,7 @@ jobs:
           python3 -m venv "${RUNNER_TEMP}/kicad-blocks-venv"
           PY="${RUNNER_TEMP}/kicad-blocks-venv/bin/python"
           "$PY" -m pip install --upgrade pip
-          "$PY" -m pip install pytest ruff resvg_py pillow platformdirs
+          "$PY" -m pip install pytest ruff resvg_py pillow platformdirs xa11y==0.16.0
           "$PY" --version
           "$PY" -m pip --version
 
