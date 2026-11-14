@@ -168,6 +168,8 @@ def python_policy_violations(source: str, filename: str = "<memory>") -> tuple[s
                 "type, a narrow Protocol, or a structured value type"
             )
 
+    # The module walk above already checked live Any references. Expand string forward
+    # annotations separately so a real annotation is not reported twice.
     roots = list(_annotation_roots(tree))
     type_comment_roots: list[ast.AST] = []
     for node in ast.walk(tree):
