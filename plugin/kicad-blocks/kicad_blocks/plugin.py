@@ -2972,7 +2972,7 @@ def _native_symbol_preview_photo(
     max_height: int = 260,
     *,
     library_file: str | Path | None = None,
-) -> tkinter_types.PhotoImage | None:
+) -> tkinter_types.PhotoImage:
     """Render the exact catalog symbol used by the current preview/editor workflow."""
     symbol_name = str(record.manifest["symbol_name"])
     library_file = Path(library_file or record.symbol_library).expanduser().resolve()
@@ -3690,7 +3690,7 @@ def _ask_layout_details(
         link_combo, "This layout is available when applying the selected implementation to a board."
     )
     frame.columnconfigure(0, weight=1)
-    result = [None]
+    result: list[_LayoutDialogChoice | None] = [None]
 
     def browse():
         selected = _pick_kicad_file(
@@ -4054,7 +4054,7 @@ def _show_block_layout_editor(
         footer, "Save layouts", lambda: None, "save", "Save PCB layout changes", state="disabled"
     )
     save_button.pack(side="right", padx=(0, 8))
-    created_layout_to_open = [None]
+    created_layout_to_open: list[Path | None] = [None]
 
     def save_and_close():
         if not changed[0]:
@@ -4304,7 +4304,7 @@ def _ask_implementation_details(
         copy_sources.clear()
 
     frame.columnconfigure(0, weight=1)
-    result = [None]
+    result: list[tuple[str, str] | None] = [None]
 
     def accept():
         selected_value = selector_value.get().strip()
@@ -4427,7 +4427,7 @@ def _show_block_variant_editor(
     ]
     default_variant = [str(record.manifest.get("default_variant") or "")]
     dirty = [False]
-    new_implementation_to_open = [None]
+    new_implementation_to_open: list[Path | None] = [None]
 
     def render(selected_index: int | None = None):
         tree.delete(*tree.get_children())
@@ -5146,9 +5146,9 @@ def _show_library_browser(
     details.configure(state="disabled")
     _bind_mousewheel(details, lambda amount: details.yview_scroll(amount, "units"))
     selected_record: list[BlockRecord | None] = [None]
-    selected_project_catalog = [None]
-    facade_button = [None]
-    open_layout_button = [None]
+    selected_project_catalog: list[Path | None] = [None]
+    facade_button: list[ttk_types.Button | None] = [None]
+    open_layout_button: list[ttk_types.Button | None] = [None]
 
     def set_details(record: BlockRecord | None) -> None:
         selected_record[0] = record
