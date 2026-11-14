@@ -380,7 +380,7 @@ class _TkGeometryWindow(Protocol):
 
     def winfo_screenheight(self) -> int: ...
 
-    def geometry(self, value: str) -> None: ...
+    def geometry(self, value: str) -> str: ...
 
     def minsize(self, width: int, height: int) -> None: ...
 
@@ -745,7 +745,7 @@ def _add_tooltip(widget: tkinter_types.Misc, text: str) -> None:
     """Attach a small themed tooltip to a compact icon button."""
     tooltip: list[tkinter_types.Toplevel | None] = [None]
 
-    def show(_event: tkinter_types.Event | None = None) -> None:
+    def show(_event: tkinter_types.Event[tkinter_types.Misc] | None = None) -> None:
         if tooltip[0] is not None or not widget.winfo_exists():
             return
         palette = getattr(widget.winfo_toplevel(), "kicad_blocks_palette", {})
@@ -773,7 +773,7 @@ def _add_tooltip(widget: tkinter_types.Misc, text: str) -> None:
         popup.geometry(f"+{x}+{y}")
         tooltip[0] = popup
 
-    def hide(_event: tkinter_types.Event | None = None) -> None:
+    def hide(_event: tkinter_types.Event[tkinter_types.Misc] | None = None) -> None:
         popup = tooltip[0]
         tooltip[0] = None
         if popup is not None:
