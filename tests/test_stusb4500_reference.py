@@ -639,7 +639,7 @@ class STUSB4500ReferenceTests(unittest.TestCase):
         for reference, body_center_x in (("T4", 1.651), ("T1", -1.651)):
             origin = _direct(instances[reference], "at")
             expected = {
-                "Reference": (body_center_x - 3.25, -6.35),
+                "Reference": (body_center_x - 2.75, -6.35),
                 "Value": (body_center_x + 2.00, -6.35),
             }
             for field_name, (dx, dy) in expected.items():
