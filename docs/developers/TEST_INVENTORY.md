@@ -8,7 +8,7 @@ programs rather than pytest modules are listed separately and must remain explic
 registered in STANDALONE_TESTS in scripts/test_inventory.py.
 
 - Pytest modules: **23**
-- Individually inventoried pytest cases: **227**
+- Individually inventoried pytest cases: **248**
 - Standalone acceptance runners: **7**
 - Additional CI validation runners: **2**
 
@@ -62,6 +62,8 @@ Core block model, facade generation, parameter handling, library registration, c
 | test_create_block_copies_optional_pcb_asset | Creates block copies optional pcb asset. |
 | test_project_library_table_registration_is_idempotent | Exercises project library table registration is idempotent. |
 | test_local_copy_reuses_facade_catalog_and_is_bound_by_instance_kiid | Exercises local copy reuses facade catalog and is bound by instance kiid. |
+| test_publish_imports_symbol_editor_project_catalog_edit | Publishes imports symbol editor project catalog edit. |
+| test_publish_rejects_conflicting_project_and_shared_facade_edits | Publishes rejects conflicting project and shared facade edits. |
 | test_publish_bumps_version_when_library_assets_change | Publishes bumps version when library assets change. |
 | test_project_library_table_has_one_stable_catalog_row_for_all_blocks | Exercises project library table has one stable catalog row for all blocks. |
 | test_shared_catalog_contains_facades_for_all_blocks | Exercises shared catalog contains facades for all blocks. |
@@ -114,7 +116,20 @@ Schematic editor action routing, selected-sheet behavior, facade editing, transa
 
 | Test | Purpose |
 | --- | --- |
-| test_edit_facade_uses_native_eeschema_library_symbol_hotkey | Exercises edit facade uses native eeschema library symbol hotkey. |
+| test_edit_facade_prefers_native_symbol_editor_action_when_supported | Exercises edit facade prefers native symbol editor action when supported. |
+| test_edit_facade_targets_preview_symbol_without_schematic_selection | Exercises edit facade targets preview symbol without schematic selection. |
+| test_edit_facade_opens_symbol_editor_from_eeschema_tools_menu | Exercises edit facade opens symbol editor from eeschema tools menu. |
+| test_symbol_editor_menu_down_count_matches_standalone_and_manager_hosted_modes | Exercises symbol editor menu down count matches standalone and manager hosted modes. |
+| test_edit_facade_does_not_disturb_an_already_open_symbol_editor | Exercises edit facade does not disturb an already open symbol editor. |
+| test_edit_facade_wayland_rejects_unavailable_native_action_without_global_input | Exercises edit facade wayland rejects unavailable native action without global input. |
+| test_edit_facade_wayland_never_types_into_an_unverified_symbol_editor | Exercises edit facade wayland never types into an unverified symbol editor. |
+| test_edit_facade_uses_verified_menu_if_native_action_acknowledges_but_does_not_open_editor | Exercises edit facade uses verified menu if native action acknowledges but does not open editor. |
+| test_edit_facade_never_sends_menu_keys_to_pcb_editor | Exercises edit facade never sends menu keys to pcb editor. |
+| test_edit_facade_stops_when_eeschema_cannot_take_keyboard_focus | Exercises edit facade stops when eeschema cannot take keyboard focus. |
+| test_wayland_edit_facade_does_not_inject_without_verified_search_focus | Exercises wayland edit facade does not inject without verified search focus. |
+| test_wayland_edit_facade_does_not_inject_when_wtype_is_missing | Exercises wayland edit facade does not inject when wtype is missing. |
+| test_edit_facade_rejects_missing_symbol_in_project_catalog | Exercises edit facade rejects missing symbol in project catalog. |
+| test_ensure_project_facade_catalog_preserves_existing_unsaved_edits | Exercises ensure project facade catalog preserves existing unsaved edits. |
 | test_create_block_from_selected_sheet_never_prompts_for_manual_pins | Creates block from selected sheet never prompts for manual pins. |
 | test_create_block_rolls_back_new_block_when_project_registration_fails | Creates block rolls back new block when project registration fails. |
 | test_create_block_prefers_typed_sheet_symbol_over_serialized_selection | Creates block prefers typed sheet symbol over serialized selection. |
@@ -127,7 +142,6 @@ Schematic editor action routing, selected-sheet behavior, facade editing, transa
 | test_create_block_fails_before_dialog_when_selected_sheetfile_is_missing | Creates block fails before dialog when selected sheetfile is missing. |
 | test_create_block_without_selection_uses_the_current_hierarchical_sheet | Creates block without selection uses the current hierarchical sheet. |
 | test_reload_symbol_library_uses_gui_supported_reload_only | Exercises reload symbol library uses gui supported reload only. |
-| test_edit_facade_requires_one_selected_symbol | Exercises edit facade requires one selected symbol. |
 | test_edit_opens_library_implementation_and_publish_advances_revision | Exercises edit opens library implementation and publish advances revision. |
 | test_instance_configuration_is_one_undoable_ipc_update | Exercises instance configuration is one undoable ipc update. |
 | test_instance_configuration_reports_item_update_status_and_rolls_back | Exercises instance configuration reports item update status and rolls back. |
@@ -182,6 +196,9 @@ Library search and selection, native previews, variants/profiles/layouts, cross-
 | Test | Purpose |
 | --- | --- |
 | test_search_matches_description_pins_and_variant_values | Exercises search matches description pins and variant values. |
+| test_native_facade_preview_exports_from_the_project_catalog_override | Exercises native facade preview exports from the project catalog override. |
+| test_native_save_dialog_uses_tk_initial_name_filters_and_suffix | Exercises native save dialog uses tk initial name filters and suffix. |
+| test_native_file_and_directory_dialog_cancel_returns_none | Exercises native file and directory dialog cancel returns none. |
 | test_native_facade_preview_removes_reference_and_component_name | Exercises native facade preview removes reference and component name. |
 | test_overview_contains_pin_types_parameters_variants_and_layouts | Exercises overview contains pin types parameters variants and layouts. |
 | test_new_pcb_layout_is_created_as_default_and_saved_in_block | Exercises new pcb layout is created as default and saved in block. |
@@ -215,7 +232,11 @@ Library search and selection, native previews, variants/profiles/layouts, cross-
 | test_editor_capture_does_not_treat_plugin_browser_as_eeschema | Exercises editor capture does not treat plugin browser as eeschema. |
 | test_native_placement_handoff_uses_add_symbol_hotkey_and_exact_library_name | Exercises native placement handoff uses add symbol hotkey and exact library name. |
 | test_native_placement_refuses_to_type_when_choose_symbol_dialog_is_absent | Exercises native placement refuses to type when choose symbol dialog is absent. |
+| test_native_run_action_status_is_checked_not_treated_as_truthy | Exercises native run action status is checked not treated as truthy. |
 | test_native_placement_uses_kicad_ipc_without_xdotool_or_captured_xid | Exercises native placement uses kicad ipc without xdotool or captured xid. |
+| test_native_placement_rejected_by_kicad_reports_real_status_without_xdotool | Exercises native placement rejected by kicad reports real status without xdotool. |
+| test_native_placement_does_not_send_global_wayland_keys_without_verified_editor | Exercises native placement does not send global wayland keys without verified editor. |
+| test_wayland_placement_does_not_inject_keys_when_xdotool_cannot_identify_editor | Exercises wayland placement does not inject keys when xdotool cannot identify editor. |
 | test_native_placement_requires_editor_when_ipc_is_unavailable | Exercises native placement requires editor when ipc is unavailable. |
 
 ### tests/test_library_validation.py
