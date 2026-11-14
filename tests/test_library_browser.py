@@ -25,6 +25,7 @@ from kicad_blocks.plugin import (
     _block_overview_text,
     _capture_eeschema_window_id,
     _choose_block_layout,
+    _desktop_file_dialog,
     _clean_facade_preview_svg,
     _filter_library_records,
     _layout_choices,
@@ -196,11 +197,14 @@ class LibraryBrowserTests(unittest.TestCase):
     def test_native_file_and_directory_choosers_use_system_filedialog(self):
         open_dialog = Mock(return_value="/tmp/block.kicad_sch")
         directory_dialog = Mock(return_value="/tmp/library")
-        with patch(
-            "kicad_blocks.plugin.filedialog",
-            SimpleNamespace(
-                askopenfilename=open_dialog,
-                askdirectory=directory_dialog,
+        with (
+            patch("kicad_blocks.plugin.shutil.which", return_value=None),
+            patch(
+                "kicad_blocks.plugin.filedialog",
+                SimpleNamespace(
+                    askopenfilename=open_dialog,
+                    askdirectory=directory_dialog,
+                ),
             ),
         ):
             selected_file = _pick_kicad_file(
@@ -221,6 +225,43 @@ class LibraryBrowserTests(unittest.TestCase):
         self.assertEqual(open_dialog.call_args.kwargs["parent"].__class__, object)
         self.assertTrue(directory_dialog.call_args.kwargs["mustexist"])
         self.assertEqual(directory_dialog.call_args.kwargs["initialdir"], str(self.root))
+
+    def test_wayland_file_chooser_uses_themed_gtk_backend_and_portal_preference(self):
+        run = Mock(return_value=SimpleNamespace(returncode=0, stdout="/tmp/selected.kicad_sch", stderr=""))
+        with (
+            patch("kicad_blocks.plugin.shutil.which", side_effect=lambda name: "/usr/bin/zenity" if name == "zenity" else None),
+            patch("kicad_blocks.plugin.subprocess.run", run),
+            patch.dict(os.environ, {"XDG_CURRENT_DESKTOP": "GNOME", "WAYLAND_DISPLAY": "wayland-0"}),
+        ):
+            selected = _desktop_file_dialog(
+                mode="open",
+                title="Choose schematic",
+                initial_path=self.v18,
+                suffix=".kicad_sch",
+                filetypes=[("KiCad schematic", "*.kicad_sch"), ("All files", "*.*")],
+            )
+        self.assertEqual(selected, "/tmp/selected.kicad_sch")
+        command = run.call_args.args[0]
+        self.assertEqual(command[0], "/usr/bin/zenity")
+        self.assertIn("--file-selection", command)
+        self.assertIn("--filename", command)
+        self.assertIn("--file-filter=KiCad schematic | *.kicad_sch", command)
+        self.assertEqual(run.call_args.kwargs["env"]["GTK_USE_PORTAL"], "1")
+
+    def test_desktop_directory_chooser_cancel_is_not_retried_with_custom_tk_dialog(self):
+        run = Mock(return_value=SimpleNamespace(returncode=1, stdout="", stderr=""))
+        with (
+            patch("kicad_blocks.plugin.shutil.which", side_effect=lambda name: "/usr/bin/zenity" if name == "zenity" else None),
+            patch("kicad_blocks.plugin.subprocess.run", run),
+            patch.dict(os.environ, {"XDG_CURRENT_DESKTOP": "GNOME", "WAYLAND_DISPLAY": "wayland-0"}),
+        ):
+            selected = _desktop_file_dialog(
+                mode="directory",
+                title="Choose library",
+                initial_path=self.root,
+            )
+        self.assertIsNone(selected)
+        self.assertIn("--directory", run.call_args.args[0])
 
     def test_layout_linked_to_implementation_is_used_when_instance_has_default(self):
         original_layouts = [dict(item) for item in self.block.manifest["layouts"]]
