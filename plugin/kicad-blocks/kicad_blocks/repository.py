@@ -2136,7 +2136,7 @@ def _read_library_settings() -> LibrarySettings:
     if not settings_path.is_file():
         return {}
     try:
-        raw: object = json.loads(settings_path.read_text(encoding="utf-8"))
+        raw = json.loads(settings_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return {}
     if not isinstance(raw, dict):
