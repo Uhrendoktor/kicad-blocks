@@ -419,6 +419,7 @@ def main() -> None:
         plugin_json = plugin_manifest_path.resolve()
         log_path = root / "eeschema-plugin-discovery.log"
         process, window_id = _launch(eeschema, schematic, env, xdotool, log_path)
+        placement_client = None
         try:
             environment = (
                 cache_home / "kicad" / version / "python-environments" / PLUGIN_IDENTIFIER
@@ -609,9 +610,6 @@ def main() -> None:
             finally:
                 facade_editor_client.close()
 
-            finally:
-                facade_editor_client.close()
-
             placement_client = KiCad(timeout_ms=30000)
             plugin_actions._start_native_symbol_placement(
                 placement_client,
@@ -741,13 +739,13 @@ def main() -> None:
                 f"{expected_lib_id}; the saved schematic passed KiCad CLI export."
             )
 
-            placement_client.close()
-
             print(
                 "KiCad plugin registration passed: plugin.json discovered, "
                 "managed Python environment created, and schematic action marked ready."
             )
         finally:
+            if placement_client is not None:
+                placement_client.close()
             _close_editor(process, window_id, xdotool)
 
 
