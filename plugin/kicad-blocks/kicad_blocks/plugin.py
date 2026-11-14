@@ -1475,7 +1475,7 @@ def _show_selected_block_configuration(
 
     profile_application_active = [False]
 
-    def apply_profile(_event=None) -> None:
+    def apply_profile(_event: tkinter_types.Event[tkinter_types.Misc] | None = None) -> None:
         if profile_var is None:
             return
         profile = profile_labels.get(profile_var.get())
@@ -4868,7 +4868,7 @@ def _show_library_roots_dialog(parent: tkinter_types.Misc) -> bool:
     close_button = ttk.Button(actions, text="Close", command=dialog.destroy)
     close_button.pack(side="right")
 
-    def update_selection_actions(_event=None) -> None:
+    def update_selection_actions(_event: tkinter_types.Event[tkinter_types.Misc] | None = None) -> None:
         path = selected_path()
         fixed = path is None or path == environment_root
         change_button.configure(state="disabled" if fixed else "normal")
@@ -5172,7 +5172,7 @@ def _show_library_browser(
         _show_library_roots_dialog(window)
         refresh_records()
 
-    def selection_changed(_event=None):
+    def selection_changed(_event: tkinter_types.Event[tkinter_types.Misc] | None = None) -> None:
         selection = tree.selection()
         record = records_by_id.get(selection[0]) if selection else None
         set_details(record)
