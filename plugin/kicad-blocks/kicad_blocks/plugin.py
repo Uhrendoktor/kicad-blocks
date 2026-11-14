@@ -65,7 +65,11 @@ from .operations import (
 from .pcb_layout import BlockLayoutPlacement, merge_block_layout, merge_block_layouts
 from .pcb_placement import placement_manifest_path, write_pcb_placement_manifest
 from .pcb_types import ResolvedBlockLayout
-from .report_types import LocalCopyPublishReport
+from .report_types import (
+    BlockErcReport,
+    LibraryValidationReport,
+    LocalCopyPublishReport,
+)
 from .repository import (
     LIBRARY_CATALOG_NAME,
     LIBRARY_NICKNAME,
@@ -155,15 +159,11 @@ class _SchematicForItemUpdate(Protocol):
 
 
 class _SchematicProject(Protocol):
-    """Project text-variable expansion used by variant resolution."""
-
-    def expand_text_variables(self, text: str) -> str: ...
-
-
-class _SchematicProjectPath(Protocol):
-    """Project path consumed when locating the saved schematic's project folder."""
+    """Saved project path and text-variable expansion used by editor actions."""
 
     path: str | Path
+
+    def expand_text_variables(self, text: str) -> str: ...
 
 
 class _SheetPageSettings(Protocol):
@@ -291,7 +291,7 @@ class _SchematicSymbol(_ProtoBackedSchematicItem, Protocol):
 class _Schematic(_SchematicForItemUpdate, Protocol):
     """Editor operations used by block management and placement actions."""
 
-    def get_project(self) -> _SchematicProjectPath: ...
+    def get_project(self) -> _SchematicProject: ...
 
     def get_selection(self) -> Sequence[_SchematicSymbol]: ...
 
@@ -904,7 +904,7 @@ def _action_button(
 
 
 def project_directory(schematic: _Schematic) -> Path:
-    project = cast(_SchematicProjectPath, schematic.get_project())
+    project = schematic.get_project()
     raw = Path(project.path).expanduser()
     if raw.is_file() or raw.suffix.lower() == ".kicad_pro":
         raw = raw.parent
@@ -2239,15 +2239,14 @@ def _sheet_path_ids(value: _SheetPath | Sequence[str] | None) -> tuple[str, ...]
     """Normalize a KiCad SheetPath or a sequence of KIID values."""
     if value is None:
         return ()
-    path = getattr(value, "path", value)
-    try:
-        items = list(path)
-    except TypeError:
-        return ()
-    result = []
+    if hasattr(value, "path"):
+        items: Sequence[KIID | str] = cast(_SheetPath, value).path
+    else:
+        items = cast(Sequence[str], value)
+    result: list[str] = []
     for item in items:
-        raw = getattr(item, "value", None) or getattr(item, "uuid", None) or item
-        text_value = str(raw).strip().strip("{}")
+        raw_value = getattr(item, "value", None) or getattr(item, "uuid", None) or item
+        text_value = str(raw_value).strip().strip("{}")
         if text_value:
             result.append(text_value.casefold())
     return tuple(result)
@@ -2437,7 +2436,7 @@ def _selected_sheet_symbol_source(
 
 
 def _create_and_place(
-    root: Path | list[Path],
+    root: Path,
     schematic: _Schematic,
     kicad: _KiCadApp,
     project_dir: Path,
@@ -2699,7 +2698,7 @@ def _edit_block_implementation(
     if len(selected) == 1 and hasattr(selected[0], "definition"):
         record = _block_record_for_instance(root, project_dir, selected[0])
     else:
-        record = _pick_record(list_blocks(root), parent, "Edit Block Implementation")
+        record = _pick_record(_list_library_records(root), parent, "Edit Block Implementation")
     if record is None:
         return None
     _register_implementation_catalog(record, _library_roots_for(root))
@@ -5737,7 +5736,9 @@ def _open_selected_block_implementation(
     record = _block_record_for_instance(root, project_dir, instance)
     raw_variant = _field_value(instance, VARIANT_FIELD_NAME)
     resolved_variant = _resolve_variant_text(
-        raw_variant, schematic.get_project(), _sheet_variables_for_symbol(schematic, instance)
+        raw_variant,
+        schematic.get_project(),
+        _sheet_variables_for_symbol(schematic, instance),
     )
     implementation_name = resolve_variant_implementation(record.manifest, resolved_variant)
     implementation_path = (record.path / implementation_name).resolve()
@@ -5779,6 +5780,10 @@ def _export_recursive_bom(
         item for item in selection if hasattr(item, "definition") and hasattr(item.definition, "id")
     ]
     if len(selected) == 1:
+        if project_dir is None:
+            if schematic is None:
+                raise ValueError("A project directory is required to resolve the selected block instance.")
+            project_dir = project_directory(schematic)
         record = _block_record_for_instance(root, project_dir, selected[0])
         parameter_values = _parameter_values_for_instance(selected[0], record)
     else:
@@ -5815,7 +5820,7 @@ def _validate_shared_library(root: Path | list[Path], parent: tkinter_types.Misc
     output = _pick_directory(parent, title="Select a folder for the library validation reports")
     if not output:
         return
-    results = []
+    results: list[tuple[Path, LibraryValidationReport]] = []
     library_roots = _library_roots_for(root)
     cli = find_kicad_cli()
     for library_path in library_roots:
@@ -5874,6 +5879,10 @@ def _validate_recursive_erc(
         item for item in selection if hasattr(item, "definition") and hasattr(item.definition, "id")
     ]
     if len(selected) == 1:
+        if project_dir is None:
+            if schematic is None:
+                raise ValueError("A project directory is required to resolve the selected block instance.")
+            project_dir = project_directory(schematic)
         record = _block_record_for_instance(root, project_dir, selected[0])
         parameter_values = _parameter_values_for_instance(selected[0], record)
     else:
@@ -5888,7 +5897,7 @@ def _validate_recursive_erc(
     output = _pick_directory(parent, title="Select a folder for recursive ERC reports")
     if not output:
         return
-    reports = validate_block_tree(
+    reports: list[BlockErcReport] = validate_block_tree(
         record, Path(output), find_kicad_cli(), library_root, parameter_values=parameter_values
     )
     failed = [item for item in reports if item["violations"]]
