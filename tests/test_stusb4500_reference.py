@@ -13,7 +13,7 @@ sys.path.insert(0, str(ROOT / "plugin" / "kicad-blocks"))
 sys.path.insert(0, str(ROOT / "examples" / "stusb4500"))
 
 from generate_reference import generate_reference_schematic
-from kicad_blocks.pcb_layout import _all, _direct, parse_sexpr
+from kicad_blocks.sexpr import parse_sexpr, sexpr_all, sexpr_direct
 
 
 class STUSB4500ReferenceTests(unittest.TestCase):
@@ -93,16 +93,13 @@ class STUSB4500ReferenceTests(unittest.TestCase):
         )
         for name, shape in expected:
             self.assertIn(
-                f'(hierarchical_label {name} (shape {shape})',
+                f"(hierarchical_label {name} (shape {shape})",
                 content,
             )
 
-
     def test_layout_is_grid_aligned_and_functionally_zoned(self) -> None:
         with tempfile.TemporaryDirectory(prefix="stusb4500-layout-") as temporary:
-            schematic = generate_reference_schematic(
-                Path(temporary) / "reference.kicad_sch"
-            )
+            schematic = generate_reference_schematic(Path(temporary) / "reference.kicad_sch")
             content = schematic.read_text(encoding="utf-8")
 
         for token in (
@@ -114,37 +111,41 @@ class STUSB4500ReferenceTests(unittest.TestCase):
             '(text "PROTECTED VSNK OUTPUT"',
             '(text "OPTIONAL HOST / I2C INTERFACE"',
             '(text "I2C ADDRESS / RESET STRAPS"',
-            '(polyline',
+            "(polyline",
             '"Layout revision 2"',
-            'D4 order code is not specified by ST',
-            'REFERENCE ONLY',
+            "D4 order code is not specified by ST",
+            "REFERENCE ONLY",
         ):
             self.assertIn(token, content)
 
         tree = parse_sexpr(content)
         placements = {}
-        for instance in _all(tree, "symbol"):
-            if _direct(instance, "lib_id") is None:
+        for instance in sexpr_all(tree, "symbol"):
+            if sexpr_direct(instance, "lib_id") is None:
                 continue
             reference = next(
                 (
                     str(prop[2])
-                    for prop in _all(instance, "property")
+                    for prop in sexpr_all(instance, "property")
                     if len(prop) >= 3 and str(prop[1]) == "Reference"
                 ),
                 None,
             )
-            at = _direct(instance, "at")
+            at = sexpr_direct(instance, "at")
             if reference is None or at is None:
                 continue
             x, y = float(at[1]), float(at[2])
             placements[reference] = (x, y)
             self.assertAlmostEqual(
-                x / 2.54, round(x / 2.54), places=3,
+                x / 2.54,
+                round(x / 2.54),
+                places=3,
                 msg=f"{reference} X coordinate is off the 2.54 mm grid",
             )
             self.assertAlmostEqual(
-                y / 2.54, round(y / 2.54), places=3,
+                y / 2.54,
+                round(y / 2.54),
+                places=3,
                 msg=f"{reference} Y coordinate is off the 2.54 mm grid",
             )
 
@@ -168,7 +169,6 @@ class STUSB4500ReferenceTests(unittest.TestCase):
         }
         for reference, position in expected.items():
             self.assertEqual(placements.get(reference), position)
-
 
 
 if __name__ == "__main__":
