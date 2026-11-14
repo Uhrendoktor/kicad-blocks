@@ -18,7 +18,6 @@ from generate_reference import (
     COMPONENT_PROPERTY_LIMITS_MM,
     DIRECT_DECOUPLERS,
     FORBIDDEN_LOCAL_LABELS,
-    GROUP_DESCRIPTION_FONT_MM,
     GROUP_GAP_MM,
     GROUND_PINS_DOWN,
     SCHEMATIC_GROUPS,
@@ -295,6 +294,7 @@ def frame_and_component_issues(tree: list) -> list[str]:
             gap = right[0] - (left[0] + left[2])
             if abs(gap - FRAME_GAP) > TOL:
                 issues.append(f"stage gap {left_name}->{right_name} is {gap:.2f} mm (expected {FRAME_GAP:.2f})")
+    pin_info = _pin_world_info(tree)
     for zone, members in ZONES.items():
         rect = frames.get(zone)
         if rect is None:
@@ -305,6 +305,18 @@ def frame_and_component_issues(tree: list) -> list[str]:
             x, y, w, h = rect
             if not (x + 2.54 - TOL <= point[0] <= x + w - 2.54 + TOL and y + 2.54 - TOL <= point[1] <= y + h - 2.54 + TOL):
                 issues.append(f"component {ref} is not comfortably inside frame {zone}")
+            for (pin_ref, pin_number), info in pin_info.items():
+                if pin_ref == ref and not _inside(info["point"], rect):
+                    issues.append(
+                        f"pin {ref}.{pin_number} crosses outside its group frame {zone}"
+                    )
+            for name in ("Reference", "Value"):
+                prop = _property(instances[ref], name)
+                if prop is None or "hide" in (_direct(prop, "effects") or []):
+                    continue
+                bounds = _text_visual_bounds(str(prop[2]), prop)
+                if bounds is not None and not _rect_inside(bounds, rect):
+                    issues.append(f"{ref} {name} text crosses outside its group frame {zone}")
     for zone, rect in frames.items():
         for segment in _segments(tree):
             if len(segment) != 2:
@@ -314,6 +326,17 @@ def frame_and_component_issues(tree: list) -> list[str]:
                 continue
             if _line_hits_box(a, b, rect):
                 issues.append(f"wire {a}->{b} crosses the {zone} frame boundary")
+    # Every visible label glyph must remain within one generated component
+    # group. The pin and wire checks above make the group association explicit.
+    for kind in ("label", "hierarchical_label"):
+        for node in _all(tree, kind):
+            bounds = _text_visual_bounds(str(node[1]), node)
+            if bounds is not None and not any(_rect_inside(bounds, rect) for rect in frames.values()):
+                at = _direct(node, "at")
+                issues.append(
+                    f"{kind} {str(node[1])!r} at ({float(at[1]):.3f}, {float(at[2]):.3f}) "
+                    "is outside every group frame"
+                )
     for node in _all(tree, "text_box"):
         uid_node = _direct(node, "uuid")
         uid = str(uid_node[1]) if uid_node is not None else ""
@@ -325,11 +348,7 @@ def frame_and_component_issues(tree: list) -> list[str]:
         box = (float(at[1]), float(at[2]), float(size[1]), float(size[2]))
         for zone, rect in frames.items():
             if _overlap(box, rect):
-                wholly_inside = (
-                    box[0] >= rect[0] - TOL and box[1] >= rect[1] - TOL
-                    and box[0] + box[2] <= rect[0] + rect[2] + TOL
-                    and box[1] + box[3] <= rect[1] + rect[3] + TOL
-                )
+                wholly_inside = _rect_inside(box, rect)
                 if not wholly_inside:
                     issues.append(f"text box {uid} penetrates frame {zone}")
     return issues
