@@ -1003,6 +1003,14 @@ def wire_obstacle_issues(tree: list) -> list[str]:
     issues = []
     bodies = _symbol_body_bounds(tree)
     pin_info = _pin_world_info(tree)
+    annotation_boxes = []
+    for annotation_index, node in enumerate(_all(tree, "text_box")):
+        at, size = _direct(node, "at"), _direct(node, "size")
+        if at is not None and size is not None:
+            annotation_boxes.append((
+                annotation_index,
+                (float(at[1]), float(at[2]), float(size[1]), float(size[2])),
+            ))
     for index, segment in enumerate(_segments(tree)):
         if len(segment) != 2:
             continue
@@ -1014,6 +1022,9 @@ def wire_obstacle_issues(tree: list) -> list[str]:
             point = info["point"]
             if point not in (start, end) and _on_segment(point, start, end):
                 issues.append(f"wire {index} passes through intermediate pin {reference}.{number}")
+        for annotation_index, bounds in annotation_boxes:
+            if _strict_line_hits_box(start, end, bounds):
+                issues.append(f"wire {index} penetrates annotation text box {annotation_index}")
     return issues
 
 
