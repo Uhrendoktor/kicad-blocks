@@ -333,7 +333,7 @@ def _note_box(
         raise ValueError(f"Note {key!r} must contain non-empty lines.")
     return [_graphic_text(
         "\n".join(lines), x, y, 0.90, key,
-        padding=1.27, border=True, box_width=55.88,
+        padding=1.27, border=True, box_width=40.64,
     )]
 
 
@@ -360,11 +360,11 @@ def _sheet_header(
     return [
         _graphic_text(
             title, x, title_y, 3.20, f"header:{key}:title",
-            box_width=rule_right - x,
+            box_width=rule_right - x, border=False,
         ),
         _graphic_text(
             subtitle, x, title_y + 7.62, 1.05, f"header:{key}:subtitle",
-            box_width=rule_right - x,
+            box_width=rule_right - x, border=False,
         ),
         _graphic_rule(x, title_y + 13.97, rule_right, title_y + 13.97, f"header:{key}:rule"),
     ]
@@ -989,11 +989,11 @@ def generate_reference_schematic(destination: Path) -> Path:
     ))
     rules.append(_graphic_text(
         "VBUS CLAMP + FILTER", 153.035, 96.52, 0.85,
-        "vbus-clamp-caption", box_width=55.88,
+        "vbus-clamp-caption", box_width=55.88, border=False,
     ))
     rules.append(_graphic_text(
         "VBUS_VS_DISCH SENSE DIVIDER", 153.035, 132.08, 0.85,
-        "vbus-divider-caption", box_width=55.88,
+        "vbus-divider-caption", box_width=55.88, border=False,
     ))
 
     # Every local label must be intentionally reused; use a short physical
