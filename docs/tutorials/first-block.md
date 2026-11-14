@@ -38,16 +38,17 @@ Review:
 
 The default implementation is the schematic copied from the selected sheet. Open it to check that the copied design is complete and that all required child sheets and library dependencies are present.
 
-## 4. Inspect the facade in a consuming project
+## 4. Place the facade in a consuming project
 
 1. Open the project that will consume the block.
 2. In Eeschema, choose **Browse and Place Functional Blocks**.
 3. Search for the block name or one of its pin, parameter, or implementation names.
 4. Select the block and inspect its preview, external pins, variants, and profiles.
+5. Choose the implementation and configuration, then choose **Place block**.
 
-The browser can register the selected facade in the consuming project's combined `KBlocks` catalog under `.kicad_blocks/`. The shared library remains in its registered location. The implementation schematic is not copied into the parent project.
+KiCad Blocks registers the facade in the consuming project's combined `KBlocks` catalog under `.kicad_blocks/`, creates it at the active sheet's grid-snapped page centre, focuses the viewport on it, and leaves it selected. The shared library remains in its registered location. The implementation schematic is not copied into the parent project.
 
-**Interactive placement limitation:** on the tested KiCad build, the supported schematic IPC API does not expose the operation required to attach the selected library symbol to the interactive placement cursor. The Place block action reports this capability gap; it does not claim a symbol has been placed. See the [compatibility notes](../explanation/compatibility.md).
+**Movement limitation:** the selected facade is placed at a fixed coordinate; it is not attached to the mouse cursor. The current KiCad schematic IPC API does not expose the interactive-move request available in PCB Editor. Reposition the selected symbol with Eeschema's normal editing tools when needed. See the [compatibility notes](../explanation/compatibility.md).
 
 ## 5. Configure an existing placed instance
 
@@ -55,7 +56,7 @@ When a project already contains a placed facade, select it and open **KiCad Bloc
 
 Choose a named profile or set its implementation variant, typed parameter values, and PCB layout. Save the settings. They are written to that placed symbol instance; other instances and the shared library are unchanged.
 
-New interactive placement from the library browser is not available on the tested KiCad build because the supported schematic IPC API lacks the required symbol-to-cursor handoff. See the [compatibility notes](../explanation/compatibility.md#kicad-editor-action-api-boundary).
+Place Block currently uses a grid-snapped page-centre position and leaves the new symbol selected. Cursor-attached movement remains unavailable until KiCad exposes a supported schematic interactive-move API. See the [compatibility notes](../explanation/compatibility.md#kicad-editor-action-api-boundary).
 
 For the exact instance fields and supported parameter types, see [per-instance fields and parameters](../reference.md#per-instance-fields).
 
