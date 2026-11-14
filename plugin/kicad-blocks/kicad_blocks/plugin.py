@@ -849,7 +849,7 @@ def _create_action_icon(parent: tkinter_types.Misc, name: str) -> tkinter_types.
 def _action_button(
     parent: tkinter_types.Misc,
     text: str,
-    command: Callable[[], object],
+    command: Callable[[], None | str | bool],
     icon: str,
     tooltip: str,
     **button_options: TkOption,
