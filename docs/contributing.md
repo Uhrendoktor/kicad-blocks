@@ -32,6 +32,31 @@ Use the following conventions when adding or changing documentation:
 
 Prefer direct, literal wording. Avoid subjective filler such as "simply", "obviously", "quickly", or "properly". Use the exact product terms **facade**, **implementation**, **variant**, **profile**, **local copy**, and **PCB layout** consistently.
 
+## Accessible visual evidence
+
+Screenshots and recordings should explain a real application state or interaction, not replace the procedure or the underlying technical information.
+
+- Give every informative image concise alt text that describes its purpose. Put detailed context, caveats, and important values in nearby text.
+- Introduce each figure with a complete sentence. Explain the user action and the resulting state; do not assume that the image alone communicates the workflow.
+- For a GIF that demonstrates a meaningful interaction, link to representative still frames or provide a text description of the state changes. Avoid flashing effects and rapid transitions.
+- Do not encode pin identity, electrical meaning, success, or error state through color alone. Pair color with labels, symbols, or text.
+- Prefer KiCad-generated SVG for schematic and symbol renders when available. Use PNG for genuine application screenshots; do not use raster images of text, code, or terminal output.
+- Capture the real application at a readable size. Correct the UI or capture fixture and regenerate the evidence instead of retouching a generated screenshot.
+
+These rules follow Google's [accessible documentation guidance](https://developers.google.com/style/accessibility) and [image guidance](https://developers.google.com/style/images).
+
+## Keep technical claims current
+
+Compatibility pages and installation instructions contain facts that can change independently of the plugin code.
+
+- Date claims about current stable releases and identify development nightlies as development builds.
+- Link version-specific claims to the primary KiCad release notes, download pages, or API documentation.
+- Distinguish a version accepted by the installer from a version covered by the full integration suite.
+- Record the tested operating system, architecture, Python version, and KiCad interfaces separately when their coverage differs.
+- Recheck external links and platform-specific paths when their related dependency or KiCad release changes.
+
+Treat an undated statement about the latest release as temporary. Prefer describing the tested capability boundary and adding a dated observation when the exact current version matters.
+
 ## Update documentation with behavior
 
 When a code change changes a user-visible action, dialog, field, workflow, compatibility boundary, or error condition, update the relevant documentation in the same pull request. Update the action map and screenshots when UI labels or screen layouts change.
@@ -65,4 +90,6 @@ The structure and writing conventions draw on these primary community and platfo
 - [Write the Docs: documentation principles](https://www.writethedocs.org/guide/writing/docs-principles/) — emphasizes skimmability, examples, consistency, freshness, discoverability, and maintainable source organization.
 - [Write the Docs: docs as code](https://www.writethedocs.org/guide/docs-as-code/) — integrates documentation with version control, code review, and automated tests.
 - [Google developer documentation style guide](https://developers.google.com/style/) — guidance for headings, procedures, voice, links, and accessible images.
+- [Google: Write accessible documentation](https://developers.google.com/style/accessibility) — equivalent text for images, lists, and screen-reader-friendly structure.
+- [Google: Diagrams, figures, and other images](https://developers.google.com/style/images) — use visuals only when useful, with descriptive alt text and context.
 - [Microsoft style guide: step-by-step instructions](https://learn.microsoft.com/en-us/style-guide/procedures-instructions/writing-step-by-step-instructions) — practical rules for scannable, ordered procedures.
