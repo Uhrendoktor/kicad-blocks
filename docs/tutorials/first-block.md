@@ -16,9 +16,9 @@ If you want a concrete reference circuit to inspect, see the [STUSB4500 example]
 
 1. Open the parent schematic in Eeschema.
 2. Select the hierarchical sheet symbol that you want to package.
-3. Choose **Create Block from Sheet** from the toolbar.
-4. Enter a block name and description.
-5. Confirm the shared library destination.
+3. Choose **Create Block from Sheet** from the toolbar. The visible creation form identifies the source sheet.
+4. Enter a block name and optional description.
+5. Create the block in the configured default shared library.
 
 You can also open the target hierarchical sheet directly and run **Create Block from Sheet** with nothing selected. KiCad Blocks uses the currently open sheet.
 
@@ -38,19 +38,16 @@ Review:
 
 The default implementation is the schematic copied from the selected sheet. Open it to check that the copied design is complete and that all required child sheets and library dependencies are present.
 
-## 4. Place the facade in a project
+## 4. Inspect the facade in a consuming project
 
 1. Open the project that will consume the block.
 2. In Eeschema, choose **Browse and Place Functional Blocks**.
 3. Search for the block name or one of its pin, parameter, or implementation names.
-4. Select the block and choose its variant or profile, if one is defined.
-5. Choose **Place block** or double-click the result.
-6. Confirm the facade in KiCad's native **Choose Symbol** dialog.
-7. Move the symbol to the required location and place it.
+4. Select the block and inspect its preview, external pins, variants, and profiles.
 
-The browser minimizes while the native placement tool is active so the Eeschema canvas is visible. After you cancel or complete placement, restore the browser from the taskbar if you want to continue browsing.
+The browser can register the selected facade in the consuming project's combined `KBlocks` catalog under `.kicad_blocks/`. The shared library remains in its registered location. The implementation schematic is not copied into the parent project.
 
-The project receives or updates a combined `KBlocks` symbol catalog under `.kicad_blocks/`. The shared library remains in its registered location. The implementation schematic is not copied into the parent project.
+**Interactive placement limitation:** on the tested KiCad build, the supported schematic IPC API does not expose the operation required to attach the selected library symbol to the interactive placement cursor. The Place block action reports this capability gap; it does not claim a symbol has been placed. See the [compatibility notes](../explanation/compatibility.md).
 
 ## 5. Configure one instance
 
