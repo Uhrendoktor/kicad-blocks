@@ -40,7 +40,15 @@ from .model import (
     sha256_file,
     slugify,
 )
-from .pcb_layout import _all, _direct, _dump, _head, _Quoted, parse_sexpr
+from .sexpr import (
+    SExprList,
+    QuotedSExpr as _Quoted,
+    dump_sexpr as _dump,
+    parse_sexpr,
+    sexpr_all as _all,
+    sexpr_direct as _direct,
+    sexpr_head as _head,
+)
 
 MANIFEST_NAME = "manifest.json"
 SYMBOL_NAME = "block.kicad_sym"
@@ -148,7 +156,7 @@ def merge_symbol_catalog(library_root: Path, symbol_file: Path) -> Path:
     return catalog
 
 
-def _named_symbol_node(symbol_library: list, symbol_name: str, source: Path) -> list:
+def _named_symbol_node(symbol_library: SExprList, symbol_name: str, source: Path) -> SExprList:
     """Return exactly one named symbol from a parsed KiCad symbol library."""
     if _head(symbol_library) != "kicad_symbol_lib":
         raise ValueError(f"Invalid KiCad symbol library: {source}")
@@ -164,7 +172,7 @@ def _named_symbol_node(symbol_library: list, symbol_name: str, source: Path) -> 
     return matches[0]
 
 
-def _symbol_definition_digest(symbol: list) -> str:
+def _symbol_definition_digest(symbol: SExprList) -> str:
     return hashlib.sha256(_dump(symbol).encode("utf-8")).hexdigest()
 
 

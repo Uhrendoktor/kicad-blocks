@@ -9,7 +9,6 @@ board currently open in PCB Editor.
 from __future__ import annotations
 
 import contextlib
-import json
 import math
 import os
 import re
@@ -20,7 +19,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
-from .model import sexpr_quote
 from .pcb_types import (
     AppliedNetclassPattern,
     BatchBlockLayoutMergeResult,
@@ -35,113 +33,16 @@ if TYPE_CHECKING:
     from .repository import BlockRecord
 
 
-type SExpr = str | list[SExpr]
-
-
-class _Quoted(str):
-    """Keep quoted S-expression strings distinct from bare atoms."""
-
-
-def _lex(source: str):
-    i = 0
-    while i < len(source):
-        ch = source[i]
-        if ch.isspace():
-            i += 1
-            continue
-        if ch == ";":
-            end = source.find("\n", i)
-            i = len(source) if end < 0 else end + 1
-            continue
-        if ch in "()":
-            yield ch
-            i += 1
-            continue
-        if ch == '"':
-            i += 1
-            escaped = False
-            out = []
-            while i < len(source):
-                cur = source[i]
-                if escaped:
-                    if cur == "x":
-                        digits = source[i + 1 : i + 3]
-                        if len(digits) != 2 or any(
-                            digit not in "0123456789abcdefABCDEF" for digit in digits
-                        ):
-                            raise ValueError("Invalid hexadecimal escape in KiCad S-expression.")
-                        out.append(f"\\u00{digits}")
-                        i += 2
-                    elif cur in "01234567":
-                        digits = source[i : i + 3]
-                        if len(digits) != 3 or any(digit not in "01234567" for digit in digits):
-                            raise ValueError("Invalid octal escape in KiCad S-expression.")
-                        out.append(f"\\u{int(digits, 8):04x}")
-                        i += 2
-                    else:
-                        out.append("\\" + cur)
-                    escaped = False
-                elif cur == "\\":
-                    escaped = True
-                elif cur == '"':
-                    break
-                else:
-                    out.append(cur)
-                i += 1
-            if i >= len(source):
-                raise ValueError("Unterminated quoted string in KiCad S-expression.")
-            try:
-                value = json.loads('"' + "".join(out) + '"')
-            except json.JSONDecodeError as exc:
-                raise ValueError(f"Invalid quoted string in KiCad S-expression: {exc}") from exc
-            yield _Quoted(value)
-            i += 1
-            continue
-        start = i
-        while i < len(source) and not source[i].isspace() and source[i] not in "()":
-            i += 1
-        yield source[start:i]
-
-
-def parse_sexpr(source: str) -> SExpr:
-    """Parse one S-expression into nested lists and scalar tokens."""
-    root: list = []
-    stack = [root]
-    for token in _lex(source):
-        if token == "(" and not isinstance(token, _Quoted):
-            node: list = []
-            stack[-1].append(node)
-            stack.append(node)
-        elif token == ")" and not isinstance(token, _Quoted):
-            if len(stack) == 1:
-                raise ValueError("Unexpected ')' in KiCad S-expression.")
-            stack.pop()
-        else:
-            stack[-1].append(token)
-    if len(stack) != 1 or len(root) != 1 or not isinstance(root[0], list):
-        raise ValueError("Malformed KiCad S-expression document.")
-    return root[0]
-
-
-def _dump(value: SExpr) -> str:
-    if isinstance(value, list):
-        return "(" + " ".join(_dump(item) for item in value) + ")"
-    if isinstance(value, _Quoted):
-        return sexpr_quote(str(value))
-    return str(value)
-
-
-def _head(node: SExpr) -> str | None:
-    return str(node[0]) if isinstance(node, list) and node and isinstance(node[0], str) else None
-
-
-def _direct(node: list, tag: str) -> list | None:
-    return next((child for child in node[1:] if _head(child) == tag), None)
-
-
-def _all(node: list, tag: str) -> list[list]:
-    return [child for child in node[1:] if _head(child) == tag]
-
+from .sexpr import (
+    SExpr,
+    SExprList,
+    QuotedSExpr as _Quoted,
+    dump_sexpr as _dump,
+    parse_sexpr,
+    sexpr_all as _all,
+    sexpr_direct as _direct,
+    sexpr_head as _head,
+)
 
 def _num(value: str) -> float:
     try:
@@ -160,14 +61,14 @@ def _fmt(value: float) -> str:
     return f"{value:.6f}".rstrip("0").rstrip(".") or "0"
 
 
-def _xy(node: list, dx: float, dy: float) -> None:
+def _xy(node: SExprList, dx: float, dy: float) -> None:
     if len(node) < 3:
         raise ValueError(f"Malformed coordinate node {_dump(node)}")
     node[1] = _fmt(_num(node[1]) + dx)
     node[2] = _fmt(_num(node[2]) + dy)
 
 
-def _get_nets(board: list) -> dict[int, str]:
+def _get_nets(board: SExprList) -> dict[int, str]:
     result = {0: ""}
     for node in _all(board, "net"):
         if len(node) >= 3:
@@ -178,14 +79,14 @@ def _get_nets(board: list) -> dict[int, str]:
     return result
 
 
-def _get_layers(board: list) -> set[str]:
+def _get_layers(board: SExprList) -> set[str]:
     layers = _direct(board, "layers")
     if layers is None:
         raise ValueError("PCB file does not define a layers list.")
     return {str(row[1]) for row in layers[1:] if isinstance(row, list) and len(row) >= 2}
 
 
-def _reference(footprint: list) -> str | None:
+def _reference(footprint: SExprList) -> str | None:
     for prop in _all(footprint, "property"):
         if len(prop) >= 3 and str(prop[1]).casefold() == "reference":
             return str(prop[2])
@@ -237,7 +138,7 @@ def _rewrite_nets(
 
 
 def _transform_point(
-    node: list,
+    node: SExprList,
     *,
     anchor_mm: tuple[float, float],
     position_mm: tuple[float, float],
@@ -257,7 +158,7 @@ def _transform_point(
     node[2] = _fmt(position_mm[1] - source_x * sine + source_y * cosine)
 
 
-def _rotate_angle_node(node: list, rotation_deg: float) -> None:
+def _rotate_angle_node(node: SExprList, rotation_deg: float) -> None:
     """Add the block rotation to an item's existing absolute orientation."""
     if len(node) >= 4:
         try:
@@ -268,7 +169,7 @@ def _rotate_angle_node(node: list, rotation_deg: float) -> None:
 
 
 def _transform_item(
-    node: list,
+    node: SExprList,
     *,
     anchor_mm: tuple[float, float],
     position_mm: tuple[float, float],
@@ -331,7 +232,7 @@ def _transform_item(
 
 
 def _rewrite_footprint(
-    footprint: list,
+    footprint: SExprList,
     reference: str,
     dx: float,
     dy: float,
@@ -369,8 +270,8 @@ def _unique_reference(base: str, existing: set[str]) -> str:
 
 
 def _merge_net_chain_sections(
-    source_board: list,
-    target_board: list,
+    source_board: SExprList,
+    target_board: SExprList,
     *,
     source_nets: dict[int, str],
     source_net_to_board_net: dict[str, str],

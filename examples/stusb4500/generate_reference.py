@@ -17,12 +17,12 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "plugin" / "kicad-blocks"))
 
-from kicad_blocks.pcb_layout import (
-    _all,
-    _direct,
-    _dump,
-    _head,
-    _Quoted,
+from kicad_blocks.sexpr import (
+    sexprsexpr_all,
+    sexprsexpr_direct,
+    dump_sexpr,
+    sexprsexpr_head,
+    QuotedSExpr,
     parse_sexpr,
 )
 
@@ -66,44 +66,44 @@ def _custom_esda25w() -> list:
     """Three-terminal ESDA25W array: CC1, CC2 and common ground."""
     return [
         "symbol",
-        _Quoted("STUSB4500_Custom:ESDA25W"),
+        QuotedSExpr("STUSB4500_Custom:ESDA25W"),
         ["in_bom", "yes"],
         ["on_board", "yes"],
         [
             "property",
-            _Quoted("Reference"),
-            _Quoted("D"),
+            QuotedSExpr("Reference"),
+            QuotedSExpr("D"),
             ["id", "0"],
             ["at", "0", "6.35", "0"],
             ["effects", ["font", ["size", "1.27", "1.27"]]],
         ],
         [
             "property",
-            _Quoted("Value"),
-            _Quoted("ESDA25W"),
+            QuotedSExpr("Value"),
+            QuotedSExpr("ESDA25W"),
             ["id", "1"],
             ["at", "0", "-6.35", "0"],
             ["effects", ["font", ["size", "1.27", "1.27"]]],
         ],
         [
             "property",
-            _Quoted("Footprint"),
-            _Quoted("Package_TO_SOT_SMD:SOT-323_SC-70"),
+            QuotedSExpr("Footprint"),
+            QuotedSExpr("Package_TO_SOT_SMD:SOT-323_SC-70"),
             ["id", "2"],
             ["at", "0", "0", "0"],
             ["effects", ["font", ["size", "1.27", "1.27"]], "hide"],
         ],
         [
             "property",
-            _Quoted("Datasheet"),
-            _Quoted(""),
+            QuotedSExpr("Datasheet"),
+            QuotedSExpr(""),
             ["id", "3"],
             ["at", "0", "0", "0"],
             ["effects", ["font", ["size", "1.27", "1.27"]], "hide"],
         ],
         [
             "symbol",
-            _Quoted("ESDA25W_0_1"),
+            QuotedSExpr("ESDA25W_0_1"),
             [
                 "rectangle",
                 ["start", "-5.08", "3.81"],
@@ -114,15 +114,15 @@ def _custom_esda25w() -> list:
         ],
         [
             "symbol",
-            _Quoted("ESDA25W_1_1"),
+            QuotedSExpr("ESDA25W_1_1"),
             [
                 "pin",
                 "passive",
                 "line",
                 ["at", "-7.62", "2.54", "0"],
                 ["length", "2.54"],
-                ["name", _Quoted("CC1"), ["effects", ["font", ["size", "1.27", "1.27"]]]],
-                ["number", _Quoted("1"), ["effects", ["font", ["size", "1.27", "1.27"]]]],
+                ["name", QuotedSExpr("CC1"), ["effects", ["font", ["size", "1.27", "1.27"]]]],
+                ["number", QuotedSExpr("1"), ["effects", ["font", ["size", "1.27", "1.27"]]]],
             ],
             [
                 "pin",
@@ -130,8 +130,8 @@ def _custom_esda25w() -> list:
                 "line",
                 ["at", "-7.62", "-2.54", "0"],
                 ["length", "2.54"],
-                ["name", _Quoted("CC2"), ["effects", ["font", ["size", "1.27", "1.27"]]]],
-                ["number", _Quoted("2"), ["effects", ["font", ["size", "1.27", "1.27"]]]],
+                ["name", QuotedSExpr("CC2"), ["effects", ["font", ["size", "1.27", "1.27"]]]],
+                ["number", QuotedSExpr("2"), ["effects", ["font", ["size", "1.27", "1.27"]]]],
             ],
             [
                 "pin",
@@ -139,8 +139,8 @@ def _custom_esda25w() -> list:
                 "line",
                 ["at", "7.62", "0", "180"],
                 ["length", "2.54"],
-                ["name", _Quoted("GND"), ["effects", ["font", ["size", "1.27", "1.27"]]]],
-                ["number", _Quoted("3"), ["effects", ["font", ["size", "1.27", "1.27"]]]],
+                ["name", QuotedSExpr("GND"), ["effects", ["font", ["size", "1.27", "1.27"]]]],
+                ["number", QuotedSExpr("3"), ["effects", ["font", ["size", "1.27", "1.27"]]]],
             ],
         ],
     ]
@@ -151,7 +151,7 @@ def _strip_embedded_font_flags(node: list) -> None:
     node[:] = [
         child
         for child in node
-        if not (isinstance(child, list) and _head(child) == "embedded_fonts")
+        if not (isinstance(child, list) and sexpr_head(child) == "embedded_fonts")
     ]
     for child in node:
         if isinstance(child, list):
@@ -166,18 +166,18 @@ def _load_symbol(root: Path, library: str, name: str) -> list:
     if not path.is_file():
         raise FileNotFoundError(f"KiCad symbol definition is missing: {path}")
     tree = parse_sexpr(path.read_text(encoding="utf-8"))
-    for node in _all(tree, "symbol"):
+    for node in sexpr_all(tree, "symbol"):
         if str(node[1]) == name:
             result = copy.deepcopy(node)
             _strip_embedded_font_flags(result)
-            result[1] = _Quoted(f"{library}:{name}")
+            result[1] = QuotedSExpr(f"{library}:{name}")
             return result
     raise LookupError(f"Symbol {library}:{name} is not in {path}.")
 
 
 def _walk(node):
     if isinstance(node, list):
-        if _head(node) == "pin":
+        if sexpr_head(node) == "pin":
             yield node
         for child in node[1:]:
             yield from _walk(child)
@@ -187,9 +187,9 @@ def _pin_data(symbol: list) -> list[dict]:
     result = []
     seen = set()
     for pin in _walk(symbol):
-        number_node = _direct(pin, "number")
-        name_node = _direct(pin, "name")
-        at_node = _direct(pin, "at")
+        number_node = sexpr_direct(pin, "number")
+        name_node = sexpr_direct(pin, "name")
+        at_node = sexpr_direct(pin, "at")
         if not number_node or not at_node or len(at_node) < 4:
             continue
         number = str(number_node[1])
@@ -224,7 +224,7 @@ def _wire(start: tuple[float, float], end: tuple[float, float], key: str) -> lis
         ["stroke", ["width", "0"], ["type", "default"]],
         [
             "uuid",
-            _Quoted(_uid(f"wire:{key}:{start[0]:.3f}:{start[1]:.3f}:{end[0]:.3f}:{end[1]:.3f}")),
+            QuotedSExpr(_uid(f"wire:{key}:{start[0]:.3f}:{start[1]:.3f}:{end[0]:.3f}:{end[1]:.3f}")),
         ],
     ]
 
@@ -235,8 +235,8 @@ def _prop(name: str, value: str, number: int, x: float, y: float, hidden: bool =
         effects.append("hide")
     return [
         "property",
-        _Quoted(name),
-        _Quoted(value),
+        QuotedSExpr(name),
+        QuotedSExpr(value),
         ["id", str(number)],
         ["at", f"{x:.3f}", f"{y:.3f}", "0"],
         effects,
@@ -255,14 +255,14 @@ def _label(
     key: str,
 ) -> list:
     effects = ["effects", ["font", ["size", "1.0", "1.0"]], ["justify", justify, "bottom"]]
-    node = ["hierarchical_label" if hierarchical else "label", _Quoted(name)]
+    node = ["hierarchical_label" if hierarchical else "label", QuotedSExpr(name)]
     if hierarchical:
         node.append(["shape", shape])
     node.extend(
         [
             ["at", f"{x:.3f}", f"{y:.3f}", str(angle)],
             effects,
-            ["uuid", _Quoted(_uid(key))],
+            ["uuid", QuotedSExpr(_uid(key))],
         ]
     )
     return node
@@ -600,7 +600,7 @@ def generate_reference_schematic(destination: Path) -> Path:
         symbol_uuid = _uid(f"symbol:{reference}")
         footprint = ""
         datasheet = DATASHEET if reference == "U1" else ""
-        for prop in _all(definition, "property"):
+        for prop in sexpr_all(definition, "property"):
             if len(prop) >= 3 and str(prop[1]) == "Footprint":
                 footprint = str(prop[2])
             elif len(prop) >= 3 and str(prop[1]) == "Datasheet" and str(prop[2]):
@@ -627,13 +627,13 @@ def generate_reference_schematic(destination: Path) -> Path:
             field_x, ref_y, value_y = sx, sy - 8, sy - 5
         instance = [
             "symbol",
-            ["lib_id", _Quoted(lib_id)],
+            ["lib_id", QuotedSExpr(lib_id)],
             ["at", f"{sx:.3f}", f"{sy:.3f}", "0"],
             ["unit", "1"],
             ["in_bom", "yes"],
             ["on_board", "yes"],
             ["dnp", "no"],
-            ["uuid", _Quoted(symbol_uuid)],
+            ["uuid", QuotedSExpr(symbol_uuid)],
             _prop("Reference", reference, 0, field_x, ref_y),
             _prop("Value", value, 1, field_x, value_y),
             _prop("Footprint", footprint, 2, sx, sy, True),
@@ -643,8 +643,8 @@ def generate_reference_schematic(destination: Path) -> Path:
             instance.append(
                 [
                     "pin",
-                    _Quoted(pin["number"]),
-                    ["uuid", _Quoted(_uid(f"pin:{reference}:{pin['number']}"))],
+                    QuotedSExpr(pin["number"]),
+                    ["uuid", QuotedSExpr(_uid(f"pin:{reference}:{pin['number']}"))],
                 ]
             )
             net_spec = pin_map.get(pin["number"])
@@ -714,11 +714,11 @@ def generate_reference_schematic(destination: Path) -> Path:
                 "instances",
                 [
                     "project",
-                    _Quoted(PROJECT),
+                    QuotedSExpr(PROJECT),
                     [
                         "path",
-                        _Quoted(f"/{ROOT_UUID}"),
-                        ["reference", _Quoted(reference)],
+                        QuotedSExpr(f"/{ROOT_UUID}"),
+                        ["reference", QuotedSExpr(reference)],
                         ["unit", "1"],
                     ],
                 ],
@@ -747,7 +747,7 @@ def generate_reference_schematic(destination: Path) -> Path:
                     "wire",
                     ["pts", ["xy", f"{px:.3f}", f"{py:.3f}"], ["xy", f"{x:.3f}", f"{y:.3f}"]],
                     ["stroke", ["width", "0"], ["type", "default"]],
-                    ["uuid", _Quoted(_uid(f"label-stub:{kind}:{net}:{px:.3f}:{py:.3f}"))],
+                    ["uuid", QuotedSExpr(_uid(f"label-stub:{kind}:{net}:{px:.3f}:{py:.3f}"))],
                 ]
             )
     for point in sorted(no_connect_points - set(label_points)):
@@ -756,7 +756,7 @@ def generate_reference_schematic(destination: Path) -> Path:
             [
                 "no_connect",
                 ["at", f"{x:.3f}", f"{y:.3f}"],
-                ["uuid", _Quoted(_uid(f"nc:{x:.3f}:{y:.3f}"))],
+                ["uuid", QuotedSExpr(_uid(f"nc:{x:.3f}:{y:.3f}"))],
             ]
         )
 
@@ -809,7 +809,7 @@ def generate_reference_schematic(destination: Path) -> Path:
                     ["at", f"{point[0]:.3f}", f"{point[1]:.3f}"],
                     ["diameter", "0"],
                     ["color", "0", "0", "0", "0"],
-                    ["uuid", _Quoted(_uid(f"junction:{net_name}:{point[0]:.3f}:{point[1]:.3f}"))],
+                    ["uuid", QuotedSExpr(_uid(f"junction:{net_name}:{point[0]:.3f}:{point[1]:.3f}"))],
                 ]
             )
         for _, point in ordered:
@@ -846,7 +846,7 @@ def generate_reference_schematic(destination: Path) -> Path:
             ["at", f"{fet_tee[0]:.3f}", f"{fet_tee[1]:.3f}"],
             ["diameter", "0"],
             ["color", "0", "0", "0", "0"],
-            ["uuid", _Quoted(_uid(f"junction:FET_MID:{fet_tee[0]:.3f}:{fet_tee[1]:.3f}"))],
+            ["uuid", QuotedSExpr(_uid(f"junction:FET_MID:{fet_tee[0]:.3f}:{fet_tee[1]:.3f}"))],
         ]
     )
     # Keep one label on the now-wired island so the exported net retains the
@@ -898,7 +898,7 @@ def generate_reference_schematic(destination: Path) -> Path:
                 ["at", f"{point[0]:.3f}", f"{point[1]:.3f}"],
                 ["diameter", "0"],
                 ["color", "0", "0", "0", "0"],
-                ["uuid", _Quoted(_uid(f"junction:{key}:{point[0]:.3f}:{point[1]:.3f}"))],
+                ["uuid", QuotedSExpr(_uid(f"junction:{key}:{point[0]:.3f}:{point[1]:.3f}"))],
             ]
         )
 
@@ -1045,27 +1045,27 @@ def generate_reference_schematic(destination: Path) -> Path:
             ["pts", ["xy", "44.45", "38.1"], ["xy", "398.78", "38.1"]],
             ["stroke", ["width", "0.254"], ["type", "default"]],
             ["fill", ["type", "none"]],
-            ["uuid", _Quoted(_uid("graphic:title-rule"))],
+            ["uuid", QuotedSExpr(_uid("graphic:title-rule"))],
         ],
     ]
 
     schematic = [
         "kicad_sch",
         ["version", "20250114"],
-        ["generator", _Quoted("kicad-blocks")],
-        ["uuid", _Quoted(ROOT_UUID)],
-        ["paper", _Quoted("A3")],
+        ["generator", QuotedSExpr("kicad-blocks")],
+        ["uuid", QuotedSExpr(ROOT_UUID)],
+        ["paper", QuotedSExpr("A3")],
         [
             "title_block",
-            ["title", _Quoted("STUSB4500 USB Type-C / USB Power Delivery Sink")],
-            ["date", _Quoted("2026-11-13")],
-            ["rev", _Quoted("Layout revision 2")],
-            ["company", _Quoted("KiCad Blocks — Reference design")],
-            ["comment", "1", _Quoted("Source: ST DS12499 Rev. 8, Figure 10")],
+            ["title", QuotedSExpr("STUSB4500 USB Type-C / USB Power Delivery Sink")],
+            ["date", QuotedSExpr("2026-11-13")],
+            ["rev", QuotedSExpr("Layout revision 2")],
+            ["company", QuotedSExpr("KiCad Blocks — Reference design")],
+            ["comment", "1", QuotedSExpr("Source: ST DS12499 Rev. 8, Figure 10")],
             [
                 "comment",
                 "2",
-                _Quoted(
+                QuotedSExpr(
                     "Reference only: verify component ratings, footprints and thermal design before production."
                 ),
             ],
@@ -1080,84 +1080,84 @@ def generate_reference_schematic(destination: Path) -> Path:
         *rules,
         [
             "text",
-            _Quoted("STUSB4500QTR — USB Type-C / USB PD sink controller"),
+            QuotedSExpr("STUSB4500QTR — USB Type-C / USB PD sink controller"),
             ["at", "50.8", "30.48", "0"],
             ["effects", ["font", ["size", "2.0", "2.0"]]],
-            ["uuid", _Quoted(_uid("text:title"))],
+            ["uuid", QuotedSExpr(_uid("text:title"))],
         ],
         [
             "text",
-            _Quoted("USB-C INPUT / CC ESD"),
+            QuotedSExpr("USB-C INPUT / CC ESD"),
             ["at", "50.8", "63.5", "0"],
             ["effects", ["font", ["size", "1.4", "1.4"]]],
-            ["uuid", _Quoted(_uid("text:input"))],
+            ["uuid", QuotedSExpr(_uid("text:input"))],
         ],
         [
             "text",
-            _Quoted("VBUS FILTER / SENSE"),
+            QuotedSExpr("VBUS FILTER / SENSE"),
             ["at", "114.3", "63.5", "0"],
             ["effects", ["font", ["size", "1.4", "1.4"]]],
-            ["uuid", _Quoted(_uid("text:filtering"))],
+            ["uuid", QuotedSExpr(_uid("text:filtering"))],
         ],
         [
             "text",
-            _Quoted("PD CONTROLLER / BYPASS"),
+            QuotedSExpr("PD CONTROLLER / BYPASS"),
             ["at", "190.5", "63.5", "0"],
             ["effects", ["font", ["size", "1.4", "1.4"]]],
-            ["uuid", _Quoted(_uid("text:controller"))],
+            ["uuid", QuotedSExpr(_uid("text:controller"))],
         ],
         [
             "text",
-            _Quoted("OPTIONAL HOST / I2C INTERFACE"),
+            QuotedSExpr("OPTIONAL HOST / I2C INTERFACE"),
             ["at", "304.8", "180.34", "0"],
             ["effects", ["font", ["size", "1.4", "1.4"]]],
-            ["uuid", _Quoted(_uid("text:mcu"))],
+            ["uuid", QuotedSExpr(_uid("text:mcu"))],
         ],
         [
             "text",
-            _Quoted("BACK-TO-BACK POWER SWITCH"),
+            QuotedSExpr("BACK-TO-BACK POWER SWITCH"),
             ["at", "281.94", "58.42", "0"],
             ["effects", ["font", ["size", "1.4", "1.4"]]],
-            ["uuid", _Quoted(_uid("text:power-path"))],
+            ["uuid", QuotedSExpr(_uid("text:power-path"))],
         ],
         [
             "text",
-            _Quoted("PROTECTED VSNK OUTPUT"),
+            QuotedSExpr("PROTECTED VSNK OUTPUT"),
             ["at", "355.6", "58.42", "0"],
             ["effects", ["font", ["size", "1.4", "1.4"]]],
-            ["uuid", _Quoted(_uid("text:output"))],
+            ["uuid", QuotedSExpr(_uid("text:output"))],
         ],
         [
             "text",
-            _Quoted("I2C ADDRESS / RESET STRAPS"),
+            QuotedSExpr("I2C ADDRESS / RESET STRAPS"),
             ["at", "147.32", "198.12", "0"],
             ["effects", ["font", ["size", "1.2", "1.2"]]],
-            ["uuid", _Quoted(_uid("text:address"))],
+            ["uuid", QuotedSExpr(_uid("text:address"))],
         ],
         [
             "text",
-            _Quoted(
+            QuotedSExpr(
                 "D4 order code is not specified by ST; select a part rated for the final VBUS range."
             ),
             ["at", "50.8", "264.16", "0"],
             ["effects", ["font", ["size", "1.0", "1.0"]]],
-            ["uuid", _Quoted(_uid("text:note"))],
+            ["uuid", QuotedSExpr(_uid("text:note"))],
         ],
         [
             "text",
-            _Quoted(
+            QuotedSExpr(
                 "REFERENCE ONLY — complete component, protection, USB-C compliance and thermal review before release."
             ),
             ["at", "50.8", "270.51", "0"],
             ["effects", ["font", ["size", "1.0", "1.0"]]],
-            ["uuid", _Quoted(_uid("text:production-note"))],
+            ["uuid", QuotedSExpr(_uid("text:production-note"))],
         ],
-        ["sheet_instances", ["path", _Quoted("/"), ["page", _Quoted("1")]]],
+        ["sheet_instances", ["path", QuotedSExpr("/"), ["page", QuotedSExpr("1")]]],
         ["embedded_fonts", "no"],
     ]
     destination = Path(destination)
     destination.parent.mkdir(parents=True, exist_ok=True)
-    destination.write_text(_dump(schematic) + "\n", encoding="utf-8")
+    destination.write_text(dump_sexpr(schematic) + "\n", encoding="utf-8")
     return destination
 
 
