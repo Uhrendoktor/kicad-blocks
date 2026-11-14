@@ -14,6 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 PLUGIN = ROOT / "plugin" / "kicad-blocks"
 sys.path.insert(0, str(PLUGIN))
 
+from kicad_blocks.pcb_layout import parse_sexpr
 from kicad_blocks.model import (
     parse_parameters,
     parse_pins,
@@ -47,7 +48,6 @@ from kicad_blocks.plugin import (
     _start_native_symbol_placement,
     _system_prefers_dark_theme,
 )
-from kicad_blocks.pcb_layout import parse_sexpr
 from kicad_blocks.repository import (
     LIBRARY_NICKNAME,
     _named_symbol_node,
