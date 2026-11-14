@@ -79,6 +79,10 @@ from .repository import library_roots as configured_library_roots
 
 LOG = logging.getLogger("kicad_blocks")
 
+class _KeepDefaultVariant:
+    """Sentinel distinguishing an omitted default variant from an explicit None."""
+
+
 _KEEP_DEFAULT_VARIANT = _KeepDefaultVariant()
 
 
@@ -241,10 +245,6 @@ class _CommandResult(Protocol):
 
     stdout: str | None
     returncode: int
-
-
-class _KeepDefaultVariant:
-    """Sentinel distinguishing an omitted default variant from an explicit None."""
 
 
 class _TkPaletteOwner(Protocol):
