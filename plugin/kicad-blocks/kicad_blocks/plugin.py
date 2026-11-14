@@ -2368,6 +2368,46 @@ def _edit_facade_symbol(
 
 
 
+def _place_existing(root, schematic, kicad, project_dir, parent) -> None:
+    """Open the searchable browser; placement is handed to KiCad's native cursor tool."""
+    editor_window_id = getattr(parent, "_kicad_blocks_editor_window_id", None)
+    browser = tk.Toplevel(parent)
+    _attach_tk_window_to_editor(browser, editor_window_id)
+    _show_library_browser(
+        browser, schematic, kicad, project_dir,
+        default_library_root(), editor_window_id,
+    )
+
+
+
+def _edit_block_implementation(root, schematic, kicad, project_dir, parent) -> None:
+    """Compatibility helper for opening a library implementation from the manager."""
+    selected = _safe_schematic_selection(schematic)
+    if len(selected) == 1 and hasattr(selected[0], "definition"):
+        record = _block_record_for_instance(root, project_dir, selected[0])
+    else:
+        record = _pick_record(list_blocks(root), parent, "Edit Block Implementation")
+    if record is None:
+        return None
+    _register_implementation_catalog(record, _library_roots_for(root))
+    process = _launch_block_asset(
+        kicad,
+        record.implementation,
+        "implementation schematic",
+        editor_window_id=getattr(parent, "_kicad_blocks_editor_window_id", None),
+    )
+    messagebox.showinfo(
+        "Block Implementation",
+        f"Opened {record.name} implementation in Eeschema.\n\n"
+        "After editing a shared library block, run Publish. "
+        "A project-local implementation remains independent until explicitly synchronized.",
+        parent=parent,
+    )
+    return process
+
+
+
+
 def _capture_eeschema_window_id() -> str | None:
     """Find the visible Eeschema main window, not the plugin top-level."""
     xdotool = shutil.which("xdotool")
