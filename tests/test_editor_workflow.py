@@ -912,7 +912,7 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
         root.destroy.assert_called_once_with()
 
 
-    def test_run_action_does_not_discover_foreign_window_handles(self):
+    def test_create_block_keeps_owner_window_mapped(self):
         root = SimpleNamespace(title=Mock(), withdraw=Mock(), destroy=Mock())
         fake_tk = SimpleNamespace(Tk=Mock(return_value=root), TclError=RuntimeError)
         kicad = SimpleNamespace(get_schematic=Mock(return_value=self.schematic))
@@ -936,7 +936,8 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
         create_from_sheet.assert_called_once_with(
             self.library, self.schematic, kicad, self.project, root, None
         )
-        root.withdraw.assert_called_once_with()
+        root.withdraw.assert_not_called()
+        self.assertTrue(root._kicad_blocks_reuse_for_create)
         root.destroy.assert_called_once_with()
 
     def test_run_action_does_not_capture_native_windows_before_creating_tk(self):
