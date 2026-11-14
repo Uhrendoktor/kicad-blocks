@@ -87,11 +87,13 @@ def wire_geometry_issues(tree: list) -> list[str]:
             if not _on_segment(cross, hs, he) or not _on_segment(cross, vs, ve):
                 continue
             h_end, v_end = cross in (hs, he), cross in (vs, ve)
-            if h_end and v_end:
+            if not h_end and not v_end:
+                issues.append(f"wire crossing at {cross}: {a}->{b} intersects {c}->{d}")
+                continue
+            if not h_end and not v_end:
                 continue
             if cross not in junctions:
-                issue = "wire crossing" if not h_end and not v_end else "unmarked T-junction"
-                issues.append(f"{issue} at {cross}: {a}->{b} intersects {c}->{d}")
+                issues.append(f"unmarked T-junction at {cross}: {a}->{b} intersects {c}->{d}")
     return issues
 
 
@@ -146,6 +148,9 @@ def label_network_issues(tree: list) -> list[str]:
         if count < 2:
             issues.append(f"local label {name!r} is used only {count} time(s)")
     endpoint_degree = Counter(p for s in segments for p in s)
+    for name, point in local:
+        if not any(_on_segment(point, a, b) for a, b in segments):
+            issues.append(f"local label {name!r} at {point} is not attached to a wire")
     for name, point in hierarchical:
         if endpoint_degree[point] != 1 or not any(_on_segment(point, a, b) for a, b in segments):
             issues.append(f"hierarchical label {name!r} at {point} must sit at the end of one wire twig")
@@ -251,8 +256,9 @@ def frame_and_component_issues(tree: list) -> list[str]:
         dnp_node, value_prop = _direct(instance, "dnp"), _property(instance, "Value")
         dnp = dnp_node is not None and str(dnp_node[1]).lower() == "yes"
         value = str(value_prop[2]) if value_prop is not None else ""
-        if ref in {"R51", "R52"} and (not dnp or value != "100k"):
-            issues.append(f"{ref} must have Value=100k and DNP=yes")
+        if ref in {"R51", "R52"}:
+            if not dnp or value != "100k":
+                issues.append(f"{ref} must have Value=100k and DNP=yes")
         elif dnp:
             issues.append(f"{ref} is DNP but is not an approved optional-population component")
     for zone in ZONES:
