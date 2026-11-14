@@ -67,8 +67,10 @@ Then enable the KiCad API in Eeschema's plugin preferences, select the supported
 2. **Create a reusable implementation.** In Eeschema, select a hierarchical sheet symbol
    in its parent schematic and run **Create Block from Sheet**. Root-sheet labels
    become the facade pins; the copied implementation stays in the shared library.
-3. **Browse a facade in another project.** Use **Browse and Place Functional Blocks**
-   to search and preview blocks. Interactive placement remains blocked pending a supported KiCad schematic IPC API.
+3. **Place a facade in another project.** Use **Browse and Place Functional Blocks**
+   to search and preview blocks, then choose **Place block**. The facade is created
+   at the active sheet's centre, focused and selected; cursor-attached movement
+   awaits a supported KiCad schematic interactive-move API.
 4. **Validate the stored circuit.** Run registered-library validation and use
    recursive ERC/BOM for implementation-level results; project-native
    ERC/netlist/BOM see the facade only.
