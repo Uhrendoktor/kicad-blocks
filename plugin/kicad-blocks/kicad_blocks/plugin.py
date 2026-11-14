@@ -953,8 +953,6 @@ def _show_selected_block_configuration(
 
     dialog = tk.Toplevel(parent)
     dialog.title(f"Configure {instance.reference} — {block.name}")
-    dialog.geometry("700x720")
-    dialog.minsize(580, 500)
     dialog.transient(parent)
     dialog.grab_set()
 
@@ -1230,6 +1228,7 @@ def _show_selected_block_configuration(
     _action_button(footer, "Save instance", save_configuration, "save", "Save configuration on the selected instance").pack(side="right")
     dialog.bind("<Escape>", lambda _event: dialog.destroy())
     dialog.protocol("WM_DELETE_WINDOW", dialog.destroy)
+    _set_window_geometry(dialog, 700, 720, 580, 500)
     dialog.wait_window()
 
 
@@ -1257,7 +1256,6 @@ def _pick_block_for_placement(records, parent):
 
     dialog = tk.Toplevel(parent)
     dialog.title("Place Functional Block")
-    _set_window_geometry(dialog, 1200, 800, 980, 640)
     dialog.transient(parent)
     dialog.grab_set()
 
@@ -1467,8 +1465,9 @@ def _pick_block_for_placement(records, parent):
     buttons.pack(fill="x", pady=(10, 0))
     _action_button(buttons, "Cancel", dialog.destroy, "cancel", "Cancel and close this dialog").pack(side="right")
     _action_button(buttons, "Place Block", choose, "place", "Start native symbol placement with this block").pack(side="right", padx=(0, 8))
-    search_entry.focus_set()
     render_results()
+    _set_window_geometry(dialog, 1200, 800, 980, 640)
+    search_entry.focus_set()
     dialog.wait_window()
     return chosen[0]
 
@@ -1482,7 +1481,6 @@ def _pick_record(records, parent, title: str):
 
     dialog = tk.Toplevel(parent)
     dialog.title(title)
-    _set_window_geometry(dialog, 920, 640, 760, 480)
     dialog.transient(parent)
     dialog.grab_set()
 
@@ -1635,6 +1633,7 @@ def _pick_record(records, parent, title: str):
     dialog.protocol("WM_DELETE_WINDOW", dialog.destroy)
     search.trace_add("write", render_results)
     render_results()
+    _set_window_geometry(dialog, 920, 640, 760, 480)
     search_entry.focus_set()
     dialog.wait_window()
     return chosen_record[0]
@@ -1974,7 +1973,6 @@ def _ask_create_block_details(parent, source_sheet: Path) -> tuple[str, str] | N
     dialog = tk.Toplevel(parent)
     dialog.title("Create Functional Block")
     dialog.transient(parent)
-    _set_window_geometry(dialog, 660, 390, 580, 340)
     frame = ttk.Frame(dialog, padding=18)
     frame.pack(fill="both", expand=True)
     ttk.Label(
@@ -2025,6 +2023,7 @@ def _ask_create_block_details(parent, source_sheet: Path) -> tuple[str, str] | N
     dialog.bind("<Return>", lambda _event: accept())
     dialog.bind("<Escape>", lambda _event: cancel())
     dialog.protocol("WM_DELETE_WINDOW", cancel)
+    _set_window_geometry(dialog, 660, 390, 580, 340)
     dialog.grab_set()
     name_entry.focus_set()
     dialog.wait_window()
@@ -3540,7 +3539,6 @@ def _ask_layout_details(parent, record) -> dict | None:
     dialog = tk.Toplevel(parent)
     dialog.title("Add PCB layout")
     dialog.transient(parent)
-    _set_window_geometry(dialog, 860, 620, 760, 560)
     frame = ttk.Frame(dialog, padding=16)
     frame.pack(fill="both", expand=True)
     ttk.Label(frame, text="PCB layout name").grid(row=0, column=0, sticky="w")
@@ -4047,7 +4045,6 @@ def _ask_implementation_details(
     dialog = tk.Toplevel(parent)
     dialog.title("Implementation details")
     dialog.transient(parent)
-    _set_window_geometry(dialog, 860, 540, 740, 460)
     frame = ttk.Frame(dialog, padding=16)
     frame.pack(fill="both", expand=True)
     ttk.Label(
@@ -4199,10 +4196,10 @@ def _ask_implementation_details(
     ).pack(side="right", padx=(0, 8))
     dialog.bind("<Return>", lambda _event: accept())
     dialog.bind("<Escape>", lambda _event: dialog.destroy())
-    _set_window_geometry(dialog, 860, 540, 740, 460)
     dialog.grab_set()
     source_entry.xview_moveto(1.0)
     selector_entry.focus_set()
+    _set_window_geometry(dialog, 860, 540, 740, 460)
     dialog.wait_window()
     return result[0]
 
@@ -4509,7 +4506,6 @@ def _show_library_roots_dialog(parent) -> bool:
     """Manage registered library folders with explicit add/create/edit actions."""
     dialog = tk.Toplevel(parent)
     dialog.title("Manage Libraries")
-    _set_window_geometry(dialog, 1280, 800, 1060, 660)
     dialog.transient(parent)
     dialog.grab_set()
 
@@ -4828,7 +4824,6 @@ def _show_library_browser(
 ) -> None:
     """Show every registered block library in one KiCad-themed browser."""
     window.title("Functional Block Library")
-    _set_window_geometry(window, 1600, 1000, 1200, 720)
     current_roots = [_library_roots_for(library_root)]
     records: list = []
     records_by_id: dict[str, object] = {}
@@ -6009,8 +6004,6 @@ def _show_action_hub(root):
     """Show compact, icon-led task actions with secondary guidance in tooltips."""
     _configure_tk_theme(root)
     root.title("KiCad Blocks — Tasks")
-    root.geometry("820x580")
-    root.minsize(680, 480)
 
     outer = ttk.Frame(root, padding=14)
     outer.pack(fill="both", expand=True)
@@ -6143,6 +6136,7 @@ def _show_action_hub(root):
     footer = ttk.Frame(outer)
     footer.pack(fill="x", pady=(10, 0))
     _action_button(footer, "Close", root.destroy, "close", "Close the task hub").pack(side="right")
+    _set_window_geometry(root, 820, 580, 680, 480)
     return tabs
 
 
