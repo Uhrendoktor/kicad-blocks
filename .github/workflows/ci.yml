@@ -198,7 +198,7 @@ jobs:
           set -euo pipefail
           PY="${RUNNER_TEMP}/kicad-blocks-venv/bin/python"
           "$PY" -m ruff check examples plugin scripts tests
-          "$PY" -m ruff format --check examples plugin scripts tests
+          "$PY" -m ruff format --check --diff examples plugin scripts tests
 
       - name: Validate documentation links and images
         shell: bash
@@ -516,7 +516,7 @@ jobs:
           "$PY" -m pytest -q
           "$PY" -m compileall -q plugin tests
           "$PY" -m ruff check examples plugin scripts tests
-          "$PY" -m ruff format --check examples plugin scripts tests
+          "$PY" -m ruff format --check --diff examples plugin scripts tests
 
       - name: Validate generated reference files with KiCad CLI
         shell: bash
