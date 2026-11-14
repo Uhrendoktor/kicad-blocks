@@ -15,10 +15,10 @@ from typing import cast
 
 from .manifest_types import (
     BlockLayoutManifest,
-    BlockPinManifest,
     BlockManifest,
     BlockParameter,
     BlockParameterInput,
+    BlockPinManifest,
     BlockProfileInput,
     BlockProfileManifest,
     BlockVariantManifest,
