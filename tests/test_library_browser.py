@@ -26,7 +26,6 @@ from kicad_blocks.plugin import (
     _capture_eeschema_window_id,
     _choose_block_layout,
     _clean_facade_preview_svg,
-    _desktop_file_dialog,
     _filter_library_records,
     _layout_choices,
     _library_record_for_instance,
@@ -133,6 +132,57 @@ class LibraryBrowserTests(unittest.TestCase):
             calls[0][-1],
             str(self.block.symbol_library.resolve()),
         )
+
+    def test_native_save_dialog_uses_tk_initial_name_filters_and_suffix(self):
+        save_dialog = Mock(return_value="/tmp/exported.csv")
+        with patch(
+            "kicad_blocks.plugin.filedialog",
+            SimpleNamespace(asksaveasfilename=save_dialog),
+        ):
+            selected = _pick_save_file(
+                object(),
+                title="Save recursive BOM",
+                initial_path=Path("/tmp") / "buck_bom.csv",
+                defaultextension=".csv",
+                filetypes=[("CSV", "*.csv"), ("All files", "*.*")],
+            )
+
+        self.assertEqual(selected, "/tmp/exported.csv")
+        self.assertEqual(save_dialog.call_args.kwargs["initialdir"], "/tmp")
+        self.assertEqual(save_dialog.call_args.kwargs["initialfile"], "buck_bom.csv")
+        self.assertEqual(save_dialog.call_args.kwargs["defaultextension"], ".csv")
+        self.assertEqual(
+            save_dialog.call_args.kwargs["filetypes"],
+            [("CSV", "*.csv"), ("All files", "*.*")],
+        )
+
+    def test_native_file_and_directory_dialog_cancel_returns_none(self):
+        open_dialog = Mock(return_value="")
+        directory_dialog = Mock(return_value="")
+        save_dialog = Mock(return_value="")
+        with patch(
+            "kicad_blocks.plugin.filedialog",
+            SimpleNamespace(
+                askopenfilename=open_dialog,
+                askdirectory=directory_dialog,
+                asksaveasfilename=save_dialog,
+            ),
+        ):
+            selected_file = _pick_kicad_file(
+                object(), title="Open board", suffix=".kicad_pcb",
+                initial_path=self.board,
+            )
+            selected_directory = _pick_directory(
+                object(), title="Choose library", initial_path=self.root,
+            )
+            selected_save = _pick_save_file(
+                object(), title="Save BOM",
+                initial_path=Path("/tmp") / "bom.csv",
+                defaultextension=".csv", filetypes=[("CSV", "*.csv")],
+            )
+        self.assertIsNone(selected_file)
+        self.assertIsNone(selected_directory)
+        self.assertIsNone(selected_save)
 
     def test_native_facade_preview_removes_reference_and_component_name(self):
         from xml.etree import ElementTree as ET
@@ -272,101 +322,6 @@ class LibraryBrowserTests(unittest.TestCase):
         self.assertEqual(open_dialog.call_args.kwargs["parent"].__class__, object)
         self.assertTrue(directory_dialog.call_args.kwargs["mustexist"])
         self.assertEqual(directory_dialog.call_args.kwargs["initialdir"], str(self.root))
-
-    def test_wayland_file_chooser_uses_themed_gtk_backend_and_portal_preference(self):
-        run = Mock(return_value=SimpleNamespace(returncode=0, stdout="/tmp/selected.kicad_sch", stderr=""))
-        with (
-            patch("kicad_blocks.plugin.shutil.which", side_effect=lambda name: "/usr/bin/zenity" if name == "zenity" else None),
-            patch("kicad_blocks.plugin.subprocess.run", run),
-            patch.dict(os.environ, {"XDG_CURRENT_DESKTOP": "GNOME", "WAYLAND_DISPLAY": "wayland-0"}),
-        ):
-            selected = _desktop_file_dialog(
-                mode="open",
-                title="Choose schematic",
-                initial_path=self.v18,
-                suffix=".kicad_sch",
-                filetypes=[("KiCad schematic", "*.kicad_sch"), ("All files", "*.*")],
-            )
-        self.assertEqual(selected, "/tmp/selected.kicad_sch")
-        command = run.call_args.args[0]
-        self.assertEqual(command[0], "/usr/bin/zenity")
-        self.assertIn("--file-selection", command)
-        self.assertIn("--filename", command)
-        self.assertIn("--file-filter=KiCad schematic | *.kicad_sch", command)
-        self.assertEqual(run.call_args.kwargs["env"]["GTK_USE_PORTAL"], "1")
-
-    def test_desktop_save_dialog_preserves_initial_filename_and_default_extension(self):
-        run = Mock(return_value=SimpleNamespace(returncode=0, stdout="/tmp/exported", stderr=""))
-        with (
-            patch("kicad_blocks.plugin.shutil.which", side_effect=lambda name: "/usr/bin/zenity" if name == "zenity" else None),
-            patch("kicad_blocks.plugin.subprocess.run", run),
-            patch.dict(os.environ, {"XDG_CURRENT_DESKTOP": "GNOME", "WAYLAND_DISPLAY": "wayland-0"}),
-        ):
-            selected = _pick_save_file(
-                object(),
-                title="Save BOM",
-                initial_path=Path("/tmp") / "buck_bom.csv",
-                defaultextension=".csv",
-                filetypes=[("CSV", "*.csv")],
-            )
-        self.assertEqual(selected, "/tmp/exported.csv")
-        command = run.call_args.args[0]
-        self.assertEqual(command[command.index("--filename") + 1], "/tmp/buck_bom.csv")
-        self.assertIn("--save", command)
-        self.assertIn("--confirm-overwrite", command)
-
-    def test_kdialog_uses_transient_parent_embedding_on_x11(self):
-        run = Mock(return_value=SimpleNamespace(returncode=0, stdout="/tmp/board.kicad_pcb", stderr=""))
-        parent = SimpleNamespace(winfo_id=Mock(return_value=0x1234))
-        with (
-            patch("kicad_blocks.plugin.shutil.which", side_effect=lambda name: "/usr/bin/kdialog" if name == "kdialog" else None),
-            patch("kicad_blocks.plugin.subprocess.run", run),
-            patch.dict(os.environ, {"XDG_CURRENT_DESKTOP": "KDE", "XDG_SESSION_TYPE": "x11"}),
-        ):
-            selected = _desktop_file_dialog(
-                parent=parent,
-                mode="open",
-                title="Choose board",
-                initial_path=self.board,
-                suffix=".kicad_pcb",
-                filetypes=[("KiCad PCB", "*.kicad_pcb")],
-            )
-        self.assertEqual(selected, "/tmp/board.kicad_pcb")
-        command = run.call_args.args[0]
-        self.assertIn("--embed", command)
-        self.assertIn(str(0x1234), command)
-
-    def test_kdialog_does_not_pass_x11_embed_id_on_wayland(self):
-        run = Mock(return_value=SimpleNamespace(returncode=0, stdout="/tmp/board.kicad_pcb", stderr=""))
-        parent = SimpleNamespace(winfo_id=Mock(return_value=0x1234))
-        with (
-            patch("kicad_blocks.plugin.shutil.which", side_effect=lambda name: "/usr/bin/kdialog" if name == "kdialog" else None),
-            patch("kicad_blocks.plugin.subprocess.run", run),
-            patch.dict(os.environ, {"XDG_CURRENT_DESKTOP": "KDE", "XDG_SESSION_TYPE": "wayland", "WAYLAND_DISPLAY": "wayland-0"}),
-        ):
-            selected = _desktop_file_dialog(
-                parent=parent,
-                mode="directory",
-                title="Choose library",
-                initial_path=self.root,
-            )
-        self.assertEqual(selected, "/tmp/board.kicad_pcb")
-        self.assertNotIn("--embed", run.call_args.args[0])
-
-    def test_desktop_directory_chooser_cancel_is_not_retried_with_custom_tk_dialog(self):
-        run = Mock(return_value=SimpleNamespace(returncode=1, stdout="", stderr=""))
-        with (
-            patch("kicad_blocks.plugin.shutil.which", side_effect=lambda name: "/usr/bin/zenity" if name == "zenity" else None),
-            patch("kicad_blocks.plugin.subprocess.run", run),
-            patch.dict(os.environ, {"XDG_CURRENT_DESKTOP": "GNOME", "WAYLAND_DISPLAY": "wayland-0"}),
-        ):
-            selected = _desktop_file_dialog(
-                mode="directory",
-                title="Choose library",
-                initial_path=self.root,
-            )
-        self.assertIsNone(selected)
-        self.assertIn("--directory", run.call_args.args[0])
 
     def test_layout_linked_to_implementation_is_used_when_instance_has_default(self):
         original_layouts = [dict(item) for item in self.block.manifest["layouts"]]
