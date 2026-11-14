@@ -159,6 +159,14 @@ class _SchematicProject(Protocol):
     def expand_text_variables(self, text: str) -> str: ...
 
 
+class _SheetPageSettings(Protocol):
+    """Page properties used to choose a deterministic placement location."""
+
+    page_size: int
+    orientation: int
+    user_page_size: _SymbolPosition | None
+
+
 class _SchematicProjectPath(Protocol):
     """Project path consumed when locating a saved schematic's project folder."""
 
@@ -220,6 +228,9 @@ class _UserField(Protocol):
 class _SheetPath(Protocol):
     @property
     def path(self) -> Sequence[KIID]: ...
+
+    @property
+    def proto(self) -> Message: ...
 
 
 class _SheetInstance(Protocol):
@@ -290,6 +301,14 @@ class _Schematic(_SchematicForItemUpdate, Protocol):
 
     def get_hierarchy(self) -> _SheetHierarchy: ...
 
+    def get_page_settings(self) -> _SheetPageSettings: ...
+
+    def for_sheet(self, sheet_path: _SheetPath) -> _Schematic: ...
+
+    def clear_selection(self) -> None: ...
+
+    def add_to_selection(self, items: Sequence[_SchematicSymbol]) -> None: ...
+
     def place_symbol_from_library(self, symbol_id: str, position: Vector2) -> _SchematicSymbol: ...
 
 
@@ -335,9 +354,7 @@ class _TkStyleLayout(Protocol):
 class _CairoSVG(Protocol):
     """Narrow SVG-to-PNG renderer interface used by toolbar icon generation."""
 
-    def svg2png(
-        self, *, bytestring: bytes, output_width: int, output_height: int
-    ) -> bytes | None: ...
+    def svg_to_bytes(self, *, svg_string: str, width: int, height: int) -> bytes: ...
 
 
 class _CommandResult(Protocol):
@@ -374,15 +391,11 @@ class _TkGeometryWindow(Protocol):
 
 
 class _TkTransientWindow(Protocol):
-    """Transient-window operations used when associating dialogs with Eeschema."""
+    """Portable parent/child window operations used by related dialogs."""
 
-    def wm_class(self, *arguments: str) -> str | tuple[str, str] | None: ...
-
-    def wm_attributes(self, *arguments: str) -> str | tuple[str, ...] | None: ...
+    master: tkinter_types.Misc | None
 
     def update_idletasks(self) -> None: ...
-
-    def winfo_id(self) -> int | str: ...
 
 
 def load_tkinter() -> None:
@@ -417,6 +430,9 @@ def _system_prefers_dark_theme() -> bool | None:
 def _configure_tk_theme(root: tkinter_types.Tk) -> None:
     """Apply a compact KiCad-compatible palette to themed and classic Tk widgets."""
     dark = _system_prefers_dark_theme()
+    if dark is None:
+        cast(_TkPaletteOwner, root).kicad_blocks_palette = {}
+        return
     colors = (
         {
             "background": "#202326",
@@ -728,10 +744,11 @@ def _attach_tk_window_to_editor(
 ) -> bool:
     """Keep related dialogs within the same Tk window hierarchy."""
     master = getattr(window, "master", None)
-    if master is None:
+    transient = getattr(window, "transient", None)
+    if master is None or not callable(transient):
         return False
     try:
-        window.transient(master)
+        cast(Callable[[tkinter_types.Wm], None], transient)(cast(tkinter_types.Wm, master))
         window.update_idletasks()
         return True
     except (AttributeError, tk.TclError):
@@ -828,10 +845,8 @@ def _create_action_icon(parent: tkinter_types.Misc, name: str) -> tkinter_types.
         "</svg>"
     )
     try:
-        cairosvg = cast(_CairoSVG, import_module("cairosvg"))
-        png = cairosvg.svg2png(bytestring=svg.encode("utf-8"), output_width=20, output_height=20)
-        if png is None:
-            raise ValueError("CairoSVG did not return PNG data for the toolbar icon.")
+        renderer = cast(_CairoSVG, import_module("resvg_py"))
+        png = renderer.svg_to_bytes(svg_string=svg, width=20, height=20)
         image = tk.PhotoImage(data=base64.b64encode(png).decode("ascii"), master=parent)
     except (ImportError, OSError, tk.TclError, ValueError):
         LOG.debug("Could not render toolbar icon %s", name, exc_info=True)
@@ -5237,14 +5252,6 @@ def _show_library_browser(
         if record is None:
             return
         try:
-            if not editor_window_id:
-                editor_window_id = _capture_eeschema_window_id()
-            if not editor_window_id and not callable(getattr(kicad, "run_action", None)):
-                raise RuntimeError(
-                    "Could not identify Eeschema and this KiCad version does not expose "
-                    "the native Place Symbol IPC action. Keep the Schematic Editor open "
-                    "and launch the Functional Block Library from that editor."
-                )
             _register_block(project_dir, record, kicad, current_roots[0])
             if not _last_library_reload_ok:
                 messagebox.showwarning(
