@@ -888,7 +888,7 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
         with (
             patch.object(plugin_actions, "tk", fake_tk),
             patch.object(plugin_actions, "messagebox", self.messagebox),
-            patch.object(plugin_actions, "_load_tkinter"),
+            patch.object(plugin_actions, "load_tkinter"),
             patch.object(
                 plugin_actions, "_capture_eeschema_window_id", return_value="0x100"
             ) as capture_editor,
@@ -934,7 +934,7 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
             ),
             patch.object(
                 plugin_actions,
-                "_load_tkinter",
+                "load_tkinter",
                 side_effect=lambda: events.append("load tkinter"),
             ),
             patch.object(plugin_actions, "tk", fake_tk),
