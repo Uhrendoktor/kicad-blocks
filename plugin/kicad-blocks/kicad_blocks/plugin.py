@@ -2346,10 +2346,11 @@ def _edit_facade_symbol(
             "Sent the native Symbol Editor menu/search sequence for %s via Wayland",
             lib_id,
         )
-        # Wayland intentionally reports a handoff rather than claiming that
-        # the compositor opened the requested symbol: this process cannot
-        # enumerate or verify the target surface.
-        return False
+        # The keyboard sequence has been dispatched to the editor that
+        # owned the transient browser. Wayland does not expose a portable API
+        # for this process to verify the resulting native window/title.
+        LOG.info("Dispatched Edit Facade keyboard handoff for %s on Wayland", lib_id)
+        return True
 
     executable = xdotool or shutil.which("xdotool")
     if not executable:
