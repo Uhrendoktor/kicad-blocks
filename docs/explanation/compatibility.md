@@ -83,7 +83,7 @@ The current supported KiCad schematic API does not provide the editor operations
 
 The supported API is documented in the [KiCad Python KiCad class](https://docs.kicad.org/kicad-python/kicad.html) and [Schematic class](https://docs.kicad.org/kicad-python/schematic.html). KiCad's API docs describe IPC as cross-platform, but that transport guarantee does not imply every editor operation exists on the server. An upstream feature proposal for interactive symbol placement ([KiCad MR !2332](https://gitlab.com/kicad/code/kicad/-/merge_requests/2332)) is closed without merge and is not available as an upstream contract.
 
-Accordingly, Place Block and Edit Facade currently report an explicit capability error. They do not silently become manual-only workflows or switch to platform-specific input injection. These core features remain incomplete until KiCad provides supported interactive placement and Symbol Editor selection APIs, followed by real GUI validation.
+Accordingly, Place Block currently performs supported fixed-coordinate placement at the active sheet center, focuses the new symbol in the viewport, and selects it. It does not attach the symbol to the mouse cursor; that still requires a schematic equivalent of `Board.interactive_move(items)`. Edit Facade reports an explicit capability error because KiCad exposes no supported Symbol Editor open/select API. Neither workflow uses platform-specific input injection or a manual-only fallback. Full feature acceptance remains open pending the missing upstream APIs and their GUI validation.
 
 ### Cross-process window ownership
 
