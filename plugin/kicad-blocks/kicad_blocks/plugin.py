@@ -2169,27 +2169,30 @@ def _start_native_symbol_placement(
     kicad,
     _editor_window_id: str | None,
     symbol_name: str,
-) -> None:
-    """Refuse placement until KiCad exposes a supported interactive IPC action.
+):
+    """Place a block near the centre of an A4 sheet and select the new symbol.
 
-    The supported schematic API can place a symbol at explicit coordinates, but
-    it does not start the native interactive cursor/chooser. The unstable
-    RunAction request is not implemented by the tested Eeschema server. Do not
-    pretend a generic chooser plus manual search is equivalent to Place Block.
+    Eeschema IPC currently supports explicit-coordinate placement and selection,
+    but not starting the interactive move tool. The A4 centre is therefore a
+    predictable staging point until the schematic interactive-move API exists.
     """
-    del kicad
     if not symbol_name or any(char.isspace() for char in symbol_name):
         raise ValueError("The selected block has an invalid KiCad symbol name.")
-    raise RuntimeError(
-        "Place Block is not available through the supported KiCad IPC API yet. "
-        f"KiCad can create {LIBRARY_NICKNAME}:{symbol_name} at an explicit coordinate "
-        "and Eeschema can add that new item to the selection. However, unlike PCB, "
-        "Eeschema has no supported interactive_move(items) IPC operation to start "
-        "the native move cursor and attach the selected symbol to the pointer. "
-        "The unstable RunAction request has no handler in the tested Eeschema build. "
-        "No manual-only or OS-specific input fallback is provided. "
-        "This requires the schematic equivalent of Board.interactive_move()."
+
+    schematic = kicad.get_schematic()
+    if schematic is None:
+        raise RuntimeError("No active schematic was found in Eeschema.")
+
+    from kipy.geometry import Vector2
+
+    symbol_id = f"{LIBRARY_NICKNAME}:{symbol_name}"
+    instance = schematic.place_symbol_from_library(
+        symbol_id, Vector2.from_xy_mm(148.5, 105.0)
     )
+    schematic.clear_selection()
+    schematic.add_to_selection(instance)
+    schematic.save()
+    return instance
 
 
 def _library_record_search_text(record) -> str:
