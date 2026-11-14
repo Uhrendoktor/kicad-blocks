@@ -32,13 +32,13 @@ The block browser shows the same entry as a searchable library item, including t
   <img src="https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/library-browser-details-light.png" alt="KiCad Blocks browser showing the STUSB4500 USB-PD Sink entry, its ten-pin interface, PDO current parameter and implementation choices" width="1000">
 </p>
 
-The placement chooser can also present an implementation and a named configuration profile before the facade is placed:
+The placement chooser shows the current flow from library browsing to a configured instance. The animation filters the library for USB blocks and selects the 5 V implementation with its 5 V / 2.4 A PDO1 profile before placement.
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/block-picker-profile.png" alt="STUSB4500 block in the placement chooser with the 5 V implementation and 5 V / 2.4 A PDO1 profile selected" width="1000">
+  <img src="https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/block-picker-workflow.gif" alt="Animated STUSB4500 placement chooser workflow showing the library entry, USB search filter, and selected 5 V / 2.4 A PDO1 profile" width="1000">
 </p>
 
-**About the chooser capture:** CI builds this UI example from the generated STUSB4500 reference schematic. It registers 5 V, 9 V and 12 V variant names and PDO profiles to test the selection controls. In this visual fixture, those variant entries all point to the same static schematic. The profile selection demonstrates the UI metadata; it does not dynamically alter the electrical circuit.
+**About the chooser capture:** CI builds this UI example from the generated STUSB4500 reference schematic. It registers 5 V, 9 V and 12 V variant names and PDO profiles to test the selection controls. In this visual fixture, those variant entries all point to the same static schematic. The profile selection demonstrates the UI metadata; it does not dynamically alter the electrical circuit. The individual [profile-selected still](https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/block-picker-profile.png) is available for readers who prefer a static image.
 
 ## External interface
 
