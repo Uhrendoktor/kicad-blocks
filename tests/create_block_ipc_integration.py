@@ -465,6 +465,63 @@ def main() -> None:
             ):
                 raise AssertionError("Create Block did not register the facade catalog in sym-lib-table.")
 
+            # Edit Facade is record-driven: the generated facade shown in
+            # the browser preview must open in Symbol Editor even though this
+            # block has never been placed in the schematic.
+            target_nickname = str(selected_manifest["library_nickname"])
+            target_symbol_name = str(selected_manifest["symbol_name"])
+
+            def contains_target_instance() -> bool:
+                return any(
+                    str(item.definition.id.library) == target_nickname
+                    and str(item.definition.id.name) == target_symbol_name
+                    for item in schematic.get_symbols()
+                )
+
+            if contains_target_instance():
+                raise AssertionError(
+                    "The zero-instance Edit Facade fixture unexpectedly contains a placed block."
+                )
+            refreshed_record = plugin_actions._register_block(
+                project_dir, selected_record, kicad, [library_root]
+            )
+            if not plugin_actions._LAST_LIBRARY_RELOAD_OK:
+                raise RuntimeError(
+                    "Could not reload the generated facade before the live Edit Facade test: "
+                    + str(plugin_actions._LAST_LIBRARY_RELOAD_WARNING)
+                )
+            if not plugin_actions._edit_facade_symbol(
+                refreshed_record, kicad, window_id, xdotool=xdotool
+            ):
+                raise AssertionError(
+                    "Edit Facade opened Symbol Editor but could not select the generated symbol."
+                )
+            if contains_target_instance():
+                raise AssertionError(
+                    "Edit Facade unexpectedly created a schematic instance while opening the library symbol."
+                )
+            target_title = f"{target_nickname}:{target_symbol_name}".casefold()
+            title_deadline = time.monotonic() + 5.0
+            symbol_editor_open = False
+            while time.monotonic() < title_deadline:
+                symbol_editor_open = any(
+                    target_symbol_name.casefold() in title.casefold()
+                    and "symbol editor" in title.casefold()
+                    for _window_id, title, _class in _windows(xdotool)
+                )
+                if symbol_editor_open:
+                    break
+                time.sleep(0.1)
+            if not symbol_editor_open:
+                raise AssertionError(
+                    f"KiCad did not display {target_title!r} in Symbol Editor. "
+                    f"Visible windows: {_windows(xdotool)!r}"
+                )
+            print(
+                f"Edit Facade opened {target_nickname}:{target_symbol_name} directly "
+                "from its generated library catalog with zero placed instances."
+            )
+
             # Scope a real IPC schematic object to the other child sheet. This
             # is the same path-bound view the action receives when a user has
             # opened that subsheet with no canvas selection.
