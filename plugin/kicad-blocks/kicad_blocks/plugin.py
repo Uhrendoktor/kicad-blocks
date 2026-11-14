@@ -2115,7 +2115,7 @@ def _parse_profile_parameter_overrides(
 ) -> dict[str, str]:
     """Parse typed NAME=VALUE overrides entered for one configuration profile."""
     declarations = {item["name"]: item for item in parameters}
-    raw_values = {}
+    raw_values: dict[str, str] = {}
     for entry in str(text or "").split(","):
         token = entry.strip()
         if not token:
@@ -2149,7 +2149,7 @@ def _collect_block_profiles(
     ):
         return []
 
-    profiles = []
+    profiles: list[BlockProfileInput] = []
     while True:
         name = simpledialog.askstring(
             "New Configuration Profile",
@@ -2895,7 +2895,9 @@ def _preferred_library_selection(
     return visible_records[0]
 
 
-def _library_record_for_tree_row(records_by_id: dict, row_id: str | None):
+def _library_record_for_tree_row(
+    records_by_id: dict[str, BlockRecord], row_id: str | None
+) -> BlockRecord | None:
     """Return the block represented by a clicked result row, never a stale selection."""
     if not row_id:
         return None
