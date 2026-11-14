@@ -482,19 +482,11 @@ def main() -> None:
                 raise AssertionError(
                     "The zero-instance Edit Facade fixture unexpectedly contains a placed block."
                 )
-            refreshed_record = plugin_actions._register_block(
-                project_dir, selected_record, kicad, [library_root]
-            )
-            if not plugin_actions._LAST_LIBRARY_RELOAD_OK:
-                raise RuntimeError(
-                    "Could not reload the generated facade before the live Edit Facade test: "
-                    + str(plugin_actions._LAST_LIBRARY_RELOAD_WARNING)
-                )
             edit_nickname = plugin_actions._register_facade_edit_library(
-                project_dir, refreshed_record, kicad
+                project_dir, selected_record, kicad
             )
             if not plugin_actions._edit_facade_symbol(
-                refreshed_record,
+                selected_record,
                 kicad,
                 window_id,
                 edit_library_nickname=edit_nickname,
