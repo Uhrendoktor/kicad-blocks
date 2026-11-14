@@ -12,7 +12,9 @@ from pathlib import Path
 from urllib.request import Request, urlopen
 
 
-def verify_release_gate(repo: str, tag: str, version_file: Path, source_sha: str, token: str) -> dict:
+def verify_release_gate(
+    repo: str, tag: str, version_file: Path, source_sha: str, token: str
+) -> dict:
     version = version_file.read_text(encoding="utf-8").strip()
     if not re.fullmatch(r"\d+\.\d+\.\d+", version):
         raise ValueError(f"Invalid VERSION file value: {version!r}.")
@@ -34,7 +36,8 @@ def verify_release_gate(repo: str, tag: str, version_file: Path, source_sha: str
             payload = json.loads(response.read().decode("utf-8"))
         last_runs = payload.get("workflow_runs", [])
         passing = [
-            run for run in last_runs
+            run
+            for run in last_runs
             if run.get("head_sha") == source_sha
             and run.get("head_branch") == "main"
             and run.get("event") == "push"
@@ -76,9 +79,7 @@ def main() -> int:
         parser.error("--repo or GITHUB_REPOSITORY is required.")
     if not token:
         parser.error("GITHUB_TOKEN is required.")
-    run = verify_release_gate(
-        args.repo, args.tag, args.version_file, args.source_sha, token
-    )
+    run = verify_release_gate(args.repo, args.tag, args.version_file, args.source_sha, token)
     print(f"Release gate passed with main CI run {run['html_url']}")
     return 0
 

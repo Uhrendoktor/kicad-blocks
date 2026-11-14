@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING, Protocol, SupportsFloat, TypedDict
 if TYPE_CHECKING:
     from .repository import BlockRecord
 
+
 class KiCadNetlist(TypedDict):
     """Schematic connectivity exported by KiCad CLI."""
 
@@ -174,10 +175,7 @@ def discover_block_dependencies(
         if child.manifest.get("block_id") == parent.manifest.get("block_id"):
             raise ValueError(f"Block {parent.name!r} cannot contain itself.")
 
-        reference = (
-            str(getattr(symbol, "reference", "") or "").strip()
-            or _field_text(symbol)
-        )
+        reference = str(getattr(symbol, "reference", "") or "").strip() or _field_text(symbol)
         if not reference or "?" in reference:
             raise ValueError(
                 f"Block facade {symbol_name!r} has no annotated reference. "
@@ -199,8 +197,7 @@ def discover_block_dependencies(
             raise ValueError(f"Block {child.name!r} has duplicate facade pin names.")
 
         symbol_pin_numbers = {
-            str(pin.number).strip()
-            for pin in (definition.pins if definition is not None else ())
+            str(pin.number).strip() for pin in (definition.pins if definition is not None else ())
         }
         missing_numbers = sorted(
             {
@@ -228,8 +225,7 @@ def discover_block_dependencies(
         orientations = {1: 0, 2: 90, 3: 180, 4: 270}
         if orientation_value not in orientations:
             raise ValueError(
-                f"Block facade {reference!r} has unsupported orientation "
-                f"{orientation_value}."
+                f"Block facade {reference!r} has unsupported orientation {orientation_value}."
             )
         position = symbol.position
         if position is None:
@@ -256,9 +252,7 @@ def _all_sheet_symbols(schematic) -> list:
     try:
         sheets = list(schematic.iter_sheets())
         symbols = [
-            symbol
-            for sheet in sheets
-            for symbol in schematic.for_sheet(sheet).get_symbols()
+            symbol for sheet in sheets for symbol in schematic.for_sheet(sheet).get_symbols()
         ]
     except AttributeError:
         symbols = list(schematic.get_symbols())
@@ -271,11 +265,7 @@ def synchronize_block_dependencies(parent, library_roots: list[Path], kicad_cli:
 
     from .repository import list_blocks, synchronize_dependencies
 
-    records = [
-        record
-        for library_root in library_roots
-        for record in list_blocks(library_root)
-    ]
+    records = [record for library_root in library_roots for record in list_blocks(library_root)]
     implementation = parent.implementation
     with tempfile.TemporaryDirectory(prefix="kicad-block-netlist-") as temporary:
         netlist_path = Path(temporary) / "implementation.net.xml"
@@ -299,9 +289,7 @@ def synchronize_block_dependencies(parent, library_roots: list[Path], kicad_cli:
                 timeout=120,
             )
         except subprocess.TimeoutExpired as exc:
-            raise RuntimeError(
-                f"KiCad netlist export timed out for {parent.name!r}."
-            ) from exc
+            raise RuntimeError(f"KiCad netlist export timed out for {parent.name!r}.") from exc
         if result.returncode != 0 or not netlist_path.is_file():
             detail = (result.stderr or result.stdout).strip()
             raise RuntimeError(
@@ -319,9 +307,7 @@ def synchronize_block_dependencies(parent, library_roots: list[Path], kicad_cli:
     try:
         schematic = kicad.get_schematic()
         if schematic is None:
-            raise RuntimeError(
-                f"KiCad could not open {parent.name!r} for dependency discovery."
-            )
+            raise RuntimeError(f"KiCad could not open {parent.name!r} for dependency discovery.")
         occurrences = discover_block_dependencies(
             parent,
             records,

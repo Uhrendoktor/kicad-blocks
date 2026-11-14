@@ -199,13 +199,12 @@ def python_policy_violations(source: str, filename: str = "<memory>") -> tuple[s
                     "or a structured value type"
                 )
             elif (
-                (isinstance(node, ast.Name) and (node.id == "object" or node.id in object_names))
-                or (
-                    isinstance(node, ast.Attribute)
-                    and node.attr == "object"
-                    and isinstance(node.value, ast.Name)
-                    and node.value.id in builtins_modules
-                )
+                isinstance(node, ast.Name) and (node.id == "object" or node.id in object_names)
+            ) or (
+                isinstance(node, ast.Attribute)
+                and node.attr == "object"
+                and isinstance(node.value, ast.Name)
+                and node.value.id in builtins_modules
             ):
                 violations.append(
                     f"{filename}:{getattr(node, 'lineno', 1)}: generic object annotation is "
@@ -225,7 +224,9 @@ def python_policy_violations(source: str, filename: str = "<memory>") -> tuple[s
                     "type comment is prohibited; use a concrete type, a narrow Protocol, "
                     "or a structured value type"
                 )
-            elif (isinstance(node, ast.Name) and (node.id == "object" or node.id in object_names)) or (
+            elif (
+                isinstance(node, ast.Name) and (node.id == "object" or node.id in object_names)
+            ) or (
                 isinstance(node, ast.Attribute)
                 and node.attr == "object"
                 and isinstance(node.value, ast.Name)
@@ -365,9 +366,7 @@ def main() -> int:
     for path in files:
         relative = path.relative_to(ROOT).as_posix()
         try:
-            violations.extend(
-                python_policy_violations(path.read_text(encoding="utf-8"), relative)
-            )
+            violations.extend(python_policy_violations(path.read_text(encoding="utf-8"), relative))
         except (OSError, UnicodeError) as error:
             violations.append(f"{relative}: unable to read Python source: {error}")
 

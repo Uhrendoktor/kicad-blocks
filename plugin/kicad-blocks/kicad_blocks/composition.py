@@ -89,9 +89,7 @@ def _compose_direct_children(
     if not dependencies:
         return {"placed": [], "labels": 0}
 
-    backup_dir = Path(
-        tempfile.mkdtemp(prefix=".kicad-block-compose-backup-", dir=parent.path)
-    )
+    backup_dir = Path(tempfile.mkdtemp(prefix=".kicad-block-compose-backup-", dir=parent.path))
     schematic_path = parent.implementation
     table_path = parent.path / "sym-lib-table"
     shutil.copy2(schematic_path, backup_dir / schematic_path.name)
@@ -128,9 +126,7 @@ def _compose_direct_children(
         kicad.load_all_libraries(types=[1])
         kicad.wait_for_libraries(types=[1], timeout_s=120.0)
 
-        symbols_by_reference = {
-            item.reference: item for item in schematic.get_symbols()
-        }
+        symbols_by_reference = {item.reference: item for item in schematic.get_symbols()}
         labels_by_position = {
             _point_key(item.position): item
             for item in schematic.get_labels()
@@ -147,10 +143,7 @@ def _compose_direct_children(
             existing = symbols_by_reference.get(reference)
             if existing is not None:
                 lib_id = existing.definition.id
-                if (
-                    lib_id.library != nickname
-                    or lib_id.name != symbol_name
-                ):
+                if lib_id.library != nickname or lib_id.name != symbol_name:
                     raise ValueError(
                         f"Reference {reference!r} already belongs to another symbol in "
                         f"{parent.name!r}; refusing to replace it."
@@ -240,7 +233,8 @@ def _compose_direct_children(
                     if (
                         str(label.text.value),
                         _point_key(label.position),
-                    ) not in actual_labels
+                    )
+                    not in actual_labels
                 ]
                 if missing_labels:
                     raise RuntimeError(

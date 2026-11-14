@@ -44,15 +44,11 @@ def pytest_collection_finish(session: pytest.Session) -> None:
         for item in session.items
         if getattr(item, "path", None) is not None
     }
-    registered_standalone = {
-        (root / relative).resolve()
-        for relative in STANDALONE_TESTS
-    }
+    registered_standalone = {(root / relative).resolve() for relative in STANDALONE_TESTS}
     empty_modules = [
         module
         for module in scope
-        if module.resolve() not in collected_paths
-        and module.resolve() not in registered_standalone
+        if module.resolve() not in collected_paths and module.resolve() not in registered_standalone
     ]
     if not empty_modules:
         return

@@ -201,7 +201,7 @@ def _purpose_from_name(name: str) -> str:
     )
     for prefix, candidate_wording in verbs:
         if phrase.startswith(prefix):
-            phrase = phrase[len(prefix):]
+            phrase = phrase[len(prefix) :]
             wording = candidate_wording
             break
     else:
@@ -234,7 +234,11 @@ def _module_purpose(relative_path: str, tree: ast.Module) -> str:
     if purpose is not None:
         return purpose
     docstring = ast.get_docstring(tree)
-    return docstring.strip().splitlines()[0] if docstring else "Focused regression tests for this module."
+    return (
+        docstring.strip().splitlines()[0]
+        if docstring
+        else "Focused regression tests for this module."
+    )
 
 
 def render_inventory(root: Path = ROOT) -> str:
@@ -267,10 +271,7 @@ def render_inventory(root: Path = ROOT) -> str:
             raise ValueError(
                 f"{relative} collects no pytest tests and is not registered as a standalone runner."
             )
-        cases = [
-            (function.name, _purpose_from_name(function.name))
-            for function in functions
-        ]
+        cases = [(function.name, _purpose_from_name(function.name)) for function in functions]
         pytest_modules.append((relative, _module_purpose(relative, tree), cases))
 
     actual_standalone = set(STANDALONE_TESTS)
@@ -320,9 +321,7 @@ def render_inventory(root: Path = ROOT) -> str:
         )
     )
     for relative, purpose, invocation in standalone_modules:
-        lines.append(
-            f"| {relative} | {_escape_cell(purpose)} | {_escape_cell(invocation)} |"
-        )
+        lines.append(f"| {relative} | {_escape_cell(purpose)} | {_escape_cell(invocation)} |")
 
     lines.extend(
         (

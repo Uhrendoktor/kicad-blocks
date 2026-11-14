@@ -59,9 +59,7 @@ def _merge_entries(
     result: BlockLayoutMergeResult | BatchBlockLayoutMergeResult,
 ) -> list[PCBPlacementEntry]:
     entries = (
-        result["placements"]
-        if "placements" in result
-        else [cast(BlockLayoutMergeResult, result)]
+        result["placements"] if "placements" in result else [cast(BlockLayoutMergeResult, result)]
     )
     if not isinstance(entries, list) or not entries:
         raise ValueError("PCB merge result does not contain any block placements.")
@@ -153,7 +151,10 @@ def read_pcb_placement_manifest(board_path: Path) -> PCBPlacementManifest:
             f"Unsupported PCB placement manifest schema: {payload.get('schema_version')!r}."
         )
     recorded_path = payload.get("board_path")
-    if not isinstance(recorded_path, str) or Path(recorded_path).expanduser().resolve() != board_path:
+    if (
+        not isinstance(recorded_path, str)
+        or Path(recorded_path).expanduser().resolve() != board_path
+    ):
         raise ValueError(
             "PCB placement manifest belongs to a different board path; refusing to move items."
         )

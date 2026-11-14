@@ -67,8 +67,7 @@ def validate_install_target(
         raise ValueError("KiCad version must use MAJOR.MINOR format, for example 10.99.")
     major, minor = (int(part) for part in version.split("."))
     if not (
-        (major, minor) == SUPPORTED_NIGHTLY_DIRECTORY
-        or major >= FIRST_STABLE_SCHEMATIC_IPC_MAJOR
+        (major, minor) == SUPPORTED_NIGHTLY_DIRECTORY or major >= FIRST_STABLE_SCHEMATIC_IPC_MAJOR
     ):
         raise ValueError(
             "KiCad Blocks requires the KiCad 11 Schematic Editor IPC API. "
@@ -102,7 +101,9 @@ def default_documents_home() -> pathlib.Path:
         return (pathlib.Path.home() / "Documents" / "KiCad").resolve()
     if sys.platform == "darwin":
         return (pathlib.Path.home() / "Documents" / "KiCad").resolve()
-    data_home = pathlib.Path(os.environ.get("XDG_DATA_HOME", pathlib.Path.home() / ".local" / "share"))
+    data_home = pathlib.Path(
+        os.environ.get("XDG_DATA_HOME", pathlib.Path.home() / ".local" / "share")
+    )
     return data_home.expanduser().resolve()
 
 
@@ -125,9 +126,7 @@ def validate_plugin_package(source: pathlib.Path) -> dict:
             "three components, for example 'org.example.myplugin'."
         )
     if identifier != PLUGIN_IDENTIFIER:
-        raise ValueError(
-            f"Expected plugin identifier {PLUGIN_IDENTIFIER!r}, got {identifier!r}."
-        )
+        raise ValueError(f"Expected plugin identifier {PLUGIN_IDENTIFIER!r}, got {identifier!r}.")
     runtime = manifest.get("runtime", {})
     if runtime.get("type") != "python":
         raise ValueError("KiCad Blocks must use the Python IPC plugin runtime.")
@@ -197,9 +196,7 @@ def install_plugin(
         tempfile.mkdtemp(prefix=".kicad-blocks-install-", dir=destination.parent)
     )
     staged_plugin = staging_root / manifest["identifier"]
-    backup = destination.with_name(
-        f"{destination.name}.backup-{uuid.uuid4().hex[:8]}"
-    )
+    backup = destination.with_name(f"{destination.name}.backup-{uuid.uuid4().hex[:8]}")
     moved_existing = False
     try:
         shutil.copytree(
@@ -226,15 +223,11 @@ def install_plugin(
         shutil.rmtree(staging_root, ignore_errors=True)
         if moved_existing and backup.exists() and not destination.exists():
             backup.rename(destination)
-    legacy_destination = (
-        documents_home / "kicad" / version / "plugins" / PLUGIN_DIRECTORY_NAME
-    )
+    legacy_destination = documents_home / "kicad" / version / "plugins" / PLUGIN_DIRECTORY_NAME
     if legacy_destination != destination and legacy_destination.is_dir():
         legacy_manifest_path = legacy_destination / "plugin.json"
         try:
-            legacy_manifest = json.loads(
-                legacy_manifest_path.read_text(encoding="utf-8")
-            )
+            legacy_manifest = json.loads(legacy_manifest_path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             legacy_manifest = {}
         if legacy_manifest.get("identifier") == "kicad-blocks":

@@ -35,7 +35,7 @@ def test_rejects_imported_any_alias_in_nested_annotations() -> None:
 
 def test_rejects_quoted_forward_reference_to_any() -> None:
     """Rejects explicit Any hidden in a quoted forward annotation."""
-    source = "from typing import Any\ndef read() -> \"list[Any]\": ...\n"
+    source = 'from typing import Any\ndef read() -> "list[Any]": ...\n'
     violations = python_policy_violations(source, "fixture.py")
     assert len(violations) == 1
     assert "explicit Any reference" in violations[0]
@@ -92,6 +92,7 @@ def test_parameter_values_remain_one_quoted_sexpr_field(value: str) -> None:
 
 def test_changed_file_ratchet_rejects_increased_annotation_debt(tmp_path: Path) -> None:
     """Rejects a changed Python file that adds unannotated parameters and returns."""
+
     def run_git(*arguments: str) -> None:
         subprocess.run(
             ("git", *arguments),
@@ -124,6 +125,7 @@ def test_changed_file_ratchet_rejects_increased_annotation_debt(tmp_path: Path) 
     assert len(violations) == 2
     assert any("missing-parameter-annotation increased" in item for item in violations)
     assert any("missing-return-annotation increased" in item for item in violations)
+
 
 def test_reports_exact_duplicate_test_bodies_even_when_docstrings_differ(tmp_path: Path) -> None:
     """Flag body-identical test functions despite different descriptive docstrings."""
