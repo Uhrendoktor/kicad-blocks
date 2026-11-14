@@ -11,25 +11,70 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "plugin" / "kicad-blocks"))
-sys.path.insert(0, str(ROOT / "examples" / "stusb4500"))
 
-from generate_reference import (
-    ADJACENT_COMPONENT_PAIRS,
-    COMMON_PIN_NET_GROUPS,
-    COMPONENT_PROPERTY_LIMITS_MM,
-    DIRECT_DECOUPLERS,
-    FIELD_SYMBOL_MAX_GAP_MM,
-    FORBIDDEN_LOCAL_LABELS,
-    FRAME_CONTENT_PADDING_MM,
-    GROUND_PINS_DOWN,
-    GROUP_EVIDENCE,
-    GROUP_GAP_MM,
-    REQUIRED_NO_CONNECT_PINS,
-    SCHEMATIC_GROUPS,
-    WIRE_LENGTH_BUDGETS_MM,
-    _uid,
-)
 from kicad_blocks.pcb_layout import _all, _direct, _head, parse_sexpr
+
+# The generic linter deliberately has no dependency on the STUSB4500 example.
+# These defaults are used only by the reusable geometry/presentation rules.
+FIELD_SYMBOL_MAX_GAP_MM = 9.00
+ZONES: dict[str, set[str]] = {}
+FLOW: tuple[str, ...] = ()
+FRAME_GAP = 2.54
+_PROFILE_LOADED = False
+
+
+def _load_stusb4500_profile() -> None:
+    """Load project-specific contracts only when the full profile is requested."""
+    global ADJACENT_COMPONENT_PAIRS, COMMON_PIN_NET_GROUPS
+    global COMPONENT_PROPERTY_LIMITS_MM, DIRECT_DECOUPLERS
+    global FIELD_SYMBOL_MAX_GAP_MM, FORBIDDEN_LOCAL_LABELS, FRAME_CONTENT_PADDING_MM
+    global GROUND_PINS_DOWN, GROUP_EVIDENCE, GROUP_GAP_MM
+    global REQUIRED_NO_CONNECT_PINS, SCHEMATIC_GROUPS, WIRE_LENGTH_BUDGETS_MM
+    global _uid, ZONES, FLOW, FRAME_GAP, _PROFILE_LOADED
+    if _PROFILE_LOADED:
+        return
+    example_root = str(ROOT / "examples" / "stusb4500")
+    if example_root not in sys.path:
+        sys.path.insert(0, example_root)
+    from generate_reference import (
+        ADJACENT_COMPONENT_PAIRS as adjacent_component_pairs,
+        COMMON_PIN_NET_GROUPS as common_pin_net_groups,
+        COMPONENT_PROPERTY_LIMITS_MM as component_property_limits_mm,
+        DIRECT_DECOUPLERS as direct_decouplers,
+        FIELD_SYMBOL_MAX_GAP_MM as field_symbol_max_gap_mm,
+        FORBIDDEN_LOCAL_LABELS as forbidden_local_labels,
+        FRAME_CONTENT_PADDING_MM as frame_content_padding_mm,
+        GROUND_PINS_DOWN as ground_pins_down,
+        GROUP_EVIDENCE as group_evidence,
+        GROUP_GAP_MM as group_gap_mm,
+        REQUIRED_NO_CONNECT_PINS as required_no_connect_pins,
+        SCHEMATIC_GROUPS as schematic_groups,
+        WIRE_LENGTH_BUDGETS_MM as wire_length_budgets_mm,
+        _uid as uid_factory,
+    )
+    ADJACENT_COMPONENT_PAIRS = adjacent_component_pairs
+    COMMON_PIN_NET_GROUPS = common_pin_net_groups
+    COMPONENT_PROPERTY_LIMITS_MM = component_property_limits_mm
+    DIRECT_DECOUPLERS = direct_decouplers
+    FIELD_SYMBOL_MAX_GAP_MM = field_symbol_max_gap_mm
+    FORBIDDEN_LOCAL_LABELS = forbidden_local_labels
+    FRAME_CONTENT_PADDING_MM = frame_content_padding_mm
+    GROUND_PINS_DOWN = ground_pins_down
+    GROUP_EVIDENCE = group_evidence
+    GROUP_GAP_MM = group_gap_mm
+    REQUIRED_NO_CONNECT_PINS = required_no_connect_pins
+    SCHEMATIC_GROUPS = schematic_groups
+    WIRE_LENGTH_BUDGETS_MM = wire_length_budgets_mm
+    _uid = uid_factory
+    ZONES = {group["id"]: set(group["members"]) for group in SCHEMATIC_GROUPS}
+    FLOW = tuple(
+        group["id"] for group in sorted(
+            (item for item in SCHEMATIC_GROUPS if item["lane"] == "main"),
+            key=lambda item: int(item["order"]),
+        )
+    )
+    FRAME_GAP = GROUP_GAP_MM
+    _PROFILE_LOADED = True
 
 STYLE_RULES = {
     "SCH001": {
@@ -140,14 +185,6 @@ STYLE_RULES = {
 
 TOL = 0.001
 PADDING = 1.27
-FRAME_GAP = GROUP_GAP_MM
-ZONES = {group["id"]: set(group["members"]) for group in SCHEMATIC_GROUPS}
-FLOW = tuple(
-    group["id"] for group in sorted(
-        (item for item in SCHEMATIC_GROUPS if item["lane"] == "main"),
-        key=lambda item: int(item["order"]),
-    )
-)
 
 
 def _segments(tree: list):
@@ -921,30 +958,24 @@ def symbol_field_clearance_issues(tree: list) -> list[str]:
 
 
 def block_annotation_issues(tree: list) -> list[str]:
-    """Require one-line block titles and bordered description/comment boxes."""
+    """Require single-line unbordered titles and boxed multiline annotations.
+
+    This rule uses native text-box presentation rather than project-specific UUIDs,
+    so it can be applied unchanged to unrelated KiCad schematics.
+    """
     issues = []
-    title_uuids = {
-        _uid(f"graphic:text:zone-title:{group['id']}")
-        for group in SCHEMATIC_GROUPS
-    }
-    description_uuids = {
-        _uid(f"graphic:text:group-description:{group['id']}")
-        for group in SCHEMATIC_GROUPS
-    }
-    for node in _all(tree, "text_box"):
+    for index, node in enumerate(_all(tree, "text_box")):
         uid_node = _direct(node, "uuid")
-        uid = str(uid_node[1]) if uid_node is not None else ""
+        uid = str(uid_node[1]) if uid_node is not None else f"box-{index}"
         value = str(node[1])
         multiline = "\n" in value or "\r" in value
         stroke = _direct(node, "stroke")
         width = _direct(stroke, "width") if stroke is not None else None
         outlined = width is not None and float(width[1]) > 0
-        if uid in title_uuids and multiline:
-            issues.append(f"block title {uid} must be a single line")
+        if multiline and not outlined:
+            issues.append(f"unbordered block title {uid} must be a single line")
         elif multiline and not outlined:
             issues.append(f"multiline annotation {uid} must have its own visible box outline")
-        if uid in description_uuids and not outlined:
-            issues.append(f"group comment {uid} must have its own visible box outline")
     return issues
 
 
@@ -1169,7 +1200,9 @@ def label_text_collision_issues(tree: list) -> list[str]:
 
 
 def check_schematic_style(tree: list, generic_only: bool = False) -> list[str]:
-    """Run every registered lint rule and return Clippy-style diagnostics."""
+    """Run reusable checks and, optionally, the selected design profile."""
+    if not generic_only:
+        _load_stusb4500_profile()
     generic_checks = (
         ("SCH001", wire_geometry_issues),
         ("SCH002", label_network_issues),
