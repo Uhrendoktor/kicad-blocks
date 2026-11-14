@@ -468,10 +468,10 @@ def read_manifest(block_path: Path) -> BlockManifest:
         layout_value: str | _RawManifestLayout = raw_layout
         if not isinstance(layout_value, dict):
             raise TypeError("Each block layout must be an object.")
-        layout = cast(BlockLayoutManifest, layout_value)
-        layout_id = str(layout.get("id", ""))
-        layout_name = str(layout.get("name", "")).strip()
-        layout_file = str(layout.get("file", ""))
+        layout_raw = layout_value
+        layout_id = str(layout_raw.get("id", ""))
+        layout_name = str(layout_raw.get("name", "")).strip()
+        layout_file = str(layout_raw.get("file", ""))
         if (
             not re.fullmatch(r"[a-z0-9_]+", layout_id)
             or not layout_name
@@ -490,7 +490,7 @@ def read_manifest(block_path: Path) -> BlockManifest:
         seen_layout_ids.add(layout_id.casefold())
         seen_layout_names.add(layout_name.casefold())
         seen_layout_files.add(layout_file.casefold())
-        project_file_value = layout.get("project_file")
+        project_file_value = layout_raw.get("project_file")
         if project_file_value:
             if not isinstance(project_file_value, str):
                 raise ValueError(f"Invalid project-settings file name for layout {layout_id!r}.")
@@ -500,17 +500,20 @@ def read_manifest(block_path: Path) -> BlockManifest:
                 or Path(project_file).suffix.casefold() != ".kicad_pro"
             ):
                 raise ValueError(f"Invalid project-settings file name for layout {layout_id!r}.")
-        ports_value = layout.get("ports")
+        ports_value = layout_raw.get("ports")
         if ports_value is not None:
             if not isinstance(ports_value, dict):
                 raise ValueError(
                     f"Layout {layout_id!r} ports must map every facade pin to a non-empty net name."
                 )
-            ports = cast(dict[str, str], ports_value)
-            if set(ports) != pin_names or any(not value.strip() for value in ports.values()):
+            ports = cast(dict[str, _RawJsonScalar], ports_value)
+            if set(ports) != pin_names or any(
+                not isinstance(value, str) or not value.strip() for value in ports.values()
+            ):
                 raise ValueError(
                     f"Layout {layout_id!r} ports must map every facade pin to a non-empty net name."
                 )
+        layout = cast(BlockLayoutManifest, layout_raw)
         layouts.append(layout)
 
     for variant in variants:
@@ -549,8 +552,6 @@ def read_manifest(block_path: Path) -> BlockManifest:
             if raw_links is None:
                 links = derived_links
             else:
-                if not isinstance(raw_links, list):
-                    raise TypeError(f"Layout {layout_id!r} implementation links must be a list.")
                 links: list[str] = []
                 for raw_link in raw_links:
                     key = str(raw_link).strip().casefold()
