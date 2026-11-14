@@ -31,6 +31,7 @@ from kicad_blocks.plugin import (
     _library_record_for_tree_row,
     _minimize_placement_windows,
     _native_schematic_preview_pages,
+    _normalize_schematic_preview_svg,
     _native_symbol_preview_photo,
     _new_blank_pcb_source,
     _pick_directory,
@@ -186,6 +187,22 @@ class LibraryBrowserTests(unittest.TestCase):
         self.assertIsNone(selected_file)
         self.assertIsNone(selected_directory)
         self.assertIsNone(selected_save)
+
+    def test_schematic_preview_svg_gets_intrinsic_pixel_dimensions(self):
+        svg = self.root / "schematic.svg"
+        svg.write_text(
+            '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2400 1600"></svg>',
+            encoding="utf-8",
+        )
+
+        normalized = _normalize_schematic_preview_svg(svg, self.root)
+
+        from xml.etree import ElementTree as ET
+
+        root = ET.parse(normalized).getroot()
+        self.assertEqual(root.attrib["width"], "2400px")
+        self.assertEqual(root.attrib["height"], "1600px")
+        self.assertEqual(root.attrib["viewBox"], "0 0 2400 1600")
 
     def test_native_schematic_preview_exports_selected_implementation_and_all_sheets(self):
         calls = []
