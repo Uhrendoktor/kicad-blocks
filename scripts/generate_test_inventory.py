@@ -249,7 +249,7 @@ def main() -> int:
                 tofile="generated test inventory",
                 lineterm="",
             )
-            print("\\n".join(list(diff)[:160]))
+            print("\n".join(list(diff)[:160]))
             return 1
         print("test-inventory=passed")
         return 0
