@@ -5,4 +5,6 @@ pyright==1.1.414
 ty==0.0.91
 vulture==2.16
 cairosvg>=2.7,<3
+platformdirs>=4.3,<5
+resvg_py>=0.5,<0.6
 Pillow>=11,<14
