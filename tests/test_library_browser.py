@@ -17,7 +17,6 @@ ROOT = Path(__file__).resolve().parents[1]
 PLUGIN = ROOT / "plugin" / "kicad-blocks"
 sys.path.insert(0, str(PLUGIN))
 
-plugin_actions = import_module("kicad_blocks.plugin")
 
 from kicad_blocks.model import (
     parse_parameters,
@@ -26,6 +25,8 @@ from kicad_blocks.model import (
 )
 from kicad_blocks.pcb_types import ResolvedBlockLayout
 from kicad_blocks.repository import BlockRecord, create_block, read_manifest
+
+plugin_actions = import_module("kicad_blocks.plugin")
 
 
 _HookResult = TypeVar("_HookResult")
