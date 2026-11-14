@@ -705,7 +705,9 @@ def _create_action_icon(parent: tk.Misc, name: str) -> tk.PhotoImage | None:
     return image
 
 
-def _action_button(parent: tk.Misc, text: str, command: Callable[[], None], icon: str, tooltip: str) -> ttk.Button:
+def _action_button(
+    parent: tk.Misc, text: str, command: Callable[[], None], icon: str, tooltip: str
+) -> ttk.Button:
     """Create a consistently padded, semantic icon-and-label action button."""
     image = _create_action_icon(parent, icon)
     options = {"text": text, "command": command, "padding": (9, 6)}
