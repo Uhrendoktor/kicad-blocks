@@ -51,14 +51,22 @@ another test at the same or a stronger runtime boundary.
 
 - Ruff uses the curated rules in `pyproject.toml` and runs read-only over all four Python
   source roots. Formatter output is checked, never committed or pushed by CI.
-- Pyright checks the reviewed deterministic core, bootstrap boundary, and tooling scripts.
-  The dynamic KiCad/Qt plugin adapter remains an explicit host-API exclusion.
+- Pyright checks the reviewed `json_types`, `model`, `repository`, package initializer,
+  entrypoint bootstrap, command helper, and release/tooling scripts in standard mode.
+  Six exact exclusions are recorded with migration/host rationales in
+  `REVIEWED_PYRIGHT_EXCLUSIONS`: the dynamic KiCad/Qt adapter, JSON-heavy composition
+  and operations, the S-expression extraction/layout paths, and the KiCad KIID sidecar
+  adapter. These are staged type migrations, not broad package exclusions. All remain
+  subject to repository-wide Ruff and AST policy, the changed-file annotation ratchet
+  across every production source root, and Vulture where included in its 100%-confidence
+  source inventory.
 - The Python policy check bans explicit `Any`, unreviewed `object` annotations,
   diagnostic suppressions, dynamic `eval`/`exec`, and `os.system`. Recursive JSON and
   S-expression aliases and a KIID Protocol with runtime value validation replace the previous five-file
   blanket `Any` exemption.
-- The annotation ratchet prevents changed files in Pyright's reviewed scope from adding
-  missing function annotations or generic `object` annotations.
+- The annotation ratchet prevents changed production files in `examples/`, `plugin/`, and
+  `scripts/`—including staged Pyright exclusions—from adding missing function annotations
+  or generic `object` annotations.
 - Vulture runs at 100% confidence on deterministic core modules only. Dynamic GUI
   registration and callbacks are not deleted based on speculative static references.
 
