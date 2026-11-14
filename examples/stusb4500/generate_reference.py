@@ -640,10 +640,13 @@ def generate_reference_schematic(destination: Path) -> Path:
                             # labels horizontally above the QFN, keeping their
                             # text clear of the vertical pin names.
                             u1_top_labels = {
+                                # Separate each top-side net name vertically.
+                                # The supply labels for pins 21 and 23 sit on
+                                # their existing direct decoupler wires.
                                 "24": (0.00, -2.54, "right", 0),
-                                "22": (0.00, -2.54, "left", 0),
-                                "21": (-2.54, 0.00, "right", 0),
-                                "23": (5.08, 0.00, "left", 0),
+                                "22": (0.00, -5.08, "left", 0),
+                                "21": (0.00, -7.62, "right", 0),
+                                "23": (0.00, -10.16, "left", 0),
                                 "25": (0.00, 5.08, "left", 0),
                             }
                             override = u1_top_labels.get(pin["number"])
@@ -950,6 +953,25 @@ def generate_reference_schematic(destination: Path) -> Path:
     if single_use:
         raise ValueError(f"Local net labels must be reused at least twice: {single_use}")
 
+    def label_position_is_on_wire(x: float, y: float) -> bool:
+        """Return true when a label can attach directly to an existing wire."""
+        for wire in wires:
+            points_node = _direct(wire, "pts")
+            if points_node is None:
+                continue
+            points = [
+                (round(float(point[1]), 3), round(float(point[2]), 3))
+                for point in _all(points_node, "xy")
+            ]
+            for start, end in zip(points, points[1:]):
+                if abs(start[1] - end[1]) < 0.001:
+                    if abs(y - start[1]) < 0.001 and min(start[0], end[0]) - 0.001 <= x <= max(start[0], end[0]) + 0.001:
+                        return True
+                elif abs(start[0] - end[0]) < 0.001:
+                    if abs(x - start[0]) < 0.001 and min(start[1], end[1]) - 0.001 <= y <= max(start[1], end[1]) + 0.001:
+                        return True
+        return False
+
     # Emit only surviving labels after local wires have consumed their
     # intermediate endpoint labels. This avoids duplicate flags on wire ends.
     for point, (net, kind, shape_name, x, y, justify, angle) in sorted(label_points.items()):
@@ -960,7 +982,10 @@ def generate_reference_schematic(destination: Path) -> Path:
                 justify=justify, angle=angle, key=f"label:{kind}:{net}:{px:.3f}:{py:.3f}",
             )
         )
-        if (round(x, 3), round(y, 3)) != point:
+        if (
+            (round(x, 3), round(y, 3)) != point
+            and not label_position_is_on_wire(x, y)
+        ):
             label_stubs.append([
                 "wire",
                 ["pts", ["xy", f"{px:.3f}", f"{py:.3f}"], ["xy", f"{x:.3f}", f"{y:.3f}"]],
