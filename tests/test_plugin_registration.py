@@ -515,6 +515,7 @@ def main() -> None:
                     refreshed_record,
                     facade_editor_client,
                     window_id,
+                    project_catalog=project / ".kicad_blocks" / LIBRARY_CATALOG_NAME,
                     xdotool=xdotool,
                 )
                 if not opened:
