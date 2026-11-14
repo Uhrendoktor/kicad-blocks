@@ -217,6 +217,89 @@ def _import_catalog_facade_edit(block: BlockRecord, manifest: dict) -> bool:
     return True
 
 
+def import_project_catalog_facade_edit(
+    block: BlockRecord,
+    project_catalog: Path,
+) -> bool:
+    """Stage a Symbol Editor edit from the project's KBlocks snapshot into one block asset.
+
+    The project catalog is the editable copy registered with the consuming
+    schematic. The shared catalog and per-block facade asset are the published
+    source of truth. Import only a project-only edit based on the manifest's
+    last-published catalog digest; reject stale or concurrent edits.
+    """
+    project_catalog = Path(project_catalog).expanduser().resolve()
+    if not project_catalog.is_file():
+        return False
+
+    manifest = read_manifest(block.path)
+    symbol_file = str(manifest["symbol_file"])
+    symbol_name = str(manifest.get("symbol_name") or "")
+    asset_path = block.path / symbol_file
+    shared_catalog_path = block.path.parent / str(
+        manifest.get("catalog_file", LIBRARY_CATALOG_NAME)
+    )
+    if not shared_catalog_path.is_file():
+        raise FileNotFoundError(
+            f"Shared facade catalog does not exist: {shared_catalog_path}"
+        )
+    if not asset_path.is_file():
+        raise FileNotFoundError(f"Block facade asset does not exist: {asset_path}")
+
+    project_tree = parse_sexpr(project_catalog.read_text(encoding="utf-8"))
+    shared_tree = parse_sexpr(shared_catalog_path.read_text(encoding="utf-8"))
+    asset_tree = parse_sexpr(asset_path.read_text(encoding="utf-8"))
+    project_symbol = _named_symbol_node(project_tree, symbol_name, project_catalog)
+    shared_symbol = _named_symbol_node(
+        shared_tree, symbol_name, shared_catalog_path
+    )
+    asset_symbol = _named_symbol_node(asset_tree, symbol_name, asset_path)
+    project_digest = _symbol_definition_digest(project_symbol)
+    shared_digest = _symbol_definition_digest(shared_symbol)
+    asset_digest = _symbol_definition_digest(asset_symbol)
+
+    baseline_catalog_digest = manifest.get("catalog_symbol_hash")
+    baseline_asset_hash = (manifest.get("hashes") or {}).get(symbol_file)
+    if baseline_catalog_digest is None or baseline_asset_hash is None:
+        if project_digest == shared_digest == asset_digest:
+            return False
+        raise RuntimeError(
+            "Cannot safely import the edited project facade because this block "
+            "has no published catalog baseline. Publish or reconcile the facade "
+            "manually before continuing."
+        )
+
+    baseline_catalog_digest = str(baseline_catalog_digest)
+    project_changed = project_digest != baseline_catalog_digest
+    shared_changed = shared_digest != baseline_catalog_digest
+    asset_changed = sha256_file(asset_path) != str(baseline_asset_hash)
+
+    if not project_changed:
+        return False
+
+    if shared_changed and project_digest != shared_digest:
+        raise RuntimeError(
+            "Facade symbol conflict: the project catalog and shared library both "
+            "changed since the last publish. Refresh the project catalog and resolve "
+            "the conflicting symbol edits before publishing."
+        )
+    if asset_changed and project_digest != asset_digest:
+        raise RuntimeError(
+            "Facade symbol conflict: the project catalog and the block's standalone "
+            "facade asset both changed since the last publish. Reconcile those edits "
+            "manually; neither version was overwritten."
+        )
+
+    standalone = copy.deepcopy(project_tree)
+    standalone[:] = [
+        child for child in standalone
+        if _head(child) != "symbol"
+    ]
+    standalone.append(copy.deepcopy(project_symbol))
+    atomic_write(asset_path, _dump(standalone) + "\n")
+    return True
+
+
 def _save_catalog_symbol_baseline(block: BlockRecord, manifest: dict) -> None:
     """Record the exact facade definition currently published in the shared catalog."""
     catalog_path = block.path.parent / str(
