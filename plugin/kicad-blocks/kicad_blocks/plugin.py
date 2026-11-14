@@ -355,6 +355,10 @@ def _set_window_geometry(window, width: int, height: int, min_width: int, min_he
     h = min(max(height, requested_height), usable_height)
     window.geometry(f"{w}x{h}+{max(0, (sw-w)//2)}+{max(0, (sh-h)//2)}")
     window.minsize(min(min_width, w), min(min_height, h))
+    master = getattr(window, "master", None)
+    if master is not None:
+        with contextlib.suppress(tk.TclError):
+            window.transient(master)
     owner = _editor_window_id_for_widget(window)
     if owner:
         _attach_tk_window_to_editor(window, owner)
@@ -2296,7 +2300,7 @@ def _edit_facade_symbol(
         wtype = shutil.which("wtype") if wayland else None
         if wtype:
             subprocess.run(
-                [wtype, "-M", "CTRL", "-M", "SHIFT", "-k", "e"],
+                [wtype, "-M", "ctrl", "-M", "shift", "-k", "e"],
                 capture_output=True,
                 text=True,
                 check=True,
