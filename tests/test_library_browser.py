@@ -31,10 +31,13 @@ from kicad_blocks.plugin import (
     _library_record_for_instance,
     _library_record_for_tree_row,
     _minimize_placement_windows,
+    _native_run_action_status,
+    _native_symbol_preview_photo,
     _new_blank_pcb_source,
     _pick_directory,
     _pick_kicad_file,
     _pick_record,
+    _pick_save_file,
     _preferred_library_selection,
     _restore_placement_windows,
     _save_block_layouts,
@@ -87,6 +90,103 @@ class LibraryBrowserTests(unittest.TestCase):
         self.assertEqual(_filter_library_records(records, "vout")[0].name, "Buck Converter")
         self.assertEqual(_filter_library_records(records, ""), records)
 
+    def test_native_facade_preview_exports_from_the_project_catalog_override(self):
+        symbol_name = self.block.manifest["symbol_name"]
+        project_catalog = self.root / "project" / "KBlocks.kicad_sym"
+        project_catalog.parent.mkdir(parents=True)
+        project_catalog.write_text(
+            self.block.symbol_library.read_text(encoding="utf-8"),
+            encoding="utf-8",
+        )
+        calls = []
+
+        def export(arguments, **kwargs):
+            calls.append(arguments)
+            output_dir = Path(arguments[arguments.index("--output") + 1])
+            output_dir.mkdir(parents=True, exist_ok=True)
+            (output_dir / f"{symbol_name}.svg").write_text(
+                '<svg xmlns="http://www.w3.org/2000/svg"><g><text>VIN</text></g></svg>',
+                encoding="utf-8",
+            )
+            return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+        with (
+            patch("kicad_blocks.plugin.find_kicad_cli", return_value="/usr/bin/kicad-cli"),
+            patch("kicad_blocks.plugin.subprocess.run", side_effect=export),
+            patch(
+                "kicad_blocks.plugin._clean_facade_preview_svg",
+                side_effect=lambda svg_file, _record, _output: svg_file,
+            ),
+            patch("cairosvg.svg2png", return_value=b"not-a-png"),
+            patch(
+                "kicad_blocks.plugin.tk",
+                SimpleNamespace(PhotoImage=Mock(return_value=object())),
+            ),
+            patch("kicad_blocks.plugin._NATIVE_PREVIEW_CACHE", {}),
+        ):
+            _native_symbol_preview_photo(
+                self.block,
+                library_file=project_catalog,
+            )
+
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(calls[0][-1], str(project_catalog.resolve()))
+        self.assertNotEqual(
+            calls[0][-1],
+            str(self.block.symbol_library.resolve()),
+        )
+
+    def test_native_save_dialog_uses_tk_initial_name_filters_and_suffix(self):
+        save_dialog = Mock(return_value="/tmp/exported.csv")
+        with patch(
+            "kicad_blocks.plugin.filedialog",
+            SimpleNamespace(asksaveasfilename=save_dialog),
+        ):
+            selected = _pick_save_file(
+                object(),
+                title="Save recursive BOM",
+                initial_path=Path("/tmp") / "buck_bom.csv",
+                defaultextension=".csv",
+                filetypes=[("CSV", "*.csv"), ("All files", "*.*")],
+            )
+
+        self.assertEqual(selected, "/tmp/exported.csv")
+        self.assertEqual(save_dialog.call_args.kwargs["initialdir"], "/tmp")
+        self.assertEqual(save_dialog.call_args.kwargs["initialfile"], "buck_bom.csv")
+        self.assertEqual(save_dialog.call_args.kwargs["defaultextension"], ".csv")
+        self.assertEqual(
+            save_dialog.call_args.kwargs["filetypes"],
+            [("CSV", "*.csv"), ("All files", "*.*")],
+        )
+
+    def test_native_file_and_directory_dialog_cancel_returns_none(self):
+        open_dialog = Mock(return_value="")
+        directory_dialog = Mock(return_value="")
+        save_dialog = Mock(return_value="")
+        with patch(
+            "kicad_blocks.plugin.filedialog",
+            SimpleNamespace(
+                askopenfilename=open_dialog,
+                askdirectory=directory_dialog,
+                asksaveasfilename=save_dialog,
+            ),
+        ):
+            selected_file = _pick_kicad_file(
+                object(), title="Open board", suffix=".kicad_pcb",
+                initial_path=self.board,
+            )
+            selected_directory = _pick_directory(
+                object(), title="Choose library", initial_path=self.root,
+            )
+            selected_save = _pick_save_file(
+                object(), title="Save BOM",
+                initial_path=Path("/tmp") / "bom.csv",
+                defaultextension=".csv", filetypes=[("CSV", "*.csv")],
+            )
+        self.assertIsNone(selected_file)
+        self.assertIsNone(selected_directory)
+        self.assertIsNone(selected_save)
+
     def test_native_facade_preview_removes_reference_and_component_name(self):
         from xml.etree import ElementTree as ET
 
@@ -121,14 +221,16 @@ class LibraryBrowserTests(unittest.TestCase):
     def test_overview_contains_pin_types_parameters_variants_and_layouts(self):
         overview = _block_overview_text(self.block)
         self.assertIn("VIN", overview)
-        self.assertIn("input", overview)
+        self.assertIn("Input", overview)
         self.assertIn("OUTPUT_VOLTAGE  ·  number  ·  default: 3.3", overview)
         self.assertIn("1V8", overview)
         self.assertIn("3V3", overview)
         self.assertIn("Compact", overview)
         self.assertIn("Default · implementation.kicad_sch", overview)
         self.assertIn("Circuit implementations · 3", overview)
-        self.assertIn("Synchronous buck regulator", overview)
+        self.assertNotIn("Purpose", overview)
+        self.assertNotIn("Synchronous buck regulator", overview)
+        self.assertNotIn("Version ·", overview)
         self.assertIn("Connections · 4", overview)
         self.assertNotIn("Block ID", overview)
         self.assertNotIn(str(self.block.manifest["block_id"]), overview)
@@ -195,11 +297,14 @@ class LibraryBrowserTests(unittest.TestCase):
     def test_native_file_and_directory_choosers_use_system_filedialog(self):
         open_dialog = Mock(return_value="/tmp/block.kicad_sch")
         directory_dialog = Mock(return_value="/tmp/library")
-        with patch(
-            "kicad_blocks.plugin.filedialog",
-            SimpleNamespace(
-                askopenfilename=open_dialog,
-                askdirectory=directory_dialog,
+        with (
+            patch("kicad_blocks.plugin.shutil.which", return_value=None),
+            patch(
+                "kicad_blocks.plugin.filedialog",
+                SimpleNamespace(
+                    askopenfilename=open_dialog,
+                    askdirectory=directory_dialog,
+                ),
             ),
         ):
             selected_file = _pick_kicad_file(
@@ -790,8 +895,15 @@ class LibraryBrowserTests(unittest.TestCase):
         self.assertFalse(any(command[1] == "type" for command in calls))
         self.assertIn(["key", "--clearmodifiers", "Escape"], [command[1:] for command in calls])
 
+    def test_native_run_action_status_is_checked_not_treated_as_truthy(self):
+        self.assertEqual(_native_run_action_status(SimpleNamespace(status=1)), 1)
+        self.assertEqual(_native_run_action_status(SimpleNamespace(status=2)), 2)
+        self.assertIsNone(_native_run_action_status(SimpleNamespace(status=None)))
+
     def test_native_placement_uses_kicad_ipc_without_xdotool_or_captured_xid(self):
-        kicad = SimpleNamespace(run_action=Mock())
+        kicad = SimpleNamespace(
+            run_action=Mock(return_value=SimpleNamespace(status=1))
+        )
         with patch("kicad_blocks.plugin.shutil.which", return_value=None):
             _start_native_symbol_placement(
                 kicad,
@@ -803,12 +915,77 @@ class LibraryBrowserTests(unittest.TestCase):
             )
         kicad.run_action.assert_called_once_with("eeschema.InteractiveDrawing.placeSymbol")
 
+    def test_native_placement_rejected_by_kicad_reports_real_status_without_xdotool(self):
+        kicad = SimpleNamespace(
+            run_action=Mock(return_value=SimpleNamespace(status=2))
+        )
+        with (
+            patch("kicad_blocks.plugin.shutil.which", return_value=None),
+            patch.dict(os.environ, {"WAYLAND_DISPLAY": "", "XDG_SESSION_TYPE": "x11"}),
+            self.assertRaisesRegex(RuntimeError, "RunActionStatus=2"),
+        ):
+            _start_native_symbol_placement(
+                kicad,
+                None,
+                "buck_converter_ab12cd34",
+                xdotool=None,
+                command_runner=Mock(),
+                pause=lambda _seconds: None,
+            )
+        kicad.run_action.assert_called_once_with("eeschema.InteractiveDrawing.placeSymbol")
+
+    def test_native_placement_does_not_send_global_wayland_keys_without_verified_editor(self):
+        command_runner = Mock()
+        with (
+            patch("kicad_blocks.plugin.shutil.which", side_effect=lambda name: {
+                "xdotool": None,
+                "wtype": "/usr/bin/wtype",
+            }.get(name)),
+            patch.dict(os.environ, {"WAYLAND_DISPLAY": "wayland-0", "XDG_SESSION_TYPE": "wayland"}),
+            self.assertRaisesRegex(RuntimeError, "No supported Wayland input helper is available"),
+        ):
+            _start_native_symbol_placement(
+                SimpleNamespace(),
+                None,
+                "buck_converter_ab12cd34",
+                xdotool=None,
+                command_runner=command_runner,
+                pause=lambda _seconds: None,
+            )
+        command_runner.assert_not_called()
+
+    def test_wayland_placement_does_not_inject_keys_when_xdotool_cannot_identify_editor(self):
+        command_runner = Mock()
+        with (
+            patch(
+                "kicad_blocks.plugin.shutil.which",
+                side_effect=lambda name: {
+                    "xdotool": "/usr/bin/xdotool",
+                    "wtype": "/usr/bin/wtype",
+                }.get(name),
+            ),
+            patch("kicad_blocks.plugin._capture_eeschema_window_id", return_value=None),
+            patch.dict(
+                os.environ,
+                {"WAYLAND_DISPLAY": "wayland-0", "XDG_SESSION_TYPE": "wayland"},
+            ),
+            self.assertRaisesRegex(RuntimeError, "(?i)automatic key injection was not attempted"),
+        ):
+            _start_native_symbol_placement(
+                SimpleNamespace(),
+                None,
+                "buck_converter_ab12cd34",
+                command_runner=command_runner,
+                pause=lambda _seconds: None,
+            )
+        command_runner.assert_not_called()
+
     def test_native_placement_requires_editor_when_ipc_is_unavailable(self):
         with (
             patch("kicad_blocks.plugin.shutil.which", return_value="/usr/bin/xdotool"),
             patch("kicad_blocks.plugin._capture_eeschema_window_id", return_value=None),
             self.assertRaisesRegex(
-                RuntimeError, "could not identify the active Schematic Editor"
+                RuntimeError, "(?i)could not identify the active Schematic Editor"
             ),
         ):
             _start_native_symbol_placement(

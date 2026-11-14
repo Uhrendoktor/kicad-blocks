@@ -27,6 +27,7 @@ from kicad_blocks.repository import (
     build_project_symbol_catalog,
     create_block,
     default_library_root,
+    import_project_catalog_facade_edit,
     library_roots,
     link_instance_to_local_copy,
     list_blocks,
@@ -620,6 +621,55 @@ class BlockRepositoryTests(unittest.TestCase):
         self.assertEqual(linked.path, local.path)
         self.assertIsNone(local_copy_for_instance(self.project, "other-instance"))
         self.assertTrue((self.project / ".kicad_blocks" / "instances.json").is_file())
+
+    def test_publish_imports_symbol_editor_project_catalog_edit(self):
+        record = create_block(self.root, "Project Edited Facade", self.pins)
+        project_catalog = build_project_symbol_catalog(self.project, [self.root])
+        original_asset = (record.path / record.manifest["symbol_file"]).read_text(encoding="utf-8")
+        original_shared = record.symbol_library.read_text(encoding="utf-8")
+        value_marker = f'(property "Value" "{record.name}"'
+        self.assertIn(value_marker, original_shared)
+        project_text = project_catalog.read_text(encoding="utf-8")
+        project_catalog.write_text(
+            project_text.replace(value_marker, f'(property "Value" "{record.name} Edited"', 1),
+            encoding="utf-8",
+        )
+
+        self.assertTrue(import_project_catalog_facade_edit(record, project_catalog))
+        staged_asset = (record.path / record.manifest["symbol_file"]).read_text(encoding="utf-8")
+        self.assertIn(f'(property "Value" "{record.name} Edited"', staged_asset)
+        self.assertEqual(record.symbol_library.read_text(encoding="utf-8"), original_shared)
+        self.assertNotEqual(staged_asset, original_asset)
+
+        published = refresh_library_block(record)
+        self.assertIn(record.manifest["symbol_file"], published["changed"])
+        self.assertIn(
+            f'(property "Value" "{record.name} Edited"',
+            record.symbol_library.read_text(encoding="utf-8"),
+        )
+        self.assertFalse(import_project_catalog_facade_edit(record, project_catalog))
+
+    def test_publish_rejects_conflicting_project_and_shared_facade_edits(self):
+        record = create_block(self.root, "Conflicting Facade", self.pins)
+        project_catalog = build_project_symbol_catalog(self.project, [self.root])
+        symbol_file = record.manifest["symbol_file"]
+        asset_before = (record.path / symbol_file).read_bytes()
+        shared_text = record.symbol_library.read_text(encoding="utf-8")
+        marker = f'(property "Value" "{record.name}"'
+        self.assertIn(marker, shared_text)
+        project_text = project_catalog.read_text(encoding="utf-8")
+        project_catalog.write_text(
+            project_text.replace(marker, f'(property "Value" "{record.name} Project"', 1),
+            encoding="utf-8",
+        )
+        record.symbol_library.write_text(
+            shared_text.replace(marker, f'(property "Value" "{record.name} Shared"', 1),
+            encoding="utf-8",
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "project catalog and shared library both changed"):
+            import_project_catalog_facade_edit(record, project_catalog)
+        self.assertEqual((record.path / symbol_file).read_bytes(), asset_before)
 
     def test_publish_bumps_version_when_library_assets_change(self):
         record = create_block(self.root, "Published Block", self.pins)

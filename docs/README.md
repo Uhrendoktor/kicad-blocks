@@ -30,6 +30,7 @@ Read these pages to understand why KiCad Blocks behaves as it does.
 
 - [Feature reference](reference.md) — action names, block and project files, instance fields, parameter syntax, PCB merge behavior, report files, and settings.
 - [Visual evidence](visual-evidence.md) — current plugin screenshots and native KiCad renders.
+- [UI review and interaction contract](ui-review.md) — window inventory, design decisions, functional edge cases, and outstanding desktop acceptance gates.
 - [STUSB4500 example](../examples/stusb4500/README.md) — a datasheet-derived editable circuit and its generated evidence.
 - [Changelog](../CHANGELOG.md) — version history and changes not yet assigned to a release.
 
