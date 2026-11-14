@@ -18,12 +18,12 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "plugin" / "kicad-blocks"))
 
 from kicad_blocks.sexpr import (
+    QuotedSExpr,
+    dump_sexpr,
+    parse_sexpr,
     sexpr_all,
     sexpr_direct,
-    dump_sexpr,
     sexpr_head,
-    QuotedSExpr,
-    parse_sexpr,
 )
 
 DATASHEET = "https://www.st.com/resource/en/datasheet/stusb4500.pdf"

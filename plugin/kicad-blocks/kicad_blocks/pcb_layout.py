@@ -29,16 +29,12 @@ from .pcb_types import (
     ProjectSettingsMergeResult,
     ResolvedBlockLayout,
 )
-from .sexpr import (
-    QuotedSExpr as _Quoted,
-    SExpr,
-    SExprList,
-    dump_sexpr as _dump,
-    parse_sexpr,
-    sexpr_all as _all,
-    sexpr_direct as _direct,
-    sexpr_head as _head,
-)
+from .sexpr import SExpr, SExprList, parse_sexpr
+from .sexpr import QuotedSExpr as _Quoted
+from .sexpr import dump_sexpr as _dump
+from .sexpr import sexpr_all as _all
+from .sexpr import sexpr_direct as _direct
+from .sexpr import sexpr_head as _head
 
 if TYPE_CHECKING:
     from .repository import BlockRecord

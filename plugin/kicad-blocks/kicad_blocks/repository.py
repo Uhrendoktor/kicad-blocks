@@ -16,9 +16,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 
-from .report_types import BlockRevisionReport, LocalCopyPublishReport, LocalCopySyncReport
-from .settings_types import InstanceLink, InstanceLinks, LibrarySettings
-
 from .extraction import extract_hierarchical_pins, prepare_block_implementation
 from .manifest_types import (
     BlockDependencyManifest,
@@ -43,6 +40,8 @@ from .model import (
     sha256_file,
     slugify,
 )
+from .report_types import BlockRevisionReport, LocalCopyPublishReport, LocalCopySyncReport
+from .settings_types import InstanceLink, InstanceLinks, LibrarySettings
 from .sexpr import (
     QuotedSExpr as _Quoted,
     SExprList,
