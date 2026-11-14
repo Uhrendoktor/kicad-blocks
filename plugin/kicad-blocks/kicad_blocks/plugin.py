@@ -5696,9 +5696,25 @@ def run_action(action: str, *, editor_window_id: str | None = None) -> None:
                 parent=root,
             )
         elif action == "edit-facade":
-            _edit_facade_symbol(
-                library_paths, schematic, project_dir, editor_window_id, root
+            record = _pick_record(
+                _list_library_records(library_paths), root, "Edit Facade"
             )
+            if record is not None:
+                project_catalog = _ensure_project_facade_catalog(
+                    project_dir, record, kicad
+                )
+                _edit_facade_symbol(
+                    record,
+                    kicad,
+                    project_catalog=project_catalog,
+                    close_browser=root.destroy,
+                )
+                messagebox.showinfo(
+                    "Edit facade",
+                    "Symbol Editor handoff requested. In its library tree, search for "
+                    + f"{LIBRARY_NICKNAME}:{record.manifest['symbol_name']}"
+                    + " and select the result. Saved facade edits are imported by Publish implementation.",
+                )
         elif action == "publish-block":
             _publish_block(library_paths, kicad, project_dir, root)
         elif action == "recursive-bom":
