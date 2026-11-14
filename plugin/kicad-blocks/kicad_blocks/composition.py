@@ -102,7 +102,7 @@ def _compose_direct_children(
     try:
         from kipy import KiCad
         from kipy.geometry import Vector2
-        from kipy.schematic import GlobalLabel
+        from kipy.schematic_types import GlobalLabel
 
         for _, child in dependencies:
             register_project_symbol_library(
