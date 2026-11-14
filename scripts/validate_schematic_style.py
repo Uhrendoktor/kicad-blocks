@@ -1,0 +1,345 @@
+"""Validate generated KiCad schematic geometry and style rules."""
+
+from __future__ import annotations
+
+import argparse
+import sys
+from collections import Counter
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "plugin" / "kicad-blocks"))
+sys.path.insert(0, str(ROOT / "examples" / "stusb4500"))
+
+from generate_reference import _uid
+from kicad_blocks.pcb_layout import _all, _direct, parse_sexpr
+
+TOL = 0.001
+PADDING = 1.27
+FRAME_GAP = 2.54
+ZONES = {
+    "usb-port": {"J1", "D1"},
+    "vbus-bulk": {"C50", "D50"},
+    "vbus-monitor": {"D4", "C4", "R1", "R4"},
+    "controller": {"U1", "C1", "C2", "C3"},
+    "address-straps": {"R51", "R52", "R53", "R54"},
+    "power-switch": {"T4", "T1", "R10", "R11", "R13"},
+    "vsnk-output": {"R2", "C10", "D11"},
+}
+FLOW = ("usb-port", "vbus-bulk", "vbus-monitor", "controller", "power-switch", "vsnk-output")
+
+
+def _segments(tree: list):
+    result = []
+    for wire in _all(tree, "wire"):
+        pts = _direct(wire, "pts")
+        xy = [(round(float(p[1]), 3), round(float(p[2]), 3)) for p in _all(pts, "xy")] if pts else []
+        result.append(tuple(xy) if len(xy) == 2 else ())
+    return result
+
+
+def _on_segment(point, start, end) -> bool:
+    x, y = point
+    x1, y1 = start
+    x2, y2 = end
+    if abs(y1 - y2) <= TOL:
+        return abs(y - y1) <= TOL and min(x1, x2) - TOL <= x <= max(x1, x2) + TOL
+    if abs(x1 - x2) <= TOL:
+        return abs(x - x1) <= TOL and min(y1, y2) - TOL <= y <= max(y1, y2) + TOL
+    return False
+
+
+def wire_geometry_issues(tree: list) -> list[str]:
+    """Reject crossings, diagonal routes, overlaps, and unmarked T-junctions."""
+    issues, valid = [], []
+    for index, segment in enumerate(_segments(tree)):
+        if len(segment) != 2:
+            issues.append(f"wire {index} must have exactly two endpoints")
+            continue
+        a, b = segment
+        if a == b:
+            issues.append(f"wire {index} has zero length")
+            continue
+        if abs(a[0] - b[0]) > TOL and abs(a[1] - b[1]) > TOL:
+            issues.append(f"wire {index} is diagonal: {a}->{b}")
+            continue
+        valid.append((a, b))
+    junctions = {
+        (round(float(_direct(j, "at")[1]), 3), round(float(_direct(j, "at")[2]), 3))
+        for j in _all(tree, "junction") if _direct(j, "at") is not None
+    }
+    for i, (a, b) in enumerate(valid):
+        for c, d in valid[i + 1:]:
+            ah, ch = abs(a[1] - b[1]) <= TOL, abs(c[1] - d[1]) <= TOL
+            if ah == ch:
+                if ah and abs(a[1] - c[1]) <= TOL:
+                    overlap = min(max(a[0], b[0]), max(c[0], d[0])) - max(min(a[0], b[0]), min(c[0], d[0]))
+                elif not ah and abs(a[0] - c[0]) <= TOL:
+                    overlap = min(max(a[1], b[1]), max(c[1], d[1])) - max(min(a[1], b[1]), min(c[1], d[1]))
+                else:
+                    overlap = 0
+                if overlap > TOL:
+                    issues.append(f"collinear wire overlap: {a}->{b} and {c}->{d}")
+                continue
+            hs, he = (a, b) if ah else (c, d)
+            vs, ve = (c, d) if ah else (a, b)
+            cross = (vs[0], hs[1])
+            if not _on_segment(cross, hs, he) or not _on_segment(cross, vs, ve):
+                continue
+            h_end, v_end = cross in (hs, he), cross in (vs, ve)
+            if h_end and v_end:
+                continue
+            if cross not in junctions:
+                issue = "wire crossing" if not h_end and not v_end else "unmarked T-junction"
+                issues.append(f"{issue} at {cross}: {a}->{b} intersects {c}->{d}")
+    return issues
+
+
+class _DSU:
+    def __init__(self):
+        self.parent = {}
+
+    def find(self, point):
+        self.parent.setdefault(point, point)
+        if self.parent[point] != point:
+            self.parent[point] = self.find(self.parent[point])
+        return self.parent[point]
+
+    def union(self, a, b):
+        a, b = self.find(a), self.find(b)
+        if a != b:
+            self.parent[b] = a
+
+
+def _labels(tree: list, kind: str):
+    return [
+        (str(node[1]), (round(float(_direct(node, "at")[1]), 3), round(float(_direct(node, "at")[2]), 3)))
+        for node in _all(tree, kind)
+        if len(node) > 1 and _direct(node, "at") is not None
+    ]
+
+
+def label_network_issues(tree: list) -> list[str]:
+    local, hierarchical = _labels(tree, "label"), _labels(tree, "hierarchical_label")
+    segments = [s for s in _segments(tree) if len(s) == 2]
+    junctions = {
+        (round(float(_direct(j, "at")[1]), 3), round(float(_direct(j, "at")[2]), 3))
+        for j in _all(tree, "junction") if _direct(j, "at") is not None
+    }
+    points = {p for s in segments for p in s} | junctions | {p for _, p in local + hierarchical}
+    dsu = _DSU()
+    for a, b in segments:
+        split = [p for p in points if _on_segment(p, a, b)]
+        axis = 0 if abs(a[1] - b[1]) <= TOL else 1
+        split.sort(key=lambda p: p[axis], reverse=a[axis] > b[axis])
+        for p, q in zip(split, split[1:]):
+            dsu.union(p, q)
+    totals, island_uses = Counter(), Counter()
+    issues = []
+    for name, point in local:
+        totals[name] += 1
+        island_uses[(name, dsu.find(point))] += 1
+    for (name, _), count in island_uses.items():
+        if count > 1:
+            issues.append(f"local label {name!r} occurs {count} times on one physical wire network")
+    for name, count in totals.items():
+        if count < 2:
+            issues.append(f"local label {name!r} is used only {count} time(s)")
+    endpoint_degree = Counter(p for s in segments for p in s)
+    for name, point in hierarchical:
+        if endpoint_degree[point] != 1 or not any(_on_segment(point, a, b) for a, b in segments):
+            issues.append(f"hierarchical label {name!r} at {point} must sit at the end of one wire twig")
+    return issues
+
+
+def _advance(char: str) -> float:
+    if char in "ilI.,:;!|'":
+        return 0.30
+    if char in "MW@%&":
+        return 0.90
+    if char.isspace():
+        return 0.34
+    if char.isupper() or char.isdigit():
+        return 0.64
+    return 0.55
+
+
+def _required_size(value: str, font: float, pad: float):
+    lines = value.splitlines() or [""]
+    width = max((sum(_advance(ch) for ch in line) for line in lines), default=0.0)
+    return 2 * pad + max(width * font * 1.12, font), 2 * pad + len(lines) * font * 1.55
+
+
+def _overlap(a, b):
+    ax, ay, aw, ah = a
+    bx, by, bw, bh = b
+    return min(ax + aw, bx + bw) - max(ax, bx) > TOL and min(ay + ah, by + bh) - max(ay, by) > TOL
+
+
+def _line_hits_box(a, b, box):
+    x, y, width, height = box
+    if abs(a[1] - b[1]) <= TOL:
+        return y - TOL <= a[1] <= y + height + TOL and min(max(a[0], b[0]), x + width) - max(min(a[0], b[0]), x) > TOL
+    if abs(a[0] - b[0]) <= TOL:
+        return x - TOL <= a[0] <= x + width + TOL and min(max(a[1], b[1]), y + height) - max(min(a[1], b[1]), y) > TOL
+    return False
+
+
+def _instances(tree: list):
+    result = {}
+    for item in _all(tree, "symbol"):
+        if _direct(item, "lib_id") is None:
+            continue
+        ref = next((str(p[2]) for p in _all(item, "property") if len(p) >= 3 and str(p[1]) == "Reference"), None)
+        if ref:
+            result[ref] = item
+    return result
+
+
+def _property(instance: list, name: str):
+    return next((p for p in _all(instance, "property") if len(p) >= 3 and str(p[1]) == name), None)
+
+
+def text_box_issues(tree: list) -> list[str]:
+    issues, boxes = [], []
+    if _all(tree, "text"):
+        issues.append("free-standing annotation text is forbidden; use KiCad text_box")
+    for index, node in enumerate(_all(tree, "text_box")):
+        at, size, margins = _direct(node, "at"), _direct(node, "size"), _direct(node, "margins")
+        effects = _direct(node, "effects")
+        font_node = _direct(_direct(effects, "font"), "size") if effects is not None and _direct(effects, "font") is not None else None
+        if at is None or size is None or margins is None or font_node is None:
+            issues.append(f"text_box {index} is missing geometry, margins or font")
+            continue
+        pads = [float(v) for v in margins[1:]]
+        if len(pads) != 4 or any(abs(v - PADDING) > TOL for v in pads):
+            issues.append(f"text_box {index} must have {PADDING:.2f} mm equal padding")
+            continue
+        x, y, w, h = float(at[1]), float(at[2]), float(size[1]), float(size[2])
+        need_w, need_h = _required_size(str(node[1]), float(font_node[1]), pads[0])
+        if w + TOL < need_w or h + TOL < need_h:
+            issues.append(f"text_box {index} undersized: {w:.2f}x{h:.2f} mm, needs {need_w:.2f}x{need_h:.2f}")
+        uid = _direct(node, "uuid")
+        boxes.append((str(uid[1]) if uid is not None else f"box-{index}", (x, y, w, h)))
+    segments = [s for s in _segments(tree) if len(s) == 2]
+    for index, (uid, box) in enumerate(boxes):
+        for other_uid, other_box in boxes[index + 1:]:
+            if _overlap(box, other_box):
+                issues.append(f"text boxes overlap: {uid} and {other_uid}")
+        if any(_line_hits_box(a, b, box) for a, b in segments):
+            issues.append(f"a wire penetrates text box {uid}")
+    return issues
+
+
+def _frame_bounds(tree: list, zone: str):
+    expected = _uid(f"graphic:rectangle:zone:{zone}")
+    for item in _all(tree, "rectangle"):
+        uid = _direct(item, "uuid")
+        if uid is None or str(uid[1]) != expected:
+            continue
+        start, end = _direct(item, "start"), _direct(item, "end")
+        if start is None or end is None:
+            return None
+        x1, y1, x2, y2 = float(start[1]), float(start[2]), float(end[1]), float(end[2])
+        return min(x1, x2), min(y1, y2), abs(x2 - x1), abs(y2 - y1)
+    return None
+
+
+def frame_and_component_issues(tree: list) -> list[str]:
+    issues, instances, frames = [], _instances(tree), {}
+    for ref, instance in instances.items():
+        dnp_node, value_prop = _direct(instance, "dnp"), _property(instance, "Value")
+        dnp = dnp_node is not None and str(dnp_node[1]).lower() == "yes"
+        value = str(value_prop[2]) if value_prop is not None else ""
+        if ref in {"R51", "R52"} and (not dnp or value != "100k"):
+            issues.append(f"{ref} must have Value=100k and DNP=yes")
+        elif dnp:
+            issues.append(f"{ref} is DNP but is not an approved optional-population component")
+    for zone in ZONES:
+        rect = _frame_bounds(tree, zone)
+        if rect is None:
+            issues.append(f"functional frame {zone!r} is missing")
+        else:
+            frames[zone] = rect
+    entries = list(frames.items())
+    for i, (name, rect) in enumerate(entries):
+        for other_name, other_rect in entries[i + 1:]:
+            if _overlap(rect, other_rect):
+                issues.append(f"functional frames overlap: {name}/{other_name}")
+    for left_name, right_name in zip(FLOW, FLOW[1:]):
+        if left_name in frames and right_name in frames:
+            left, right = frames[left_name], frames[right_name]
+            gap = right[0] - (left[0] + left[2])
+            if abs(gap - FRAME_GAP) > TOL:
+                issues.append(f"stage gap {left_name}->{right_name} is {gap:.2f} mm (expected {FRAME_GAP:.2f})")
+    for zone, members in ZONES.items():
+        rect = frames.get(zone)
+        if rect is None:
+            continue
+        for ref in members:
+            at = _direct(instances[ref], "at") if ref in instances else None
+            point = (float(at[1]), float(at[2])) if at is not None else (float("nan"), float("nan"))
+            x, y, w, h = rect
+            if not (x + 2.54 - TOL <= point[0] <= x + w - 2.54 + TOL and y + 2.54 - TOL <= point[1] <= y + h - 2.54 + TOL):
+                issues.append(f"component {ref} is not comfortably inside frame {zone}")
+    for zone, rect in frames.items():
+        x, y, w, h = rect
+        for segment in _segments(tree):
+            if len(segment) != 2:
+                continue
+            a, b = segment
+            def inside(p):
+                return x - TOL <= p[0] <= x + w + TOL and y - TOL <= p[1] <= y + h + TOL
+            if inside(a) and inside(b):
+                continue
+            if _line_hits_box(a, b, rect):
+                issues.append(f"wire {a}->{b} crosses the {zone} frame boundary")
+    for node in _all(tree, "text_box"):
+        uid_node = _direct(node, "uuid")
+        uid = str(uid_node[1]) if uid_node is not None else ""
+        if "zone-title:" in uid:
+            continue
+        at, size = _direct(node, "at"), _direct(node, "size")
+        if at is None or size is None:
+            continue
+        box = (float(at[1]), float(at[2]), float(size[1]), float(size[2]))
+        for zone, rect in frames.items():
+            if _overlap(box, rect):
+                wholly_inside = (
+                    box[0] >= rect[0] - TOL and box[1] >= rect[1] - TOL
+                    and box[0] + box[2] <= rect[0] + rect[2] + TOL
+                    and box[1] + box[3] <= rect[1] + rect[3] + TOL
+                )
+                if not wholly_inside:
+                    issues.append(f"text box {uid} penetrates frame {zone}")
+    return issues
+
+
+def check_schematic_style(tree: list) -> list[str]:
+    return wire_geometry_issues(tree) + label_network_issues(tree) + text_box_issues(tree) + frame_and_component_issues(tree)
+
+
+def validate_schematic_style(path: Path) -> dict[str, int]:
+    tree = parse_sexpr(Path(path).read_text(encoding="utf-8"))
+    issues = check_schematic_style(tree)
+    if issues:
+        raise ValueError("Schematic style validation failed:\n- " + "\n- ".join(issues))
+    return {
+        "wires": len(_all(tree, "wire")),
+        "local_labels": len(_all(tree, "label")),
+        "hierarchical_labels": len(_all(tree, "hierarchical_label")),
+        "text_boxes": len(_all(tree, "text_box")),
+        "functional_frames": len(ZONES),
+    }
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("schematic", type=Path)
+    args = parser.parse_args()
+    totals = validate_schematic_style(args.schematic)
+    print("Schematic style audit passed: " + ", ".join(f"{k}={v}" for k, v in totals.items()))
+
+
+if __name__ == "__main__":
+    main()
