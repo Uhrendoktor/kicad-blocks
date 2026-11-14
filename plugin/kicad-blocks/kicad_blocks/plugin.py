@@ -3536,9 +3536,7 @@ def _show_block_layout_editor(
         state="disabled",
     )
     remove_button.pack(side="left", padx=(8, 0))
-    default_button = ttk.Button(
-        actions, text="Set default", command=make_default, state="disabled"
-    )
+    default_button = ttk.Button(actions, text="Set default", command=make_default, state="disabled")
     default_button.pack(side="left", padx=(8, 0))
 
     link_actions = ttk.Frame(frame)
@@ -3792,7 +3790,9 @@ def _ask_implementation_details(
     dialog = tk.Toplevel(parent)
     dialog.title("Implementation details")
     dialog.transient(parent)
-    _set_window_geometry(dialog, 780, 440 if allow_create else 360, 640, 400 if allow_create else 340)
+    _set_window_geometry(
+        dialog, 780, 440 if allow_create else 360, 640, 400 if allow_create else 340
+    )
     frame = ttk.Frame(dialog, padding=16)
     frame.pack(fill="both", expand=True)
     ttk.Label(
@@ -3801,9 +3801,7 @@ def _ask_implementation_details(
         font=("TkDefaultFont", 12, "bold"),
     ).grid(row=0, column=0, columnspan=3, sticky="w", pady=(0, 14))
 
-    ttk.Label(frame, text="Variant value").grid(
-        row=1, column=0, columnspan=3, sticky="w"
-    )
+    ttk.Label(frame, text="Variant value").grid(row=1, column=0, columnspan=3, sticky="w")
     ttk.Label(
         frame,
         text="Stored in KB_VARIANT to select this circuit on each placed block.",
@@ -3820,9 +3818,7 @@ def _ask_implementation_details(
     copy_value = tk.StringVar()
     copy_sources: dict[str, Path] = {}
     if allow_create:
-        ttk.Label(frame, text="Starting point").grid(
-            row=4, column=0, columnspan=3, sticky="w"
-        )
+        ttk.Label(frame, text="Starting point").grid(row=4, column=0, columnspan=3, sticky="w")
         modes = [
             "Choose a schematic file",
             "Create a new empty schematic",
@@ -4042,7 +4038,9 @@ def _show_block_variant_editor(
             text="Edit default" if row_index == 0 else "Edit variant",
             state="normal" if has_selection else "disabled",
         )
-        remove_button.configure(state="normal" if row_index is not None and row_index > 0 else "disabled")
+        remove_button.configure(
+            state="normal" if row_index is not None and row_index > 0 else "disabled"
+        )
         save_button.configure(state="normal" if dirty[0] else "disabled")
 
     def add_variant():
@@ -4146,19 +4144,13 @@ def _show_block_variant_editor(
     actions.pack(fill="x", pady=(12, 0))
     add_button = ttk.Button(actions, text="Add variant", command=add_variant)
     add_button.pack(side="left")
-    edit_button = ttk.Button(
-        actions, text="Edit variant", command=edit_variant, state="disabled"
-    )
+    edit_button = ttk.Button(actions, text="Edit variant", command=edit_variant, state="disabled")
     edit_button.pack(side="left", padx=(8, 0))
-    remove_button = ttk.Button(
-        actions, text="Remove", command=remove_variant, state="disabled"
-    )
+    remove_button = ttk.Button(actions, text="Remove", command=remove_variant, state="disabled")
     remove_button.pack(side="left", padx=(8, 0))
     cancel_button = ttk.Button(actions, text="Cancel", command=dialog.destroy)
     cancel_button.pack(side="right")
-    save_button = ttk.Button(
-        actions, text="Save changes", command=save_and_close, state="disabled"
-    )
+    save_button = ttk.Button(actions, text="Save changes", command=save_and_close, state="disabled")
     save_button.pack(side="right", padx=(0, 8))
 
     tree.bind("<<TreeviewSelect>>", update_actions)
@@ -4730,16 +4722,13 @@ def _show_library_browser(
                     instance_record = _block_record_for_instance(
                         current_roots[0], project_dir, selected_instances[0]
                     )
-                    can_edit_facade = (
-                        instance_record.manifest.get("block_id")
-                        == record.manifest.get("block_id")
-                    )
+                    can_edit_facade = instance_record.manifest.get(
+                        "block_id"
+                    ) == record.manifest.get("block_id")
                 except (OSError, RuntimeError, ValueError, LookupError, TypeError, KeyError):
                     can_edit_facade = False
         if facade_button[0] is not None:
-            facade_button[0].configure(
-                state="normal" if can_edit_facade else "disabled"
-            )
+            facade_button[0].configure(state="normal" if can_edit_facade else "disabled")
 
     def place_selected(_event=None):
         nonlocal editor_window_id
@@ -5040,9 +5029,7 @@ def _show_library_browser(
         state="disabled",
     )
     facade_button[0].pack(side="left", padx=(8, 0))
-    variants_button = ttk.Button(
-        primary_actions, text="Implementations", command=edit_variants
-    )
+    variants_button = ttk.Button(primary_actions, text="Implementations", command=edit_variants)
     variants_button.pack(side="left", padx=(8, 0))
 
     layout_actions = ttk.Frame(actions)
@@ -5058,9 +5045,7 @@ def _show_library_browser(
         layout_actions, text="Manage PCB layouts", command=manage_layouts
     )
     manage_layout_button.pack(side="left", padx=(8, 0))
-    refresh_button = ttk.Button(
-        layout_actions, text="Refresh", command=refresh_records
-    )
+    refresh_button = ttk.Button(layout_actions, text="Refresh", command=refresh_records)
     refresh_button.pack(side="right")
     refresh_records()
     selection_changed()
