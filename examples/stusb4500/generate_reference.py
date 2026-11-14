@@ -640,13 +640,8 @@ def generate_reference_schematic(destination: Path) -> Path:
                             # labels horizontally above the QFN, keeping their
                             # text clear of the vertical pin names.
                             u1_top_labels = {
-                                # Separate each top-side net name vertically.
-                                # The supply labels for pins 21 and 23 sit on
-                                # their existing direct decoupler wires.
                                 "24": (0.00, -2.54, "right", 0),
                                 "22": (0.00, -5.08, "left", 0),
-                                "21": (0.00, -7.62, "right", 0),
-                                "23": (0.00, -10.16, "left", 0),
                                 "25": (0.00, 5.08, "left", 0),
                             }
                             override = u1_top_labels.get(pin["number"])
@@ -843,6 +838,22 @@ def generate_reference_schematic(destination: Path) -> Path:
     add_junction(vreg_2v7_branch, "VREG_2V7:C2-C3-bypass-branch")
     remove_local_label("C2", "1", "VREG_2V7")
     remove_local_label("C3", "1", "VREG_2V7")
+
+    # The short VREG_1V2 bypass net is shown by its direct U1.21-to-C1 wire.
+    # Remove the U1-side one-off label and add a second local label on a clear
+    # point of that wire, away from the capacitor bodies and adjacent pin names.
+    remove_local_label("U1", "21", "VREG_1V2")
+    vreg_1v2_tap = (251.460, 109.220)
+    add_junction(vreg_1v2_tap, "VREG_1V2:label-tap")
+    label_points[vreg_1v2_tap] = (
+        "VREG_1V2", "local", None,
+        256.540, 109.220, "left", 0,
+    )
+
+    # U1.23 is physically connected to C2/C3 and the address/sense network.
+    # The other repeated VREG_2V7 labels carry the net identity without a
+    # crowded top-side label over the capacitor bank.
+    remove_local_label("U1", "23", "VREG_2V7")
 
     # R55.1 is physically wired to U1.6; RESET remains a hierarchical parent port.
     reset_pin = pin_world_points[("U1", "6")]

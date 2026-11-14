@@ -343,8 +343,7 @@ class STUSB4500ReferenceTests(unittest.TestCase):
         expected = {
             ("VBUS", 243.840, 111.760, 0.0),
             ("VSYS", 246.380, 109.220, 0.0),
-            ("VREG_1V2", 251.460, 106.680, 0.0),
-            ("VREG_2V7", 254.000, 104.140, 0.0),
+            ("VREG_1V2", 256.540, 109.220, 0.0),
         }
         actual = {
             (
