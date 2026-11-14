@@ -250,6 +250,44 @@ class LibraryBrowserTests(unittest.TestCase):
         self.assertIn("--file-filter=KiCad schematic | *.kicad_sch", command)
         self.assertEqual(run.call_args.kwargs["env"]["GTK_USE_PORTAL"], "1")
 
+    def test_kdialog_uses_transient_parent_embedding_on_x11(self):
+        run = Mock(return_value=SimpleNamespace(returncode=0, stdout="/tmp/board.kicad_pcb", stderr=""))
+        parent = SimpleNamespace(winfo_id=Mock(return_value=0x1234))
+        with (
+            patch("kicad_blocks.plugin.shutil.which", side_effect=lambda name: "/usr/bin/kdialog" if name == "kdialog" else None),
+            patch("kicad_blocks.plugin.subprocess.run", run),
+            patch.dict(os.environ, {"XDG_CURRENT_DESKTOP": "KDE", "XDG_SESSION_TYPE": "x11"}),
+        ):
+            selected = _desktop_file_dialog(
+                parent=parent,
+                mode="open",
+                title="Choose board",
+                initial_path=self.board,
+                suffix=".kicad_pcb",
+                filetypes=[("KiCad PCB", "*.kicad_pcb")],
+            )
+        self.assertEqual(selected, "/tmp/board.kicad_pcb")
+        command = run.call_args.args[0]
+        self.assertIn("--embed", command)
+        self.assertIn(str(0x1234), command)
+
+    def test_kdialog_does_not_pass_x11_embed_id_on_wayland(self):
+        run = Mock(return_value=SimpleNamespace(returncode=0, stdout="/tmp/board.kicad_pcb", stderr=""))
+        parent = SimpleNamespace(winfo_id=Mock(return_value=0x1234))
+        with (
+            patch("kicad_blocks.plugin.shutil.which", side_effect=lambda name: "/usr/bin/kdialog" if name == "kdialog" else None),
+            patch("kicad_blocks.plugin.subprocess.run", run),
+            patch.dict(os.environ, {"XDG_CURRENT_DESKTOP": "KDE", "XDG_SESSION_TYPE": "wayland", "WAYLAND_DISPLAY": "wayland-0"}),
+        ):
+            selected = _desktop_file_dialog(
+                parent=parent,
+                mode="directory",
+                title="Choose library",
+                initial_path=self.root,
+            )
+        self.assertEqual(selected, "/tmp/board.kicad_pcb")
+        self.assertNotIn("--embed", run.call_args.args[0])
+
     def test_desktop_directory_chooser_cancel_is_not_retried_with_custom_tk_dialog(self):
         run = Mock(return_value=SimpleNamespace(returncode=1, stdout="", stderr=""))
         with (
