@@ -492,8 +492,6 @@ class LibraryBrowserTests(unittest.TestCase):
         self.assertEqual(pages, cached_pages)
         self.assertTrue(all(png == b"schematic-png" for _label, png in pages))
 
-    def test_native_facade_preview_removes_reference_and_component_name(self):
-
     def test_native_facade_preview_removes_reference_and_component_name(self) -> None:
         from xml.etree import ElementTree as ET
 

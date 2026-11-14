@@ -331,7 +331,11 @@ class _KiCadApp(Protocol):
 
     def get_kicad_binary_path(self, editor: str) -> str | None: ...
 
-    
+    def run_action(self, action: str) -> None: ...
+
+    def close(self) -> None: ...
+
+
 # These private adapters are referenced dynamically by the GUI and acceptance
 # runners; keep them discoverable to static unused-symbol analysis.
 __all__ = [
@@ -341,11 +345,6 @@ __all__ = [
     "_place_existing",
     "_edit_block_implementation",
 ]
-
-def run_action(self, action: str) -> None: ...
-
-    def close(self) -> None: ...
-
 
 class _TkTagConfigurable(Protocol):
     """Treeview style operation not included in Tk's bundled type stubs."""
