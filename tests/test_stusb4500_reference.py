@@ -550,7 +550,7 @@ class STUSB4500ReferenceTests(unittest.TestCase):
         self.assertAlmostEqual(bounds["vbus-monitor"][3], 213.360, places=3)
         self.assertAlmostEqual(bounds["controller"][1], 218.440, places=3)
         for index, first in enumerate(frames):
-            for second in frames[index + 1:
+            for second in frames[index + 1:]:
                 overlap_x = min(first[3], second[3]) - max(first[1], second[1])
                 overlap_y = min(first[4], second[4]) - max(first[2], second[2])
                 self.assertFalse(
