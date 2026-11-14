@@ -771,11 +771,11 @@ class LibraryBrowserTests(unittest.TestCase):
         with (
             patch("kicad_blocks.plugin.subprocess.run") as run_process,
             patch("kicad_blocks.plugin.shutil.which") as find_command,
+            self.assertRaisesRegex(RuntimeError, "schematic equivalent of Board.interactive_move"),
         ):
-            with self.assertRaisesRegex(RuntimeError, "schematic equivalent of Board.interactive_move"):
-                _start_native_symbol_placement(
-                    SimpleNamespace(run_action=run_action), None, "buck_converter_ab12cd34"
-                )
+            _start_native_symbol_placement(
+                SimpleNamespace(run_action=run_action), None, "buck_converter_ab12cd34"
+            )
         run_action.assert_not_called()
         run_process.assert_not_called()
         find_command.assert_not_called()
