@@ -308,21 +308,19 @@ def _graphic_text(
             f"Text box width {width:.3f} mm is smaller than measured width "
             f"{measured_width:.3f} mm for {value!r}."
         )
-    stroke = (
-        ["stroke", ["width", "0.1524"], ["type", "default"]]
-        if border else ["stroke", ["width", "0"], ["type", "default"]]
-    )
-    return [
+    result = [
         "text_box", _Quoted(value),
         ["at", f"{x:.3f}", f"{y:.3f}", "0"],
         ["size", f"{width:.3f}", f"{height:.3f}"],
         ["margins", *(f"{padding:.3f}" for _ in range(4))],
-        stroke,
         ["fill", ["type", "none"]],
         ["effects", ["font", ["size", f"{size:.3f}", f"{size:.3f}"]],
             ["justify", "left", "top"]],
         ["uuid", _Quoted(_uid(f"graphic:text:{key}"))],
     ]
+    if border:
+        result.insert(5, ["stroke", ["width", "0.1524"], ["type", "default"]])
+    return result
 
 
 def _note_box(
