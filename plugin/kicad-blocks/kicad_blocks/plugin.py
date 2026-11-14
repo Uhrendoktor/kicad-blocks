@@ -5212,22 +5212,11 @@ def _show_library_browser(
         if record is None:
             return
         try:
-            refreshed_record = _register_block(
-                project_dir, record, kicad, current_roots[0]
-            )
-            if not _LAST_LIBRARY_RELOAD_OK:
-                messagebox.showwarning(
-                    "Edit facade",
-                    _LAST_LIBRARY_RELOAD_WARNING
-                    or "KiCad could not reload the generated facade catalog. Restart Eeschema and retry.",
-                    parent=window,
-                )
-                return
             edit_nickname = _register_facade_edit_library(
-                project_dir, refreshed_record, kicad
+                project_dir, record, kicad
             )
             opened = _edit_facade_symbol(
-                refreshed_record,
+                record,
                 kicad,
                 editor_window_id,
                 edit_library_nickname=edit_nickname,
@@ -5236,8 +5225,8 @@ def _show_library_browser(
                 messagebox.showinfo(
                     "Edit facade",
                     "Symbol Editor is open. Search its library tree for "
-                    + f"{refreshed_record.manifest['library_nickname']}:"
-                    + str(refreshed_record.manifest["symbol_name"])
+                    + f"{edit_nickname}:"
+                    + str(record.manifest["symbol_name"])
                     + " and press Enter.",
                     parent=window,
                 )
