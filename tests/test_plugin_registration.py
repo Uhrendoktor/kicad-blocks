@@ -135,6 +135,11 @@ def _dump_accessibility_tree(process_id: int) -> str:
     """Diagnostic-only probe of KiCad's native accessibility surface."""
     try:
         import xa11y
+    except ImportError as exc:
+        result = f"xa11y accessibility probe unavailable: {type(exc).__name__}: {exc}"
+        print(result, flush=True)
+        return result
+    try:
         app = xa11y.App.by_pid(process_id, timeout=5.0)
         tree = app.dump(max_depth=14)
     except xa11y.XA11yError as exc:
