@@ -330,7 +330,18 @@ class _KiCadApp(Protocol):
 
     def get_kicad_binary_path(self, editor: str) -> str | None: ...
 
-    def run_action(self, action: str) -> None: ...
+    
+# These private adapters are referenced dynamically by the GUI and acceptance
+# runners; keep them discoverable to static unused-symbol analysis.
+__all__ = [
+    "_pick_block_for_placement",
+    "_choose_library_root",
+    "_collect_block_profiles",
+    "_place_existing",
+    "_edit_block_implementation",
+]
+
+def run_action(self, action: str) -> None: ...
 
     def close(self) -> None: ...
 
@@ -351,6 +362,12 @@ class _TkEntryCursor(Protocol):
     """Entry cursor operation used when focusing the search field."""
 
     def icursor(self, index: str | int) -> None: ...
+
+
+class _TkPreviewCanvas(Protocol):
+    """Canvas retaining the native Tk image for the latest facade preview."""
+
+    _native_preview_photo: tkinter_types.PhotoImage | None
 
 
 class _TkGridManaged(Protocol):
@@ -3089,7 +3106,9 @@ def _draw_facade_preview(
         )
         return
 
-    canvas._native_preview_photo = photo
+    if photo is None:
+        return
+    cast(_TkPreviewCanvas, canvas)._native_preview_photo = photo
     width = max(int(canvas.winfo_width()), 480)
     height = max(int(canvas.winfo_height()), 250)
     canvas.create_image(width / 2, height / 2, image=photo, anchor="center")
