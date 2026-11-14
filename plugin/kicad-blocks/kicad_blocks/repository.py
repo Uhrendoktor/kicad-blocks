@@ -948,7 +948,16 @@ _LAYOUT_MANIFEST_KEYS = (
 
 def _layout_configuration(manifest: BlockManifest) -> BlockLayoutConfiguration:
     """Return the manifest fields that define a block's PCB implementations."""
-    return {key: copy.deepcopy(manifest.get(key)) for key in _LAYOUT_MANIFEST_KEYS}
+    result: BlockLayoutConfiguration = {
+        "layouts": copy.deepcopy(manifest["layouts"]),
+        "default_layout": manifest["default_layout"],
+        "layout_file": manifest["layout_file"],
+        "layout_project_file": manifest["layout_project_file"],
+    }
+    layout_ports = manifest.get("layout_ports")
+    if layout_ports is not None:
+        result["layout_ports"] = copy.deepcopy(layout_ports)
+    return result
 
 
 def _set_layout_configuration(
@@ -1015,6 +1024,14 @@ def make_local_copy(source: BlockRecord, project_dir: Path) -> BlockRecord:
         json.dumps(manifest, indent=2, ensure_ascii=False) + "\n",
     )
     return _record(folder)
+
+
+def _local_copy_source_path(manifest: BlockManifest) -> Path:
+    """Resolve the required upstream source path recorded by a local block copy."""
+    source_path = manifest.get("source_path")
+    if not source_path:
+        raise ValueError("The project-local block has no recorded source library path.")
+    return Path(source_path).expanduser().resolve()
 
 
 def _instance_links_path(project_dir: Path) -> Path:
@@ -1127,7 +1144,7 @@ def synchronize_local_copy(local_block: BlockRecord) -> LocalCopySyncReport:
     manifest = local_block.manifest
     if not manifest.get("local_copy"):
         raise ValueError("Selected block is not a local project copy.")
-    source_path = Path(manifest["source_path"]).resolve()
+    source_path = _local_copy_source_path(manifest)
     source = _record(source_path)
     if source.manifest["block_id"] != manifest.get("source_block_id"):
         raise ValueError("The recorded source path now points to a different block.")
@@ -1465,7 +1482,7 @@ def publish_local_copy(local_block: BlockRecord) -> LocalCopyPublishReport:
     manifest = read_manifest(local_block.path)
     if not manifest.get("local_copy"):
         raise ValueError("Only a project-local block copy can be synchronized.")
-    source_path = Path(manifest["source_path"]).expanduser().resolve()
+    source_path = _local_copy_source_path(manifest)
     source = _record(source_path)
     if source.manifest.get("block_id") != manifest.get("source_block_id"):
         raise ValueError("The recorded source path now points to a different block.")
@@ -2005,8 +2022,9 @@ def synchronize_dependencies(
 
 def _dependency_anchor(block_path: Path, manifest: BlockManifest) -> Path:
     """Return the canonical source directory for resolving relative children."""
-    source_path = manifest.get("source_path") if manifest.get("local_copy") else None
-    return Path(source_path).expanduser().resolve() if source_path else Path(block_path).resolve()
+    if manifest.get("local_copy"):
+        return _local_copy_source_path(manifest).parent
+    return Path(block_path).resolve()
 
 
 def _dependency_path(
@@ -2052,7 +2070,7 @@ def resolve_dependency_occurrences(
     set, because reusing the same child block at two references is valid.
     """
     source_path = (
-        Path(block.manifest["source_path"]).expanduser().resolve()
+        _local_copy_source_path(block.manifest)
         if block.manifest.get("local_copy")
         else block.path.resolve()
     )
