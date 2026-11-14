@@ -54,6 +54,49 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
         self._dependency_patch.stop()
         self.temp.cleanup()
 
+    def test_edit_facade_prefers_native_symbol_editor_action_when_supported(self):
+        from kicad_blocks.repository import build_project_symbol_catalog
+
+        project_catalog = build_project_symbol_catalog(self.project, [self.library])
+        actions = []
+        calls = []
+
+        def run_action(action):
+            actions.append(action)
+            return SimpleNamespace(status=1)
+
+        def command_runner(arguments, **kwargs):
+            calls.append(arguments)
+            if arguments[1:4] == ["search", "--onlyvisible", "--name"]:
+                return SimpleNamespace(stdout="0x200", returncode=0)
+            if arguments[1:3] == ["getwindowname", "0x200"]:
+                return SimpleNamespace(
+                    stdout=f"Symbol Editor — {self.block.manifest['symbol_name']}",
+                    returncode=0,
+                )
+            return SimpleNamespace(stdout="", returncode=0)
+
+        opened = plugin_actions._edit_facade_symbol(
+            self.block,
+            SimpleNamespace(run_action=run_action),
+            "0x100",
+            project_catalog=project_catalog,
+            xdotool="/usr/bin/xdotool",
+            command_runner=command_runner,
+            pause=lambda _seconds: None,
+        )
+
+        self.assertTrue(opened)
+        self.assertEqual(actions, ["common.Control.showSymbolEditor"])
+        self.assertNotIn(
+            ["/usr/bin/xdotool", "key", "--clearmodifiers", "alt+t"],
+            calls,
+        )
+        self.assertIn(
+            ["/usr/bin/xdotool", "type", "--clearmodifiers", "--delay", "12", self.block.manifest["symbol_name"]],
+            calls,
+        )
+
     def test_edit_facade_targets_preview_symbol_without_schematic_selection(self):
         from kicad_blocks.repository import build_project_symbol_catalog
 
@@ -129,15 +172,21 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
         )
         self.assertGreaterEqual(search_count[0], 2)
 
-    def test_wayland_edit_facade_closes_browser_and_sends_native_menu_search(self):
+    def test_wayland_edit_facade_uses_native_action_before_wtype_search(self):
         from kicad_blocks.repository import build_project_symbol_catalog
 
         project_catalog = build_project_symbol_catalog(self.project, [self.library])
         calls = []
         closed = []
+        actions = []
+
         def command_runner(arguments, **kwargs):
             calls.append(arguments)
             return SimpleNamespace(stdout="", returncode=0)
+
+        def run_action(action):
+            actions.append(action)
+            return SimpleNamespace(status=1)
 
         with patch.dict(
             os.environ,
@@ -145,7 +194,7 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
         ):
             opened = plugin_actions._edit_facade_symbol(
                 self.block,
-                SimpleNamespace(),
+                SimpleNamespace(run_action=run_action),
                 None,
                 project_catalog=project_catalog,
                 wtype="/usr/bin/wtype",
@@ -155,13 +204,11 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
             )
 
         self.assertTrue(opened)
+        self.assertEqual(actions, ["common.Control.showSymbolEditor"])
         self.assertEqual(closed, [True])
         self.assertEqual(
             calls,
             [
-                ["/usr/bin/wtype", "-M", "alt", "-k", "t", "-m", "alt"],
-                ["/usr/bin/wtype", "-k", "s"],
-                ["/usr/bin/wtype", "-k", "Return"],
                 ["/usr/bin/wtype", "-M", "ctrl", "-k", "l", "-m", "ctrl"],
                 ["/usr/bin/wtype", "-M", "ctrl", "-k", "a", "-m", "ctrl"],
                 ["/usr/bin/wtype", "-d", "12", self.block.manifest["symbol_name"]],
@@ -175,6 +222,12 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
         project_catalog = build_project_symbol_catalog(self.project, [self.library])
         runner = Mock()
         closed = Mock()
+        actions = []
+
+        def run_action(action):
+            actions.append(action)
+            return SimpleNamespace(status=1)
+
         with (
             patch.object(plugin_actions.shutil, "which", return_value=None),
             patch.dict(
@@ -184,15 +237,16 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
         ):
             opened = plugin_actions._edit_facade_symbol(
                 self.block,
-                SimpleNamespace(),
+                SimpleNamespace(run_action=run_action),
                 None,
                 project_catalog=project_catalog,
                 command_runner=runner,
                 close_browser=closed,
             )
         self.assertFalse(opened)
+        self.assertEqual(actions, ["common.Control.showSymbolEditor"])
         runner.assert_not_called()
-        closed.assert_not_called()
+        closed.assert_called_once()
 
     def test_edit_facade_rejects_missing_symbol_in_project_catalog(self):
         from kicad_blocks.repository import build_project_symbol_catalog
