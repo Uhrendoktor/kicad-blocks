@@ -8,11 +8,11 @@ import hashlib
 import importlib.util
 import json
 import os
-from pathlib import Path
 import re
 import stat
 import subprocess
 import tempfile
+from pathlib import Path
 from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -139,8 +139,7 @@ def build_release_package(
                 info.external_attr = (stat.S_IFREG | 0o644) << 16
                 info.flag_bits |= 0x800
                 archive.writestr(
-                    info, path.read_bytes(),
-                    compress_type=ZIP_DEFLATED, compresslevel=9
+                    info, path.read_bytes(), compress_type=ZIP_DEFLATED, compresslevel=9
                 )
             info = ZipInfo(
                 f"{archive_root}/RELEASE_INFO.json",
@@ -151,17 +150,14 @@ def build_release_package(
             info.external_attr = (stat.S_IFREG | 0o644) << 16
             info.flag_bits |= 0x800
             archive.writestr(
-                info, release_info.encode("utf-8"),
-                compress_type=ZIP_DEFLATED, compresslevel=9
+                info, release_info.encode("utf-8"), compress_type=ZIP_DEFLATED, compresslevel=9
             )
         temp_path.replace(archive_path)
     finally:
         temp_path.unlink(missing_ok=True)
 
     digest = hashlib.sha256(archive_path.read_bytes()).hexdigest()
-    checksum_path.write_text(
-        f"{digest}  {archive_path.name}\n", encoding="ascii"
-    )
+    checksum_path.write_text(f"{digest}  {archive_path.name}\n", encoding="ascii")
     print(f"Built {archive_path} ({archive_path.stat().st_size} bytes)")
     print(f"SHA-256 {digest}")
     return archive_path, checksum_path
