@@ -83,43 +83,50 @@ class _GifFrameCount(Protocol):
 
 
 plugin_api = cast(_PluginActions, plugin_actions)
+
+
+def _private_action(name: str) -> Callable[..., None]:
+    """Resolve one production-private UI function without exposing its module symbol."""
+    return cast(Callable[..., None], getattr(plugin_actions, name))
+
+
 configure_tk_theme = cast(
-    Callable[[tk.Misc], None], getattr(plugin_actions, "_configure_tk_theme")
+    Callable[[tk.Misc], None], _private_action("_configure_tk_theme")
 )
 pick_block_for_placement = cast(
     Callable[[list[BlockRecord], tk.Misc], PlacementSelection | None],
-    getattr(plugin_actions, "_pick_block_for_placement"),
+    _private_action("_pick_block_for_placement"),
 )
 show_library_browser = cast(
     Callable[
         [tk.Misc, _SchematicFixture, _KiCadFixture, Path, Path | list[Path], str | None],
         None,
     ],
-    getattr(plugin_actions, "_show_library_browser"),
+    _private_action("_show_library_browser"),
 )
 show_library_roots_dialog = cast(
-    Callable[[tk.Misc], bool], getattr(plugin_actions, "_show_library_roots_dialog")
+    Callable[[tk.Misc], bool], _private_action("_show_library_roots_dialog")
 )
-show_action_hub = cast(Callable[[tk.Misc], ttk.Notebook], getattr(plugin_actions, "_show_action_hub"))
+show_action_hub = cast(Callable[[tk.Misc], ttk.Notebook], _private_action("_show_action_hub"))
 show_block_variant_editor = cast(
     Callable[[BlockRecord, tk.Misc], Path | None],
-    getattr(plugin_actions, "_show_block_variant_editor"),
+    _private_action("_show_block_variant_editor"),
 )
 show_block_layout_editor = cast(
     Callable[[BlockRecord, tk.Misc], bool | None],
-    getattr(plugin_actions, "_show_block_layout_editor"),
+    _private_action("_show_block_layout_editor"),
 )
 ask_layout_details = cast(
     Callable[[tk.Misc, BlockRecord], LayoutDialogResult | None],
-    getattr(plugin_actions, "_ask_layout_details"),
+    _private_action("_ask_layout_details"),
 )
 ask_implementation_details = cast(
     Callable[..., tuple[str, str] | None],
-    getattr(plugin_actions, "_ask_implementation_details"),
+    _private_action("_ask_implementation_details"),
 )
 ask_create_block_details = cast(
     Callable[[tk.Misc, Path], tuple[str, str] | None],
-    getattr(plugin_actions, "_ask_create_block_details"),
+    _private_action("_ask_create_block_details"),
 )
 
 type _ModalResult = Path | tuple[str, str] | LayoutDialogResult | bool | None
