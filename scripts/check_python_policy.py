@@ -212,22 +212,16 @@ def _check_pyright_inventory() -> list[str]:
         if relative not in discovered:
             errors.append(f"python policy: stale Pyright exclusion for missing module {relative}")
         if relative not in excluded:
-            errors.append(
-                f"pyrightconfig.json: reviewed exclusion {relative} is not in the exclude list"
-            )
+            errors.append(f"pyrightconfig.json: reviewed exclusion {relative} is not in the exclude list")
         if not rationale.strip():
-            errors.append(
-                f"python policy: Pyright exclusion {relative} has no rationale"
-            )
+            errors.append(f"python policy: Pyright exclusion {relative} has no rationale")
     for relative in excluded:
         if (
             relative.startswith("plugin/kicad-blocks/kicad_blocks/")
             and relative.endswith(".py")
             and relative not in REVIEWED_PYRIGHT_EXCLUSIONS
         ):
-            errors.append(
-                f"python policy: unreviewed exact Pyright exclusion {relative}"
-            )
+            errors.append(f"python policy: unreviewed exact Pyright exclusion {relative}")
     return errors
 
 
@@ -301,8 +295,7 @@ def _check_annotation_ratchet(base_ref: str) -> list[str]:
     for relative in (line for line in changed.splitlines() if line):
         path = ROOT / relative
         if not any(
-            relative == root or relative.startswith(f"{root}/")
-            for root in ANNOTATION_RATCHET_ROOTS
+            relative == root or relative.startswith(f"{root}/") for root in ANNOTATION_RATCHET_ROOTS
         ):
             continue
         if not path.is_file():
