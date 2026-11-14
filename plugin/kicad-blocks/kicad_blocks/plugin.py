@@ -4222,6 +4222,7 @@ def _show_block_variant_editor(
 
     frame = ttk.Frame(dialog, padding=14)
     frame.pack(fill="both", expand=True)
+    palette = getattr(parent, "_kicad_blocks_palette", {})
     frame.columnconfigure(0, weight=1)
     frame.rowconfigure(2, weight=1)
     ttk.Label(
@@ -4414,7 +4415,7 @@ def _show_block_variant_editor(
             parent=dialog,
         ):
             return
-        removed = variants.pop(index)
+        variants.pop(index)
         if is_default:
             default_variant[0] = ""
         dirty[0] = True
