@@ -105,6 +105,7 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
         project_catalog = build_project_symbol_catalog(self.project, [self.library])
         calls = []
         pauses = []
+        focus_reads = [0]
         search_count = [0]
 
         def command_runner(arguments, **kwargs):
@@ -123,7 +124,11 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
             if arguments[1:3] == ["getwindowclassname", "0x100"]:
                 return SimpleNamespace(stdout="eeschema", returncode=0)
             if arguments[1:2] == ["getwindowfocus"]:
-                return SimpleNamespace(stdout="0x100", returncode=0)
+                focus_reads[0] += 1
+                return SimpleNamespace(
+                    stdout="0x100" if focus_reads[0] == 1 else "0x200",
+                    returncode=0,
+                )
             if arguments[1:3] == ["getwindowpid", "0x100"]:
                 return SimpleNamespace(stdout="1001", returncode=0)
             if arguments[1:3] == ["getwindowname", "0x200"]:
@@ -148,6 +153,9 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
         self.assertIn(["/usr/bin/xdotool", "windowraise", "0x100"], calls)
         self.assertIn(["/usr/bin/xdotool", "windowactivate", "--sync", "0x100"], calls)
         self.assertIn(["/usr/bin/xdotool", "windowfocus", "--sync", "0x100"], calls)
+        self.assertIn(["/usr/bin/xdotool", "windowraise", "0x200"], calls)
+        self.assertIn(["/usr/bin/xdotool", "windowactivate", "--sync", "0x200"], calls)
+        self.assertIn(["/usr/bin/xdotool", "windowfocus", "--sync", "0x200"], calls)
         self.assertIn(["/usr/bin/xdotool", "key", "--clearmodifiers", "alt+t"], calls)
         self.assertIn(["/usr/bin/xdotool", "key", "--clearmodifiers", "Home"], calls)
         self.assertEqual(
@@ -170,6 +178,7 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
         project_catalog = build_project_symbol_catalog(self.project, [self.library])
         calls = []
         pauses = []
+        focus_reads = [0]
         search_count = [0]
 
         def command_runner(arguments, **kwargs):
@@ -188,7 +197,11 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
             if arguments[1:3] == ["getwindowclassname", "0x100"]:
                 return SimpleNamespace(stdout="eeschema", returncode=0)
             if arguments[1:2] == ["getwindowfocus"]:
-                return SimpleNamespace(stdout="0x100", returncode=0)
+                focus_reads[0] += 1
+                return SimpleNamespace(
+                    stdout="0x100" if focus_reads[0] == 1 else "0x200",
+                    returncode=0,
+                )
             if arguments[1:3] == ["getwindowpid", "0x100"]:
                 return SimpleNamespace(stdout="1001", returncode=0)
             if arguments[1:3] == ["getwindowname", "0x200"]:
@@ -213,6 +226,9 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
         self.assertIn(["/usr/bin/xdotool", "windowraise", "0x100"], calls)
         self.assertIn(["/usr/bin/xdotool", "windowactivate", "--sync", "0x100"], calls)
         self.assertIn(["/usr/bin/xdotool", "windowfocus", "--sync", "0x100"], calls)
+        self.assertIn(["/usr/bin/xdotool", "windowraise", "0x200"], calls)
+        self.assertIn(["/usr/bin/xdotool", "windowactivate", "--sync", "0x200"], calls)
+        self.assertIn(["/usr/bin/xdotool", "windowfocus", "--sync", "0x200"], calls)
         self.assertIn(["/usr/bin/xdotool", "key", "--clearmodifiers", "alt+t"], calls)
         self.assertIn(["/usr/bin/xdotool", "key", "--clearmodifiers", "Home"], calls)
         self.assertEqual(

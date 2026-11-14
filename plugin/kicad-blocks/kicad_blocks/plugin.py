@@ -2526,7 +2526,24 @@ def _edit_facade_symbol(
     if close_browser is not None:
         close_browser()
 
+    # The new editor can be visible before the window manager has activated it.
+    # Raise and activate it before using the global library-tree search shortcut.
+    send("windowraise", symbol_editor_id, check=False)
+    send("windowactivate", "--sync", symbol_editor_id, check=False)
     send("windowfocus", "--sync", symbol_editor_id)
+    pause(0.15)
+    focused_id = send("getwindowfocus", check=False)
+    if focused_id != str(symbol_editor_id):
+        focused_title = (
+            send("getwindowname", focused_id, check=False)
+            if focused_id else "<no focused window>"
+        )
+        raise RuntimeError(
+            "Could not activate the new Symbol Editor window for Edit Facade. "
+            f"Focus remains on {focused_title!r}; expected {symbol_editor_id!r}. "
+            f"Open Tools → Symbol Editor manually, then search for {lib_id}."
+        )
+
     if initial_symbol_editor is not None:
         # An already-open editor may have the drawing canvas, not its filter,
         # focused. Do not type into an unknown widget or disturb unsaved edits.
