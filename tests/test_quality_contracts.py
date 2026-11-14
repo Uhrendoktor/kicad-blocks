@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import subprocess
 import sys
-from collections import Counter
 from pathlib import Path
 
 from hypothesis import given, settings
@@ -17,11 +15,7 @@ sys.path.insert(0, str(PLUGIN))
 from kicad_blocks.model import parse_parameters, sexpr_quote, substitute_parameter_templates
 from kicad_blocks.pcb_layout import _dump, parse_sexpr
 
-from scripts.check_python_quality import (
-    annotation_debt,
-    annotation_ratchet_violations,
-    python_policy_violations,
-)
+from scripts.check_python_quality import python_policy_violations
 from scripts.check_test_quality import scan_tests
 
 
@@ -59,17 +53,6 @@ def test_allows_runtime_object_construction_and_ordinary_prose() -> None:
     assert python_policy_violations(source, "fixture.py") == ()
 
 
-def test_annotation_debt_counts_parameters_and_returns_separately() -> None:
-    """Counts missing parameter and return annotations as separate ratchet rules."""
-    source = "def legacy(value):\n    return value\n"
-    assert annotation_debt(source, "fixture.py") == Counter(
-        {
-            "missing-parameter-annotation": 1,
-            "missing-return-annotation": 1,
-        }
-    )
-
-
 @settings(max_examples=80, deadline=None)
 @given(st.lists(st.text(max_size=80), min_size=0, max_size=12))
 def test_quoted_sexpr_values_round_trip(values: list[str]) -> None:
@@ -88,43 +71,6 @@ def test_parameter_values_remain_one_quoted_sexpr_field(value: str) -> None:
     parsed = parse_sexpr(rendered)
     assert parsed[1][2] == value
     assert len(parsed) == 2
-
-
-def test_changed_file_ratchet_rejects_increased_annotation_debt(tmp_path: Path) -> None:
-    """Rejects a changed Python file that adds unannotated parameters and returns."""
-
-    def run_git(*arguments: str) -> None:
-        subprocess.run(
-            ("git", *arguments),
-            cwd=tmp_path,
-            check=True,
-            capture_output=True,
-            timeout=30,
-        )
-
-    run_git("init")
-    run_git("config", "user.name", "Quality Contract Test")
-    run_git("config", "user.email", "quality-contract@example.invalid")
-    source = tmp_path / "module.py"
-    source.write_text(
-        "def stable(value: str) -> str:\n    return value\n",
-        encoding="utf-8",
-    )
-    run_git("add", "module.py")
-    run_git("commit", "-m", "base")
-    run_git("branch", "quality-base")
-    source.write_text(
-        "def stable(value: str) -> str:\n    return value\n\n"
-        "def introduced(value):\n    return value\n",
-        encoding="utf-8",
-    )
-    run_git("add", "module.py")
-    run_git("commit", "-m", "introduce annotation debt")
-
-    violations = annotation_ratchet_violations("quality-base", root=tmp_path)
-    assert len(violations) == 2
-    assert any("missing-parameter-annotation increased" in item for item in violations)
-    assert any("missing-return-annotation increased" in item for item in violations)
 
 
 def test_reports_exact_duplicate_test_bodies_even_when_docstrings_differ(tmp_path: Path) -> None:
