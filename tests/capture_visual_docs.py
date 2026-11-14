@@ -522,7 +522,7 @@ def capture_ui_workflows(library_roots, record, project_dir: Path, output_dir: P
             configuration_run = subprocess.run(
                 [
                     sys.executable,
-                    str(ROOT / "tests" / "test_instance_configuration_gui.py"),
+                    str(ROOT / "tests" / "acceptance_instance_configuration_gui.py"),
                     "--screenshot",
                     str(configuration_screenshot),
                 ],
