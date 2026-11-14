@@ -2553,6 +2553,51 @@ def _native_symbol_preview_photo(
 _NATIVE_PREVIEW_CACHE: dict[tuple, object] = {}
 
 
+def _normalize_schematic_preview_svg(svg_file: Path, output_dir: Path) -> Path:
+    """Give KiCad's SVG export an explicit pixel viewport for resvg."""
+    import xml.etree.ElementTree as ET
+
+    root = ET.parse(svg_file).getroot()
+    view_box = root.attrib.get("viewBox") or root.attrib.get("viewbox") or ""
+    view_box_values = re.findall(
+        r"[-+]?(?:\d*\.\d+|\d+\.?\d*)(?:[eE][-+]?\d+)?",
+        view_box,
+    )
+    if len(view_box_values) == 4:
+        try:
+            view_width = float(view_box_values[2])
+            view_height = float(view_box_values[3])
+        except ValueError:
+            view_width = view_height = 0.0
+        if view_width > 0 and view_height > 0:
+            root.set("width", f"{view_width:g}px")
+            root.set("height", f"{view_height:g}px")
+    else:
+        def valid_dimension(value: str | None) -> bool:
+            if not value:
+                return False
+            match = re.fullmatch(
+                r"\s*([+]?(?:\d+(?:\.\d*)?|\.\d+))(?:px|pt|pc|mm|cm|in)?\s*",
+                value,
+                flags=re.IGNORECASE,
+            )
+            return bool(match and float(match.group(1)) > 0)
+
+        if not valid_dimension(root.attrib.get("width")) or not valid_dimension(
+            root.attrib.get("height")
+        ):
+            root.set("width", "300px")
+            root.set("height", "150px")
+
+    normalized = output_dir / f"{svg_file.stem}-preview.svg"
+    ET.ElementTree(root).write(
+        normalized,
+        encoding="utf-8",
+        xml_declaration=True,
+    )
+    return normalized
+
+
 def _native_schematic_preview_pages(
     record,
     implementation: str = "",
@@ -2641,8 +2686,12 @@ def _native_schematic_preview_pages(
                     suffix = suffix[len(prefix):]
                 suffix = re.sub(r"[-_]+", " ", suffix).strip()
                 label = f"Sheet {index + 1}" + (f" · {suffix}" if suffix else "")
+            normalized_svg = _normalize_schematic_preview_svg(
+                svg_file,
+                output_dir,
+            )
             png_data = resvg_py.svg_to_bytes(
-                svg_path=str(svg_file),
+                svg_path=str(normalized_svg),
                 width=int(width),
                 height=int(width),
             )
