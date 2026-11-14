@@ -418,7 +418,7 @@ def _measure_text_box(
         (sum(_glyph_advance(character) for character in line) for line in lines),
         default=0.0,
     )
-    width = 2 * padding + max(line_width * size * 1.12, size)
+    width = 2 * padding + max(line_width * size * 1.30, size)
     height = 2 * padding + len(lines) * size * 1.55
     return round(width, 3), round(height, 3)
 
