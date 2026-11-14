@@ -77,6 +77,8 @@ Open **Browse and Place Functional Blocks**, then choose **Manage Libraries**. T
 
 Registering a folder does not move its contents. Unregistering a folder does not delete it.
 
+Each shared library is initialized with a managed `.gitignore` section for generated previews, caches, validation/ERC reports, KiCad lock/settings/backups, and common temporary files. Any existing custom `.gitignore` rules are preserved; block source files and the `KBlocks.kicad_sym` catalog remain trackable.
+
 To override the default destination, set the environment variable before launching KiCad:
 
 ~~~bash
