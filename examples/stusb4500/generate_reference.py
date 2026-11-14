@@ -33,9 +33,16 @@ PROJECT = "functional-block-implementation"
 # Declarative circuit groups.  Their page-level placement, frame bounds,
 # titles and descriptions are derived from member pin geometry.
 GROUP_GAP_MM = 2.54
-GROUP_X_PADDING_MM = 12.70
-GROUP_TOP_PADDING_MM = 17.78
-GROUP_BOTTOM_PADDING_MM = 5.08
+GROUP_X_PADDING_MM = 13.97
+GROUP_TOP_PADDING_MM = 20.32
+GROUP_BOTTOM_PADDING_MM = 7.62
+FRAME_CONTENT_PADDING_MM = 2.54
+FIELD_SYMBOL_MAX_GAP_MM = 8.00
+WIRE_LENGTH_BUDGETS_MM = {"power-switch": 105.00}
+COMMON_PIN_NET_GROUPS = (
+    {"name": "GND", "pins": (("C2", "2"), ("C3", "2"))},
+)
+REQUIRED_NO_CONNECT_PINS = ("U1.3",)
 GROUP_DESCRIPTION_FONT_MM = 0.65
 GROUP_EVIDENCE = {
     "datasheet": DATASHEET,
@@ -71,8 +78,9 @@ SCHEMATIC_GROUPS = (
     },
     {
         "id": "vbus-monitor", "title": "VBUS MONITOR / FILTER",
-        "description": "VBUS filter, fast-charge path and VBUS_VS_DISCH divider. D4 part is unspecified; verify its rating.",
-        "members": ("D4", "C4", "R1", "R4"), "lane": "main", "order": 2,
+        "description": "VBUS filter and fast-charge path.\nR1/R4 form the VBUS_VS_DISCH monitor divider; verify D4 rating.",
+        "members": ("D4", "C4", "R1", "R4"),
+        "documentation_members": ("R1", "R4"), "lane": "main", "order": 2,
         "layout": {
             "anchor": "D4", "anchor_y_mm": 111.76,
             "constraints": (
@@ -118,7 +126,7 @@ SCHEMATIC_GROUPS = (
             "anchor": "T4", "anchor_y_mm": 104.14,
             "constraints": (
                 {"kind": "offset", "component": "T1", "to": "T4", "dx_mm": 40.64, "dy_mm": 0.0},
-                {"kind": "midpoint_offset", "component": "R10", "between": ("T4", "T1"), "dx_mm": 0.0, "dy_mm": 27.94},
+                {"kind": "midpoint_offset", "component": "R10", "between": ("T4", "T1"), "dx_mm": 0.0, "dy_mm": 17.78},
                 {"kind": "offset", "component": "R11", "to": "R10", "dx_mm": 7.62, "dy_mm": 7.62},
                 {"kind": "offset", "component": "R13", "to": "R11", "dx_mm": 20.32, "dy_mm": 0.0},
             ),
@@ -126,8 +134,9 @@ SCHEMATIC_GROUPS = (
     },
     {
         "id": "vsnk-output", "title": "VSNK OUTPUT",
-        "description": "Protected sink output with local bypass and TVS components.",
-        "members": ("R2", "C10", "D11"), "lane": "main", "order": 5,
+        "description": "Protected sink output with local bypass and TVS protection.\nR2 is the DISCH-to-VSNK discharge path.",
+        "members": ("R2", "C10", "D11"),
+        "documentation_members": ("R2",), "lane": "main", "order": 5,
         "layout": {
             "anchor": "C10", "anchor_y_mm": 99.06,
             "constraints": (
@@ -149,9 +158,9 @@ ADJACENT_COMPONENT_PAIRS = (
     {"left": "C2", "right": "C3", "body_width_mm": 2.54, "max_gap_mm": 2.54},
 )
 COMPONENT_PROPERTY_LIMITS_MM = {
-    "resistor_reference": 4.00,
-    "capacitor_reference": 6.00,
-    "capacitor_value": 6.00,
+    "resistor_reference": 3.00,
+    "capacitor_reference": 4.00,
+    "capacitor_value": 5.50,
 }
 
 
@@ -747,7 +756,7 @@ def _functional_group(group: dict, bounds: tuple[float, float, float, float]) ->
     title = str(group["title"])
     width = right - left
     tab_width = min(
-        width, max(12.70, _measure_text_box(title, 1.27, 1.27)[0] + 2.54),
+        width, max(12.70, _measure_text_box(title, 1.27, 1.27)[0] + 5.08),
     )
     description = _group_description(group)
     return [
@@ -759,9 +768,9 @@ def _functional_group(group: dict, bounds: tuple[float, float, float, float]) ->
             box_width=tab_width - 2.54,
         ),
         _graphic_text(
-            description, left + 1.27, top + 1.27, GROUP_DESCRIPTION_FONT_MM,
-            f"group-description:{group['id']}", padding=1.27, border=False,
-            box_width=width - 2.54,
+            description, left + 2.54, top + 2.54, GROUP_DESCRIPTION_FONT_MM,
+            f"group-description:{group['id']}", padding=1.27, border=True,
+            box_width=width - 5.08,
         ),
     ]
 
@@ -913,11 +922,11 @@ def generate_reference_schematic(destination: Path) -> Path:
                 datasheet = str(prop[2])
         reference_justify = None
         if reference == "U1":
-            # Keep the fields close to the right side of the IC while
-            # right-aligning them inside the automatically sized group frame.
-            reference_x, reference_y = sx + 22.86, sy - 41.91
-            value_x, value_y = sx + 22.86, sy - 39.37
-            reference_justify = "right"
+            # Put both fields immediately outside the right edge of the QFN.
+            # Left justification keeps the long value clear of the body.
+            reference_x, reference_y = sx + 15.24, sy - 17.78
+            value_x, value_y = sx + 15.24, sy - 15.24
+            reference_justify = "left"
         elif reference == "J1":
             # Put the connector fields immediately above its tall body.
             reference_x, reference_y = sx, sy - 33.02
@@ -936,19 +945,24 @@ def generate_reference_schematic(destination: Path) -> Path:
                 # Vertical resistors have a terminal directly above the body.
                 # Put the reference beside the body instead of on that pin.
                 ref_offsets = {
-                    "R1": -3.81, "R2": 3.81, "R4": 3.81,
-                    "R10": -3.81, "R11": 3.81, "R13": -3.81, "R55": -2.54,
+                    "R1": -2.54, "R2": 2.54, "R4": 2.54,
+                    "R10": -2.54, "R11": 2.54, "R13": -2.54, "R55": -2.54,
                 }
                 dx = ref_offsets[reference]
                 reference_x, reference_y = sx + dx, sy
                 reference_justify = "left" if dx > 0 else "right"
+        elif reference == "D1":
+            # The ESD array's longer value sits completely above its symbol body.
+            reference_x, reference_y = sx, sy - 8.89
+            value_x, value_y = sx, sy - 6.35
         elif reference.startswith("D"):
             # Keep diode identifiers close to the symbol, not floating above it.
             reference_x, reference_y = sx, sy - 6.35
             value_x, value_y = sx, sy - 3.81
         elif reference.startswith("C"):
-            reference_x, reference_y = sx - 5.08, sy - 2.54
-            value_x, value_y = sx - 5.08, sy + 2.54
+            # Put references outside the vertical decoupler wire corridor.
+            reference_x, reference_y = sx - 3.81, sy
+            value_x, value_y = sx - 4.45, sy + 2.54
         else:
             reference_x, reference_y = sx, sy - 8
             value_x, value_y = sx, sy - 5
@@ -970,6 +984,7 @@ def generate_reference_schematic(destination: Path) -> Path:
             _prop(
                 "Value", value, 1, value_x, value_y,
                 font_size=0.72 if reference.startswith("R") else 1.10,
+                justify=reference_justify if reference == "U1" else None,
                 angle=field_angle,
             ),
             _prop("Footprint", footprint, 2, sx, sy, True),
