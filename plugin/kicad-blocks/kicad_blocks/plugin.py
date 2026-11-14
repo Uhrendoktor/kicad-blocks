@@ -19,6 +19,7 @@ from typing import TYPE_CHECKING, Protocol, cast
 # The core block model and IPC helpers must remain importable in headless
 # environments. Load Tkinter only when the interactive manager is invoked.
 if TYPE_CHECKING:
+    import tkinter as tk
     import tkinter as tkinter_types
     import tkinter.ttk as ttk_types
     from tkinter import filedialog, messagebox, simpledialog, ttk
@@ -196,7 +197,7 @@ def _system_prefers_dark_theme() -> bool:
     return False
 
 
-def _configure_tk_theme(root: tkinter_types.Misc) -> None:
+def _configure_tk_theme(root: tkinter_types.Tk) -> None:
     """Apply a compact KiCad-compatible palette to themed and classic Tk widgets."""
     dark = _system_prefers_dark_theme()
     colors = (
@@ -233,7 +234,7 @@ def _configure_tk_theme(root: tkinter_types.Misc) -> None:
     style = ttk.Style(root)
     with contextlib.suppress(tk.TclError):
         style.theme_use("clam")
-    root.configure(background=colors["background"], highlightthickness=0)
+    root.configure({"background": colors["background"], "highlightthickness": 0})
     for option, value in {
         "*Background": colors["background"],
         "*Foreground": colors["foreground"],
@@ -456,7 +457,7 @@ def _configure_tk_theme(root: tkinter_types.Misc) -> None:
         background=[("active", colors["accent"]), ("pressed", colors["accent"])],
     )
     style.configure("TSeparator", background=colors["border"])
-    root._kicad_blocks_palette = colors
+    setattr(root, "_kicad_blocks_palette", colors)
 
 
 def _editor_window_id_for_widget(window: tkinter_types.Misc) -> str | None:
@@ -547,7 +548,7 @@ def _attach_tk_window_to_editor(window, editor_window_id: str | None) -> bool:
 
 
 def _attach_process_window_to_editor(
-    process: subprocess.Popen,
+    process: subprocess.Popen[str],
     editor_window_id: str | None,
     *,
     target_name: str | None = None,
@@ -634,7 +635,7 @@ def _add_tooltip(widget: tkinter_types.Misc, text: str) -> None:
         palette = getattr(widget.winfo_toplevel(), "_kicad_blocks_palette", {})
         background = palette.get("surface_alt", "#e8eaed")
         foreground = palette.get("foreground", "#20252a")
-        popup = tkinter_types.Toplevel(widget)
+        popup = tk.Toplevel(widget)
         popup.wm_overrideredirect(True)
         with contextlib.suppress(tk.TclError):
             popup.wm_attributes("-topmost", True)
@@ -695,14 +696,14 @@ def _create_action_icon(parent: tkinter_types.Misc, name: str) -> tkinter_types.
         import cairosvg
 
         png = cairosvg.svg2png(bytestring=svg.encode("utf-8"), output_width=20, output_height=20)
-        image = tkinter_types.PhotoImage(data=base64.b64encode(png).decode("ascii"), master=parent)
+        image = tk.PhotoImage(data=base64.b64encode(png).decode("ascii"), master=parent)
     except (ImportError, OSError, tk.TclError, ValueError):
         LOG.debug("Could not render toolbar icon %s", name, exc_info=True)
         return None
     owner = parent.winfo_toplevel()
     images = getattr(owner, "_kicad_blocks_action_icons", {})
     images[name] = image
-    owner._kicad_blocks_action_icons = images
+    setattr(owner, "_kicad_blocks_action_icons", images)
     return image
 
 
@@ -711,10 +712,12 @@ def _action_button(
 ) -> ttk_types.Button:
     """Create a consistently padded, semantic icon-and-label action button."""
     image = _create_action_icon(parent, icon)
-    options = {"text": text, "command": command, "padding": (9, 6)}
-    if image is not None:
-        options.update({"image": image, "compound": "left"})
-    button = ttk.Button(parent, **options)
+    if image is None:
+        button = ttk.Button(parent, text=text, command=command, padding=(9, 6))
+    else:
+        button = ttk.Button(
+            parent, text=text, command=command, padding=(9, 6), image=image, compound="left"
+        )
     _add_tooltip(button, tooltip)
     return button
 
