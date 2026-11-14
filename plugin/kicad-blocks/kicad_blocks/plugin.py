@@ -276,13 +276,13 @@ class _CommandResult(Protocol):
 class _TkPaletteOwner(Protocol):
     """Tk window carrying the selected KiCad Blocks palette."""
 
-    _kicad_blocks_palette: dict[str, str]
+    kicad_blocks_palette: dict[str, str]
 
 
 class _TkActionIconOwner(Protocol):
     """Tk window retaining PhotoImage references used by action buttons."""
 
-    _kicad_blocks_action_icons: dict[str, tkinter_types.PhotoImage]
+    kicad_blocks_action_icons: dict[str, tkinter_types.PhotoImage]
 
 
 class _TkGeometryWindow(Protocol):
@@ -665,7 +665,7 @@ def _configure_tk_theme(root: tkinter_types.Tk) -> None:
         background=[("active", colors["accent"]), ("pressed", colors["accent"])],
     )
     style.configure("TSeparator", background=colors["border"])
-    cast(_TkPaletteOwner, root)._kicad_blocks_palette = colors
+    cast(_TkPaletteOwner, root).kicad_blocks_palette = colors
 
 
 def _editor_window_id_for_widget(window: tkinter_types.Misc | _TkGeometryWindow) -> str | None:
@@ -846,7 +846,7 @@ def _add_tooltip(widget: tkinter_types.Misc, text: str) -> None:
     def show(_event: tkinter_types.Event | None = None) -> None:
         if tooltip[0] is not None or not widget.winfo_exists():
             return
-        palette = getattr(widget.winfo_toplevel(), "_kicad_blocks_palette", {})
+        palette = getattr(widget.winfo_toplevel(), "kicad_blocks_palette", {})
         background = palette.get("surface_alt", "#e8eaed")
         foreground = palette.get("foreground", "#20252a")
         popup = tk.Toplevel(widget)
@@ -898,7 +898,7 @@ def _create_action_icon(parent: tkinter_types.Misc, name: str) -> tkinter_types.
     path_data = drawings.get(name)
     if not path_data:
         return None
-    palette = getattr(parent.winfo_toplevel(), "_kicad_blocks_palette", {})
+    palette = getattr(parent.winfo_toplevel(), "kicad_blocks_palette", {})
     accent = palette.get("accent", "#4c789f")
     svg = (
         '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">'
@@ -915,11 +915,12 @@ def _create_action_icon(parent: tkinter_types.Misc, name: str) -> tkinter_types.
         LOG.debug("Could not render toolbar icon %s", name, exc_info=True)
         return None
     owner = parent.winfo_toplevel()
+    image_owner = cast(_TkActionIconOwner, owner)
     images: dict[str, tkinter_types.PhotoImage] = getattr(
-        owner, "_kicad_blocks_action_icons", {}
+        image_owner, "kicad_blocks_action_icons", {}
     )
     images[name] = image
-    setattr(owner, "_kicad_blocks_action_icons", images)
+    image_owner.kicad_blocks_action_icons = images
     return image
 
 
@@ -1653,7 +1654,7 @@ def _pick_block_for_placement(
     tree.column("library", width=130, minwidth=100, stretch=False)
     scroll = ttk.Scrollbar(left, orient="vertical", command=tree.yview, style="Vertical.TScrollbar")
     tree.configure(yscrollcommand=scroll.set)
-    palette = getattr(parent, "_kicad_blocks_palette", {})
+    palette = getattr(parent, "kicad_blocks_palette", {})
     tree.tag_configure("even", background=palette.get("surface", "#f4f5f6"))
     tree.tag_configure("odd", background=palette.get("surface_alt", "#e8eaed"))
     tree.grid(row=0, column=0, sticky="nsew")
@@ -1907,7 +1908,7 @@ def _pick_record(
         results_frame, orient="vertical", command=tree.yview, style="Vertical.TScrollbar"
     )
     tree.configure(yscrollcommand=scrollbar.set)
-    palette = getattr(parent, "_kicad_blocks_palette", {})
+    palette = getattr(parent, "kicad_blocks_palette", {})
     tree.tag_configure("even", background=palette.get("surface", "#f4f5f6"))
     tree.tag_configure("odd", background=palette.get("surface_alt", "#e8eaed"))
     tree.grid(row=0, column=0, sticky="nsew")
@@ -2380,7 +2381,7 @@ def _ask_create_block_details(
         text="Create a reusable block from this sheet",
         font=("TkDefaultFont", 12, "bold"),
     ).pack(anchor="w")
-    palette = getattr(parent, "_kicad_blocks_palette", {})
+    palette = getattr(parent, "kicad_blocks_palette", {})
     ttk.Label(
         frame,
         text=f"Source sheet: {source_sheet.name}",
@@ -4449,7 +4450,7 @@ def _show_block_variant_editor(
     tree.grid(row=0, column=0, sticky="nsew")
     scroll.grid(row=0, column=1, sticky="ns")
 
-    palette = getattr(parent, "_kicad_blocks_palette", {})
+    palette = getattr(parent, "kicad_blocks_palette", {})
     tree.tag_configure("even", background=palette.get("surface", "#f4f5f6"))
     tree.tag_configure("odd", background=palette.get("surface_alt", "#e8eaed"))
     variants = [
@@ -4702,7 +4703,7 @@ def _show_library_roots_dialog(parent: tkinter_types.Misc) -> bool:
         yscrollcommand=vertical_scroll.set,
         xscrollcommand=horizontal_scroll.set,
     )
-    palette = getattr(parent, "_kicad_blocks_palette", {})
+    palette = getattr(parent, "kicad_blocks_palette", {})
     tree.tag_configure("even", background=palette.get("surface", "#f4f5f6"))
     tree.tag_configure("odd", background=palette.get("surface_alt", "#e8eaed"))
     tree.grid(row=0, column=0, sticky="nsew")
@@ -4956,7 +4957,7 @@ def _show_library_browser(
     records_by_id: dict[str, BlockRecord] = {}
 
     style = ttk.Style(window)
-    palette = getattr(window, "_kicad_blocks_palette", {})
+    palette = getattr(window, "kicad_blocks_palette", {})
     theme_background = (
         palette.get("background")
         or style.lookup("TFrame", "background")
