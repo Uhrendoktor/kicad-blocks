@@ -7,6 +7,7 @@ validated at its file boundary and then represented by one of these schemas.
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import TYPE_CHECKING, Literal, NotRequired, Required, TypedDict
 
 if TYPE_CHECKING:
@@ -14,6 +15,7 @@ if TYPE_CHECKING:
 
 ParameterType = Literal["string", "number", "integer", "boolean"]
 InterfaceSource = Literal["manual", "hierarchical_labels"]
+FileSystemPath = str | Path
 ParameterScalar = str | int | float | bool | None
 
 
@@ -47,8 +49,8 @@ class BlockVariantInput(TypedDict, total=False):
     """Variant source accepted when creating a block."""
 
     value: Required[str]
-    path: str
-    file: str
+    path: FileSystemPath
+    file: FileSystemPath
     layout_id: str
 
 
@@ -65,10 +67,10 @@ class BlockLayoutInput(TypedDict, total=False):
 
     id: str
     name: str
-    path: str
-    file: str
-    project_path: str
-    project_file: str
+    path: FileSystemPath
+    file: FileSystemPath
+    project_path: FileSystemPath
+    project_file: FileSystemPath
     ports: dict[str, str]
     legacy: bool
 
