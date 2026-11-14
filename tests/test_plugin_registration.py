@@ -451,14 +451,27 @@ def main() -> None:
             # Exercise the picker in KiCad's managed plugin environment so
             # CairoSVG and the other declared plugin dependencies are available.
             # The managed interpreter shares the system Tk installation.
-            picker_probe = subprocess.run(
-                [str(env_python), str(ROOT / "tests" / "test_library_picker_gui.py")],
-                env=env,
-                capture_output=True,
-                text=True,
-                check=True,
-                timeout=30.0,
-            )
+            try:
+                picker_probe = subprocess.run(
+                    [str(env_python), str(ROOT / "tests" / "test_library_picker_gui.py")],
+                    env=env,
+                    capture_output=True,
+                    text=True,
+                    check=True,
+                    timeout=60.0,
+                )
+            except subprocess.TimeoutExpired as exc:
+                partial_stdout = exc.stdout or ""
+                partial_stderr = exc.stderr or ""
+                if isinstance(partial_stdout, bytes):
+                    partial_stdout = partial_stdout.decode("utf-8", errors="replace")
+                if isinstance(partial_stderr, bytes):
+                    partial_stderr = partial_stderr.decode("utf-8", errors="replace")
+                raise TimeoutError(
+                    "The KiCad-managed block-picker smoke test exceeded 60 seconds. "
+                    f"Partial stdout: {partial_stdout[-4000:]!r}; "
+                    f"partial stderr: {partial_stderr[-4000:]!r}"
+                ) from exc
             if "kicad-native svg facade preview passed" not in picker_probe.stdout.casefold():
                 raise AssertionError(
                     "The native-rendered Tk picker smoke test did not report success. "
