@@ -33,6 +33,7 @@ MODULE_PURPOSES = {
     "test_publish_release.py": "Versioned release asset upload, checksum verification, and immutable existing-asset behavior.",
     "test_release_package.py": "Deterministic release archive contents, installation from an extracted archive, and dependency URL consistency.",
     "test_stusb4500_reference.py": "Generated STUSB4500 reference design structure, electrical pin shapes, grid alignment, and functional PCB zoning.",
+    "test_test_quality.py": "High-confidence AST checks for no-op tests and exact duplicate test bodies within the same module and class/fixture scope; similar tests across distinct runtime boundaries are not conflated.",
     "test_validate_docs.py": "Checks Markdown and HTML links, heading anchors, image alt text, and ignores fenced code blocks while validating documentation.",
     "test_variants.py": "Exact variant resolution, invalid/default behavior, text-variable expansion, and variant synchronization.",
     "test_verify_release_gate.py": "Release gate enforcement for successful main CI on the exact source SHA and correct version/tag metadata.",
