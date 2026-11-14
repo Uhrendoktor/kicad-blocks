@@ -5,9 +5,9 @@ Use this guide to turn a hierarchical sheet into a library block or place an exi
 ## Create a block from a sheet
 
 1. Open the parent schematic in Eeschema and select the hierarchical sheet symbol to package. Alternatively, open the target sheet itself and run the command with no selection.
-2. Choose **Create Block from Sheet**.
-3. Enter the name and optional description.
-4. Choose the shared library destination.
+2. Choose **Create Block from Sheet**. The creation form opens in a visible plugin window and identifies the source sheet.
+3. Enter the required block name and optional description.
+4. Create the block in the configured default shared library.
 
 KiCad Blocks copies the selected sheet and its child schematic files into a new `.kicad_block` directory. It leaves the source project unchanged. The root sheet's hierarchical labels become the facade pins; child-sheet labels remain internal.
 
@@ -21,7 +21,7 @@ Open **Browse and Place Functional Blocks**, then choose **Manage Libraries**.
 - Choose **Create library** to create an empty folder.
 - Choose **Change folder** to point a registration at another location.
 - Choose **Set default** to select the destination for newly created blocks.
-- Choose **Unregister** to remove a folder from the list without deleting its files.
+- Choose **Unregister** to remove a non-default folder from the list without deleting its files. The active default library cannot be unregistered; use **Change folder** to migrate that registration.
 
 The browser searches all registered libraries. A folder that contains no valid `.kicad_block` assets will not show usable entries.
 
