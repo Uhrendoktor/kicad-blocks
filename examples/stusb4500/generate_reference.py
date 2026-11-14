@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import copy
 import os
-import shutil
 import subprocess
 import sys
 import uuid
@@ -18,11 +17,11 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "plugin" / "kicad-blocks"))
 
 from kicad_blocks.pcb_layout import (
-    _Quoted,
     _all,
     _direct,
     _dump,
     _head,
+    _Quoted,
     parse_sexpr,
 )
 
@@ -117,10 +116,7 @@ def _load_symbol(root: Path, library: str, name: str) -> list:
     if library == "STUSB4500_Custom" and name == "ESDA25W":
         return _custom_esda25w()
     packed = root / f"{library}.kicad_sym"
-    if packed.is_file():
-        path = packed
-    else:
-        path = root / f"{library}.kicad_symdir" / f"{name}.kicad_sym"
+    path = packed if packed.is_file() else root / f"{library}.kicad_symdir" / f"{name}.kicad_sym"
     if not path.is_file():
         raise FileNotFoundError(f"KiCad symbol definition is missing: {path}")
     tree = parse_sexpr(path.read_text(encoding="utf-8"))
@@ -463,7 +459,7 @@ def generate_reference_schematic(destination: Path) -> Path:
         if len(anchors) != 1:
             raise ValueError(f"{net_name} wire group must contain one label anchor: {label_anchor}")
         anchor_point = anchors[0]
-        for (key_a, point_a), (key_b, point_b) in zip(ordered, ordered[1:]):
+        for (key_a, point_a), (key_b, point_b) in zip(ordered, ordered[1:], strict=False):
             wires.append(_wire(point_a, point_b, f"{net_name}:{key_a[0]}.{key_a[1]}-{key_b[0]}.{key_b[1]}"))
         for _, point in ordered[1:-1]:
             junctions.append([
@@ -473,7 +469,7 @@ def generate_reference_schematic(destination: Path) -> Path:
                 ["color", "0", "0", "0", "0"],
                 ["uuid", _Quoted(_uid(f"junction:{net_name}:{point[0]:.3f}:{point[1]:.3f}"))],
             ])
-        for key, point in ordered:
+        for _, point in ordered:
             if point != anchor_point:
                 label_points.pop(point, None)
 
@@ -498,7 +494,7 @@ def generate_reference_schematic(destination: Path) -> Path:
         fet_end_track,
         fet_t1_source,
     ]
-    for index, (start, end) in enumerate(zip(fet_route, fet_route[1:])):
+    for index, (start, end) in enumerate(zip(fet_route, fet_route[1:], strict=False)):
         wires.append(_wire(start, end, f"FET_MID:power-trunk:{index}"))
     wires.append(_wire(fet_tee, fet_r10_node, "FET_MID:R10-branch"))
     junctions.append([
@@ -534,7 +530,7 @@ def generate_reference_schematic(destination: Path) -> Path:
         (gate_out[0], gate_target[1]),
         gate_target,
     ]
-    for index, (start, end) in enumerate(zip(gate_route, gate_route[1:])):
+    for index, (start, end) in enumerate(zip(gate_route, gate_route[1:], strict=False)):
         wires.append(_wire(start, end, f"VSNK_GATE:T1-to-R10:{index}"))
     gate_label = label_points.get(fet_gate)
     if gate_label is None or gate_label[0] != "VSNK_GATE" or gate_label[1] != "local":
@@ -547,7 +543,7 @@ def generate_reference_schematic(destination: Path) -> Path:
     def add_route(net: str, points: list[tuple[float, float]], key: str) -> None:
         if len(points) < 2:
             raise ValueError(f"{net} route {key} needs at least two points.")
-        for index, (start, end) in enumerate(zip(points, points[1:])):
+        for index, (start, end) in enumerate(zip(points, points[1:], strict=False)):
             wires.append(_wire(start, end, f"{net}:{key}:{index}"))
 
     def add_junction(point: tuple[float, float], key: str) -> None:
