@@ -8,8 +8,24 @@ import math
 import re
 import unicodedata
 import uuid
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
+from pathlib import Path
+from typing import cast
+
+from .manifest_types import (
+    BlockLayoutManifest,
+    BlockManifest,
+    BlockParameter,
+    BlockParameterInput,
+    BlockPinManifest,
+    BlockProfileInput,
+    BlockProfileManifest,
+    BlockVariantManifest,
+    ParameterScalar,
+    ParameterType,
+    ResolvedProfileConfiguration,
+)
 
 PIN_TYPES = ("input", "output", "bidirectional", "tristate", "passive")
 _KICAD_PIN_TYPES = {
@@ -29,7 +45,8 @@ class BlockPin:
     electrical_type: str = "passive"
     number: str = ""
 
-    def as_manifest(self, index: int) -> dict[str, str]:
+    def as_manifest(self, index: int) -> BlockPinManifest:
+        """Serialize this pin using its stable KiCad symbol pin number."""
         return {
             "name": self.name,
             "number": self.number or str(index),
@@ -53,7 +70,7 @@ def parameter_field_name(name: str) -> str:
     return PARAMETER_FIELD_PREFIX + str(name)
 
 
-def resolve_variant_implementation(manifest: dict, value: str) -> str:
+def resolve_variant_implementation(manifest: BlockManifest, value: str) -> str:
     """Resolve an explicit selector or the configured default implementation.
 
     An empty KB_VARIANT selects default_variant when one is configured,
@@ -67,8 +84,7 @@ def resolve_variant_implementation(manifest: dict, value: str) -> str:
         if not requested:
             return str(manifest["implementation_file"])
     matches = [
-        item for item in variants
-        if str(item.get("value", "")).casefold() == requested.casefold()
+        item for item in variants if str(item.get("value", "")).casefold() == requested.casefold()
     ]
     if len(matches) != 1:
         choices = ", ".join(str(item.get("value", "")) for item in variants)
@@ -76,13 +92,17 @@ def resolve_variant_implementation(manifest: dict, value: str) -> str:
     return str(matches[0]["file"])
 
 
-def validate_parameter_value(parameter: dict, value: object) -> str:
+def validate_parameter_value(
+    parameter: BlockParameterInput | BlockParameter, value: ParameterScalar
+) -> str:
     """Validate and normalize one single-line parameter value."""
     name = str(parameter.get("name", "parameter"))
     kind = str(parameter.get("type", "string")).casefold()
     text = str(value)
     if len(text) > 512 or "\n" in text or "\r" in text:
-        raise ValueError(f"Value for parameter {name!r} must be at most 512 single-line characters.")
+        raise ValueError(
+            f"Value for parameter {name!r} must be at most 512 single-line characters."
+        )
     if kind == "string":
         return text
     if kind == "number":
@@ -98,7 +118,14 @@ def validate_parameter_value(parameter: dict, value: object) -> str:
             raise ValueError(f"Parameter {name!r} must be an integer.")
         return str(int(text.strip()))
     if kind == "boolean":
-        values = {"true": "true", "false": "false", "1": "true", "0": "false", "yes": "true", "no": "false"}
+        values = {
+            "true": "true",
+            "false": "false",
+            "1": "true",
+            "0": "false",
+            "yes": "true",
+            "no": "false",
+        }
         try:
             return values[text.strip().casefold()]
         except KeyError as exc:
@@ -106,9 +133,11 @@ def validate_parameter_value(parameter: dict, value: object) -> str:
     raise ValueError(f"Unsupported type {kind!r} for parameter {name!r}.")
 
 
-def normalize_parameters(parameters: Iterable[dict] | None) -> list[dict[str, str]]:
+def normalize_parameters(
+    parameters: Iterable[BlockParameterInput | BlockParameter] | None,
+) -> list[BlockParameter]:
     """Validate parameter declarations from a block manifest or API call."""
-    normalized: list[dict[str, str]] = []
+    normalized: list[BlockParameter] = []
     seen: set[str] = set()
     for item in parameters or ():
         if not isinstance(item, dict):
@@ -127,25 +156,30 @@ def normalize_parameters(parameters: Iterable[dict] | None) -> list[dict[str, st
             raise ValueError(
                 f"Unknown type {kind!r} for parameter {name!r}; choose {', '.join(PARAMETER_TYPES)}."
             )
-        default = validate_parameter_value(
-            {"name": name, "type": kind}, item.get("default", "")
-        )
+        default = validate_parameter_value({"name": name, "type": kind}, item.get("default", ""))
         description = str(item.get("description", "")).strip()
         if len(description) > 256 or "\n" in description or "\r" in description:
-            raise ValueError(f"Description for parameter {name!r} must be a single line of at most 256 characters.")
+            raise ValueError(
+                f"Description for parameter {name!r} must be a single line of at most 256 characters."
+            )
         normalized.append(
-            {"name": name, "type": kind, "default": default, "description": description}
+            {
+                "name": name,
+                "type": cast(ParameterType, kind),
+                "default": default,
+                "description": description,
+            }
         )
     return normalized
 
 
 def normalize_profiles(
-    profiles: Iterable[dict] | None,
-    parameters: Iterable[dict] | None,
-    variants: Iterable[dict] | None,
-    layouts: Iterable[dict] | None,
+    profiles: Iterable[BlockProfileInput | BlockProfileManifest] | None,
+    parameters: Iterable[BlockParameterInput | BlockParameter] | None,
+    variants: Iterable[BlockVariantManifest] | None,
+    layouts: Iterable[BlockLayoutManifest] | None,
     default_layout: str | None = None,
-) -> list[dict]:
+) -> list[BlockProfileManifest]:
     """Validate named configuration profiles for one block.
 
     A profile is a reusable preset for one declared schematic variant, a
@@ -154,19 +188,12 @@ def normalize_profiles(
     """
     parameter_definitions = normalize_parameters(parameters)
     parameter_names = {item["name"] for item in parameter_definitions}
-    variant_definitions = {
-        str(item.get("value", "")).casefold(): item
-        for item in variants or ()
-    }
-    variant_values = {
-        key: str(item.get("value", ""))
-        for key, item in variant_definitions.items()
-    }
+    variant_definitions = {str(item.get("value", "")).casefold(): item for item in variants or ()}
+    variant_values = {key: str(item.get("value", "")) for key, item in variant_definitions.items()}
     layout_ids = {
-        str(item.get("id", "")).casefold(): str(item.get("id", ""))
-        for item in layouts or ()
+        str(item.get("id", "")).casefold(): str(item.get("id", "")) for item in layouts or ()
     }
-    normalized: list[dict] = []
+    normalized: list[BlockProfileManifest] = []
     seen_ids: set[str] = set()
     seen_names: set[str] = set()
 
@@ -178,7 +205,9 @@ def normalize_profiles(
             raise ValueError("Profile names must contain 1 to 80 single-line characters.")
         profile_id = str(item.get("id") or slugify(name)).strip().casefold()
         if not re.fullmatch(r"[a-z0-9_]+", profile_id):
-            raise ValueError(f"Invalid profile id {profile_id!r}; use lowercase letters, numbers and underscores.")
+            raise ValueError(
+                f"Invalid profile id {profile_id!r}; use lowercase letters, numbers and underscores."
+            )
         if profile_id in seen_ids or name.casefold() in seen_names:
             raise ValueError(f"Duplicate block profile name or id: {name!r}.")
         seen_ids.add(profile_id)
@@ -186,7 +215,9 @@ def normalize_profiles(
 
         description = str(item.get("description", "")).strip()
         if len(description) > 256 or "\n" in description or "\r" in description:
-            raise ValueError(f"Description for profile {name!r} must be a single line of at most 256 characters.")
+            raise ValueError(
+                f"Description for profile {name!r} must be a single line of at most 256 characters."
+            )
 
         raw_variant = str(item.get("variant", "") or "").strip()
         variant = None
@@ -199,7 +230,9 @@ def normalize_profiles(
                     f"Available values: {choices}."
                 )
         elif raw_variant:
-            raise ValueError(f"Profile {name!r} defines a variant but this block has no variant implementations.")
+            raise ValueError(
+                f"Profile {name!r} defines a variant but this block has no variant implementations."
+            )
 
         raw_parameters = item.get("parameters", {})
         if not isinstance(raw_parameters, dict):
@@ -210,18 +243,12 @@ def normalize_profiles(
                 f"Profile {name!r} contains unknown parameter(s): {', '.join(unknown_parameters)}."
             )
         parameter_values = resolve_parameter_values(parameter_definitions, raw_parameters)
-        overrides = {
-            key: parameter_values[key]
-            for key in raw_parameters
-        }
+        overrides = {key: parameter_values[key] for key in raw_parameters}
 
         raw_layout = str(item.get("layout", "") or "").strip()
-        variant_definition = variant_definitions.get(
-            str(variant or "").casefold()
-        )
+        variant_definition = variant_definitions.get(str(variant or "").casefold())
         linked_layout = (
-            str(variant_definition.get("layout_id", "") or "")
-            if variant_definition else ""
+            str(variant_definition.get("layout_id", "") or "") if variant_definition else ""
         )
         if layout_ids:
             selected_layout = layout_ids.get(
@@ -235,21 +262,27 @@ def normalize_profiles(
                 )
         else:
             if raw_layout:
-                raise ValueError(f"Profile {name!r} defines a PCB layout but this block has no layouts.")
+                raise ValueError(
+                    f"Profile {name!r} defines a PCB layout but this block has no layouts."
+                )
             selected_layout = None
 
-        normalized.append({
-            "id": profile_id,
-            "name": name,
-            "description": description,
-            "variant": variant,
-            "parameters": overrides,
-            "layout": selected_layout,
-        })
+        normalized.append(
+            {
+                "id": profile_id,
+                "name": name,
+                "description": description,
+                "variant": variant,
+                "parameters": overrides,
+                "layout": selected_layout,
+            }
+        )
     return normalized
 
 
-def resolve_profile_configuration(manifest: dict, profile_id: str) -> dict:
+def resolve_profile_configuration(
+    manifest: BlockManifest, profile_id: str
+) -> ResolvedProfileConfiguration:
     """Resolve one profile into its complete per-instance field values."""
     requested = str(profile_id or "").strip().casefold()
     profiles = manifest.get("profiles") or []
@@ -258,7 +291,11 @@ def resolve_profile_configuration(manifest: dict, profile_id: str) -> dict:
         choices = ", ".join(str(item.get("name", item.get("id", ""))) for item in profiles)
         raise ValueError(
             f"Unknown block profile {profile_id!r}."
-            + (f" Available profiles: {choices}." if choices else " This block defines no profiles.")
+            + (
+                f" Available profiles: {choices}."
+                if choices
+                else " This block defines no profiles."
+            )
         )
     profile = matches[0]
     return {
@@ -290,7 +327,8 @@ def parse_parameters(spec: str) -> list[dict[str, str]]:
 
 
 def resolve_parameter_values(
-    parameters: Iterable[dict] | None, overrides: dict[str, object] | None = None
+    parameters: Iterable[BlockParameterInput | BlockParameter] | None,
+    overrides: Mapping[str, ParameterScalar] | None = None,
 ) -> dict[str, str]:
     """Resolve defaults plus caller overrides, rejecting unknown parameters."""
     definitions = normalize_parameters(parameters)
@@ -305,8 +343,8 @@ def resolve_parameter_values(
 
 def substitute_parameter_templates(
     content: str,
-    parameters: Iterable[dict] | None,
-    overrides: dict[str, object] | None = None,
+    parameters: Iterable[BlockParameterInput | BlockParameter] | None,
+    overrides: Mapping[str, ParameterScalar] | None = None,
 ) -> str:
     """Substitute {{NAME}} tokens in KiCad text fields using validated values.
 
@@ -347,9 +385,8 @@ def substitute_parameter_templates(
         elif character == '"':
             in_string = True
 
-    def escape(match: re.Match) -> str:
-        value = values[match.group(1)]
-        return value.replace("\\", "\\\\").replace('"', '\\"')
+    def escape(match: re.Match[str]) -> str:
+        return sexpr_quote(values[match.group(1)])[1:-1]
 
     return _PARAMETER_TOKEN.sub(escape, content)
 
@@ -380,9 +417,7 @@ def parse_pins(spec: str) -> list[BlockPin]:
         if electrical_type == "bidir":
             electrical_type = "bidirectional"
         if electrical_type not in PIN_TYPES:
-            raise ValueError(
-                f"Unknown pin type {raw_type!r}; choose {', '.join(PIN_TYPES)}."
-            )
+            raise ValueError(f"Unknown pin type {raw_type!r}; choose {', '.join(PIN_TYPES)}.")
         if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_./+#-]*", name):
             raise ValueError(
                 f"Invalid pin name {name!r}. Use letters, numbers, _, ., /, +, # or -; "
@@ -402,8 +437,23 @@ def parse_pins(spec: str) -> list[BlockPin]:
 
 
 def sexpr_quote(value: str) -> str:
-    """Quote a string using KiCad's S-expression string conventions."""
-    return json.dumps(str(value), ensure_ascii=False)
+    """Quote text using KiCad's UTF-8 and C-style S-expression escapes."""
+    escaped: list[str] = []
+    for character in str(value):
+        codepoint = ord(character)
+        if character == "\\":
+            escaped.append("\\\\")
+        elif character == '"':
+            escaped.append('\\"')
+        elif character == "\n":
+            escaped.append("\\n")
+        elif character == "\r":
+            escaped.append("\\r")
+        elif codepoint < 0x20 or codepoint == 0x7F:
+            escaped.append(f"\\x{codepoint:02x}")
+        else:
+            escaped.append(character)
+    return '"' + "".join(escaped) + '"'
 
 
 def _pin_y(row: int, row_count: int, pitch: float = 2.54) -> float:
@@ -508,7 +558,7 @@ def render_symbol_library(
     pins: Iterable[BlockPin],
     *,
     reference_prefix: str = "X",
-    parameters: Iterable[dict] = (),
+    parameters: Iterable[BlockParameterInput | BlockParameter] = (),
     default_layout_id: str | None = None,
     include_profile_field: bool = False,
 ) -> str:
@@ -538,47 +588,70 @@ def render_symbol_library(
         "    (exclude_from_sim no)",
         "    (in_bom yes)",
         "    (on_board yes)",
-        "    (property \"Reference\" " + sexpr_quote(reference_prefix) +
-        " (at 0 " + str(round(top + 2.54, 4)) +
-        ' 0) (effects (font (size 1.27 1.27)) (justify left bottom)))',
-        "    (property \"Value\" " + sexpr_quote(display_name) +
-        " (at 0 " + str(round(bottom - 2.54, 4)) +
-        ' 0) (effects (font (size 1.27 1.27)) (justify left top) hide))',
+        '    (property "Reference" '
+        + sexpr_quote(reference_prefix)
+        + " (at 0 "
+        + str(round(top + 2.54, 4))
+        + " 0) (effects (font (size 1.27 1.27)) (justify left bottom)))",
+        '    (property "Value" '
+        + sexpr_quote(display_name)
+        + " (at 0 "
+        + str(round(bottom - 2.54, 4))
+        + " 0) (effects (font (size 1.27 1.27)) (justify left top) hide))",
         '    (property "Footprint" "" (at 0 0 0) (effects (font (size 1.27 1.27)) hide))',
         '    (property "Datasheet" "" (at 0 0 0) (effects (font (size 1.27 1.27)) hide))',
-        '    (property "Block ID" ' + sexpr_quote(block_id) +
-        ' (at 0 0 0) (effects (font (size 1.0 1.0)) hide))',
+        '    (property "Block ID" '
+        + sexpr_quote(block_id)
+        + " (at 0 0 0) (effects (font (size 1.0 1.0)) hide))",
         '    (property "Block Type" "kicad-blocks" (at 0 0 0) (effects (font (size 1.0 1.0)) hide))',
         f"    (symbol {sexpr_quote(symbol_name + '_0_1')}",
-        "      (rectangle (start " + str(-half_width) + " " + str(top) +
-        ") (end " + str(half_width) + " " + str(bottom) +
-        ") (stroke (width 0.254) (type default)) (fill (type background)))",
+        "      (rectangle (start "
+        + str(-half_width)
+        + " "
+        + str(top)
+        + ") (end "
+        + str(half_width)
+        + " "
+        + str(bottom)
+        + ") (stroke (width 0.254) (type default)) (fill (type background)))",
         "    )",
         f"    (symbol {sexpr_quote(symbol_name + '_1_1')}",
     ]
 
-    parameter_fields = [
-        '    (property "KB_VARIANT" "" (at 0 0 0) (effects (font (size 1.0 1.0)) hide))'
-    ] + (
-        ['    (property "KB_PROFILE" "" (at 0 0 0) (effects (font (size 1.0 1.0)) hide))']
-        if include_profile_field else []
-    ) + [
-        "    (property " + sexpr_quote(parameter_field_name(item["name"])) + " "
-        + sexpr_quote(item["default"]) + " (at 0 0 0) "
-        + '(effects (font (size 1.0 1.0)) hide))'
-        for item in normalize_parameters(parameters)
-    ]
+    parameter_fields = (
+        ['    (property "KB_VARIANT" "" (at 0 0 0) (effects (font (size 1.0 1.0)) hide))']
+        + (
+            ['    (property "KB_PROFILE" "" (at 0 0 0) (effects (font (size 1.0 1.0)) hide))']
+            if include_profile_field
+            else []
+        )
+        + [
+            "    (property "
+            + sexpr_quote(parameter_field_name(item["name"]))
+            + " "
+            + sexpr_quote(item["default"])
+            + " (at 0 0 0) "
+            + "(effects (font (size 1.0 1.0)) hide))"
+            for item in normalize_parameters(parameters)
+        ]
+    )
     if default_layout_id:
         if not re.fullmatch(r"[a-z0-9_]+", default_layout_id):
-            raise ValueError("Default PCB layout ID must use lowercase letters, numbers and underscores.")
+            raise ValueError(
+                "Default PCB layout ID must use lowercase letters, numbers and underscores."
+            )
         parameter_fields.append(
-            "    (property " + sexpr_quote(LAYOUT_FIELD_NAME) + " "
-            + sexpr_quote(default_layout_id) + " (at 0 0 0) "
-            + '(effects (font (size 1.0 1.0)) hide))'
+            "    (property "
+            + sexpr_quote(LAYOUT_FIELD_NAME)
+            + " "
+            + sexpr_quote(default_layout_id)
+            + " (at 0 0 0) "
+            + "(effects (font (size 1.0 1.0)) hide))"
         )
     if parameter_fields:
         insertion = next(
-            index for index, line in enumerate(lines)
+            index
+            for index, line in enumerate(lines)
             if line == f"    (symbol {sexpr_quote(symbol_name + '_0_1')}"
         )
         lines[insertion:insertion] = parameter_fields
@@ -618,8 +691,11 @@ def render_implementation_schematic(
         '(kicad_sch (version 20250114) (generator "kicad_blocks")',
         f"  (uuid {sexpr_quote(document_uuid)})",
         '  (paper "A4")',
-        '  (title_block (title ' + sexpr_quote(display_name) +
-        ') (comment 1 ' + sexpr_quote("Block ID: " + block_id) + '))',
+        "  (title_block (title "
+        + sexpr_quote(display_name)
+        + ") (comment 1 "
+        + sexpr_quote("Block ID: " + block_id)
+        + "))",
         "  (lib_symbols)",
     ]
     for index, pin in enumerate(pins):
@@ -631,7 +707,7 @@ def render_implementation_schematic(
                 f"  (hierarchical_label {sexpr_quote(pin.name)}",
                 f"    (shape {_KICAD_PIN_TYPES[pin.electrical_type]})",
                 f"    (at {x} {y} 0)",
-                '    (effects (font (size 1.27 1.27)) (justify left bottom))',
+                "    (effects (font (size 1.27 1.27)) (justify left bottom))",
                 f"    (uuid {sexpr_quote(str(uuid.uuid4()))})",
                 "  )",
             ]
@@ -647,7 +723,8 @@ def render_implementation_schematic(
     return "\n".join(lines)
 
 
-def sha256_file(path) -> str:
+def sha256_file(path: Path) -> str:
+    """Return a file SHA-256 digest while streaming large assets in bounded chunks."""
     digest = hashlib.sha256()
     with open(path, "rb") as stream:
         for chunk in iter(lambda: stream.read(1024 * 1024), b""):
@@ -656,5 +733,6 @@ def sha256_file(path) -> str:
 
 
 def revision_for_hashes(hashes: dict[str, str]) -> str:
+    """Build a deterministic revision ID from sorted asset names and content digests."""
     payload = json.dumps(hashes, sort_keys=True, separators=(",", ":")).encode()
     return hashlib.sha256(payload).hexdigest()
