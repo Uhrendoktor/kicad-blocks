@@ -772,11 +772,11 @@ def generate_reference_schematic(destination: Path) -> Path:
                 datasheet = str(prop[2])
         reference_justify = None
         if reference == "U1":
-            # Keep U1's fields adjacent to the right edge, vertically centered
-            # beside the IC rather than detached below the symbol.
-            reference_x, reference_y = sx + 30.48, sy - 41.91
-            value_x, value_y = sx + 30.48, sy - 39.37
-            reference_justify = "left"
+            # Keep the fields close to the right side of the IC while
+            # right-aligning them inside the automatically sized group frame.
+            reference_x, reference_y = sx + 22.86, sy - 41.91
+            value_x, value_y = sx + 22.86, sy - 39.37
+            reference_justify = "right"
         elif reference == "J1":
             # Put the connector fields immediately above its tall body.
             reference_x, reference_y = sx, sy - 33.02
