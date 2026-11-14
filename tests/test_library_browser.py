@@ -698,8 +698,7 @@ class LibraryBrowserTests(unittest.TestCase):
 
         widget = FakeWidget()
         scrolls = []
-        with patch("kicad_blocks.plugin.sys.platform", "darwin"):
-            _bind_mousewheel(widget, scrolls.append)
+        _bind_mousewheel(widget, scrolls.append)
         handler = widget.bindings["<MouseWheel>"]
         handler(SimpleNamespace(delta=0.25, num=None))
         handler(SimpleNamespace(delta=0.25, num=None))
