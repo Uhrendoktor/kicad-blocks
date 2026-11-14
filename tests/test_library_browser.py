@@ -116,7 +116,7 @@ class LibraryBrowserTests(unittest.TestCase):
                 "kicad_blocks.plugin._clean_facade_preview_svg",
                 side_effect=lambda svg_file, _record, _output: svg_file,
             ),
-            patch("cairosvg.svg2png", return_value=b"not-a-png"),
+            patch("resvg_py.svg_to_bytes", return_value=b"not-a-png"),
             patch(
                 "kicad_blocks.plugin.tk",
                 SimpleNamespace(PhotoImage=Mock(return_value=object())),
