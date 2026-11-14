@@ -3645,7 +3645,7 @@ def _show_block_layout_editor(
             variant_layouts[linked_implementation] = layout_id
         changed[0] = True
         status_value.set(
-            f"Added {name}. Select Save layouts to store it in the block library and open the board."
+            f"Added {name}."
         )
         render(layout_id)
 
@@ -3653,11 +3653,25 @@ def _show_block_layout_editor(
         item = selected_layout()
         if item is None:
             return
+        replacement_id = next(
+            (candidate["id"] for candidate in layouts if candidate["id"] != item["id"]),
+            None,
+        )
+        consequence = (
+            f" Variants linked to it will use {next((candidate['name'] for candidate in layouts if candidate['id'] == replacement_id), 'the remaining layout')} instead."
+            if replacement_id
+            else " No PCB layouts will remain; variant layout assignments will be cleared."
+        )
+        if not messagebox.askyesno(
+            "Remove PCB layout",
+            f"Remove {item['name']}?{consequence}",
+            parent=dialog,
+        ):
+            return
         removed_id = item["id"]
         layouts.remove(item)
         layout_implementations.pop(removed_id, None)
         added_ids[:] = [item_id for item_id in added_ids if item_id != removed_id]
-        replacement_id = layouts[0]["id"] if layouts else None
         if default_layout_id_holder[0] == removed_id:
             default_layout_id_holder[0] = replacement_id
             if replacement_id:
@@ -3675,7 +3689,7 @@ def _show_block_layout_editor(
                     variant_layouts.pop(value)
         changed[0] = True
         status_value.set(
-            f"Removed {item['name']}. Remaining boards keep their implementation associations."
+            f"Removed {item['name']}."
         )
         render(replacement_id)
 
@@ -3688,7 +3702,7 @@ def _show_block_layout_editor(
         if "Default" not in links:
             links.append("Default")
         changed[0] = True
-        status_value.set(f"{item['name']} is now the default PCB layout.")
+        status_value.set(f"Default: {item['name']}.")
         render(item["id"])
 
     implementation_values = ["Default"] + [
@@ -3709,7 +3723,7 @@ def _show_block_layout_editor(
         else:
             variant_layouts[selected] = item["id"]
         changed[0] = True
-        status_value.set(f"{item['name']} is now available to {selected}.")
+        status_value.set(f"Assigned {item['name']} to {selected}.")
         render(item["id"])
 
     def update_actions(_event=None):
@@ -3719,9 +3733,15 @@ def _show_block_layout_editor(
         link_button.configure(state="normal" if has_selection else "disabled")
         save_button.configure(state="normal" if changed[0] else "disabled")
 
-    ttk.Label(frame, textvariable=status_value, wraplength=980, justify="left").grid(
-        row=2, column=0, sticky="ew", pady=(2, 4)
-    )
+    palette = getattr(parent, "_kicad_blocks_palette", {})
+    ttk.Label(
+        frame,
+        textvariable=status_value,
+        foreground=palette.get("muted", "#5f6871"),
+        font=("TkDefaultFont", 8),
+        wraplength=900,
+        justify="left",
+    ).grid(row=2, column=0, sticky="ew", pady=(2, 4))
     actions = ttk.Frame(frame)
     actions.grid(row=3, column=0, sticky="ew", pady=(8, 0))
     _action_button(actions, "Add layout", add_layout, "add", "Add a PCB layout").pack(side="left")
@@ -3747,9 +3767,21 @@ def _show_block_layout_editor(
     link_button.pack(side="left", padx=(8, 0))
 
 
+    def cancel_layout_edits():
+        if changed[0] and not messagebox.askyesno(
+            "Discard layout changes",
+            "Discard the unsaved PCB layout changes?",
+            parent=dialog,
+        ):
+            return
+        dialog.destroy()
+
     footer = ttk.Frame(frame)
-    footer.grid(row=6, column=0, sticky="ew", pady=(14, 0))
-    _action_button(footer, "Cancel", dialog.destroy, "cancel", "Close without saving layout changes").pack(side="right")
+    footer.grid(row=5, column=0, sticky="ew", pady=(12, 0))
+    _action_button(
+        footer, "Cancel", cancel_layout_edits, "cancel",
+        "Close without saving layout changes",
+    ).pack(side="right")
     save_button = _action_button(
         footer, "Save layouts", lambda: None, "save", "Save PCB layout changes", state="disabled"
     )
@@ -3782,6 +3814,7 @@ def _show_block_layout_editor(
     save_button.configure(command=save_and_close)
     tree.bind("<<TreeviewSelect>>", update_actions)
     render(layouts[0]["id"] if layouts else None)
+    dialog.protocol("WM_DELETE_WINDOW", cancel_layout_edits)
     _set_window_geometry(dialog, 1120, 800, 980, 650)
     dialog.grab_set()
     dialog.wait_window()
@@ -4351,11 +4384,38 @@ def _show_block_variant_editor(
         if row_index is None or row_index == 0:
             return
         index = row_index - 1
-        removed = variants.pop(index)
-        if (
+        candidate = variants[index]
+        referenced_profiles = [
+            str(item.get("name", item.get("id", "Unnamed profile")))
+            for item in record.manifest.get("profiles", [])
+            if str(item.get("variant", "")).casefold()
+            == candidate["value"].casefold()
+        ]
+        if referenced_profiles:
+            messagebox.showinfo(
+                "Implementation is in use",
+                f"{candidate['value']} is referenced by: "
+                + ", ".join(referenced_profiles)
+                + ". Change those profiles before removing this implementation.",
+                parent=dialog,
+            )
+            return
+        is_default = (
             default_variant[0]
-            and removed["value"].casefold() == default_variant[0].casefold()
+            and candidate["value"].casefold() == default_variant[0].casefold()
+        )
+        consequence = (
+            " It is the default, so new instances with an empty KB_VARIANT will use the base implementation."
+            if is_default else ""
+        )
+        if not messagebox.askyesno(
+            "Remove implementation",
+            f"Remove {candidate['value']}?{consequence}",
+            parent=dialog,
         ):
+            return
+        removed = variants.pop(index)
+        if is_default:
             default_variant[0] = ""
         dirty[0] = True
         render(min(row_index, len(variants)) if variants else 0)
@@ -4416,7 +4476,19 @@ def _show_block_variant_editor(
         "Remove the selected variant", state="disabled"
     )
     remove_button.pack(side="left", padx=(8, 0))
-    _action_button(actions, "Cancel", dialog.destroy, "cancel", "Close without saving changes").pack(side="right")
+    def cancel_variant_edits():
+        if dirty[0] and not messagebox.askyesno(
+            "Discard implementation changes",
+            "Discard the unsaved implementation changes?",
+            parent=dialog,
+        ):
+            return
+        dialog.destroy()
+
+    _action_button(
+        actions, "Cancel", cancel_variant_edits, "cancel",
+        "Close without saving implementation changes",
+    ).pack(side="right")
     save_button = _action_button(
         actions, "Save changes", save_and_close, "save",
         "Save implementation changes", state="disabled"
@@ -4427,6 +4499,7 @@ def _show_block_variant_editor(
     tree.bind("<Double-1>", lambda _event: edit_variant())
     tree.bind("<Delete>", lambda _event: remove_variant())
     render(0)
+    dialog.protocol("WM_DELETE_WINDOW", cancel_variant_edits)
     _set_window_geometry(dialog, 1080, 740, 900, 620)
     dialog.grab_set()
     dialog.wait_window()
