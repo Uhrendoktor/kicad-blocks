@@ -15,9 +15,9 @@ sys.path.insert(0, str(ROOT / "examples" / "stusb4500"))
 from generate_reference import generate_reference_schematic
 from kicad_blocks.model import parse_pins
 from kicad_blocks.operations import export_block_bom, validate_block_tree
-from kicad_blocks.sexpr import parse_sexpr, sexpr_all, sexpr_direct
 from kicad_blocks.plugin import _new_blank_pcb_source
 from kicad_blocks.repository import add_dependency, create_block
+from kicad_blocks.sexpr import parse_sexpr, sexpr_all, sexpr_direct
 
 
 def _find_kicad_cli() -> str:
