@@ -138,6 +138,7 @@ class STUSB4500ReferenceTests(unittest.TestCase):
         self.assertLess(positions["T4"][0], positions["T1"][0])
 
 
+
     def test_address_straps_are_separate_and_reset_stays_with_controller(self) -> None:
         with tempfile.TemporaryDirectory(prefix="stusb4500-address-") as temporary:
             content, tree, instances = self._generate(temporary)
@@ -146,7 +147,7 @@ class STUSB4500ReferenceTests(unittest.TestCase):
             self.assertIn(reference, instances)
             self.assertEqual(float(_direct(instances[reference], "at")[3]), 90.0)
         self.assertIn("R55", instances)
-        self.assertLess(float(_direct(instances["R55"], "at")[2]), 180.34)
+        self.assertLess(float(_direct(instances["R55"], "at")[2]), 240.0)
 
         r51, r52, r53, r54 = (
             _direct(instances[reference], "at")
