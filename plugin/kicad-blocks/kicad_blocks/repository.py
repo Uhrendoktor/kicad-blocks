@@ -401,8 +401,6 @@ def synchronize_project_symbol_catalog(
     return False
 
 
-def _import_catalog_facade_edit(block: BlockRecord, manifest: dict) -> bool:
-
 def _import_catalog_facade_edit(block: BlockRecord, manifest: BlockManifest) -> bool:
     """Import a Symbol Editor catalog edit into the block's revisioned facade asset.
 
