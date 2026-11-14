@@ -18,9 +18,10 @@ from typing import TYPE_CHECKING, Protocol, cast
 # The core block model and IPC helpers must remain importable in headless
 # environments. Load Tkinter only when the interactive manager is invoked.
 if TYPE_CHECKING:
+    from google.protobuf.message import Message
+
     import tkinter as tk
     from tkinter import filedialog, messagebox, simpledialog, ttk
-    from google.protobuf.message import Message
 else:
     tk = None
     ttk = None
