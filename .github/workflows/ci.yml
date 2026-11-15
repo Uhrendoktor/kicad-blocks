@@ -14,12 +14,12 @@ concurrency:
   group: kicad-blocks-${{ github.ref }}
   cancel-in-progress: true
 
-# The runner is owned by the repository maintainer. Do not execute fork PR code
-# on it: only pull requests whose head branch is in this repository are eligible.
+# Same-repository PRs use GitHub-hosted Ubuntu for timely review validation.
+# Push validation on main stays on the maintainer-owned serial runner for release work.
 jobs:
   python-and-kicad:
     if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
-    runs-on: [self-hosted, linux, x64]
+    runs-on: ${{ github.event_name == 'pull_request' && 'ubuntu-24.04' || fromJSON('["self-hosted", "linux", "x64"]') }}
     timeout-minutes: 50
     steps:
       - uses: actions/checkout@v4
