@@ -80,7 +80,7 @@ def _tracked_python_files() -> list[str]:
     output = _git(["ls-files", "-z", "--", "*.py", "*.pyi"])
     if not isinstance(output, str):
         raise RuntimeError("Git returned an unexpected binary file list.")
-    return sorted(path for path in output.split("\\0") if path)
+    return sorted(path for path in output.split("\0") if path)
 
 
 def _ruff_findings(paths: list[str], *, cwd: Path) -> list[_Finding]:
