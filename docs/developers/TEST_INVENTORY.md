@@ -7,8 +7,8 @@ is listed individually with its assertion purpose. Files that are executable acc
 programs rather than pytest modules are listed separately and must remain explicitly
 registered in STANDALONE_TESTS in scripts/test_inventory.py.
 
-- Pytest modules: **24**
-- Individually inventoried pytest cases: **238**
+- Pytest modules: **26**
+- Individually inventoried pytest cases: **291**
 - Standalone acceptance runners: **7**
 - Additional CI validation runners: **2**
 
@@ -227,6 +227,17 @@ Library search and selection, native previews, variants/profiles/layouts, cross-
 | test_place_block_rejects_invalid_symbol_id_before_connecting | Exercises place block rejects invalid symbol id before connecting. |
 | test_place_block_requires_an_active_schematic | Exercises place block requires an active schematic. |
 
+### tests/test_library_gitignore.py
+
+Focused regression tests for this module.
+
+| Test | Purpose |
+| --- | --- |
+| test_ignore_file_covers_generated_content_and_preserves_custom_rules | Exercises ignore file covers generated content and preserves custom rules. |
+| test_registering_existing_library_initializes_ignore_file | Exercises registering existing library initializes ignore file. |
+| test_block_creation_initializes_an_unregistered_library | Exercises block creation initializes an unregistered library. |
+| test_project_local_copy_initializes_its_gitignore | Exercises project local copy initializes its gitignore. |
+
 ### tests/test_library_validation.py
 
 Machine-readable library validation reports, asset hashes/revisions, corrupt or missing assets, empty-library behavior, and recursive ERC when KiCad CLI is available.
@@ -363,15 +374,67 @@ Deterministic release archive contents, installation from the extracted package,
 | test_extracted_release_archive_installs_using_its_bundled_installer | Exercises extracted release archive installs using its bundled installer. |
 | test_release_builder_rejects_mismatched_binding_dependency_url | Exercises release builder rejects mismatched binding dependency url. |
 
+### tests/test_schematic_style_rules.py
+
+Regression tests for generic schematic style rules and profile contracts.
+
+| Test | Purpose |
+| --- | --- |
+| test_rule_catalogue_and_generated_reference_pass | Exercises rule catalogue and generated reference pass. |
+| test_multiline_block_title_is_rejected | Exercises multiline block title is rejected. |
+| test_generic_checker_does_not_import_example_generator | Exercises generic checker does not import example generator. |
+| test_generic_multiline_unbordered_text_is_rejected | Exercises generic multiline unbordered text is rejected. |
+| test_unbordered_title_box_must_have_single_line_render_reserve | Exercises unbordered title box must have single line render reserve. |
+| test_group_comment_requires_its_own_outline | Exercises group comment requires its own outline. |
+| test_label_names_cannot_mix_local_and_hierarchical_kinds | Exercises label names cannot mix local and hierarchical kinds. |
+| test_symbol_obstacles_use_real_outlines_not_rectangular_bounds | Exercises symbol obstacles use real outlines not rectangular bounds. |
+| test_wire_through_visible_symbol_field_is_rejected | Exercises wire through visible symbol field is rejected. |
+| test_symbol_fields_may_not_straddle_their_body | Exercises symbol fields may not straddle their body. |
+| test_wire_through_symbol_body_is_rejected | Exercises wire through symbol body is rejected. |
+| test_wire_through_comment_box_is_rejected | Exercises wire through comment box is rejected. |
+| test_shared_decoupler_ground_and_visible_nc_markers_are_present | Exercises shared decoupler ground and visible nc markers are present. |
+| test_common_ground_contract_detects_a_wrong_decoupler_net | Exercises common ground contract detects a wrong decoupler net. |
+| test_wire_compactness_uses_a_normalized_budget_score | Exercises wire compactness uses a normalized budget score. |
+
 ### tests/test_stusb4500_reference.py
 
 Generated STUSB4500 example schematic, standard external electrical pin shapes, and functional PCB layout alignment/zoning.
 
 | Test | Purpose |
 | --- | --- |
-| test_generates_real_component_schematic_with_hierarchical_ports | Generates real component schematic with hierarchical ports. |
-| test_external_ports_use_standard_kicad_electrical_shapes | Exercises external ports use standard kicad electrical shapes. |
-| test_layout_is_grid_aligned_and_functionally_zoned | Exercises layout is grid aligned and functionally zoned. |
+| test_block_has_only_explicit_hierarchical_interfaces_and_no_globals | Exercises block has only explicit hierarchical interfaces and no globals. |
+| test_vsys_is_a_separate_system_input_not_ground | Exercises vsys is a separate system input not ground. |
+| test_parent_level_mcu_and_output_connectors_are_not_inside_the_block | Exercises parent level mcu and output connectors are not inside the block. |
+| test_left_to_right_functional_modules_are_explicit | Exercises left to right functional modules are explicit. |
+| test_address_straps_are_separate_and_reset_stays_with_controller | Exercises address straps are separate and reset stays with controller. |
+| test_back_to_back_pmos_midpoint_is_directly_wired_to_r10 | Exercises back to back pmos midpoint is directly wired to r10. |
+| test_power_path_is_split_into_switch_and_compact_output_stage | Exercises power path is split into switch and compact output stage. |
+| test_vbus_conditioning_groups_are_explained | Exercises vbus conditioning groups are explained. |
+| test_resistor_values_are_centered_inside_their_symbol_bodies | Exercises resistor values are centered inside their symbol bodies. |
+| test_j1_and_u1_fields_are_close_and_inside_their_groups | Exercises j1 and u1 fields are close and inside their groups. |
+| test_group_descriptions_and_source_evidence_are_generated | Exercises group descriptions and source evidence are generated. |
+| test_no_label_glyph_is_replaced_by_a_global_label | Exercises no label glyph is replaced by a global label. |
+| test_regulator_decouplers_use_direct_wires_not_pin_labels | Exercises regulator decouplers use direct wires not pin labels. |
+| test_bulk_protection_frame_is_derived_from_member_components | Exercises bulk protection frame is derived from member components. |
+| test_internal_nets_and_hierarchical_vsnk_scope_are_consistent | Exercises internal nets and hierarchical vsnk scope are consistent. |
+| test_decoupler_ground_uses_one_physical_hierarchical_port | Exercises decoupler ground uses one physical hierarchical port. |
+| test_controller_bypass_caps_are_repositioned_for_short_c1_route | Exercises controller bypass caps are repositioned for short c1 route. |
+| test_back_to_back_fets_are_condensed | Exercises back to back fets are condensed. |
+| test_vbus_filtered_nodes_use_local_labels_without_crossing_d4 | Exercises vbus filtered nodes use local labels without crossing d4. |
+| test_esd_array_ground_faces_down_and_cc_labels_remain_visible | Exercises esd array ground faces down and cc labels remain visible. |
+| test_cc2_route_uses_only_valid_orthogonal_segments | Exercises cc2 route uses only valid orthogonal segments. |
+| test_kicad_text_justification_uses_only_supported_directions | Exercises kicad text justification uses only supported directions. |
+| test_all_generated_wires_are_two_point_orthogonal_segments | Exercises all generated wires are two point orthogonal segments. |
+| test_decouplers_are_directly_wired_to_u1_supply_pins | Exercises decouplers are directly wired to u1 supply pins. |
+| test_every_local_label_name_is_reused | Exercises every local label name is reused. |
+| test_header_helper_and_functional_blocks_are_used | Exercises header helper and functional blocks are used. |
+| test_component_origins_are_derived_from_group_constraints | Exercises component origins are derived from group constraints. |
+| test_functional_frames_are_derived_and_packed_with_constant_spacing | Exercises functional frames are derived and packed with constant spacing. |
+| test_r51_r52_use_populated_values_with_dnp_flags | Exercises r51 r52 use populated values with dnp flags. |
+| test_style_linter_exposes_stable_rule_ids | Exercises style linter exposes stable rule ids. |
+| test_label_glyph_wire_overlap_is_a_dedicated_error | Exercises label glyph wire overlap is a dedicated error. |
+| test_native_text_boxes_have_uniform_padding_and_style_audit_passes | Exercises native text boxes have uniform padding and style audit passes. |
+| test_r55_ground_label_stub_remains_local_and_does_not_cross_cc2 | Exercises r55 ground label stub remains local and does not cross cc2. |
 
 ### tests/test_validate_docs.py
 
