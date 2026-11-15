@@ -370,6 +370,17 @@ def _select_default_implementation(dialog) -> None:
     )
     if tree is None or "0" not in tree.get_children():
         raise RuntimeError("The implementations dialog does not contain its Default row.")
+    default_values = tree.item("0", "values")
+    if not default_values or default_values[0] != "Default":
+        raise RuntimeError(
+            "The implementations table must expose one Default row, not a separate Base row: "
+            f"{default_values!r}."
+        )
+    if any(
+        "Base implementation" in str(tree.item(item, "values"))
+        for item in tree.get_children()
+    ):
+        raise RuntimeError("The implementations table must not expose Base as an extra state.")
     tree.selection_set("0")
     tree.focus("0")
     tree.event_generate("<<TreeviewSelect>>")
