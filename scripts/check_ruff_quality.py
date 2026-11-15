@@ -1,4 +1,7 @@
-"""Apply the full Ruff policy to Python lines changed by the current Git revision."""
+"""Apply the repository-wide Ruff rule set to changed Python lines.
+
+Copyright (c) 2026 KiCad Blocks contributors.
+"""
 
 from __future__ import annotations
 
@@ -12,8 +15,8 @@ from pathlib import Path
 from typing import TypedDict, cast
 
 ROOT = Path(__file__).resolve().parents[1]
-_HUNK = re.compile(r"^@@ -\\d+(?:,\\d+)? \\+(\\d+)(?:,(\\d+))? @@")
-_FILE = re.compile(r"^\\+\\+\\+ b/(.+)$")
+_HUNK = re.compile(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@")
+_FILE = re.compile(r"^\+\+\+ b/(.+)$")
 
 
 class _Location(TypedDict, total=False):
@@ -66,7 +69,11 @@ def _base_ref(explicit: str | None) -> str:
 
 
 def added_line_ranges(diff: str) -> dict[str, tuple[tuple[int, int], ...]]:
-    """Return zero-context added/modified line ranges by repository-relative path."""
+    """Parse zero-context diff hunks into added/modified ranges.
+
+    Returns:
+        A mapping from repository-relative Python paths to inclusive line ranges.
+    """
     ranges: dict[str, list[tuple[int, int]]] = {}
     current_path: str | None = None
     for line in diff.splitlines():
@@ -114,11 +121,15 @@ def _touches_changed_lines(finding: _Finding, ranges: dict[str, tuple[tuple[int,
 def _tracked_python_files() -> list[str]:
     """Return the tracked Python sources and stubs Ruff should inspect."""
     output = _git(["ls-files", "-z", "--", "*.py", "*.pyi"])
-    return sorted(path for path in output.split("\\0") if path)
+    return sorted(path for path in output.split("\0") if path)
 
 
 def _ruff_findings(paths: list[str]) -> list[_Finding]:
-    """Collect full-policy Ruff diagnostics without failing on legacy baseline debt."""
+    """Collect full-policy Ruff diagnostics without failing on legacy baseline debt.
+
+    Raises:
+        RuntimeError: If Ruff times out, cannot run, or returns invalid JSON.
+    """
     if not paths:
         return []
     try:
@@ -154,9 +165,16 @@ def _ruff_findings(paths: list[str]) -> list[_Finding]:
 
 
 def main() -> int:
-    """Run Ruff comprehensively and fail only on diagnostics introduced by this change."""
+    """Run full Ruff checks and fail on newly introduced diagnostics.
+
+    Returns:
+        Zero when changed lines are clean; one when the policy or a tool fails.
+    """
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--base-ref", help="Git ref to compare against; defaults to CI event context.")
+    parser.add_argument(
+        "--base-ref",
+        help="Git ref to compare against; defaults to CI event context.",
+    )
     arguments = parser.parse_args()
     try:
         base = _base_ref(arguments.base_ref)
@@ -177,7 +195,7 @@ def main() -> int:
         ranges = added_line_ranges(diff)
         findings = _ruff_findings(_tracked_python_files())
     except (OSError, RuntimeError, ValueError) as error:
-        sys.stderr.write(f"ruff-quality-gate=failed: {error}\\n")
+        sys.stderr.write(f"ruff-quality-gate=failed: {error}\n")
         return 1
 
     introduced = sorted(
@@ -189,13 +207,13 @@ def main() -> int:
         ),
     )
     if introduced:
-        sys.stderr.write(f"ruff-quality-gate=failed introduced_diagnostics={len(introduced)}\\n")
+        sys.stderr.write(f"ruff-quality-gate=failed introduced_diagnostics={len(introduced)}\n")
         for item in introduced:
             location = item.get("location", {})
             filename = _relative_filename(item.get("filename", "")) or item.get("filename", "")
             sys.stderr.write(
                 f"{filename}:{location.get('row', 1)}: "
-                f"{item.get('code', 'RUFF')}: {item.get('message', '')}\\n"
+                f"{item.get('code', 'RUFF')}: {item.get('message', '')}\n"
             )
         return 1
 
@@ -204,7 +222,7 @@ def main() -> int:
         "ruff-quality-gate=passed "
         f"tracked_python_files={len(_tracked_python_files())} "
         f"changed_python_files={changed_files} "
-        f"existing_diagnostics={len(findings)}\\n"
+        f"existing_diagnostics={len(findings)}\n"
     )
     return 0
 
