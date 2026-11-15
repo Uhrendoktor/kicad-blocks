@@ -64,9 +64,9 @@ The Functional Block Library browser presents these primary actions:
 - **Manage PCB layouts** — edits stored boards, implementation links, and the default layout.
 - **Refresh** — reloads the registered library list.
 
-The Implementations dialog contains a **Default** row and any named variants. Selecting **Default** enables **Edit default**, which opens the default schematic. Named rows enable **Edit variant**. A variant can be added from an existing schematic, a new blank schematic, or a copy of another library implementation.
+The Implementations dialog contains exactly one **Default** row for the active default schematic and the remaining named alternatives. Selecting **Default** enables **Edit default**, which opens the current default schematic. Selecting an alternative enables **Edit implementation** and **Set as default**; promoting it replaces the single Default row rather than adding a separate Base state. Named alternatives can be added from an existing schematic, a new blank schematic, or a copy of another library implementation. Accepted changes are persisted immediately; **Save & close** retries failed writes.
 
-The PCB layout manager separates the layout table, assignment controls, and Save/Cancel footer. The **Assign selected layout to** selector can choose **Default**, a named variant, or **No variant link**.
+The PCB layout manager separates the layout table and assignment controls. The **Assign selected layout to** selector can choose **Default** or a named variant. Every layout remains linked to at least one implementation. Accepted Add, Remove, Assign, and Set default operations persist immediately and refresh the table. **Save & close** retries failed writes; **Close** exits the manager.
 
 The **Add PCB layout** dialog supports two starting modes: **Create a new empty board** and **Choose an existing PCB file**. The file entry and **Choose file** button are visible only in the existing-file mode. **Use for implementation** associates the new board with **Default** or a named variant.
 
@@ -148,7 +148,7 @@ The selected root instance's overrides are applied to its implementation. Nested
 A variant maps a `KB_VARIANT` string to an alternative implementation schematic.
 
 - Matching is case-insensitive but otherwise exact.
-- If a block declares variants, an empty, unresolved, or unknown value is an error. The plugin does not guess a default.
+- An empty `KB_VARIANT` selects the configured default implementation. An explicit named value selects its matching alternative; an unknown explicit value remains an error.
 - A block without variants uses `implementation.kicad_sch`.
 
 A named profile is a reusable partial configuration containing a profile name and ID, a variant value, optional typed parameter overrides, and an optional PCB layout ID. Parameters not specified by the profile inherit block defaults.
