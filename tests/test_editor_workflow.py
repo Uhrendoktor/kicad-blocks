@@ -945,15 +945,18 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
             Tk=Mock(side_effect=lambda: events.append("tk.Tk") or root),
             TclError=Exception,
         )
+        fake_kipy = types.ModuleType("kipy")
+        fake_kipy.KiCad = Mock(side_effect=lambda: events.append("kipy.KiCad") or object())
         with (
             patch.object(plugin_actions, "_load_tkinter", side_effect=lambda: events.append("load tkinter")),
             patch.object(plugin_actions, "tk", fake_tk),
             patch.object(plugin_actions, "_configure_tk_theme"),
             patch.object(plugin_actions, "_attach_tk_window_to_editor"),
             patch.object(plugin_actions, "_show_action_hub"),
+            patch.dict(sys.modules, {"kipy": fake_kipy}),
         ):
             plugin_actions.run_action("open-hub")
-        self.assertEqual(events, ["load tkinter", "tk.Tk"])
+        self.assertEqual(events, ["load tkinter", "tk.Tk", "kipy.KiCad"])
         self.assertNotIn("_kicad_blocks_editor_window_id", root.__dict__)
 
 if __name__ == "__main__":
