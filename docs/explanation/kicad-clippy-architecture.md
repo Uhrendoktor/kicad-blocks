@@ -116,7 +116,7 @@ Instead:
 - A single diagnostic model presents both sources consistently.
 - Native ERC type IDs/settings keys remain identifiable as native findings; do not rename them as custom rules.
 
-KiCad's current add-on documentation says IPC is language-agnostic, KiCad 9/10 provide PCB Editor plugins, and KiCad 11 adds schematic-editor plugins and headless IPC/export support. Executable plugins can launch a separately compiled program. This gives us a future Rust integration path, but CLI ERC is the robust starting point. See [KiCad's add-on developer documentation](https://dev-docs.kicad.org/en/apis-and-binding/ipc-api/for-addon-developers/).
+KiCad's current add-on documentation says IPC is language-agnostic, KiCad 9/10 provide PCB Editor plugins, and KiCad 11 adds schematic-editor plugins and headless IPC/export support. Executable plugins can launch a separately compiled program. However, this repository's compatibility matrix currently validates KiCad 10.99.0 as a development nightly and does not yet validate stable KiCad 11's full schematic IPC workflow. Therefore CLI ERC is the first supported path; add the schematic IPC adapter only after the target stable KiCad release is exercised by this repository's integration suite. See [KiCad's add-on developer documentation](https://dev-docs.kicad.org/en/apis-and-binding/ipc-api/for-addon-developers/) and the repository's [compatibility matrix](compatibility.md).
 
 ### 2.3 Existing Rust parser tooling
 
