@@ -200,9 +200,9 @@ jobs:
           "$PY" scripts/check_python_quality.py
           "$PY" scripts/test_inventory.py --check
           "$PY" scripts/check_test_quality.py
+          "$PY" scripts/check_ruff_quality.py
           mapfile -d '' TRACKED_PYTHON < <(git ls-files -z -- '*.py' '*.pyi')
           if (("${#TRACKED_PYTHON[@]}")); then
-            "$PY" -m ruff check "${TRACKED_PYTHON[@]}"
             "$PY" -m ruff format --check "${TRACKED_PYTHON[@]}"
           fi
           "$PY" -m pyright -p pyrightconfig.json --pythonpath "$PY"
@@ -527,7 +527,7 @@ jobs:
           "$PY" -m pip install -r requirements-dev.txt -r plugin/kicad-blocks/requirements.txt
           "$PY" -m pytest -q
           "$PY" -m compileall -q plugin tests scripts
-          "$PY" -m ruff check plugin tests scripts/validate_schematic_style.py
+          "$PY" scripts/check_ruff_quality.py
 
       - name: Validate generated reference files with KiCad CLI
         shell: bash
