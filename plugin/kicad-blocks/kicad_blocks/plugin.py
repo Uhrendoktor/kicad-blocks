@@ -6074,9 +6074,9 @@ def _apply_selected_block_pcb_layouts(
         "The original board and project settings were not modified.")
 
 
-def _show_action_hub(root):
+def _show_action_hub(root, kicad=None):
     """Show compact, icon-led task actions with secondary guidance in tooltips."""
-    _configure_tk_theme(root)
+    _configure_tk_theme(root, kicad)
     root.title("KiCad Blocks — Tasks")
 
     outer = ttk.Frame(root, padding=14)
@@ -6253,7 +6253,7 @@ def run_action(action: str, *, editor_window_id: str | None = None) -> None:
         kicad = KiCad()
         _configure_tk_theme(root, kicad)
         if action == "open-hub":
-            _show_action_hub(root)
+            _show_action_hub(root, kicad)
             root.mainloop()
             return
 
