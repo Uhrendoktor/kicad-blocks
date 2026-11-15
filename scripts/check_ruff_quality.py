@@ -1,7 +1,6 @@
-"""Apply the repository-wide Ruff rule set to changed Python lines.
-
-Copyright (c) 2026 KiCad Blocks contributors.
-"""
+# Copyright (c) 2026 KiCad Blocks contributors.
+# ruff: noqa: INP001
+"""Apply the repository-wide Ruff rule set to changed Python lines."""
 
 from __future__ import annotations
 
@@ -36,7 +35,11 @@ class _Finding(TypedDict, total=False):
 
 
 def _git(arguments: list[str]) -> str:
-    """Run a bounded Git query against this checkout."""
+    """Run a bounded Git query against this checkout.
+
+    Raises:
+        RuntimeError: If Git fails or exceeds the query time limit.
+    """
     try:
         result = subprocess.run(
             ["git", *arguments],
@@ -106,7 +109,10 @@ def _relative_filename(filename: str) -> str | None:
     return candidate.as_posix()
 
 
-def _touches_changed_lines(finding: _Finding, ranges: dict[str, tuple[tuple[int, int], ...]]) -> bool:
+def _touches_changed_lines(
+    finding: _Finding,
+    ranges: dict[str, tuple[tuple[int, int], ...]],
+) -> bool:
     """Return whether a Ruff diagnostic overlaps any added/modified source line."""
     filename = _relative_filename(finding.get("filename", ""))
     if filename is None or filename not in ranges:
