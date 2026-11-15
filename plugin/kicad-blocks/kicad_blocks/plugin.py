@@ -166,14 +166,14 @@ def _system_prefers_dark_theme(kicad=None) -> bool | None:
             or schematic_colors.get("sheet_background")
         )
         return _theme_color_is_dark(background)
-    except (AttributeError, ImportError, KeyError, OSError, TypeError, ValueError, json.JSONDecodeError):
+    except (AttributeError, ImportError, KeyError, OSError, TypeError, ValueError):
         LOG.debug("Could not read the active KiCad color theme; retaining native Tk colors", exc_info=True)
         return None
 
 
-def _configure_tk_theme(root) -> None:
+def _configure_tk_theme(root, kicad=None) -> None:
     """Apply a compact KiCad-compatible palette to themed and classic Tk widgets."""
-    dark = _system_prefers_dark_theme()
+    dark = _system_prefers_dark_theme(kicad)
     if dark is None:
         # Keep the toolkit/host native colors, but preserve the shared control
         # geometry/accessibility contract. Returning before this style setup
