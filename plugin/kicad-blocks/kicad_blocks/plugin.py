@@ -35,6 +35,7 @@ else:
     filedialog = None
     messagebox = None
     simpledialog = None
+    TkOption = object
 
 from .auto_dependencies import synchronize_block_dependencies
 from .extraction import selected_sheet_file, selected_sheet_instance_uuid
