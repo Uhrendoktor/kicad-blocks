@@ -150,7 +150,7 @@ def _diagnostic_counts(
     return Counter(_diagnostic_key(item, root=root) for item in findings)
 
 
-def _parent_findings(revision: str) -> tuple[list[_Finding], int]:
+def _parent_findings(revision: str) -> tuple[Counter[_DiagnosticKey], int]:
     """Run Ruff against one parent tree materialized from the local Git object.
 
     Returns:
@@ -171,7 +171,8 @@ def _parent_findings(revision: str) -> tuple[list[_Finding], int]:
             message = f"Unable to extract Ruff baseline tree {revision[:12]}."
             raise RuntimeError(message) from error
         paths = _python_files(root)
-        return _ruff_findings(paths, cwd=root), len(paths)
+        findings = _ruff_findings(paths, cwd=root)
+        return _diagnostic_counts(findings, root=root), len(paths)
 
 
 def main() -> int:
@@ -185,8 +186,7 @@ def main() -> int:
         baseline: Counter[_DiagnosticKey] = Counter()
         baseline_sources = 0
         for parent in parents:
-            findings, source_count = _parent_findings(parent)
-            counts = _diagnostic_counts(findings, root=Path(tempfile.gettempdir()))
+            counts, source_count = _parent_findings(parent)
             baseline_sources = max(baseline_sources, source_count)
             for key, count in counts.items():
                 baseline[key] = max(baseline[key], count)
