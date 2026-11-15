@@ -70,10 +70,10 @@ The implementation details dialog uses a short **Variant value** label and expla
 
 ## Manage PCB layouts
 
-The PCB layout manager separates the stored layout table, the assignment selector, and its Save/Cancel footer.
+The PCB layout manager separates the stored layout table and implementation-assignment controls. Add, Remove, Assign, and Set default persist immediately; Save & close retries failed writes.
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/pcb-layout-manager-light.png" alt="PCB layouts manager with layout rows, implementation assignment controls, and Save layouts and Cancel footer buttons" width="1000">
+  <img src="https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/pcb-layout-manager-light.png" alt="PCB layouts manager with layout rows, implementation assignment controls, and Close and Save and close footer buttons" width="1000">
 </p>
 
 When creating a named layout from a blank board, the source-file controls are hidden:
