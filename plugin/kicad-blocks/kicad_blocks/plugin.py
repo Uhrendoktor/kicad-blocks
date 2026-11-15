@@ -154,11 +154,26 @@ def _system_prefers_dark_theme(kicad=None) -> bool | None:
         # KiCad's built-in default schematic canvas is light and has no user
         # palette file. Custom and installed themes are read from the reported
         # settings directory, without guessing an OS-specific config location.
-        if theme_name == "_builtin_default":
+        if theme_name in {"_builtin_default", "_builtin_classic"}:
             return False
-        if Path(theme_name).name != theme_name:
-            return None
-        theme_path = settings_path / "colors" / f"{theme_name}.json"
+
+        theme_reference = Path(theme_name).expanduser()
+        if theme_reference.is_absolute():
+            # KiCad may persist a fully qualified path for a theme imported
+            # from outside the normal user colors directory.
+            theme_path = theme_reference
+        else:
+            # A plain theme identifier is resolved only below KiCad's
+            # IPC-reported settings directory. Reject traversal and nested
+            # relative paths instead of probing an unrelated filesystem path.
+            if len(theme_reference.parts) != 1 or theme_reference.name in {"", ".", ".."}:
+                return None
+            filename = (
+                theme_reference.name
+                if theme_reference.suffix.casefold() == ".json"
+                else f"{theme_reference.name}.json"
+            )
+            theme_path = settings_path / "colors" / filename
         theme = json.loads(theme_path.read_text(encoding="utf-8"))
         schematic_colors = theme.get("schematic") or {}
         background = (
