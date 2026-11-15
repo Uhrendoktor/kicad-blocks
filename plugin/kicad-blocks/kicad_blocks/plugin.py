@@ -88,16 +88,87 @@ def _load_tkinter() -> None:
     simpledialog = simpledialog_module
 
 
-def _system_prefers_dark_theme() -> bool | None:
-    """Return an explicit theme override, or None to keep Tk’s native theme."""
+def _theme_color_is_dark(value: object) -> bool | None:
+    """Classify a KiCad theme RGB color by perceptual luminance."""
+    text = str(value or "").strip()
+    hex_match = re.fullmatch(r"#?([0-9a-fA-F]{6})", text)
+    if hex_match:
+        raw = hex_match.group(1)
+        rgb = [int(raw[index:index + 2], 16) for index in (0, 2, 4)]
+    else:
+        rgb_match = re.fullmatch(r"rgba?\(\s*([^)]+)\s*\)", text, re.IGNORECASE)
+        if not rgb_match:
+            return None
+        try:
+            rgb = [float(part.strip()) for part in rgb_match.group(1).split(",")[:3]]
+        except ValueError:
+            return None
+        if len(rgb) != 3 or any(not math.isfinite(channel) for channel in rgb):
+            return None
+        rgb = [max(0.0, min(255.0, channel)) for channel in rgb]
+
+    linear = []
+    for channel in rgb:
+        normalized = channel / 255.0
+        linear.append(
+            normalized / 12.92
+            if normalized <= 0.04045
+            else ((normalized + 0.055) / 1.055) ** 2.4
+        )
+    luminance = 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2]
+    return luminance < 0.45
+
+
+def _system_prefers_dark_theme(kicad=None) -> bool | None:
+    """Read Eeschema's active KiCad color theme through the IPC-reported settings path.
+
+    KiCad does not expose a dedicated stable theme getter. KiCad 11's get_paths()
+    supplies the running installation's user-settings path; Eeschema stores its
+    selected theme in eeschema.json and custom palettes in colors/<theme>.json.
+    Missing/older IPC support falls back to the native Tk appearance.
+    """
     override = os.environ.get("KICAD_BLOCKS_THEME", "system").strip().casefold()
     if override in {"dark", "true", "1", "yes", "on"}:
         return True
     if override in {"light", "false", "0", "no", "off"}:
         return False
-    # Tk does not expose a portable query for the host OS dark-mode preference.
-    # Preserve the toolkit's native theme rather than probing OS-specific settings.
-    return None
+    if kicad is None:
+        return None
+
+    try:
+        from kipy.proto.common.types import PathType
+
+        paths = kicad.get_paths()
+        settings_directory = paths.get(PathType.PATH_USER_SETTINGS)
+        if not settings_directory:
+            return None
+        settings_path = Path(settings_directory)
+        eeschema_settings = json.loads(
+            (settings_path / "eeschema.json").read_text(encoding="utf-8")
+        )
+        theme_name = str(
+            (eeschema_settings.get("appearance") or {}).get("color_theme") or ""
+        ).strip()
+        if not theme_name:
+            return None
+        # KiCad's built-in default schematic canvas is light and has no user
+        # palette file. Custom and installed themes are read from the reported
+        # settings directory, without guessing an OS-specific config location.
+        if theme_name == "_builtin_default":
+            return False
+        if Path(theme_name).name != theme_name:
+            return None
+        theme_path = settings_path / "colors" / f"{theme_name}.json"
+        theme = json.loads(theme_path.read_text(encoding="utf-8"))
+        schematic_colors = theme.get("schematic") or {}
+        background = (
+            schematic_colors.get("background")
+            or schematic_colors.get("sheet_background")
+        )
+        return _theme_color_is_dark(background)
+    except (AttributeError, ImportError, KeyError, OSError, TypeError, ValueError, json.JSONDecodeError):
+        LOG.debug("Could not read the active KiCad color theme; retaining native Tk colors", exc_info=True)
+        return None
 
 
 def _configure_tk_theme(root) -> None:
@@ -6165,14 +6236,15 @@ def run_action(action: str, *, editor_window_id: str | None = None) -> None:
     root.title("KiCad Blocks — Tasks" if action == "open-hub" else "KiCad Blocks")
     _attach_tk_window_to_editor(root, editor_window_id)
     try:
+        from kipy import KiCad
+
+        kicad = KiCad()
+        _configure_tk_theme(root, kicad)
         if action == "open-hub":
             _show_action_hub(root)
             root.mainloop()
             return
 
-        from kipy import KiCad
-
-        kicad = KiCad()
         schematic = kicad.get_schematic()
         if schematic is None:
             raise ValueError("No active schematic was found. Open and save a project first.")
