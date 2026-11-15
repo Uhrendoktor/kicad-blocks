@@ -71,6 +71,24 @@ def _base_ref(explicit: str | None) -> str:
     return "origin/main"
 
 
+def _merge_base(base: str) -> str:
+    """Resolve a merge base, fetching a shallow CI base ref when necessary.
+
+    Raises:
+        RuntimeError: If the base revision cannot be fetched or has no merge base.
+    """
+    try:
+        return _git(["merge-base", base, "HEAD"]).strip()
+    except RuntimeError:
+        if base.startswith("origin/"):
+            branch = base.removeprefix("origin/")
+            refspec = f"refs/heads/{branch}:refs/remotes/origin/{branch}"
+            _git(["fetch", "--no-tags", "--depth=1", "origin", refspec])
+        else:
+            _git(["fetch", "--no-tags", "--depth=1", "origin", base])
+        return _git(["merge-base", base, "HEAD"]).strip()
+
+
 def added_line_ranges(diff: str) -> dict[str, tuple[tuple[int, int], ...]]:
     """Parse zero-context diff hunks into added/modified ranges.
 
@@ -184,7 +202,7 @@ def main() -> int:
     arguments = parser.parse_args()
     try:
         base = _base_ref(arguments.base_ref)
-        merge_base = _git(["merge-base", base, "HEAD"]).strip()
+        merge_base = _merge_base(base)
         diff = _git(
             [
                 "diff",
