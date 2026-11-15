@@ -30,6 +30,10 @@ from kicad_blocks.sexpr import (
     sexpr_head,
 )
 
+# Compatibility aliases for the profile geometry checks below.
+_all = sexpr_all
+_direct = sexpr_direct
+
 DATASHEET = "https://www.st.com/resource/en/datasheet/stusb4500.pdf"
 ROOT_UUID = str(uuid.uuid5(uuid.NAMESPACE_URL, "kicad-blocks:stusb4500-reference:root"))
 PROJECT = "functional-block-implementation"
