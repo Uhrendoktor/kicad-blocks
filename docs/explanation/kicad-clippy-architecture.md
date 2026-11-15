@@ -600,7 +600,7 @@ unimplemented = "deny"
 dbg_macro = "deny"
 ~~~
 
-The final exact lint set should be tested against the selected minimum stable Rust version. Add narrowly scoped, documented exceptions only where the lint is not actionable or the API shape genuinely requires it. Do not silence lints globally to get a green build.
+Each workspace crate should opt into the shared policy with a package-level lints.workspace = true setting; workspace lint declarations are not automatically inherited by every member. Pin the minimum stable Rust toolchain in rust-toolchain.toml and test the exact lint set against it. Add narrowly scoped, documented exceptions only where a lint is not actionable or the API shape genuinely requires it. Do not silence lints globally to get a green build.
 
 Required CI commands:
 
