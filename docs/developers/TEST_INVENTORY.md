@@ -188,8 +188,13 @@ Library search and selection, native previews, variants/profiles/layouts, cross-
 | --- | --- |
 | test_search_matches_description_pins_and_variant_values | Exercises search matches description pins and variant values. |
 | test_native_facade_preview_exports_from_the_project_catalog_override | Exercises native facade preview exports from the project catalog override. |
+| test_project_catalog_sync_updates_only_the_changed_library_facade | Exercises project catalog sync updates only the changed library facade. |
+| test_project_catalog_sync_uses_a_changed_shared_library_symbol | Exercises project catalog sync uses a changed shared library symbol. |
+| test_project_catalog_sync_preserves_a_project_local_facade_edit | Exercises project catalog sync preserves a project local facade edit. |
 | test_native_save_dialog_uses_tk_initial_name_filters_and_suffix | Exercises native save dialog uses tk initial name filters and suffix. |
 | test_native_file_and_directory_dialog_cancel_returns_none | Exercises native file and directory dialog cancel returns none. |
+| test_schematic_preview_svg_gets_intrinsic_pixel_dimensions | Exercises schematic preview svg gets intrinsic pixel dimensions. |
+| test_native_schematic_preview_exports_selected_implementation_and_all_sheets | Exercises native schematic preview exports selected implementation and all sheets. |
 | test_native_facade_preview_removes_reference_and_component_name | Exercises native facade preview removes reference and component name. |
 | test_overview_contains_pin_types_parameters_variants_and_layouts | Exercises overview contains pin types parameters variants and layouts. |
 | test_new_pcb_layout_is_created_as_default_and_saved_in_block | Exercises new pcb layout is created as default and saved in block. |
@@ -355,10 +360,9 @@ Regression tests for the AST-based Any/object policy, annotation-debt ratchet, a
 | test_rejects_quoted_forward_reference_to_any | Rejects quoted forward reference to any. |
 | test_rejects_generic_object_aliases_inside_annotations | Rejects generic object aliases inside annotations. |
 | test_allows_runtime_object_construction_and_ordinary_prose | Exercises allows runtime object construction and ordinary prose. |
-| test_annotation_debt_counts_parameters_and_returns_separately | Exercises annotation debt counts parameters and returns separately. |
+| test_ruff_policy_uses_full_selection_and_exact_compatibility_exceptions | Exercises ruff policy uses full selection and exact compatibility exceptions. |
 | test_quoted_sexpr_values_round_trip | Exercises quoted sexpr values round trip. |
 | test_parameter_values_remain_one_quoted_sexpr_field | Exercises parameter values remain one quoted sexpr field. |
-| test_changed_file_ratchet_rejects_increased_annotation_debt | Exercises changed file ratchet rejects increased annotation debt. |
 | test_reports_exact_duplicate_test_bodies_even_when_docstrings_differ | Reports exact duplicate test bodies even when docstrings differ. |
 | test_different_bodies_and_class_fixture_scopes_are_not_duplicates | Exercises different bodies and class fixture scopes are not duplicates. |
 | test_reports_empty_and_pass_only_test_bodies | Reports empty and pass only test bodies. |
