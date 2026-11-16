@@ -45,7 +45,7 @@ if TYPE_CHECKING:
 _T = TypeVar("_T")
 
 # This helper remains available to existing internal integrations and tests.
-__all__ = ["_xy"]
+__all__ = ["_xy", "rewrite_nets", "transform_item", "merge_project_net_settings"]
 
 
 def _num(value: SExpr) -> float:
@@ -744,6 +744,13 @@ def _merge_project_net_settings(
         "merged_chain_names": merged_chain_names,
         "unmatched_chains": unmatched_chains,
     }
+
+
+
+# Public testing/integration surfaces for deterministic PCB transformations.
+rewrite_nets = _rewrite_nets
+transform_item = _transform_item
+merge_project_net_settings = _merge_project_net_settings
 
 
 def resolve_block_layout(block: BlockRecord, layout_id: str | None = None) -> ResolvedBlockLayout:
