@@ -242,6 +242,7 @@ class TreeSelectionContract(ComponentContract):
     row_id: str
     summary_contract_id: str
     expected_summary: str
+    expected_values: tuple[str, ...] | None = None
 
     def execute(self, context: UiTestContext) -> dict[str, Any]:
         tree = context.require_widget(self.contract_id)
@@ -251,9 +252,14 @@ class TreeSelectionContract(ComponentContract):
         context.root.update_idletasks()
         context.root.update()
         summary = context.require_widget(self.summary_contract_id)
+        summary_text = str(summary.cget("text"))
+        text_variable = str(summary.cget("textvariable") or "")
+        if text_variable:
+            summary_text = str(summary.getvar(text_variable))
         return {
             "selection": tuple(tree.selection()),
-            "summary": str(summary.cget("text")),
+            "summary": summary_text,
+            "values": tuple(tree.item(self.row_id, "values")),
         }
 
     def assert_result(
@@ -261,6 +267,8 @@ class TreeSelectionContract(ComponentContract):
     ) -> None:
         assert observation["selection"] == (self.row_id,)
         assert observation["summary"] == self.expected_summary
+        if self.expected_values is not None:
+            assert observation["values"] == self.expected_values
 
 
 @dataclass(frozen=True)
