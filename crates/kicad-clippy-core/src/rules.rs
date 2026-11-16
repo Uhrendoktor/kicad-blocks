@@ -1,4 +1,3 @@
-
 use std::collections::{BTreeMap, btree_map::Entry};
 
 use serde::{Deserialize, Serialize};
@@ -134,7 +133,10 @@ mod tests {
         let mut registry = RuleRegistry::new();
 
         assert!(registry.register(sample_rule()).is_ok());
-        assert_eq!(registry.get("SCH001").map(|rule| rule.name.as_str()), Some("wire geometry"));
+        assert_eq!(
+            registry.get("SCH001").map(|rule| rule.name.as_str()),
+            Some("wire geometry")
+        );
         assert!(registry.register(sample_rule()).is_err());
         assert_eq!(registry.len(), 1);
     }

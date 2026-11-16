@@ -1,11 +1,9 @@
-
 #![forbid(unsafe_code)]
 
 //! Native KiCad Electrical Rules Checker adapter.
 
 use std::{
-    fs,
-    io,
+    fs, io,
     path::{Path, PathBuf},
     process::Command,
 };
@@ -137,11 +135,7 @@ pub fn parse_erc_json(
         };
 
         for violation in violations {
-            diagnostics.push(parse_violation(
-                violation,
-                sheet_path.clone(),
-                source_path,
-            ));
+            diagnostics.push(parse_violation(violation, sheet_path.clone(), source_path));
         }
     }
 
@@ -173,8 +167,7 @@ fn parse_violation(
     sheet_path: Option<String>,
     source_path: &Path,
 ) -> Diagnostic {
-    let violation_type =
-        string_member(violation, "type").unwrap_or_else(|| "unknown".to_owned());
+    let violation_type = string_member(violation, "type").unwrap_or_else(|| "unknown".to_owned());
     let severity_text = string_member(violation, "severity").unwrap_or_default();
     let severity = match severity_text.as_str() {
         "error" => Severity::Error,
@@ -195,8 +188,7 @@ fn parse_violation(
     let mut diagnostic = Diagnostic::new(
         format!("KICAD/ERC/{violation_type}"),
         severity,
-        string_member(violation, "description")
-            .unwrap_or_else(|| "KiCad ERC violation".to_owned()),
+        string_member(violation, "description").unwrap_or_else(|| "KiCad ERC violation".to_owned()),
     );
     diagnostic.source = Some(source_path.to_path_buf());
     diagnostic.sheet_path = sheet_path;
@@ -266,8 +258,7 @@ mod tests {
     "#;
 
     #[test]
-    fn reads_sheet_nested_violations_and_preserves_item_context(
-    ) -> Result<(), Box<dyn Error>> {
+    fn reads_sheet_nested_violations_and_preserves_item_context() -> Result<(), Box<dyn Error>> {
         let report = parse_erc_json(ERC_REPORT, Path::new("fixture.kicad_sch"))?;
 
         assert_eq!(report.kicad_version.as_deref(), Some("10.0.0"));
@@ -277,7 +268,9 @@ mod tests {
         assert_eq!(diagnostic.severity, Severity::Error);
         assert_eq!(diagnostic.sheet_path.as_deref(), Some("/"));
         assert_eq!(
-            diagnostic.schematic_location.map(|point| (point.x_mm, point.y_mm)),
+            diagnostic
+                .schematic_location
+                .map(|point| (point.x_mm, point.y_mm)),
             Some((10.5, 20.25))
         );
         assert_eq!(diagnostic.related[0].uuid.as_deref(), Some("item-uuid"));

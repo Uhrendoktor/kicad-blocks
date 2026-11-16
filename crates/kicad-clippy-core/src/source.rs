@@ -1,4 +1,3 @@
-
 use std::{
     path::{Path, PathBuf},
     sync::Arc,
@@ -126,20 +125,43 @@ mod tests {
     fn maps_ascii_offsets_to_one_based_locations() {
         let source = SourceFile::new("example.kicad_sch", "alpha\nbeta");
 
-        assert_eq!(source.line_column(0).map(|v| (v.line, v.column)), Some((1, 1)));
-        assert_eq!(source.line_column(3).map(|v| (v.line, v.column)), Some((1, 4)));
-        assert_eq!(source.line_column(6).map(|v| (v.line, v.column)), Some((2, 1)));
-        assert_eq!(source.line_column(10).map(|v| (v.line, v.column)), Some((2, 5)));
+        assert_eq!(
+            source.line_column(0).map(|v| (v.line, v.column)),
+            Some((1, 1))
+        );
+        assert_eq!(
+            source.line_column(3).map(|v| (v.line, v.column)),
+            Some((1, 4))
+        );
+        assert_eq!(
+            source.line_column(6).map(|v| (v.line, v.column)),
+            Some((2, 1))
+        );
+        assert_eq!(
+            source.line_column(10).map(|v| (v.line, v.column)),
+            Some((2, 5))
+        );
     }
 
     #[test]
     fn columns_count_unicode_scalars_and_reject_interior_utf8_offsets() {
         let source = SourceFile::new("unicode.kicad_sch", "Aé日本\nB");
 
-        assert_eq!(source.line_column(1).map(|v| (v.line, v.column)), Some((1, 2)));
-        assert_eq!(source.line_column(3).map(|v| (v.line, v.column)), Some((1, 3)));
+        assert_eq!(
+            source.line_column(1).map(|v| (v.line, v.column)),
+            Some((1, 2))
+        );
+        assert_eq!(
+            source.line_column(3).map(|v| (v.line, v.column)),
+            Some((1, 3))
+        );
         assert_eq!(source.line_column(2), None);
-        assert_eq!(source.line_column(source.text().len()).map(|v| (v.line, v.column)), Some((2, 2)));
+        assert_eq!(
+            source
+                .line_column(source.text().len())
+                .map(|v| (v.line, v.column)),
+            Some((2, 2))
+        );
     }
 
     #[test]

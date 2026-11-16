@@ -1,4 +1,3 @@
-
 #![forbid(unsafe_code)]
 
 //! Shared data contracts for the kicad-clippy schematic linter.

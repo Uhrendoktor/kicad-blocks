@@ -1,4 +1,3 @@
-
 #![forbid(unsafe_code)]
 
 use std::{
@@ -209,10 +208,7 @@ fn render_text(output: &LintOutput) -> Result<(), io::Error> {
     Ok(())
 }
 
-fn render_diagnostic(
-    stdout: &mut impl Write,
-    diagnostic: &Diagnostic,
-) -> Result<(), io::Error> {
+fn render_diagnostic(stdout: &mut impl Write, diagnostic: &Diagnostic) -> Result<(), io::Error> {
     write!(
         stdout,
         "{}[{}]: {}",

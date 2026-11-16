@@ -1,12 +1,10 @@
-
 use std::{
-    fs,
-    io,
+    fs, io,
     path::{Path, PathBuf},
 };
 
 use kicad_clippy_core::{ByteSpan, SourceFile};
-use kiutils_sexpr::{parse_one, Atom, CstDocument, Node, ParseError};
+use kiutils_sexpr::{Atom, CstDocument, Node, ParseError, parse_one};
 use thiserror::Error;
 
 /// A parsed schematic retaining both its original source and lossless CST.
@@ -149,7 +147,10 @@ mod tests {
 
         assert_eq!(document.cst().to_lossless_string(), SCHEMATIC);
         assert_eq!(root_span, Some(ByteSpan::new(0, SCHEMATIC.len())));
-        assert_eq!(document.source().path().to_string_lossy(), "fixture.kicad_sch");
+        assert_eq!(
+            document.source().path().to_string_lossy(),
+            "fixture.kicad_sch"
+        );
         if let Some(span) = root_span {
             assert_eq!(document.source().slice(span), Some(SCHEMATIC));
         }
@@ -158,7 +159,8 @@ mod tests {
 
     #[test]
     fn rejects_non_schematic_roots() {
-        let result = SchematicDocument::from_text("board.kicad_pcb", "(kicad_pcb (version 20250101))");
+        let result =
+            SchematicDocument::from_text("board.kicad_pcb", "(kicad_pcb (version 20250101))");
 
         assert!(result.is_err());
     }
