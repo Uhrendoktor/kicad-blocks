@@ -202,6 +202,40 @@ jobs:
         shell: bash
         run: "${RUNNER_TEMP}/kicad-blocks-venv/bin/python tests/validate_kicad_cli.py"
 
+      - name: Build kicad-clippy Rust CLI
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+          cargo build --locked --package kicad-clippy
+
+      - name: Exercise kicad-clippy through native KiCad ERC
+        shell: bash
+        run: |
+          set -euo pipefail
+          SCHEMATIC="${RUNNER_TEMP}/kicad-clippy-native-erc.kicad_sch"
+          REPORT="${RUNNER_TEMP}/kicad-clippy-native-erc.json"
+          python3 examples/stusb4500/generate_reference.py --output "$SCHEMATIC"
+          target/debug/kicad-clippy lint "$SCHEMATIC" --kicad-cli "$KICAD_CLI" --format json > "$REPORT"
+          python3 - "$REPORT" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+
+          report = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+          assert report["syntax_valid"] is True
+          assert report["erc_skipped"] is False
+          assert report["kicad_version"]
+          assert isinstance(report["diagnostics"], list)
+          assert report["summary"]["errors"] == 0
+          assert all(item["code"].startswith("KICAD/ERC/") for item in report["diagnostics"])
+          print(
+              "kicad-clippy parsed the native KiCad ERC report: "
+              f"{len(report['diagnostics'])} findings, zero errors."
+          )
+          PY
+
       - name: Install virtual-display GUI test dependencies
         shell: bash
         run: |
