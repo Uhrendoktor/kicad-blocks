@@ -11,7 +11,8 @@
   ],
   "extraPaths": [
     "plugin/kicad-blocks",
-    "examples/stusb4500"
+    "examples/stusb4500",
+    "scripts"
   ],
   "typeCheckingMode": "strict",
   "reportMissingImports": "error",

@@ -14,7 +14,7 @@ import sys
 import uuid
 from collections.abc import Iterator
 from pathlib import Path
-from typing import TypedDict
+from typing import Literal, Required, TypedDict
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "plugin" / "kicad-blocks"))
@@ -46,8 +46,8 @@ GROUP_TOP_PADDING_MM = 20.32
 GROUP_BOTTOM_PADDING_MM = 7.62
 FRAME_CONTENT_PADDING_MM = 2.54
 FIELD_SYMBOL_MAX_GAP_MM = 9.00
-WIRE_LENGTH_BUDGETS_MM = {"power-switch": 95.00}
-COMMON_PIN_NET_GROUPS = (
+WIRE_LENGTH_BUDGETS_MM: dict[str, float] = {"power-switch": 95.00}
+COMMON_PIN_NET_GROUPS: tuple[_CommonPinNetGroup, ...] = (
     {
         "name": "GND",
         "pins": (("C2", "2"), ("C3", "2")),
@@ -57,7 +57,7 @@ COMMON_PIN_NET_GROUPS = (
 )
 REQUIRED_NO_CONNECT_PINS = ("U1.11", "U1.14", "U1.15", "U1.17", "U1.20")
 GROUP_DESCRIPTION_FONT_MM = 0.65
-GROUP_EVIDENCE = {
+GROUP_EVIDENCE: _GroupEvidence = {
     "datasheet": DATASHEET,
     "document": "ST DS12499 Rev. 8",
     "page": 26,
@@ -66,7 +66,7 @@ GROUP_EVIDENCE = {
     # once a reviewed asset is checked into the example.
     "screenshot_asset": None,
 }
-SCHEMATIC_GROUPS = (
+SCHEMATIC_GROUPS: tuple[_SchematicGroup, ...] = (
     {
         "id": "usb-port",
         "title": "USB-C PORT / CC PROTECTION",
@@ -201,18 +201,18 @@ SCHEMATIC_GROUPS = (
         },
     },
 )
-DIRECT_DECOUPLERS = (
+DIRECT_DECOUPLERS: tuple[tuple[str, str, str, str], ...] = (
     ("U1", "21", "C1", "1"),
     ("U1", "23", "C2", "1"),
     ("U1", "23", "C3", "1"),
 )
-GROUND_PINS_DOWN = ("D1.3",)
-FORBIDDEN_LOCAL_LABELS = ("VREG_1V2", "FET_MID")
-ADJACENT_COMPONENT_PAIRS = (
+GROUND_PINS_DOWN: tuple[str, ...] = ("D1.3",)
+FORBIDDEN_LOCAL_LABELS: tuple[str, ...] = ("VREG_1V2", "FET_MID")
+ADJACENT_COMPONENT_PAIRS: tuple[_AdjacentComponentPair, ...] = (
     {"left": "R1", "right": "R4", "body_width_mm": 2.54, "max_gap_mm": 2.54},
     {"left": "C2", "right": "C3", "body_width_mm": 2.54, "max_gap_mm": 2.54},
 )
-COMPONENT_PROPERTY_LIMITS_MM = {
+COMPONENT_PROPERTY_LIMITS_MM: dict[str, float] = {
     "resistor_reference": 3.00,
     "capacitor_reference": 4.00,
     "capacitor_value": 5.50,
@@ -227,6 +227,96 @@ class _PinData(TypedDict):
     x: float
     y: float
     angle: int
+
+
+class _GroupEvidence(TypedDict):
+    """Datasheet reference used in the functional-group annotation."""
+
+    datasheet: str
+    document: str
+    page: int
+    figure: str
+    screenshot_asset: str | None
+
+
+class _CommonPinNetGroup(TypedDict):
+    """Pin group with an explicit common electrical net."""
+
+    name: str
+    pins: tuple[tuple[str, str], ...]
+    wire_connected: bool
+    single_label: bool
+
+
+class _AdjacentComponentPair(TypedDict):
+    """Maximum permitted gap between adjacent component bodies."""
+
+    left: str
+    right: str
+    body_width_mm: float
+    max_gap_mm: float
+
+
+class _OffsetRule(TypedDict):
+    """Place one component at a relative offset from another."""
+
+    kind: Literal["offset"]
+    component: str
+    to: str
+    dx_mm: float
+    dy_mm: float
+
+
+class _MidpointOffsetRule(TypedDict):
+    """Place one component relative to the midpoint of two components."""
+
+    kind: Literal["midpoint_offset"]
+    component: str
+    between: tuple[str, str]
+    dx_mm: float
+    dy_mm: float
+
+
+class _PinOffsetRule(TypedDict):
+    """Place one component relative to a numbered pin on another component."""
+
+    kind: Literal["pin_offset"]
+    component: str
+    to: str
+    pin: str
+    dx_mm: float
+    dy_mm: float
+
+
+type _LayoutRule = _OffsetRule | _MidpointOffsetRule | _PinOffsetRule
+
+
+class _GroupLayout(TypedDict):
+    """Anchor and relative constraints for one schematic group."""
+
+    anchor: str
+    anchor_y_mm: float
+    constraints: tuple[_LayoutRule, ...]
+
+
+class _SchematicGroup(TypedDict, total=False):
+    """Functional group metadata used for component layout and annotations."""
+
+    id: Required[str]
+    title: Required[str]
+    description: Required[str]
+    members: Required[tuple[str, ...]]
+    lane: Required[Literal["main", "secondary"]]
+    order: int
+    documentation_members: tuple[str, ...]
+    extra_top_padding_mm: float
+    align_to: str
+    y_offset_mm: float
+    layout: _GroupLayout
+
+
+type _PinAssignment = tuple[str, str, str]
+type _ComponentSpec = tuple[str, str, str, str, None, dict[str, _PinAssignment]]
 
 
 def _uid(key: str) -> str:
@@ -439,8 +529,8 @@ def _prop(
     font_size: float = 1.27,
     justify: str | None = None,
     angle: int = 0,
-) -> list:
-    effects = ["effects", ["font", ["size", f"{font_size:.3f}", f"{font_size:.3f}"]]]
+) -> SExprList:
+    effects: SExprList = ["effects", ["font", ["size", f"{font_size:.3f}", f"{font_size:.3f}"]]]
     if justify:
         if justify not in {"left", "right"}:
             raise ValueError(
@@ -470,8 +560,8 @@ def _label(
     justify: str | None = "left",
     angle: int = 0,
     key: str,
-) -> list:
-    effects = ["effects", ["font", ["size", "1.0", "1.0"]]]
+) -> SExprList:
+    effects: SExprList = ["effects", ["font", ["size", "1.0", "1.0"]]]
     if justify is not None:
         if justify not in {"left", "right"}:
             raise ValueError(
@@ -480,9 +570,9 @@ def _label(
             )
         effects.append(["justify", justify, "bottom"])
     if hierarchical:
-        node = ["hierarchical_label", QuotedSExpr(name), ["shape", shape]]
+        node: SExprList = ["hierarchical_label", QuotedSExpr(name), ["shape", shape]]
     else:
-        node = ["label", QuotedSExpr(name)]
+        node: SExprList = ["label", QuotedSExpr(name)]
     node.extend(
         [
             ["at", f"{x:.3f}", f"{y:.3f}", str(angle)],
@@ -499,7 +589,7 @@ def _graphic_rectangle(
     x2: float,
     y2: float,
     key: str,
-) -> list:
+) -> SExprList:
     """Draw a light, unfilled functional-zone frame."""
     return [
         "rectangle",
@@ -511,7 +601,7 @@ def _graphic_rectangle(
     ]
 
 
-def _graphic_tab(x: float, y: float, width: float, key: str) -> list:
+def _graphic_tab(x: float, y: float, width: float, key: str) -> SExprList:
     """Draw three tab edges; the frame top serves as the fourth edge."""
     top = y - 5.08
     right = x + width
@@ -571,7 +661,7 @@ def _graphic_text(
     padding: float = 1.27,
     border: bool = True,
     box_width: float | None = None,
-) -> list:
+) -> SExprList:
     """Create a native KiCad text_box with measured size and uniform margins.
 
     Coordinates identify the top-left box corner. KiCad lays out/reflows text
@@ -586,7 +676,7 @@ def _graphic_text(
             f"Text box width {width:.3f} mm is smaller than measured width "
             f"{measured_width:.3f} mm for {value!r}."
         )
-    result = [
+    result: SExprList = [
         "text_box",
         QuotedSExpr(value),
         ["at", f"{x:.3f}", f"{y:.3f}", "0"],
@@ -606,7 +696,7 @@ def _note_box(
     y: float,
     lines: tuple[str, ...],
     key: str,
-) -> list[list]:
+) -> list[SExprList]
     """Create one native note text_box sized from the supplied text."""
     if not lines or any(not line.strip() for line in lines):
         raise ValueError(f"Note {key!r} must contain non-empty lines.")
@@ -624,7 +714,7 @@ def _note_box(
     ]
 
 
-def _graphic_rule(x1: float, y1: float, x2: float, y2: float, key: str) -> list:
+def _graphic_rule(x1: float, y1: float, x2: float, y2: float, key: str) -> SExprList:
     """Draw a restrained page-level divider."""
     if abs(x1 - x2) > 0.001 and abs(y1 - y2) > 0.001:
         raise ValueError(f"Non-orthogonal graphic rule: {(x1, y1)} -> {(x2, y2)}")
@@ -733,7 +823,7 @@ def _symbol_rotation(reference: str) -> int:
     return 0
 
 
-def _world_pin(sx: float, sy: float, rotation: int, pin: dict) -> tuple[float, float]:
+def _world_pin(sx: float, sy: float, rotation: int, pin: _PinData) -> tuple[float, float]:
     """Transform a library pin coordinate into sheet coordinates."""
     x, y = float(pin["x"]), float(pin["y"])
     if rotation == 0:
@@ -747,7 +837,7 @@ def _world_pin(sx: float, sy: float, rotation: int, pin: dict) -> tuple[float, f
     raise ValueError(f"Unsupported symbol rotation: {rotation}.")
 
 
-def _group_evidence_line(group: dict) -> str:
+def _group_evidence_line(group: _SchematicGroup) -> str:
     evidence = {**GROUP_EVIDENCE, **group.get("evidence", {})}
     return (
         f"{str(evidence['document']).upper()} | "
@@ -759,7 +849,7 @@ def _group_description(group: dict) -> str:
     return f"{group['description']}\n{_group_evidence_line(group)}"
 
 
-def _group_text_width(group: dict) -> float:
+def _group_text_width(group: _SchematicGroup) -> float:
     title_width, _ = _measure_text_box(str(group["title"]), 1.27, 1.27)
     description_width, _ = _measure_text_box(
         _group_description(group),
@@ -772,15 +862,15 @@ def _group_text_width(group: dict) -> float:
 
 
 def _resolve_group_component_positions(
-    specs: list[tuple],
-    loaded: dict[tuple[str, str], list],
+    specs: list[_ComponentSpec],
+    loaded: dict[tuple[str, str], SExprList],
 ) -> dict[str, list[float]]:
     """Resolve component origins from group anchors and relative constraints.
 
     Layout metadata uses offsets, midpoint relations and library-pin-relative
     relations. Sheet coordinates are deliberately absent from symbol specs.
     """
-    by_ref = {spec[0]: spec for spec in specs}
+    by_ref: dict[str, _ComponentSpec] = {spec[0]: spec for spec in specs}
     positions: dict[str, list[float]] = {}
     for group in SCHEMATIC_GROUPS:
         layout = group.get("layout")
@@ -874,15 +964,15 @@ def _resolve_group_component_positions(
 
 
 def _pack_component_groups(
-    specs: list[tuple],
-    loaded: dict[tuple[str, str], list],
+    specs: list[_ComponentSpec],
+    loaded: dict[tuple[str, str], SExprList],
 ) -> dict[str, tuple[float, float]]:
     """Resolve local constraints, then pack derived group bounds left-to-right."""
     by_ref = {spec[0]: spec for spec in specs}
     positions = _resolve_group_component_positions(specs, loaded)
 
-    def raw_bounds(group: dict) -> tuple[float, float, float, float]:
-        points = []
+    def raw_bounds(group: _SchematicGroup) -> tuple[float, float, float, float]:
+        points: list[tuple[float, float]] = []
         for reference in group["members"]:
             spec = by_ref[reference]
             rotation = _symbol_rotation(reference)
@@ -945,7 +1035,7 @@ def _pack_component_groups(
     return {reference: (point[0], point[1]) for reference, point in positions.items()}
 
 
-def _functional_group(group: dict, bounds: tuple[float, float, float, float]) -> list[list]:
+def _functional_group(group: _SchematicGroup, bounds: tuple[float, float, float, float]) -> list[SExprList]:
     """Generate a frame, title tab and descriptive source panel from bounds."""
     left, top, right, bottom = bounds
     title = str(group["title"])
@@ -1305,8 +1395,8 @@ def generate_reference_schematic(destination: Path) -> Path:
             if mapping[0] == "GND":
                 pin_map[pin_number] = ("GND", "hier", "passive")
 
-    library_symbols = []
-    loaded = {}
+    library_symbols: list[SExprList] = []
+    loaded: dict[tuple[str, str], SExprList] = {}
     for _, library, symbol_name, *_ in specs:
         key = (library, symbol_name)
         if key not in loaded:
@@ -1314,9 +1404,9 @@ def generate_reference_schematic(destination: Path) -> Path:
             library_symbols.append(loaded[key])
 
     positions = _pack_component_groups(specs, loaded)
-    instances = []
-    labels = []
-    no_connects = []
+    instances: list[SExprList] = []
+    labels: list[SExprList] = []
+    no_connects: list[SExprList] = []
     label_points: dict[
         tuple[float, float],
         tuple[str, str, str | None, float, float, str, int],
@@ -2024,7 +2114,7 @@ def generate_reference_schematic(destination: Path) -> Path:
         right = max(right, left + _group_text_width(group))
         rules.extend(_functional_group(group, (left, top, right, bottom)))
 
-    schematic = [
+    schematic: SExprList = [
         "kicad_sch",
         ["version", "20250114"],
         ["generator", QuotedSExpr("kicad-blocks")],

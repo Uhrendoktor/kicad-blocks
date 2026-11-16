@@ -10,7 +10,7 @@ from collections.abc import Iterator, Mapping, Sequence
 from itertools import pairwise
 from math import hypot
 from pathlib import Path
-from typing import Literal, NotRequired, Protocol, Required, TypedDict, cast
+from typing import Literal, Protocol, Required, TypedDict, cast
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "plugin" / "kicad-blocks"))
@@ -125,7 +125,7 @@ class _STUSB4500Profile(Protocol):
     SCHEMATIC_GROUPS: tuple[_SchematicGroup, ...]
     WIRE_LENGTH_BUDGETS_MM: dict[str, float]
 
-    def _uid(self, key: str) -> str: ...
+    def reference_uid(self, key: str) -> str: ...
 
 
 # The generic linter deliberately has no dependency on the STUSB4500 example.
@@ -150,7 +150,7 @@ frame_gap: float = 2.54
 profile_loaded: bool = False
 
 
-def _uid(key: str) -> str:
+def reference_uid(key: str) -> str:
     raise RuntimeError(f"Profile-specific UUID requested before loading a design profile: {key}")
 
 
@@ -161,7 +161,7 @@ def _load_stusb4500_profile() -> None:
     global field_symbol_max_gap_mm, forbidden_local_labels, frame_content_padding_mm
     global ground_pins_down, group_evidence, group_gap_mm
     global required_no_connect_pins, schematic_groups, wire_length_budgets_mm
-    global _uid, zones, flow, frame_gap, profile_loaded
+    global reference_uid, zones, flow, frame_gap, profile_loaded
     if profile_loaded:
         return
     example_root = str(ROOT / "examples" / "stusb4500")
@@ -182,7 +182,7 @@ def _load_stusb4500_profile() -> None:
     required_no_connect_pins = profile.REQUIRED_NO_CONNECT_PINS
     schematic_groups = profile.SCHEMATIC_GROUPS
     wire_length_budgets_mm = profile.WIRE_LENGTH_BUDGETS_MM
-    _uid = profile._uid
+    reference_uid = profile.reference_uid
     zones = {group["id"]: set(group["members"]) for group in schematic_groups}
     flow = tuple(
         group["id"]
