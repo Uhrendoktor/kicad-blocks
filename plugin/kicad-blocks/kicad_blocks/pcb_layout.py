@@ -502,9 +502,7 @@ def _read_netclass_definitions(
         TypeError: If the project section is not an array of objects.
     """
     raw_classes = settings.get("classes", [])
-    if not isinstance(raw_classes, list) or any(
-        not isinstance(item, dict) for item in raw_classes
-    ):
+    if not isinstance(raw_classes, list) or any(not isinstance(item, dict) for item in raw_classes):
         raise TypeError(f"KiCad {source_name} net_settings.classes must be an array of objects.")
     return cast(list[KiCadNetclassDefinition], raw_classes)
 
@@ -522,8 +520,10 @@ def _read_netclass_patterns(settings: KiCadNetSettings) -> list[KiCadNetclassPat
     if not isinstance(raw_patterns, list):
         raise TypeError("KiCad net_settings.netclass_patterns must be an array.")
     for entry in raw_patterns:
-        if not isinstance(entry, dict) or not isinstance(entry.get("pattern"), str) or not isinstance(
-            entry.get("netclass"), str
+        if (
+            not isinstance(entry, dict)
+            or not isinstance(entry.get("pattern"), str)
+            or not isinstance(entry.get("netclass"), str)
         ):
             raise TypeError("KiCad net_settings.netclass_patterns entries require string fields.")
     return cast(list[KiCadNetclassPattern], raw_patterns)
@@ -897,6 +897,7 @@ def _merge_project_net_settings(
         "merged_chain_names": merged_chain_names,
         "unmatched_chains": unmatched_chains,
     }
+
 
 # Public testing/integration surfaces for deterministic PCB transformations.
 rewrite_nets = _rewrite_nets
@@ -1341,9 +1342,7 @@ def _prepare_layout_item(
         reference = _unique_reference(
             f"{settings.instance_reference}_{old_reference}", context.existing_references
         )
-        _rewrite_footprint(
-            item, reference, 0.0, 0.0, uuid_remap=context.pad_uuid_remap
-        )
+        _rewrite_footprint(item, reference, 0.0, 0.0, uuid_remap=context.pad_uuid_remap)
         _transform_item(
             item,
             anchor_mm=settings.anchor_mm,
@@ -1407,9 +1406,7 @@ def _import_layout_items(
         item_uuids.append(item_uuid)
     if not imported:
         raise ValueError("The stored block layout contains no importable PCB objects.")
-    return _ImportedLayoutItems(
-        imported, references, item_uuids, skipped, context.pad_uuid_remap
-    )
+    return _ImportedLayoutItems(imported, references, item_uuids, skipped, context.pad_uuid_remap)
 
 
 def _insert_layout_items(
@@ -1548,17 +1545,29 @@ def merge_block_layout(
         "layout_name": files.selected_layout.get("name"),
         "instance_reference": instance_reference,
         "rotation_deg": placement.rotation_deg,
-        "project_file": (
-            str(files.output_project) if files.output_project.is_file() else None
-        ),
+        "project_file": (str(files.output_project) if files.output_project.is_file() else None),
         "merged_netclasses": project_merge["merged_classes"] if project_merge is not None else [],
-        "assigned_project_nets": project_merge["assigned_nets"] if project_merge is not None else [],
-        "ignored_project_patterns": project_merge["ignored_patterns"] if project_merge is not None else False,
-        "applied_project_patterns": project_merge["applied_patterns"] if project_merge is not None else [],
-        "unmatched_project_patterns": project_merge["unmatched_patterns"] if project_merge is not None else [],
-        "ignored_project_chain_classes": project_merge["ignored_chain_classes"] if project_merge is not None else False,
-        "merged_project_chain_names": project_merge["merged_chain_names"] if project_merge is not None else [],
-        "unmatched_project_chains": project_merge["unmatched_chains"] if project_merge is not None else [],
+        "assigned_project_nets": project_merge["assigned_nets"]
+        if project_merge is not None
+        else [],
+        "ignored_project_patterns": project_merge["ignored_patterns"]
+        if project_merge is not None
+        else False,
+        "applied_project_patterns": project_merge["applied_patterns"]
+        if project_merge is not None
+        else [],
+        "unmatched_project_patterns": project_merge["unmatched_patterns"]
+        if project_merge is not None
+        else [],
+        "ignored_project_chain_classes": project_merge["ignored_chain_classes"]
+        if project_merge is not None
+        else False,
+        "merged_project_chain_names": project_merge["merged_chain_names"]
+        if project_merge is not None
+        else [],
+        "unmatched_project_chains": project_merge["unmatched_chains"]
+        if project_merge is not None
+        else [],
         "merged_board_chains": sorted(chain_name_map.values()),
         "footprints": imported.references,
         "interactive_item_uuids": imported.item_uuids,
