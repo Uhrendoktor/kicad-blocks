@@ -313,11 +313,18 @@ def test_open_pcb_button_creates_chooser_for_selected_block(monkeypatch, tmp_pat
             and child.title() == "Open PCB layout — USB power block"
         ]
         assert len(dialogs) == 1
-        combo = next(
+        def walk_widgets(parent):
+            for child in parent.winfo_children():
+                yield child
+                yield from walk_widgets(child)
+
+        combos = [
             item
-            for item in plugin_actions.tk.Widget.winfo_children(dialogs[0])
-            if item.winfo_class() == "TFrame"
-        )
-        assert combo is not None
+            for item in walk_widgets(dialogs[0])
+            if item.winfo_class() == "TCombobox"
+        ]
+        assert len(combos) == 1
+        assert combos[0].get() == "Default [default-pcb]"
+        assert tuple(combos[0]["values"]) == ("Default [default-pcb]",)
     finally:
         root.destroy()
