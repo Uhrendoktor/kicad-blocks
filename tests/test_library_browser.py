@@ -984,8 +984,8 @@ class LibraryBrowserTests(unittest.TestCase):
         ):
             _configure_tk_theme(root)
         self.assertEqual(root._kicad_blocks_palette, {})
-        style.configure.assert_any_call("Treeview", rowheight=36, padding=(4, 3))
-        style.configure.assert_any_call("Treeview.Heading", padding=(8, 8))
+        style.configure.assert_any_call("Treeview", rowheight=29, padding=(4, 2))
+        style.configure.assert_any_call("Treeview.Heading", padding=(8, 6))
 
     def _theme_ipc_modules(self):
         package = ModuleType("kipy")

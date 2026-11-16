@@ -196,21 +196,23 @@ def _configure_tk_theme(root, kicad=None) -> None:
         # used to drop the fixed Treeview row height and clip table text.
         root._kicad_blocks_palette = {}
         style = ttk.Style(root)
-        style.configure("Treeview", rowheight=36, padding=(4, 3))
-        style.configure("Treeview.Heading", padding=(8, 8))
+        style.configure("Treeview", rowheight=29, padding=(4, 2))
+        style.configure("Treeview.Heading", padding=(8, 6))
         style.configure("Vertical.TScrollbar", width=12)
         style.configure("Horizontal.TScrollbar", width=12)
         return
     colors = ({
-        "background": "#202326", "surface": "#292d31", "surface_alt": "#33383d",
-        "field": "#191c1f", "hover": "#3b4249", "selected": "#344b62",
-        "foreground": "#e6e9ec", "muted": "#aab2ba", "border": "#48515a",
-        "accent": "#78a9d4", "scroll_thumb": "#505a64", "scroll_trough": "#24282c",
+        "background": "#171c21", "surface": "#222a31", "surface_alt": "#2b343d",
+        "field": "#171c21", "hover": "#33404a", "selected": "#355169",
+        "foreground": "#e8edf2", "muted": "#a7b2bd", "border": "#414c56",
+        "accent": "#79b8e4", "accent_foreground": "#17232e",
+        "scroll_thumb": "#505d69", "scroll_trough": "#1d242a",
     } if dark else {
-        "background": "#e8eaed", "surface": "#f4f5f6", "surface_alt": "#e1e4e7",
-        "field": "#ffffff", "hover": "#e8edf2", "selected": "#c9d8e6",
-        "foreground": "#20252a", "muted": "#5f6871", "border": "#b8c0c8",
-        "accent": "#4c789f", "scroll_thumb": "#c0c7ce", "scroll_trough": "#e4e7ea",
+        "background": "#f1f4f7", "surface": "#ffffff", "surface_alt": "#edf1f5",
+        "field": "#ffffff", "hover": "#e7eff6", "selected": "#d5e6f4",
+        "foreground": "#202934", "muted": "#647180", "border": "#d6dee6",
+        "accent": "#2f6f9f", "accent_foreground": "#ffffff",
+        "scroll_thumb": "#c1cbd5", "scroll_trough": "#e8edf2",
     })
     style = ttk.Style(root)
     try:
@@ -232,6 +234,18 @@ def _configure_tk_theme(root, kicad=None) -> None:
     style.configure("TFrame", background=colors["background"])
     style.configure("TPanedwindow", background=colors["background"])
     style.configure("TLabel", background=colors["background"], foreground=colors["foreground"])
+    style.configure(
+        "Title.TLabel", background=colors["background"], foreground=colors["foreground"],
+        font=("TkDefaultFont", 12, "bold"),
+    )
+    style.configure(
+        "Section.TLabel", background=colors["background"], foreground=colors["muted"],
+        font=("TkDefaultFont", 9, "bold"),
+    )
+    style.configure(
+        "Muted.TLabel", background=colors["background"], foreground=colors["muted"],
+        font=("TkDefaultFont", 8),
+    )
     style.configure("TLabelframe", background=colors["background"], foreground=colors["foreground"],
                     bordercolor=colors["border"], lightcolor=colors["border"],
                     darkcolor=colors["border"], relief="solid", borderwidth=1)
@@ -264,6 +278,22 @@ def _configure_tk_theme(root, kicad=None) -> None:
         lightcolor=[("focus", colors["accent"]), ("!focus", colors["surface_alt"])],
         darkcolor=[("focus", colors["accent"]), ("!focus", colors["surface_alt"])],
     )
+    style.configure(
+        "Primary.TButton",
+        background=colors["accent"], foreground=colors["accent_foreground"],
+        bordercolor=colors["accent"], lightcolor=colors["accent"],
+        darkcolor=colors["accent"], borderwidth=0, focuscolor=colors["accent"],
+        focusthickness=1, padding=(10, 6), relief="flat",
+        font=("TkDefaultFont", 9, "bold"),
+    )
+    style.map(
+        "Primary.TButton",
+        background=[("disabled", colors["surface_alt"]), ("pressed", colors["selected"]), ("active", colors["accent"])],
+        foreground=[("disabled", colors["muted"]), ("!disabled", colors["accent_foreground"])],
+        bordercolor=[("focus", colors["accent"]), ("!focus", colors["accent"])],
+        lightcolor=[("focus", colors["accent"]), ("!focus", colors["accent"])],
+        darkcolor=[("focus", colors["accent"]), ("!focus", colors["accent"])],
+    )
     style.configure("TEntry", fieldbackground=colors["field"], foreground=colors["foreground"],
                     insertcolor=colors["foreground"], bordercolor=colors["border"],
                     lightcolor=colors["border"], darkcolor=colors["border"], padding=(7, 5))
@@ -280,12 +310,12 @@ def _configure_tk_theme(root, kicad=None) -> None:
     style.configure("Treeview", background=colors["surface"], fieldbackground=colors["surface"],
                     foreground=colors["foreground"], bordercolor=colors["border"],
                     lightcolor=colors["border"], darkcolor=colors["border"],
-                    rowheight=36, relief="flat", borderwidth=0, padding=(4, 3))
+                    rowheight=29, relief="flat", borderwidth=0, padding=(4, 2))
     style.map("Treeview", background=[("selected", colors["selected"])],
               foreground=[("selected", colors["foreground"])])
     style.configure("Treeview.Heading", background=colors["surface_alt"], foreground=colors["muted"],
                     bordercolor=colors["border"], lightcolor=colors["surface_alt"],
-                    darkcolor=colors["border"], relief="flat", padding=(8, 8),
+                    darkcolor=colors["border"], relief="flat", padding=(8, 6),
                     font=("TkDefaultFont", 9, "bold"))
     style.map("Treeview.Heading", background=[("active", colors["hover"])],
               foreground=[("active", colors["foreground"])])
@@ -448,7 +478,7 @@ def _add_tooltip(widget, text: str) -> None:
     widget.bind("<ButtonPress>", hide, add="+")
 
 
-def _create_action_icon(parent, name: str):
+def _create_action_icon(parent, name: str, stroke_color: str | None = None):
     """Render one semantic 20px toolbar icon using the current KiCad palette."""
     drawings = {
         "place": '<rect x="4" y="4" width="12" height="12" rx="2"/><path d="M16 16l4 4M10 7v6M7 10h6"/>',
@@ -483,7 +513,7 @@ def _create_action_icon(parent, name: str):
     if not path_data:
         return None
     palette = getattr(parent.winfo_toplevel(), "_kicad_blocks_palette", {})
-    accent = palette.get("accent", "#4c789f")
+    accent = stroke_color or palette.get("accent", "#4c789f")
     svg = (
         '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">'
         f'<g fill="none" stroke="{accent}" stroke-width="1.7" stroke-linecap="round" '
@@ -520,8 +550,14 @@ def _action_button(
     **button_options,
 ):
     """Create a consistently padded, semantic icon-and-label action button."""
-    image = _create_action_icon(parent, icon)
-    options = {"text": text, "command": command, "padding": (9, 6)}
+    palette = getattr(parent.winfo_toplevel(), "_kicad_blocks_palette", {})
+    icon_color = (
+        palette.get("accent_foreground")
+        if button_options.get("style") == "Primary.TButton"
+        else None
+    )
+    image = _create_action_icon(parent, icon, icon_color)
+    options = {"text": text, "command": command, "padding": (8, 5)}
     options.update(button_options)
     if image is not None:
         options.update({"image": image, "compound": "left"})
@@ -876,7 +912,7 @@ def _show_selected_block_configuration(
     dialog.title(f"Configure {instance.reference} — {block.name}")
     dialog.transient(parent)
 
-    outer = ttk.Frame(dialog, padding=18)
+    outer = ttk.Frame(dialog, padding=12)
     outer.pack(fill="both", expand=True)
     ttk.Label(
         outer,
@@ -888,8 +924,8 @@ def _show_selected_block_configuration(
     profile_var = None
     profile_labels: dict[str, dict] = {}
     if profiles:
-        section = ttk.LabelFrame(content, text="Configuration profile", padding=10)
-        section.pack(fill="x", pady=(0, 10))
+        section = ttk.LabelFrame(content, text="Configuration profile", padding=8)
+        section.pack(fill="x", pady=(0, 6))
         profile_labels = {
             f"{item['name']}  [{item['id']}]": item
             for item in profiles
@@ -916,8 +952,8 @@ def _show_selected_block_configuration(
     variant_var = None
     variant_combo = None
     if variants:
-        section = ttk.LabelFrame(content, text="Implementation variant", padding=10)
-        section.pack(fill="x", pady=(0, 10))
+        section = ttk.LabelFrame(content, text="Implementation variant", padding=8)
+        section.pack(fill="x", pady=(0, 6))
         variant_var = tk.StringVar(value=_field_value(instance, VARIANT_FIELD_NAME))
         variant_combo = ttk.Combobox(
             section,
@@ -930,8 +966,8 @@ def _show_selected_block_configuration(
 
     parameter_vars = {}
     if parameters:
-        section = ttk.LabelFrame(content, text="Parameters", padding=10)
-        section.pack(fill="both", expand=True, pady=(0, 10))
+        section = ttk.LabelFrame(content, text="Parameters", padding=8)
+        section.pack(fill="both", expand=True, pady=(0, 6))
         section.columnconfigure(1, weight=1)
         for row, parameter in enumerate(parameters):
             name = parameter["name"]
@@ -950,15 +986,15 @@ def _show_selected_block_configuration(
                 )
             else:
                 widget = ttk.Entry(section, textvariable=variable)
-            widget.grid(row=row * 2, column=1, sticky="ew", pady=(5, 0))
+            widget.grid(row=row * 2, column=1, sticky="ew", pady=(3, 0))
             description = parameter.get("description") or f"Default: {parameter['default']}"
             _add_tooltip(widget, description)
 
     layout_var = None
     layout_ids = {}
     if layouts:
-        section = ttk.LabelFrame(content, text="PCB layout", padding=10)
-        section.pack(fill="x", pady=(0, 10))
+        section = ttk.LabelFrame(content, text="PCB layout", padding=8)
+        section.pack(fill="x", pady=(0, 6))
         layout_ids = {
             f"{item.get('name', item.get('id'))}  [{item.get('id')}]": str(item.get("id") or "")
             for item in layouts
@@ -1078,7 +1114,7 @@ def _show_selected_block_configuration(
             linked_variable.trace_add("write", mark_profile_custom)
 
     footer = ttk.Frame(outer)
-    footer.pack(fill="x", pady=(14, 0))
+    footer.pack(fill="x", pady=(10, 0))
 
     def save_configuration() -> None:
         try:
@@ -1175,12 +1211,12 @@ def _pick_block_for_placement(records, parent):
     dialog.title("Place Functional Block")
     dialog.transient(parent)
 
-    outer = ttk.Frame(dialog, padding=12)
+    outer = ttk.Frame(dialog, padding=10)
     outer.pack(fill="both", expand=True)
-    ttk.Label(outer, text="Search functional blocks").pack(anchor="w")
+    ttk.Label(outer, text="Search").pack(anchor="w")
     search = tk.StringVar()
     search_entry = ttk.Entry(outer, textvariable=search)
-    search_entry.pack(fill="x", pady=(4, 8))
+    search_entry.pack(fill="x", pady=(3, 6))
 
     panes = ttk.Panedwindow(outer, orient="horizontal")
     panes.pack(fill="both", expand=True)
@@ -1222,14 +1258,14 @@ def _pick_block_for_placement(records, parent):
     profile_combo = ttk.Combobox(config, textvariable=profile_value, state="readonly", width=32)
     profile_combo.grid(row=1, column=1, sticky="ew", pady=2)
 
-    preview_box = ttk.LabelFrame(right, text="Schematic Facade — rendered by KiCad", padding=6)
+    preview_box = ttk.LabelFrame(right, text="KiCad facade preview", padding=5)
     preview_box.pack(fill="both", expand=True)
-    preview = tk.Canvas(preview_box, height=310, highlightthickness=0, borderwidth=0)
+    preview = tk.Canvas(preview_box, height=270, highlightthickness=0, borderwidth=0)
     preview.pack(fill="both", expand=True)
     _bind_mousewheel(preview, lambda amount: preview.yview_scroll(amount, "units"))
 
     metadata = ttk.Label(right, text="", wraplength=620, justify="left")
-    metadata.pack(fill="x", anchor="w", pady=(8, 0))
+    metadata.pack(fill="x", anchor="w", pady=(6, 0))
 
     records_by_id = {}
     visible_records = []
@@ -1382,7 +1418,7 @@ def _pick_block_for_placement(records, parent):
     _action_button(buttons, "Cancel", dialog.destroy, "cancel", "Cancel and close this dialog").pack(side="right")
     _action_button(buttons, "Place Block", choose, "place", "Start native symbol placement with this block").pack(side="right", padx=(0, 8))
     render_results()
-    _set_window_geometry(dialog, 1200, 800, 980, 640)
+    _set_window_geometry(dialog, 1080, 720, 900, 580)
     dialog.grab_set()
     search_entry.focus_set()
     dialog.wait_window()
@@ -1892,7 +1928,7 @@ def _ask_create_block_details(parent, source_sheet: Path) -> tuple[str, str] | N
     dialog.title("Create Functional Block")
     if not reuse_parent:
         dialog.transient(parent)
-    frame = ttk.Frame(dialog, padding=18)
+    frame = ttk.Frame(dialog, padding=14)
     frame.pack(fill="both", expand=True)
     ttk.Label(
         frame,
@@ -1904,16 +1940,16 @@ def _ask_create_block_details(parent, source_sheet: Path) -> tuple[str, str] | N
         frame,
         text=f"Source sheet: {source_sheet.name}",
         foreground=palette.get("muted", ""),
-    ).pack(anchor="w", pady=(4, 16))
+    ).pack(anchor="w", pady=(3, 10))
     ttk.Label(frame, text="Block name").pack(anchor="w")
     name = tk.StringVar(
         value=source_sheet.stem.replace("_", " ").replace("-", " ").title()
     )
     name_entry = ttk.Entry(frame, textvariable=name)
-    name_entry.pack(fill="x", pady=(4, 12))
+    name_entry.pack(fill="x", pady=(3, 8))
     ttk.Label(frame, text="Description (optional)").pack(anchor="w")
-    description = tk.Text(frame, height=5, wrap="word", relief="flat", borderwidth=1)
-    description.pack(fill="both", expand=True, pady=(4, 14))
+    description = tk.Text(frame, height=3, wrap="word", relief="flat", borderwidth=1)
+    description.pack(fill="both", expand=True, pady=(3, 10))
     description.configure(
         background=palette.get("field", "#ffffff"),
         foreground=palette.get("foreground", "#20252a"),
@@ -3395,13 +3431,13 @@ def _ask_layout_details(parent, record) -> dict | None:
     dialog._kicad_ui_screen_id = "add-pcb-layout"
     dialog.title("Add PCB layout")
     dialog.transient(parent)
-    frame = ttk.Frame(dialog, padding=16)
+    frame = ttk.Frame(dialog, padding=12)
     frame.pack(fill="both", expand=True)
     ttk.Label(frame, text="PCB layout name").grid(row=0, column=0, sticky="w")
     name_value = tk.StringVar(value="New layout")
     name_entry = ttk.Entry(frame, textvariable=name_value)
     name_entry._kicad_ui_contract_id = "add-pcb-layout.name"
-    name_entry.grid(row=1, column=0, columnspan=3, sticky="ew", pady=(4, 12))
+    name_entry.grid(row=1, column=0, columnspan=3, sticky="ew", pady=(3, 8))
     ttk.Label(frame, text="Starting point").grid(row=2, column=0, sticky="w")
     mode_value = tk.StringVar(value="Create a new empty board")
     mode_combo = ttk.Combobox(
@@ -3411,16 +3447,16 @@ def _ask_layout_details(parent, record) -> dict | None:
         state="readonly",
     )
     mode_combo._kicad_ui_contract_id = "add-pcb-layout.mode"
-    mode_combo.grid(row=3, column=0, columnspan=3, sticky="ew", pady=(4, 12))
+    mode_combo.grid(row=3, column=0, columnspan=3, sticky="ew", pady=(3, 8))
     source_value = tk.StringVar()
     source_entry = ttk.Entry(frame, textvariable=source_value)
     source_entry._kicad_ui_contract_id = "add-pcb-layout.source"
-    source_entry.grid(row=4, column=0, columnspan=2, sticky="ew", pady=(4, 12))
+    source_entry.grid(row=4, column=0, columnspan=2, sticky="ew", pady=(3, 8))
     browse_button = _action_button(
         frame, "Choose file…", lambda: None, "file", "Choose an existing KiCad PCB file",
         contract_id="add-pcb-layout.browse",
     )
-    browse_button.grid(row=4, column=2, sticky="ew", padx=(8, 0), pady=(4, 12))
+    browse_button.grid(row=4, column=2, sticky="ew", padx=(6, 0), pady=(3, 8))
     implementation_values = ["Default"] + [
         str(item["value"]) for item in record.manifest.get("variants", [])
     ]
@@ -3433,7 +3469,7 @@ def _ask_layout_details(parent, record) -> dict | None:
         state="readonly",
     )
     link_combo._kicad_ui_contract_id = "add-pcb-layout.implementation"
-    link_combo.grid(row=6, column=0, columnspan=3, sticky="ew", pady=(4, 4))
+    link_combo.grid(row=6, column=0, columnspan=3, sticky="ew", pady=(3, 2))
     _add_tooltip(link_combo, "This layout is available when applying the selected implementation to a board.")
     frame.columnconfigure(0, weight=1)
     result = [None]
@@ -3488,7 +3524,7 @@ def _ask_layout_details(parent, record) -> dict | None:
         dialog.destroy()
 
     buttons = ttk.Frame(frame)
-    buttons.grid(row=7, column=0, columnspan=3, sticky="ew", pady=(8, 0))
+    buttons.grid(row=7, column=0, columnspan=3, sticky="ew", pady=(6, 0))
     _action_button(
         buttons, "Cancel", dialog.destroy, "cancel", "Cancel layout creation",
         contract_id="add-pcb-layout.cancel",
@@ -3499,7 +3535,7 @@ def _ask_layout_details(parent, record) -> dict | None:
     ).pack(side="right", padx=(0, 8))
     dialog.bind("<Return>", lambda _event: accept())
     dialog.bind("<Escape>", lambda _event: dialog.destroy())
-    _set_window_geometry(dialog, 860, 620, 760, 560)
+    _set_window_geometry(dialog, 760, 500, 640, 430)
     dialog.grab_set()
     name_entry.focus_set()
     dialog.wait_window()
@@ -3926,20 +3962,20 @@ def _ask_implementation_details(
     dialog = tk.Toplevel(parent)
     dialog.title("Implementation details")
     dialog.transient(parent)
-    frame = ttk.Frame(dialog, padding=16)
+    frame = ttk.Frame(dialog, padding=12)
     frame.pack(fill="both", expand=True)
     ttk.Label(
         frame,
         text="New circuit implementation",
         font=("TkDefaultFont", 12, "bold"),
-    ).grid(row=0, column=0, columnspan=3, sticky="w", pady=(0, 14))
+    ).grid(row=0, column=0, columnspan=3, sticky="w", pady=(0, 8))
 
     ttk.Label(frame, text="Variant value").grid(
         row=1, column=0, columnspan=3, sticky="w"
     )
     selector_value = tk.StringVar(value=value)
     selector_entry = ttk.Entry(frame, textvariable=selector_value)
-    selector_entry.grid(row=2, column=0, columnspan=3, sticky="ew", pady=(2, 12))
+    selector_entry.grid(row=2, column=0, columnspan=3, sticky="ew", pady=(2, 8))
     _add_tooltip(selector_entry, "Stored in KB_VARIANT on the placed facade.")
 
     mode_value = tk.StringVar(value="Choose a schematic file")
@@ -3958,7 +3994,7 @@ def _ask_implementation_details(
         mode_combo = ttk.Combobox(
             frame, textvariable=mode_value, values=modes, state="readonly"
         )
-        mode_combo.grid(row=4, column=0, columnspan=3, sticky="ew", pady=(4, 12))
+        mode_combo.grid(row=4, column=0, columnspan=3, sticky="ew", pady=(3, 8))
     else:
         modes = ["Choose a schematic file"]
         mode_combo = None
@@ -3967,7 +4003,7 @@ def _ask_implementation_details(
     source_label = ttk.Label(frame, text="Source schematic (.kicad_sch)")
     source_label.grid(row=source_row, column=0, columnspan=3, sticky="w")
     source_entry = ttk.Entry(frame, textvariable=source_value)
-    source_entry.grid(row=source_row + 1, column=0, columnspan=2, sticky="ew", pady=(4, 14))
+    source_entry.grid(row=source_row + 1, column=0, columnspan=2, sticky="ew", pady=(3, 10))
     browse_button = _action_button(
         frame, "Choose file…", lambda: None, "file", "Choose an implementation schematic"
     )
@@ -3979,7 +4015,7 @@ def _ask_implementation_details(
         state="readonly",
     )
     copy_combo.grid(
-        row=source_row + 1, column=0, columnspan=3, sticky="ew", pady=(4, 14)
+        row=source_row + 1, column=0, columnspan=3, sticky="ew", pady=(3, 10)
     )
     copy_combo.grid_remove()
 
@@ -4070,7 +4106,7 @@ def _ask_implementation_details(
         dialog.destroy()
 
     buttons = ttk.Frame(frame)
-    buttons.grid(row=source_row + 2, column=0, columnspan=3, sticky="ew", pady=(12, 4))
+    buttons.grid(row=source_row + 2, column=0, columnspan=3, sticky="ew", pady=(8, 2))
     _action_button(buttons, "Cancel", dialog.destroy, "cancel", "Cancel implementation setup").pack(side="right")
     _action_button(
         buttons, "Use implementation", accept, "select", "Use the selected implementation",
@@ -4079,7 +4115,7 @@ def _ask_implementation_details(
     dialog.bind("<Escape>", lambda _event: dialog.destroy())
     source_entry.xview_moveto(1.0)
     selector_entry.focus_set()
-    _set_window_geometry(dialog, 860, 540, 740, 460)
+    _set_window_geometry(dialog, 780, 490, 660, 420)
     dialog.grab_set()
     dialog.wait_window()
     return result[0]
@@ -4097,7 +4133,7 @@ def _show_block_variant_editor(
     dialog.title(f"Implementations — {record.name}")
     dialog.transient(parent)
 
-    frame = ttk.Frame(dialog, padding=14)
+    frame = ttk.Frame(dialog, padding=12)
     frame.pack(fill="both", expand=True)
     palette = getattr(parent, "_kicad_blocks_palette", {})
     frame.columnconfigure(0, weight=1)
@@ -4115,7 +4151,7 @@ def _show_block_variant_editor(
         font=("TkDefaultFont", 8),
     )
     status_label._kicad_ui_contract_id = "implementations-manager.status"
-    status_label.grid(row=1, column=0, sticky="w", pady=(3, 8))
+    status_label.grid(row=1, column=0, sticky="w", pady=(2, 6))
 
     table_frame = ttk.Frame(frame)
     table_frame.grid(row=2, column=0, sticky="nsew")
@@ -4131,9 +4167,9 @@ def _show_block_variant_editor(
     tree.heading("value", text="Implementation")
     tree.heading("file", text="Schematic file")
     tree.heading("role", text="Role")
-    tree.column("value", width=220, minwidth=160, stretch=False)
-    tree.column("file", width=560, minwidth=320, stretch=True)
-    tree.column("role", width=150, minwidth=130, stretch=False)
+    tree.column("value", width=190, minwidth=150, stretch=False)
+    tree.column("file", width=430, minwidth=260, stretch=True)
+    tree.column("role", width=130, minwidth=110, stretch=False)
     scroll = ttk.Scrollbar(
         table_frame, orient="vertical", command=tree.yview, style="Vertical.TScrollbar"
     )
@@ -4426,7 +4462,7 @@ def _show_block_variant_editor(
     dialog.bind("<Escape>", lambda _event: cancel_variant_edits())
     render(0)
     dialog.protocol("WM_DELETE_WINDOW", cancel_variant_edits)
-    _set_window_geometry(dialog, 1080, 740, 900, 620)
+    _set_window_geometry(dialog, 980, 650, 820, 520)
     dialog.grab_set()
     dialog.wait_window()
     return new_implementation_to_open[0]
@@ -4438,7 +4474,7 @@ def _show_library_roots_dialog(parent) -> bool:
     dialog.title("Manage Libraries")
     dialog.transient(parent)
 
-    outer = ttk.Frame(dialog, padding=14)
+    outer = ttk.Frame(dialog, padding=10)
     outer.pack(fill="both", expand=True)
     outer.columnconfigure(0, weight=1)
     outer.rowconfigure(1, weight=1)
@@ -4650,7 +4686,7 @@ def _show_library_roots_dialog(parent) -> bool:
         except (OSError, ValueError) as exc:
             messagebox.showerror("Set default library", str(exc), parent=dialog)
 
-    library_actions = ttk.Frame(outer, padding=(0, 9, 0, 6))
+    library_actions = ttk.Frame(outer, padding=(0, 7, 0, 5))
     library_actions.grid(row=3, column=0, sticky="ew")
     _action_button(
         library_actions, "Add library", add_library, "add",
@@ -4664,7 +4700,7 @@ def _show_library_roots_dialog(parent) -> bool:
     ttk.Separator(outer, orient="horizontal").grid(
         row=4, column=0, sticky="ew", pady=(2, 2)
     )
-    selected_actions = ttk.Frame(outer, padding=(0, 6, 0, 0))
+    selected_actions = ttk.Frame(outer, padding=(0, 5, 0, 0))
     selected_actions.grid(row=5, column=0, sticky="ew")
     change_button = _action_button(
         selected_actions, "Change folder", change_library_folder, "change",
@@ -4703,7 +4739,7 @@ def _show_library_roots_dialog(parent) -> bool:
     tree.bind("<<TreeviewSelect>>", update_selection_actions)
     render()
     update_selection_actions()
-    _set_window_geometry(dialog, 1120, 680, 880, 500)
+    _set_window_geometry(dialog, 1040, 620, 820, 460)
     dialog.grab_set()
     dialog.wait_window()
     return changed[0]
@@ -4763,22 +4799,22 @@ def _show_library_browser(
     palette = getattr(window, "_kicad_blocks_palette", {})
     theme_background = palette.get("background") or style.lookup("TFrame", "background") or window.cget("background")
     theme_foreground = palette.get("foreground") or style.lookup("TLabel", "foreground") or ""
-    outer = ttk.Frame(window, padding=10)
+    outer = ttk.Frame(window, padding=8)
     outer.pack(fill="both", expand=True)
     header = ttk.Frame(outer)
-    header.pack(fill="x", pady=(0, 8))
-    ttk.Label(header, text="Functional Block Library").pack(side="left")
+    header.pack(fill="x", pady=(0, 6))
+    ttk.Label(header, text="Functional Block Library", style="Title.TLabel").pack(side="left")
     library_path = tk.StringVar()
-    library_summary = ttk.Label(header, textvariable=library_path)
+    library_summary = ttk.Label(header, textvariable=library_path, style="Muted.TLabel")
     library_summary._kicad_ui_contract_id = "library-browser.summary"
     library_summary.pack(side="right", padx=(12, 0))
 
     panes = ttk.Panedwindow(outer, orient="horizontal")
     panes._kicad_ui_contract_id = "library-browser.panes"
     panes.pack(fill="both", expand=True)
-    left = ttk.Frame(panes, padding=(0, 0, 8, 0))
+    left = ttk.Frame(panes, padding=(0, 0, 6, 0))
     left._kicad_ui_contract_id = "library-browser.results-pane"
-    right = ttk.Frame(panes, padding=(8, 0, 0, 0))
+    right = ttk.Frame(panes, padding=(6, 0, 0, 0))
     right._kicad_ui_contract_id = "library-browser.preview-pane"
     panes.add(left, weight=3)
     panes.add(right, weight=4)
@@ -4789,7 +4825,7 @@ def _show_library_browser(
     search = tk.StringVar()
     search_entry = ttk.Entry(left, textvariable=search)
     search_entry._kicad_ui_contract_id = "library-browser.search"
-    search_entry.grid(row=1, column=0, sticky="ew", pady=(4, 8))
+    search_entry.grid(row=1, column=0, sticky="ew", pady=(3, 6))
     _add_tooltip(search_entry, "Filter blocks · ↑/↓ browse · Enter place")
     tree_frame = ttk.Frame(left)
     tree_frame.grid(row=2, column=0, sticky="nsew")
@@ -4824,17 +4860,17 @@ def _show_library_browser(
     _bind_mousewheel(tree, lambda amount: tree.yview_scroll(amount, "units"))
 
     right.columnconfigure(0, weight=1)
-    right.rowconfigure(2, weight=2)
+    right.rowconfigure(2, weight=3)
     right.rowconfigure(3, weight=1)
-    name_label = ttk.Label(right, text="Select a block")
+    name_label = ttk.Label(right, text="Select a block", style="Title.TLabel")
     name_label._kicad_ui_contract_id = "library-browser.selected-name"
     name_label.grid(row=0, column=0, sticky="ew")
     description_label = ttk.Label(
-        right, text="", wraplength=560, justify="left"
+        right, text="", wraplength=560, justify="left", style="Muted.TLabel"
     )
-    description_label.grid(row=1, column=0, sticky="ew", pady=(4, 8))
+    description_label.grid(row=1, column=0, sticky="ew", pady=(3, 6))
 
-    preview_box = ttk.LabelFrame(right, text="Preview", padding=5)
+    preview_box = ttk.LabelFrame(right, text="Preview", padding=4)
     preview_box.grid(row=2, column=0, sticky="nsew")
     preview_notebook = ttk.Notebook(preview_box)
     preview_notebook._kicad_ui_contract_id = "library-browser.preview.views"
@@ -4883,7 +4919,7 @@ def _show_library_browser(
         textvariable=implementation_choice,
         values=("Default",),
         state="disabled",
-        width=22,
+        width=16,
     )
     implementation_selector._kicad_ui_contract_id = "library-browser.implementation"
     implementation_selector.pack(side="left", padx=(5, 0))
@@ -4895,7 +4931,7 @@ def _show_library_browser(
         textvariable=page_choice,
         values=(),
         state="disabled",
-        width=22,
+        width=16,
     )
     page_selector._kicad_ui_contract_id = "library-browser.sheet"
     schematic_frame = ttk.Frame(schematic_page)
@@ -4932,19 +4968,19 @@ def _show_library_browser(
     schematic_x_scroll.grid(row=1, column=0, sticky="ew")
     _bind_mousewheel(schematic_preview, lambda amount: schematic_preview.yview_scroll(amount, "units"))
 
-    details_box = ttk.LabelFrame(right, text="Block overview", padding=5)
+    details_box = ttk.LabelFrame(right, text="Block overview", padding=4)
     details_box.grid(row=3, column=0, sticky="nsew", pady=(8, 0))
     details_frame = ttk.Frame(details_box)
     details_frame.pack(fill="both", expand=True)
     details = tk.Text(
         details_frame,
-        height=12,
+        height=8,
         wrap="word",
         relief="flat",
         borderwidth=0,
         background=theme_background,
         foreground=theme_foreground,
-        font=("TkDefaultFont", 9),
+        font=("TkDefaultFont", 8),
     )
     details_scroll = ttk.Scrollbar(
         details_frame, orient="vertical", command=details.yview, style="Vertical.TScrollbar"
@@ -5082,13 +5118,11 @@ def _show_library_browser(
 
         name_label.configure(text=record.name)
         description = " ".join(
-            str(record.manifest.get("description", "") or "No description provided.").split()
+            str(record.manifest.get("description", "") or "").split()
         )
         if len(description) > 150:
             description = description[:147].rstrip() + "…"
-        description_label.configure(
-            text=f"{description}  ·  {record.path.parent.name}"
-        )
+        description_label.configure(text=description)
         details.configure(state="normal")
         details.delete("1.0", "end")
         details.tag_configure(
@@ -5555,12 +5589,13 @@ def _show_library_browser(
         ),
     )
 
-    action_toolbar = ttk.Frame(outer, padding=(0, 10, 0, 0))
+    action_toolbar = ttk.Frame(outer, padding=(0, 7, 0, 0))
     action_toolbar.pack(fill="x")
     place_button = _action_button(
         action_toolbar, "Place block", place_selected, "place",
-        "Register the selected facade and start KiCad native symbol placement",
+        "Create the selected facade at the active sheet centre and select it",
         contract_id="library-browser.action.place",
+        style="Primary.TButton",
     )
     place_button.pack(side="left")
     implementation_button = _action_button(
@@ -5568,46 +5603,52 @@ def _show_library_browser(
         "Open the base or a named circuit implementation",
         contract_id="library-browser.action.implementation",
     )
-    implementation_button.pack(side="left", padx=(6, 0))
+    implementation_button.pack(side="left", padx=(4, 0))
     facade_button[0] = _action_button(
         action_toolbar, "Edit facade", edit_facade, "facade",
         "Open the generated library facade in KiCad Symbol Editor",
         contract_id="library-browser.action.facade",
     )
-    facade_button[0].pack(side="left", padx=(6, 0))
+    facade_button[0].pack(side="left", padx=(4, 0))
     variants_button = _action_button(
         action_toolbar, "Variants", edit_variants, "variants",
         "Add, edit, remove, or set the default circuit implementation",
         contract_id="library-browser.action.variants",
     )
-    variants_button.pack(side="left", padx=(6, 0))
+    variants_button.pack(side="left", padx=(4, 0))
+    ttk.Separator(action_toolbar, orient="vertical").pack(
+        side="left", fill="y", padx=7, pady=4
+    )
     open_layout_button[0] = _action_button(
         action_toolbar, "Open PCB", open_layout, "pcb",
         "Open one of the block's stored PCB layouts",
         contract_id="library-browser.action.open-pcb",
     )
-    open_layout_button[0].pack(side="left", padx=(6, 0))
+    open_layout_button[0].pack(side="left", padx=(4, 0))
     manage_layout_button = _action_button(
         action_toolbar, "PCB layouts", manage_layouts, "layouts",
         "Add and associate PCB layouts with implementations",
         contract_id="library-browser.action.manage-pcb-layouts",
     )
-    manage_layout_button.pack(side="left", padx=(6, 0))
+    manage_layout_button.pack(side="left", padx=(4, 0))
+    ttk.Separator(action_toolbar, orient="vertical").pack(
+        side="left", fill="y", padx=7, pady=4
+    )
     refresh_button = _action_button(
         action_toolbar, "Refresh", refresh_records, "refresh",
         "Reload registered libraries and block details",
         contract_id="library-browser.action.refresh",
     )
-    refresh_button.pack(side="left", padx=(6, 0))
+    refresh_button.pack(side="left", padx=(4, 0))
     libraries_button = _action_button(
         action_toolbar, "Libraries", manage_libraries, "libraries",
         "Register, create, change, or unregister block libraries",
         contract_id="library-browser.action.libraries",
     )
-    libraries_button.pack(side="left", padx=(6, 0))
+    libraries_button.pack(side="left", padx=(4, 0))
     refresh_records()
     selection_changed()
-    _set_window_geometry(window, 1600, 1000, 1200, 720)
+    _set_window_geometry(window, 1440, 900, 1080, 660)
     window.bind("<FocusIn>", lambda _event: selection_changed(), add="+")
     search_entry.focus_set()
 
@@ -6168,13 +6209,13 @@ def _show_action_hub(root, kicad=None):
     root._kicad_ui_screen_id = "task-hub"
     root.title("KiCad Blocks — Tasks")
 
-    outer = ttk.Frame(root, padding=14)
+    outer = ttk.Frame(root, padding=12)
     outer.pack(fill="both", expand=True)
     ttk.Label(
         outer,
         text="KiCad Blocks",
-        font=("TkDefaultFont", 16, "bold"),
-    ).pack(anchor="w", pady=(0, 10))
+        font=("TkDefaultFont", 14, "bold"),
+    ).pack(anchor="w", pady=(0, 7))
 
     tabs = ttk.Notebook(outer)
     tabs._kicad_ui_contract_id = "task-hub.views"
@@ -6281,11 +6322,18 @@ def _show_action_hub(root, kicad=None):
         run_action(selected_action)
 
     for tab_name, actions in groups:
-        tab = ttk.Frame(tabs, padding=(12, 10))
+        tab = ttk.Frame(tabs, padding=(8, 7))
         tabs.add(tab, text=tab_name)
-        for row, (title, description, action_id, icon_name) in enumerate(actions):
+        tab.columnconfigure(0, weight=1, uniform="task-actions")
+        tab.columnconfigure(1, weight=1, uniform="task-actions")
+        for index, (title, description, action_id, icon_name) in enumerate(actions):
+            row, column = divmod(index, 2)
+            column_span = 2 if len(actions) % 2 and index == len(actions) - 1 else 1
             cell = ttk.Frame(tab)
-            cell.grid(row=row, column=0, sticky="ew", pady=3)
+            cell.grid(
+                row=row, column=column, columnspan=column_span,
+                sticky="ew", padx=4, pady=3,
+            )
             button = _action_button(
                 cell,
                 title,
@@ -6295,10 +6343,9 @@ def _show_action_hub(root, kicad=None):
                 contract_id=f"task-hub.action.{action_id}",
             )
             button.pack(fill="x", expand=True)
-        tab.columnconfigure(0, weight=1)
 
     footer = ttk.Frame(outer)
-    footer.pack(fill="x", pady=(10, 0))
+    footer.pack(fill="x", pady=(8, 0))
     _action_button(
         footer,
         "Close",
@@ -6307,7 +6354,7 @@ def _show_action_hub(root, kicad=None):
         "Close the task hub",
         contract_id="task-hub.close",
     ).pack(side="right")
-    _set_window_geometry(root, 820, 580, 680, 480)
+    _set_window_geometry(root, 760, 520, 640, 440)
     return tabs
 
 
