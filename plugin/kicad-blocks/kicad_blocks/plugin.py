@@ -1026,6 +1026,7 @@ def _action_button(
 ) -> ttk_types.Button:
     """Create a consistently padded, semantic icon-and-label action button."""
     image = _create_action_icon(parent, icon)
+
     def invoke() -> str | None:
         result = command()
         return result if isinstance(result, str) else None
@@ -1787,7 +1788,7 @@ def _pick_block_for_placement(
     visible_records: list[BlockRecord] = []
     selected_record: list[BlockRecord | None] = [None]
     chosen: list[_BlockPlacementSelection | None] = [None]
-    updating_config = [False]
+    updating_config: list[bool] = [False]
     preview_size: list[tuple[int, int] | None] = [None]
 
     def preview_resized(event: tkinter_types.Event[tkinter_types.Misc]) -> None:
@@ -4139,7 +4140,7 @@ def _show_block_layout_editor(
     if not default_layout_id and layouts:
         default_layout_id = layouts[0]["id"]
     default_layout_id_holder: list[str | None] = [default_layout_id]
-    variant_layouts = {
+    variant_layouts: dict[str, str] = {
         str(item["value"]): str(item.get("layout_id") or default_layout_id).casefold()
         for item in record.manifest.get("variants", [])
         if layouts
@@ -4157,7 +4158,7 @@ def _show_block_layout_editor(
             links = ["Default"]
         layout_implementations[item["id"]] = list(dict.fromkeys(links))
 
-    changed = [False]
+    changed: list[bool] = [False]
     added_ids: list[str] = []
     created_layout_to_open: list[Path | None] = [None]
     status_value = tk.StringVar(
@@ -4769,14 +4770,15 @@ def _show_block_variant_editor(
     cast(_TkTagConfigurable, tree).tag_configure(
         "odd", background=palette.get("surface_alt", "#e8eaed")
     )
-    variants: list[BlockVariantEditInput] = [
-        {
+    variants: list[BlockVariantEditInput] = []
+    for item in record.manifest.get("variants", []):
+        editable: BlockVariantEditInput = {
             "value": str(item["value"]),
             "file": str(item["file"]),
-            **({"layout_id": str(item["layout_id"]).casefold()} if item.get("layout_id") else {}),
         }
-        for item in record.manifest.get("variants", [])
-    ]
+        if item.get("layout_id"):
+            editable["layout_id"] = str(item["layout_id"]).casefold()
+        variants.append(editable)
     default_variant: list[str] = [str(record.manifest.get("default_variant") or "")]
     dirty: list[bool] = [False]
     new_implementation_to_open: list[Path | None] = [None]
@@ -5589,7 +5591,7 @@ def _show_library_browser(
     schematic_x_scroll = ttk.Scrollbar(
         schematic_frame,
         orient="horizontal",
-        command=schematic_preview.xview,
+        command=_scrollbar_command(schematic_preview.xview),
         style="Horizontal.TScrollbar",
     )
     schematic_preview.configure(

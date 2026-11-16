@@ -333,7 +333,8 @@ def synchronize_project_symbol_catalog(
             raise ValueError(f"Invalid project symbol synchronization state: {state_file}") from exc
         if not isinstance(loaded_state, dict):
             raise ValueError(f"Invalid project symbol synchronization state: {state_file}")
-        loaded_symbols = loaded_state.get("symbols")
+        loaded_state_dict = cast(dict[str, object], loaded_state)
+        loaded_symbols = loaded_state_dict.get("symbols")
         if not isinstance(loaded_symbols, dict):
             raise ValueError(f"Invalid project symbol synchronization state: {state_file}")
         for name, digest in cast(dict[object, object], loaded_symbols).items():
@@ -341,7 +342,7 @@ def synchronize_project_symbol_catalog(
                 raise ValueError(f"Invalid project symbol synchronization state: {state_file}")
             synchronized[name] = digest
         state: dict[str, object] = {
-            "schema_version": loaded_state.get("schema_version", 1),
+            "schema_version": loaded_state_dict.get("schema_version", 1),
             "symbols": synchronized,
         }
     else:
