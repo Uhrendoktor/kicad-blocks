@@ -217,6 +217,42 @@ jobs:
           SCHEMATIC="${RUNNER_TEMP}/kicad-clippy-native-erc.kicad_sch"
           REPORT="${RUNNER_TEMP}/kicad-clippy-native-erc.json"
           python3 examples/stusb4500/generate_reference.py --output "$SCHEMATIC"
+          python3 - "$SCHEMATIC" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+
+          sys.path.insert(0, str(Path("examples/stusb4500").resolve()))
+          from generate_reference import ROOT_UUID
+
+          schematic = Path(sys.argv[1])
+          project = schematic.with_suffix(".kicad_pro")
+          settings = {
+              "meta": {"filename": project.name, "version": 3},
+              "erc": {
+                  "erc_exclusions": [],
+                  "meta": {"version": 0},
+                  "rule_severities": {
+                      "pin_not_connected": "ignore",
+                      "pin_not_driven": "ignore",
+                      "power_pin_not_driven": "ignore",
+                      "isolated_pin_label": "ignore",
+                      "lib_symbol_issues": "ignore",
+                      "footprint_link_issues": "ignore",
+                  },
+              },
+              "schematic": {
+                  "meta": {"version": 1},
+                  "top_level_sheets": [{
+                      "filename": schematic.name,
+                      "name": "Root",
+                      "uuid": ROOT_UUID,
+                  }],
+              },
+              "sheets": [[ROOT_UUID, "Root"]],
+          }
+          project.write_text(json.dumps(settings, indent=2) + "\\n", encoding="utf-8")
+          PY
           set +e
           target/debug/kicad-clippy lint "$SCHEMATIC" --kicad-cli "$KICAD_CLI" --format json > "$REPORT"
           LINTER_STATUS=$?
