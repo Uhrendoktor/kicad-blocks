@@ -5,6 +5,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from typing import cast
 
 PLUGIN = Path(__file__).resolve().parents[1] / "plugin" / "kicad-blocks"
 sys.path.insert(0, str(PLUGIN))
@@ -21,7 +22,9 @@ from kicad_blocks.model import (
     substitute_parameter_templates,
     transform_symbol_point_to_schematic,
 )
+from kicad_blocks.manifest_types import BlockManifest
 from kicad_blocks.repository import (
+    BlockRecord,
     add_dependency,
     add_library_root,
     build_project_symbol_catalog,
@@ -147,6 +150,7 @@ class BlockModelTests(unittest.TestCase):
         second = SimpleNamespace(
             definition=SimpleNamespace(id=SimpleNamespace(library="KBlocks", name="Buck"))
         )
+
         class FakeSchematic:
             def get_selection(self) -> list[object]:
                 return [first, object(), second]
@@ -644,6 +648,7 @@ class BlockRepositoryTests(unittest.TestCase):
         link_instance_to_local_copy(self.project, "instance-kiid-001", local)
         linked = local_copy_for_instance(self.project, "instance-kiid-001")
         self.assertIsNotNone(linked)
+        assert linked is not None
         self.assertEqual(linked.path, local.path)
         self.assertIsNone(local_copy_for_instance(self.project, "other-instance"))
         self.assertTrue((self.project / ".kicad_blocks" / "instances.json").is_file())
@@ -743,7 +748,7 @@ class BlockRepositoryTests(unittest.TestCase):
     def test_local_copy_is_independent_and_syncs_unmodified_assets(self):
         source = create_block(self.root, "Power Stage", self.pins)
         local = make_local_copy(source, self.project)
-        self.assertTrue(local.manifest["local_copy"])
+        self.assertTrue(local.manifest.get("local_copy"))
         self.assertNotEqual(local.path, source.path)
         source.implementation.write_text(
             source.implementation.read_text(encoding="utf-8") + "\n; upstream change\n",
@@ -809,7 +814,7 @@ class BlockRepositoryTests(unittest.TestCase):
         child_b = create_block(self.root, "Power B", self.pins)
         local = make_local_copy(source, self.project)
         add_dependency(source, child_a)
-        local_manifest = read_manifest(local.path)
+        local_manifest: dict[str, object] = dict(read_manifest(local.path))
         local_manifest["dependencies"] = [
             {
                 "block_id": child_b.manifest["block_id"],
@@ -821,10 +826,12 @@ class BlockRepositoryTests(unittest.TestCase):
         (local.path / "manifest.json").write_text(
             json.dumps(local_manifest, indent=2) + "\n", encoding="utf-8"
         )
+        malformed_record = BlockRecord(
+            path=local.path,
+            manifest=cast(BlockManifest, local_manifest),
+        )
         with self.assertRaisesRegex(RuntimeError, "manifest.dependencies"):
-            synchronize_local_copy(
-                type("Record", (), {"path": local.path, "manifest": local_manifest})()
-            )
+            synchronize_local_copy(malformed_record)
 
     def test_layout_configuration_is_pulled_into_local_copy(self):
         first_board = self.project / "sync_standard.kicad_pcb"

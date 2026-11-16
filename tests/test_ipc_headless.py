@@ -9,7 +9,6 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
-from types import SimpleNamespace
 from typing import cast
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -102,8 +101,6 @@ def main() -> None:
         )
         try:
             schematic = kicad.get_schematic()
-            if schematic is None:
-                raise RuntimeError("KiCad IPC did not load the test schematic.")
 
             # In headless mode libraries load asynchronously. Initialize the
             # symbol libraries, then register and reload the test library.
@@ -220,7 +217,11 @@ def main() -> None:
                 raise AssertionError("Placed facade has the wrong KiCad library identifier.")
 
             original_instance_id = str(instance.id)
-            selection = SimpleNamespace(get_selection=lambda: [instance])
+            class FakeSelection:
+                def get_selection(self) -> list[object]:
+                    return [instance]
+
+            selection = FakeSelection()
             local_path = make_selected_local(
                 cast(Schematic, selection), cast(KiCadApp, kicad), project_dir, library_root
             )

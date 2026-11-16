@@ -52,7 +52,11 @@ _normalize_schematic_preview_svg = cast(
 
 
 
-def _return_preview_svg(svg_file: Path, _record: BlockRecord, _output: Path) -> Path:
+def _return_preview_svg(
+    svg_file: Path,
+    _record: BlockRecord,
+    _output: Path,
+) -> Path:
     """Keep the fixture SVG unchanged while preserving the cleaner's contract."""
     return svg_file
 
@@ -178,7 +182,9 @@ class LibraryBrowserTests(unittest.TestCase):
         )
         calls: list[Sequence[str]] = []
 
-        def export(arguments: Sequence[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        def export(
+            arguments: Sequence[str], **kwargs: object
+        ) -> subprocess.CompletedProcess[str]:
             calls.append(arguments)
             output_dir = Path(arguments[arguments.index("--output") + 1])
             output_dir.mkdir(parents=True, exist_ok=True)

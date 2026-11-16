@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import csv
+import subprocess
 import sys
 import tempfile
 import unittest
+from collections.abc import Sequence
 from pathlib import Path
-from types import SimpleNamespace
 from unittest.mock import patch
 
 PLUGIN = Path(__file__).resolve().parents[1] / "plugin" / "kicad-blocks"
@@ -44,15 +45,21 @@ class RecursiveBlockOperationTests(unittest.TestCase):
             encoding="utf-8",
         )
         output = Path(self.temp.name) / "parameterized.csv"
-        observed = {}
+        observed_path: list[Path] = []
+        observed_content: list[str] = []
 
-        def fake_run(command, capture_output, text, check):
+        def fake_run(
+            command: Sequence[str],
+            capture_output: bool,
+            text: bool,
+            check: bool,
+        ) -> subprocess.CompletedProcess[str]:
             implementation = Path(command[-1])
-            observed["path"] = implementation
-            observed["content"] = implementation.read_text(encoding="utf-8")
+            observed_path.append(implementation)
+            observed_content.append(implementation.read_text(encoding="utf-8"))
             output_path = Path(command[command.index("--output") + 1])
             output_path.write_text("Reference,Qty,Value\nR1,1,1.8V\n", encoding="utf-8")
-            return SimpleNamespace(returncode=0, stdout="", stderr="")
+            return subprocess.CompletedProcess(command, 0, "", "")
 
         with patch("kicad_blocks.operations.subprocess.run", side_effect=fake_run):
             result = export_block_bom(
@@ -64,8 +71,8 @@ class RecursiveBlockOperationTests(unittest.TestCase):
             )
 
         self.assertEqual(result["row_count"], 1)
-        self.assertNotEqual(observed["path"], block.implementation)
-        self.assertIn('(property "Value" "1.8"', observed["content"])
+        self.assertNotEqual(observed_path[0], block.implementation)
+        self.assertIn('(property "Value" "1.8"', observed_content[0])
         self.assertNotIn("{{OUTPUT_VOLTAGE}}", observed["content"])
         self.assertIn("{{OUTPUT_VOLTAGE}}", block.implementation.read_text(encoding="utf-8"))
 
@@ -89,7 +96,12 @@ class RecursiveBlockOperationTests(unittest.TestCase):
     def test_export_bom_combines_nested_blocks_and_namespaces_references(self):
         output = Path(self.temp.name) / "merged.csv"
 
-        def fake_run(command, capture_output, text, check):
+        def fake_run(
+            command: Sequence[str],
+            capture_output: bool,
+            text: bool,
+            check: bool,
+        ) -> subprocess.CompletedProcess[str]:
             output_path = Path(command[command.index("--output") + 1])
             implementation_path = Path(command[-1])
             if implementation_path == self.child.implementation:
@@ -103,7 +115,7 @@ class RecursiveBlockOperationTests(unittest.TestCase):
                 f"Reference,Qty,Value\n{reference},1,{value}\n",
                 encoding="utf-8",
             )
-            return SimpleNamespace(returncode=0, stdout="", stderr="")
+            return subprocess.CompletedProcess(command, 0, "", "")
 
         with patch("kicad_blocks.operations.subprocess.run", side_effect=fake_run):
             result = export_block_bom(self.parent, output, "kicad-cli", self.root)
@@ -122,7 +134,12 @@ class RecursiveBlockOperationTests(unittest.TestCase):
         self.parent = add_dependency(self.parent, self.child, reference="B2")
         output = Path(self.temp.name) / "repeated.csv"
 
-        def fake_run(command, capture_output, text, check):
+        def fake_run(
+            command: Sequence[str],
+            capture_output: bool,
+            text: bool,
+            check: bool,
+        ) -> subprocess.CompletedProcess[str]:
             output_path = Path(command[command.index("--output") + 1])
             implementation_path = Path(command[-1])
             reference = "R1" if implementation_path == self.child.implementation else "U1"
@@ -130,7 +147,7 @@ class RecursiveBlockOperationTests(unittest.TestCase):
                 f"Reference,Qty,Value\n{reference},1,10k\n",
                 encoding="utf-8",
             )
-            return SimpleNamespace(returncode=0, stdout="", stderr="")
+            return subprocess.CompletedProcess(command, 0, "", "")
 
         with patch("kicad_blocks.operations.subprocess.run", side_effect=fake_run):
             result = export_block_bom(self.parent, output, "kicad-cli", self.root)
@@ -143,12 +160,17 @@ class RecursiveBlockOperationTests(unittest.TestCase):
         self.assertEqual(refs.count("B2/Power Stage::R1"), 1)
 
     def test_recursive_erc_runs_once_for_each_block_and_records_violations(self):
-        def fake_run(command, capture_output, text, check):
+        def fake_run(
+            command: Sequence[str],
+            capture_output: bool,
+            text: bool,
+            check: bool,
+        ) -> subprocess.CompletedProcess[str]:
             report = Path(command[command.index("--output") + 1])
             report.write_text('{"violations":[]}', encoding="utf-8")
             implementation_path = Path(command[-1])
             code = 5 if implementation_path == self.child.implementation else 0
-            return SimpleNamespace(returncode=code, stdout="", stderr="")
+            return subprocess.CompletedProcess(command, code, "", "")
 
         with patch("kicad_blocks.operations.subprocess.run", side_effect=fake_run) as run:
             reports = validate_block_tree(
