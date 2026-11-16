@@ -10,10 +10,12 @@ import tempfile
 import time
 from pathlib import Path
 from types import SimpleNamespace
-from tkinter import Misc
-from typing import cast
-from tkinter import Misc
-from typing import cast
+from typing import TYPE_CHECKING, cast
+
+if TYPE_CHECKING:
+    from tkinter import Misc
+else:
+    Misc = object
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -81,6 +83,7 @@ def main() -> None:
                 )
             ),
         )
+
         class FakeSchematic:
             def get_selection(self) -> list[object]:
                 return [selected_instance]
@@ -90,8 +93,12 @@ def main() -> None:
             return eeschema
 
         schematic = cast(plugin_actions.Schematic, FakeSchematic())
-        kicad = cast(plugin_actions.KiCadApp, SimpleNamespace(get_kicad_binary_path=get_kicad_binary_path))
+        kicad = cast(
+            plugin_actions.KiCadApp,
+            SimpleNamespace(get_kicad_binary_path=get_kicad_binary_path),
+        )
         parent_window = cast(Misc, object())
+
         def showinfo(*args: object, **kwargs: object) -> None:
             return None
 
