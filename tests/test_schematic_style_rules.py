@@ -15,7 +15,7 @@ sys.path.insert(0, str(ROOT / "examples" / "stusb4500"))
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from generate_reference import generate_reference_schematic
-from kicad_blocks.sexpr import SExprList, parse_sexpr, sexpr_all, sexpr_direct
+from kicad_blocks.sexpr import SExpr, SExprList, parse_sexpr, sexpr_all, sexpr_direct
 from validate_schematic_style import (
     STYLE_RULES,
     pin_world_info,
@@ -33,6 +33,21 @@ from validate_schematic_style import (
     wire_compactness_issues,
     wire_obstacle_issues,
 )
+
+
+def _required_direct(node: SExprList, tag: str) -> SExprList:
+    """Return a required direct child, failing clearly when it is absent."""
+    child = sexpr_direct(node, tag)
+    if child is None:
+        raise AssertionError(f"Required {tag!r} child is missing.")
+    return child
+
+
+def _scalar_number(value: SExpr) -> float:
+    """Convert a scalar S-expression atom to a float."""
+    if not isinstance(value, str):
+        raise AssertionError(f"Expected numeric S-expression atom, got {value!r}.")
+    return float(value)
 
 
 class SchematicStyleRuleTests(unittest.TestCase):
@@ -88,7 +103,7 @@ assert "generate_reference" not in sys.modules
         self.assertEqual(completed.returncode, 0, completed.stderr)
 
     def test_generic_multiline_unbordered_text_is_rejected(self) -> None:
-        tree = [
+        tree: SExprList = [
             "kicad_sch",
             [
                 "text_box",
@@ -106,8 +121,8 @@ assert "generate_reference" not in sys.modules
     def test_unbordered_title_box_must_have_single_line_render_reserve(self) -> None:
         tree = self.fresh_tree()
         title = next(node for node in sexpr_all(tree, "text_box") if str(node[1]) == "VSNK OUTPUT")
-        size = sexpr_direct(title, "size")
-        size[1] = f"{float(size[1]) - 3.0:.3f}"
+        size = _required_direct(title, "size")
+        size[1] = f"{_scalar_number(size[1]) - 3.0:.3f}"
         self.assertTrue(
             any("cannot reliably render on one line" in issue for issue in text_box_issues(tree))
         )
@@ -119,7 +134,7 @@ assert "generate_reference" not in sys.modules
             for node in sexpr_all(tree, "text_box")
             if str(node[1]).startswith("Type-C receptacle and dual CC-line ESD protection.")
         )
-        width = sexpr_direct(sexpr_direct(note, "stroke"), "width")
+        width = _required_direct(_required_direct(note, "stroke"), "width")
         width[1] = "-1"
         self.assertTrue(
             any("visible box outline" in issue for issue in group_comment_outline_issues(tree))
@@ -193,7 +208,10 @@ assert "generate_reference" not in sys.modules
             )
         )
         value = next(prop for prop in sexpr_all(d50, "property") if str(prop[1]) == "Value")
-        x, y, width, height = text_visual_bounds(str(value[2]), value)
+        bounds = text_visual_bounds(str(value[2]), value)
+        if bounds is None:
+            self.fail("Expected visible symbol-field bounds.")
+        x, y, width, height = bounds
         tree.append(
             [
                 "wire",
@@ -219,9 +237,9 @@ assert "generate_reference" not in sys.modules
             )
         )
         value = next(prop for prop in sexpr_all(d1, "property") if str(prop[1]) == "Value")
-        d1_at = sexpr_direct(d1, "at")
-        value_at = sexpr_direct(value, "at")
-        value_at[1] = f"{float(d1_at[1]) + 2.54:.3f}"
+        d1_at = _required_direct(d1, "at")
+        value_at = _required_direct(value, "at")
+        value_at[1] = f"{_scalar_number(d1_at[1]) + 2.54:.3f}"
         value_at[2] = str(d1_at[2])
         self.assertTrue(
             any(
@@ -247,9 +265,9 @@ assert "generate_reference" not in sys.modules
             for node in sexpr_all(tree, "text_box")
             if str(node[1]).startswith("Type-C receptacle and dual CC-line ESD protection.")
         )
-        at, size = sexpr_direct(note, "at"), sexpr_direct(note, "size")
-        x = float(at[1]) + float(size[1]) / 2
-        y = float(at[2]) + float(size[2]) / 2
+        at, size = _required_direct(note, "at"), _required_direct(note, "size")
+        x = _scalar_number(at[1]) + _scalar_number(size[1]) / 2
+        y = _scalar_number(at[2]) + _scalar_number(size[2]) / 2
         tree.append(
             [
                 "wire",
@@ -265,11 +283,10 @@ assert "generate_reference" not in sys.modules
         pins = pin_world_info(tree)
         markers = {
             (
-                round(float(sexpr_direct(node, "at")[1]), 3),
-                round(float(sexpr_direct(node, "at")[2]), 3),
+                round(_scalar_number(_required_direct(node, "at")[1]), 3),
+                round(_scalar_number(_required_direct(node, "at")[2]), 3),
             )
             for node in sexpr_all(tree, "no_connect")
-            if sexpr_direct(node, "at") is not None
         }
         # U1.3 is already a hidden no_connect pin in its embedded symbol.
         self.assertNotIn(pins[("U1", "3")]["point"], markers)
@@ -280,10 +297,9 @@ assert "generate_reference" not in sys.modules
         marker = next(
             node
             for node in sexpr_all(tree, "no_connect")
-            if sexpr_direct(node, "at") is not None
-            and (
-                round(float(sexpr_direct(node, "at")[1]), 3),
-                round(float(sexpr_direct(node, "at")[2]), 3),
+            if (
+                round(_scalar_number(_required_direct(node, "at")[1]), 3),
+                round(_scalar_number(_required_direct(node, "at")[2]), 3),
             )
             == marker_point
         )
@@ -300,13 +316,14 @@ assert "generate_reference" not in sys.modules
                 at = sexpr_direct(node, "at")
                 if at is None:
                     continue
-                point = (round(float(at[1]), 3), round(float(at[2]), 3))
+                point = (round(_scalar_number(at[1]), 3), round(_scalar_number(at[2]), 3))
                 if str(node[1]) == "GND" and dsu.find(point) == root:
                     label = node
                     break
             if label is not None:
                 break
-        self.assertIsNotNone(label)
+        if label is None:
+            self.fail("Expected a GND label attached to the common net.")
         label[1] = "GND_LOCAL"
         self.assertTrue(any("common net GND" in issue for issue in common_pin_net_issues(tree)))
 
