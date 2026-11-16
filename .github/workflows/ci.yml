@@ -261,24 +261,28 @@ jobs:
             echo "::error::kicad-clippy did not produce a normalized JSON report (exit $LINTER_STATUS)."
             exit 1
           fi
-          python3 - "$REPORT" <<'PY'
+          python3 - "$REPORT" "$LINTER_STATUS" <<'PY'
           import json
           import sys
           from pathlib import Path
 
           report = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+          linter_status = int(sys.argv[2])
+          diagnostics = report["diagnostics"]
           assert report["syntax_valid"] is True
           assert report["erc_skipped"] is False
           assert report["kicad_version"]
           assert isinstance(report["diagnostics"], list)
-          assert report["summary"]["errors"] == 0
-          assert all(item["code"].startswith("KICAD/ERC/") for item in report["diagnostics"])
+          active_errors = sum(item["severity"] == "error" and not item["excluded"] for item in diagnostics)
+          assert report["summary"]["errors"] == active_errors
+          assert linter_status == int(active_errors > 0)
+          assert all(item["code"].startswith("KICAD/ERC/") for item in diagnostics)
           print(
               "kicad-clippy parsed the native KiCad ERC report: "
-              f"{len(report['diagnostics'])} findings, zero errors."
+              f"{len(diagnostics)} findings, {active_errors} active errors."
           )
           PY
-          echo "kicad-clippy exit code: $LINTER_STATUS"
+
 
       - name: Install virtual-display GUI test dependencies
         shell: bash
