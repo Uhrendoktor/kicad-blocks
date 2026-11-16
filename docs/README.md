@@ -25,12 +25,14 @@ Read these pages to understand why KiCad Blocks behaves as it does.
 
 - [Architecture and design model](explanation/architecture.md) — facade symbols, stored implementations, variants, parameters, local copies, automatic child-block dependencies and the native KiCad boundary.
 - [Compatibility and test coverage](explanation/compatibility.md) — tested environment, interpreter coverage, unvalidated targets, and known gaps.
+- [Automated UI testing architecture](explanation/ui-testing-architecture.md) — reusable execute/result component contracts, framework research, coverage discovery, and incremental rollout.
 
 ## Reference
 
 - [Feature reference](reference.md) — action names, block and project files, instance fields, parameter syntax, PCB merge behavior, report files, and settings.
 - [Visual evidence](visual-evidence.md) — current plugin screenshots and native KiCad renders.
 - [UI review and interaction contract](ui-review.md) — window inventory, design decisions, functional edge cases, and outstanding desktop acceptance gates.
+- [Generated UI window inventory](ui-inventory.md) — registered windows, major workflows, current automation coverage, and real light/dark screenshots.
 - [STUSB4500 example](../examples/stusb4500/README.md) — a datasheet-derived editable circuit and its generated evidence.
 - [Changelog](../CHANGELOG.md) — version history and changes not yet assigned to a release.
 

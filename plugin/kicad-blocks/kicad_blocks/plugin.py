@@ -515,6 +515,8 @@ def _action_button(
     command,
     icon: str,
     tooltip: str,
+    *,
+    contract_id: str | None = None,
     **button_options,
 ):
     """Create a consistently padded, semantic icon-and-label action button."""
@@ -524,6 +526,10 @@ def _action_button(
     if image is not None:
         options.update({"image": image, "compound": "left"})
     button = ttk.Button(parent, **options)
+    if contract_id is not None:
+        # Stable IDs let the UI contract suite discover and execute the same
+        # controls that production users see, without relying on screen text.
+        button._kicad_ui_contract_id = contract_id
     _add_tooltip(button, tooltip)
     return button
 
@@ -2465,6 +2471,63 @@ def _restore_placement_windows(windows: list) -> None:
             window.deiconify()
 
 
+def _svg_dimension_to_pixels(value: str | None) -> float | None:
+    """Convert an SVG absolute length to CSS pixels, or return None if invalid."""
+    if not value:
+        return None
+    match = re.fullmatch(
+        r"\s*([+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?)(px|pt|pc|mm|cm|in)?\s*",
+        value,
+        flags=re.IGNORECASE,
+    )
+    if not match:
+        return None
+    amount = float(match.group(1))
+    if not 0 < amount < float("inf"):
+        return None
+    scale = {
+        "px": 1.0,
+        "pt": 96.0 / 72.0,
+        "pc": 16.0,
+        "mm": 96.0 / 25.4,
+        "cm": 96.0 / 2.54,
+        "in": 96.0,
+    }
+    return amount * scale[(match.group(2) or "px").lower()]
+
+
+def _normalize_svg_preview_viewport(root) -> None:
+    """Give an SVG a positive pixel viewport that resvg can always rasterize."""
+    view_box = root.attrib.get("viewBox") or root.attrib.get("viewbox") or ""
+    values = re.findall(
+        r"[-+]?(?:\d*\.\d+|\d+\.?\d*)(?:[eE][-+]?\d+)?",
+        view_box,
+    )
+    if len(values) == 4:
+        try:
+            view_width = float(values[2])
+            view_height = float(values[3])
+        except ValueError:
+            view_width = view_height = 0.0
+        if (
+            0 < view_width < float("inf")
+            and 0 < view_height < float("inf")
+        ):
+            root.set("width", f"{view_width:g}px")
+            root.set("height", f"{view_height:g}px")
+            return
+
+    # Without a usable viewBox, preserve KiCad's physical canvas size but
+    # express it in CSS pixels. resvg's Python binding rejects some otherwise
+    # valid physical-unit exports as having an invalid intrinsic size.
+    width = _svg_dimension_to_pixels(root.attrib.get("width"))
+    height = _svg_dimension_to_pixels(root.attrib.get("height"))
+    if width is None or height is None:
+        width, height = 300.0, 150.0
+    root.set("width", f"{width:g}px")
+    root.set("height", f"{height:g}px")
+
+
 def _clean_facade_preview_svg(svg_file: Path, record, output_dir: Path) -> Path:
     """Remove component-name and reference placeholder artwork from the SVG."""
     import xml.etree.ElementTree as ET
@@ -2496,37 +2559,7 @@ def _clean_facade_preview_svg(svg_file: Path, record, output_dir: Path) -> Path:
             if contained_labels(child_node) & display_labels:
                 parent_node.remove(child_node)
 
-    # resvg requires a concrete intrinsic viewport. KiCad exports commonly
-    # include a viewBox but may omit usable width/height attributes; CairoSVG
-    # tolerated that ambiguity while resvg correctly rejects an undefined size.
-    view_box = root.attrib.get("viewBox") or root.attrib.get("viewbox") or ""
-    view_box_values = re.findall(
-        r"[-+]?(?:\d*\.\d+|\d+\.?\d*)(?:[eE][-+]?\d+)?", view_box
-    )
-    if len(view_box_values) == 4:
-        try:
-            view_width, view_height = float(view_box_values[2]), float(view_box_values[3])
-        except ValueError:
-            view_width = view_height = 0.0
-        if view_width > 0 and view_height > 0:
-            root.set("width", f"{view_width:g}px")
-            root.set("height", f"{view_height:g}px")
-    else:
-        def valid_dimension(value: str | None) -> bool:
-            if not value:
-                return False
-            match = re.fullmatch(
-                r"\s*([+]?(?:\d+(?:\.\d*)?|\.\d+))(?:px|pt|pc|mm|cm|in)?\s*",
-                value,
-                flags=re.IGNORECASE,
-            )
-            return bool(match and float(match.group(1)) > 0)
-
-        if not valid_dimension(root.attrib.get("width")) or not valid_dimension(
-            root.attrib.get("height")
-        ):
-            root.set("width", "300px")
-            root.set("height", "150px")
+    _normalize_svg_preview_viewport(root)
 
     cleaned_svg = output_dir / "facade-preview.svg"
     ET.ElementTree(root).write(
@@ -2646,37 +2679,7 @@ def _normalize_schematic_preview_svg(svg_file: Path, output_dir: Path) -> Path:
     import xml.etree.ElementTree as ET
 
     root = ET.parse(svg_file).getroot()
-    view_box = root.attrib.get("viewBox") or root.attrib.get("viewbox") or ""
-    view_box_values = re.findall(
-        r"[-+]?(?:\d*\.\d+|\d+\.?\d*)(?:[eE][-+]?\d+)?",
-        view_box,
-    )
-    if len(view_box_values) == 4:
-        try:
-            view_width = float(view_box_values[2])
-            view_height = float(view_box_values[3])
-        except ValueError:
-            view_width = view_height = 0.0
-        if view_width > 0 and view_height > 0:
-            root.set("width", f"{view_width:g}px")
-            root.set("height", f"{view_height:g}px")
-    else:
-        def valid_dimension(value: str | None) -> bool:
-            if not value:
-                return False
-            match = re.fullmatch(
-                r"\s*([+]?(?:\d+(?:\.\d*)?|\.\d+))(?:px|pt|pc|mm|cm|in)?\s*",
-                value,
-                flags=re.IGNORECASE,
-            )
-            return bool(match and float(match.group(1)) > 0)
-
-        if not valid_dimension(root.attrib.get("width")) or not valid_dimension(
-            root.attrib.get("height")
-        ):
-            root.set("width", "300px")
-            root.set("height", "150px")
-
+    _normalize_svg_preview_viewport(root)
     normalized = output_dir / f"{svg_file.stem}-preview.svg"
     ET.ElementTree(root).write(
         normalized,
@@ -2973,7 +2976,11 @@ def _save_block_variants(
 
         if item.get("file"):
             filename = str(item["file"])
-            source = None
+            source = (
+                Path(item["source"]).expanduser().resolve()
+                if item.get("source")
+                else None
+            )
         else:
             source = Path(item.get("source", "")).expanduser().resolve()
             if not source.is_file() or source.suffix.casefold() != ".kicad_sch":
@@ -3385,6 +3392,7 @@ def _new_blank_pcb_source() -> Path:
 def _ask_layout_details(parent, record) -> dict | None:
     """Choose an existing board or create a blank starting point for a named layout."""
     dialog = tk.Toplevel(parent)
+    dialog._kicad_ui_screen_id = "add-pcb-layout"
     dialog.title("Add PCB layout")
     dialog.transient(parent)
     frame = ttk.Frame(dialog, padding=16)
@@ -3392,6 +3400,7 @@ def _ask_layout_details(parent, record) -> dict | None:
     ttk.Label(frame, text="PCB layout name").grid(row=0, column=0, sticky="w")
     name_value = tk.StringVar(value="New layout")
     name_entry = ttk.Entry(frame, textvariable=name_value)
+    name_entry._kicad_ui_contract_id = "add-pcb-layout.name"
     name_entry.grid(row=1, column=0, columnspan=3, sticky="ew", pady=(4, 12))
     ttk.Label(frame, text="Starting point").grid(row=2, column=0, sticky="w")
     mode_value = tk.StringVar(value="Create a new empty board")
@@ -3401,11 +3410,16 @@ def _ask_layout_details(parent, record) -> dict | None:
         values=("Create a new empty board", "Choose an existing PCB file"),
         state="readonly",
     )
+    mode_combo._kicad_ui_contract_id = "add-pcb-layout.mode"
     mode_combo.grid(row=3, column=0, columnspan=3, sticky="ew", pady=(4, 12))
     source_value = tk.StringVar()
     source_entry = ttk.Entry(frame, textvariable=source_value)
+    source_entry._kicad_ui_contract_id = "add-pcb-layout.source"
     source_entry.grid(row=4, column=0, columnspan=2, sticky="ew", pady=(4, 12))
-    browse_button = _action_button(frame, "Choose file…", lambda: None, "file", "Choose an existing KiCad PCB file")
+    browse_button = _action_button(
+        frame, "Choose file…", lambda: None, "file", "Choose an existing KiCad PCB file",
+        contract_id="add-pcb-layout.browse",
+    )
     browse_button.grid(row=4, column=2, sticky="ew", padx=(8, 0), pady=(4, 12))
     implementation_values = ["Default"] + [
         str(item["value"]) for item in record.manifest.get("variants", [])
@@ -3418,6 +3432,7 @@ def _ask_layout_details(parent, record) -> dict | None:
         values=implementation_values,
         state="readonly",
     )
+    link_combo._kicad_ui_contract_id = "add-pcb-layout.implementation"
     link_combo.grid(row=6, column=0, columnspan=3, sticky="ew", pady=(4, 4))
     _add_tooltip(link_combo, "This layout is available when applying the selected implementation to a board.")
     frame.columnconfigure(0, weight=1)
@@ -3474,8 +3489,14 @@ def _ask_layout_details(parent, record) -> dict | None:
 
     buttons = ttk.Frame(frame)
     buttons.grid(row=7, column=0, columnspan=3, sticky="ew", pady=(8, 0))
-    _action_button(buttons, "Cancel", dialog.destroy, "cancel", "Cancel layout creation").pack(side="right")
-    _action_button(buttons, "Add layout", accept, "create", "Add this PCB layout to the block").pack(side="right", padx=(0, 8))
+    _action_button(
+        buttons, "Cancel", dialog.destroy, "cancel", "Cancel layout creation",
+        contract_id="add-pcb-layout.cancel",
+    ).pack(side="right")
+    _action_button(
+        buttons, "Add layout", accept, "create", "Add this PCB layout to the block",
+        contract_id="add-pcb-layout.add",
+    ).pack(side="right", padx=(0, 8))
     dialog.bind("<Return>", lambda _event: accept())
     dialog.bind("<Escape>", lambda _event: dialog.destroy())
     _set_window_geometry(dialog, 860, 620, 760, 560)
@@ -4071,6 +4092,8 @@ def _show_block_variant_editor(
 ) -> Path | None:
     """Manage named implementations and select which one empty KB_VARIANT uses."""
     dialog = tk.Toplevel(parent)
+    dialog._kicad_ui_screen_id = "implementations-manager"
+    dialog._kicad_ui_contract_id = "implementations-manager.window"
     dialog.title(f"Implementations — {record.name}")
     dialog.transient(parent)
 
@@ -4085,12 +4108,14 @@ def _show_block_variant_editor(
     status_value = tk.StringVar(
         value="Empty KB_VARIANT uses the default implementation."
     )
-    ttk.Label(
+    status_label = ttk.Label(
         frame,
         textvariable=status_value,
         foreground=palette.get("muted", "#5f6871"),
         font=("TkDefaultFont", 8),
-    ).grid(row=1, column=0, sticky="w", pady=(3, 8))
+    )
+    status_label._kicad_ui_contract_id = "implementations-manager.status"
+    status_label.grid(row=1, column=0, sticky="w", pady=(3, 8))
 
     table_frame = ttk.Frame(frame)
     table_frame.grid(row=2, column=0, sticky="nsew")
@@ -4102,6 +4127,7 @@ def _show_block_variant_editor(
         show="headings",
         selectmode="browse",
     )
+    tree._kicad_ui_contract_id = "implementations-manager.rows"
     tree.heading("value", text="Implementation")
     tree.heading("file", text="Schematic file")
     tree.heading("role", text="Role")
@@ -4168,7 +4194,11 @@ def _show_block_variant_editor(
             item = variants[variant_index]
             tree.insert(
                 "", "end", iid=str(row_index),
-                values=(item["value"], item["file"], "Alternative"),
+                values=(
+                    item["value"],
+                    item.get("file") or Path(str(item.get("source") or "")).name or "Pending save",
+                    "Alternative",
+                ),
                 tags=("odd" if row_index % 2 else "even",),
             )
         if selected_index is not None and 0 <= selected_index <= len(alternative_variant_indices()):
@@ -4238,7 +4268,9 @@ def _show_block_variant_editor(
                 "Edit implementation", f"The value {value!r} already exists.", parent=dialog
             )
             return
-        updated = {"value": value, "source": source}
+        # Keep the existing library filename when a selector is renamed. A
+        # different source may still replace its contents at the same path.
+        updated = {"value": value, "file": current["file"], "source": source}
         if current.get("layout_id"):
             updated["layout_id"] = current["layout_id"]
         if current.get("open_after_save"):
@@ -4344,17 +4376,27 @@ def _show_block_variant_editor(
 
     actions = ttk.Frame(frame)
     actions.grid(row=3, column=0, sticky="ew", pady=(12, 0))
-    _action_button(actions, "Add variant", add_variant, "add", "Add a named implementation variant").pack(side="left")
-    edit_button = _action_button(actions, "Edit variant", edit_variant, "edit", "Edit the selected implementation", state="disabled")
+    _action_button(
+        actions, "Add variant", add_variant, "add",
+        "Add a named implementation variant",
+        contract_id="implementations-manager.action.add",
+    ).pack(side="left")
+    edit_button = _action_button(
+        actions, "Edit variant", edit_variant, "edit",
+        "Edit the selected implementation", state="disabled",
+        contract_id="implementations-manager.action.edit",
+    )
     edit_button.pack(side="left", padx=(8, 0))
     default_button = _action_button(
         actions, "Set as default", make_default, "default",
-        "Set the selected implementation as default", state="disabled"
+        "Set the selected implementation as default", state="disabled",
+        contract_id="implementations-manager.action.default",
     )
     default_button.pack(side="left", padx=(8, 0))
     remove_button = _action_button(
         actions, "Remove", remove_variant, "remove",
-        "Remove the selected variant", state="disabled"
+        "Remove the selected variant", state="disabled",
+        contract_id="implementations-manager.action.remove",
     )
     remove_button.pack(side="left", padx=(8, 0))
     def cancel_variant_edits():
@@ -4369,10 +4411,12 @@ def _show_block_variant_editor(
     _action_button(
         actions, "Close", cancel_variant_edits, "cancel",
         "Close the implementation manager",
+        contract_id="implementations-manager.action.close",
     ).pack(side="right")
     save_button = _action_button(
         actions, "Save & close", save_and_close, "save",
-        "Save any pending changes and close the implementation manager"
+        "Save any pending changes and close the implementation manager",
+        contract_id="implementations-manager.action.save-close",
     )
     save_button.pack(side="right", padx=(0, 8))
 
@@ -4709,6 +4753,7 @@ def _show_library_browser(
     editor_window_id: str | None,
 ) -> None:
     """Show every registered block library in one KiCad-themed browser."""
+    window._kicad_ui_screen_id = "functional-block-library"
     window.title("Functional Block Library")
     current_roots = [_library_roots_for(library_root)]
     records: list = []
@@ -4724,12 +4769,17 @@ def _show_library_browser(
     header.pack(fill="x", pady=(0, 8))
     ttk.Label(header, text="Functional Block Library").pack(side="left")
     library_path = tk.StringVar()
-    ttk.Label(header, textvariable=library_path).pack(side="right", padx=(12, 0))
+    library_summary = ttk.Label(header, textvariable=library_path)
+    library_summary._kicad_ui_contract_id = "library-browser.summary"
+    library_summary.pack(side="right", padx=(12, 0))
 
     panes = ttk.Panedwindow(outer, orient="horizontal")
+    panes._kicad_ui_contract_id = "library-browser.panes"
     panes.pack(fill="both", expand=True)
     left = ttk.Frame(panes, padding=(0, 0, 8, 0))
+    left._kicad_ui_contract_id = "library-browser.results-pane"
     right = ttk.Frame(panes, padding=(8, 0, 0, 0))
+    right._kicad_ui_contract_id = "library-browser.preview-pane"
     panes.add(left, weight=3)
     panes.add(right, weight=4)
 
@@ -4738,6 +4788,7 @@ def _show_library_browser(
     ttk.Label(left, text="Search blocks").grid(row=0, column=0, sticky="w")
     search = tk.StringVar()
     search_entry = ttk.Entry(left, textvariable=search)
+    search_entry._kicad_ui_contract_id = "library-browser.search"
     search_entry.grid(row=1, column=0, sticky="ew", pady=(4, 8))
     _add_tooltip(search_entry, "Filter blocks · ↑/↓ browse · Enter place")
     tree_frame = ttk.Frame(left)
@@ -4750,6 +4801,7 @@ def _show_library_browser(
         show="headings",
         selectmode="browse",
     )
+    tree._kicad_ui_contract_id = "library-browser.results"
     tree.heading("block", text="Block")
     tree.heading("library", text="Library")
     tree.heading("pins", text="I/O")
@@ -4775,6 +4827,7 @@ def _show_library_browser(
     right.rowconfigure(2, weight=2)
     right.rowconfigure(3, weight=1)
     name_label = ttk.Label(right, text="Select a block")
+    name_label._kicad_ui_contract_id = "library-browser.selected-name"
     name_label.grid(row=0, column=0, sticky="ew")
     description_label = ttk.Label(
         right, text="", wraplength=560, justify="left"
@@ -4784,9 +4837,11 @@ def _show_library_browser(
     preview_box = ttk.LabelFrame(right, text="Preview", padding=5)
     preview_box.grid(row=2, column=0, sticky="nsew")
     preview_notebook = ttk.Notebook(preview_box)
+    preview_notebook._kicad_ui_contract_id = "library-browser.preview.views"
     preview_notebook.pack(fill="both", expand=True)
 
     facade_page = ttk.Frame(preview_notebook)
+    facade_page._kicad_ui_contract_id = "library-browser.preview.facade"
     preview_notebook.add(facade_page, text="Facade")
     facade_frame = ttk.Frame(facade_page)
     facade_frame.pack(fill="both", expand=True)
@@ -4815,6 +4870,7 @@ def _show_library_browser(
     _bind_mousewheel(preview, lambda amount: preview.yview_scroll(amount, "units"))
 
     schematic_page = ttk.Frame(preview_notebook)
+    schematic_page._kicad_ui_contract_id = "library-browser.preview.schematic"
     preview_notebook.add(schematic_page, text="Schematic")
     schematic_page.columnconfigure(0, weight=1)
     schematic_page.rowconfigure(1, weight=1)
@@ -4829,6 +4885,7 @@ def _show_library_browser(
         state="disabled",
         width=22,
     )
+    implementation_selector._kicad_ui_contract_id = "library-browser.implementation"
     implementation_selector.pack(side="left", padx=(5, 0))
     _add_tooltip(implementation_selector, "Choose the implementation shown in the schematic preview")
     page_choice = tk.StringVar()
@@ -4840,6 +4897,7 @@ def _show_library_browser(
         state="disabled",
         width=22,
     )
+    page_selector._kicad_ui_contract_id = "library-browser.sheet"
     schematic_frame = ttk.Frame(schematic_page)
     schematic_frame.grid(row=1, column=0, sticky="nsew")
     schematic_frame.columnconfigure(0, weight=1)
@@ -5247,6 +5305,8 @@ def _show_library_browser(
                 messagebox.showerror("Open implementation", str(exc), parent=window)
             return
         chooser = tk.Toplevel(window)
+        chooser._kicad_ui_screen_id = "open-implementation-chooser"
+        chooser._kicad_ui_contract_id = "open-implementation-chooser.window"
         chooser.title(f"Open implementation — {record.name}")
         chooser.transient(window)
         chooser.grab_set()
@@ -5261,6 +5321,7 @@ def _show_library_browser(
             state="readonly",
             width=42,
         )
+        combo._kicad_ui_contract_id = "open-implementation-chooser.choice"
         combo.pack(fill="x", pady=8)
 
         def launch_variant():
@@ -5283,10 +5344,16 @@ def _show_library_browser(
 
         buttons = ttk.Frame(frame)
         buttons.pack(fill="x")
-        _action_button(buttons, "Open", launch_variant, "open", "Open the selected implementation").pack(side="right")
-        _action_button(buttons, "Cancel", chooser.destroy, "cancel", "Close without opening an implementation").pack(
-            side="right", padx=(0, 6)
-        )
+        _action_button(
+            buttons, "Open", launch_variant, "open",
+            "Open the selected implementation",
+            contract_id="open-implementation-chooser.action.open",
+        ).pack(side="right")
+        _action_button(
+            buttons, "Cancel", chooser.destroy, "cancel",
+            "Close without opening an implementation",
+            contract_id="open-implementation-chooser.action.cancel",
+        ).pack(side="right", padx=(0, 6))
         _set_window_geometry(chooser, 500, 190, 440, 160)
         combo.focus_set()
 
@@ -5360,6 +5427,8 @@ def _show_library_browser(
         if not layouts:
             return
         chooser = tk.Toplevel(window)
+        chooser._kicad_ui_screen_id = "open-pcb-layout-chooser"
+        chooser._kicad_ui_contract_id = "open-pcb-layout-chooser.window"
         chooser.title(f"Open PCB layout — {record.name}")
         chooser.transient(window)
         chooser.grab_set()
@@ -5395,6 +5464,7 @@ def _show_library_browser(
         combo = ttk.Combobox(
             frame, textvariable=choice, values=labels, state="readonly", width=36
         )
+        combo._kicad_ui_contract_id = "open-pcb-layout-chooser.choice"
         combo.pack(fill="x", pady=8)
 
         def launch_layout():
@@ -5425,10 +5495,19 @@ def _show_library_browser(
 
         buttons = ttk.Frame(frame)
         buttons.pack(fill="x")
-        _action_button(buttons, "Manage layouts…", manage_layouts, "layouts", "Manage stored PCB layouts").pack(side="left")
-        _action_button(buttons, "Open", launch_layout, "open", "Open the selected PCB layout").pack(side="right")
         _action_button(
-            buttons, "Cancel", chooser.destroy, "cancel", "Close without opening a PCB layout",
+            buttons, "Manage layouts…", manage_layouts, "layouts",
+            "Manage stored PCB layouts",
+            contract_id="open-pcb-layout-chooser.action.manage",
+        ).pack(side="left")
+        _action_button(
+            buttons, "Open", launch_layout, "open", "Open the selected PCB layout",
+            contract_id="open-pcb-layout-chooser.action.open",
+        ).pack(side="right")
+        _action_button(
+            buttons, "Cancel", chooser.destroy, "cancel",
+            "Close without opening a PCB layout",
+            contract_id="open-pcb-layout-chooser.action.cancel",
         ).pack(side="right", padx=(0, 6))
         _set_window_geometry(chooser, 500, 200, 440, 170)
         combo.focus_set()
@@ -5481,41 +5560,49 @@ def _show_library_browser(
     place_button = _action_button(
         action_toolbar, "Place block", place_selected, "place",
         "Register the selected facade and start KiCad native symbol placement",
+        contract_id="library-browser.action.place",
     )
     place_button.pack(side="left")
     implementation_button = _action_button(
         action_toolbar, "Implementation", open_implementation, "implementation",
         "Open the base or a named circuit implementation",
+        contract_id="library-browser.action.implementation",
     )
     implementation_button.pack(side="left", padx=(6, 0))
     facade_button[0] = _action_button(
         action_toolbar, "Edit facade", edit_facade, "facade",
         "Open the generated library facade in KiCad Symbol Editor",
+        contract_id="library-browser.action.facade",
     )
     facade_button[0].pack(side="left", padx=(6, 0))
     variants_button = _action_button(
         action_toolbar, "Variants", edit_variants, "variants",
         "Add, edit, remove, or set the default circuit implementation",
+        contract_id="library-browser.action.variants",
     )
     variants_button.pack(side="left", padx=(6, 0))
     open_layout_button[0] = _action_button(
         action_toolbar, "Open PCB", open_layout, "pcb",
         "Open one of the block's stored PCB layouts",
+        contract_id="library-browser.action.open-pcb",
     )
     open_layout_button[0].pack(side="left", padx=(6, 0))
     manage_layout_button = _action_button(
         action_toolbar, "PCB layouts", manage_layouts, "layouts",
         "Add and associate PCB layouts with implementations",
+        contract_id="library-browser.action.manage-pcb-layouts",
     )
     manage_layout_button.pack(side="left", padx=(6, 0))
     refresh_button = _action_button(
         action_toolbar, "Refresh", refresh_records, "refresh",
         "Reload registered libraries and block details",
+        contract_id="library-browser.action.refresh",
     )
     refresh_button.pack(side="left", padx=(6, 0))
     libraries_button = _action_button(
         action_toolbar, "Libraries", manage_libraries, "libraries",
         "Register, create, change, or unregister block libraries",
+        contract_id="library-browser.action.libraries",
     )
     libraries_button.pack(side="left", padx=(6, 0))
     refresh_records()
@@ -6078,6 +6165,7 @@ def _apply_selected_block_pcb_layouts(
 def _show_action_hub(root, kicad=None):
     """Show compact, icon-led task actions with secondary guidance in tooltips."""
     _configure_tk_theme(root, kicad)
+    root._kicad_ui_screen_id = "task-hub"
     root.title("KiCad Blocks — Tasks")
 
     outer = ttk.Frame(root, padding=14)
@@ -6089,6 +6177,7 @@ def _show_action_hub(root, kicad=None):
     ).pack(anchor="w", pady=(0, 10))
 
     tabs = ttk.Notebook(outer)
+    tabs._kicad_ui_contract_id = "task-hub.views"
     tabs.pack(fill="both", expand=True)
 
     groups = [
@@ -6203,13 +6292,21 @@ def _show_action_hub(root, kicad=None):
                 command=lambda selected=action_id: dispatch(selected),
                 icon=icon_name,
                 tooltip=description,
+                contract_id=f"task-hub.action.{action_id}",
             )
             button.pack(fill="x", expand=True)
         tab.columnconfigure(0, weight=1)
 
     footer = ttk.Frame(outer)
     footer.pack(fill="x", pady=(10, 0))
-    _action_button(footer, "Close", root.destroy, "close", "Close the task hub").pack(side="right")
+    _action_button(
+        footer,
+        "Close",
+        root.destroy,
+        "close",
+        "Close the task hub",
+        contract_id="task-hub.close",
+    ).pack(side="right")
     _set_window_geometry(root, 820, 580, 680, 480)
     return tabs
 
