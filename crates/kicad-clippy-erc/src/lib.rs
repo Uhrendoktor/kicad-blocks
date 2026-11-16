@@ -83,8 +83,8 @@ pub enum ErcError {
 ///
 /// # Errors
 ///
-/// Returns [`ErcError`] when the process cannot be started, the CLI exits unsuccessfully,
-/// or its generated JSON report cannot be read or decoded.
+/// Returns [`ErcError`] when the process cannot be started, `KiCad` fails without writing a report,
+/// or the generated report cannot be read or decoded.
 pub fn run_native_erc(
     program: impl AsRef<Path>,
     schematic_path: impl AsRef<Path>,
