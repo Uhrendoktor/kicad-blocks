@@ -25,6 +25,7 @@ from .pcb_types import (
     BatchBlockLayoutMergeResult,
     BlockLayoutMergeResult,
     KiCadNetclassDefinition,
+    KiCadNetclassPattern,
     KiCadNetSettings,
     KiCadProjectData,
     KiCadProjectMetadata,
@@ -503,31 +504,37 @@ def _merge_project_net_settings(
         if not isinstance(raw_source_value, dict):
             raise ValueError(f"Invalid block project-settings JSON: {source_project}")
         raw_source_data = cast(dict[str, object], raw_source_value)
-        raw_source_settings = raw_source_data.get("net_settings", {})
-        if not isinstance(raw_source_settings, dict):
+        raw_source_settings_value = raw_source_data.get("net_settings", {})
+        if not isinstance(raw_source_settings_value, dict):
             raise ValueError("Block project file has an invalid net_settings section.")
+        raw_source_settings = cast(dict[str, object], raw_source_settings_value)
         source_settings = cast(KiCadNetSettings, raw_source_settings)
     else:
-        source_settings = cast(KiCadNetSettings, {})
+        raw_source_settings = {}
+        source_settings = cast(KiCadNetSettings, raw_source_settings)
 
-    raw_target_settings = raw_target_data.get("net_settings")
-    if raw_target_settings is None:
-        target_settings: KiCadNetSettings = {"classes": [], "netclass_assignments": {}}
-        target_data["net_settings"] = target_settings
-    elif isinstance(raw_target_settings, dict):
-        target_settings = cast(KiCadNetSettings, raw_target_settings)
-        target_data["net_settings"] = target_settings
+    raw_target_settings_value = raw_target_data.get("net_settings")
+    if raw_target_settings_value is None:
+        raw_target_settings: dict[str, object] = {
+            "classes": [],
+            "netclass_assignments": {},
+        }
+        raw_target_data["net_settings"] = raw_target_settings
+    elif isinstance(raw_target_settings_value, dict):
+        raw_target_settings = cast(dict[str, object], raw_target_settings_value)
     else:
         raise TypeError("Target project file has an invalid net_settings section.")
+    target_settings = cast(KiCadNetSettings, raw_target_settings)
+    target_data["net_settings"] = target_settings
 
-    raw_target_classes = target_settings.get("classes", [])
-    if type(raw_target_classes) is not list:
+    raw_target_classes = raw_target_settings.get("classes", [])
+    if not isinstance(raw_target_classes, list):
         raise TypeError("KiCad target net_settings.classes must be an array.")
-    target_classes = raw_target_classes
-    raw_source_classes = source_settings.get("classes", [])
-    if type(raw_source_classes) is not list:
+    target_classes = cast(list[KiCadNetclassDefinition], raw_target_classes)
+    raw_source_classes = raw_source_settings.get("classes", [])
+    if not isinstance(raw_source_classes, list):
         raise TypeError("KiCad source net_settings.classes must be an array.")
-    source_classes = raw_source_classes
+    source_classes = cast(list[KiCadNetclassDefinition], raw_source_classes)
 
     class_by_name: dict[str, KiCadNetclassDefinition] = {}
     priorities: list[int] = []
@@ -579,14 +586,15 @@ def _merge_project_net_settings(
             merged_classes.append(desired_name)
         class_map[original_name] = desired_name
 
-    raw_source_assignments = source_settings.get("netclass_assignments", {})
-    raw_target_assignments = target_settings.get("netclass_assignments", {})
-    if type(raw_source_assignments) is not dict or type(raw_target_assignments) is not dict:
+    raw_source_assignments = raw_source_settings.get("netclass_assignments", {})
+    raw_target_assignments = raw_target_settings.get("netclass_assignments", {})
+    if not isinstance(raw_source_assignments, dict) or not isinstance(raw_target_assignments, dict):
         raise TypeError("KiCad net_settings.netclass_assignments must be an object.")
-    source_assignments = raw_source_assignments
+    source_assignments = cast(dict[str, str | list[str]], raw_source_assignments)
+    target_assignment_values = cast(dict[str, str | list[str]], raw_target_assignments)
     target_assignments: dict[str, list[str]] = {
         str(net_name): _normalise_class_assignment(classes)
-        for net_name, classes in raw_target_assignments.items()
+        for net_name, classes in target_assignment_values.items()
     }
 
     reverse_ports: dict[str, str] = {}
@@ -625,10 +633,10 @@ def _merge_project_net_settings(
     applied_patterns: list[AppliedNetclassPattern] = []
     unmatched_patterns: list[str] = []
     source_net_map = source_net_to_board_net or {}
-    raw_source_patterns = source_settings.get("netclass_patterns", [])
-    if type(raw_source_patterns) is not list:
+    raw_source_patterns = raw_source_settings.get("netclass_patterns", [])
+    if not isinstance(raw_source_patterns, list):
         raise TypeError("KiCad net_settings.netclass_patterns must be an array.")
-    source_patterns = raw_source_patterns
+    source_patterns = cast(list[KiCadNetclassPattern], raw_source_patterns)
 
     for entry in source_patterns:
         pattern = entry.get("pattern")
@@ -680,7 +688,8 @@ def _merge_project_net_settings(
         metadata: KiCadProjectMetadata = {}
         target_data["meta"] = metadata
     elif isinstance(raw_metadata, dict):
-        metadata = cast(KiCadProjectMetadata, raw_metadata)
+        raw_metadata_dict = cast(dict[str, object], raw_metadata)
+        metadata = cast(KiCadProjectMetadata, raw_metadata_dict)
         target_data["meta"] = metadata
     else:
         raise TypeError("KiCad project meta section must be an object.")
