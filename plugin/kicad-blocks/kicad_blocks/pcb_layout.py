@@ -1061,6 +1061,384 @@ def merge_block_layouts(
     }
 
 
+@dataclass(frozen=True, slots=True)
+class _LayoutMergeFiles:
+    """Resolved source and destination assets for one block layout merge."""
+
+    target_board: Path
+    source_board: Path
+    output_board: Path
+    target_project: Path
+    output_project: Path
+    source_project: Path | None
+    selected_layout: ResolvedBlockLayout
+
+
+@dataclass(frozen=True, slots=True)
+class _LayoutPlacement:
+    """Validated physical placement and facade-to-layout net mapping."""
+
+    position_mm: tuple[float, float]
+    anchor_mm: tuple[float, float]
+    rotation_deg: float
+    ports: dict[str, str]
+
+
+@dataclass(slots=True)
+class _BoardNetMapping:
+    """Source and target net tables plus the remapped net nodes to insert."""
+
+    source_nets: dict[int, str]
+    target_nets: dict[int, str]
+    net_map: dict[int, tuple[int, str]]
+    new_net_nodes: list[SExprList]
+
+
+@dataclass(slots=True)
+class _ImportedLayoutItems:
+    """Prepared interactive board objects and their identity/mapping metadata."""
+
+    items: list[SExprList]
+    references: list[str]
+    item_uuids: list[str]
+    skipped: set[str]
+    pad_uuid_remap: dict[str, str]
+
+
+_IGNORED_LAYOUT_TOP_LEVEL_KINDS = {
+    "version",
+    "generator",
+    "general",
+    "paper",
+    "layers",
+    "setup",
+    "net",
+    "net_class",
+    "net_chains",
+    "embedded_fonts",
+    "uuid",
+}
+_SUPPORTED_LAYOUT_ITEM_KINDS = {
+    "footprint",
+    "segment",
+    "arc",
+    "via",
+    "zone",
+    "gr_line",
+    "gr_arc",
+    "gr_circle",
+    "gr_rect",
+    "gr_poly",
+    "gr_curve",
+    "gr_text",
+    "gr_text_box",
+    "dimension",
+    "target",
+}
+
+
+def _resolve_layout_merge_files(
+    target_board: Path,
+    block: BlockRecord,
+    output_board: Path,
+    instance_reference: str,
+    layout_id: str | None,
+) -> _LayoutMergeFiles:
+    """Resolve layout files and validate that outputs cannot overwrite inputs.
+
+    Raises:
+        FileNotFoundError: If the target board or stored block layout is missing.
+        FileExistsError: If an output PCB or project file already exists.
+        ValueError: If the reference designator or output path is invalid.
+    """
+    target_path = Path(target_board).expanduser().resolve()
+    output_path = Path(output_board).expanduser().resolve()
+    selected_layout = resolve_block_layout(block, layout_id)
+    source_path = (Path(block.path) / selected_layout["file"]).resolve()
+    project_filename = selected_layout.get("project_file")
+    source_project = (
+        (Path(block.path) / str(project_filename)).resolve() if project_filename else None
+    )
+    target_project = target_path.with_suffix(".kicad_pro")
+    output_project = output_path.with_suffix(".kicad_pro")
+    if not target_path.is_file() or not source_path.is_file():
+        raise FileNotFoundError("Project board or stored block PCB layout does not exist.")
+    if output_path == target_path:
+        raise ValueError("Output must be a new file; the project board is never overwritten.")
+    if output_path.exists():
+        raise FileExistsError(
+            f"Output PCB already exists and will not be overwritten: {output_path}"
+        )
+    if output_project.exists():
+        raise FileExistsError(
+            f"Output project settings already exist and will not be overwritten: {output_project}"
+        )
+    if not re.fullmatch(r"[A-Za-z][A-Za-z0-9_]*", instance_reference):
+        raise ValueError(
+            "Block instance reference must start with a letter and use only letters, digits and underscores."
+        )
+    return _LayoutMergeFiles(
+        target_path,
+        source_path,
+        output_path,
+        target_project,
+        output_project,
+        source_project,
+        selected_layout,
+    )
+
+
+def _validate_layout_placement(
+    block: BlockRecord,
+    selected_layout: ResolvedBlockLayout,
+    position_mm: tuple[float, float],
+    layout_anchor_mm: tuple[float, float],
+    rotation_deg: float,
+    pin_to_board_net: dict[str, str],
+) -> _LayoutPlacement:
+    """Validate coordinates and derive the source-port to project-net map.
+
+    Raises:
+        ValueError: If coordinates, facade pin maps, or target net names are invalid.
+    """
+    if len(position_mm) != 2 or len(layout_anchor_mm) != 2:
+        raise ValueError("Placement position and layout anchor must each contain two coordinates.")
+    position = (float(position_mm[0]), float(position_mm[1]))
+    anchor = (float(layout_anchor_mm[0]), float(layout_anchor_mm[1]))
+    rotation = float(rotation_deg)
+    if not all(math.isfinite(value) for value in (*position, *anchor, rotation)):
+        raise ValueError("Placement position, layout anchor and rotation must be finite.")
+    pins = {str(pin["name"]) for pin in block.manifest.get("pins", [])}
+    if set(pin_to_board_net) != pins:
+        raise ValueError(f"Map every facade pin exactly once. Expected {sorted(pins)}.")
+    if any(not str(name).strip() for name in pin_to_board_net.values()):
+        raise ValueError("Target board net names cannot be empty.")
+    ports = (
+        selected_layout.get("ports")
+        or block.manifest.get("layout_ports")
+        or {pin: pin for pin in pins}
+    )
+    if set(ports) != pins:
+        raise ValueError("Block layout_ports must map every facade pin exactly once.")
+    mapped_ports: dict[str, str] = {}
+    for pin, source_net in ports.items():
+        source_name = str(source_net)
+        destination = str(pin_to_board_net[pin]).strip()
+        if source_name in mapped_ports and mapped_ports[source_name] != destination:
+            raise ValueError(f"Layout net {source_name!r} maps to two project nets.")
+        mapped_ports[source_name] = destination
+    return _LayoutPlacement(position, anchor, rotation % 360.0, mapped_ports)
+
+
+def _read_layout_documents(files: _LayoutMergeFiles) -> tuple[SExprList, SExprList]:
+    """Parse both board documents and ensure the target supports every source layer.
+
+    Raises:
+        ValueError: If either file is not a KiCad PCB document or required layers are absent.
+    """
+    target = parse_sexpr(files.target_board.read_text(encoding="utf-8"))
+    source = parse_sexpr(files.source_board.read_text(encoding="utf-8"))
+    if _head(target) != "kicad_pcb" or _head(source) != "kicad_pcb":
+        raise ValueError("Both files must be KiCad PCB S-expression documents.")
+    missing_layers = sorted(_get_layers(source) - _get_layers(target))
+    if missing_layers:
+        raise ValueError(
+            "Project board lacks layers required by the block: " + ", ".join(missing_layers)
+        )
+    return target, source
+
+
+def _map_layout_nets(
+    source: SExprList,
+    target: SExprList,
+    ports: dict[str, str],
+    instance_reference: str,
+) -> _BoardNetMapping:
+    """Map block nets to project nets, namespacing non-port nets by instance."""
+    source_nets = _get_nets(source)
+    target_nets = _get_nets(target)
+    target_codes = {name: code for code, name in target_nets.items()}
+    next_code = max(target_nets, default=0) + 1
+    net_map: dict[int, tuple[int, str]] = {0: (0, "")}
+    new_net_nodes: list[SExprList] = []
+    for old_code, source_name in source_nets.items():
+        if old_code == 0:
+            continue
+        destination_name = ports.get(source_name)
+        if destination_name is None:
+            safe_name = (
+                re.sub(r"[^A-Za-z0-9_./+-]+", "_", source_name).strip("_") or f"NET{old_code}"
+            )
+            destination_name = f"{instance_reference}_{safe_name}"
+        destination_code = target_codes.get(destination_name)
+        if destination_code is None:
+            destination_code = next_code
+            next_code += 1
+            target_codes[destination_name] = destination_code
+            new_net_nodes.append(["net", str(destination_code), _Quoted(destination_name)])
+        net_map[old_code] = (destination_code, destination_name)
+    return _BoardNetMapping(source_nets, target_nets, net_map, new_net_nodes)
+
+
+def _prepare_layout_item(
+    raw_item: SExpr,
+    kind: str,
+    *,
+    existing_references: set[str],
+    used_item_uuids: set[str],
+    pad_uuid_remap: dict[str, str],
+    net_map: dict[int, tuple[int, str]],
+    anchor_mm: tuple[float, float],
+    position_mm: tuple[float, float],
+    rotation_deg: float,
+) -> tuple[SExprList, str | None, str]:
+    """Clone, transform, remap and validate one imported board object.
+
+    Raises:
+        ValueError: If a footprint lacks a reference or an item lacks a unique UUID/TSTAMP.
+    """
+    item = parse_sexpr(_dump(raw_item))
+    reference: str | None = None
+    if kind == "footprint":
+        old_reference = _reference(item)
+        if not old_reference:
+            raise ValueError("Every stored layout footprint must have a Reference property.")
+        reference = _unique_reference(
+            f"{reference_prefix}_{old_reference}", existing_references
+        )
+        _rewrite_footprint(item, reference, 0.0, 0.0, uuid_remap=pad_uuid_remap)
+    else:
+        _refresh_ids(item)
+    _transform_item(
+        item,
+        anchor_mm=anchor_mm,
+        position_mm=position_mm,
+        rotation_deg=rotation_deg,
+    )
+    _rewrite_nets(item, net_map, include_net_name=(kind == "footprint"))
+    item_id_node = _direct(item, "uuid") or _direct(item, "tstamp")
+    if item_id_node is None or len(item_id_node) < 2:
+        raise ValueError(
+            f"Imported PCB {kind} object has no top-level UUID/TSTAMP for interactive placement."
+        )
+    item_uuid = str(item_id_node[1]).strip()
+    if not item_uuid or item_uuid in used_item_uuids:
+        raise ValueError(f"Imported PCB object has a missing or duplicate UUID: {item_uuid!r}.")
+    used_item_uuids.add(item_uuid)
+    return item, reference, item_uuid
+
+
+def _import_layout_items(
+    source: SExprList,
+    net_map: dict[int, tuple[int, str]],
+    *,
+    instance_reference: str,
+    anchor_mm: tuple[float, float],
+    position_mm: tuple[float, float],
+    rotation_deg: float,
+) -> _ImportedLayoutItems:
+    """Prepare every supported layout item and report unsupported top-level kinds.
+
+    Raises:
+        ValueError: If no supported items remain or any object lacks required identifiers.
+    """
+    existing_references = {
+        reference.casefold()
+        for item in source[1:]
+        if isinstance(item, list) and _head(item) == "footprint"
+        if (reference := _reference(item))
+    }
+    imported: list[SExprList] = []
+    references: list[str] = []
+    item_uuids: list[str] = []
+    used_item_uuids: set[str] = set()
+    skipped: set[str] = set()
+    pad_uuid_remap: dict[str, str] = {}
+    for raw_item in source[1:]:
+        kind = _head(raw_item)
+        if kind in _IGNORED_LAYOUT_TOP_LEVEL_KINDS:
+            continue
+        if kind not in _SUPPORTED_LAYOUT_ITEM_KINDS:
+            if kind:
+                skipped.add(kind)
+            continue
+        item, reference, item_uuid = _prepare_layout_item(
+            raw_item,
+            str(kind),
+            existing_references=existing_references,
+            used_item_uuids=used_item_uuids,
+            pad_uuid_remap=pad_uuid_remap,
+            net_map=net_map,
+            anchor_mm=anchor_mm,
+            position_mm=position_mm,
+            rotation_deg=rotation_deg,
+        )
+        if reference is not None:
+            references.append(reference)
+        imported.append(item)
+        item_uuids.append(item_uuid)
+    if not imported:
+        raise ValueError("The stored block layout contains no importable PCB objects.")
+    return _ImportedLayoutItems(imported, references, item_uuids, skipped, pad_uuid_remap)
+
+
+def _insert_layout_items(
+    target: SExprList,
+    new_net_nodes: list[SExprList],
+    imported_items: list[SExprList],
+) -> None:
+    """Insert newly declared nets before the imported board primitives."""
+    last_net = max((index for index, item in enumerate(target) if _head(item) == "net"), default=0)
+    for offset, net_node in enumerate(new_net_nodes, start=1):
+        target.insert(last_net + offset, net_node)
+    target.extend(imported_items)
+
+
+def _existing_project_chain_names(target: SExprList, target_project: Path) -> set[str]:
+    """Collect net-chain names already used by the target board and project.
+
+    Raises:
+        ValueError: If the target project settings file is malformed.
+    """
+    existing: set[str] = set()
+    target_chain_section = _direct(target, "net_chains")
+    if target_chain_section is not None:
+        for chain in target_chain_section[1:]:
+            if isinstance(chain, list) and _head(chain) == "net_chain":
+                name_node = _direct(chain, "name")
+                if name_node is not None and len(name_node) >= 2:
+                    existing.add(str(name_node[1]).casefold())
+    if target_project.is_file():
+        project_data = _load_project_settings(
+            target_project, context="Invalid target project-settings JSON"
+        )
+        project_settings: KiCadNetSettings = project_data.get("net_settings") or {}
+        for values in (
+            project_settings.get("net_chain_classes") or {},
+            project_settings.get("net_chain_netclasses") or {},
+        ):
+            existing.update(str(name).casefold() for name in values)
+    return existing
+
+
+def _write_layout_outputs(
+    files: _LayoutMergeFiles,
+    target: SExprList,
+    project_merge: ProjectSettingsMergeResult | None,
+) -> None:
+    """Write new board/project copies, removing a partial board if settings fail."""
+    _atomic_write(files.output_board, _dump(target) + "\\n")
+    try:
+        if project_merge is not None:
+            _atomic_write(
+                files.output_project,
+                json.dumps(project_merge["data"], indent=2, ensure_ascii=False) + "\\n",
+            )
+    except Exception:
+        files.output_board.unlink(missing_ok=True)
+        raise
+
+
 def merge_block_layout(
     target_board: Path,
     block: BlockRecord,
@@ -1075,285 +1453,88 @@ def merge_block_layout(
 ) -> BlockLayoutMergeResult:
     """Merge a stored block layout into a new copy of a project board.
 
-    The manifest's optional layout_ports map relates facade pin names to
-    the net names used in the stored PCB. Without it, names are assumed equal.
-    Internal source nets are namespaced with the block instance reference.
-    The input project board is never modified.
+    Returns:
+        The merged board path, mapping decisions and imported board-object counts.
+
+    Raises:
+        FileNotFoundError: If the project board or stored block layout is missing.
+        FileExistsError: If either output file already exists.
+        ValueError: If placement, layers, net mappings, or imported board items are invalid.
     """
-    target_board = Path(target_board).expanduser().resolve()
-    output_board = Path(output_board).expanduser().resolve()
-    selected_layout = resolve_block_layout(block, layout_id)
-    layout_name = selected_layout["file"]
-    source_board = (Path(block.path) / layout_name).resolve()
-    layout_project_file = selected_layout.get("project_file")
-    source_project = (
-        (Path(block.path) / str(layout_project_file)).resolve() if layout_project_file else None
+    files = _resolve_layout_merge_files(
+        target_board, block, output_board, instance_reference, layout_id
     )
-    target_project = target_board.with_suffix(".kicad_pro")
-    output_project = output_board.with_suffix(".kicad_pro")
-    if not target_board.is_file() or not source_board.is_file():
-        raise FileNotFoundError("Project board or stored block PCB layout does not exist.")
-    if output_board == target_board:
-        raise ValueError("Output must be a new file; the project board is never overwritten.")
-    if output_board.exists():
-        raise FileExistsError(
-            f"Output PCB already exists and will not be overwritten: {output_board}"
-        )
-    if output_project.exists():
-        raise FileExistsError(
-            f"Output project settings already exist and will not be overwritten: {output_project}"
-        )
-    if not re.fullmatch(r"[A-Za-z][A-Za-z0-9_]*", instance_reference):
-        raise ValueError(
-            "Block instance reference must start with a letter and use only letters, digits and underscores."
-        )
-    if len(position_mm) != 2 or len(layout_anchor_mm) != 2:
-        raise ValueError("Placement position and layout anchor must each contain two coordinates.")
-    x, y = map(float, position_mm)
-    anchor_x, anchor_y = map(float, layout_anchor_mm)
-    rotation_deg = float(rotation_deg)
-    if not all(math.isfinite(value) for value in (x, y, anchor_x, anchor_y, rotation_deg)):
-        raise ValueError("Placement position, layout anchor and rotation must be finite.")
-    rotation_deg %= 360.0
-
-    pins = {str(pin["name"]) for pin in block.manifest.get("pins", [])}
-    if set(pin_to_board_net) != pins:
-        raise ValueError(f"Map every facade pin exactly once. Expected {sorted(pins)}.")
-    if any(not str(name).strip() for name in pin_to_board_net.values()):
-        raise ValueError("Target board net names cannot be empty.")
-
-    target = parse_sexpr(target_board.read_text(encoding="utf-8"))
-    source = parse_sexpr(source_board.read_text(encoding="utf-8"))
-    if _head(target) != "kicad_pcb" or _head(source) != "kicad_pcb":
-        raise ValueError("Both files must be KiCad PCB S-expression documents.")
-    missing_layers = sorted(_get_layers(source) - _get_layers(target))
-    if missing_layers:
-        raise ValueError(
-            "Project board lacks layers required by the block: " + ", ".join(missing_layers)
-        )
-
-    source_nets = _get_nets(source)
-    target_nets = _get_nets(target)
-    target_codes = {name: code for code, name in target_nets.items()}
-    next_code = max(target_nets, default=0) + 1
-    ports = (
-        selected_layout.get("ports")
-        or block.manifest.get("layout_ports")
-        or {pin: pin for pin in pins}
+    placement = _validate_layout_placement(
+        block,
+        files.selected_layout,
+        position_mm,
+        layout_anchor_mm,
+        rotation_deg,
+        pin_to_board_net,
     )
-    if set(ports) != pins:
-        raise ValueError("Block layout_ports must map every facade pin exactly once.")
-    port_map: dict[str, str] = {}
-    for pin, layout_net in ports.items():
-        layout_net = str(layout_net)
-        destination = str(pin_to_board_net[pin]).strip()
-        if layout_net in port_map and port_map[layout_net] != destination:
-            raise ValueError(f"Layout net {layout_net!r} maps to two project nets.")
-        port_map[layout_net] = destination
-
-    net_map: dict[int, tuple[int, str]] = {0: (0, "")}
-    new_net_nodes: list[SExprList] = []
-    for old_code, source_name in source_nets.items():
-        if old_code == 0:
-            continue
-        if source_name in port_map:
-            destination_name = port_map[source_name]
-        else:
-            safe_name = (
-                re.sub(r"[^A-Za-z0-9_./+-]+", "_", source_name).strip("_") or f"NET{old_code}"
-            )
-            destination_name = f"{instance_reference}_{safe_name}"
-        destination_code = target_codes.get(destination_name)
-        if destination_code is None:
-            destination_code = next_code
-            next_code += 1
-            target_codes[destination_name] = destination_code
-            new_net_nodes.append(["net", str(destination_code), _Quoted(destination_name)])
-        net_map[old_code] = (destination_code, destination_name)
-
-    existing_references = {
-        reference.casefold()
-        for item in target[1:]
-        if isinstance(item, list) and _head(item) == "footprint"
-        if (reference := _reference(item))
-    }
-    supported = {
-        "footprint",
-        "segment",
-        "arc",
-        "via",
-        "zone",
-        "gr_line",
-        "gr_arc",
-        "gr_circle",
-        "gr_rect",
-        "gr_poly",
-        "gr_curve",
-        "gr_text",
-        "gr_text_box",
-        "dimension",
-        "target",
-    }
-    imported: list[SExprList] = []
-    imported_references: list[str] = []
-    interactive_item_uuids: list[str] = []
-    skipped: set[str] = set()
-    pad_uuid_remap: dict[str, str] = {}
-    anchor = (anchor_x, anchor_y)
-    position = (x, y)
-    for raw_item in source[1:]:
-        kind = _head(raw_item)
-        if kind in {
-            "version",
-            "generator",
-            "general",
-            "paper",
-            "layers",
-            "setup",
-            "net",
-            "net_class",
-            "net_chains",
-            "embedded_fonts",
-            "uuid",
-        }:
-            continue
-        if kind not in supported:
-            if kind:
-                skipped.add(kind)
-            continue
-        item = parse_sexpr(_dump(raw_item))
-        if kind == "footprint":
-            old_reference = _reference(item)
-            if not old_reference:
-                raise ValueError("Every stored layout footprint must have a Reference property.")
-            new_reference = _unique_reference(
-                f"{instance_reference}_{old_reference}", existing_references
-            )
-            _rewrite_footprint(item, new_reference, 0.0, 0.0, uuid_remap=pad_uuid_remap)
-            _transform_item(
-                item,
-                anchor_mm=anchor,
-                position_mm=position,
-                rotation_deg=rotation_deg,
-            )
-            imported_references.append(new_reference)
-        else:
-            _transform_item(
-                item,
-                anchor_mm=anchor,
-                position_mm=position,
-                rotation_deg=rotation_deg,
-            )
-            _refresh_ids(item)
-        _rewrite_nets(item, net_map, include_net_name=(kind == "footprint"))
-        item_id_node = _direct(item, "uuid") or _direct(item, "tstamp")
-        if item_id_node is None or len(item_id_node) < 2:
-            raise ValueError(
-                f"Imported PCB {kind} object has no top-level UUID/TSTAMP for interactive placement."
-            )
-        item_uuid = str(item_id_node[1]).strip()
-        if not item_uuid or item_uuid in interactive_item_uuids:
-            raise ValueError(f"Imported PCB object has a missing or duplicate UUID: {item_uuid!r}.")
-        interactive_item_uuids.append(item_uuid)
-        imported.append(item)
-
-    if not imported:
-        raise ValueError(f"Block {block.name!r} has no importable PCB objects.")
-    last_net = max((i for i, item in enumerate(target) if _head(item) == "net"), default=0)
-    for offset, net_node in enumerate(new_net_nodes, start=1):
-        target.insert(last_net + offset, net_node)
-    target.extend(imported)
-
+    target, source = _read_layout_documents(files)
+    net_mapping = _map_layout_nets(
+        source, target, placement.ports, instance_reference
+    )
+    imported = _import_layout_items(
+        source,
+        net_mapping.net_map,
+        instance_reference=instance_reference,
+        anchor_mm=placement.anchor_mm,
+        position_mm=placement.position_mm,
+        rotation_deg=placement.rotation_deg,
+    )
+    _insert_layout_items(target, net_mapping.new_net_nodes, imported.items)
     source_net_to_board_net = {
-        source_name: net_map[code][1]
-        for code, source_name in source_nets.items()
-        if code in net_map and code != 0
+        source_name: net_mapping.net_map[code][1]
+        for code, source_name in net_mapping.source_nets.items()
+        if code in net_mapping.net_map and code != 0
     }
-    existing_chain_names: set[str] = set()
-    target_chain_section = _direct(target, "net_chains")
-    if target_chain_section is not None:
-        for chain in target_chain_section[1:]:
-            if isinstance(chain, list) and _head(chain) == "net_chain":
-                name_node = _direct(chain, "name")
-                if name_node is not None and len(name_node) >= 2:
-                    existing_chain_names.add(str(name_node[1]).casefold())
-    if target_project.is_file():
-        existing_project = _load_project_settings(
-            target_project, context="Invalid target project-settings JSON"
-        )
-        existing_settings: KiCadNetSettings = existing_project.get("net_settings") or {}
-        for key in ("net_chain_classes", "net_chain_netclasses"):
-            values = existing_settings.get(key, {})
-            if isinstance(values, dict):
-                existing_chain_names.update(str(name).casefold() for name in values)
-
+    existing_chain_names = _existing_project_chain_names(target, files.target_project)
     chain_name_map = _merge_net_chain_sections(
         source,
         target,
-        source_nets=source_nets,
+        source_nets=net_mapping.source_nets,
         source_net_to_board_net=source_net_to_board_net,
-        pad_uuid_remap=pad_uuid_remap,
+        pad_uuid_remap=imported.pad_uuid_remap,
         instance_reference=instance_reference,
         existing_chain_names=existing_chain_names,
     )
-
     project_merge = _merge_project_net_settings(
-        target_project,
-        source_project,
-        output_project,
+        files.target_project,
+        files.source_project,
+        files.output_project,
         instance_reference=instance_reference,
-        layout_ports={str(key): str(value) for key, value in ports.items()},
+        layout_ports=placement.ports,
         pin_to_board_net=pin_to_board_net,
         source_net_to_board_net=source_net_to_board_net,
         source_chain_name_map=chain_name_map,
     )
-    _atomic_write(output_board, _dump(target) + "\n")
-    try:
-        if project_merge is not None:
-            _atomic_write(
-                output_project,
-                json.dumps(project_merge["data"], indent=2, ensure_ascii=False) + "\n",
-            )
-    except Exception:
-        output_board.unlink(missing_ok=True)
-        raise
-
+    _write_layout_outputs(files, target, project_merge)
     return {
-        "output": str(output_board),
+        "output": str(files.output_board),
         "block": block.name,
-        "layout_id": selected_layout.get("id"),
-        "layout_name": selected_layout.get("name"),
+        "layout_id": files.selected_layout.get("id"),
+        "layout_name": files.selected_layout.get("name"),
         "instance_reference": instance_reference,
-        "rotation_deg": rotation_deg,
-        "project_file": project_merge["output"] if project_merge is not None else None,
+        "rotation_deg": placement.rotation_deg,
+        "project_file": (
+            str(files.output_project) if files.output_project.is_file() else None
+        ),
         "merged_netclasses": project_merge["merged_classes"] if project_merge is not None else [],
-        "assigned_project_nets": project_merge["assigned_nets"]
-        if project_merge is not None
-        else [],
-        "ignored_project_patterns": project_merge["ignored_patterns"]
-        if project_merge is not None
-        else False,
-        "applied_project_patterns": project_merge["applied_patterns"]
-        if project_merge is not None
-        else [],
-        "unmatched_project_patterns": project_merge["unmatched_patterns"]
-        if project_merge is not None
-        else [],
-        "ignored_project_chain_classes": project_merge["ignored_chain_classes"]
-        if project_merge is not None
-        else False,
-        "merged_project_chain_names": project_merge["merged_chain_names"]
-        if project_merge is not None
-        else [],
-        "unmatched_project_chains": project_merge["unmatched_chains"]
-        if project_merge is not None
-        else [],
+        "assigned_project_nets": project_merge["assigned_nets"] if project_merge is not None else [],
+        "ignored_project_patterns": project_merge["ignored_patterns"] if project_merge is not None else False,
+        "applied_project_patterns": project_merge["applied_patterns"] if project_merge is not None else [],
+        "unmatched_project_patterns": project_merge["unmatched_patterns"] if project_merge is not None else [],
+        "ignored_project_chain_classes": project_merge["ignored_chain_classes"] if project_merge is not None else False,
+        "merged_project_chain_names": project_merge["merged_chain_names"] if project_merge is not None else [],
+        "unmatched_project_chains": project_merge["unmatched_chains"] if project_merge is not None else [],
         "merged_board_chains": sorted(chain_name_map.values()),
-        "footprints": imported_references,
-        "interactive_item_uuids": interactive_item_uuids,
-        "footprint_count": len(imported_references),
-        "object_count": len(imported),
-        "new_net_count": len(new_net_nodes),
-        "new_nets": [str(node[2]) for node in new_net_nodes],
-        "skipped_top_level_items": sorted(skipped),
+        "footprints": imported.references,
+        "interactive_item_uuids": imported.item_uuids,
+        "footprint_count": len(imported.references),
+        "object_count": len(imported.items),
+        "new_net_count": len(net_mapping.new_net_nodes),
+        "new_nets": [str(node[2]) for node in net_mapping.new_net_nodes],
+        "skipped_top_level_items": sorted(imported.skipped),
     }
