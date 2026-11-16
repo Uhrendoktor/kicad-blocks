@@ -112,6 +112,7 @@ class ButtonContract(ComponentContract):
     expected_action: str | tuple[str, ...] | None
     destroys_window: bool = True
     expected_new_window_title: str | None = None
+    expected_label: str | None = None
 
     def execute(self, context: UiTestContext) -> dict[str, Any]:
         button = context.require_widget(self.contract_id)
@@ -136,6 +137,7 @@ class ButtonContract(ComponentContract):
             ]
         return {
             "invoke_result": result,
+            "label": str(button.cget("text")),
             "action_calls": list(context.action_calls),
             "root_exists": root_exists,
             "new_windows": new_windows,
@@ -152,6 +154,8 @@ class ButtonContract(ComponentContract):
             expected = [self.expected_action]
         assert observation["action_calls"] == expected
         assert observation["root_exists"] is (not self.destroys_window)
+        if self.expected_label is not None:
+            assert observation["label"] == self.expected_label
         if self.expected_new_window_title is not None:
             assert self.expected_new_window_title in observation["new_windows"]
 
