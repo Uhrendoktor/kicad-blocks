@@ -11,7 +11,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from scripts.generate_ui_inventory import load_catalog, render_inventory  # noqa: E402
+from scripts.generate_ui_inventory import load_catalog, render_inventory
 
 CATALOG_PATH = ROOT / "tests" / "ui_contract_catalog.json"
 INVENTORY_PATH = ROOT / "docs" / "ui-inventory.md"
