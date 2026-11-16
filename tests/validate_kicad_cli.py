@@ -18,7 +18,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 from generate_reference import ROOT_UUID, generate_reference_schematic
 from kicad_blocks.model import parse_pins
 from kicad_blocks.operations import export_block_bom, validate_block_tree
-from kicad_blocks.pcb_layout import new_blank_pcb_source
+from kicad_blocks.plugin import new_blank_pcb_source
 from kicad_blocks.sexpr import (
     QuotedSExpr as _Quoted,
     dump_sexpr as _dump,
