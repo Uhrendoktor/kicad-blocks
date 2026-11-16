@@ -6,8 +6,12 @@ import json
 import shutil
 import tempfile
 import uuid
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, Protocol, cast
+from typing import TYPE_CHECKING, Protocol, cast
+
+if TYPE_CHECKING:
+    from kipy.geometry import Vector2
 
 from .manifest_types import BlockDependencyManifest
 from .model import (
@@ -60,6 +64,43 @@ class _GlobalLabel(Protocol):
     text: _LabelText
     id: _LabelId
     shape: int
+
+
+class _LibraryIdentifier(Protocol):
+    library: str
+    name: str
+
+
+class _SymbolDefinition(Protocol):
+    id: _LibraryIdentifier
+
+
+class _SymbolTransform(Protocol):
+    orientation: int
+
+
+class _SchematicSymbolInstance(Protocol):
+    reference: str
+    definition: _SymbolDefinition
+    transform: _SymbolTransform
+
+
+class _SchematicSymbolPlacer(Protocol):
+    """Public KiCad schematic placement API exposed by the Python bindings."""
+
+    def place_symbol_from_library(
+        self,
+        lib_id: str,
+        position: Vector2,
+        orientation: int | None = None,
+        reference: str | None = None,
+    ) -> _SchematicSymbolInstance: ...
+
+
+class _SchematicItemWriter(Protocol):
+    """Typed item-creation boundary for generated KiCad wrapper objects."""
+
+    def create_items(self, items: list[_GlobalLabel]) -> None: ...
 
 
 def _child_record(
@@ -155,7 +196,10 @@ def _compose_direct_children(
         kicad.load_all_libraries()
         kicad.wait_for_libraries(timeout_s=120.0)
 
-        symbols_by_reference = {item.reference: item for item in schematic.get_symbols()}
+        symbols_by_reference: dict[str, _SchematicSymbolInstance] = {
+            item.reference: item
+            for item in cast(Sequence[_SchematicSymbolInstance], schematic.get_symbols())
+        }
         known_labels = cast(list[_GlobalLabel], schematic.get_labels())
         labels_by_position: dict[tuple[int, int], _GlobalLabel] = {
             _point_key(item.position): item for item in known_labels
@@ -187,12 +231,10 @@ def _compose_direct_children(
                 position = dependency.get("position_mm", [100.0, 160.0])
                 if len(position) != 2:
                     raise ValueError(f"Invalid position for nested instance {reference!r}.")
-                existing = schematic.place_symbol_from_library(
+                existing = cast(_SchematicSymbolPlacer, schematic).place_symbol_from_library(
                     f"{nickname}:{symbol_name}",
                     Vector2.from_xy_mm(float(position[0]), float(position[1])),
-                    # The current public API documents integer degrees; the generated
-                    # wrapper stub models this argument as a protobuf ValueType.
-                    orientation=cast(Any, orientation),
+                    orientation=orientation,
                     reference=reference,
                 )
                 symbols_by_reference[reference] = existing
@@ -244,10 +286,10 @@ def _compose_direct_children(
             try:
                 # KiCad's generated IPC stub does not currently expose the
                 # concrete generated message type for GlobalLabel.
-                schematic.create_items(cast(Any, new_labels))
+                cast(_SchematicItemWriter, schematic).create_items(new_labels)
             except AttributeError as exc:
                 # Some KiCad development builds have returned a CreateItem
-                # result with no packed Any payload even though the object
+                # result without a packed payload even though the object
                 # was applied to the document. Verify document state before
                 # deciding whether this was a harmless response issue.
                 if "type_url" not in str(exc):

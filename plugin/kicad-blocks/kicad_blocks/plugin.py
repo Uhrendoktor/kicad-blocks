@@ -15,7 +15,7 @@ import tempfile
 from collections.abc import Callable, Iterator, Sequence
 from importlib import import_module
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Protocol, TypedDict, cast
+from typing import TYPE_CHECKING, Protocol, TypedDict, cast
 
 # The core block model and IPC helpers must remain importable in headless
 # environments. Load Tkinter only when the interactive manager is invoked.
@@ -380,12 +380,11 @@ class _TkPreviewCanvas(Protocol):
 
 
 def _after_event(
-    callback: Callable[[], object],
+    callback: Callable[[], str | None],
 ) -> Callable[[tkinter_types.Event[tkinter_types.Misc]], str | None]:
     """Adapt a zero-argument action to a typed Tk event callback."""
     def handle(_event: tkinter_types.Event[tkinter_types.Misc]) -> str | None:
-        result = callback()
-        return result if isinstance(result, str) else None
+        return callback()
 
     return handle
 
@@ -1018,7 +1017,7 @@ def _action_button(
     button = ttk.Button(
         parent,
         text=text,
-        command=cast(Any, command),
+        command=cast(Callable[..., None | str | bool], command),
         padding=(9, 6),
         **button_options,
     )
