@@ -217,6 +217,7 @@ def main() -> None:
                 raise AssertionError("Placed facade has the wrong KiCad library identifier.")
 
             original_instance_id = str(instance.id)
+
             class FakeSelection:
                 def get_selection(self) -> list[SchematicSymbol]:
                     return [cast(SchematicSymbol, instance)]
@@ -263,7 +264,9 @@ def main() -> None:
                 local_text + "\n; local IPC publish test\n",
                 encoding="utf-8",
             )
-            published = sync_selected_local(cast(Schematic, selection), cast(KiCadApp, kicad), project_dir)
+            published = sync_selected_local(
+                cast(Schematic, selection), cast(KiCadApp, kicad), project_dir
+            )
             if "implementation.kicad_sch" not in published["published"]:
                 raise AssertionError(f"Local implementation edit was not published: {published!r}")
             if "; local IPC publish test" not in block.implementation.read_text(encoding="utf-8"):
@@ -276,7 +279,9 @@ def main() -> None:
                 source_text + "\n; upstream IPC pull test\n",
                 encoding="utf-8",
             )
-            pulled = sync_selected_local(cast(Schematic, selection), cast(KiCadApp, kicad), project_dir)
+            pulled = sync_selected_local(
+                cast(Schematic, selection), cast(KiCadApp, kicad), project_dir
+            )
             if "implementation.kicad_sch" not in pulled["pulled"]:
                 raise AssertionError(f"Upstream implementation edit was not pulled: {pulled!r}")
             if "; upstream IPC pull test" not in local.implementation.read_text(encoding="utf-8"):

@@ -467,7 +467,9 @@ class BlockRepositoryTests(unittest.TestCase):
         instance = SimpleNamespace(
             definition=SimpleNamespace(id=SimpleNamespace(library="KBlocks", name="buck_1234abcd"))
         )
-        self.assertEqual(symbol_identifier(cast(SchematicSymbol, instance)), ("KBlocks", "buck_1234abcd"))
+        self.assertEqual(
+            symbol_identifier(cast(SchematicSymbol, instance)), ("KBlocks", "buck_1234abcd")
+        )
 
     def test_create_block_writes_facade_and_separate_implementation(self):
         record = create_block(self.root, "Buck Converter", self.pins, description="Step-down")
@@ -819,14 +821,17 @@ class BlockRepositoryTests(unittest.TestCase):
         local = make_local_copy(source, self.project)
         add_dependency(source, child_a)
         local_manifest = read_manifest(local.path)
-        local_manifest["dependencies"] = cast(list[BlockDependencyManifest], [
-            {
-                "block_id": child_b.manifest["block_id"],
-                "name": child_b.name,
-                "path": str(child_b.path),
-                "revision": child_b.manifest["revision"],
-            }
-        ])
+        local_manifest["dependencies"] = cast(
+            list[BlockDependencyManifest],
+            [
+                {
+                    "block_id": child_b.manifest["block_id"],
+                    "name": child_b.name,
+                    "path": str(child_b.path),
+                    "revision": child_b.manifest["revision"],
+                }
+            ],
+        )
         (local.path / "manifest.json").write_text(
             json.dumps(local_manifest, indent=2) + "\n", encoding="utf-8"
         )

@@ -329,7 +329,9 @@ def synchronize_project_symbol_catalog(
     synchronized: dict[str, str] = {}
     if state_file.is_file():
         try:
-            loaded_state: JSONValue = cast(JSONValue, json.loads(state_file.read_text(encoding="utf-8")))
+            loaded_state: JSONValue = cast(
+                JSONValue, json.loads(state_file.read_text(encoding="utf-8"))
+            )
         except json.JSONDecodeError as exc:
             raise ValueError(f"Invalid project symbol synchronization state: {state_file}") from exc
         if not isinstance(loaded_state, dict):
