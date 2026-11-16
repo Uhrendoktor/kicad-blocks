@@ -561,10 +561,10 @@ def text_box_issues(tree: SExprList) -> list[str]:
         stroke = _direct(node, "stroke")
         stroke_width = _direct(stroke, "width") if stroke is not None else None
         unbordered = stroke_width is None or _number(stroke_width[1]) <= 0
-        if unbordered and w + TOL < need_w + SINGLE_LINE_TEXT_RESERVE_MM:
+        if unbordered and w + TOL < need_w + single_line_text_reserve_mm:
             issues.append(
                 f"unbordered text_box {index} cannot reliably render on one line: "
-                f"needs {need_w + SINGLE_LINE_TEXT_RESERVE_MM:.2f} mm width"
+                f"needs {need_w + single_line_text_reserve_mm:.2f} mm width"
             )
         uid = _direct(node, "uuid")
         boxes.append((str(uid[1]) if uid is not None else f"box-{index}", (x, y, w, h)))
@@ -714,7 +714,7 @@ def physical_topology_issues(tree: SExprList) -> list[str]:
     _load_stusb4500_profile()
     issues = []
     dsu, pin_info = _wire_networks(tree)
-    pairs = list(DIRECT_DECOUPLERS) + [
+    pairs = list(direct_decouplers) + [
         ("T4", "3", "T1", "2"),
         ("T1", "2", "R10", "1"),
     ]
@@ -739,7 +739,7 @@ def physical_topology_issues(tree: SExprList) -> list[str]:
                 f"{ref_a}.{pin_a}/{ref_b}.{pin_b} must not use labels instead of direct wires"
             )
 
-    forbidden = set(FORBIDDEN_LOCAL_LABELS)
+    forbidden = set(forbidden_local_labels)
     for node in _all(tree, "label"):
         if len(node) > 1 and str(node[1]) in forbidden:
             issues.append(f"local label {str(node[1])!r} is forbidden on a directly wired net")
@@ -751,7 +751,7 @@ def pin_orientation_issues(tree: SExprList) -> list[str]:
     _load_stusb4500_profile()
     issues = []
     pin_info = _pin_world_info(tree)
-    for key in GROUND_PINS_DOWN:
+    for key in ground_pins_down:
         reference, number = key.split(".", 1)
         pin = pin_info.get((reference, number))
         if pin is None:
@@ -794,7 +794,7 @@ def component_spacing_issues(tree: SExprList) -> list[str]:
         at = _direct(instance, "at")
         if at is not None:
             positions[reference] = (_number(at[1]), _number(at[2]))
-    for rule in ADJACENT_COMPONENT_PAIRS:
+    for rule in adjacent_component_pairs:
         left, right = str(rule["left"]), str(rule["right"])
         if left not in positions or right not in positions:
             issues.append(f"adjacency rule references missing components {left}/{right}")
@@ -819,16 +819,16 @@ def component_spacing_issues(tree: SExprList) -> list[str]:
         checks = []
         if reference.startswith("R") and ref_prop is not None:
             checks.append(
-                ("Reference", ref_prop, COMPONENT_PROPERTY_LIMITS_MM["resistor_reference"])
+                ("Reference", ref_prop, component_property_limits_mm["resistor_reference"])
             )
         if reference.startswith("C"):
             if ref_prop is not None:
                 checks.append(
-                    ("Reference", ref_prop, COMPONENT_PROPERTY_LIMITS_MM["capacitor_reference"])
+                    ("Reference", ref_prop, component_property_limits_mm["capacitor_reference"])
                 )
             if value_prop is not None:
                 checks.append(
-                    ("Value", value_prop, COMPONENT_PROPERTY_LIMITS_MM["capacitor_value"])
+                    ("Value", value_prop, component_property_limits_mm["capacitor_value"])
                 )
         for name, prop, limit in checks:
             prop_at = _direct(prop, "at")
@@ -851,7 +851,7 @@ def group_metadata_issues(tree: SExprList) -> list[str]:
     text_uuids: set[str] = {
         str(uid[1]) for node in _all(tree, "text_box") if (uid := _direct(node, "uuid")) is not None
     }
-    for group in SCHEMATIC_GROUPS:
+    for group in schematic_groups:
         for key, description in (
             (f"graphic:text:zone-title:{group['id']}", "title"),
             (f"graphic:text:group-description:{group['id']}", "description"),
@@ -912,7 +912,7 @@ def frame_and_component_issues(tree: SExprList) -> list[str]:
                 issues.append(f"{ref} must have Value=100k and DNP=yes")
         elif dnp:
             issues.append(f"{ref} is DNP but is not an approved optional-population component")
-    for zone in ZONES:
+    for zone in zones:
         rect = _frame_bounds(tree, zone)
         if rect is None:
             issues.append(f"functional frame {zone!r} is missing")
@@ -923,16 +923,16 @@ def frame_and_component_issues(tree: SExprList) -> list[str]:
         for other_name, other_rect in entries[i + 1 :]:
             if _overlap(rect, other_rect):
                 issues.append(f"functional frames overlap: {name}/{other_name}")
-    for left_name, right_name in pairwise(FLOW):
+    for left_name, right_name in pairwise(flow):
         if left_name in frames and right_name in frames:
             left, right = frames[left_name], frames[right_name]
             gap = right[0] - (left[0] + left[2])
-            if abs(gap - FRAME_GAP) > TOL:
+            if abs(gap - frame_gap) > TOL:
                 issues.append(
-                    f"stage gap {left_name}->{right_name} is {gap:.2f} mm (expected {FRAME_GAP:.2f})"
+                    f"stage gap {left_name}->{right_name} is {gap:.2f} mm (expected {frame_gap:.2f})"
                 )
     pin_info = _pin_world_info(tree)
-    for zone, members in ZONES.items():
+    for zone, members in zones.items():
         rect = frames.get(zone)
         if rect is None:
             continue
@@ -985,7 +985,7 @@ def frame_and_component_issues(tree: SExprList) -> list[str]:
                     f"{kind} {str(node[1])!r} at ({anchor[0]:.3f}, {anchor[1]:.3f}) "
                     f"extends outside its owning group frame {owners[0][0]}"
                 )
-    title_uuids = {_uid(f"graphic:text:zone-title:{group['id']}") for group in SCHEMATIC_GROUPS}
+    title_uuids = {_uid(f"graphic:text:zone-title:{group['id']}") for group in schematic_groups}
     for node in _all(tree, "text_box"):
         uid_node = _direct(node, "uuid")
         uid = str(uid_node[1]) if uid_node is not None else ""
@@ -1459,10 +1459,10 @@ def symbol_field_clearance_issues(tree: SExprList) -> list[str]:
                 issues.append(f"{reference} {name} partially straddles its symbol body")
         elif body:
             gap = _symbol_box_gap(bounds, body)
-            if gap > FIELD_SYMBOL_MAX_GAP_MM + TOL:
+            if gap > field_symbol_max_gap_mm + TOL:
                 issues.append(
                     f"{reference} {name} is {gap:.2f} mm from its visible symbol geometry; "
-                    f"maximum is {FIELD_SYMBOL_MAX_GAP_MM:.2f} mm"
+                    f"maximum is {field_symbol_max_gap_mm:.2f} mm"
                 )
         for start, end in segments:
             if _strict_line_hits_box(start, end, bounds):
@@ -1516,7 +1516,7 @@ def group_comment_outline_issues(tree: SExprList) -> list[str]:
     """Require every declared design-block comment panel to have a visible border."""
     _load_stusb4500_profile()
     description_uuids = {
-        _uid(f"graphic:text:group-description:{group['id']}") for group in SCHEMATIC_GROUPS
+        _uid(f"graphic:text:group-description:{group['id']}") for group in schematic_groups
     }
     issues = []
     for node in _all(tree, "text_box"):
@@ -1546,10 +1546,10 @@ def frame_content_clearance_issues(tree: SExprList) -> list[str]:
     """Keep visible labels and group comment panels inset from their owning frame."""
     _load_stusb4500_profile()
     issues = []
-    frames = {zone: _frame_bounds(tree, zone) for zone in ZONES}
+    frames = {zone: _frame_bounds(tree, zone) for zone in zones}
     description_uuids = {
         _uid(f"graphic:text:group-description:{group['id']}"): group["id"]
-        for group in SCHEMATIC_GROUPS
+        for group in schematic_groups
     }
     for kind in ("label", "hierarchical_label", "global_label"):
         for node in _all(tree, kind):
@@ -1565,10 +1565,10 @@ def frame_content_clearance_issues(tree: SExprList) -> list[str]:
             ]
             if len(owners) == 1:
                 zone, rect = owners[0]
-                if not _rect_inside_margin(bounds, rect, FRAME_CONTENT_PADDING_MM):
+                if not _rect_inside_margin(bounds, rect, frame_content_padding_mm):
                     issues.append(
                         f"{kind} {str(node[1])!r} is closer than "
-                        f"{FRAME_CONTENT_PADDING_MM:.2f} mm to frame {zone}"
+                        f"{frame_content_padding_mm:.2f} mm to frame {zone}"
                     )
     for node in _all(tree, "text_box"):
         uid_node = _direct(node, "uuid")
@@ -1581,7 +1581,7 @@ def frame_content_clearance_issues(tree: SExprList) -> list[str]:
         box = (_number(at[1]), _number(at[2]), _number(size[1]), _number(size[2]))
         zone = description_uuids[uid]
         rect = frames.get(zone)
-        if rect is not None and not _rect_inside_margin(box, rect, FRAME_CONTENT_PADDING_MM):
+        if rect is not None and not _rect_inside_margin(box, rect, frame_content_padding_mm):
             issues.append(f"group comment {uid} violates frame content padding")
     return issues
 
@@ -1592,7 +1592,7 @@ def wire_obstacle_issues(tree: SExprList) -> list[str]:
     bodies = _symbol_primitives(tree)
     pin_info = _pin_world_info(tree)
     pins_by_reference: dict[str, set[Point]] = {}
-    for (reference, _number), info in pin_info.items():
+    for (reference, pin_number), info in pin_info.items():
         pins_by_reference.setdefault(reference, set()).add(info["point"])
     annotation_boxes: list[tuple[int, Rect]] = []
     for annotation_index, node in enumerate(_all(tree, "text_box")):
@@ -1649,7 +1649,7 @@ def common_pin_net_issues(tree: SExprList) -> list[str]:
             names_by_root.setdefault(root, set()).add(name)
             labels_by_root.setdefault(root, []).append((kind, name, point))
 
-    for group in COMMON_PIN_NET_GROUPS:
+    for group in common_pin_net_groups:
         expected = str(group["name"])
         roots = []
         for reference, number in group["pins"]:
@@ -1699,7 +1699,7 @@ def required_no_connect_issues(tree: SExprList) -> list[str]:
         for node in _all(tree, "no_connect")
         if _direct(node, "at") is not None
     }
-    for key in REQUIRED_NO_CONNECT_PINS:
+    for key in required_no_connect_pins:
         reference, number = key.split(".", 1)
         info = pin_info.get((reference, number))
         if info is None:
@@ -1713,7 +1713,7 @@ def wire_compactness_issues(tree: SExprList, budgets: Mapping[str, float] | None
     """Score total internal wire length in each group against a configurable budget."""
     _load_stusb4500_profile()
     issues = []
-    active_budgets = WIRE_LENGTH_BUDGETS_MM if budgets is None else budgets
+    active_budgets = wire_length_budgets_mm if budgets is None else budgets
     for zone, limit in active_budgets.items():
         frame = _frame_bounds(tree, zone)
         if frame is None:
@@ -1744,16 +1744,16 @@ def circuit_documentation_issues(tree: SExprList) -> list[str]:
         for node in _all(tree, "text_box")
         if (uid := _direct(node, "uuid")) is not None
     }
-    evidence_ok = bool(GROUP_EVIDENCE.get("datasheet") or GROUP_EVIDENCE.get("screenshot_asset"))
+    evidence_ok = bool(group_evidence.get("datasheet") or group_evidence.get("screenshot_asset"))
     if not evidence_ok:
         issues.append("group evidence must provide a datasheet or reviewed screenshot asset")
-    if not GROUP_EVIDENCE.get("screenshot_asset") and not (
-        GROUP_EVIDENCE.get("document")
-        and GROUP_EVIDENCE.get("page")
-        and GROUP_EVIDENCE.get("figure")
+    if not group_evidence.get("screenshot_asset") and not (
+        group_evidence.get("document")
+        and group_evidence.get("page")
+        and group_evidence.get("figure")
     ):
         issues.append("group evidence must identify its document, page and figure")
-    for group in SCHEMATIC_GROUPS:
+    for group in schematic_groups:
         members = tuple(group.get("documentation_members", ()))
         if not members:
             continue
@@ -1870,7 +1870,7 @@ def validate_schematic_style(path: Path, generic_only: bool = False) -> dict[str
         "local_labels": len(_all(tree, "label")),
         "hierarchical_labels": len(_all(tree, "hierarchical_label")),
         "text_boxes": len(_all(tree, "text_box")),
-        "functional_frames": len(ZONES),
+        "functional_frames": len(zones),
         "style_rules": len(STYLE_RULES),
     }
 
