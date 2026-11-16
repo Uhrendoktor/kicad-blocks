@@ -54,7 +54,6 @@ _normalize_schematic_preview_svg = cast(
 )
 
 
-
 def _return_preview_svg(
     svg_file: Path,
     _record: BlockRecord,

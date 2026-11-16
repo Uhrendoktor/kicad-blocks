@@ -219,7 +219,9 @@ def _normalize_instance_node(
             project[1:] = [
                 child
                 for child in project[1:]
-                if not (isinstance(child, list) and _head(child) == "path" and id(child) not in kept_ids)
+                if not (
+                    isinstance(child, list) and _head(child) == "path" and id(child) not in kept_ids
+                )
             ]
             for path in kept:
                 if len(path) >= 2:
@@ -272,7 +274,9 @@ def _normalize_sheet_instances(
         instances[1:] = [
             child
             for child in instances[1:]
-            if not (isinstance(child, list) and _head(child) == "path" and id(child) not in kept_ids)
+            if not (
+                isinstance(child, list) and _head(child) == "path" and id(child) not in kept_ids
+            )
         ]
     else:
         page_node: SExprList = ["page", _Quoted("1" if is_root else "2")]

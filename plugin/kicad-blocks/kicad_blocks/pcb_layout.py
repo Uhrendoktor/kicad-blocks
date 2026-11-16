@@ -749,7 +749,6 @@ def _merge_project_net_settings(
     }
 
 
-
 # Public testing/integration surfaces for deterministic PCB transformations.
 rewrite_nets = _rewrite_nets
 transform_item = _transform_item
