@@ -15,6 +15,17 @@ Do not repeat a block description in multiple panels, explain a field immediatel
 
 Every modal must support Escape/cancel where cancellation is safe, have a useful initial focus, and preserve the invoking editor context. Destructive or irreversible actions require a clear consequence and an appropriate confirmation.
 
+## Density and visual hierarchy
+
+The shared panels follow the compact slate treatment established in
+`kicad-jlcpcb-interface`: restrained surfaces, a cool accent, quiet secondary
+text, flat controls, and compact 29 px table rows. Use one clear primary action,
+keep related secondary actions in the same toolbar, and group unrelated actions
+with restrained spacing rather than extra explanatory cards. Prefer concise
+context over repeated descriptions, and expose details only where they support
+the current task. Preserve the selected KiCad theme and the existing keyboard,
+accessibility, and semantic UI contracts.
+
 ## Window inventory and design decisions
 
 | Window / surface | Primary task | Essential visible content | Move out of the main view | Functional edge cases to prove |

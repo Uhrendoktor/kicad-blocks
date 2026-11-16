@@ -190,6 +190,31 @@ def test_task_hub_close_button_destroys_window_without_dispatch(monkeypatch):
             pass
 
 
+def test_task_hub_actions_use_a_compact_two_column_grid(monkeypatch):
+    root, notebook = _new_hub(monkeypatch)
+    try:
+        for tab_id in notebook.tabs():
+            tab = notebook.nametowidget(tab_id)
+            buttons = [
+                child
+                for cell in tab.winfo_children()
+                for child in cell.winfo_children()
+                if isinstance(child, plugin_actions.ttk.Button)
+                and str(getattr(child, "_kicad_ui_contract_id", "")).startswith(
+                    "task-hub.action."
+                )
+            ]
+            assert len(buttons) in {3, 5}
+            positions = [button.master.grid_info() for button in buttons]
+            assert positions[0]["column"] == 0
+            assert positions[1]["column"] == 1
+            assert positions[0]["row"] == positions[1]["row"]
+            if len(buttons) % 2:
+                assert positions[-1]["columnspan"] == 2
+    finally:
+        root.destroy()
+
+
 def test_choice_view_contract_invokes_selected_combobox_view():
     plugin_actions._load_tkinter()
     tk = plugin_actions.tk
