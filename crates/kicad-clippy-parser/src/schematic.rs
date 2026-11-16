@@ -16,6 +16,10 @@ pub struct SchematicDocument {
 
 impl SchematicDocument {
     /// Reads and parses a schematic from disk.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SchematicParseError`] when the file cannot be read, parsed, or validated as a schematic.
     pub fn from_path(path: impl AsRef<Path>) -> Result<Self, SchematicParseError> {
         let path = path.as_ref().to_path_buf();
         let text = fs::read_to_string(&path).map_err(|source| SchematicParseError::Io {
@@ -27,6 +31,10 @@ impl SchematicDocument {
     }
 
     /// Parses schematic text while retaining the caller-supplied path for diagnostics.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SchematicParseError::Syntax`] for malformed input or [`SchematicParseError::WrongRoot`] for a non-schematic root.
     pub fn from_text(
         path: impl Into<PathBuf>,
         text: impl Into<String>,
@@ -58,13 +66,13 @@ impl SchematicDocument {
 
     /// Returns the original source and its precomputed line index.
     #[must_use]
-    pub fn source(&self) -> &SourceFile {
+    pub const fn source(&self) -> &SourceFile {
         &self.source
     }
 
     /// Returns the lossless concrete syntax tree.
     #[must_use]
-    pub fn cst(&self) -> &CstDocument {
+    pub const fn cst(&self) -> &CstDocument {
         &self.cst
     }
 
@@ -93,7 +101,7 @@ fn root_name(document: &CstDocument) -> Option<&str> {
     Some(name)
 }
 
-/// Errors raised while loading or parsing a KiCad schematic.
+/// Errors raised while loading or parsing a `KiCad` schematic.
 #[derive(Debug, Error)]
 pub enum SchematicParseError {
     /// The source file could not be read as UTF-8 text.
@@ -114,7 +122,7 @@ pub enum SchematicParseError {
         #[source]
         source: ParseError,
     },
-    /// The root expression is not a KiCad schematic document.
+    /// The root expression is not a `KiCad` schematic document.
     #[error("expected a kicad_sch root in {path}, found {actual:?}")]
     WrongRoot {
         /// Path being parsed.
