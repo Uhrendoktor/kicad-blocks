@@ -2471,6 +2471,63 @@ def _restore_placement_windows(windows: list) -> None:
             window.deiconify()
 
 
+def _svg_dimension_to_pixels(value: str | None) -> float | None:
+    """Convert an SVG absolute length to CSS pixels, or return None if invalid."""
+    if not value:
+        return None
+    match = re.fullmatch(
+        r"\\s*([+]?(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:[eE][-+]?\\d+)?)(px|pt|pc|mm|cm|in)?\\s*",
+        value,
+        flags=re.IGNORECASE,
+    )
+    if not match:
+        return None
+    amount = float(match.group(1))
+    if not 0 < amount < float("inf"):
+        return None
+    scale = {
+        "px": 1.0,
+        "pt": 96.0 / 72.0,
+        "pc": 16.0,
+        "mm": 96.0 / 25.4,
+        "cm": 96.0 / 2.54,
+        "in": 96.0,
+    }
+    return amount * scale[(match.group(2) or "px").lower()]
+
+
+def _normalize_svg_preview_viewport(root) -> None:
+    """Give an SVG a positive pixel viewport that resvg can always rasterize."""
+    view_box = root.attrib.get("viewBox") or root.attrib.get("viewbox") or ""
+    values = re.findall(
+        r"[-+]?(?:\\d*\\.\\d+|\\d+\\.?\\d*)(?:[eE][-+]?\\d+)?",
+        view_box,
+    )
+    if len(values) == 4:
+        try:
+            view_width = float(values[2])
+            view_height = float(values[3])
+        except ValueError:
+            view_width = view_height = 0.0
+        if (
+            0 < view_width < float("inf")
+            and 0 < view_height < float("inf")
+        ):
+            root.set("width", f"{view_width:g}px")
+            root.set("height", f"{view_height:g}px")
+            return
+
+    # Without a usable viewBox, preserve KiCad's physical canvas size but
+    # express it in CSS pixels. resvg's Python binding rejects some otherwise
+    # valid physical-unit exports as having an invalid intrinsic size.
+    width = _svg_dimension_to_pixels(root.attrib.get("width"))
+    height = _svg_dimension_to_pixels(root.attrib.get("height"))
+    if width is None or height is None:
+        width, height = 300.0, 150.0
+    root.set("width", f"{width:g}px")
+    root.set("height", f"{height:g}px")
+
+
 def _clean_facade_preview_svg(svg_file: Path, record, output_dir: Path) -> Path:
     """Remove component-name and reference placeholder artwork from the SVG."""
     import xml.etree.ElementTree as ET
@@ -2502,37 +2559,7 @@ def _clean_facade_preview_svg(svg_file: Path, record, output_dir: Path) -> Path:
             if contained_labels(child_node) & display_labels:
                 parent_node.remove(child_node)
 
-    # resvg requires a concrete intrinsic viewport. KiCad exports commonly
-    # include a viewBox but may omit usable width/height attributes; CairoSVG
-    # tolerated that ambiguity while resvg correctly rejects an undefined size.
-    view_box = root.attrib.get("viewBox") or root.attrib.get("viewbox") or ""
-    view_box_values = re.findall(
-        r"[-+]?(?:\d*\.\d+|\d+\.?\d*)(?:[eE][-+]?\d+)?", view_box
-    )
-    if len(view_box_values) == 4:
-        try:
-            view_width, view_height = float(view_box_values[2]), float(view_box_values[3])
-        except ValueError:
-            view_width = view_height = 0.0
-        if view_width > 0 and view_height > 0:
-            root.set("width", f"{view_width:g}px")
-            root.set("height", f"{view_height:g}px")
-    else:
-        def valid_dimension(value: str | None) -> bool:
-            if not value:
-                return False
-            match = re.fullmatch(
-                r"\s*([+]?(?:\d+(?:\.\d*)?|\.\d+))(?:px|pt|pc|mm|cm|in)?\s*",
-                value,
-                flags=re.IGNORECASE,
-            )
-            return bool(match and float(match.group(1)) > 0)
-
-        if not valid_dimension(root.attrib.get("width")) or not valid_dimension(
-            root.attrib.get("height")
-        ):
-            root.set("width", "300px")
-            root.set("height", "150px")
+    _normalize_svg_preview_viewport(root)
 
     cleaned_svg = output_dir / "facade-preview.svg"
     ET.ElementTree(root).write(
@@ -2652,37 +2679,7 @@ def _normalize_schematic_preview_svg(svg_file: Path, output_dir: Path) -> Path:
     import xml.etree.ElementTree as ET
 
     root = ET.parse(svg_file).getroot()
-    view_box = root.attrib.get("viewBox") or root.attrib.get("viewbox") or ""
-    view_box_values = re.findall(
-        r"[-+]?(?:\d*\.\d+|\d+\.?\d*)(?:[eE][-+]?\d+)?",
-        view_box,
-    )
-    if len(view_box_values) == 4:
-        try:
-            view_width = float(view_box_values[2])
-            view_height = float(view_box_values[3])
-        except ValueError:
-            view_width = view_height = 0.0
-        if view_width > 0 and view_height > 0:
-            root.set("width", f"{view_width:g}px")
-            root.set("height", f"{view_height:g}px")
-    else:
-        def valid_dimension(value: str | None) -> bool:
-            if not value:
-                return False
-            match = re.fullmatch(
-                r"\s*([+]?(?:\d+(?:\.\d*)?|\.\d+))(?:px|pt|pc|mm|cm|in)?\s*",
-                value,
-                flags=re.IGNORECASE,
-            )
-            return bool(match and float(match.group(1)) > 0)
-
-        if not valid_dimension(root.attrib.get("width")) or not valid_dimension(
-            root.attrib.get("height")
-        ):
-            root.set("width", "300px")
-            root.set("height", "150px")
-
+    _normalize_svg_preview_viewport(root)
     normalized = output_dir / f"{svg_file.stem}-preview.svg"
     ET.ElementTree(root).write(
         normalized,

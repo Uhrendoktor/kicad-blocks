@@ -425,6 +425,59 @@ class LibraryBrowserTests(unittest.TestCase):
         self.assertEqual(pages, cached_pages)
         self.assertTrue(all(png == b"schematic-png" for _label, png in pages))
 
+    def test_native_facade_preview_normalizes_physical_dimensions_before_rasterizing(self):
+        symbol_name = self.block.manifest["symbol_name"]
+        rasterized_dimensions = []
+
+        def export(arguments, **kwargs):
+            output_dir = Path(arguments[arguments.index("--output") + 1])
+            output_dir.mkdir(parents=True, exist_ok=True)
+            # KiCad symbol exports can declare the intrinsic canvas in mm and
+            # omit viewBox; this is the physical-size case seen in the UI audit.
+            (output_dir / f"{symbol_name}.svg").write_text(
+                '<svg xmlns="http://www.w3.org/2000/svg" '
+                'width="21.4662mm" height="23.6534mm">'
+                '<g><path d="M 1 1 L 12 12"/></g></svg>',
+                encoding="utf-8",
+            )
+            return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+        def rasterize(*, svg_path, width, height):
+            from xml.etree import ElementTree as ET
+
+            root = ET.parse(svg_path).getroot()
+            rasterized_dimensions.append(
+                (root.attrib.get("width"), root.attrib.get("height"))
+            )
+            return b"not-a-png"
+
+        with (
+            patch("kicad_blocks.plugin.find_kicad_cli", return_value="/usr/bin/kicad-cli"),
+            patch("kicad_blocks.plugin.subprocess.run", side_effect=export),
+            patch("resvg_py.svg_to_bytes", side_effect=rasterize),
+            patch(
+                "kicad_blocks.plugin.tk",
+                SimpleNamespace(PhotoImage=Mock(return_value=object())),
+            ),
+            patch("kicad_blocks.plugin._NATIVE_PREVIEW_CACHE", {}),
+        ):
+            _native_symbol_preview_photo(self.block)
+
+        self.assertEqual(len(rasterized_dimensions), 1)
+        width, height = rasterized_dimensions[0]
+        self.assertTrue(width.endswith("px"))
+        self.assertTrue(height.endswith("px"))
+        self.assertAlmostEqual(
+            float(width.removesuffix("px")),
+            21.4662 * 96.0 / 25.4,
+            places=3,
+        )
+        self.assertAlmostEqual(
+            float(height.removesuffix("px")),
+            23.6534 * 96.0 / 25.4,
+            places=3,
+        )
+
     def test_native_facade_preview_removes_reference_and_component_name(self):
         from xml.etree import ElementTree as ET
 
