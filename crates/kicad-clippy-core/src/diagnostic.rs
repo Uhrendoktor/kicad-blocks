@@ -40,9 +40,9 @@ pub struct SchematicLocation {
 /// An affected item related to a diagnostic.
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct RelatedLocation {
-    /// Human-readable description supplied by KiCad or a rule.
+    /// Human-readable description supplied by `KiCad` or a rule.
     pub description: String,
-    /// KiCad item UUID, when available.
+    /// `KiCad` item UUID, when available.
     pub uuid: Option<String>,
     /// Physical schematic location, when available.
     pub location: Option<SchematicLocation>,
@@ -65,13 +65,13 @@ pub struct Diagnostic {
     pub source: Option<PathBuf>,
     /// Source byte span, when the finding maps to text.
     pub span: Option<ByteSpan>,
-    /// KiCad sheet path for hierarchical designs.
+    /// `KiCad` sheet path for hierarchical designs.
     pub sheet_path: Option<String>,
     /// Physical schematic location in millimetres.
     pub schematic_location: Option<SchematicLocation>,
     /// Additional affected items.
     pub related: Vec<RelatedLocation>,
-    /// Whether KiCad marked the finding as excluded.
+    /// Whether `KiCad` marked the finding as excluded.
     pub excluded: bool,
 }
 
