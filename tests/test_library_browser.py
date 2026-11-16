@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 import tempfile
@@ -9,7 +10,7 @@ import unittest
 from collections.abc import Callable, Sequence
 from importlib import import_module
 from pathlib import Path
-from types import SimpleNamespace
+from types import ModuleType, SimpleNamespace
 from typing import Protocol, TypedDict, TypeVar, cast
 from unittest.mock import Mock, patch
 
@@ -119,6 +120,9 @@ _schematic_page_center_mm = cast(
 )
 _system_prefers_dark_theme = cast(
     Callable[..., bool | None], _private_hook("_system_prefers_dark_theme")
+)
+_configure_tk_theme = cast(
+    Callable[..., None], _private_hook("_configure_tk_theme")
 )
 
 
@@ -970,6 +974,91 @@ class LibraryBrowserTests(unittest.TestCase):
             self.assertTrue(_system_prefers_dark_theme())
         with patch.dict(os.environ, {"KICAD_BLOCKS_THEME": "light"}):
             self.assertFalse(_system_prefers_dark_theme())
+
+
+    def test_system_theme_keeps_fixed_treeview_geometry_without_changing_native_colors(self) -> None:
+        style = Mock()
+        root = SimpleNamespace()
+        with (
+            patch.dict(os.environ, {"KICAD_BLOCKS_THEME": "system"}),
+            patch("kicad_blocks.plugin.ttk", SimpleNamespace(Style=Mock(return_value=style))),
+        ):
+            _configure_tk_theme(root)
+        self.assertEqual(root.kicad_blocks_palette, {})
+        style.configure.assert_any_call("Treeview", rowheight=36, padding=(4, 3))
+        style.configure.assert_any_call("Treeview.Heading", padding=(8, 8))
+
+    def _theme_ipc_modules(self) -> dict[str, ModuleType]:
+        package = ModuleType("kipy")
+        package.__path__ = []
+        proto = ModuleType("kipy.proto")
+        proto.__path__ = []
+        common = ModuleType("kipy.proto.common")
+        common.__path__ = []
+        path_types = ModuleType("kipy.proto.common.types")
+        path_types.PathType = SimpleNamespace(PATH_USER_SETTINGS=11)
+        package.proto = proto
+        proto.common = common
+        common.types = path_types
+        return {
+            "kipy": package,
+            "kipy.proto": proto,
+            "kipy.proto.common": common,
+            "kipy.proto.common.types": path_types,
+        }
+
+    def test_system_theme_reads_active_kicad_color_theme_through_ipc_paths(self) -> None:
+        settings = Path(self.temp.name) / "kicad-settings"
+        colors = settings / "colors"
+        colors.mkdir(parents=True)
+        (settings / "eeschema.json").write_text(
+            '{"appearance":{"color_theme":"tokyo_night"}}',
+            encoding="utf-8",
+        )
+        (colors / "tokyo_night.json").write_text(
+            '{"schematic":{"background":"rgb(26, 27, 38)"}}',
+            encoding="utf-8",
+        )
+        kicad = SimpleNamespace(get_paths=Mock(return_value={11: str(settings)}))
+        with (
+            patch.dict(os.environ, {"KICAD_BLOCKS_THEME": "system"}),
+            patch.dict(sys.modules, self._theme_ipc_modules()),
+        ):
+            self.assertTrue(_system_prefers_dark_theme(kicad))
+        kicad.get_paths.assert_called_once_with()
+
+    def test_system_theme_reads_absolute_kicad_color_theme_path(self) -> None:
+        settings = Path(self.temp.name) / "kicad-settings"
+        settings.mkdir()
+        theme_file = Path(self.temp.name) / "imported-theme.json"
+        theme_file.write_text(
+            '{"schematic":{"background":"rgb(250, 250, 250)"}}',
+            encoding="utf-8",
+        )
+        (settings / "eeschema.json").write_text(
+            json.dumps({"appearance": {"color_theme": str(theme_file)}}),
+            encoding="utf-8",
+        )
+        kicad = SimpleNamespace(get_paths=Mock(return_value={11: str(settings)}))
+        with (
+            patch.dict(os.environ, {"KICAD_BLOCKS_THEME": "system"}),
+            patch.dict(sys.modules, self._theme_ipc_modules()),
+        ):
+            self.assertFalse(_system_prefers_dark_theme(kicad))
+
+    def test_system_theme_falls_back_when_kicad_theme_data_is_missing(self) -> None:
+        settings = Path(self.temp.name) / "kicad-settings"
+        settings.mkdir()
+        (settings / "eeschema.json").write_text(
+            '{"appearance":{"color_theme":"missing-theme"}}',
+            encoding="utf-8",
+        )
+        kicad = SimpleNamespace(get_paths=Mock(return_value={11: str(settings)}))
+        with (
+            patch.dict(os.environ, {"KICAD_BLOCKS_THEME": "system"}),
+            patch.dict(sys.modules, self._theme_ipc_modules()),
+        ):
+            self.assertIsNone(_system_prefers_dark_theme(kicad))
 
     def test_record_picker_returns_single_choice_without_opening_a_dialog(self) -> None:
         self.assertIs(_pick_record([self.block], object(), "Pick Block"), self.block)

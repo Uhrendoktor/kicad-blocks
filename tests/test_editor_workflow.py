@@ -210,7 +210,7 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
         register.assert_called_once_with(
             self.project, self.block, self.kicad, [self.library.resolve()]
         )
-        messagebox.showinfo.assert_called_once()
+        messagebox.showinfo.assert_not_called()
 
     def test_create_block_rolls_back_new_block_when_project_registration_fails(self):
         source = self.project / "power_stage.kicad_sch"
@@ -549,7 +549,7 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
         self.assertIn("implementation.kicad_sch", published_manifest["hashes"])
         self.kicad.reload_library.assert_called_once()
         self.kicad.wait_for_libraries.assert_called_once()
-        self.messagebox.showinfo.assert_called()
+        self.messagebox.showinfo.assert_not_called()
 
     def test_instance_configuration_is_one_undoable_ipc_update(self):
         from google.protobuf.empty_pb2 import Empty
@@ -859,7 +859,7 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
             description="Selected child sheet",
         )
 
-    def test_task_hub_edit_facade_uses_native_cross_platform_ipc_handoff(self) -> None:
+    def test_task_hub_edit_facade_does_not_report_success_without_editor_handoff(self) -> None:
         root = SimpleNamespace(title=Mock(), withdraw=Mock(), destroy=Mock())
         fake_tk = SimpleNamespace(Tk=Mock(return_value=root), TclError=RuntimeError)
         kicad = SimpleNamespace(get_schematic=Mock(return_value=self.schematic))
@@ -891,14 +891,11 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
             project_catalog=project_catalog,
             close_browser=root.destroy,
         )
-        self.messagebox.showinfo.assert_called_once()
-        self.assertIn(
-            self.block.manifest["symbol_name"], self.messagebox.showinfo.call_args.args[1]
-        )
+        self.messagebox.showinfo.assert_not_called()
         root.withdraw.assert_called_once_with()
         root.destroy.assert_called_once_with()
 
-    def test_run_action_does_not_discover_foreign_window_handles(self) -> None:
+    def test_create_block_keeps_owner_window_mapped(self) -> None:
         root = SimpleNamespace(title=Mock(), withdraw=Mock(), destroy=Mock())
         fake_tk = SimpleNamespace(Tk=Mock(return_value=root), TclError=RuntimeError)
         kicad = SimpleNamespace(get_schematic=Mock(return_value=self.schematic))
@@ -922,7 +919,8 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
         create_from_sheet.assert_called_once_with(
             self.library, self.schematic, kicad, self.project, root, None
         )
-        root.withdraw.assert_called_once_with()
+        root.withdraw.assert_not_called()
+        self.assertTrue(root._kicad_blocks_reuse_for_create)
         root.destroy.assert_called_once_with()
 
     def test_run_action_does_not_capture_native_windows_before_creating_tk(self) -> None:
@@ -932,6 +930,8 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
             Tk=Mock(side_effect=lambda: events.append("tk.Tk") or root),
             TclError=Exception,
         )
+        fake_kipy = types.ModuleType("kipy")
+        fake_kipy.KiCad = Mock(side_effect=lambda: events.append("kipy.KiCad") or object())
         with (
             patch.object(
                 plugin_actions, "_load_tkinter", side_effect=lambda: events.append("load tkinter")
@@ -940,9 +940,10 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
             patch.object(plugin_actions, "_configure_tk_theme"),
             patch.object(plugin_actions, "_attach_tk_window_to_editor"),
             patch.object(plugin_actions, "_show_action_hub"),
+            patch.dict(sys.modules, {"kipy": fake_kipy}),
         ):
             plugin_actions.run_action("open-hub")
-        self.assertEqual(events, ["load tkinter", "tk.Tk"])
+        self.assertEqual(events, ["load tkinter", "tk.Tk", "kipy.KiCad"])
         self.assertNotIn("_kicad_blocks_editor_window_id", root.__dict__)
 
 
