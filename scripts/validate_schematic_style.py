@@ -15,7 +15,14 @@ from typing import Literal, NotRequired, Protocol, Required, TypedDict, cast
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "plugin" / "kicad-blocks"))
 
-from kicad_blocks.sexpr import SExpr, SExprList, sexpr_all as _all, sexpr_direct as _direct, sexpr_head as _head, parse_sexpr
+from kicad_blocks.sexpr import (
+    SExpr,
+    SExprList,
+    sexpr_all as _all,
+    sexpr_direct as _direct,
+    sexpr_head as _head,
+    parse_sexpr,
+)
 
 Point = tuple[float, float]
 Segment = tuple[Point, Point]
@@ -332,9 +339,7 @@ def _segments(tree: SExprList) -> list[Segment]:
     result: list[Segment] = []
     for wire in _all(tree, "wire"):
         pts = _direct(wire, "pts")
-        xy = (
-            [(_number(p[1]), _number(p[2])) for p in _all(pts, "xy")] if pts else []
-        )
+        xy = [(_number(p[1]), _number(p[2])) for p in _all(pts, "xy")] if pts else []
         result.append(tuple(xy) if len(xy) == 2 else ())
     return result
 
@@ -938,7 +943,9 @@ def frame_and_component_issues(tree: SExprList) -> list[str]:
             continue
         for ref in members:
             at = _direct(instances[ref], "at") if ref in instances else None
-            point = (_number(at[1]), _number(at[2])) if at is not None else (float("nan"), float("nan"))
+            point = (
+                (_number(at[1]), _number(at[2])) if at is not None else (float("nan"), float("nan"))
+            )
             x, y, w, h = rect
             if not (
                 x + 2.54 - TOL <= point[0] <= x + w - 2.54 + TOL
@@ -1365,7 +1372,9 @@ def _symbol_box_gap(box: Rect, primitives: Sequence[_SymbolPrimitive]) -> float:
     return min(gaps) if gaps else float("inf")
 
 
-def _wire_crosses_symbol(start: Point, end: Point, primitives: Sequence[_SymbolPrimitive], pin_points: set[Point]) -> bool:
+def _wire_crosses_symbol(
+    start: Point, end: Point, primitives: Sequence[_SymbolPrimitive], pin_points: set[Point]
+) -> bool:
     for primitive in primitives:
         if primitive["kind"] == "circle":
             distance = _point_segment_distance(primitive["center"], start, end)
