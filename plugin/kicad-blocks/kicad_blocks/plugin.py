@@ -390,6 +390,17 @@ def _after_event(
     return handle
 
 
+def _scrollbar_command(
+    view: Callable[..., tuple[float, float]],
+) -> Callable[..., str | None]:
+    """Adapt Tk's viewport query to the Tcl command signature used by scrollbars."""
+    def invoke(*arguments: str | int) -> str | None:
+        view(*arguments)
+        return None
+
+    return invoke
+
+
 class _TkGridManaged(Protocol):
     """Grid-managed widget operation used to hide optional editor controls."""
 
@@ -1015,10 +1026,14 @@ def _action_button(
 ) -> ttk_types.Button:
     """Create a consistently padded, semantic icon-and-label action button."""
     image = _create_action_icon(parent, icon)
+    def invoke() -> str | None:
+        result = command()
+        return result if isinstance(result, str) else None
+
     button = ttk.Button(
         parent,
         text=text,
-        command=cast(Callable[..., None | str | bool], command),
+        command=invoke,
         padding=(9, 6),
         **button_options,
     )
@@ -1727,7 +1742,7 @@ def _pick_block_for_placement(
     scroll = ttk.Scrollbar(
         left,
         orient="vertical",
-        command=cast(Callable[..., None], tree.yview),
+        command=_scrollbar_command(tree.yview),
         style="Vertical.TScrollbar",
     )
     tree.configure(yscrollcommand=scroll.set)
@@ -1990,7 +2005,7 @@ def _pick_record(
     scrollbar = ttk.Scrollbar(
         results_frame,
         orient="vertical",
-        command=cast(Callable[..., None], tree.yview),
+        command=_scrollbar_command(tree.yview),
         style="Vertical.TScrollbar",
     )
     tree.configure(yscrollcommand=scrollbar.set)
@@ -3504,14 +3519,14 @@ def _save_block_variants(
 
     block_path = Path(record.path).resolve()
     manifest = read_manifest(block_path)
-    previous = list(manifest.get("variants", []))
-    previous_files = {str(item["file"]) for item in previous}
-    previous_layout_by_value = {
+    previous: list[BlockVariantManifest] = list(manifest.get("variants", []))
+    previous_files: set[str] = {str(item["file"]) for item in previous}
+    previous_layout_by_value: dict[str, str] = {
         str(item.get("value", "")).casefold(): str(item.get("layout_id", "")).casefold()
         for item in previous
         if item.get("layout_id")
     }
-    previous_layout_by_file = {
+    previous_layout_by_file: dict[str, str] = {
         str(item.get("file", "")).casefold(): str(item.get("layout_id", "")).casefold()
         for item in previous
         if item.get("layout_id")
@@ -3533,7 +3548,10 @@ def _save_block_variants(
             filename = str(item["file"])
             source = None
         else:
-            source = Path(item.get("source", "")).expanduser().resolve()
+            source_value = item.get("source")
+            if source_value is None or not str(source_value).strip():
+                raise ValueError(f"Implementation variant {value!r} has no source schematic.")
+            source = Path(source_value).expanduser().resolve()
             if not source.is_file() or source.suffix.casefold() != ".kicad_sch":
                 raise ValueError(
                     "Implementation variant must be an existing .kicad_sch file: " + str(source)
@@ -3567,8 +3585,8 @@ def _save_block_variants(
             descriptor["layout_id"] = str(linked_layout).casefold()
         normalized.append(descriptor)
 
-    available_values = {item["value"].casefold() for item in normalized}
-    dangling_profiles = [
+    available_values: set[str] = {item["value"].casefold() for item in normalized}
+    dangling_profiles: list[str] = [
         str(item.get("name", item.get("id", "Unnamed profile")))
         for item in manifest.get("profiles", [])
         if item.get("variant") and str(item["variant"]).casefold() not in available_values
@@ -3580,7 +3598,9 @@ def _save_block_variants(
             + ". Update those profiles before changing the implementation list."
         )
 
-    new_value_by_file = {str(item["file"]).casefold(): str(item["value"]) for item in normalized}
+    new_value_by_file: dict[str, str] = {
+        str(item["file"]).casefold(): str(item["value"]) for item in normalized
+    }
     old_value_to_new: dict[str, str | None] = {}
     for old in previous:
         replacement_value = new_value_by_file.get(str(old.get("file", "")).casefold())
@@ -3628,7 +3648,7 @@ def _save_block_variants(
 
     # Keep per-layout implementation tags valid when selectors are renamed or removed.
     for layout in manifest.get("layouts", []):
-        links = []
+        links: list[str] = []
         for raw_link in layout.get("implementations", []):
             key = str(raw_link).casefold()
             if key == "default":
@@ -4101,7 +4121,7 @@ def _show_block_layout_editor(
     scroll = ttk.Scrollbar(
         table_frame,
         orient="vertical",
-        command=cast(Callable[..., None], tree.yview),
+        command=_scrollbar_command(tree.yview),
         style="Vertical.TScrollbar",
     )
     tree.configure(yscrollcommand=scroll.set)
@@ -4736,7 +4756,7 @@ def _show_block_variant_editor(
     tree.column("file", width=560, minwidth=320, stretch=True)
     tree.column("role", width=150, minwidth=130, stretch=False)
     scroll = ttk.Scrollbar(
-        table_frame, orient="vertical", command=tree.yview, style="Vertical.TScrollbar"
+        table_frame, orient="vertical", command=_scrollbar_command(tree.yview), style="Vertical.TScrollbar"
     )
     tree.configure(yscrollcommand=scroll.set)
     tree.grid(row=0, column=0, sticky="nsew")
@@ -4757,8 +4777,8 @@ def _show_block_variant_editor(
         }
         for item in record.manifest.get("variants", [])
     ]
-    default_variant = [str(record.manifest.get("default_variant") or "")]
-    dirty = [False]
+    default_variant: list[str] = [str(record.manifest.get("default_variant") or "")]
+    dirty: list[bool] = [False]
     new_implementation_to_open: list[Path | None] = [None]
 
     def default_implementation_path() -> Path:
@@ -4864,7 +4884,7 @@ def _show_block_variant_editor(
         if index is None:
             return
         current = variants[index]
-        current_source = current.get("source") or str(Path(record.path) / current["file"])
+        current_source = str(current.get("source") or (Path(record.path) / current["file"]))
         details = _ask_implementation_details(
             dialog, value=current["value"], source=current_source, record=record
         )
@@ -4879,7 +4899,7 @@ def _show_block_variant_editor(
                 "Edit implementation", f"The value {value!r} already exists.", parent=dialog
             )
             return
-        updated = {"value": value, "source": source}
+        updated: BlockVariantEditInput = {"value": value, "source": source}
         if current.get("layout_id"):
             updated["layout_id"] = current["layout_id"]
         if current.get("open_after_save"):
@@ -4920,7 +4940,8 @@ def _show_block_variant_editor(
         if removed_file and new_implementation_to_open[0] == Path(record.path) / removed_file:
             new_implementation_to_open[0] = None
         dirty[0] = True
-        render(min(row_index, len(alternative_variant_indices())))
+        selected_row = row_index if row_index is not None else 0
+        render(min(selected_row, len(alternative_variant_indices())))
         persist_variant_changes()
 
     def make_default() -> None:
@@ -4945,18 +4966,16 @@ def _show_block_variant_editor(
             from .repository import read_manifest
 
             saved = read_manifest(Path(record.path))
-            variants[:] = [
-                {
+            saved_variants: list[BlockVariantEditInput] = []
+            for item in saved.get("variants", []):
+                editable: BlockVariantEditInput = {
                     "value": str(item["value"]),
                     "file": str(item["file"]),
-                    **(
-                        {"layout_id": str(item["layout_id"]).casefold()}
-                        if item.get("layout_id")
-                        else {}
-                    ),
                 }
-                for item in saved.get("variants", [])
-            ]
+                if item.get("layout_id"):
+                    editable["layout_id"] = str(item["layout_id"]).casefold()
+                saved_variants.append(editable)
+            variants[:] = saved_variants
             default_variant[0] = str(saved.get("default_variant") or "")
             if open_value:
                 selected = next(
@@ -5084,7 +5103,7 @@ def _show_library_roots_dialog(parent: tkinter_types.Misc) -> bool:
     vertical_scroll = ttk.Scrollbar(
         table_frame,
         orient="vertical",
-        command=cast(Callable[..., None], tree.yview),
+        command=_scrollbar_command(tree.yview),
         style="Vertical.TScrollbar",
     )
     horizontal_scroll = ttk.Scrollbar(
@@ -5461,7 +5480,7 @@ def _show_library_browser(
     tree_y_scroll = ttk.Scrollbar(
         tree_frame,
         orient="vertical",
-        command=cast(Callable[..., None], tree.yview),
+        command=_scrollbar_command(tree.yview),
         style="Vertical.TScrollbar",
     )
     tree_x_scroll = ttk.Scrollbar(
@@ -5506,7 +5525,7 @@ def _show_library_browser(
         borderwidth=0,
     )
     preview_y_scroll = ttk.Scrollbar(
-        facade_frame, orient="vertical", command=preview.yview, style="Vertical.TScrollbar"
+        facade_frame, orient="vertical", command=_scrollbar_command(preview.yview), style="Vertical.TScrollbar"
     )
     preview_x_scroll = ttk.Scrollbar(
         facade_frame, orient="horizontal", command=preview.xview, style="Horizontal.TScrollbar"
@@ -5564,7 +5583,7 @@ def _show_library_browser(
     schematic_y_scroll = ttk.Scrollbar(
         schematic_frame,
         orient="vertical",
-        command=schematic_preview.yview,
+        command=_scrollbar_command(schematic_preview.yview),
         style="Vertical.TScrollbar",
     )
     schematic_x_scroll = ttk.Scrollbar(
@@ -5599,7 +5618,7 @@ def _show_library_browser(
         font=("TkDefaultFont", 9),
     )
     details_scroll = ttk.Scrollbar(
-        details_frame, orient="vertical", command=details.yview, style="Vertical.TScrollbar"
+        details_frame, orient="vertical", command=_scrollbar_command(details.yview), style="Vertical.TScrollbar"
     )
     details.configure(yscrollcommand=details_scroll.set)
     details.pack(side="left", fill="both", expand=True)
