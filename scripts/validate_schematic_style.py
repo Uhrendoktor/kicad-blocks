@@ -177,11 +177,11 @@ def _load_stusb4500_profile() -> None:
     wire_length_budgets_mm = profile.WIRE_LENGTH_BUDGETS_MM
     _uid = profile._uid
     zones = {group["id"]: set(group["members"]) for group in schematic_groups}
-    FLOW = tuple(
+    flow = tuple(
         group["id"]
         for group in sorted(
-            (item for item in SCHEMATIC_GROUPS if item["lane"] == "main"),
-            key=lambda item: int(item["order"]),
+            (item for item in schematic_groups if item["lane"] == "main"),
+            key=lambda item: item["order"],
         )
     )
     frame_gap = group_gap_mm
@@ -320,8 +320,15 @@ def _position(node: SExprList) -> Point | None:
     return _number(at[1]), _number(at[2])
 
 
+def _direct_point(node: SExprList, tag: str = "at") -> Point | None:
+    """Read the first two numeric values from one direct child node."""
+    child = _direct(node, tag)
+    if child is None or len(child) < 3:
+        return None
+    return _number(child[1]), _number(child[2])
+
+
 def _segments(tree: SExprList) -> list[Segment]:
-    result: list[Segment] = []
     result: list[Segment] = []
     for wire in _all(tree, "wire"):
         pts = _direct(wire, "pts")
@@ -345,7 +352,8 @@ def _on_segment(point: Point, start: Point, end: Point) -> bool:
 
 def wire_geometry_issues(tree: SExprList) -> list[str]:
     """Reject crossings, diagonal routes, overlaps, and unmarked T-junctions."""
-    issues: list[str] = []\n    valid: list[Segment] = []
+    issues: list[str] = []
+    valid: list[Segment] = []
     for index, segment in enumerate(_segments(tree)):
         if len(segment) != 2:
             issues.append(f"wire {index} must have exactly two endpoints")
@@ -359,9 +367,9 @@ def wire_geometry_issues(tree: SExprList) -> list[str]:
             continue
         valid.append((a, b))
     junctions = {
-        (round(_position(j)[0], 3), round(_position(j)[1], 3))
-        for j in _all(tree, "junction")
-        if _direct(j, "at") is not None
+        (round(point[0], 3), round(point[1], 3))
+        for junction in _all(tree, "junction")
+        if (point := _position(junction)) is not None
     }
     for i, (a, b) in enumerate(valid):
         for c, d in valid[i + 1 :]:
@@ -413,23 +421,21 @@ class _DSU:
 
 
 def _labels(tree: SExprList, kind: str) -> list[LabelPoint]:
-    return [
-        (
-            str(node[1]),
-            (round(_position(node)[0], 3), round(_position(node)[1], 3)),
-        )
-        for node in _all(tree, kind)
-        if len(node) > 1 and _direct(node, "at") is not None
-    ]
+    labels: list[LabelPoint] = []
+    for node in _all(tree, kind):
+        point = _position(node)
+        if len(node) > 1 and point is not None:
+            labels.append((str(node[1]), (round(point[0], 3), round(point[1], 3))))
+    return labels
 
 
 def label_network_issues(tree: SExprList) -> list[str]:
     local, hierarchical = _labels(tree, "label"), _labels(tree, "hierarchical_label")
     segments = [s for s in _segments(tree) if len(s) == 2]
     junctions = {
-        (round(_position(j)[0], 3), round(_position(j)[1], 3))
-        for j in _all(tree, "junction")
-        if _direct(j, "at") is not None
+        (round(point[0], 3), round(point[1], 3))
+        for junction in _all(tree, "junction")
+        if (point := _position(junction)) is not None
     }
     points = {p for s in segments for p in s} | junctions | {p for _, p in local + hierarchical}
     dsu = _DSU()
