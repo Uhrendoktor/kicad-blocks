@@ -1,6 +1,6 @@
 #![forbid(unsafe_code)]
 
-//! Native KiCad Electrical Rules Checker adapter.
+//! Native `KiCad` Electrical Rules Checker adapter.
 
 use std::{
     fs, io,
@@ -13,16 +13,16 @@ use serde_json::Value;
 use tempfile::tempdir;
 use thiserror::Error;
 
-/// Normalized result from KiCad's native schematic ERC.
+/// Normalized result from `KiCad`'s native schematic ERC.
 #[derive(Clone, Debug, PartialEq)]
 pub struct NativeErcReport {
-    /// KiCad version reported by the CLI.
+    /// `KiCad` version reported by the CLI.
     pub kicad_version: Option<String>,
     /// Report date, when present.
     pub date: Option<String>,
     /// Coordinate unit label supplied by the report.
     pub coordinate_units: Option<String>,
-    /// Checks disabled in the KiCad project.
+    /// Checks disabled in the `KiCad` project.
     pub ignored_checks: Vec<IgnoredCheck>,
     /// Findings normalized to the shared diagnostic model.
     pub diagnostics: Vec<Diagnostic>,
@@ -36,19 +36,19 @@ impl NativeErcReport {
     }
 }
 
-/// A native ERC check intentionally disabled in the KiCad project.
+/// A native ERC check intentionally disabled in the `KiCad` project.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct IgnoredCheck {
-    /// KiCad check key.
+    /// `KiCad` check key.
     pub key: String,
-    /// Description supplied by KiCad.
+    /// Description supplied by `KiCad`.
     pub description: String,
 }
 
-/// Errors raised when invoking KiCad or decoding its ERC report.
+/// Errors raised when invoking `KiCad` or decoding its ERC report.
 #[derive(Debug, Error)]
 pub enum ErcError {
-    /// The KiCad executable could not be started.
+    /// The `KiCad` executable could not be started.
     #[error("could not start KiCad CLI {program}: {source}")]
     Spawn {
         /// Executable path or command name.
@@ -57,12 +57,12 @@ pub enum ErcError {
         #[source]
         source: io::Error,
     },
-    /// KiCad returned an unsuccessful process status.
+    /// `KiCad` returned an unsuccessful process status.
     #[error("KiCad ERC failed with status {status}: {stderr}")]
     CliFailed {
         /// Exit status rendered as text.
         status: String,
-        /// Standard error output from KiCad.
+        /// Standard error output from `KiCad`.
         stderr: String,
     },
     /// A temporary report or input file operation failed.
@@ -71,15 +71,20 @@ pub enum ErcError {
     /// The JSON report could not be decoded.
     #[error("could not decode KiCad ERC JSON: {0}")]
     Json(#[from] serde_json::Error),
-    /// The JSON did not match KiCad's ERC report structure.
+    /// The JSON did not match `KiCad`'s ERC report structure.
     #[error("invalid KiCad ERC report: {0}")]
     InvalidReport(String),
 }
 
-/// Runs KiCad CLI ERC and decodes its JSON report.
+/// Runs `KiCad` CLI ERC and decodes its JSON report.
 ///
 /// The CLI's default violation exit behavior is retained; the
-/// --exit-code-violations option is deliberately not enabled.
+/// `--exit-code-violations` option is deliberately not enabled.
+///
+/// # Errors
+///
+/// Returns [`ErcError`] when the process cannot be started, the CLI exits unsuccessfully,
+/// or its generated JSON report cannot be read or decoded.
 pub fn run_native_erc(
     program: impl AsRef<Path>,
     schematic_path: impl AsRef<Path>,
@@ -115,7 +120,12 @@ pub fn run_native_erc(
     parse_erc_json(&contents, schematic_path)
 }
 
-/// Parses a KiCad ERC report, whose violations are nested under each sheet.
+/// Parses a `KiCad` ERC report, whose violations are nested under each sheet.
+///
+/// # Errors
+///
+/// Returns [`ErcError::Json`] for invalid JSON or [`ErcError::InvalidReport`] when the
+/// decoded document does not contain the expected per-sheet report structure.
 pub fn parse_erc_json(
     contents: &[u8],
     schematic_path: impl AsRef<Path>,
