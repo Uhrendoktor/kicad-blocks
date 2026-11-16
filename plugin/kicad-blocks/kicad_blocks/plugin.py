@@ -438,7 +438,14 @@ class _TkStyleLayout(Protocol):
 class _ResvgPy(Protocol):
     """Narrow SVG-to-PNG renderer interface used by toolbar icon generation."""
 
-    def svg_to_bytes(self, *, svg_string: str, width: int, height: int) -> bytes: ...
+    def svg_to_bytes(
+        self,
+        *,
+        svg_string: str,
+        width: int,
+        height: int,
+        dpi: float = 0.0,
+    ) -> bytes: ...
 
 
 class _TkPaletteOwner(Protocol):
@@ -3184,6 +3191,9 @@ def _native_symbol_preview_photo(
                 svg_string=svg_file.read_text(encoding="utf-8"),
                 width=int(width),
                 height=int(max_height),
+                # KiCad exports physical dimensions in millimetres. resvg needs
+                # a concrete DPI to convert those units into its pixel viewport.
+                dpi=96.0,
             )
             try:
                 from io import BytesIO

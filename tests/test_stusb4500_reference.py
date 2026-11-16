@@ -644,7 +644,9 @@ class STUSB4500ReferenceTests(unittest.TestCase):
         frames: dict[str, tuple[float, float, float, float]] = {}
         for group in SCHEMATIC_GROUPS:
             frame_uuid = reference_uid(f"graphic:rectangle:zone:{group['id']}")
-            frame = next(node for node in sexpr_all(tree, "rectangle") if _has_uuid(node, frame_uuid))
+            frame = next(
+                node for node in sexpr_all(tree, "rectangle") if _has_uuid(node, frame_uuid)
+            )
             start, end = _required_direct(frame, "start"), _required_direct(frame, "end")
             frames[group["id"]] = (
                 _scalar_number(start[1]),
