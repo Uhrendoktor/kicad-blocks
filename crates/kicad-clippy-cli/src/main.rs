@@ -13,7 +13,7 @@ use kicad_clippy_parser::SchematicDocument;
 use serde::Serialize;
 use thiserror::Error;
 
-/// Clippy-inspired checks for `KiCad` schematic source files.
+/// Clippy-inspired checks for ``KiCad`` schematic source files.
 #[derive(Debug, Parser)]
 #[command(version, about, long_about = None)]
 struct Cli {
@@ -23,14 +23,14 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Commands {
-    /// Parse a schematic and run `KiCad`'s native Electrical Rules Checker.
+    /// Parse a schematic and run ``KiCad``'s native Electrical Rules Checker.
     Lint {
         /// Schematic source file to inspect.
         schematic: PathBuf,
         /// Output format.
         #[arg(long, value_enum, default_value_t = OutputFormat::Text)]
         format: OutputFormat,
-        /// Parse the file without launching `KiCad` ERC.
+        /// Parse the file without launching ``KiCad`` ERC.
         #[arg(long)]
         skip_erc: bool,
         /// Explicit path or command name for kicad-cli.
