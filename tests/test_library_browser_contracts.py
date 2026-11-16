@@ -67,6 +67,7 @@ def _record(library_root: Path, block_id: str, name: str, description: str):
         implementation=block_path / "implementation.kicad_sch",
         manifest={
             "block_id": block_id,
+            "symbol_name": f"{block_id}_facade",
             "name": name,
             "description": description,
             "slug": block_id,
@@ -239,6 +240,13 @@ def test_place_button_registers_selected_block_and_starts_native_placement(monke
         plugin_actions, "_start_native_symbol_placement",
         lambda *_args, **_kwargs: context.action_calls.append("start-placement"),
     )
+    monkeypatch.setattr(
+        plugin_actions.messagebox,
+        "showerror",
+        lambda title, message, **_kwargs: context.events.append(
+            f"unexpected error dialog: {title}: {message}"
+        ),
+    )
     try:
         _select_first_record(context)
         ButtonContract(
@@ -246,6 +254,7 @@ def test_place_button_registers_selected_block_and_starts_native_placement(monke
             expected_action=("register-block", "start-placement"),
             destroys_window=False,
         ).run(context)
+        assert context.events == []
     finally:
         root.destroy()
 
