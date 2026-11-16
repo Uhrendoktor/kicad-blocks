@@ -319,7 +319,7 @@ type _PinAssignment = tuple[str, str, str]
 type _ComponentSpec = tuple[str, str, str, str, None, dict[str, _PinAssignment]]
 
 
-def _uid(key: str) -> str:
+def referencereference_uid(key: str) -> str:
     return str(uuid.uuid5(uuid.NAMESPACE_URL, f"kicad-blocks:stusb4500-reference:{key}"))
 
 
@@ -513,7 +513,7 @@ def _wire(start: tuple[float, float], end: tuple[float, float], key: str) -> SEx
         [
             "uuid",
             QuotedSExpr(
-                _uid(f"wire:{key}:{start[0]:.3f}:{start[1]:.3f}:{end[0]:.3f}:{end[1]:.3f}")
+                reference_uid(f"wire:{key}:{start[0]:.3f}:{start[1]:.3f}:{end[0]:.3f}:{end[1]:.3f}")
             ),
         ],
     ]
@@ -577,7 +577,7 @@ def _label(
         [
             ["at", f"{x:.3f}", f"{y:.3f}", str(angle)],
             effects,
-            ["uuid", QuotedSExpr(_uid(key))],
+            ["uuid", QuotedSExpr(reference_uid(key))],
         ]
     )
     return node
@@ -597,7 +597,7 @@ def _graphic_rectangle(
         ["end", f"{x2:.3f}", f"{y2:.3f}"],
         ["stroke", ["width", "0.254"], ["type", "default"]],
         ["fill", ["type", "none"]],
-        ["uuid", QuotedSExpr(_uid(f"graphic:rectangle:{key}"))],
+        ["uuid", QuotedSExpr(reference_uid(f"graphic:rectangle:{key}"))],
     ]
 
 
@@ -616,7 +616,7 @@ def _graphic_tab(x: float, y: float, width: float, key: str) -> SExprList:
         ],
         ["stroke", ["width", "0.254"], ["type", "default"]],
         ["fill", ["type", "none"]],
-        ["uuid", QuotedSExpr(_uid(f"graphic:tab:{key}"))],
+        ["uuid", QuotedSExpr(reference_uid(f"graphic:tab:{key}"))],
     ]
 
 
@@ -684,7 +684,7 @@ def _graphic_text(
         ["margins", *(f"{padding:.3f}" for _ in range(4))],
         ["fill", ["type", "none"]],
         ["effects", ["font", ["size", f"{size:.3f}", f"{size:.3f}"]], ["justify", "left", "top"]],
-        ["uuid", QuotedSExpr(_uid(f"graphic:text:{key}"))],
+        ["uuid", QuotedSExpr(reference_uid(f"graphic:text:{key}"))],
     ]
     stroke_width = "0.1524" if border else "-1"
     result.insert(5, ["stroke", ["width", stroke_width], ["type", "default"]])
@@ -723,7 +723,7 @@ def _graphic_rule(x1: float, y1: float, x2: float, y2: float, key: str) -> SExpr
         ["pts", ["xy", f"{x1:.3f}", f"{y1:.3f}"], ["xy", f"{x2:.3f}", f"{y2:.3f}"]],
         ["stroke", ["width", "0.254"], ["type", "default"]],
         ["fill", ["type", "none"]],
-        ["uuid", QuotedSExpr(_uid(f"graphic:rule:{key}"))],
+        ["uuid", QuotedSExpr(reference_uid(f"graphic:rule:{key}"))],
     ]
 
 
@@ -1074,7 +1074,7 @@ def _functional_group(group: _SchematicGroup, bounds: tuple[float, float, float,
 def generate_reference_schematic(destination: Path) -> Path:
     """Write the editable, datasheet-derived STUSB4500 implementation sheet."""
     root = _symbol_root()
-    specs = [
+    specs: list[_ComponentSpec] = [
         # ref, library, symbol, value, unused position slot, pin-number -> (net, kind, shape).
         # Component origins are resolved exclusively from SCHEMATIC_GROUPS layout constraints.
         (
@@ -1424,7 +1424,7 @@ def generate_reference_schematic(destination: Path) -> Path:
                 f"{reference} maps unknown {library}:{symbol_name} pins: {sorted(unknown)}"
             )
         lib_id = f"{library}:{symbol_name}"
-        symbol_uuid = _uid(f"symbol:{reference}")
+        symbol_uuid = reference_uid(f"symbol:{reference}")
         footprint = ""
         datasheet = DATASHEET if reference == "U1" else ""
         for prop in sexpr_all(definition, "property"):
@@ -1545,7 +1545,7 @@ def generate_reference_schematic(destination: Path) -> Path:
                 [
                     "pin",
                     QuotedSExpr(pin["number"]),
-                    ["uuid", QuotedSExpr(_uid(f"pin:{reference}:{pin['number']}"))],
+                    ["uuid", QuotedSExpr(reference_uid(f"pin:{reference}:{pin['number']}"))],
                 ]
             )
             net_spec = pin_map.get(pin["number"])
@@ -1698,14 +1698,14 @@ def generate_reference_schematic(destination: Path) -> Path:
 
     # Generate label glyphs after wiring so consumed endpoints do not retain
     # duplicate flags on top of their visible wire connections.
-    label_stubs = []
+    label_stubs: list[SExprList] = []
     for point in sorted(no_connect_points - set(label_points)):
         x, y = point
         no_connects.append(
             [
                 "no_connect",
                 ["at", f"{x:.3f}", f"{y:.3f}"],
-                ["uuid", QuotedSExpr(_uid(f"nc:{x:.3f}:{y:.3f}"))],
+                ["uuid", QuotedSExpr(reference_uid(f"nc:{x:.3f}:{y:.3f}"))],
             ]
         )
 
@@ -1720,8 +1720,8 @@ def generate_reference_schematic(destination: Path) -> Path:
         ("ADDR1", [("R51", "2"), ("R53", "1")], ("R51", "2")),
         ("ADDR0", [("R52", "2"), ("R54", "1")], ("R52", "2")),
     ]
-    wires = []
-    junctions = []
+    wires: list[SExprList] = []
+    junctions: list[SExprList] = []
     for net_name, pin_keys, label_anchor in wire_groups:
         missing = [key for key in pin_keys if key not in pin_world_points]
         if missing:
@@ -1758,7 +1758,7 @@ def generate_reference_schematic(destination: Path) -> Path:
                     ["color", "0", "0", "0", "0"],
                     [
                         "uuid",
-                        QuotedSExpr(_uid(f"junction:{net_name}:{point[0]:.3f}:{point[1]:.3f}")),
+                        QuotedSExpr(reference_uid(f"junction:{net_name}:{point[0]:.3f}:{point[1]:.3f}")),
                     ],
                 ]
             )
@@ -1780,7 +1780,7 @@ def generate_reference_schematic(destination: Path) -> Path:
                 ["at", f"{point[0]:.3f}", f"{point[1]:.3f}"],
                 ["diameter", "0"],
                 ["color", "0", "0", "0", "0"],
-                ["uuid", QuotedSExpr(_uid(f"junction:{key}:{point[0]:.3f}:{point[1]:.3f}"))],
+                ["uuid", QuotedSExpr(reference_uid(f"junction:{key}:{point[0]:.3f}:{point[1]:.3f}"))],
             ]
         )
 
@@ -1995,7 +1995,7 @@ def generate_reference_schematic(destination: Path) -> Path:
 
     # The header is page-level. Group frames and descriptions are generated
     # from member pin geometry after the routed schematic has been assembled.
-    rules = _sheet_header(
+    rules: list[SExprList] = _sheet_header(
         "STUSB4500 USB-C / POWER DELIVERY SINK",
         "DATASHEET-BASED REFERENCE  |  ST DS12499 REV. 8, FIGURE 10",
     )

@@ -125,7 +125,7 @@ class _STUSB4500Profile(Protocol):
     SCHEMATIC_GROUPS: tuple[_SchematicGroup, ...]
     WIRE_LENGTH_BUDGETS_MM: dict[str, float]
 
-    def reference_uid(self, key: str) -> str: ...
+    def referencereference_uid(self, key: str) -> str: ...
 
 
 # The generic linter deliberately has no dependency on the STUSB4500 example.
@@ -150,7 +150,7 @@ frame_gap: float = 2.54
 profile_loaded: bool = False
 
 
-def reference_uid(key: str) -> str:
+def referencereference_uid(key: str) -> str:
     raise RuntimeError(f"Profile-specific UUID requested before loading a design profile: {key}")
 
 
@@ -584,7 +584,7 @@ def text_box_issues(tree: SExprList) -> list[str]:
 
 
 def _frame_bounds(tree: SExprList, zone: str) -> Rect | None:
-    expected = _uid(f"graphic:rectangle:zone:{zone}")
+    expected = reference_uid(f"graphic:rectangle:zone:{zone}")
     for item in _all(tree, "rectangle"):
         uid = _direct(item, "uuid")
         if uid is None or str(uid[1]) != expected:
@@ -861,7 +861,7 @@ def group_metadata_issues(tree: SExprList) -> list[str]:
             (f"graphic:text:zone-title:{group['id']}", "title"),
             (f"graphic:text:group-description:{group['id']}", "description"),
         ):
-            expected = _uid(key)
+            expected = reference_uid(key)
             if expected not in text_uuids:
                 issues.append(
                     f"schematic group {group['id']} is missing its generated {description}"
@@ -992,7 +992,7 @@ def frame_and_component_issues(tree: SExprList) -> list[str]:
                     f"{kind} {str(node[1])!r} at ({anchor[0]:.3f}, {anchor[1]:.3f}) "
                     f"extends outside its owning group frame {owners[0][0]}"
                 )
-    title_uuids = {_uid(f"graphic:text:zone-title:{group['id']}") for group in schematic_groups}
+    title_uuids = {reference_uid(f"graphic:text:zone-title:{group['id']}") for group in schematic_groups}
     for node in _all(tree, "text_box"):
         uid_node = _direct(node, "uuid")
         uid = str(uid_node[1]) if uid_node is not None else ""
@@ -1525,7 +1525,7 @@ def group_comment_outline_issues(tree: SExprList) -> list[str]:
     """Require every declared design-block comment panel to have a visible border."""
     _load_stusb4500_profile()
     description_uuids = {
-        _uid(f"graphic:text:group-description:{group['id']}") for group in schematic_groups
+        reference_uid(f"graphic:text:group-description:{group['id']}") for group in schematic_groups
     }
     issues = []
     for node in _all(tree, "text_box"):
@@ -1557,7 +1557,7 @@ def frame_content_clearance_issues(tree: SExprList) -> list[str]:
     issues = []
     frames = {zone: _frame_bounds(tree, zone) for zone in zones}
     description_uuids = {
-        _uid(f"graphic:text:group-description:{group['id']}"): group["id"]
+        reference_uid(f"graphic:text:group-description:{group['id']}"): group["id"]
         for group in schematic_groups
     }
     for kind in ("label", "hierarchical_label", "global_label"):
@@ -1768,7 +1768,7 @@ def circuit_documentation_issues(tree: SExprList) -> list[str]:
         members = tuple(group.get("documentation_members", ()))
         if not members:
             continue
-        description_id = _uid(f"graphic:text:group-description:{group['id']}")
+        description_id = reference_uid(f"graphic:text:group-description:{group['id']}")
         description = text_by_uuid.get(description_id, "")
         missing = [reference for reference in members if reference not in description]
         if missing:
