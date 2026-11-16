@@ -31,6 +31,8 @@ The initial component types are:
 | `ButtonContract` | `ttk.Button` / `Button` | Invoked command, exact action route, expected window/dialog lifecycle |
 | `MenuItemContract` | `Menu` entry | Invoked menu command and resulting state |
 | `ChoiceViewContract` | `ttk.Combobox` or equivalent choice | Selected value and dependent callback/state |
+| `EntryInputContract` | `ttk.Entry` / `Entry` | Entered value, filtered result count, and dependent summary/detail |
+| `TreeSelectionContract` | `ttk.Treeview` | Selected row and dependent selected-record detail |
 | `NotebookViewContract` | `ttk.Notebook` | Every declared view can be selected and its required controls become visible |
 | `PaneGroupContract` | `ttk.Panedwindow` | Expected child panes are present, visible, correctly oriented, and have non-zero geometry |
 
@@ -89,9 +91,14 @@ They are already present in CI and can send real X11 keyboard input and capture 
 
 - stable screen ID, title, purpose, and current coverage status;
 - major functionality or nested notebook views and action labels;
-- semantic control IDs when the screen is contract-tested;
+- semantic control IDs and a per-control assertion status:
+  - **behavior asserted:** a contract executes the real widget action and asserts its intended effect;
+  - **result observed:** the control is asserted as an outcome of another component contract (for example, a selected-name label or visible pane);
+  - **uncovered:** the control is present and discoverable, but its interaction/result contract has not been implemented yet;
 - references to automated evidence;
 - the current light/dark or state-specific screenshots.
+
+Catalog validation rejects duplicate semantic IDs and missing/unknown per-control assertion statuses. Tests derive their expected Task Hub actions and Library Browser control inventory from this catalog; adding a control to the UI without registering it is therefore a coverage failure.
 
 Run:
 
