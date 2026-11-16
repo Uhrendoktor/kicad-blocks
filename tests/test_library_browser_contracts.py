@@ -512,3 +512,247 @@ def test_libraries_toolbar_opens_library_roots_manager_and_refreshes(
         ).run(context)
     finally:
         root.destroy()
+
+
+
+IMPLEMENTATION_CHOOSER_CONTROLS = {
+    "open-implementation-chooser.window",
+    "open-implementation-chooser.choice",
+    "open-implementation-chooser.action.open",
+    "open-implementation-chooser.action.cancel",
+}
+
+PCB_CHOOSER_CONTROLS = {
+    "open-pcb-layout-chooser.window",
+    "open-pcb-layout-chooser.choice",
+    "open-pcb-layout-chooser.action.open",
+    "open-pcb-layout-chooser.action.cancel",
+    "open-pcb-layout-chooser.action.manage",
+}
+
+
+def _find_toplevel(root, title: str):
+    return next(
+        child
+        for child in root.winfo_children()
+        if child.winfo_class() == "Toplevel" and child.title() == title
+    )
+
+
+def test_open_implementation_chooser_opens_the_selected_named_variant(
+    monkeypatch, tmp_path
+):
+    root, context, records, _library, _project = _new_browser(
+        monkeypatch, tmp_path
+    )
+    records[0].manifest["variants"] = [
+        {"value": "1V8", "file": "implementation_1v8.kicad_sch"}
+    ]
+    effects = []
+    monkeypatch.setattr(
+        plugin_actions, "_register_implementation_catalog",
+        lambda *_args, **_kwargs: effects.append("registered"),
+    )
+    monkeypatch.setattr(
+        plugin_actions, "_launch_block_asset",
+        lambda _kicad, asset, *_args, **_kwargs: effects.append(Path(asset).name),
+    )
+    try:
+        _select_first_record(context)
+        ButtonContract(
+            contract_id="library-browser.action.implementation",
+            expected_action="registered",
+            destroys_window=False,
+            expected_label="Implementation",
+            expected_new_window_title="Open implementation — USB power block",
+        ).run(context)
+        chooser = _find_toplevel(
+            root, "Open implementation — USB power block"
+        )
+        assert_control_coverage(chooser, IMPLEMENTATION_CHOOSER_CONTROLS)
+        WindowContract(
+            title="Open implementation — USB power block",
+            screen_id="open-implementation-chooser",
+            required_widget_ids=tuple(IMPLEMENTATION_CHOOSER_CONTROLS),
+        ).run(UiTestContext(chooser))
+        context.refresh_widgets()
+        combo = context.require_widget("open-implementation-chooser.choice")
+        assert tuple(combo["values"]) == (
+            "Default — implementation.kicad_sch",
+            "1V8",
+        )
+        combo.set("1V8")
+        effects.clear()
+        ButtonContract(
+            contract_id="open-implementation-chooser.action.open",
+            expected_action="implementation_1v8.kicad_sch",
+            destroys_window=False,
+            expected_label="Open",
+            expected_closed_window_title="Open implementation — USB power block",
+        ).run(context)
+    finally:
+        root.destroy()
+
+
+def test_open_implementation_chooser_cancel_closes_without_opening(
+    monkeypatch, tmp_path
+):
+    root, context, records, _library, _project = _new_browser(
+        monkeypatch, tmp_path
+    )
+    records[0].manifest["variants"] = [
+        {"value": "1V8", "file": "implementation_1v8.kicad_sch"}
+    ]
+    effects = []
+    monkeypatch.setattr(
+        plugin_actions, "_register_implementation_catalog",
+        lambda *_args, **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        plugin_actions, "_launch_block_asset",
+        lambda *_args, **_kwargs: effects.append("unexpected-open"),
+    )
+    try:
+        _select_first_record(context)
+        ButtonContract(
+            contract_id="library-browser.action.implementation",
+            expected_action=None,
+            destroys_window=False,
+            expected_label="Implementation",
+            expected_new_window_title="Open implementation — USB power block",
+        ).run(context)
+        chooser = _find_toplevel(
+            root, "Open implementation — USB power block"
+        )
+        assert_control_coverage(chooser, IMPLEMENTATION_CHOOSER_CONTROLS)
+        context.refresh_widgets()
+        ButtonContract(
+            contract_id="open-implementation-chooser.action.cancel",
+            expected_action=None,
+            destroys_window=False,
+            expected_label="Cancel",
+            expected_closed_window_title="Open implementation — USB power block",
+        ).run(context)
+        assert effects == []
+    finally:
+        root.destroy()
+
+
+def test_open_pcb_chooser_opens_the_selected_layout(monkeypatch, tmp_path):
+    layouts = [
+        {"id": "default-pcb", "name": "Default", "file": "default.kicad_pcb"},
+        {"id": "aux-pcb", "name": "Auxiliary", "file": "auxiliary.kicad_pcb"},
+    ]
+    root, context, _records, _library, _project = _new_browser(
+        monkeypatch, tmp_path, layouts=layouts
+    )
+    effects = []
+    monkeypatch.setattr(
+        plugin_actions, "_launch_block_asset",
+        lambda _kicad, asset, *_args, **_kwargs: effects.append(Path(asset).name),
+    )
+    try:
+        _select_first_record(context)
+        ButtonContract(
+            contract_id="library-browser.action.open-pcb",
+            expected_action=None,
+            destroys_window=False,
+            expected_label="Open PCB",
+            expected_new_window_title="Open PCB layout — USB power block",
+        ).run(context)
+        chooser = _find_toplevel(root, "Open PCB layout — USB power block")
+        assert_control_coverage(chooser, PCB_CHOOSER_CONTROLS)
+        WindowContract(
+            title="Open PCB layout — USB power block",
+            screen_id="open-pcb-layout-chooser",
+            required_widget_ids=tuple(PCB_CHOOSER_CONTROLS),
+        ).run(UiTestContext(chooser))
+        context.refresh_widgets()
+        combo = context.require_widget("open-pcb-layout-chooser.choice")
+        assert tuple(combo["values"]) == (
+            "Default [default-pcb]",
+            "Auxiliary [aux-pcb]",
+        )
+        combo.set("Auxiliary [aux-pcb]")
+        ButtonContract(
+            contract_id="open-pcb-layout-chooser.action.open",
+            expected_action="auxiliary.kicad_pcb",
+            destroys_window=False,
+            expected_label="Open",
+            expected_closed_window_title="Open PCB layout — USB power block",
+        ).run(context)
+    finally:
+        root.destroy()
+
+
+def test_open_pcb_chooser_cancel_closes_without_opening(monkeypatch, tmp_path):
+    layouts = [
+        {"id": "default-pcb", "name": "Default", "file": "default.kicad_pcb"}
+    ]
+    root, context, _records, _library, _project = _new_browser(
+        monkeypatch, tmp_path, layouts=layouts
+    )
+    effects = []
+    monkeypatch.setattr(
+        plugin_actions, "_launch_block_asset",
+        lambda *_args, **_kwargs: effects.append("unexpected-open"),
+    )
+    try:
+        _select_first_record(context)
+        ButtonContract(
+            contract_id="library-browser.action.open-pcb",
+            expected_action=None,
+            destroys_window=False,
+            expected_label="Open PCB",
+            expected_new_window_title="Open PCB layout — USB power block",
+        ).run(context)
+        chooser = _find_toplevel(root, "Open PCB layout — USB power block")
+        assert_control_coverage(chooser, PCB_CHOOSER_CONTROLS)
+        context.refresh_widgets()
+        ButtonContract(
+            contract_id="open-pcb-layout-chooser.action.cancel",
+            expected_action=None,
+            destroys_window=False,
+            expected_label="Cancel",
+            expected_closed_window_title="Open PCB layout — USB power block",
+        ).run(context)
+        assert effects == []
+    finally:
+        root.destroy()
+
+
+def test_open_pcb_chooser_manage_layouts_opens_manager_and_refreshes(
+    monkeypatch, tmp_path
+):
+    layouts = [
+        {"id": "default-pcb", "name": "Default", "file": "default.kicad_pcb"}
+    ]
+    root, context, _records, _library, _project = _new_browser(
+        monkeypatch, tmp_path, layouts=layouts
+    )
+    try:
+        _select_first_record(context)
+        ButtonContract(
+            contract_id="library-browser.action.open-pcb",
+            expected_action=None,
+            destroys_window=False,
+            expected_label="Open PCB",
+            expected_new_window_title="Open PCB layout — USB power block",
+        ).run(context)
+        chooser = _find_toplevel(root, "Open PCB layout — USB power block")
+        assert_control_coverage(chooser, PCB_CHOOSER_CONTROLS)
+        context.action_calls.clear()
+        monkeypatch.setattr(
+            plugin_actions, "_show_block_layout_editor",
+            lambda *_args, **_kwargs: context.action_calls.append("manage-layouts"),
+        )
+        context.refresh_widgets()
+        ButtonContract(
+            contract_id="open-pcb-layout-chooser.action.manage",
+            expected_action=("manage-layouts", "refresh"),
+            destroys_window=False,
+            expected_label="Manage layouts…",
+            expected_closed_window_title="Open PCB layout — USB power block",
+        ).run(context)
+    finally:
+        root.destroy()
