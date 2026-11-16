@@ -193,6 +193,8 @@ def test_task_hub_close_button_destroys_window_without_dispatch(monkeypatch):
 def test_task_hub_actions_use_a_compact_two_column_grid(monkeypatch):
     root, notebook = _new_hub(monkeypatch)
     try:
+        assert root.winfo_width() >= 700
+        assert root.winfo_height() >= 500
         for tab_id in notebook.tabs():
             tab = notebook.nametowidget(tab_id)
             buttons = [

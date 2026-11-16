@@ -6354,7 +6354,7 @@ def _show_action_hub(root, kicad=None):
         "Close the task hub",
         contract_id="task-hub.close",
     ).pack(side="right")
-    _set_window_geometry(root, 760, 460, 640, 400)
+    _set_window_geometry(root, 760, 520, 640, 440)
     return tabs
 
 
