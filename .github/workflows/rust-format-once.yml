@@ -1,0 +1,56 @@
+name: kicad-clippy one-time Rust formatting
+
+on:
+  push:
+    branches:
+      - feature/kicad-clippy-rust-foundation
+
+permissions:
+  contents: write
+
+concurrency:
+  group: kicad-clippy-format-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  format-and-validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/kicad-clippy-rust-foundation
+
+      - name: Install stable Rust toolchain
+        run: |
+          rustup toolchain install stable --profile minimal --component rustfmt --component clippy
+          rustup default stable
+
+      - name: Format and resolve dependencies
+        run: |
+          cargo fmt --all
+          cargo generate-lockfile
+
+      - name: Commit formatting and lockfile
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -n "$(git status --porcelain)" ]]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add -- Cargo.lock crates
+            git commit -m "style: format kicad-clippy and pin dependencies"
+            git push origin HEAD:feature/kicad-clippy-rust-foundation
+          fi
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Run strict Clippy
+        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+
+      - name: Run workspace tests
+        run: cargo test --workspace --all-features
+
+      - name: Run documentation tests
+        run: cargo test --workspace --doc
