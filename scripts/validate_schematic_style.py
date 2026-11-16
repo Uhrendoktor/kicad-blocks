@@ -26,7 +26,7 @@ from kicad_blocks.sexpr import (
 
 Point = tuple[float, float]
 Segment = tuple[Point, Point]
-RawSegment = tuple[Point, ...]
+RawSegment = tuple[Point, Point] | tuple[()]
 Rect = tuple[float, float, float, float]
 LabelPoint = tuple[str, Point]
 VisibleProperty = tuple[str, str, Rect, SExprList]
@@ -341,7 +341,10 @@ def _segments(tree: SExprList) -> list[RawSegment]:
     for wire in _all(tree, "wire"):
         pts = _direct(wire, "pts")
         xy = [(_number(p[1]), _number(p[2])) for p in _all(pts, "xy")] if pts else []
-        result.append(tuple(xy) if len(xy) == 2 else ())
+        if len(xy) == 2:
+            result.append((xy[0], xy[1]))
+        else:
+            result.append(())
     return result
 
 

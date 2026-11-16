@@ -317,7 +317,7 @@ class _SchematicGroup(TypedDict, total=False):
     description: Required[str]
     members: Required[tuple[str, ...]]
     lane: Required[Literal["main", "secondary"]]
-    order: Required[int]
+    order: int
     documentation_members: tuple[str, ...]
     extra_top_padding_mm: float
     align_to: str
@@ -1009,7 +1009,7 @@ def _pack_component_groups(
     cursor = 25.40
     primary = sorted(
         (item for item in SCHEMATIC_GROUPS if item["lane"] == "main"),
-        key=lambda item: int(item["order"]),
+        key=lambda item: int(item.get("order", 0)),
     )
     for group in primary:
         left, top, right, bottom = raw_bounds(group)
