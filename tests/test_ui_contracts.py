@@ -85,6 +85,14 @@ def test_task_hub_window_is_registered_and_visible(monkeypatch):
         WindowContract(
             title="KiCad Blocks — Tasks",
             screen_id="task-hub",
+            required_widget_ids=(
+                "task-hub.views",
+                "task-hub.close",
+                *(
+                    _button_contract_id(action_id)
+                    for action_id, _, _ in TASK_HUB_ACTIONS
+                ),
+            ),
         ).run(UiTestContext(root))
     finally:
         root.destroy()
@@ -233,6 +241,7 @@ def test_menu_item_contract_invokes_real_tk_menu_command():
             menu_item_id="library.refresh",
             expected_event="refresh",
         ).run(context)
+        assert_control_coverage(root, {"library.refresh"})
     finally:
         root.destroy()
 
@@ -276,6 +285,22 @@ def test_control_coverage_fails_for_untagged_buttons():
         ttk.Button(root, text="Missing ID", command=lambda: None).pack()
         root.update()
         with pytest.raises(AssertionError, match="untagged"):
+            assert_control_coverage(root, set())
+    finally:
+        root.destroy()
+
+
+
+def test_control_coverage_fails_for_untagged_menu_entries():
+    plugin_actions._load_tkinter()
+    tk = plugin_actions.tk
+    root = tk.Tk()
+    try:
+        menu = tk.Menu(root, tearoff=False)
+        menu.add_command(label="Unregistered", command=lambda: None)
+        root.configure(menu=menu)
+        root.update()
+        with pytest.raises(AssertionError, match="Menu entry"):
             assert_control_coverage(root, set())
     finally:
         root.destroy()
