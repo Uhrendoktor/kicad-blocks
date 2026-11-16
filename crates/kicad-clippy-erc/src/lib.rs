@@ -58,12 +58,12 @@ pub enum ErcError {
         source: io::Error,
     },
     /// `KiCad` returned an unsuccessful process status.
-    #[error("KiCad ERC failed with status {status}: {stderr}")]
+    #[error("KiCad ERC failed with status {status}: {details}")]
     CliFailed {
         /// Exit status rendered as text.
         status: String,
-        /// Standard error output from `KiCad`.
-        stderr: String,
+        /// Combined standard output and standard error from `KiCad`.
+        details: String,
     },
     /// A temporary report or input file operation failed.
     #[error("ERC report I/O failed: {0}")]
@@ -109,14 +109,32 @@ pub fn run_native_erc(
             source,
         })?;
 
-    if !output.status.success() {
-        return Err(ErcError::CliFailed {
-            status: output.status.to_string(),
-            stderr: String::from_utf8_lossy(&output.stderr).trim().to_owned(),
-        });
-    }
+    let contents = match fs::read(&report_path) {
+        Ok(contents) => contents,
+        Err(source) if !output.status.success() => {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            let details = [stdout.trim(), stderr.trim()]
+                .into_iter()
+                .filter(|text| !text.is_empty())
+                .collect::<Vec<_>>()
+                .join("\\n");
 
-    let contents = fs::read(&report_path)?;
+            return Err(ErcError::CliFailed {
+                status: output.status.to_string(),
+                details: if details.is_empty() {
+                    source.to_string()
+                } else {
+                    details
+                },
+            });
+        }
+        Err(source) => return Err(ErcError::Io(source)),
+    };
+
+    // KiCad may return a non-zero status and still write a complete ERC report.
+    // In that case the report is authoritative; normalized diagnostic severity
+    // determines the linter's exit code.
     parse_erc_json(&contents, schematic_path)
 }
 
