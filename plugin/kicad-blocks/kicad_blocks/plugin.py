@@ -3391,6 +3391,7 @@ def _new_blank_pcb_source() -> Path:
 def _ask_layout_details(parent, record) -> dict | None:
     """Choose an existing board or create a blank starting point for a named layout."""
     dialog = tk.Toplevel(parent)
+    dialog._kicad_ui_screen_id = "add-pcb-layout"
     dialog.title("Add PCB layout")
     dialog.transient(parent)
     frame = ttk.Frame(dialog, padding=16)
@@ -3398,6 +3399,7 @@ def _ask_layout_details(parent, record) -> dict | None:
     ttk.Label(frame, text="PCB layout name").grid(row=0, column=0, sticky="w")
     name_value = tk.StringVar(value="New layout")
     name_entry = ttk.Entry(frame, textvariable=name_value)
+    name_entry._kicad_ui_contract_id = "add-pcb-layout.name"
     name_entry.grid(row=1, column=0, columnspan=3, sticky="ew", pady=(4, 12))
     ttk.Label(frame, text="Starting point").grid(row=2, column=0, sticky="w")
     mode_value = tk.StringVar(value="Create a new empty board")
@@ -3407,11 +3409,16 @@ def _ask_layout_details(parent, record) -> dict | None:
         values=("Create a new empty board", "Choose an existing PCB file"),
         state="readonly",
     )
+    mode_combo._kicad_ui_contract_id = "add-pcb-layout.mode"
     mode_combo.grid(row=3, column=0, columnspan=3, sticky="ew", pady=(4, 12))
     source_value = tk.StringVar()
     source_entry = ttk.Entry(frame, textvariable=source_value)
+    source_entry._kicad_ui_contract_id = "add-pcb-layout.source"
     source_entry.grid(row=4, column=0, columnspan=2, sticky="ew", pady=(4, 12))
-    browse_button = _action_button(frame, "Choose file…", lambda: None, "file", "Choose an existing KiCad PCB file")
+    browse_button = _action_button(
+        frame, "Choose file…", lambda: None, "file", "Choose an existing KiCad PCB file",
+        contract_id="add-pcb-layout.browse",
+    )
     browse_button.grid(row=4, column=2, sticky="ew", padx=(8, 0), pady=(4, 12))
     implementation_values = ["Default"] + [
         str(item["value"]) for item in record.manifest.get("variants", [])
@@ -3424,6 +3431,7 @@ def _ask_layout_details(parent, record) -> dict | None:
         values=implementation_values,
         state="readonly",
     )
+    link_combo._kicad_ui_contract_id = "add-pcb-layout.implementation"
     link_combo.grid(row=6, column=0, columnspan=3, sticky="ew", pady=(4, 4))
     _add_tooltip(link_combo, "This layout is available when applying the selected implementation to a board.")
     frame.columnconfigure(0, weight=1)
@@ -3480,8 +3488,14 @@ def _ask_layout_details(parent, record) -> dict | None:
 
     buttons = ttk.Frame(frame)
     buttons.grid(row=7, column=0, columnspan=3, sticky="ew", pady=(8, 0))
-    _action_button(buttons, "Cancel", dialog.destroy, "cancel", "Cancel layout creation").pack(side="right")
-    _action_button(buttons, "Add layout", accept, "create", "Add this PCB layout to the block").pack(side="right", padx=(0, 8))
+    _action_button(
+        buttons, "Cancel", dialog.destroy, "cancel", "Cancel layout creation",
+        contract_id="add-pcb-layout.cancel",
+    ).pack(side="right")
+    _action_button(
+        buttons, "Add layout", accept, "create", "Add this PCB layout to the block",
+        contract_id="add-pcb-layout.add",
+    ).pack(side="right", padx=(0, 8))
     dialog.bind("<Return>", lambda _event: accept())
     dialog.bind("<Escape>", lambda _event: dialog.destroy())
     _set_window_geometry(dialog, 860, 620, 760, 560)
