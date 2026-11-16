@@ -468,21 +468,111 @@ def load_tkinter() -> None:
 _load_tkinter = load_tkinter
 
 
-def _system_prefers_dark_theme() -> bool | None:
-    """Return an explicit KiCad Blocks theme override, or keep the host theme."""
+def _theme_color_is_dark(value: object) -> bool | None:
+    """Classify a KiCad theme RGB color by perceptual luminance."""
+    text_value = str(value or "").strip()
+    hex_match = re.fullmatch(r"#?([0-9a-fA-F]{6})", text_value)
+    rgb: list[float]
+    if hex_match:
+        raw = hex_match.group(1)
+        rgb = [float(int(raw[index:index + 2], 16)) for index in (0, 2, 4)]
+    else:
+        rgb_match = re.fullmatch(r"rgba?\(\s*([^)]+)\s*\)", text_value, re.IGNORECASE)
+        if not rgb_match:
+            return None
+        try:
+            rgb = [float(part.strip()) for part in rgb_match.group(1).split(",")[:3]]
+        except ValueError:
+            return None
+        if len(rgb) != 3 or any(not math.isfinite(channel) for channel in rgb):
+            return None
+        rgb = [max(0.0, min(255.0, channel)) for channel in rgb]
+
+    linear: list[float] = []
+    for channel in rgb:
+        normalized = channel / 255.0
+        linear.append(
+            normalized / 12.92
+            if normalized <= 0.04045
+            else ((normalized + 0.055) / 1.055) ** 2.4
+        )
+    luminance = 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2]
+    return luminance < 0.45
+
+
+def _system_prefers_dark_theme(kicad: _KiCadApp | None = None) -> bool | None:
+    """Read Eeschema's active theme from the settings path reported by KiCad IPC.
+
+    KiCad stores its selected theme in eeschema.json and custom palettes in
+    colors/<theme>.json. Missing or older IPC support keeps native Tk colors.
+    """
     override = os.environ.get("KICAD_BLOCKS_THEME", "system").strip().casefold()
     if override in {"dark", "true", "1", "yes", "on"}:
         return True
     if override in {"light", "false", "0", "no", "off"}:
         return False
-    return None
+    if kicad is None:
+        return None
+
+    try:
+        from kipy.proto.common.types import PathType
+
+        get_paths = cast(Callable[[], dict[object, str]], getattr(kicad, "get_paths"))
+        paths = get_paths()
+        settings_directory = paths.get(cast(object, PathType.PATH_USER_SETTINGS))
+        if not settings_directory:
+            return None
+        settings_path = Path(settings_directory)
+        eeschema_settings = cast(
+            dict[str, object],
+            json.loads((settings_path / "eeschema.json").read_text(encoding="utf-8")),
+        )
+        appearance = cast(dict[str, object], eeschema_settings.get("appearance") or {})
+        theme_name = str(appearance.get("color_theme") or "").strip()
+        if not theme_name:
+            return None
+        if theme_name in {"_builtin_default", "_builtin_classic"}:
+            return False
+
+        theme_reference = Path(theme_name).expanduser()
+        if theme_reference.is_absolute():
+            theme_path = theme_reference
+        else:
+            if len(theme_reference.parts) != 1 or theme_reference.name in {"", ".", ".."}:
+                return None
+            filename = (
+                theme_reference.name
+                if theme_reference.suffix.casefold() == ".json"
+                else f"{theme_reference.name}.json"
+            )
+            theme_path = settings_path / "colors" / filename
+        theme = cast(
+            dict[str, object],
+            json.loads(theme_path.read_text(encoding="utf-8")),
+        )
+        schematic_colors = cast(dict[str, object], theme.get("schematic") or {})
+        background = schematic_colors.get("background") or schematic_colors.get("sheet_background")
+        return _theme_color_is_dark(background)
+    except (AttributeError, ImportError, KeyError, OSError, TypeError, ValueError):
+        LOG.debug(
+            "Could not read the active KiCad color theme; retaining native Tk colors",
+            exc_info=True,
+        )
+        return None
 
 
-def _configure_tk_theme(root: tkinter_types.Misc) -> None:
+def _configure_tk_theme(
+    root: tkinter_types.Misc, kicad: _KiCadApp | None = None
+) -> None:
     """Apply a compact KiCad-compatible palette to themed and classic Tk widgets."""
-    dark = _system_prefers_dark_theme()
+    dark = _system_prefers_dark_theme(kicad)
     if dark is None:
         cast(_TkPaletteOwner, root).kicad_blocks_palette = {}
+        style = ttk.Style(root)
+        style.configure("Treeview", rowheight=36, padding=(4, 3))
+        style.configure("Treeview.Heading", padding=(8, 8))
+        style.configure("Vertical.TScrollbar", width=12)
+        style.configure("Horizontal.TScrollbar", width=12)
         return
     colors = (
         {
@@ -1541,12 +1631,11 @@ def _show_selected_block_configuration(
             messagebox.showerror("Invalid Block Configuration", str(exc), parent=dialog)
             return
 
-        messagebox.showinfo(
+        LOG.info(
+            "%s: Saved configuration for %s. The schematic was updated through KiCad IPC "
+            "as one undoable change; the shared library block was not modified.",
             "Block Instance Updated",
-            f"Saved configuration for {instance.reference}.\n\n"
-            "The schematic was updated through KiCad IPC as one undoable change. "
-            "The shared library block was not modified.",
-            parent=dialog,
+            instance.reference,
         )
         dialog.destroy()
 
@@ -2367,9 +2456,11 @@ def _ask_create_block_details(
     parent: tkinter_types.Misc, source_sheet: Path
 ) -> tuple[str, str] | None:
     """Collect the block name and description in one creation dialog."""
-    dialog = tk.Toplevel(parent)
+    reuse_parent = bool(getattr(parent, "_kicad_blocks_reuse_for_create", False))
+    dialog = parent if reuse_parent else tk.Toplevel(parent)
     dialog.title("Create Functional Block")
-    dialog.transient(parent)
+    if not reuse_parent:
+        dialog.transient(parent)
     frame = ttk.Frame(dialog, padding=18)
     frame.pack(fill="both", expand=True)
     ttk.Label(
@@ -2398,6 +2489,16 @@ def _ask_create_block_details(
         highlightcolor=palette.get("accent", "#4c789f"),
     )
     result: list[tuple[str, str] | None] = [None]
+    completed: tkinter_types.Variable | None = (
+        cast(tkinter_types.Variable, tk.BooleanVar(master=dialog, value=False))
+        if reuse_parent else None
+    )
+
+    def finish() -> None:
+        if completed is not None:
+            completed.set(True)
+        else:
+            dialog.destroy()
 
     def accept() -> None:
         value = name.get().strip()
@@ -2406,19 +2507,19 @@ def _ask_create_block_details(
             name_entry.focus_set()
             return
         result[0] = (value, description.get("1.0", "end-1c").strip())
-        dialog.destroy()
+        finish()
 
     buttons = ttk.Frame(frame)
     buttons.pack(fill="x")
-    _action_button(buttons, "Cancel", dialog.destroy, "cancel", "Cancel block creation").pack(
+    _action_button(buttons, "Cancel", finish, "cancel", "Cancel block creation").pack(
         side="right"
     )
     _action_button(
         buttons, "Create Block", accept, "create", "Create the reusable block from this sheet"
     ).pack(side="right", padx=(0, 8))
 
-    def cancel():
-        dialog.destroy()
+    def cancel() -> None:
+        finish()
 
     dialog.bind("<Return>", lambda _event: accept())
     dialog.bind("<Escape>", lambda _event: cancel())
@@ -2426,7 +2527,12 @@ def _ask_create_block_details(
     _set_window_geometry(dialog, 660, 390, 580, 340)
     dialog.grab_set()
     name_entry.focus_set()
-    dialog.wait_window()
+    if completed is not None:
+        dialog.wait_variable(completed)
+        with contextlib.suppress(tk.TclError):
+            dialog.grab_release()
+    else:
+        dialog.wait_window()
     return result[0]
 
 
@@ -2582,23 +2688,16 @@ def _create_and_place(
     pins_summary = "\\n".join(
         f"  • {pin['name']} — {pin['electrical_type']}" for pin in record.manifest.get("pins", [])
     )
-    messagebox.showinfo(
+    LOG.info(
+        "%s: created %s from hierarchical sheet %s with facade pins %s, implementation %s, "
+        "and symbol library %s. Library reload note: %s",
         "Block Created",
-        f"Created {name} from hierarchical sheet {source_sheet.name}.\\n\\n"
-        f"Facade pins were generated from hierarchical labels and their shapes:\\n"
-        f"{pins_summary}\\n\\n"
-        f"Implementation: {record.implementation}\\n"
-        f"Facade symbol: {record.symbol_library}\\n\\n"
-        "The original project sheet is unchanged. Edit the facade in KiCad's "
-        "normal Symbol Editor, then use Publish Library Block. When the "
-        "implementation's hierarchical labels change, Publish synchronizes "
-        "facade pin names and electrical types automatically."
-        + (
-            f"\\n\\nLibrary reload note: {_last_library_reload_warning}"
-            if _last_library_reload_warning
-            else ""
-        ),
-        parent=parent,
+        name,
+        source_sheet.name,
+        pins_summary,
+        record.implementation,
+        record.symbol_library,
+        _last_library_reload_warning or "none",
     )
 
 
@@ -2730,12 +2829,11 @@ def _edit_block_implementation(
         "implementation schematic",
         editor_window_id=getattr(parent, "_kicad_blocks_editor_window_id", None),
     )
-    messagebox.showinfo(
+    LOG.info(
+        "%s: opened %s implementation in Eeschema. Publish shared edits; "
+        "project-local implementations remain independent until synchronized.",
         "Block Implementation",
-        f"Opened {record.name} implementation in Eeschema.\n\n"
-        "After editing a shared library block, run Publish. "
-        "A project-local implementation remains independent until explicitly synchronized.",
-        parent=parent,
+        record.name,
     )
     return process
 
