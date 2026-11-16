@@ -67,15 +67,17 @@ This matches the codebase: the application is written in Tkinter, the existing t
 
 ### Considered: Squish for Tk
 
-Squish explicitly supports Tk applications and complex controls such as item views, menus, and tabs, with Tcl/Tk API access. It is the strongest commercial option to revisit if a paid cross-platform recorder/desktop-automation product is justified. It is not a requirement for the baseline CI design.
+Squish explicitly supports Tk applications and complex controls such as item views, menus, and tabs, with Tcl/Tk API access. It is the strongest documented commercial option for black-box Tk automation across Windows, Linux, and Unix. It is not a requirement for the baseline CI design because the in-process contracts are free, easier to debug, and run without recorder licensing. Revisit Squish if cross-platform desktop-level automation becomes a priority.
 
 ### Not selected: pytest-qt
 
 pytest-qt is specifically for PyQt5, PyQt6, and PySide6. This repository uses Tkinter; adding Qt tooling would require a different widget stack and would not test the actual UI.
 
-### Not selected as the cross-platform solution: pywinauto
+### Experimental desktop adapter: pywinauto 1.0.0b1
 
-pywinauto documents Windows Win32 and Microsoft UI Automation backends. Its documentation still describes AT-SPI on Linux and Apple Accessibility support as longer-term plans. It may help with Windows-specific desktop checks but does not currently provide the cross-platform abstraction required for this test architecture.
+The framework situation changed shortly before this work: pywinauto 1.0.0b1 (15 October 2026) added beta Linux AT-SPI and macOS Accessibility backends, alongside newer Windows backends. That makes it worth a focused experiment for cross-platform window discovery, keyboard/focus checks, and native chooser behavior. However, the long-running Tkinter support issue remains open: Tk widgets can be exposed as generic child surfaces instead of reliable named controls. Therefore, do not assume that the new backends automatically provide complete semantic coverage of this application's Tk widget tree. The current pywinauto getting-started text also does not fully reflect the new beta backends.
+
+The older Tka11y package is not a suitable baseline either: its PyPI project describes an AT-SPI-only integration from 2009. Tk 9.1's accepted TIP 733 adds a native accessibility API direction for core Tk/ttk widgets, but the application must actually be running a Tk 9.1 build with that support. We should inspect the Tcl/Tk runtime shipped by each supported KiCad installation before depending on it.
 
 ### Retained for desktop-specific tests: xdotool and Xvfb
 
@@ -120,5 +122,9 @@ Do not claim that every button works merely because Task Hub dispatch is complet
 - [Python Tkinter reference](https://docs.python.org/3/library/tkinter.html) — widget hierarchy, the Tcl/Tk command model, button invocation, and menu invocation.
 - [pytest parametrizing tests](https://www.pytest.org/en/latest/example/parametrize.html) — generate independent test cases from each registered action or view.
 - [Squish automated GUI testing for Tk](https://www.qt.io/quality-assurance/squish/platform-automated-tk-gui-testing) — commercial Tk support, complex controls, and Tcl/Tk API access.
-- [pywinauto getting started](https://pywinauto.readthedocs.io/en/latest/getting_started.html) — Windows UI Automation and Win32 backends; documents the status of Linux/macOS accessibility backends.
+- [pywinauto 1.0.0b1 release notes](https://github.com/pywinauto/pywinauto/releases/tag/1.0.0b1) — beta Linux AT-SPI and macOS Accessibility backends, published 15 October 2026.
+- [pywinauto Tkinter-support issue #84](https://github.com/pywinauto/pywinauto/issues/84) — outstanding concerns about semantic discovery of Tk controls.
+- [pywinauto getting started](https://pywinauto.readthedocs.io/en/latest/getting_started.html) — backend-selection guidance; note that some prose predates the 1.0.0b1 backends.
+- [Tka11y on PyPI](https://pypi.org/project/Tka11y/) — historical AT-SPI bridge for Tk, Linux-only and not an appropriate current dependency.
+- [Tcl/Tk TIP 733](https://core.tcl-lang.org/tips/doc/trunk/tip/733.md) — accepted proposal for native Tk accessibility/screen-reader support.
 - [pytest-qt introduction](https://pytest-qt.readthedocs.io/en/stable/intro.html) — confirms its Qt binding targets (PyQt5, PyQt6, PySide6).
