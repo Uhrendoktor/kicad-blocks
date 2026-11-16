@@ -46,18 +46,27 @@ _T = TypeVar("_T")
 
 
 def _load_project_settings(path: Path, *, context: str) -> KiCadProjectData:
-    """Decode and validate the project sections consumed by the PCB importer."""
+    """Decode and validate the project sections consumed by the PCB importer.
+
+    Returns:
+        The decoded KiCad project document narrowed to its domain schema.
+
+    Raises:
+        ValueError: If the document is not valid JSON.
+        TypeError: If the root or a consumed settings section is not an object.
+    """
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:
         raise ValueError(f"{context}: {path}") from exc
     if not isinstance(data, dict):
-        raise ValueError(f"{context}: {path}")
+        raise TypeError(f"{context}: {path}")
     for section_name in ("meta", "net_settings"):
         section = data.get(section_name)
         if section is not None and not isinstance(section, dict):
-            raise ValueError(f"{context}: invalid {section_name} section in {path}")
+            raise TypeError(f"{context}: invalid {section_name} section in {path}")
     return cast(KiCadProjectData, data)
+
 
 # This helper remains available to existing internal integrations and tests.
 __all__ = ["_xy", "rewrite_nets", "transform_item", "merge_project_net_settings"]
@@ -1106,6 +1115,27 @@ class _ImportedLayoutItems:
     pad_uuid_remap: dict[str, str]
 
 
+@dataclass(frozen=True, slots=True)
+class _LayoutItemImportSettings:
+    """Immutable geometry and net mapping for one block layout import."""
+
+    instance_reference: str
+    net_map: dict[int, tuple[int, str]]
+    anchor_mm: tuple[float, float]
+    position_mm: tuple[float, float]
+    rotation_deg: float
+
+
+@dataclass(slots=True)
+class _LayoutItemContext:
+    """Shared mutable collision and identity state for imported PCB objects."""
+
+    settings: _LayoutItemImportSettings
+    existing_references: set[str]
+    used_item_uuids: set[str]
+    pad_uuid_remap: dict[str, str]
+
+
 _IGNORED_LAYOUT_TOP_LEVEL_KINDS = {
     "version",
     "generator",
@@ -1293,21 +1323,14 @@ def _map_layout_nets(
 def _prepare_layout_item(
     raw_item: SExpr,
     kind: str,
-    *,
-    existing_references: set[str],
-    used_item_uuids: set[str],
-    pad_uuid_remap: dict[str, str],
-    net_map: dict[int, tuple[int, str]],
-    anchor_mm: tuple[float, float],
-    position_mm: tuple[float, float],
-    rotation_deg: float,
-    instance_reference: str,
+    context: _LayoutItemContext,
 ) -> tuple[SExprList, str | None, str]:
     """Clone, transform, remap and validate one imported board object.
 
     Raises:
         ValueError: If a footprint lacks a reference or an item lacks a unique UUID/TSTAMP.
     """
+    settings = context.settings
     item = parse_sexpr(_dump(raw_item))
     reference: str | None = None
     if kind == "footprint":
@@ -1315,45 +1338,42 @@ def _prepare_layout_item(
         if not old_reference:
             raise ValueError("Every stored layout footprint must have a Reference property.")
         reference = _unique_reference(
-            f"{instance_reference}_{old_reference}", existing_references
+            f"{settings.instance_reference}_{old_reference}", context.existing_references
         )
-        _rewrite_footprint(item, reference, 0.0, 0.0, uuid_remap=pad_uuid_remap)
+        _rewrite_footprint(
+            item, reference, 0.0, 0.0, uuid_remap=context.pad_uuid_remap
+        )
         _transform_item(
             item,
-            anchor_mm=anchor_mm,
-            position_mm=position_mm,
-            rotation_deg=rotation_deg,
+            anchor_mm=settings.anchor_mm,
+            position_mm=settings.position_mm,
+            rotation_deg=settings.rotation_deg,
         )
     else:
         _transform_item(
             item,
-            anchor_mm=anchor_mm,
-            position_mm=position_mm,
-            rotation_deg=rotation_deg,
+            anchor_mm=settings.anchor_mm,
+            position_mm=settings.position_mm,
+            rotation_deg=settings.rotation_deg,
         )
         _refresh_ids(item)
-    _rewrite_nets(item, net_map, include_net_name=(kind == "footprint"))
+    _rewrite_nets(item, settings.net_map, include_net_name=(kind == "footprint"))
     item_id_node = _direct(item, "uuid") or _direct(item, "tstamp")
     if item_id_node is None or len(item_id_node) < 2:
         raise ValueError(
             f"Imported PCB {kind} object has no top-level UUID/TSTAMP for interactive placement."
         )
     item_uuid = str(item_id_node[1]).strip()
-    if not item_uuid or item_uuid in used_item_uuids:
+    if not item_uuid or item_uuid in context.used_item_uuids:
         raise ValueError(f"Imported PCB object has a missing or duplicate UUID: {item_uuid!r}.")
-    used_item_uuids.add(item_uuid)
+    context.used_item_uuids.add(item_uuid)
     return item, reference, item_uuid
 
 
 def _import_layout_items(
     source: SExprList,
     target: SExprList,
-    net_map: dict[int, tuple[int, str]],
-    *,
-    instance_reference: str,
-    anchor_mm: tuple[float, float],
-    position_mm: tuple[float, float],
-    rotation_deg: float,
+    settings: _LayoutItemImportSettings,
 ) -> _ImportedLayoutItems:
     """Prepare every supported layout item and report unsupported top-level kinds.
 
@@ -1366,12 +1386,11 @@ def _import_layout_items(
         if isinstance(item, list) and _head(item) == "footprint"
         if (reference := _reference(item))
     }
+    context = _LayoutItemContext(settings, existing_references, set(), {})
     imported: list[SExprList] = []
     references: list[str] = []
     item_uuids: list[str] = []
-    used_item_uuids: set[str] = set()
     skipped: set[str] = set()
-    pad_uuid_remap: dict[str, str] = {}
     for raw_item in source[1:]:
         kind = _head(raw_item)
         if kind in _IGNORED_LAYOUT_TOP_LEVEL_KINDS:
@@ -1380,25 +1399,16 @@ def _import_layout_items(
             if kind:
                 skipped.add(kind)
             continue
-        item, reference, item_uuid = _prepare_layout_item(
-            raw_item,
-            str(kind),
-            existing_references=existing_references,
-            used_item_uuids=used_item_uuids,
-            pad_uuid_remap=pad_uuid_remap,
-            net_map=net_map,
-            anchor_mm=anchor_mm,
-            position_mm=position_mm,
-            rotation_deg=rotation_deg,
-            instance_reference=instance_reference,
-        )
+        item, reference, item_uuid = _prepare_layout_item(raw_item, str(kind), context)
         if reference is not None:
             references.append(reference)
         imported.append(item)
         item_uuids.append(item_uuid)
     if not imported:
         raise ValueError("The stored block layout contains no importable PCB objects.")
-    return _ImportedLayoutItems(imported, references, item_uuids, skipped, pad_uuid_remap)
+    return _ImportedLayoutItems(
+        imported, references, item_uuids, skipped, context.pad_uuid_remap
+    )
 
 
 def _insert_layout_items(
@@ -1495,15 +1505,14 @@ def merge_block_layout(
     net_mapping = _map_layout_nets(
         source, target, placement.source_net_to_board_net, instance_reference
     )
-    imported = _import_layout_items(
-        source,
-        target,
-        net_mapping.net_map,
+    item_settings = _LayoutItemImportSettings(
         instance_reference=instance_reference,
+        net_map=net_mapping.net_map,
         anchor_mm=placement.anchor_mm,
         position_mm=placement.position_mm,
         rotation_deg=placement.rotation_deg,
     )
+    imported = _import_layout_items(source, target, item_settings)
     _insert_layout_items(target, net_mapping.new_net_nodes, imported.items)
     source_net_to_board_net = {
         source_name: net_mapping.net_map[code][1]
