@@ -347,6 +347,7 @@ __all__ = [
     "_edit_block_implementation",
 ]
 
+
 class _TkTagConfigurable(Protocol):
     """Treeview style operation not included in Tk's bundled type stubs."""
 
@@ -1618,11 +1619,20 @@ def _pick_block_for_placement(
     tree.heading("library", text="Library")
     tree.column("block", width=220, minwidth=160, stretch=True)
     tree.column("library", width=130, minwidth=100, stretch=False)
-    scroll = ttk.Scrollbar(left, orient="vertical", command=cast(Callable[..., None], tree.yview), style="Vertical.TScrollbar")
+    scroll = ttk.Scrollbar(
+        left,
+        orient="vertical",
+        command=cast(Callable[..., None], tree.yview),
+        style="Vertical.TScrollbar",
+    )
     tree.configure(yscrollcommand=scroll.set)
     palette = getattr(parent, "kicad_blocks_palette", {})
-    cast(_TkTagConfigurable, tree).tag_configure("even", background=palette.get("surface", "#f4f5f6"))
-    cast(_TkTagConfigurable, tree).tag_configure("odd", background=palette.get("surface_alt", "#e8eaed"))
+    cast(_TkTagConfigurable, tree).tag_configure(
+        "even", background=palette.get("surface", "#f4f5f6")
+    )
+    cast(_TkTagConfigurable, tree).tag_configure(
+        "odd", background=palette.get("surface_alt", "#e8eaed")
+    )
     tree.grid(row=0, column=0, sticky="nsew")
     scroll.grid(row=0, column=1, sticky="ns")
     _bind_mousewheel(tree, lambda amount: tree.yview_scroll(amount, "units"))
@@ -1870,12 +1880,19 @@ def _pick_record(
     tree.column("variants", width=75, minwidth=60, stretch=False, anchor="center")
     tree.column("layouts", width=65, minwidth=55, stretch=False, anchor="center")
     scrollbar = ttk.Scrollbar(
-        results_frame, orient="vertical", command=cast(Callable[..., None], tree.yview), style="Vertical.TScrollbar"
+        results_frame,
+        orient="vertical",
+        command=cast(Callable[..., None], tree.yview),
+        style="Vertical.TScrollbar",
     )
     tree.configure(yscrollcommand=scrollbar.set)
     palette = getattr(parent, "kicad_blocks_palette", {})
-    cast(_TkTagConfigurable, tree).tag_configure("even", background=palette.get("surface", "#f4f5f6"))
-    cast(_TkTagConfigurable, tree).tag_configure("odd", background=palette.get("surface_alt", "#e8eaed"))
+    cast(_TkTagConfigurable, tree).tag_configure(
+        "even", background=palette.get("surface", "#f4f5f6")
+    )
+    cast(_TkTagConfigurable, tree).tag_configure(
+        "odd", background=palette.get("surface_alt", "#e8eaed")
+    )
     tree.grid(row=0, column=0, sticky="nsew")
     scrollbar.grid(row=0, column=1, sticky="ns")
 
@@ -3057,6 +3074,7 @@ def _native_symbol_preview_photo(
 
 _NATIVE_PREVIEW_CACHE: dict[tuple[str, int, str, int, int], bytes] = {}
 
+
 def _normalize_schematic_preview_svg(svg_file: Path, output_dir: Path) -> Path:
     """Give KiCad's SVG export an explicit pixel viewport for resvg."""
     import xml.etree.ElementTree as ET
@@ -3077,6 +3095,7 @@ def _normalize_schematic_preview_svg(svg_file: Path, output_dir: Path) -> Path:
             root.set("width", f"{view_width:g}px")
             root.set("height", f"{view_height:g}px")
     else:
+
         def valid_dimension(value: str | None) -> bool:
             if not value:
                 return False
@@ -3109,14 +3128,10 @@ def _native_schematic_preview_pages(
     width: int = 900,
 ) -> list[tuple[str, bytes]]:
     """Render every sheet of the selected implementation with KiCad CLI."""
-    implementation_file = resolve_variant_implementation(
-        record.manifest, implementation
-    )
+    implementation_file = resolve_variant_implementation(record.manifest, implementation)
     schematic_file = (Path(record.path) / implementation_file).resolve()
     if not schematic_file.is_file():
-        raise FileNotFoundError(
-            f"Implementation schematic is missing: {schematic_file}"
-        )
+        raise FileNotFoundError(f"Implementation schematic is missing: {schematic_file}")
 
     block_path = Path(record.path).resolve()
     schematic_assets = tuple(
@@ -3167,9 +3182,7 @@ def _native_schematic_preview_pages(
             svg_files.remove(root_svg)
             svg_files.insert(0, root_svg)
         if not svg_files:
-            raise RuntimeError(
-                "KiCad schematic export did not produce any SVG preview pages."
-            )
+            raise RuntimeError("KiCad schematic export did not produce any SVG preview pages.")
 
         try:
             import resvg_py
@@ -3187,7 +3200,7 @@ def _native_schematic_preview_pages(
                 suffix = svg_file.stem
                 prefix = f"{schematic_file.stem}-"
                 if suffix.casefold().startswith(prefix.casefold()):
-                    suffix = suffix[len(prefix):]
+                    suffix = suffix[len(prefix) :]
                 suffix = re.sub(r"[-_]+", " ", suffix).strip()
                 label = f"Sheet {index + 1}" + (f" · {suffix}" if suffix else "")
             normalized_svg = _normalize_schematic_preview_svg(
@@ -3225,9 +3238,7 @@ def _draw_schematic_preview(canvas, pages, page_label: str | None = None) -> Non
     photo = tk.PhotoImage(data=base64.b64encode(png_data).decode("ascii"))
     canvas._native_schematic_preview_photo = photo
     canvas.create_image(8, 8, image=photo, anchor="nw")
-    canvas.configure(
-        scrollregion=(0, 0, photo.width() + 16, photo.height() + 16)
-    )
+    canvas.configure(scrollregion=(0, 0, photo.width() + 16, photo.height() + 16))
     canvas.xview_moveto(0)
     canvas.yview_moveto(0)
 
@@ -3961,7 +3972,10 @@ def _show_block_layout_editor(
     tree.column("assigned", width=220, minwidth=160, stretch=False)
     tree.column("file", width=470, minwidth=260, stretch=True)
     scroll = ttk.Scrollbar(
-        table_frame, orient="vertical", command=cast(Callable[..., None], tree.yview), style="Vertical.TScrollbar"
+        table_frame,
+        orient="vertical",
+        command=cast(Callable[..., None], tree.yview),
+        style="Vertical.TScrollbar",
     )
     tree.configure(yscrollcommand=scroll.set)
     tree.grid(row=0, column=0, sticky="nsew")
@@ -4572,15 +4586,22 @@ def _show_block_variant_editor(
     tree.column("file", width=560, minwidth=320, stretch=True)
     tree.column("role", width=150, minwidth=130, stretch=False)
     scroll = ttk.Scrollbar(
-        table_frame, orient="vertical", command=cast(Callable[..., None], tree.yview), style="Vertical.TScrollbar"
+        table_frame,
+        orient="vertical",
+        command=cast(Callable[..., None], tree.yview),
+        style="Vertical.TScrollbar",
     )
     tree.configure(yscrollcommand=scroll.set)
     tree.grid(row=0, column=0, sticky="nsew")
     scroll.grid(row=0, column=1, sticky="ns")
 
     palette = getattr(parent, "kicad_blocks_palette", {})
-    cast(_TkTagConfigurable, tree).tag_configure("even", background=palette.get("surface", "#f4f5f6"))
-    cast(_TkTagConfigurable, tree).tag_configure("odd", background=palette.get("surface_alt", "#e8eaed"))
+    cast(_TkTagConfigurable, tree).tag_configure(
+        "even", background=palette.get("surface", "#f4f5f6")
+    )
+    cast(_TkTagConfigurable, tree).tag_configure(
+        "odd", background=palette.get("surface_alt", "#e8eaed")
+    )
     variants = [
         {
             "value": str(item["value"]),
@@ -4881,18 +4902,28 @@ def _show_library_roots_dialog(parent: tkinter_types.Misc) -> bool:
     tree.column("role", width=140, minwidth=110, stretch=False, anchor="center")
     tree.column("path", width=500, minwidth=220, stretch=True)
     vertical_scroll = ttk.Scrollbar(
-        table_frame, orient="vertical", command=cast(Callable[..., None], tree.yview), style="Vertical.TScrollbar"
+        table_frame,
+        orient="vertical",
+        command=cast(Callable[..., None], tree.yview),
+        style="Vertical.TScrollbar",
     )
     horizontal_scroll = ttk.Scrollbar(
-        table_frame, orient="horizontal", command=cast(Callable[..., None], tree.xview), style="Horizontal.TScrollbar"
+        table_frame,
+        orient="horizontal",
+        command=cast(Callable[..., None], tree.xview),
+        style="Horizontal.TScrollbar",
     )
     tree.configure(
         yscrollcommand=vertical_scroll.set,
         xscrollcommand=horizontal_scroll.set,
     )
     palette = getattr(parent, "kicad_blocks_palette", {})
-    cast(_TkTagConfigurable, tree).tag_configure("even", background=palette.get("surface", "#f4f5f6"))
-    cast(_TkTagConfigurable, tree).tag_configure("odd", background=palette.get("surface_alt", "#e8eaed"))
+    cast(_TkTagConfigurable, tree).tag_configure(
+        "even", background=palette.get("surface", "#f4f5f6")
+    )
+    cast(_TkTagConfigurable, tree).tag_configure(
+        "odd", background=palette.get("surface_alt", "#e8eaed")
+    )
     tree.grid(row=0, column=0, sticky="nsew")
     vertical_scroll.grid(row=0, column=1, sticky="ns")
     horizontal_scroll.grid(row=1, column=0, sticky="ew")
@@ -5248,10 +5279,16 @@ def _show_library_browser(
     tree.column("variants", width=78, minwidth=72, stretch=False, anchor="center")
     tree.column("layouts", width=52, minwidth=48, stretch=False, anchor="center")
     tree_y_scroll = ttk.Scrollbar(
-        tree_frame, orient="vertical", command=cast(Callable[..., None], tree.yview), style="Vertical.TScrollbar"
+        tree_frame,
+        orient="vertical",
+        command=cast(Callable[..., None], tree.yview),
+        style="Vertical.TScrollbar",
     )
     tree_x_scroll = ttk.Scrollbar(
-        tree_frame, orient="horizontal", command=cast(Callable[..., None], tree.xview), style="Horizontal.TScrollbar"
+        tree_frame,
+        orient="horizontal",
+        command=cast(Callable[..., None], tree.xview),
+        style="Horizontal.TScrollbar",
     )
     tree.configure(
         yscrollcommand=tree_y_scroll.set,
@@ -5319,7 +5356,9 @@ def _show_library_browser(
         width=22,
     )
     implementation_selector.pack(side="left", padx=(5, 0))
-    _add_tooltip(implementation_selector, "Choose the implementation shown in the schematic preview")
+    _add_tooltip(
+        implementation_selector, "Choose the implementation shown in the schematic preview"
+    )
     page_choice = tk.StringVar()
     page_selector_label = ttk.Label(schematic_controls, text="Sheet")
     page_selector = ttk.Combobox(
@@ -5361,7 +5400,9 @@ def _show_library_browser(
     schematic_preview.grid(row=0, column=0, sticky="nsew")
     schematic_y_scroll.grid(row=0, column=1, sticky="ns")
     schematic_x_scroll.grid(row=1, column=0, sticky="ew")
-    _bind_mousewheel(schematic_preview, lambda amount: schematic_preview.yview_scroll(amount, "units"))
+    _bind_mousewheel(
+        schematic_preview, lambda amount: schematic_preview.yview_scroll(amount, "units")
+    )
 
     details_box = ttk.LabelFrame(right, text="Block overview", padding=5)
     details_box.grid(row=3, column=0, sticky="nsew", pady=(8, 0))
@@ -5563,9 +5604,7 @@ def _show_library_browser(
         page_selector.pack_forget()
 
         try:
-            selected_project_catalog[0] = _ensure_project_facade_catalog(
-                project_dir, record, kicad
-            )
+            selected_project_catalog[0] = _ensure_project_facade_catalog(project_dir, record, kicad)
         except (OSError, RuntimeError, ValueError, LookupError) as exc:
             LOG.exception(
                 "Could not resolve the project facade catalog for %s",
@@ -6191,7 +6230,9 @@ def _export_recursive_bom(
     if len(selected) == 1:
         if project_dir is None:
             if schematic is None:
-                raise ValueError("A project directory is required to resolve the selected block instance.")
+                raise ValueError(
+                    "A project directory is required to resolve the selected block instance."
+                )
             project_dir = project_directory(schematic)
         record = _block_record_for_instance(root, project_dir, selected[0])
         parameter_values = _parameter_values_for_instance(selected[0], record)
@@ -6290,7 +6331,9 @@ def _validate_recursive_erc(
     if len(selected) == 1:
         if project_dir is None:
             if schematic is None:
-                raise ValueError("A project directory is required to resolve the selected block instance.")
+                raise ValueError(
+                    "A project directory is required to resolve the selected block instance."
+                )
             project_dir = project_directory(schematic)
         record = _block_record_for_instance(root, project_dir, selected[0])
         parameter_values = _parameter_values_for_instance(selected[0], record)

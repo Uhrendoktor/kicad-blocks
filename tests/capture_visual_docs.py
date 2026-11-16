@@ -658,8 +658,7 @@ def capture_ui_workflows(
                     minimum_size=(1000, 650),
                 )
                 browser_notebooks = [
-                    widget for widget in walk_widgets(root)
-                    if widget.winfo_class() == "TNotebook"
+                    widget for widget in walk_widgets(root) if widget.winfo_class() == "TNotebook"
                 ]
                 if not browser_notebooks:
                     raise RuntimeError("The Functional Block Library preview tabs are missing.")
@@ -673,12 +672,15 @@ def capture_ui_workflows(
                     minimum_size=(1000, 650),
                 )
                 schematic_canvases = [
-                    widget for widget in walk_widgets(root)
+                    widget
+                    for widget in walk_widgets(root)
                     if widget.winfo_class() == "Canvas"
                     and getattr(widget, "_native_schematic_preview_photo", None) is not None
                 ]
                 if not schematic_canvases:
-                    raise RuntimeError("The library schematic preview did not render a KiCad image.")
+                    raise RuntimeError(
+                        "The library schematic preview did not render a KiCad image."
+                    )
                 _capture_modal(
                     root,
                     lambda target=root: show_library_roots_dialog(target),

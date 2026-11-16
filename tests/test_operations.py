@@ -40,7 +40,7 @@ class RecursiveBlockOperationTests(unittest.TestCase):
         original = block.implementation.read_text(encoding="utf-8")
         block.implementation.write_text(
             original + '\n  (property "Value" "{{OUTPUT_VOLTAGE}}" '
-            '(at 50 50 0) (effects (font (size 1 1))))\n',
+            "(at 50 50 0) (effects (font (size 1 1))))\n",
             encoding="utf-8",
         )
         output = Path(self.temp.name) / "parameterized.csv"
@@ -76,16 +76,14 @@ class RecursiveBlockOperationTests(unittest.TestCase):
             parse_pins("VIN:input"),
         )
         block.implementation.write_text(
-            block.implementation.read_text(encoding="utf-8") + '\n; {{UNDECLARED}}\n',
+            block.implementation.read_text(encoding="utf-8") + "\n; {{UNDECLARED}}\n",
             encoding="utf-8",
         )
         with (
             patch("kicad_blocks.operations.subprocess.run") as run,
             self.assertRaisesRegex(ValueError, "undeclared"),
         ):
-            export_block_bom(
-                block, Path(self.temp.name) / "invalid.csv", "kicad-cli", self.root
-            )
+            export_block_bom(block, Path(self.temp.name) / "invalid.csv", "kicad-cli", self.root)
         run.assert_not_called()
 
     def test_export_bom_combines_nested_blocks_and_namespaces_references(self):

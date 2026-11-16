@@ -68,35 +68,47 @@ GROUP_EVIDENCE = {
 }
 SCHEMATIC_GROUPS = (
     {
-        "id": "usb-port", "title": "USB-C PORT / CC PROTECTION",
+        "id": "usb-port",
+        "title": "USB-C PORT / CC PROTECTION",
         "description": "Type-C receptacle and dual CC-line ESD protection.",
-        "members": ("J1", "D1"), "lane": "main", "order": 0,
+        "members": ("J1", "D1"),
+        "lane": "main",
+        "order": 0,
         "layout": {
-            "anchor": "J1", "anchor_y_mm": 139.70,
+            "anchor": "J1",
+            "anchor_y_mm": 139.70,
             "constraints": (
                 {"kind": "offset", "component": "D1", "to": "J1", "dx_mm": 33.02, "dy_mm": 0.0},
             ),
         },
     },
     {
-        "id": "vbus-bulk", "title": "VBUS BULK PROTECTION",
+        "id": "vbus-bulk",
+        "title": "VBUS BULK PROTECTION",
         "description": "Input bulk capacitance and VBUS transient clamp.",
-        "members": ("C50", "D50"), "lane": "main", "order": 1,
+        "members": ("C50", "D50"),
+        "lane": "main",
+        "order": 1,
         "layout": {
-            "anchor": "C50", "anchor_y_mm": 132.08,
+            "anchor": "C50",
+            "anchor_y_mm": 132.08,
             "constraints": (
                 {"kind": "offset", "component": "D50", "to": "C50", "dx_mm": 20.32, "dy_mm": 0.0},
             ),
         },
     },
     {
-        "id": "vbus-monitor", "title": "VBUS MONITOR / FILTER",
+        "id": "vbus-monitor",
+        "title": "VBUS MONITOR / FILTER",
         "description": "VBUS filter and fast-charge path.\nR1/R4 form the VBUS_VS_DISCH monitor divider; verify D4 rating.",
         "members": ("D4", "C4", "R1", "R4"),
-        "documentation_members": ("R1", "R4"), "lane": "main", "order": 2,
+        "documentation_members": ("R1", "R4"),
+        "lane": "main",
+        "order": 2,
         "extra_top_padding_mm": 10.16,
         "layout": {
-            "anchor": "D4", "anchor_y_mm": 111.76,
+            "anchor": "D4",
+            "anchor_y_mm": 111.76,
             "constraints": (
                 {"kind": "offset", "component": "C4", "to": "D4", "dx_mm": 12.70, "dy_mm": 3.81},
                 {"kind": "offset", "component": "R1", "to": "C4", "dx_mm": 12.70, "dy_mm": 0.0},
@@ -105,26 +117,41 @@ SCHEMATIC_GROUPS = (
         },
     },
     {
-        "id": "controller", "title": "STUSB4500 CONTROLLER",
+        "id": "controller",
+        "title": "STUSB4500 CONTROLLER",
         "description": "USB-PD controller with directly wired VREG_1V2 and VREG_2V7 bypass capacitors.",
-        "members": ("U1", "C1", "C2", "C3", "R55"), "lane": "main", "order": 3,
+        "members": ("U1", "C1", "C2", "C3", "R55"),
+        "lane": "main",
+        "order": 3,
         "layout": {
-            "anchor": "U1", "anchor_y_mm": 137.16,
+            "anchor": "U1",
+            "anchor_y_mm": 137.16,
             "constraints": (
                 {"kind": "offset", "component": "C1", "to": "U1", "dx_mm": 5.08, "dy_mm": -35.56},
                 {"kind": "offset", "component": "C2", "to": "U1", "dx_mm": 15.24, "dy_mm": -35.56},
                 {"kind": "offset", "component": "C3", "to": "C2", "dx_mm": 5.08, "dy_mm": 0.0},
-                {"kind": "pin_offset", "component": "R55", "to": "U1", "pin": "6", "dx_mm": -7.62, "dy_mm": 7.62},
+                {
+                    "kind": "pin_offset",
+                    "component": "R55",
+                    "to": "U1",
+                    "pin": "6",
+                    "dx_mm": -7.62,
+                    "dy_mm": 7.62,
+                },
             ),
         },
     },
     {
-        "id": "address-straps", "title": "I2C ADDRESS STRAPS",
+        "id": "address-straps",
+        "title": "I2C ADDRESS STRAPS",
         "description": "Selectable ADDR0/ADDR1 pull-up and pull-down networks.",
-        "members": ("R51", "R52", "R53", "R54"), "lane": "secondary",
-        "align_to": "controller", "y_offset_mm": 25.40,
+        "members": ("R51", "R52", "R53", "R54"),
+        "lane": "secondary",
+        "align_to": "controller",
+        "y_offset_mm": 25.40,
         "layout": {
-            "anchor": "R51", "anchor_y_mm": 177.80,
+            "anchor": "R51",
+            "anchor_y_mm": 177.80,
             "constraints": (
                 {"kind": "offset", "component": "R52", "to": "R51", "dx_mm": 0.0, "dy_mm": 12.70},
                 {"kind": "offset", "component": "R53", "to": "R51", "dx_mm": 20.32, "dy_mm": 0.0},
@@ -133,26 +160,40 @@ SCHEMATIC_GROUPS = (
         },
     },
     {
-        "id": "power-switch", "title": "BACK-TO-BACK PMOS SWITCH",
+        "id": "power-switch",
+        "title": "BACK-TO-BACK PMOS SWITCH",
         "description": "Back-to-back P-channel switches with a direct common-source control network.",
-        "members": ("T4", "T1", "R10", "R11", "R13"), "lane": "main", "order": 4,
+        "members": ("T4", "T1", "R10", "R11", "R13"),
+        "lane": "main",
+        "order": 4,
         "layout": {
-            "anchor": "T4", "anchor_y_mm": 104.14,
+            "anchor": "T4",
+            "anchor_y_mm": 104.14,
             "constraints": (
                 {"kind": "offset", "component": "T1", "to": "T4", "dx_mm": 25.40, "dy_mm": 0.0},
-                {"kind": "midpoint_offset", "component": "R10", "between": ("T4", "T1"), "dx_mm": 0.0, "dy_mm": 17.78},
+                {
+                    "kind": "midpoint_offset",
+                    "component": "R10",
+                    "between": ("T4", "T1"),
+                    "dx_mm": 0.0,
+                    "dy_mm": 17.78,
+                },
                 {"kind": "offset", "component": "R11", "to": "R10", "dx_mm": 7.62, "dy_mm": 7.62},
                 {"kind": "offset", "component": "R13", "to": "R11", "dx_mm": 20.32, "dy_mm": 0.0},
             ),
         },
     },
     {
-        "id": "vsnk-output", "title": "VSNK OUTPUT",
+        "id": "vsnk-output",
+        "title": "VSNK OUTPUT",
         "description": "Protected sink output with local bypass and TVS protection.\nR2 is the DISCH-to-VSNK discharge path.",
         "members": ("R2", "C10", "D11"),
-        "documentation_members": ("R2",), "lane": "main", "order": 5,
+        "documentation_members": ("R2",),
+        "lane": "main",
+        "order": 5,
         "layout": {
-            "anchor": "C10", "anchor_y_mm": 99.06,
+            "anchor": "C10",
+            "anchor_y_mm": 99.06,
             "constraints": (
                 {"kind": "offset", "component": "D11", "to": "C10", "dx_mm": 0.0, "dy_mm": 25.40},
                 {"kind": "offset", "component": "R2", "to": "C10", "dx_mm": 0.0, "dy_mm": 46.99},
@@ -176,6 +217,7 @@ COMPONENT_PROPERTY_LIMITS_MM = {
     "capacitor_reference": 4.00,
     "capacitor_value": 5.50,
 }
+
 
 class _PinData(TypedDict):
     """Electrical and geometric data extracted from one library pin."""
@@ -388,8 +430,14 @@ def _wire(start: tuple[float, float], end: tuple[float, float], key: str) -> SEx
 
 
 def _prop(
-    name: str, value: str, number: int, x: float, y: float,
-    hidden: bool = False, font_size: float = 1.27, justify: str | None = None,
+    name: str,
+    value: str,
+    number: int,
+    x: float,
+    y: float,
+    hidden: bool = False,
+    font_size: float = 1.27,
+    justify: str | None = None,
     angle: int = 0,
 ) -> list:
     effects = ["effects", ["font", ["size", f"{font_size:.3f}", f"{font_size:.3f}"]]]
@@ -413,8 +461,15 @@ def _prop(
 
 
 def _label(
-    name: str, x: float, y: float, *, hierarchical: bool = False,
-    shape: str = "passive", justify: str | None = "left", angle: int = 0, key: str,
+    name: str,
+    x: float,
+    y: float,
+    *,
+    hierarchical: bool = False,
+    shape: str = "passive",
+    justify: str | None = "left",
+    angle: int = 0,
+    key: str,
 ) -> list:
     effects = ["effects", ["font", ["size", "1.0", "1.0"]]]
     if justify is not None:
@@ -439,7 +494,11 @@ def _label(
 
 
 def _graphic_rectangle(
-    x1: float, y1: float, x2: float, y2: float, key: str,
+    x1: float,
+    y1: float,
+    x2: float,
+    y2: float,
+    key: str,
 ) -> list:
     """Draw a light, unfilled functional-zone frame."""
     return [
@@ -458,7 +517,8 @@ def _graphic_tab(x: float, y: float, width: float, key: str) -> list:
     right = x + width
     return [
         "polyline",
-        ["pts",
+        [
+            "pts",
             ["xy", f"{x:.3f}", f"{y:.3f}"],
             ["xy", f"{x:.3f}", f"{top:.3f}"],
             ["xy", f"{right:.3f}", f"{top:.3f}"],
@@ -484,7 +544,9 @@ def _glyph_advance(character: str) -> float:
 
 
 def _measure_text_box(
-    value: str, size: float, padding: float = 1.27,
+    value: str,
+    size: float,
+    padding: float = 1.27,
 ) -> tuple[float, float]:
     """Measure text conservatively and add equal physical padding on every side."""
     if size <= 0 or padding < 0:
@@ -500,8 +562,14 @@ def _measure_text_box(
 
 
 def _graphic_text(
-    value: str, x: float, y: float, size: float, key: str,
-    *, padding: float = 1.27, border: bool = True,
+    value: str,
+    x: float,
+    y: float,
+    size: float,
+    key: str,
+    *,
+    padding: float = 1.27,
+    border: bool = True,
     box_width: float | None = None,
 ) -> list:
     """Create a native KiCad text_box with measured size and uniform margins.
@@ -519,13 +587,13 @@ def _graphic_text(
             f"{measured_width:.3f} mm for {value!r}."
         )
     result = [
-        "text_box", QuotedSExpr(value),
+        "text_box",
+        QuotedSExpr(value),
         ["at", f"{x:.3f}", f"{y:.3f}", "0"],
         ["size", f"{width:.3f}", f"{height:.3f}"],
         ["margins", *(f"{padding:.3f}" for _ in range(4))],
         ["fill", ["type", "none"]],
-        ["effects", ["font", ["size", f"{size:.3f}", f"{size:.3f}"]],
-            ["justify", "left", "top"]],
+        ["effects", ["font", ["size", f"{size:.3f}", f"{size:.3f}"]], ["justify", "left", "top"]],
         ["uuid", QuotedSExpr(_uid(f"graphic:text:{key}"))],
     ]
     stroke_width = "0.1524" if border else "-1"
@@ -534,15 +602,26 @@ def _graphic_text(
 
 
 def _note_box(
-    x: float, y: float, lines: tuple[str, ...], key: str,
+    x: float,
+    y: float,
+    lines: tuple[str, ...],
+    key: str,
 ) -> list[list]:
     """Create one native note text_box sized from the supplied text."""
     if not lines or any(not line.strip() for line in lines):
         raise ValueError(f"Note {key!r} must contain non-empty lines.")
-    return [_graphic_text(
-        "\n".join(lines), x, y, 0.90, key,
-        padding=1.27, border=True, box_width=40.64,
-    )]
+    return [
+        _graphic_text(
+            "\n".join(lines),
+            x,
+            y,
+            0.90,
+            key,
+            padding=1.27,
+            border=True,
+            box_width=40.64,
+        )
+    ]
 
 
 def _graphic_rule(x1: float, y1: float, x2: float, y2: float, key: str) -> list:
@@ -559,28 +638,48 @@ def _graphic_rule(x1: float, y1: float, x2: float, y2: float, key: str) -> list:
 
 
 def _sheet_header(
-    title: str, subtitle: str, *, x: float = 25.40,
-    title_y: float = 48.26, rule_right: float = 411.48, key: str = "sheet",
+    title: str,
+    subtitle: str,
+    *,
+    x: float = 25.40,
+    title_y: float = 48.26,
+    rule_right: float = 411.48,
+    key: str = "sheet",
 ) -> list[list]:
     """Place a compact title/subtitle in the reserved top margin."""
     if title_y + 17.78 >= 81.28:
         raise ValueError("Sheet header must remain above the functional-block tabs.")
     return [
         _graphic_text(
-            title, x, title_y, 3.20, f"header:{key}:title",
-            box_width=rule_right - x, border=False,
+            title,
+            x,
+            title_y,
+            3.20,
+            f"header:{key}:title",
+            box_width=rule_right - x,
+            border=False,
         ),
         _graphic_text(
-            subtitle, x, title_y + 7.62, 1.05, f"header:{key}:subtitle",
-            box_width=rule_right - x, border=False,
+            subtitle,
+            x,
+            title_y + 7.62,
+            1.05,
+            f"header:{key}:subtitle",
+            box_width=rule_right - x,
+            border=False,
         ),
         _graphic_rule(x, title_y + 13.97, rule_right, title_y + 13.97, f"header:{key}:rule"),
     ]
 
 
 def _functional_block(
-    x: float, y: float, right: float, bottom: float,
-    title: str, tab_width: float, key: str,
+    x: float,
+    y: float,
+    right: float,
+    bottom: float,
+    title: str,
+    tab_width: float,
+    key: str,
 ) -> list[list]:
     """Generate one grid-aligned, thin-frame module with an attached title tab."""
     if not (x < right and y < bottom):
@@ -598,16 +697,26 @@ def _functional_block(
         _graphic_rectangle(x, y, right, bottom, f"zone:{key}"),
         _graphic_tab(x, y, tab_width, key),
         _graphic_text(
-            title, x + 1.27, y - 4.83, 1.27,
-            f"zone-title:{key}", padding=1.27, border=False,
+            title,
+            x + 1.27,
+            y - 4.83,
+            1.27,
+            f"zone-title:{key}",
+            padding=1.27,
+            border=False,
             box_width=tab_width - 2.54,
         ),
     ]
 
 
 def _functional_zone(
-    x: float, y: float, right: float, bottom: float,
-    title: str, tab_width: float, key: str,
+    x: float,
+    y: float,
+    right: float,
+    bottom: float,
+    title: str,
+    tab_width: float,
+    key: str,
 ) -> list[list]:
     """Backward-compatible alias for the reusable functional-block helper."""
     return _functional_block(x, y, right, bottom, title, tab_width, key)
@@ -653,7 +762,9 @@ def _group_description(group: dict) -> str:
 def _group_text_width(group: dict) -> float:
     title_width, _ = _measure_text_box(str(group["title"]), 1.27, 1.27)
     description_width, _ = _measure_text_box(
-        _group_description(group), GROUP_DESCRIPTION_FONT_MM, 1.27,
+        _group_description(group),
+        GROUP_DESCRIPTION_FONT_MM,
+        1.27,
     )
     # Unbordered single-line titles reserve an additional 10.16 mm beyond
     # the measured text box to cover KiCad's renderer-specific glyph widths.
@@ -661,7 +772,8 @@ def _group_text_width(group: dict) -> float:
 
 
 def _resolve_group_component_positions(
-    specs: list[tuple], loaded: dict[tuple[str, str], list],
+    specs: list[tuple],
+    loaded: dict[tuple[str, str], list],
 ) -> dict[str, list[float]]:
     """Resolve component origins from group anchors and relative constraints.
 
@@ -718,10 +830,7 @@ def _resolve_group_component_positions(
                     definition = loaded[(reference_spec[1], reference_spec[2])]
                     pin_number = str(rule["pin"])
                     pin = next(
-                        (
-                            item for item in _pin_data(definition)
-                            if item["number"] == pin_number
-                        ),
+                        (item for item in _pin_data(definition) if item["number"] == pin_number),
                         None,
                     )
                     if pin is None:
@@ -731,7 +840,9 @@ def _resolve_group_component_positions(
                         )
                     reference_rotation = _symbol_rotation(reference)
                     pin_point = _world_pin(
-                        *positions[reference], reference_rotation, pin,
+                        *positions[reference],
+                        reference_rotation,
+                        pin,
                     )
                     point = (
                         pin_point[0] + float(rule["dx_mm"]),
@@ -763,7 +874,8 @@ def _resolve_group_component_positions(
 
 
 def _pack_component_groups(
-    specs: list[tuple], loaded: dict[tuple[str, str], list],
+    specs: list[tuple],
+    loaded: dict[tuple[str, str], list],
 ) -> dict[str, tuple[float, float]]:
     """Resolve local constraints, then pack derived group bounds left-to-right."""
     by_ref = {spec[0]: spec for spec in specs}
@@ -776,14 +888,15 @@ def _pack_component_groups(
             rotation = _symbol_rotation(reference)
             definition = loaded[(spec[1], spec[2])]
             points.extend(
-                _world_pin(*positions[reference], rotation, pin)
-                for pin in _pin_data(definition)
+                _world_pin(*positions[reference], rotation, pin) for pin in _pin_data(definition)
             )
         if not points:
             raise ValueError(f"Group {group['id']} contains no symbol pins.")
         return (
-            min(p[0] for p in points), min(p[1] for p in points),
-            max(p[0] for p in points), max(p[1] for p in points),
+            min(p[0] for p in points),
+            min(p[1] for p in points),
+            max(p[0] for p in points),
+            max(p[1] for p in points),
         )
 
     placed: dict[str, tuple[float, float, float, float]] = {}
@@ -820,8 +933,10 @@ def _pack_component_groups(
             positions[reference][0] += shift_x
             positions[reference][1] += shift_y
         placed[group["id"]] = (
-            left + shift_x - GROUP_X_PADDING_MM, top + shift_y,
-            left + shift_x - GROUP_X_PADDING_MM + width, bottom + shift_y,
+            left + shift_x - GROUP_X_PADDING_MM,
+            top + shift_y,
+            left + shift_x - GROUP_X_PADDING_MM + width,
+            bottom + shift_y,
         )
 
     assigned = [reference for group in SCHEMATIC_GROUPS for reference in group["members"]]
@@ -836,20 +951,31 @@ def _functional_group(group: dict, bounds: tuple[float, float, float, float]) ->
     title = str(group["title"])
     width = right - left
     tab_width = min(
-        width, max(12.70, _measure_text_box(title, 1.27, 1.27)[0] + 12.70),
+        width,
+        max(12.70, _measure_text_box(title, 1.27, 1.27)[0] + 12.70),
     )
     description = _group_description(group)
     return [
         _graphic_rectangle(left, top, right, bottom, f"zone:{group['id']}"),
         _graphic_tab(left, top, tab_width, group["id"]),
         _graphic_text(
-            title, left + 1.27, top - 4.83, 1.27,
-            f"zone-title:{group['id']}", padding=1.27, border=False,
+            title,
+            left + 1.27,
+            top - 4.83,
+            1.27,
+            f"zone-title:{group['id']}",
+            padding=1.27,
+            border=False,
             box_width=tab_width - 2.54,
         ),
         _graphic_text(
-            description, left + 2.54, top + 2.54, GROUP_DESCRIPTION_FONT_MM,
-            f"group-description:{group['id']}", padding=1.27, border=True,
+            description,
+            left + 2.54,
+            top + 2.54,
+            GROUP_DESCRIPTION_FONT_MM,
+            f"group-description:{group['id']}",
+            padding=1.27,
+            border=True,
             box_width=width - 5.08,
         ),
     ]
@@ -861,100 +987,314 @@ def generate_reference_schematic(destination: Path) -> Path:
     specs = [
         # ref, library, symbol, value, unused position slot, pin-number -> (net, kind, shape).
         # Component origins are resolved exclusively from SCHEMATIC_GROUPS layout constraints.
-        ("U1", "Interface_USB", "STUSB4500QTR", "STUSB4500QTR", None, {
-            "1": ("CC1", "local", ""), "2": ("CC1", "local", ""),
-            "4": ("CC2", "local", ""),
-            "5": ("CC2", "local", ""), "6": ("RESET", "hier", "input"),
-            "7": ("SCL", "hier", "input"), "8": ("SDA", "hier", "bidirectional"),
-            "9": ("DISCH", "local", ""), "10": ("GND", "hier", "passive"),
-            "11": ("NC", "nc", ""), "12": ("ADDR0", "local", ""),
-            "13": ("ADDR1", "local", ""), "14": ("NC", "nc", ""),
-            "15": ("NC", "nc", ""), "16": ("VBUS_EN_SNK", "local", ""),
-            "17": ("NC", "nc", ""), "18": ("VBUS_VS_DISCH", "local", ""),
-            "19": ("ALERT#", "hier", "output"), "20": ("NC", "nc", ""),
-            "21": ("VREG_1V2", "local", ""), "22": ("VSYS", "hier", "input"),
-            "23": ("VREG_2V7", "local", ""), "24": ("VBUS", "local", ""),
-            "25": ("GND", "local", ""),
-        }),
-        ("J1", "Connector", "USB_C_Receptacle", "USB 3.1 Type-C receptacle", None, {
-            "A1": ("GND", "local", ""), "A4": ("VBUS", "local", ""),
-            "A5": ("CC1", "local", ""), "A9": ("VBUS", "local", ""),
-            "A12": ("GND", "local", ""), "B1": ("GND", "local", ""),
-            "B4": ("VBUS", "local", ""), "B5": ("CC2", "local", ""),
-            "B9": ("VBUS", "local", ""), "B12": ("GND", "local", ""),
-        }),
-        ("C50", "Device", "C", "4.7uF", None, {
-            "1": ("VBUS", "local", ""), "2": ("GND", "local", ""),
-        }),
-        ("D50", "Device", "D_TVS", "ESDA25P35-1U1M", None, {
-            "1": ("VBUS", "local", ""), "2": ("GND", "local", ""),
-        }),
-        ("D1", "STUSB4500_Custom", "ESDA25W", "ESDA25W", None, {
-            "1": ("CC1", "local", ""), "2": ("CC2", "local", ""),
-            "3": ("GND", "local", ""),
-        }),
-        ("D4", "Device", "D", "D4 (part not specified)", None, {
-            "1": ("VBUS_FILTERED", "local", ""), "2": ("VBUS", "local", ""),
-        }),
-        ("C4", "Device", "C", "1uF", None, {
-            "1": ("VBUS_FILTERED", "local", ""), "2": ("GND", "local", ""),
-        }),
-        ("R1", "Device", "R", "470", None, {
-            "1": ("VBUS_FILTERED", "local", ""), "2": ("VBUS_VS_DISCH", "local", ""),
-        }),
-        ("R4", "Device", "R", "1k", None, {
-            "1": ("VREG_2V7", "local", ""), "2": ("VBUS_VS_DISCH", "local", ""),
-        }),
-        ("C1", "Device", "C", "1uF", None, {
-            "1": ("VREG_1V2", "local", ""), "2": ("GND", "local", ""),
-        }),
-        ("C2", "Device", "C", "1uF", None, {
-            "1": ("VREG_2V7", "local", ""), "2": ("GND", "local", ""),
-        }),
-        ("C3", "Device", "C", "1uF", None, {
-            "1": ("VREG_2V7", "local", ""), "2": ("GND", "local", ""),
-        }),
-        ("R51", "Device", "R", "100k", None, {
-            "1": ("VREG_2V7", "local", ""), "2": ("ADDR1", "local", ""),
-        }),
-        ("R52", "Device", "R", "100k", None, {
-            "1": ("VREG_2V7", "local", ""), "2": ("ADDR0", "local", ""),
-        }),
-        ("R53", "Device", "R", "100k", None, {
-            "1": ("ADDR1", "local", ""), "2": ("GND", "local", ""),
-        }),
-        ("R54", "Device", "R", "100k", None, {
-            "1": ("ADDR0", "local", ""), "2": ("GND", "local", ""),
-        }),
-        ("R55", "Device", "R", "10k", None, {
-            "1": ("RESET", "local", ""), "2": ("GND", "local", ""),
-        }),
-        ("T4", "Transistor_FET", "Q_PMOS_GSD", "STL6P3LLH6", None, {
-            "1": ("VBUS_EN_SNK", "local", ""), "2": ("VBUS", "local", ""),
-            "3": ("FET_MID", "local", ""),
-        }),
-        ("T1", "Transistor_FET", "Q_PMOS_GSD", "STL6P3LLH6", None, {
-            "1": ("VSNK_GATE", "local", ""), "2": ("FET_MID", "local", ""),
-            "3": ("VSNK", "hier", "output"),
-        }),
-        ("R10", "Device", "R", "100k", None, {
-            "1": ("FET_MID", "local", ""), "2": ("VSNK_GATE", "local", ""),
-        }),
-        ("R11", "Device", "R", "22k", None, {
-            "1": ("VSNK_GATE", "local", ""), "2": ("GND", "local", ""),
-        }),
-        ("R13", "Device", "R", "100", None, {
-            "1": ("VSNK_GATE", "local", ""), "2": ("VBUS_EN_SNK", "local", ""),
-        }),
-        ("R2", "Device", "R", "1k", None, {
-            "1": ("DISCH", "local", ""), "2": ("VSNK", "hier", "output"),
-        }),
-        ("C10", "Device", "C", "100nF", None, {
-            "1": ("VSNK", "hier", "output"), "2": ("GND", "local", ""),
-        }),
-        ("D11", "Device", "D_TVS", "ESDA25P35-1U1M", None, {
-            "1": ("VSNK", "hier", "output"), "2": ("GND", "local", ""),
-        }),
+        (
+            "U1",
+            "Interface_USB",
+            "STUSB4500QTR",
+            "STUSB4500QTR",
+            None,
+            {
+                "1": ("CC1", "local", ""),
+                "2": ("CC1", "local", ""),
+                "4": ("CC2", "local", ""),
+                "5": ("CC2", "local", ""),
+                "6": ("RESET", "hier", "input"),
+                "7": ("SCL", "hier", "input"),
+                "8": ("SDA", "hier", "bidirectional"),
+                "9": ("DISCH", "local", ""),
+                "10": ("GND", "hier", "passive"),
+                "11": ("NC", "nc", ""),
+                "12": ("ADDR0", "local", ""),
+                "13": ("ADDR1", "local", ""),
+                "14": ("NC", "nc", ""),
+                "15": ("NC", "nc", ""),
+                "16": ("VBUS_EN_SNK", "local", ""),
+                "17": ("NC", "nc", ""),
+                "18": ("VBUS_VS_DISCH", "local", ""),
+                "19": ("ALERT#", "hier", "output"),
+                "20": ("NC", "nc", ""),
+                "21": ("VREG_1V2", "local", ""),
+                "22": ("VSYS", "hier", "input"),
+                "23": ("VREG_2V7", "local", ""),
+                "24": ("VBUS", "local", ""),
+                "25": ("GND", "local", ""),
+            },
+        ),
+        (
+            "J1",
+            "Connector",
+            "USB_C_Receptacle",
+            "USB 3.1 Type-C receptacle",
+            None,
+            {
+                "A1": ("GND", "local", ""),
+                "A4": ("VBUS", "local", ""),
+                "A5": ("CC1", "local", ""),
+                "A9": ("VBUS", "local", ""),
+                "A12": ("GND", "local", ""),
+                "B1": ("GND", "local", ""),
+                "B4": ("VBUS", "local", ""),
+                "B5": ("CC2", "local", ""),
+                "B9": ("VBUS", "local", ""),
+                "B12": ("GND", "local", ""),
+            },
+        ),
+        (
+            "C50",
+            "Device",
+            "C",
+            "4.7uF",
+            None,
+            {
+                "1": ("VBUS", "local", ""),
+                "2": ("GND", "local", ""),
+            },
+        ),
+        (
+            "D50",
+            "Device",
+            "D_TVS",
+            "ESDA25P35-1U1M",
+            None,
+            {
+                "1": ("VBUS", "local", ""),
+                "2": ("GND", "local", ""),
+            },
+        ),
+        (
+            "D1",
+            "STUSB4500_Custom",
+            "ESDA25W",
+            "ESDA25W",
+            None,
+            {
+                "1": ("CC1", "local", ""),
+                "2": ("CC2", "local", ""),
+                "3": ("GND", "local", ""),
+            },
+        ),
+        (
+            "D4",
+            "Device",
+            "D",
+            "D4 (part not specified)",
+            None,
+            {
+                "1": ("VBUS_FILTERED", "local", ""),
+                "2": ("VBUS", "local", ""),
+            },
+        ),
+        (
+            "C4",
+            "Device",
+            "C",
+            "1uF",
+            None,
+            {
+                "1": ("VBUS_FILTERED", "local", ""),
+                "2": ("GND", "local", ""),
+            },
+        ),
+        (
+            "R1",
+            "Device",
+            "R",
+            "470",
+            None,
+            {
+                "1": ("VBUS_FILTERED", "local", ""),
+                "2": ("VBUS_VS_DISCH", "local", ""),
+            },
+        ),
+        (
+            "R4",
+            "Device",
+            "R",
+            "1k",
+            None,
+            {
+                "1": ("VREG_2V7", "local", ""),
+                "2": ("VBUS_VS_DISCH", "local", ""),
+            },
+        ),
+        (
+            "C1",
+            "Device",
+            "C",
+            "1uF",
+            None,
+            {
+                "1": ("VREG_1V2", "local", ""),
+                "2": ("GND", "local", ""),
+            },
+        ),
+        (
+            "C2",
+            "Device",
+            "C",
+            "1uF",
+            None,
+            {
+                "1": ("VREG_2V7", "local", ""),
+                "2": ("GND", "local", ""),
+            },
+        ),
+        (
+            "C3",
+            "Device",
+            "C",
+            "1uF",
+            None,
+            {
+                "1": ("VREG_2V7", "local", ""),
+                "2": ("GND", "local", ""),
+            },
+        ),
+        (
+            "R51",
+            "Device",
+            "R",
+            "100k",
+            None,
+            {
+                "1": ("VREG_2V7", "local", ""),
+                "2": ("ADDR1", "local", ""),
+            },
+        ),
+        (
+            "R52",
+            "Device",
+            "R",
+            "100k",
+            None,
+            {
+                "1": ("VREG_2V7", "local", ""),
+                "2": ("ADDR0", "local", ""),
+            },
+        ),
+        (
+            "R53",
+            "Device",
+            "R",
+            "100k",
+            None,
+            {
+                "1": ("ADDR1", "local", ""),
+                "2": ("GND", "local", ""),
+            },
+        ),
+        (
+            "R54",
+            "Device",
+            "R",
+            "100k",
+            None,
+            {
+                "1": ("ADDR0", "local", ""),
+                "2": ("GND", "local", ""),
+            },
+        ),
+        (
+            "R55",
+            "Device",
+            "R",
+            "10k",
+            None,
+            {
+                "1": ("RESET", "local", ""),
+                "2": ("GND", "local", ""),
+            },
+        ),
+        (
+            "T4",
+            "Transistor_FET",
+            "Q_PMOS_GSD",
+            "STL6P3LLH6",
+            None,
+            {
+                "1": ("VBUS_EN_SNK", "local", ""),
+                "2": ("VBUS", "local", ""),
+                "3": ("FET_MID", "local", ""),
+            },
+        ),
+        (
+            "T1",
+            "Transistor_FET",
+            "Q_PMOS_GSD",
+            "STL6P3LLH6",
+            None,
+            {
+                "1": ("VSNK_GATE", "local", ""),
+                "2": ("FET_MID", "local", ""),
+                "3": ("VSNK", "hier", "output"),
+            },
+        ),
+        (
+            "R10",
+            "Device",
+            "R",
+            "100k",
+            None,
+            {
+                "1": ("FET_MID", "local", ""),
+                "2": ("VSNK_GATE", "local", ""),
+            },
+        ),
+        (
+            "R11",
+            "Device",
+            "R",
+            "22k",
+            None,
+            {
+                "1": ("VSNK_GATE", "local", ""),
+                "2": ("GND", "local", ""),
+            },
+        ),
+        (
+            "R13",
+            "Device",
+            "R",
+            "100",
+            None,
+            {
+                "1": ("VSNK_GATE", "local", ""),
+                "2": ("VBUS_EN_SNK", "local", ""),
+            },
+        ),
+        (
+            "R2",
+            "Device",
+            "R",
+            "1k",
+            None,
+            {
+                "1": ("DISCH", "local", ""),
+                "2": ("VSNK", "hier", "output"),
+            },
+        ),
+        (
+            "C10",
+            "Device",
+            "C",
+            "100nF",
+            None,
+            {
+                "1": ("VSNK", "hier", "output"),
+                "2": ("GND", "local", ""),
+            },
+        ),
+        (
+            "D11",
+            "Device",
+            "D_TVS",
+            "ESDA25P35-1U1M",
+            None,
+            {
+                "1": ("VSNK", "hier", "output"),
+                "2": ("GND", "local", ""),
+            },
+        ),
     ]
 
     # All ground endpoints intentionally use the same hierarchical parent
@@ -1019,9 +1359,7 @@ def generate_reference_schematic(destination: Path) -> Path:
             # Keep both fields above the MOSFET bodies. The labels sit at
             # opposite outer sides of the pair, away from gate/source wires.
             dx = -5.08 if reference == "T4" else 8.89
-            reference_x, reference_y = (
-                sx + dx, sy - (5.08 if reference == "T1" else 6.35)
-            )
+            reference_x, reference_y = (sx + dx, sy - (5.08 if reference == "T1" else 6.35))
             value_x, value_y = (
                 sx + (5.08 if reference == "T1" else dx),
                 sy - (7.62 if reference == "T1" else 8.89),
@@ -1038,8 +1376,13 @@ def generate_reference_schematic(destination: Path) -> Path:
                 # Vertical resistors have a terminal directly above the body.
                 # Put the reference beside the body instead of on that pin.
                 ref_offsets = {
-                    "R1": -2.54, "R2": 2.54, "R4": 2.54,
-                    "R10": -2.54, "R11": 2.54, "R13": -2.54, "R55": -2.54,
+                    "R1": -2.54,
+                    "R2": 2.54,
+                    "R4": 2.54,
+                    "R10": -2.54,
+                    "R11": 2.54,
+                    "R13": -2.54,
+                    "R55": -2.54,
                 }
                 dx = ref_offsets[reference]
                 reference_x, reference_y = sx + dx, sy
@@ -1053,9 +1396,7 @@ def generate_reference_schematic(destination: Path) -> Path:
         elif reference.startswith("D"):
             # Keep diode identifiers close to the symbol, not floating above it.
             reference_x, reference_y = sx, sy - 6.35
-            value_x, value_y = (
-                sx, sy + 7.62 if reference == "D50" else sy - 3.81
-            )
+            value_x, value_y = (sx, sy + 7.62 if reference == "D50" else sy - 3.81)
         elif reference.startswith("C"):
             # Put references on opposite sides of the decouplers where
             # adjacent bodies would otherwise crowd the field glyphs.
@@ -1078,18 +1419,30 @@ def generate_reference_schematic(destination: Path) -> Path:
         # address resistors are counter-rotated so that their text stays legible.
         field_angle = 90 if reference.startswith("R") else 0
         instance = [
-            "symbol", ["lib_id", QuotedSExpr(lib_id)], ["at", f"{sx:.3f}", f"{sy:.3f}", str(rotation)],
-            ["unit", "1"], ["in_bom", "yes"], ["on_board", "yes"],
+            "symbol",
+            ["lib_id", QuotedSExpr(lib_id)],
+            ["at", f"{sx:.3f}", f"{sy:.3f}", str(rotation)],
+            ["unit", "1"],
+            ["in_bom", "yes"],
+            ["on_board", "yes"],
             ["dnp", "yes" if reference in {"R51", "R52"} else "no"],
             ["uuid", QuotedSExpr(symbol_uuid)],
             _prop(
-                "Reference", reference, 0, reference_x, reference_y,
+                "Reference",
+                reference,
+                0,
+                reference_x,
+                reference_y,
                 font_size=0.95 if reference.startswith("R") else 1.10,
                 justify=reference_justify,
                 angle=field_angle,
             ),
             _prop(
-                "Value", value, 1, value_x, value_y,
+                "Value",
+                value,
+                1,
+                value_x,
+                value_y,
                 font_size=0.72 if reference.startswith("R") else 1.10,
                 justify=value_justify,
                 angle=field_angle,
@@ -1158,7 +1511,10 @@ def generate_reference_schematic(destination: Path) -> Path:
                             # Rotate hierarchical GND ports to follow their
                             # physical wire twig, including downward stubs.
                             label_angle = {
-                                0: 180, 90: 90, 180: 0, 270: 270,
+                                0: 180,
+                                90: 90,
+                                180: 0,
+                                270: 270,
                             }[angle]
                             if angle in {90, 270}:
                                 justify = "right"
@@ -1363,17 +1719,24 @@ def generate_reference_schematic(destination: Path) -> Path:
     remove_hierarchical_label("C2", "2", "GND")
     remove_hierarchical_label("C3", "2", "GND")
     shared_ground_junction = (
-        round((c2_ground[0] + c3_ground[0]) / 2, 3), c2_ground[1],
+        round((c2_ground[0] + c3_ground[0]) / 2, 3),
+        c2_ground[1],
     )
     shared_ground_port = (
-        shared_ground_junction[0], round(shared_ground_junction[1] + 2.54, 3),
+        shared_ground_junction[0],
+        round(shared_ground_junction[1] + 2.54, 3),
     )
     add_route("GND", [c2_ground, c3_ground], "c2-c3-shared-ground-rail")
     add_junction(shared_ground_junction, "GND:C2-C3-shared-branch")
     # Generate the single hierarchical port as a short label twig from the branch.
     label_points[shared_ground_junction] = (
-        "GND", "hier", "passive",
-        shared_ground_port[0], shared_ground_port[1], "right", 90,
+        "GND",
+        "hier",
+        "passive",
+        shared_ground_port[0],
+        shared_ground_port[1],
+        "right",
+        90,
     )
 
     # R1.2 and R4.2 share one physical wire network. Keep one local label on
@@ -1397,7 +1760,8 @@ def generate_reference_schematic(destination: Path) -> Path:
     add_route("FET_MID", [t4_fet_mid, t1_fet_mid], "back-to-back-pmos-common-source")
     add_junction(fet_mid_branch, "FET_MID:common-source-midpoint")
     add_route(
-        "FET_MID", [fet_mid_branch, r10_fet_mid],
+        "FET_MID",
+        [fet_mid_branch, r10_fet_mid],
         "common-source-midpoint-to-r10",
     )
 
@@ -1412,9 +1776,15 @@ def generate_reference_schematic(destination: Path) -> Path:
     # The input bulk capacitor and TVS share a short local VBUS entry rail.
     c50_vbus = pin_world_points[("C50", "1")]
     d50_vbus = pin_world_points[("D50", "1")]
-    add_route("VBUS", [
-        c50_vbus, (d50_vbus[0], c50_vbus[1]), d50_vbus,
-    ], "input-cap-tvs-feed")
+    add_route(
+        "VBUS",
+        [
+            c50_vbus,
+            (d50_vbus[0], c50_vbus[1]),
+            d50_vbus,
+        ],
+        "input-cap-tvs-feed",
+    )
     remove_local_label("D50", "1", "VBUS")
 
     # All regulator bypass capacitors connect directly to IC supply pins.
@@ -1425,11 +1795,11 @@ def generate_reference_schematic(destination: Path) -> Path:
     remove_local_label("C1", "1", "VREG_1V2")
     if abs(u1_vreg_1v2[0] - c1_vreg_1v2[0]) > 0.001:
         raise ValueError(
-            f"C1.1 must align with U1.21 for a direct bypass route: "
-            f"{c1_vreg_1v2}, {u1_vreg_1v2}"
+            f"C1.1 must align with U1.21 for a direct bypass route: {c1_vreg_1v2}, {u1_vreg_1v2}"
         )
     add_route(
-        "VREG_1V2", [u1_vreg_1v2, c1_vreg_1v2],
+        "VREG_1V2",
+        [u1_vreg_1v2, c1_vreg_1v2],
         "u1-vreg-1v2-direct-to-c1",
     )
 
@@ -1439,13 +1809,20 @@ def generate_reference_schematic(destination: Path) -> Path:
     vreg_2v7_branch = (u1_vreg_2v7[0], 90.17)
     c3_vreg_2v7_branch = (c3_vreg_2v7[0], 90.17)
     # Extend the trunk to C3; C2 branches into the same physical supply rail.
-    add_route("VREG_2V7", [
-        u1_vreg_2v7, vreg_2v7_branch,
-        c3_vreg_2v7_branch, c3_vreg_2v7,
-    ], "u1-vreg-2v7-to-c3")
+    add_route(
+        "VREG_2V7",
+        [
+            u1_vreg_2v7,
+            vreg_2v7_branch,
+            c3_vreg_2v7_branch,
+            c3_vreg_2v7,
+        ],
+        "u1-vreg-2v7-to-c3",
+    )
     c2_vreg_2v7_branch = (c2_vreg_2v7[0], 90.17)
     add_route(
-        "VREG_2V7", [c2_vreg_2v7_branch, c2_vreg_2v7],
+        "VREG_2V7",
+        [c2_vreg_2v7_branch, c2_vreg_2v7],
         "vreg-2v7-rail-to-c2",
     )
     add_junction(c2_vreg_2v7_branch, "VREG_2V7:C2-bypass-branch")
@@ -1457,19 +1834,28 @@ def generate_reference_schematic(destination: Path) -> Path:
     remove_local_label("U1", "23", "VREG_2V7")
     vreg_2v7_label_tap = (u1_vreg_2v7[0], 95.250)
     label_points[vreg_2v7_label_tap] = (
-        "VREG_2V7", "local", None,
-        vreg_2v7_label_tap[0], vreg_2v7_label_tap[1], "left", 0,
+        "VREG_2V7",
+        "local",
+        None,
+        vreg_2v7_label_tap[0],
+        vreg_2v7_label_tap[1],
+        "left",
+        0,
     )
 
     # R55.1 is physically wired to U1.6; RESET remains a hierarchical parent port.
     reset_pin = pin_world_points[("U1", "6")]
     reset_pull_down = pin_world_points[("R55", "1")]
     remove_local_label("R55", "1", "RESET")
-    add_route("RESET", [
-        reset_pin,
-        (reset_pull_down[0], reset_pin[1]),
-        reset_pull_down,
-    ], "u1-reset-to-r55")
+    add_route(
+        "RESET",
+        [
+            reset_pin,
+            (reset_pull_down[0], reset_pin[1]),
+            reset_pull_down,
+        ],
+        "u1-reset-to-r55",
+    )
 
     # D4 is reversed so VBUS enters from the connector side and filtered VBUS
     # exits to the right. The local rail ties its output to C4.1 and R1.1.
@@ -1491,7 +1877,9 @@ def generate_reference_schematic(destination: Path) -> Path:
         first = pin_world_points[first_pin]
         second = pin_world_points[second_pin]
         if abs(first[1] - second[1]) > 0.001:
-            raise ValueError(f"{net_name} strap resistors are not on the same row: {first}, {second}")
+            raise ValueError(
+                f"{net_name} strap resistors are not on the same row: {first}, {second}"
+            )
         anchor = first
         label = label_points.get(anchor)
         if label is None or label[0] != net_name:
@@ -1500,7 +1888,13 @@ def generate_reference_schematic(destination: Path) -> Path:
         midpoint = (round((first[0] + second[0]) / 2, 3), first[1])
         add_junction(midpoint, f"{net_name}:label-tap")
         label_points[midpoint] = (
-            net_name, "local", None, midpoint[0], midpoint[1] - 5.08, None, 0,
+            net_name,
+            "local",
+            None,
+            midpoint[0],
+            midpoint[1] - 5.08,
+            None,
+            0,
         )
 
     # VSNK exits at the right side of the switch block as an explicit parent
@@ -1526,8 +1920,7 @@ def generate_reference_schematic(destination: Path) -> Path:
     single_use = {net: count for net, count in local_label_uses.items() if count < 2}
     if single_use:
         raise ValueError(
-            "Local labels must connect at least two disconnected wire networks: "
-            f"{single_use}"
+            f"Local labels must connect at least two disconnected wire networks: {single_use}"
         )
 
     def label_position_is_on_wire(x: float, y: float) -> bool:
@@ -1542,15 +1935,22 @@ def generate_reference_schematic(destination: Path) -> Path:
             ]
             for start, end in zip(points, points[1:]):
                 if abs(start[1] - end[1]) < 0.001:
-                    if abs(y - start[1]) < 0.001 and min(start[0], end[0]) - 0.001 <= x <= max(start[0], end[0]) + 0.001:
+                    if (
+                        abs(y - start[1]) < 0.001
+                        and min(start[0], end[0]) - 0.001 <= x <= max(start[0], end[0]) + 0.001
+                    ):
                         return True
                 elif abs(start[0] - end[0]) < 0.001:
-                    if abs(x - start[0]) < 0.001 and min(start[1], end[1]) - 0.001 <= y <= max(start[1], end[1]) + 0.001:
+                    if (
+                        abs(x - start[0]) < 0.001
+                        and min(start[1], end[1]) - 0.001 <= y <= max(start[1], end[1]) + 0.001
+                    ):
                         return True
         return False
 
     def segment_is_already_wired(
-        start: tuple[float, float], end: tuple[float, float],
+        start: tuple[float, float],
+        end: tuple[float, float],
     ) -> bool:
         """Avoid duplicating a route segment when a label branches from it."""
         target = frozenset((start, end))
@@ -1574,8 +1974,14 @@ def generate_reference_schematic(destination: Path) -> Path:
         px, py = point
         labels.append(
             _label(
-                net, x, y, hierarchical=kind == "hier", shape=shape_name,
-                justify=justify, angle=angle, key=f"label:{kind}:{net}:{px:.3f}:{py:.3f}",
+                net,
+                x,
+                y,
+                hierarchical=kind == "hier",
+                shape=shape_name,
+                justify=justify,
+                angle=angle,
+                key=f"label:{kind}:{net}:{px:.3f}:{py:.3f}",
             )
         )
         target = (round(x, 3), round(y, 3))
@@ -1586,7 +1992,9 @@ def generate_reference_schematic(destination: Path) -> Path:
                 path.append((start[0], target[1]))
             path.append(target)
             for segment_index, (segment_start, segment_end) in enumerate(zip(path, path[1:])):
-                if segment_start == segment_end or segment_is_already_wired(segment_start, segment_end):
+                if segment_start == segment_end or segment_is_already_wired(
+                    segment_start, segment_end
+                ):
                     continue
                 label_stubs.append(
                     _wire(
@@ -1601,7 +2009,8 @@ def generate_reference_schematic(destination: Path) -> Path:
     for group in SCHEMATIC_GROUPS:
         members = set(group["members"])
         points = [
-            point for (reference, _number), point in pin_world_points.items()
+            point
+            for (reference, _number), point in pin_world_points.items()
             if reference in members
         ]
         if not points:
@@ -1616,18 +2025,34 @@ def generate_reference_schematic(destination: Path) -> Path:
         rules.extend(_functional_group(group, (left, top, right, bottom)))
 
     schematic = [
-        "kicad_sch", ["version", "20250114"], ["generator", QuotedSExpr("kicad-blocks")],
-        ["uuid", QuotedSExpr(ROOT_UUID)], ["paper", QuotedSExpr("A3")],
-        ["title_block",
+        "kicad_sch",
+        ["version", "20250114"],
+        ["generator", QuotedSExpr("kicad-blocks")],
+        ["uuid", QuotedSExpr(ROOT_UUID)],
+        ["paper", QuotedSExpr("A3")],
+        [
+            "title_block",
             ["title", QuotedSExpr("STUSB4500 USB Type-C / USB Power Delivery Sink")],
             ["date", QuotedSExpr("2026-11-14")],
             ["rev", QuotedSExpr("Electrical and layout refinement 6")],
             ["company", QuotedSExpr("KiCad Blocks — Reference design")],
             ["comment", "1", QuotedSExpr("Source: ST DS12499 Rev. 8, Figure 10")],
-            ["comment", "2", QuotedSExpr("Reference only: verify component ratings, footprints and thermal design before production.")],
+            [
+                "comment",
+                "2",
+                QuotedSExpr(
+                    "Reference only: verify component ratings, footprints and thermal design before production."
+                ),
+            ],
         ],
         ["lib_symbols", *library_symbols],
-        *instances, *wires, *label_stubs, *labels, *no_connects, *junctions, *rules,
+        *instances,
+        *wires,
+        *label_stubs,
+        *labels,
+        *no_connects,
+        *junctions,
+        *rules,
         ["sheet_instances", ["path", QuotedSExpr("/"), ["page", QuotedSExpr("1")]]],
         ["embedded_fonts", "no"],
     ]

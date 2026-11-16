@@ -70,9 +70,7 @@ class PublishIpcWheelTests(unittest.TestCase):
 
     def test_publish_recovers_when_upload_succeeded_but_response_was_lost(self):
         with tempfile.TemporaryDirectory() as temp:
-            wheel = Path(temp) / (
-                "kicad_python-0.9.0.dev0-cp312-cp312-linux_x86_64.whl"
-            )
+            wheel = Path(temp) / ("kicad_python-0.9.0.dev0-cp312-cp312-linux_x86_64.whl")
             wheel.write_bytes(b"wheel-bytes")
             release_url = "https://api.github.com/repos/owner/repo/releases/tags/kicad-python-dev"
             upload_url = "https://uploads.github.com/repos/owner/repo/releases/1/assets"

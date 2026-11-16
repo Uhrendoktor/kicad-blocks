@@ -583,9 +583,7 @@ def _merge_project_net_settings(
     source_assignments = cast(dict[str, str | list[str]], raw_source_assignments)
     target_assignments: dict[str, list[str]] = {
         str(net_name): _normalise_class_assignment(classes)
-        for net_name, classes in cast(
-            dict[str, str | list[str]], raw_target_assignments
-        ).items()
+        for net_name, classes in cast(dict[str, str | list[str]], raw_target_assignments).items()
     }
 
     reverse_ports: dict[str, str] = {}

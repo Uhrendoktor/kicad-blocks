@@ -36,9 +36,7 @@ def _find_executable(*names: str) -> str:
 
 def main() -> None:
     """Open a block's implementation in the actual GUI and save it."""
-    eeschema = os.environ.get("KICAD_EESCHEMA") or _find_executable(
-        "eeschema-nightly", "eeschema"
-    )
+    eeschema = os.environ.get("KICAD_EESCHEMA") or _find_executable("eeschema-nightly", "eeschema")
     xdotool = _find_executable("xdotool")
     if not os.environ.get("DISPLAY"):
         raise RuntimeError(
@@ -147,7 +145,8 @@ def main() -> None:
 
                     setup = next(
                         (
-                            item for item in windows
+                            item
+                            for item in windows
                             if "kicad setup" in (item[1] + " " + item[2]).casefold()
                         ),
                         None,
@@ -180,7 +179,8 @@ def main() -> None:
 
                     editor = next(
                         (
-                            item for item in reversed(windows)
+                            item
+                            for item in reversed(windows)
                             if implementation.stem.casefold() in item[1].casefold()
                             and (
                                 "schematic editor" in item[1].casefold()
@@ -374,7 +374,9 @@ def main() -> None:
                 time.sleep(1.0)
 
                 if not implementation.is_file() or not implementation.stat().st_size:
-                    raise AssertionError("Eeschema removed or emptied the implementation schematic.")
+                    raise AssertionError(
+                        "Eeschema removed or emptied the implementation schematic."
+                    )
                 if edit_label not in implementation.read_text(encoding="utf-8"):
                     raise AssertionError(
                         "The global label placed through the Eeschema GUI was not saved "
@@ -439,11 +441,15 @@ def main() -> None:
         if published_manifest["version"] <= version_before_publish:
             raise AssertionError("Plugin Publish did not advance the library block revision.")
         if "implementation.kicad_sch" not in published_manifest["hashes"]:
-            raise AssertionError("Published library manifest does not hash the edited implementation.")
+            raise AssertionError(
+                "Published library manifest does not hash the edited implementation."
+            )
         if edit_label not in block.implementation.read_text(encoding="utf-8"):
             raise AssertionError("Plugin Publish lost the Eeschema GUI edit.")
         if local_copy.implementation.read_bytes() != local_before:
-            raise AssertionError("Publishing the library unexpectedly modified the existing local copy.")
+            raise AssertionError(
+                "Publishing the library unexpectedly modified the existing local copy."
+            )
         if not reload_calls:
             raise AssertionError("Plugin Publish did not refresh the stable KiCad symbol catalog.")
 
@@ -471,19 +477,19 @@ def main() -> None:
                 f"Plugin Sync did not pull the published GUI edit: {sync_result!r}"
             )
         if edit_label not in local_copy.implementation.read_text(encoding="utf-8"):
-            raise AssertionError("The pre-existing local copy did not receive the published GUI edit.")
+            raise AssertionError(
+                "The pre-existing local copy did not receive the published GUI edit."
+            )
         if read_manifest(local_copy.path)["source_revision"] != published_manifest["revision"]:
-            raise AssertionError("The local sync baseline was not advanced to the published revision.")
-        print(
-            "Eeschema GUI edit -> plugin Publish -> existing KIID-bound local copy Sync passed."
-        )
+            raise AssertionError(
+                "The local sync baseline was not advanced to the published revision."
+            )
+        print("Eeschema GUI edit -> plugin Publish -> existing KIID-bound local copy Sync passed.")
 
         # Re-parse the shared and synchronized local implementation after their
         # GUI edit and synchronization to ensure both remain valid KiCad files.
         # schematic document.
-        cli = os.environ.get("KICAD_CLI") or _find_executable(
-            "kicad-cli-nightly", "kicad-cli"
-        )
+        cli = os.environ.get("KICAD_CLI") or _find_executable("kicad-cli-nightly", "kicad-cli")
         output_dir = root / "svg"
         output_dir.mkdir()
         subprocess.run(
@@ -519,7 +525,9 @@ def main() -> None:
             text=True,
         )
         if not list(local_output.glob("*.svg")):
-            raise AssertionError("KiCad CLI could not export the synchronized local implementation.")
+            raise AssertionError(
+                "KiCad CLI could not export the synchronized local implementation."
+            )
         print("KiCad CLI re-parsed both published and synchronized implementations.")
 
 

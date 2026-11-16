@@ -219,9 +219,7 @@ class LibraryBrowserTests(unittest.TestCase):
             project_catalog.parent,
             self.filter_block.path / self.filter_block.manifest["symbol_file"],
         )
-        original_catalog = parse_sexpr(
-            project_catalog.read_text(encoding="utf-8")
-        )
+        original_catalog = parse_sexpr(project_catalog.read_text(encoding="utf-8"))
         filter_name = self.filter_block.manifest["symbol_name"]
         filter_digest_before = _symbol_definition_digest(
             _named_symbol_node(original_catalog, filter_name, project_catalog)
@@ -231,9 +229,7 @@ class LibraryBrowserTests(unittest.TestCase):
         source_content = source_symbol.read_text(encoding="utf-8")
         self.assertIn('"Buck Converter"', source_content)
         source_symbol.write_text(
-            source_content.replace(
-                '"Buck Converter"', '"Buck Converter Updated"', 1
-            ),
+            source_content.replace('"Buck Converter"', '"Buck Converter Updated"', 1),
             encoding="utf-8",
         )
 
@@ -246,9 +242,7 @@ class LibraryBrowserTests(unittest.TestCase):
                 baseline_digest=self.block.manifest["catalog_symbol_hash"],
             )
         )
-        updated_catalog = parse_sexpr(
-            project_catalog.read_text(encoding="utf-8")
-        )
+        updated_catalog = parse_sexpr(project_catalog.read_text(encoding="utf-8"))
         updated_symbol = _named_symbol_node(
             updated_catalog,
             self.block.manifest["symbol_name"],
@@ -308,9 +302,7 @@ class LibraryBrowserTests(unittest.TestCase):
         shared_text = shared_catalog.read_text(encoding="utf-8")
         self.assertIn('"Buck Converter"', shared_text)
         shared_catalog.write_text(
-            shared_text.replace(
-                '"Buck Converter"', '"Shared Library Facade"', 1
-            ),
+            shared_text.replace('"Buck Converter"', '"Shared Library Facade"', 1),
             encoding="utf-8",
         )
         block_symbol = self.block.path / self.block.manifest["symbol_file"]
@@ -345,9 +337,7 @@ class LibraryBrowserTests(unittest.TestCase):
         )
         project_text = project_catalog.read_text(encoding="utf-8")
         self.assertIn('"Buck Converter"', project_text)
-        project_override = project_text.replace(
-            '"Buck Converter"', '"Project Specific Facade"', 1
-        )
+        project_override = project_text.replace('"Buck Converter"', '"Project Specific Facade"', 1)
         project_catalog.write_text(project_override, encoding="utf-8")
 
         source_symbol = self.block.path / self.block.manifest["symbol_file"]
@@ -482,7 +472,11 @@ class LibraryBrowserTests(unittest.TestCase):
         self.assertEqual(len(calls), 1)
         self.assertEqual(
             calls[0][-1],
-            str((self.block.path / resolve_variant_implementation(self.block.manifest, "1V8")).resolve()),
+            str(
+                (
+                    self.block.path / resolve_variant_implementation(self.block.manifest, "1V8")
+                ).resolve()
+            ),
         )
         self.assertEqual(
             calls[0][1:5],

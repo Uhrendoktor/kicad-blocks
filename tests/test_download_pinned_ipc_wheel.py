@@ -24,13 +24,15 @@ class DownloadPinnedWheelTests(unittest.TestCase):
         self.digest = f"sha256:{hashlib.sha256(self.payload).hexdigest()}"
         self.release = {
             "tag_name": "kicad-python-76b47d25",
-            "assets": [{
-                "name": self.wheel_name,
-                "state": "uploaded",
-                "browser_download_url": "https://example.invalid/wheel.whl",
-                "digest": self.digest,
-                "size": len(self.payload),
-            }],
+            "assets": [
+                {
+                    "name": self.wheel_name,
+                    "state": "uploaded",
+                    "browser_download_url": "https://example.invalid/wheel.whl",
+                    "digest": self.digest,
+                    "size": len(self.payload),
+                }
+            ],
         }
 
     def test_reuses_exact_abi_wheel_after_digest_and_archive_validation(self) -> None:
@@ -55,7 +57,10 @@ class DownloadPinnedWheelTests(unittest.TestCase):
         ):
             self.assertIsNone(
                 downloader.download_pinned_wheel(
-                    Path(tempfile.gettempdir()), "Uhrendoktor/kicad-blocks", self.source_sha, "token"
+                    Path(tempfile.gettempdir()),
+                    "Uhrendoktor/kicad-blocks",
+                    self.source_sha,
+                    "token",
                 )
             )
         release_without_asset = {**self.release, "assets": []}
@@ -65,7 +70,10 @@ class DownloadPinnedWheelTests(unittest.TestCase):
         ):
             self.assertIsNone(
                 downloader.download_pinned_wheel(
-                    Path(tempfile.gettempdir()), "Uhrendoktor/kicad-blocks", self.source_sha, "token"
+                    Path(tempfile.gettempdir()),
+                    "Uhrendoktor/kicad-blocks",
+                    self.source_sha,
+                    "token",
                 )
             )
 

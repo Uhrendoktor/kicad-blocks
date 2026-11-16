@@ -104,7 +104,6 @@ type _RawInstanceLinksValue = _RawJsonScalar | dict[str, _RawInstanceLinkValue]
 type _RawLibrarySettingValue = _RawJsonScalar | list[_RawJsonScalar]
 
 
-
 _LOG = logging.getLogger(__name__)
 
 
@@ -205,10 +204,7 @@ def _merge_symbol_node(
             raise ValueError(f"Invalid KiCad symbol catalog: {catalog_path}")
     else:
         existing = copy.deepcopy(source_tree)
-        existing[:] = [
-            item for item in existing
-            if item is existing[0] or _head(item) != "symbol"
-        ]
+        existing[:] = [item for item in existing if item is existing[0] or _head(item) != "symbol"]
 
     matches = [
         (index, item)
@@ -217,8 +213,7 @@ def _merge_symbol_node(
     ]
     if len(matches) > 1:
         raise ValueError(
-            f"Expected at most one {symbol_name!r} symbol in {catalog_path}; "
-            f"found {len(matches)}."
+            f"Expected at most one {symbol_name!r} symbol in {catalog_path}; found {len(matches)}."
         )
     if not matches:
         existing.append(copy.deepcopy(symbol))
@@ -290,9 +285,7 @@ def synchronize_project_symbol_catalog(
     project_catalog = Path(project_catalog).expanduser().resolve()
     block_symbol_file = Path(block_symbol_file).expanduser().resolve()
     if project_catalog.name != LIBRARY_CATALOG_NAME:
-        raise ValueError(
-            f"Project symbol catalog must be named {LIBRARY_CATALOG_NAME!r}."
-        )
+        raise ValueError(f"Project symbol catalog must be named {LIBRARY_CATALOG_NAME!r}.")
     if not block_symbol_file.is_file():
         raise FileNotFoundError(block_symbol_file)
 
@@ -303,12 +296,8 @@ def synchronize_project_symbol_catalog(
     if shared_catalog_file is not None:
         shared_catalog_file = Path(shared_catalog_file).expanduser().resolve()
         if shared_catalog_file.is_file():
-            shared_tree = parse_sexpr(
-                shared_catalog_file.read_text(encoding="utf-8")
-            )
-            shared_symbol = _named_symbol_node(
-                shared_tree, symbol_name, shared_catalog_file
-            )
+            shared_tree = parse_sexpr(shared_catalog_file.read_text(encoding="utf-8"))
+            shared_symbol = _named_symbol_node(shared_tree, symbol_name, shared_catalog_file)
             shared_digest = _symbol_definition_digest(shared_symbol)
             if shared_digest == source_digest:
                 source_tree = shared_tree
@@ -340,13 +329,9 @@ def synchronize_project_symbol_catalog(
         try:
             state = json.loads(state_file.read_text(encoding="utf-8"))
         except json.JSONDecodeError as exc:
-            raise ValueError(
-                f"Invalid project symbol synchronization state: {state_file}"
-            ) from exc
+            raise ValueError(f"Invalid project symbol synchronization state: {state_file}") from exc
         if not isinstance(state, dict) or not isinstance(state.get("symbols"), dict):
-            raise ValueError(
-                f"Invalid project symbol synchronization state: {state_file}"
-            )
+            raise ValueError(f"Invalid project symbol synchronization state: {state_file}")
     else:
         state = {"schema_version": 1, "symbols": {}}
     synchronized = state["symbols"]
@@ -365,7 +350,8 @@ def synchronize_project_symbol_catalog(
 
     catalog_tree = parse_sexpr(project_catalog.read_text(encoding="utf-8"))
     project_matches = [
-        item for item in _all(catalog_tree, "symbol")
+        item
+        for item in _all(catalog_tree, "symbol")
         if len(item) >= 2 and str(item[1]) == symbol_name
     ]
     if not project_matches:

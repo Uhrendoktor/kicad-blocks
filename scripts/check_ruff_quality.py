@@ -218,9 +218,7 @@ def main() -> int:
                 item.get("message", ""),
             )
         )
-        sys.stderr.write(
-            f"ruff-quality-gate=failed introduced_diagnostics={len(introduced)}\\n"
-        )
+        sys.stderr.write(f"ruff-quality-gate=failed introduced_diagnostics={len(introduced)}\\n")
         for finding in introduced:
             sys.stderr.write(
                 f"{finding.get('filename', '')}: "

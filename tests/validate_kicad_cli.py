@@ -68,11 +68,20 @@ def _validate_stusb4500_netlist(cli: str, output_dir: Path) -> None:
         tree_for_probe = parse_sexpr(schematic_text)
         probes = {
             "without-graphics": {
-                "rectangle", "polyline", "text", "circle", "arc", "bezier",
+                "rectangle",
+                "polyline",
+                "text",
+                "circle",
+                "arc",
+                "bezier",
             },
             "without-labels-and-wires": {
-                "label", "hierarchical_label", "global_label", "wire",
-                "junction", "no_connect",
+                "label",
+                "hierarchical_label",
+                "global_label",
+                "wire",
+                "junction",
+                "no_connect",
             },
             "without-hierarchical-labels": {"hierarchical_label"},
             "without-local-labels": {"label"},
@@ -88,28 +97,33 @@ def _validate_stusb4500_netlist(cli: str, output_dir: Path) -> None:
         for probe_name, excluded in probes.items():
             variant = copy.deepcopy(tree_for_probe)
             variant[1:] = [
-                child for child in variant[1:]
-                if not isinstance(child, list) or not child
-                or str(child[0]) not in excluded
+                child
+                for child in variant[1:]
+                if not isinstance(child, list) or not child or str(child[0]) not in excluded
             ]
             variant_path = output_dir / f"stusb4500-{probe_name}.kicad_sch"
             variant_path.write_text(_dump(variant) + "\n", encoding="utf-8")
             variant_netlist = output_dir / f"stusb4500-{probe_name}.net"
             result = subprocess.run(
                 [
-                    cli, "sch", "export", "netlist", "--output",
-                    str(variant_netlist), str(variant_path),
+                    cli,
+                    "sch",
+                    "export",
+                    "netlist",
+                    "--output",
+                    str(variant_netlist),
+                    str(variant_path),
                 ],
-                capture_output=True, text=True, check=False,
+                capture_output=True,
+                text=True,
+                check=False,
             )
-            print(
-                f"{probe_name}: rc={result.returncode}; "
-                f"stderr={result.stderr.strip()!r}"
-            )
+            print(f"{probe_name}: rc={result.returncode}; stderr={result.stderr.strip()!r}")
         # A hand-built empty sheet distinguishes invalid root metadata from
         # an invalid embedded symbol library or instance graph.
         minimal = [
-            "kicad_sch", ["version", "20250114"],
+            "kicad_sch",
+            ["version", "20250114"],
             ["generator", _Quoted("kicad-blocks")],
             ["uuid", _Quoted("4d83d47b-34f6-52b9-a6da-6d2c4794dc61")],
             ["paper", _Quoted("A3")],
@@ -120,9 +134,18 @@ def _validate_stusb4500_netlist(cli: str, output_dir: Path) -> None:
         minimal_path = output_dir / "stusb4500-minimal-root.kicad_sch"
         minimal_path.write_text(_dump(minimal) + "\n", encoding="utf-8")
         minimal_result = subprocess.run(
-            [cli, "sch", "export", "netlist", "--output",
-             str(output_dir / "minimal-root.net"), str(minimal_path)],
-            capture_output=True, text=True, check=False,
+            [
+                cli,
+                "sch",
+                "export",
+                "netlist",
+                "--output",
+                str(output_dir / "minimal-root.net"),
+                str(minimal_path),
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
         )
         print(
             "minimal-empty-sheet: "
@@ -130,56 +153,80 @@ def _validate_stusb4500_netlist(cli: str, output_dir: Path) -> None:
             f"stderr={minimal_result.stderr.strip()!r}"
         )
         root_heads = {
-            "version", "generator", "uuid", "paper",
-            "title_block", "sheet_instances", "embedded_fonts",
+            "version",
+            "generator",
+            "uuid",
+            "paper",
+            "title_block",
+            "sheet_instances",
+            "embedded_fonts",
         }
         root_only = [
             "kicad_sch",
-            *copy.deepcopy([
-                child for child in tree_for_probe[1:]
-                if isinstance(child, list) and child
-                and str(child[0]) in root_heads
-            ]),
+            *copy.deepcopy(
+                [
+                    child
+                    for child in tree_for_probe[1:]
+                    if isinstance(child, list) and child and str(child[0]) in root_heads
+                ]
+            ),
         ]
-        top_level = [
-            child for child in tree_for_probe[1:]
-            if isinstance(child, list) and child
-        ]
+        top_level = [child for child in tree_for_probe[1:] if isinstance(child, list) and child]
         print(
             "top-level nodes: "
             f"{[(str(child[0]), sum(str(item[0]) == str(child[0]) for item in top_level if item)) for child in top_level if child]}"
         )
+
         def with_heads(name: str, heads: set[str]) -> tuple[Path, int, str]:
             candidate = copy.deepcopy(root_only)
-            candidate.extend(copy.deepcopy([
-                child for child in top_level if str(child[0]) in heads
-            ]))
+            candidate.extend(
+                copy.deepcopy([child for child in top_level if str(child[0]) in heads])
+            )
             candidate_path = output_dir / f"stusb4500-{name}.kicad_sch"
             candidate_path.write_text(_dump(candidate) + "\n", encoding="utf-8")
             candidate_result = subprocess.run(
                 [
-                    cli, "sch", "export", "netlist", "--output",
-                    str(output_dir / f"{name}.net"), str(candidate_path),
+                    cli,
+                    "sch",
+                    "export",
+                    "netlist",
+                    "--output",
+                    str(output_dir / f"{name}.net"),
+                    str(candidate_path),
                 ],
-                capture_output=True, text=True, check=False,
+                capture_output=True,
+                text=True,
+                check=False,
             )
             return candidate_path, candidate_result.returncode, candidate_result.stderr.strip()
 
         library_heads = {"lib_symbols"}
         component_heads = {"symbol"}
         connectivity_heads = {
-            "wire", "label", "hierarchical_label", "global_label", "junction", "no_connect",
+            "wire",
+            "label",
+            "hierarchical_label",
+            "global_label",
+            "junction",
+            "no_connect",
         }
         graphic_heads = {"rectangle", "polyline", "text", "circle", "arc", "bezier"}
         for name, heads in (
             ("components-only", root_heads | library_heads | component_heads),
             ("graphics-only", root_heads | graphic_heads),
             ("connectivity-only", root_heads | library_heads | connectivity_heads),
-            ("components-and-connectivity", root_heads | library_heads | component_heads | connectivity_heads),
-            ("components-and-graphics", root_heads | library_heads | component_heads | graphic_heads),
+            (
+                "components-and-connectivity",
+                root_heads | library_heads | component_heads | connectivity_heads,
+            ),
+            (
+                "components-and-graphics",
+                root_heads | library_heads | component_heads | graphic_heads,
+            ),
         ):
             _, returncode, stderr = with_heads(
-                name, heads - root_heads,
+                name,
+                heads - root_heads,
             )
             print(f"{name}: rc={returncode}; stderr={stderr!r}")
         for name, include_title, include_libraries in (
@@ -191,13 +238,14 @@ def _validate_stusb4500_netlist(cli: str, output_dir: Path) -> None:
             candidate = copy.deepcopy(root_only)
             if not include_title:
                 candidate[1:] = [
-                    child for child in candidate[1:]
-                    if not isinstance(child, list) or not child
-                    or str(child[0]) != "title_block"
+                    child
+                    for child in candidate[1:]
+                    if not isinstance(child, list) or not child or str(child[0]) != "title_block"
                 ]
             if include_libraries:
                 libraries = next(
-                    child for child in tree_for_probe[1:]
+                    child
+                    for child in tree_for_probe[1:]
                     if isinstance(child, list) and child and str(child[0]) == "lib_symbols"
                 )
                 candidate.append(copy.deepcopy(libraries))
@@ -205,17 +253,27 @@ def _validate_stusb4500_netlist(cli: str, output_dir: Path) -> None:
             candidate_path.write_text(_dump(candidate) + "\n", encoding="utf-8")
             candidate_result = subprocess.run(
                 [
-                    cli, "sch", "export", "netlist", "--output",
-                    str(output_dir / f"{name}.net"), str(candidate_path),
+                    cli,
+                    "sch",
+                    "export",
+                    "netlist",
+                    "--output",
+                    str(output_dir / f"{name}.net"),
+                    str(candidate_path),
                 ],
-                capture_output=True, text=True, check=False,
+                capture_output=True,
+                text=True,
+                check=False,
             )
             print(
                 f"{name}: rc={candidate_result.returncode}; "
                 f"stderr={candidate_result.stderr.strip()!r}"
             )
         raise subprocess.CalledProcessError(
-            loaded.returncode, export_command, loaded.stdout, loaded.stderr,
+            loaded.returncode,
+            export_command,
+            loaded.stdout,
+            loaded.stderr,
         )
     tree = parse_sexpr(netlist_path.read_text(encoding="utf-8"))
     actual: dict[tuple[str, str], str] = {}
@@ -337,11 +395,13 @@ def _validate_stusb4500_netlist(cli: str, output_dir: Path) -> None:
         names = {actual.get(pin) for pin in pins}
         if None in names or len(names) != 1:
             mismatches[("physical-net", net_description)] = (
-                "all pins share one physical net", sorted(str(name) for name in names),
+                "all pins share one physical net",
+                sorted(str(name) for name in names),
             )
         elif next(iter(names)) in {"VREG_1V2", "FET_MID"}:
             mismatches[("physical-net", net_description)] = (
-                "unnamed physical net", next(iter(names)),
+                "unnamed physical net",
+                next(iter(names)),
             )
     if mismatches:
         schematic_tree = parse_sexpr(schematic_text)
@@ -357,9 +417,9 @@ def _validate_stusb4500_netlist(cli: str, output_dir: Path) -> None:
         for head in ("label", "hierarchical_label"):
             for label in _all(schematic_tree, head):
                 at = _direct(label, "at")
-                all_labels.append((
-                    head, str(label[1]), round(float(at[1]), 3), round(float(at[2]), 3)
-                ))
+                all_labels.append(
+                    (head, str(label[1]), round(float(at[1]), 3), round(float(at[2]), 3))
+                )
         raw_nets = []
         for net in _all(nets_container, "net"):
             name_node = _direct(net, "name")
@@ -372,9 +432,7 @@ def _validate_stusb4500_netlist(cli: str, output_dir: Path) -> None:
                 pin_node = _direct(node, "pin")
                 if ref_node is not None and pin_node is not None:
                     nodes.append((str(ref_node[1]), str(pin_node[1])))
-            if name in {"CC1", "CC2", "GND"} or any(
-                pin in mismatches for pin in nodes
-            ):
+            if name in {"CC1", "CC2", "GND"} or any(pin in mismatches for pin in nodes):
                 raw_nets.append((name, nodes))
         raise RuntimeError(
             "STUSB4500 KiCad netlist connectivity mismatch: "
@@ -404,11 +462,13 @@ def _validate_stusb4500_netlist(cli: str, output_dir: Path) -> None:
         },
         "schematic": {
             "meta": {"version": 1},
-            "top_level_sheets": [{
-                "filename": schematic.name,
-                "name": "Root",
-                "uuid": ROOT_UUID,
-            }],
+            "top_level_sheets": [
+                {
+                    "filename": schematic.name,
+                    "name": "Root",
+                    "uuid": ROOT_UUID,
+                }
+            ],
         },
         "sheets": [[ROOT_UUID, "Root"]],
     }
@@ -420,23 +480,30 @@ def _validate_stusb4500_netlist(cli: str, output_dir: Path) -> None:
     erc_report = output_dir / "stusb4500-erc.rpt"
     erc_result = subprocess.run(
         [
-            cli, "sch", "erc", "--output", str(erc_report),
-            "--severity-all", "--exit-code-violations", str(schematic),
+            cli,
+            "sch",
+            "erc",
+            "--output",
+            str(erc_report),
+            "--severity-all",
+            "--exit-code-violations",
+            str(schematic),
         ],
-        capture_output=True, text=True, check=False,
+        capture_output=True,
+        text=True,
+        check=False,
     )
     if erc_result.returncode:
         report_text = (
             erc_report.read_text(encoding="utf-8", errors="replace")
-            if erc_report.is_file() else erc_result.stderr.strip()
+            if erc_report.is_file()
+            else erc_result.stderr.strip()
         )
         raise RuntimeError(f"STUSB4500 ERC reported violations:\n{report_text}")
     if not erc_report.is_file():
         raise RuntimeError("KiCad ERC did not write its report.")
     print("KiCad ERC: zero unignored violations under the standalone child-block profile.")
-    print(
-        f"KiCad netlist validated {len(expected)} critical STUSB4500 pin-to-net assignments."
-    )
+    print(f"KiCad netlist validated {len(expected)} critical STUSB4500 pin-to-net assignments.")
 
 
 def main() -> None:

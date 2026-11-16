@@ -60,8 +60,7 @@ class SchematicStyleRuleTests(unittest.TestCase):
     def test_multiline_block_title_is_rejected(self) -> None:
         tree = self.fresh_tree()
         title = next(
-            node for node in _all(tree, "text_box")
-            if str(node[1]) == "USB-C PORT / CC PROTECTION"
+            node for node in _all(tree, "text_box") if str(node[1]) == "USB-C PORT / CC PROTECTION"
         )
         title[1] = str(title[1]) + "\nWRAPPED"
         self.assertTrue(any("single line" in issue for issue in block_annotation_issues(tree)))
@@ -88,41 +87,39 @@ assert "generate_reference" not in sys.modules
         tree = [
             "kicad_sch",
             [
-                "text_box", "BLOCK TITLE\nWRAPPED",
-                ["at", "10", "10", "0"], ["size", "40", "8"],
+                "text_box",
+                "BLOCK TITLE\nWRAPPED",
+                ["at", "10", "10", "0"],
+                ["size", "40", "8"],
                 ["stroke", ["width", "-1"]],
                 ["uuid", "future-schematic-title"],
             ],
         ]
-        self.assertTrue(any(
-            "multiline annotation" in issue
-            for issue in block_annotation_issues(tree)
-        ))
+        self.assertTrue(
+            any("multiline annotation" in issue for issue in block_annotation_issues(tree))
+        )
 
     def test_unbordered_title_box_must_have_single_line_render_reserve(self) -> None:
         tree = self.fresh_tree()
-        title = next(
-            node for node in _all(tree, "text_box")
-            if str(node[1]) == "VSNK OUTPUT"
-        )
+        title = next(node for node in _all(tree, "text_box") if str(node[1]) == "VSNK OUTPUT")
         size = _direct(title, "size")
         size[1] = f"{float(size[1]) - 3.0:.3f}"
-        self.assertTrue(any(
-            "cannot reliably render on one line" in issue
-            for issue in text_box_issues(tree)
-        ))
+        self.assertTrue(
+            any("cannot reliably render on one line" in issue for issue in text_box_issues(tree))
+        )
 
     def test_group_comment_requires_its_own_outline(self) -> None:
         tree = self.fresh_tree()
         note = next(
-            node for node in _all(tree, "text_box")
+            node
+            for node in _all(tree, "text_box")
             if str(node[1]).startswith("Type-C receptacle and dual CC-line ESD protection.")
         )
         width = _direct(_direct(note, "stroke"), "width")
         width[1] = "-1"
-        self.assertTrue(any(
-            "visible box outline" in issue for issue in group_comment_outline_issues(tree)
-        ))
+        self.assertTrue(
+            any("visible box outline" in issue for issue in group_comment_outline_issues(tree))
+        )
 
     def test_label_names_cannot_mix_local_and_hierarchical_kinds(self) -> None:
         tree = [
@@ -139,13 +136,22 @@ assert "generate_reference" not in sys.modules
     def test_symbol_obstacles_use_real_outlines_not_rectangular_bounds(self) -> None:
         tree = [
             "kicad_sch",
-            ["lib_symbols",
-                ["symbol", "Test:Triangle",
-                    ["symbol", "Triangle_0_1",
-                        ["polyline",
-                            ["pts",
-                                ["xy", "0", "0"], ["xy", "4", "0"],
-                                ["xy", "0", "4"], ["xy", "0", "0"],
+            [
+                "lib_symbols",
+                [
+                    "symbol",
+                    "Test:Triangle",
+                    [
+                        "symbol",
+                        "Triangle_0_1",
+                        [
+                            "polyline",
+                            [
+                                "pts",
+                                ["xy", "0", "0"],
+                                ["xy", "4", "0"],
+                                ["xy", "0", "4"],
+                                ["xy", "0", "0"],
                             ],
                             ["stroke", ["width", "0.254"]],
                             ["fill", ["type", "none"]],
@@ -153,10 +159,14 @@ assert "generate_reference" not in sys.modules
                     ],
                 ],
             ],
-            ["symbol",
+            [
+                "symbol",
                 ["lib_id", "Test:Triangle"],
                 ["at", "0", "0", "0"],
-                ["property", "Reference", "Q1",
+                [
+                    "property",
+                    "Reference",
+                    "Q1",
                     ["at", "10", "10", "0"],
                     ["effects", ["font", ["size", "1", "1"]]],
                 ],
@@ -171,31 +181,38 @@ assert "generate_reference" not in sys.modules
     def test_wire_through_visible_symbol_field_is_rejected(self) -> None:
         tree = self.fresh_tree()
         d50 = next(
-            node for node in _all(tree, "symbol")
-            if any(str(prop[1]) == "Reference" and str(prop[2]) == "D50"
-                   for prop in _all(node, "property"))
+            node
+            for node in _all(tree, "symbol")
+            if any(
+                str(prop[1]) == "Reference" and str(prop[2]) == "D50"
+                for prop in _all(node, "property")
+            )
         )
-        value = next(
-            prop for prop in _all(d50, "property")
-            if str(prop[1]) == "Value"
-        )
+        value = next(prop for prop in _all(d50, "property") if str(prop[1]) == "Value")
         x, y, width, height = _text_visual_bounds(str(value[2]), value)
-        tree.append([
-            "wire", ["pts",
-                ["xy", f"{x - 1.0:.3f}", f"{y + height / 2:.3f}"],
-                ["xy", f"{x + width + 1.0:.3f}", f"{y + height / 2:.3f}"],
-            ],
-        ])
-        self.assertTrue(any(
-            "symbol field D50 Value" in issue for issue in wire_obstacle_issues(tree)
-        ))
+        tree.append(
+            [
+                "wire",
+                [
+                    "pts",
+                    ["xy", f"{x - 1.0:.3f}", f"{y + height / 2:.3f}"],
+                    ["xy", f"{x + width + 1.0:.3f}", f"{y + height / 2:.3f}"],
+                ],
+            ]
+        )
+        self.assertTrue(
+            any("symbol field D50 Value" in issue for issue in wire_obstacle_issues(tree))
+        )
 
     def test_symbol_fields_may_not_straddle_their_body(self) -> None:
         tree = self.fresh_tree()
         d1 = next(
-            node for node in _all(tree, "symbol")
-            if any(str(prop[1]) == "Reference" and str(prop[2]) == "D1"
-                   for prop in _all(node, "property"))
+            node
+            for node in _all(tree, "symbol")
+            if any(
+                str(prop[1]) == "Reference" and str(prop[2]) == "D1"
+                for prop in _all(node, "property")
+            )
         )
         value = next(prop for prop in _all(d1, "property") if str(prop[1]) == "Value")
         d1_at = _direct(d1, "at")
@@ -203,35 +220,39 @@ assert "generate_reference" not in sys.modules
         value_at[1] = f"{float(d1_at[1]) + 2.54:.3f}"
         value_at[2] = str(d1_at[2])
         self.assertTrue(
-            any("D1 Value partially straddles" in issue
-                for issue in symbol_field_clearance_issues(tree))
+            any(
+                "D1 Value partially straddles" in issue
+                for issue in symbol_field_clearance_issues(tree)
+            )
         )
 
     def test_wire_through_symbol_body_is_rejected(self) -> None:
         tree = self.fresh_tree()
-        tree.append([
-            "wire", ["pts", ["xy", "234.000", "137.000"],
-                     ["xy", "258.000", "137.000"]],
-        ])
+        tree.append(
+            [
+                "wire",
+                ["pts", ["xy", "234.000", "137.000"], ["xy", "258.000", "137.000"]],
+            ]
+        )
         self.assertTrue(any("symbol body U1" in issue for issue in wire_obstacle_issues(tree)))
 
     def test_wire_through_comment_box_is_rejected(self) -> None:
         tree = self.fresh_tree()
         note = next(
-            node for node in _all(tree, "text_box")
+            node
+            for node in _all(tree, "text_box")
             if str(node[1]).startswith("Type-C receptacle and dual CC-line ESD protection.")
         )
         at, size = _direct(note, "at"), _direct(note, "size")
         x = float(at[1]) + float(size[1]) / 2
         y = float(at[2]) + float(size[2]) / 2
-        tree.append([
-            "wire",
-            ["pts", ["xy", f"{x - 2.0:.3f}", f"{y:.3f}"],
-             ["xy", f"{x + 2.0:.3f}", f"{y:.3f}"]],
-        ])
-        self.assertTrue(any(
-            "annotation text box" in issue for issue in wire_obstacle_issues(tree)
-        ))
+        tree.append(
+            [
+                "wire",
+                ["pts", ["xy", f"{x - 2.0:.3f}", f"{y:.3f}"], ["xy", f"{x + 2.0:.3f}", f"{y:.3f}"]],
+            ]
+        )
+        self.assertTrue(any("annotation text box" in issue for issue in wire_obstacle_issues(tree)))
 
     def test_shared_decoupler_ground_and_visible_nc_markers_are_present(self) -> None:
         tree = self.fresh_tree()
@@ -239,8 +260,7 @@ assert "generate_reference" not in sys.modules
         self.assertEqual(required_no_connect_issues(tree), [])
         pins = _pin_world_info(tree)
         markers = {
-            (round(float(_direct(node, "at")[1]), 3),
-             round(float(_direct(node, "at")[2]), 3))
+            (round(float(_direct(node, "at")[1]), 3), round(float(_direct(node, "at")[2]), 3))
             for node in _all(tree, "no_connect")
             if _direct(node, "at") is not None
         }
@@ -251,10 +271,11 @@ assert "generate_reference" not in sys.modules
             self.assertIn(pins[(reference, number)]["point"], markers)
         marker_point = pins[("U1", "11")]["point"]
         marker = next(
-            node for node in _all(tree, "no_connect")
+            node
+            for node in _all(tree, "no_connect")
             if _direct(node, "at") is not None
-            and (round(float(_direct(node, "at")[1]), 3),
-                 round(float(_direct(node, "at")[2]), 3)) == marker_point
+            and (round(float(_direct(node, "at")[1]), 3), round(float(_direct(node, "at")[2]), 3))
+            == marker_point
         )
         tree.remove(marker)
         self.assertTrue(any("U1.11" in issue for issue in required_no_connect_issues(tree)))
@@ -283,8 +304,10 @@ assert "generate_reference" not in sys.modules
         tree = self.fresh_tree()
         self.assertEqual(wire_compactness_issues(tree), [])
         self.assertTrue(
-            any("score is" in issue
-                for issue in wire_compactness_issues(tree, {"power-switch": 1.0}))
+            any(
+                "score is" in issue
+                for issue in wire_compactness_issues(tree, {"power-switch": 1.0})
+            )
         )
 
 

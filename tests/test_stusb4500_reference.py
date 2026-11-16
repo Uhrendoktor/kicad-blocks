@@ -44,8 +44,7 @@ def _instance_map(tree: list) -> dict[str, list]:
 
 def _property(instance: list, name: str) -> list:
     return next(
-        prop for prop in _all(instance, "property")
-        if len(prop) >= 3 and str(prop[1]) == name
+        prop for prop in _all(instance, "property") if len(prop) >= 3 and str(prop[1]) == name
     )
 
 
@@ -144,8 +143,6 @@ class STUSB4500ReferenceTests(unittest.TestCase):
         self.assertLess(positions["U1"][0], positions["T4"][0])
         self.assertLess(positions["T4"][0], positions["T1"][0])
 
-
-
     def test_address_straps_are_separate_and_reset_stays_with_controller(self) -> None:
         with tempfile.TemporaryDirectory(prefix="stusb4500-address-") as temporary:
             content, tree, instances = self._generate(temporary)
@@ -157,8 +154,7 @@ class STUSB4500ReferenceTests(unittest.TestCase):
         self.assertLess(float(_direct(instances["R55"], "at")[2]), 240.0)
 
         r51, r52, r53, r54 = (
-            _direct(instances[reference], "at")
-            for reference in ("R51", "R52", "R53", "R54")
+            _direct(instances[reference], "at") for reference in ("R51", "R52", "R53", "R54")
         )
         self.assertAlmostEqual(float(r51[2]), float(r53[2]), places=3)
         self.assertAlmostEqual(float(r52[2]), float(r54[2]), places=3)
@@ -167,12 +163,12 @@ class STUSB4500ReferenceTests(unittest.TestCase):
         self.assertLess(abs(float(r51[2]) - float(r52[2])), 15.0)
 
         strap_names = {
-            str(node[1]) for node in _all(tree, "label")
+            str(node[1])
+            for node in _all(tree, "label")
             if len(node) > 1 and str(node[1]) in {"ADDR0", "ADDR1"}
         }
         self.assertEqual(strap_names, {"ADDR0", "ADDR1"})
         self.assertNotIn("(global_label", content)
-
 
     def test_back_to_back_pmos_midpoint_is_directly_wired_to_r10(self) -> None:
         with tempfile.TemporaryDirectory(prefix="stusb4500-pmos-link-") as temporary:
@@ -206,7 +202,8 @@ class STUSB4500ReferenceTests(unittest.TestCase):
 
         def frame(name: str):
             node = next(
-                node for node in _all(tree, "rectangle")
+                node
+                for node in _all(tree, "rectangle")
                 if _direct(node, "uuid")
                 and str(_direct(node, "uuid")[1]) == _uid(f"graphic:rectangle:zone:{name}")
             )
@@ -216,15 +213,14 @@ class STUSB4500ReferenceTests(unittest.TestCase):
         switch, output = frame("power-switch"), frame("vsnk-output")
         self.assertAlmostEqual(output[0] - switch[2], 2.54, places=3)
 
-
-
     def test_vbus_conditioning_groups_are_explained(self) -> None:
         with tempfile.TemporaryDirectory(prefix="stusb4500-vbus-groups-") as temporary:
             content, tree, _ = self._generate(temporary)
 
         text_by_uuid = {
             str(_direct(node, "uuid")[1]): str(node[1])
-            for node in _all(tree, "text_box") if _direct(node, "uuid") is not None
+            for node in _all(tree, "text_box")
+            if _direct(node, "uuid") is not None
         }
         group = next(item for item in SCHEMATIC_GROUPS if item["id"] == "vbus-monitor")
         description_uuid = _uid("graphic:text:group-description:vbus-monitor")
@@ -256,8 +252,6 @@ class STUSB4500ReferenceTests(unittest.TestCase):
                 field_angle = _direct(_property(instance, field_name), "at")[3]
                 self.assertEqual(float(field_angle), 90.0, f"{reference} {field_name} angle")
 
-
-
     def test_j1_and_u1_fields_are_close_and_inside_their_groups(self) -> None:
         with tempfile.TemporaryDirectory(prefix="stusb4500-fields-") as temporary:
             _, _, instances = self._generate(temporary)
@@ -269,8 +263,10 @@ class STUSB4500ReferenceTests(unittest.TestCase):
             self.assertLess(float(at[2]), float(j1[2]) - 27.94)
 
         u1 = _direct(instances["U1"], "at")
-        for field_name, expected_y in (("Reference", float(u1[2]) - 17.78),
-                                       ("Value", float(u1[2]) - 15.24)):
+        for field_name, expected_y in (
+            ("Reference", float(u1[2]) - 17.78),
+            ("Value", float(u1[2]) - 15.24),
+        ):
             prop = _property(instances["U1"], field_name)
             at = _direct(prop, "at")
             self.assertAlmostEqual(float(at[1]), float(u1[1]) + 15.24, places=3)
@@ -290,7 +286,8 @@ class STUSB4500ReferenceTests(unittest.TestCase):
 
         text_by_uuid = {
             str(_direct(node, "uuid")[1]): str(node[1])
-            for node in _all(tree, "text_box") if _direct(node, "uuid") is not None
+            for node in _all(tree, "text_box")
+            if _direct(node, "uuid") is not None
         }
         for group in SCHEMATIC_GROUPS:
             title_uuid = _uid(f"graphic:text:zone-title:{group['id']}")
@@ -301,7 +298,8 @@ class STUSB4500ReferenceTests(unittest.TestCase):
             self.assertIn("ST DS12499 REV. 8 | PAGE 26 | FIGURE 10", text_by_uuid[description_uuid])
         self.assertNotIn("D4 is unspecified; verify its VBUS rating.", content)
         header_title = next(
-            node for node in _all(tree, "text_box")
+            node
+            for node in _all(tree, "text_box")
             if str(node[1]) == "STUSB4500 USB-C / POWER DELIVERY SINK"
         )
         self.assertGreater(float(_direct(header_title, "size")[1]), 350.0)
@@ -315,7 +313,6 @@ class STUSB4500ReferenceTests(unittest.TestCase):
         self.assertIn('(hierarchical_label "GND" (shape passive)', content)
         self.assertIn('(hierarchical_label "VSYS" (shape input)', content)
 
-
     def test_regulator_decouplers_use_direct_wires_not_pin_labels(self) -> None:
         with tempfile.TemporaryDirectory(prefix="stusb4500-u1-top-labels-") as temporary:
             content, tree, _ = self._generate(temporary)
@@ -324,8 +321,7 @@ class STUSB4500ReferenceTests(unittest.TestCase):
         self.assertNotIn("VREG_1V2", local_labels)
         self.assertIn("VREG_2V7", local_labels)
         self.assertNotIn('(label "FET_MID"', content)
-        self.assertIn('(wire (pts ', content)
-
+        self.assertIn("(wire (pts ", content)
 
     def test_bulk_protection_frame_is_derived_from_member_components(self) -> None:
         with tempfile.TemporaryDirectory(prefix="stusb4500-bulk-frame-") as temporary:
@@ -333,7 +329,8 @@ class STUSB4500ReferenceTests(unittest.TestCase):
 
         zone_uuid = _uid("graphic:rectangle:zone:vbus-bulk")
         zone = next(
-            node for node in _all(tree, "rectangle")
+            node
+            for node in _all(tree, "rectangle")
             if _direct(node, "uuid") and str(_direct(node, "uuid")[1]) == zone_uuid
         )
         start, end = _direct(zone, "start"), _direct(zone, "end")
@@ -345,7 +342,6 @@ class STUSB4500ReferenceTests(unittest.TestCase):
             self.assertGreater(float(end[2]), float(at[2]))
         self.assertGreater(float(end[1]) - float(start[1]), 20.0)
 
-
     def test_internal_nets_and_hierarchical_vsnk_scope_are_consistent(self) -> None:
         with tempfile.TemporaryDirectory(prefix="stusb4500-local-nets-") as temporary:
             content, tree, _ = self._generate(temporary)
@@ -353,8 +349,17 @@ class STUSB4500ReferenceTests(unittest.TestCase):
         labels = {str(node[1]) for node in _all(tree, "label")}
         hierarchical = {str(node[1]) for node in _all(tree, "hierarchical_label")}
         for name in (
-            "VBUS", "CC1", "CC2", "VBUS_FILTERED", "VBUS_VS_DISCH",
-            "VBUS_EN_SNK", "VSNK_GATE", "DISCH", "VREG_2V7", "ADDR0", "ADDR1",
+            "VBUS",
+            "CC1",
+            "CC2",
+            "VBUS_FILTERED",
+            "VBUS_VS_DISCH",
+            "VBUS_EN_SNK",
+            "VSNK_GATE",
+            "DISCH",
+            "VREG_2V7",
+            "ADDR0",
+            "ADDR1",
         ):
             self.assertIn(name, labels)
         self.assertNotIn("VSNK", labels)
@@ -362,7 +367,6 @@ class STUSB4500ReferenceTests(unittest.TestCase):
         self.assertNotIn("VREG_1V2", labels)
         self.assertNotIn("FET_MID", labels)
         self.assertNotIn('(global_label "', content)
-
 
     def test_decoupler_ground_uses_one_physical_hierarchical_port(self) -> None:
         with tempfile.TemporaryDirectory(prefix="stusb4500-shared-gnd-") as temporary:
@@ -406,13 +410,15 @@ class STUSB4500ReferenceTests(unittest.TestCase):
             content, tree, instances = self._generate(temporary)
 
         filtered_labels = [
-            node for node in _all(tree, "label")
+            node
+            for node in _all(tree, "label")
             if len(node) > 1 and str(node[1]) == "VBUS_FILTERED"
         ]
         self.assertEqual(len(filtered_labels), 2)
         self.assertEqual(float(_direct(instances["D4"], "at")[3]), 180.0)
         sense_labels = [
-            node for node in _all(tree, "label")
+            node
+            for node in _all(tree, "label")
             if len(node) > 1 and str(node[1]) == "VBUS_VS_DISCH"
         ]
         self.assertEqual(len(sense_labels), 2)
@@ -420,15 +426,12 @@ class STUSB4500ReferenceTests(unittest.TestCase):
         self.assertAlmostEqual(abs(float(r4[1]) - float(r1[1])), 5.08, places=3)
         self.assertAlmostEqual(float(r4[2]), float(r1[2]), places=3)
         for wire in _all(tree, "wire"):
-            coords = [
-                (float(p[1]), float(p[2]))
-                for p in _all(_direct(wire, "pts"), "xy")
-            ]
+            coords = [(float(p[1]), float(p[2])) for p in _all(_direct(wire, "pts"), "xy")]
             self.assertEqual(len(coords), 2)
-            self.assertTrue(abs(coords[0][0] - coords[1][0]) < 0.001
-                            or abs(coords[0][1] - coords[1][1]) < 0.001)
+            self.assertTrue(
+                abs(coords[0][0] - coords[1][0]) < 0.001 or abs(coords[0][1] - coords[1][1]) < 0.001
+            )
         self.assertNotIn("(global_label", content)
-
 
     def test_esd_array_ground_faces_down_and_cc_labels_remain_visible(self) -> None:
         with tempfile.TemporaryDirectory(prefix="stusb4500-esd-labels-") as temporary:
@@ -442,15 +445,13 @@ class STUSB4500ReferenceTests(unittest.TestCase):
         self.assertNotIn('(global_label "CC1"', content)
         self.assertNotIn('(global_label "CC2"', content)
 
-
     def test_cc2_route_uses_only_valid_orthogonal_segments(self) -> None:
         with tempfile.TemporaryDirectory(prefix="stusb4500-cc-routing-") as temporary:
             _content, tree, _ = self._generate(temporary)
 
         for wire in _all(tree, "wire"):
             coordinates = [
-                (float(point[1]), float(point[2]))
-                for point in _all(_direct(wire, "pts"), "xy")
+                (float(point[1]), float(point[2])) for point in _all(_direct(wire, "pts"), "xy")
             ]
             self.assertEqual(len(coordinates), 2)
             self.assertNotEqual(coordinates[0], coordinates[1])
@@ -480,18 +481,13 @@ class STUSB4500ReferenceTests(unittest.TestCase):
         self.assertTrue(wires)
         for wire in wires:
             pts = _direct(wire, "pts")
-            coords = [
-                (float(point[1]), float(point[2]))
-                for point in _all(pts, "xy")
-            ]
+            coords = [(float(point[1]), float(point[2])) for point in _all(pts, "xy")]
             self.assertEqual(len(coords), 2)
             (x1, y1), (x2, y2) = coords
             self.assertTrue(
                 abs(x1 - x2) < 0.001 or abs(y1 - y2) < 0.001,
                 f"Non-orthogonal wire: {coords}",
             )
-
-
 
     def test_decouplers_are_directly_wired_to_u1_supply_pins(self) -> None:
         with tempfile.TemporaryDirectory(prefix="stusb4500-decouplers-") as temporary:
@@ -523,13 +519,17 @@ class STUSB4500ReferenceTests(unittest.TestCase):
         self.assertIn('(text_box "STUSB4500 USB-C / POWER DELIVERY SINK"', content)
         self.assertIn('(text_box "DATASHEET-BASED REFERENCE', content)
         titles = {str(node[1]) for node in _all(tree, "text_box")}
-        self.assertTrue({
-            "USB-C PORT / CC PROTECTION", "VBUS BULK PROTECTION",
-            "VBUS MONITOR / FILTER", "STUSB4500 CONTROLLER",
-            "I2C ADDRESS STRAPS", "BACK-TO-BACK PMOS SWITCH",
-            "VSNK OUTPUT",
-        }.issubset(titles))
-
+        self.assertTrue(
+            {
+                "USB-C PORT / CC PROTECTION",
+                "VBUS BULK PROTECTION",
+                "VBUS MONITOR / FILTER",
+                "STUSB4500 CONTROLLER",
+                "I2C ADDRESS STRAPS",
+                "BACK-TO-BACK PMOS SWITCH",
+                "VSNK OUTPUT",
+            }.issubset(titles)
+        )
 
     def test_component_origins_are_derived_from_group_constraints(self) -> None:
         with tempfile.TemporaryDirectory(prefix="stusb4500-group-layout-") as temporary:
@@ -541,7 +541,8 @@ class STUSB4500ReferenceTests(unittest.TestCase):
             targets = {str(rule["component"]) for rule in layout["constraints"]}
             self.assertIn(layout["anchor"], members)
             self.assertEqual(
-                {layout["anchor"]} | targets, members,
+                {layout["anchor"]} | targets,
+                members,
                 f"Every component in {group['id']} must be constrained from its group anchor.",
             )
 
@@ -580,12 +581,16 @@ class STUSB4500ReferenceTests(unittest.TestCase):
         for group in SCHEMATIC_GROUPS:
             frame_uuid = _uid(f"graphic:rectangle:zone:{group['id']}")
             frame = next(
-                node for node in _all(tree, "rectangle")
+                node
+                for node in _all(tree, "rectangle")
                 if _direct(node, "uuid") and str(_direct(node, "uuid")[1]) == frame_uuid
             )
             start, end = _direct(frame, "start"), _direct(frame, "end")
             frames[group["id"]] = (
-                float(start[1]), float(start[2]), float(end[1]), float(end[2]),
+                float(start[1]),
+                float(start[2]),
+                float(end[1]),
+                float(end[2]),
             )
         main = sorted(
             (group for group in SCHEMATIC_GROUPS if group["lane"] == "main"),
@@ -596,7 +601,7 @@ class STUSB4500ReferenceTests(unittest.TestCase):
             self.assertAlmostEqual(gap, 2.54, places=3)
         for i, first in enumerate(SCHEMATIC_GROUPS):
             a = frames[first["id"]]
-            for second in SCHEMATIC_GROUPS[i + 1:]:
+            for second in SCHEMATIC_GROUPS[i + 1 :]:
                 b = frames[second["id"]]
                 overlap_x = min(a[2], b[2]) - max(a[0], b[0])
                 overlap_y = min(a[3], b[3]) - max(a[1], b[1])
@@ -617,28 +622,30 @@ class STUSB4500ReferenceTests(unittest.TestCase):
     def test_style_linter_exposes_stable_rule_ids(self) -> None:
         rule_ids = tuple(STYLE_RULES)
         self.assertEqual(rule_ids, tuple(f"SCH{index:03d}" for index in range(1, 20)))
-        self.assertTrue(all(rule["severity"] in {"error", "warning"} for rule in STYLE_RULES.values()))
+        self.assertTrue(
+            all(rule["severity"] in {"error", "warning"} for rule in STYLE_RULES.values())
+        )
         self.assertTrue(all(rule["name"] and rule["description"] for rule in STYLE_RULES.values()))
 
     def test_label_glyph_wire_overlap_is_a_dedicated_error(self) -> None:
         with tempfile.TemporaryDirectory(prefix="stusb4500-label-overlap-") as temporary:
             _content, tree, _instances = self._generate(temporary)
 
-        label = next(
-            node for node in _all(tree, "label")
-            if str(node[1]) == "CC1"
-        )
+        label = next(node for node in _all(tree, "label") if str(node[1]) == "CC1")
         x, y, width, height = _text_visual_bounds(str(label[1]), label)
         wire_y = y + height / 2
-        tree.append([
-            "wire",
-            ["pts",
-                ["xy", f"{x - 1.0:.3f}", f"{wire_y:.3f}"],
-                ["xy", f"{x + width + 1.0:.3f}", f"{wire_y:.3f}"],
-            ],
-            ["stroke", ["width", "0"], ["type", "default"]],
-            ["uuid", "00000000-0000-0000-0000-000000000001"],
-        ])
+        tree.append(
+            [
+                "wire",
+                [
+                    "pts",
+                    ["xy", f"{x - 1.0:.3f}", f"{wire_y:.3f}"],
+                    ["xy", f"{x + width + 1.0:.3f}", f"{wire_y:.3f}"],
+                ],
+                ["stroke", ["width", "0"], ["type", "default"]],
+                ["uuid", "00000000-0000-0000-0000-000000000001"],
+            ]
+        )
         issues = label_wire_overlap_issues(tree)
         self.assertTrue(
             any("CC1" in issue and "overlaps a wire" in issue for issue in issues),
@@ -655,7 +662,6 @@ class STUSB4500ReferenceTests(unittest.TestCase):
         for issue in style_issues:
             print(f"SCHEMATIC_STYLE: {issue}")
         self.assertEqual(style_issues, [], "Generated schematic style violations")
-
 
     def test_r55_ground_label_stub_remains_local_and_does_not_cross_cc2(self) -> None:
         with tempfile.TemporaryDirectory(prefix="stusb4500-u1-gnd-cc2-") as temporary:
