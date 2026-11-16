@@ -222,7 +222,8 @@ class LibraryBrowserTests(unittest.TestCase):
             )
 
         self.assertEqual(len(calls), 1)
-        self.assertEqual(render_svg.call_args.kwargs["dpi"], 96.0)
+        assert render_svg.call_args is not None
+        assert render_svg.call_args.kwargs["dpi"] == 96.0
         self.assertEqual(calls[0][-1], str(project_catalog.resolve()))
         self.assertNotEqual(
             calls[0][-1],
