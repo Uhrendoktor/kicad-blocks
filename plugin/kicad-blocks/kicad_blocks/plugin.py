@@ -1183,9 +1183,12 @@ def _pick_block_for_placement(records, parent):
     search_entry.pack(fill="x", pady=(4, 8))
 
     panes = ttk.Panedwindow(outer, orient="horizontal")
+    panes._kicad_ui_contract_id = "library-browser.panes"
     panes.pack(fill="both", expand=True)
     left = ttk.Frame(panes, padding=(0, 0, 8, 0))
+    left._kicad_ui_contract_id = "library-browser.results-pane"
     right = ttk.Frame(panes, padding=(8, 0, 0, 0))
+    right._kicad_ui_contract_id = "library-browser.preview-pane"
     panes.add(left, weight=2)
     panes.add(right, weight=3)
     left.rowconfigure(0, weight=1)
@@ -1416,6 +1419,7 @@ def _pick_record(records, parent, title: str):
         show="headings",
         selectmode="browse",
     )
+    tree._kicad_ui_contract_id = "library-browser.results"
     tree.heading("block", text="Block")
     tree.heading("library", text="Library")
     tree.heading("pins", text="Pins")
@@ -4715,6 +4719,7 @@ def _show_library_browser(
     editor_window_id: str | None,
 ) -> None:
     """Show every registered block library in one KiCad-themed browser."""
+    window._kicad_ui_screen_id = "functional-block-library"
     window.title("Functional Block Library")
     current_roots = [_library_roots_for(library_root)]
     records: list = []
@@ -4744,6 +4749,7 @@ def _show_library_browser(
     ttk.Label(left, text="Search blocks").grid(row=0, column=0, sticky="w")
     search = tk.StringVar()
     search_entry = ttk.Entry(left, textvariable=search)
+    search_entry._kicad_ui_contract_id = "library-browser.search"
     search_entry.grid(row=1, column=0, sticky="ew", pady=(4, 8))
     _add_tooltip(search_entry, "Filter blocks · ↑/↓ browse · Enter place")
     tree_frame = ttk.Frame(left)
@@ -4790,9 +4796,11 @@ def _show_library_browser(
     preview_box = ttk.LabelFrame(right, text="Preview", padding=5)
     preview_box.grid(row=2, column=0, sticky="nsew")
     preview_notebook = ttk.Notebook(preview_box)
+    preview_notebook._kicad_ui_contract_id = "library-browser.preview.views"
     preview_notebook.pack(fill="both", expand=True)
 
     facade_page = ttk.Frame(preview_notebook)
+    facade_page._kicad_ui_contract_id = "library-browser.preview.facade"
     preview_notebook.add(facade_page, text="Facade")
     facade_frame = ttk.Frame(facade_page)
     facade_frame.pack(fill="both", expand=True)
@@ -4821,6 +4829,7 @@ def _show_library_browser(
     _bind_mousewheel(preview, lambda amount: preview.yview_scroll(amount, "units"))
 
     schematic_page = ttk.Frame(preview_notebook)
+    schematic_page._kicad_ui_contract_id = "library-browser.preview.schematic"
     preview_notebook.add(schematic_page, text="Schematic")
     schematic_page.columnconfigure(0, weight=1)
     schematic_page.rowconfigure(1, weight=1)
@@ -4835,6 +4844,7 @@ def _show_library_browser(
         state="disabled",
         width=22,
     )
+    implementation_selector._kicad_ui_contract_id = "library-browser.implementation"
     implementation_selector.pack(side="left", padx=(5, 0))
     _add_tooltip(implementation_selector, "Choose the implementation shown in the schematic preview")
     page_choice = tk.StringVar()
@@ -4846,6 +4856,7 @@ def _show_library_browser(
         state="disabled",
         width=22,
     )
+    page_selector._kicad_ui_contract_id = "library-browser.sheet"
     schematic_frame = ttk.Frame(schematic_page)
     schematic_frame.grid(row=1, column=0, sticky="nsew")
     schematic_frame.columnconfigure(0, weight=1)
@@ -5487,41 +5498,49 @@ def _show_library_browser(
     place_button = _action_button(
         action_toolbar, "Place block", place_selected, "place",
         "Register the selected facade and start KiCad native symbol placement",
+        contract_id="library-browser.action.place",
     )
     place_button.pack(side="left")
     implementation_button = _action_button(
         action_toolbar, "Implementation", open_implementation, "implementation",
         "Open the base or a named circuit implementation",
+        contract_id="library-browser.action.implementation",
     )
     implementation_button.pack(side="left", padx=(6, 0))
     facade_button[0] = _action_button(
         action_toolbar, "Edit facade", edit_facade, "facade",
         "Open the generated library facade in KiCad Symbol Editor",
+        contract_id="library-browser.action.facade",
     )
     facade_button[0].pack(side="left", padx=(6, 0))
     variants_button = _action_button(
         action_toolbar, "Variants", edit_variants, "variants",
         "Add, edit, remove, or set the default circuit implementation",
+        contract_id="library-browser.action.variants",
     )
     variants_button.pack(side="left", padx=(6, 0))
     open_layout_button[0] = _action_button(
         action_toolbar, "Open PCB", open_layout, "pcb",
         "Open one of the block's stored PCB layouts",
+        contract_id="library-browser.action.open-pcb",
     )
     open_layout_button[0].pack(side="left", padx=(6, 0))
     manage_layout_button = _action_button(
         action_toolbar, "PCB layouts", manage_layouts, "layouts",
         "Add and associate PCB layouts with implementations",
+        contract_id="library-browser.action.manage-pcb-layouts",
     )
     manage_layout_button.pack(side="left", padx=(6, 0))
     refresh_button = _action_button(
         action_toolbar, "Refresh", refresh_records, "refresh",
         "Reload registered libraries and block details",
+        contract_id="library-browser.action.refresh",
     )
     refresh_button.pack(side="left", padx=(6, 0))
     libraries_button = _action_button(
         action_toolbar, "Libraries", manage_libraries, "libraries",
         "Register, create, change, or unregister block libraries",
+        contract_id="library-browser.action.libraries",
     )
     libraries_button.pack(side="left", padx=(6, 0))
     refresh_records()
