@@ -5,9 +5,9 @@ This page is generated from the declarative UI catalog. It inventories the curre
 
 | Coverage status | Screens | Meaning |
 |---|---:|---|
-| Contracted | 2 | Widget-level execute/result assertions are registered and run in CI. |
+| Contracted | 4 | Widget-level execute/result assertions are registered and run in CI. |
 | Partial | 8 | Targeted GUI, integration, model, or screenshot checks exist; the full control matrix is not contracted. |
-| Inventory only | 5 | Window/workflow is documented here; systematic interaction contracts remain future work. |
+| Inventory only | 3 | Window/workflow is documented here; systematic interaction contracts remain future work. |
 
 The first contract milestones cover Task Hub routing and navigation and the Add PCB layout dialog's application-owned controls. The Functional Block Library and implementation manager have substantial partial contract coverage. None of this implies that every downstream KiCad operation or native OS chooser has been proven.
 
@@ -292,19 +292,26 @@ The library-root manager is captured and has domain-level coverage for root conf
 
 Select which named circuit implementation to open in the schematic editor.
 
-**Coverage:** Inventory only — systematic UI contracts not implemented yet.
+**Coverage:** Contracted — widget action and expected UI transition asserted.
 
-The chooser is implemented as a transient Tk window in the functional block browser. It is not yet in the visual screenshot inventory or a reusable execute-and-assert component contract.
+Real Tk contracts assert the transient window identity, available Default/named choices, opening the selected named implementation, and cancelling without launching a document.
 
 **Major functionality**
 
-- Show available default and named implementations for the selected block
-- Return the selected implementation to the editor-open workflow
+- Show the default and all named implementations for the selected block
+- Open the selected implementation file in the schematic editor
 - Cancel without opening a document
+
+**Registered semantic controls**
+
+- Open implementation chooser (`open-implementation-chooser.window`; window; behavior asserted)
+- Implementation selection (`open-implementation-chooser.choice`; combobox; behavior asserted)
+- Open selected implementation (`open-implementation-chooser.action.open`; button; behavior asserted)
+- Cancel (`open-implementation-chooser.action.cancel`; button; behavior asserted)
 
 **Current automated evidence**
 
-- `tests/test_library_browser.py`
+- `tests/test_library_browser_contracts.py`
 
 **Production screenshots:** Not yet captured for this surface.
 
@@ -314,18 +321,28 @@ The chooser is implemented as a transient Tk window in the functional block brow
 
 Select a stored PCB layout to open in PCB Editor.
 
-**Coverage:** Inventory only — systematic UI contracts not implemented yet.
+**Coverage:** Contracted — widget action and expected UI transition asserted.
 
-The chooser is implemented as a transient Tk window in the functional block browser. It is not yet in the visual screenshot inventory or a reusable execute-and-assert component contract.
+Real Tk contracts assert the transient window identity, available layouts, opening the selected board file, cancelling without a launch, and entering the PCB layouts manager.
 
 **Major functionality**
 
-- Show stored PCB layouts for the selected block
-- Return the selected layout to the editor-open workflow
+- Show available stored PCB layouts for the selected block
+- Open the selected board in PCB Editor
+- Open the PCB layouts manager
 - Cancel without opening a board
+
+**Registered semantic controls**
+
+- Open PCB layout chooser (`open-pcb-layout-chooser.window`; window; behavior asserted)
+- PCB layout selection (`open-pcb-layout-chooser.choice`; combobox; behavior asserted)
+- Open selected PCB layout (`open-pcb-layout-chooser.action.open`; button; behavior asserted)
+- Cancel (`open-pcb-layout-chooser.action.cancel`; button; behavior asserted)
+- Manage layouts (`open-pcb-layout-chooser.action.manage`; button; behavior asserted)
 
 **Current automated evidence**
 
+- `tests/test_library_browser_contracts.py`
 - `tests/test_pcb_layout.py`
 
 **Production screenshots:** Not yet captured for this surface.
