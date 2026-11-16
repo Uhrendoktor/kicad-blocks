@@ -40,6 +40,10 @@ All thirteen action-button routes, the Close action, the three notebook views, w
   - Apply selected PCB layout (`apply-pcb-layout`)
   - Apply multiple PCB layouts (`apply-multiple-pcb-layouts`)
 
+**Registered semantic controls**
+
+- Workflow tabs (`task-hub.views`; notebook)
+
 **Other controls**
 
 - Close
@@ -76,7 +80,7 @@ Search registered block libraries, inspect facade and schematic previews, choose
 
 **Coverage:** Partial — targeted GUI, integration, or visual checks exist.
 
-The production browser is captured in both themes and has targeted unit/integration coverage for search, selection, preview rendering, and placement hand-off. Its complete toolbar action set is not yet registered as execute-and-assert contracts.
+The production browser is captured in both themes and has targeted unit/integration coverage for filtering, result selection, and placement. Real-widget interaction contracts now assert search filtering, selected-record details, Facade/Schematic preview switching, both split panes, Refresh, Place, default implementation open, Edit Facade routing, and creation of the PCB-layout chooser. The Variants, Open PCB confirm/cancel, PCB layouts manager, and Libraries actions, as well as full failure-state coverage, remain to be contracted.
 
 **Major functionality**
 
@@ -86,8 +90,32 @@ The production browser is captured in both themes and has targeted unit/integrat
 - Refresh records and manage library roots
 - Place a facade or open implementation, facade, and PCB layout managers
 
+**Registered semantic controls**
+
+- Results and preview split panes (`library-browser.panes`; paned-window)
+- Block results (`library-browser.results-pane`; pane)
+- Selected block preview and details (`library-browser.preview-pane`; pane)
+- Search blocks (`library-browser.search`; entry)
+- Block list (`library-browser.results`; treeview)
+- Library and filtered-result count (`library-browser.summary`; status-label)
+- Selected block name (`library-browser.selected-name`; selection-label)
+- Facade and Schematic tabs (`library-browser.preview.views`; notebook)
+- Facade preview (`library-browser.preview.facade`; view)
+- Schematic preview (`library-browser.preview.schematic`; view)
+- Implementation selector (`library-browser.implementation`; combobox)
+- Sheet selector (`library-browser.sheet`; combobox)
+- Place block (`library-browser.action.place`; button)
+- Implementation (`library-browser.action.implementation`; button)
+- Edit facade (`library-browser.action.facade`; button)
+- Variants (`library-browser.action.variants`; button)
+- Open PCB (`library-browser.action.open-pcb`; button)
+- PCB layouts (`library-browser.action.manage-pcb-layouts`; button)
+- Refresh (`library-browser.action.refresh`; button)
+- Libraries (`library-browser.action.libraries`; button)
+
 **Current automated evidence**
 
+- `tests/test_library_browser_contracts.py`
 - `tests/test_library_browser.py`
 - `tests/capture_visual_docs.py`
 
