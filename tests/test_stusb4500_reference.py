@@ -14,7 +14,7 @@ sys.path.insert(0, str(ROOT / "examples" / "stusb4500"))
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from generate_reference import SCHEMATIC_GROUPS, reference_uid, generate_reference_schematic
-from kicad_blocks.sexpr import SExprList, parse_sexpr, sexpr_all, sexpr_direct
+from kicad_blocks.sexpr import SExpr, SExprList, parse_sexpr, sexpr_all, sexpr_direct
 from validate_schematic_style import (
     STYLE_RULES,
     check_schematic_style,
@@ -45,6 +45,13 @@ def _atom(node: SExprList, index: int) -> str:
 def _number(node: SExprList, index: int) -> float:
     """Read one numeric scalar from a parsed KiCad S-expression node."""
     return float(_atom(node, index))
+
+
+def _scalar_number(value: SExpr) -> float:
+    """Convert one scalar atom to a float, rejecting nested S-expression nodes."""
+    if not isinstance(value, str):
+        raise AssertionError(f"Expected numeric S-expression atom, got {value!r}.")
+    return float(value)
 
 
 def _instance_map(tree: SExprList) -> dict[str, SExprList]:
@@ -156,10 +163,10 @@ class STUSB4500ReferenceTests(unittest.TestCase):
         self.assertNotIn("OPTIONAL MCU / I2C INTERFACE", content)
         self.assertNotIn("ADDRESS / RESET STRAPS", content)
 
-        positions: dict[str, SExprList] = {}
+        positions: dict[str, tuple[float, float]] = {}
         for reference in ("J1", "C50", "D4", "U1", "T4", "T1"):
             at = _required_direct(instances[reference], "at")
-            positions[reference] = (float(at[1]), float(at[2]))
+            positions[reference] = (_scalar_number(at[1]), _scalar_number(at[2]))
         self.assertLess(positions["J1"][0], positions["C50"][0])
         self.assertLess(positions["C50"][0], positions["D4"][0])
         self.assertLess(positions["D4"][0], positions["U1"][0])
@@ -172,19 +179,19 @@ class STUSB4500ReferenceTests(unittest.TestCase):
 
         for reference in ("R51", "R52", "R53", "R54"):
             self.assertIn(reference, instances)
-            self.assertEqual(float(_required_direct(instances[reference], "at")[3]), 90.0)
+            self.assertEqual(_scalar_number(_required_direct(instances[reference], "at")[3]), 90.0)
         self.assertIn("R55", instances)
-        self.assertLess(float(_required_direct(instances["R55"], "at")[2]), 240.0)
+        self.assertLess(_scalar_number(_required_direct(instances["R55"], "at")[2]), 240.0)
 
         r51, r52, r53, r54 = (
             _required_direct(instances[reference], "at")
             for reference in ("R51", "R52", "R53", "R54")
         )
-        self.assertAlmostEqual(float(r51[2]), float(r53[2]), places=3)
-        self.assertAlmostEqual(float(r52[2]), float(r54[2]), places=3)
-        self.assertLess(float(r51[1]), float(r53[1]))
-        self.assertLess(float(r52[1]), float(r54[1]))
-        self.assertLess(abs(float(r51[2]) - float(r52[2])), 15.0)
+        self.assertAlmostEqual(_scalar_number(r51[2]), _scalar_number(r53[2]), places=3)
+        self.assertAlmostEqual(_scalar_number(r52[2]), _scalar_number(r54[2]), places=3)
+        self.assertLess(_scalar_number(r51[1]), _scalar_number(r53[1]))
+        self.assertLess(_scalar_number(r52[1]), _scalar_number(r54[1]))
+        self.assertLess(abs(_scalar_number(r51[2]) - _scalar_number(r52[2])), 15.0)
 
         strap_names = {
             str(node[1])
@@ -217,12 +224,12 @@ class STUSB4500ReferenceTests(unittest.TestCase):
             reference: _required_direct(instances[reference], "at")
             for reference in ("T4", "T1", "C10", "D11", "R2")
         }
-        self.assertLess(float(positions["T4"][1]), float(positions["T1"][1]))
-        self.assertLess(float(positions["T1"][1]), float(positions["C10"][1]))
-        output_x = {round(float(positions[reference][1]), 3) for reference in ("C10", "D11", "R2")}
+        self.assertLess(_scalar_number(positions["T4"][1]), _scalar_number(positions["T1"][1]))
+        self.assertLess(_scalar_number(positions["T1"][1]), _scalar_number(positions["C10"][1]))
+        output_x = {round(_scalar_number(positions[reference][1]), 3) for reference in ("C10", "D11", "R2")}
         self.assertEqual(len(output_x), 1)
-        self.assertLess(float(positions["C10"][2]), float(positions["D11"][2]))
-        self.assertLess(float(positions["D11"][2]), float(positions["R2"][2]))
+        self.assertLess(_scalar_number(positions["C10"][2]), _scalar_number(positions["D11"][2]))
+        self.assertLess(_scalar_number(positions["D11"][2]), _scalar_number(positions["R2"][2]))
 
         def frame(name: str):
             node = next(
@@ -233,7 +240,7 @@ class STUSB4500ReferenceTests(unittest.TestCase):
                 == reference_uid(f"graphic:rectangle:zone:{name}")
             )
             start, end = _required_direct(node, "start"), _required_direct(node, "end")
-            return (float(start[1]), float(start[2]), float(end[1]), float(end[2]))
+            return (_scalar_number(start[1]), _scalar_number(start[2]), _scalar_number(end[1]), _scalar_number(end[2]))
 
         switch, output = frame("power-switch"), frame("vsnk-output")
         self.assertAlmostEqual(output[0] - switch[2], 2.54, places=3)
@@ -264,18 +271,18 @@ class STUSB4500ReferenceTests(unittest.TestCase):
             instance = instances[reference]
             symbol_at = _required_direct(instance, "at")
             value_at = _required_direct(_property(instance, "Value"), "at")
-            self.assertAlmostEqual(float(value_at[1]), float(symbol_at[1]), places=3, msg=reference)
-            self.assertAlmostEqual(float(value_at[2]), float(symbol_at[2]), places=3, msg=reference)
+            self.assertAlmostEqual(_scalar_number(value_at[1]), _scalar_number(symbol_at[1]), places=3, msg=reference)
+            self.assertAlmostEqual(_scalar_number(value_at[2]), _scalar_number(symbol_at[2]), places=3, msg=reference)
             effects = _required_direct(_property(instance, "Value"), "effects")
             font = _required_direct(effects, "font")
             size = _required_direct(font, "size")
-            self.assertLessEqual(float(size[1]), 0.72, msg=reference)
+            self.assertLessEqual(_scalar_number(size[1]), 0.72, msg=reference)
             # KiCad centers fields by default. "center" is not a valid
             # horizontal justify direction and makes the entire sheet unloadable.
             self.assertIsNone(sexpr_direct(effects, "justify"), msg=reference)
             for field_name in ("Reference", "Value"):
                 field_angle = _required_direct(_property(instance, field_name), "at")[3]
-                self.assertEqual(float(field_angle), 90.0, f"{reference} {field_name} angle")
+                self.assertEqual(_scalar_number(field_angle), 90.0, f"{reference} {field_name} angle")
 
     def test_j1_and_u1_fields_are_close_and_inside_their_groups(self) -> None:
         with tempfile.TemporaryDirectory(prefix="stusb4500-fields-") as temporary:
@@ -284,18 +291,18 @@ class STUSB4500ReferenceTests(unittest.TestCase):
         j1 = _required_direct(instances["J1"], "at")
         for field_name in ("Reference", "Value"):
             at = _required_direct(_property(instances["J1"], field_name), "at")
-            self.assertAlmostEqual(float(at[1]), float(j1[1]), places=3)
-            self.assertLess(float(at[2]), float(j1[2]) - 27.94)
+            self.assertAlmostEqual(_scalar_number(at[1]), _scalar_number(j1[1]), places=3)
+            self.assertLess(_scalar_number(at[2]), _scalar_number(j1[2]) - 27.94)
 
         u1 = _required_direct(instances["U1"], "at")
         for field_name, expected_y in (
-            ("Reference", float(u1[2]) - 17.78),
-            ("Value", float(u1[2]) - 15.24),
+            ("Reference", _scalar_number(u1[2]) - 17.78),
+            ("Value", _scalar_number(u1[2]) - 15.24),
         ):
             prop = _property(instances["U1"], field_name)
             at = _required_direct(prop, "at")
-            self.assertAlmostEqual(float(at[1]), float(u1[1]) + 15.24, places=3)
-            self.assertAlmostEqual(float(at[2]), expected_y, places=3)
+            self.assertAlmostEqual(_scalar_number(at[1]), _scalar_number(u1[1]) + 15.24, places=3)
+            self.assertAlmostEqual(_scalar_number(at[2]), expected_y, places=3)
             if field_name == "Reference":
                 self.assertEqual(
                     _atom(_required_direct(_required_direct(prop, "effects"), "justify"), 1), "left"
@@ -306,8 +313,8 @@ class STUSB4500ReferenceTests(unittest.TestCase):
                 )
 
         r55 = _required_direct(instances["R55"], "at")
-        self.assertAlmostEqual(float(r55[1]), float(u1[1]) - 22.86, places=3)
-        self.assertLess(abs(float(r55[2]) - float(u1[2])), 15.0)
+        self.assertAlmostEqual(_scalar_number(r55[1]), _scalar_number(u1[1]) - 22.86, places=3)
+        self.assertLess(abs(_scalar_number(r55[2]) - _scalar_number(u1[2])), 15.0)
 
     def test_group_descriptions_and_source_evidence_are_generated(self) -> None:
         with tempfile.TemporaryDirectory(prefix="stusb4500-group-descriptions-") as temporary:
@@ -367,11 +374,11 @@ class STUSB4500ReferenceTests(unittest.TestCase):
         start, end = _required_direct(zone, "start"), _required_direct(zone, "end")
         for reference in ("C50", "D50"):
             at = _required_direct(instances[reference], "at")
-            self.assertLess(float(start[1]), float(at[1]))
-            self.assertLess(float(start[2]), float(at[2]))
-            self.assertGreater(float(end[1]), float(at[1]))
-            self.assertGreater(float(end[2]), float(at[2]))
-        self.assertGreater(float(end[1]) - float(start[1]), 20.0)
+            self.assertLess(_scalar_number(start[1]), _scalar_number(at[1]))
+            self.assertLess(_scalar_number(start[2]), _scalar_number(at[2]))
+            self.assertGreater(_scalar_number(end[1]), _scalar_number(at[1]))
+            self.assertGreater(_scalar_number(end[2]), _scalar_number(at[2]))
+        self.assertGreater(_scalar_number(end[1]) - _scalar_number(start[1]), 20.0)
 
     def test_internal_nets_and_hierarchical_vsnk_scope_are_consistent(self) -> None:
         with tempfile.TemporaryDirectory(prefix="stusb4500-local-nets-") as temporary:
@@ -410,7 +417,7 @@ class STUSB4500ReferenceTests(unittest.TestCase):
         for node in sexpr_all(tree, "hierarchical_label"):
             at = sexpr_direct(node, "at")
             if str(node[1]) == "GND" and at is not None:
-                point = (round(float(at[1]), 3), round(float(at[2]), 3))
+                point = (round(_scalar_number(at[1]), 3), round(_scalar_number(at[2]), 3))
                 if dsu.find(point) == dsu.find(c2):
                     ground_labels.append(node)
         self.assertEqual(len(ground_labels), 1)
@@ -420,12 +427,12 @@ class STUSB4500ReferenceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="stusb4500-bypass-layout-") as temporary:
             _content, tree, instances = self._generate(temporary)
         u1_x = _number(_required_direct(instances["U1"], "at"), 1)
-        self.assertAlmostEqual(float(sexpr_direct(instances["C1"], "at")[1]), u1_x + 5.08, places=3)
+        self.assertAlmostEqual(_scalar_number(sexpr_direct(instances["C1"], "at")[1]), u1_x + 5.08, places=3)
         self.assertAlmostEqual(
-            float(sexpr_direct(instances["C2"], "at")[1]), u1_x + 15.24, places=3
+            _scalar_number(sexpr_direct(instances["C2"], "at")[1]), u1_x + 15.24, places=3
         )
         self.assertAlmostEqual(
-            float(sexpr_direct(instances["C3"], "at")[1]), u1_x + 20.32, places=3
+            _scalar_number(sexpr_direct(instances["C3"], "at")[1]), u1_x + 20.32, places=3
         )
         dsu, pins = wire_networks(tree)
         c1 = pins[("C1", "1")]["point"]
@@ -436,8 +443,8 @@ class STUSB4500ReferenceTests(unittest.TestCase):
     def test_back_to_back_fets_are_condensed(self) -> None:
         with tempfile.TemporaryDirectory(prefix="stusb4500-compact-fets-") as temporary:
             _content, _tree, instances = self._generate(temporary)
-        t4_x = float(_required_direct(instances["T4"], "at")[1])
-        t1_x = float(_required_direct(instances["T1"], "at")[1])
+        t4_x = _scalar_number(_required_direct(instances["T4"], "at")[1])
+        t1_x = _scalar_number(_required_direct(instances["T1"], "at")[1])
         self.assertAlmostEqual(t1_x - t4_x, 25.40, places=3)
 
     def test_vbus_filtered_nodes_use_local_labels_without_crossing_d4(self) -> None:
@@ -458,11 +465,11 @@ class STUSB4500ReferenceTests(unittest.TestCase):
         ]
         self.assertEqual(len(sense_labels), 2)
         r1, r4 = _required_direct(instances["R1"], "at"), _required_direct(instances["R4"], "at")
-        self.assertAlmostEqual(abs(float(r4[1]) - float(r1[1])), 5.08, places=3)
-        self.assertAlmostEqual(float(r4[2]), float(r1[2]), places=3)
+        self.assertAlmostEqual(abs(_scalar_number(r4[1]) - _scalar_number(r1[1])), 5.08, places=3)
+        self.assertAlmostEqual(_scalar_number(r4[2]), _scalar_number(r1[2]), places=3)
         for wire in sexpr_all(tree, "wire"):
             coords = [
-                (float(p[1]), float(p[2])) for p in sexpr_all(_required_direct(wire, "pts"), "xy")
+                (_scalar_number(p[1]), _scalar_number(p[2])) for p in sexpr_all(_required_direct(wire, "pts"), "xy")
             ]
             self.assertEqual(len(coords), 2)
             self.assertTrue(
@@ -488,7 +495,7 @@ class STUSB4500ReferenceTests(unittest.TestCase):
 
         for wire in sexpr_all(tree, "wire"):
             coordinates = [
-                (float(point[1]), float(point[2]))
+                (_scalar_number(point[1]), _scalar_number(point[2]))
                 for point in sexpr_all(_required_direct(wire, "pts"), "xy")
             ]
             self.assertEqual(len(coordinates), 2)
@@ -519,7 +526,7 @@ class STUSB4500ReferenceTests(unittest.TestCase):
         self.assertTrue(wires)
         for wire in wires:
             pts = _required_direct(wire, "pts")
-            coords = [(float(point[1]), float(point[2])) for point in sexpr_all(pts, "xy")]
+            coords = [(_scalar_number(point[1]), _scalar_number(point[2])) for point in sexpr_all(pts, "xy")]
             self.assertEqual(len(coords), 2)
             (x1, y1), (x2, y2) = coords
             self.assertTrue(
@@ -586,7 +593,7 @@ class STUSB4500ReferenceTests(unittest.TestCase):
 
         def origin(reference: str) -> tuple[float, float]:
             at = _required_direct(instances[reference], "at")
-            return float(at[1]), float(at[2])
+            return _scalar_number(at[1]), _scalar_number(at[2])
 
         def delta(first: str, second: str) -> tuple[float, float]:
             a, b = origin(first), origin(second)
@@ -625,10 +632,10 @@ class STUSB4500ReferenceTests(unittest.TestCase):
             )
             start, end = _required_direct(frame, "start"), _required_direct(frame, "end")
             frames[group["id"]] = (
-                float(start[1]),
-                float(start[2]),
-                float(end[1]),
-                float(end[2]),
+                _scalar_number(start[1]),
+                _scalar_number(start[2]),
+                _scalar_number(end[1]),
+                _scalar_number(end[2]),
             )
         main = sorted(
             (group for group in SCHEMATIC_GROUPS if group["lane"] == "main"),
@@ -706,8 +713,8 @@ class STUSB4500ReferenceTests(unittest.TestCase):
             _content, tree, instances = self._generate(temporary)
         u1 = _required_direct(instances["U1"], "at")
         r55 = _required_direct(instances["R55"], "at")
-        self.assertAlmostEqual(float(r55[1]), float(u1[1]) - 22.86, places=3)
-        self.assertLess(abs(float(r55[2]) - float(u1[2])), 15.0)
+        self.assertAlmostEqual(_scalar_number(r55[1]), _scalar_number(u1[1]) - 22.86, places=3)
+        self.assertLess(abs(_scalar_number(r55[2]) - _scalar_number(u1[2])), 15.0)
         self.assertEqual(check_schematic_style(tree), [])
 
 
