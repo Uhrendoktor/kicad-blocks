@@ -17,11 +17,13 @@ sys.path.insert(0, str(ROOT / "tests"))
 from kicad_blocks import plugin as plugin_actions
 from ui_contracts import (
     ButtonContract,
+    ChoiceViewContract,
     EntryInputContract,
     NotebookViewContract,
     PaneGroupContract,
     TreeSelectionContract,
     UiTestContext,
+    WindowContract,
     assert_control_coverage,
 )
 
@@ -548,14 +550,13 @@ def test_open_implementation_chooser_opens_the_selected_named_variant(
     records[0].manifest["variants"] = [
         {"value": "1V8", "file": "implementation_1v8.kicad_sch"}
     ]
-    effects = []
     monkeypatch.setattr(
         plugin_actions, "_register_implementation_catalog",
-        lambda *_args, **_kwargs: effects.append("registered"),
+        lambda *_args, **_kwargs: context.action_calls.append("registered"),
     )
     monkeypatch.setattr(
         plugin_actions, "_launch_block_asset",
-        lambda _kicad, asset, *_args, **_kwargs: effects.append(Path(asset).name),
+        lambda _kicad, asset, *_args, **_kwargs: context.action_calls.append(Path(asset).name),
     )
     try:
         _select_first_record(context)
@@ -582,7 +583,7 @@ def test_open_implementation_chooser_opens_the_selected_named_variant(
             "1V8",
         )
         combo.set("1V8")
-        effects.clear()
+        context.action_calls.clear()
         ButtonContract(
             contract_id="open-implementation-chooser.action.open",
             expected_action="implementation_1v8.kicad_sch",
