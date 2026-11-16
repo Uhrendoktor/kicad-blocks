@@ -101,7 +101,7 @@ def _run_manager(root, record, context, action):
             context.refresh_widgets()
             assert_control_coverage(dialog, MANAGER_CONTROLS)
             action(dialog)
-        except BaseException as exc:
+        except Exception as exc:
             # Tkinter reports callback exceptions to stderr and keeps a modal
             # wait_window() alive. Capture the exception in the test thread,
             # close the modal, and re-raise after wait_window returns so CI
