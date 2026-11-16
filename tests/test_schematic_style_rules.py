@@ -15,12 +15,12 @@ sys.path.insert(0, str(ROOT / "examples" / "stusb4500"))
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from generate_reference import generate_reference_schematic
-from kicad_blocks.pcb_layout import _all, _direct, parse_sexpr
+from kicad_blocks.sexpr import SExprList, parse_sexpr, sexpr_all, sexpr_direct
 from validate_schematic_style import (
     STYLE_RULES,
-    _pin_world_info,
-    _text_visual_bounds,
-    _wire_networks,
+    pin_world_info,
+    text_visual_bounds,
+    wire_networks,
     block_annotation_issues,
     check_generic_schematic_style,
     check_schematic_style,
@@ -36,6 +36,8 @@ from validate_schematic_style import (
 
 
 class SchematicStyleRuleTests(unittest.TestCase):
+    source: SExprList
+
     @classmethod
     def setUpClass(cls) -> None:
         cls.temporary = tempfile.TemporaryDirectory(prefix="schematic-style-rules-")
@@ -46,7 +48,7 @@ class SchematicStyleRuleTests(unittest.TestCase):
     def tearDownClass(cls) -> None:
         cls.temporary.cleanup()
 
-    def fresh_tree(self) -> list:
+    def fresh_tree(self) -> SExprList:
         return copy.deepcopy(self.source)
 
     def test_rule_catalogue_and_generated_reference_pass(self) -> None:
@@ -60,7 +62,7 @@ class SchematicStyleRuleTests(unittest.TestCase):
     def test_multiline_block_title_is_rejected(self) -> None:
         tree = self.fresh_tree()
         title = next(
-            node for node in _all(tree, "text_box") if str(node[1]) == "USB-C PORT / CC PROTECTION"
+            node for node in sexpr_all(tree, "text_box") if str(node[1]) == "USB-C PORT / CC PROTECTION"
         )
         title[1] = str(title[1]) + "\nWRAPPED"
         self.assertTrue(any("single line" in issue for issue in block_annotation_issues(tree)))
@@ -101,8 +103,8 @@ assert "generate_reference" not in sys.modules
 
     def test_unbordered_title_box_must_have_single_line_render_reserve(self) -> None:
         tree = self.fresh_tree()
-        title = next(node for node in _all(tree, "text_box") if str(node[1]) == "VSNK OUTPUT")
-        size = _direct(title, "size")
+        title = next(node for node in sexpr_all(tree, "text_box") if str(node[1]) == "VSNK OUTPUT")
+        size = sexpr_direct(title, "size")
         size[1] = f"{float(size[1]) - 3.0:.3f}"
         self.assertTrue(
             any("cannot reliably render on one line" in issue for issue in text_box_issues(tree))
@@ -112,10 +114,10 @@ assert "generate_reference" not in sys.modules
         tree = self.fresh_tree()
         note = next(
             node
-            for node in _all(tree, "text_box")
+            for node in sexpr_all(tree, "text_box")
             if str(node[1]).startswith("Type-C receptacle and dual CC-line ESD protection.")
         )
-        width = _direct(_direct(note, "stroke"), "width")
+        width = sexpr_direct(sexpr_direct(note, "stroke"), "width")
         width[1] = "-1"
         self.assertTrue(
             any("visible box outline" in issue for issue in group_comment_outline_issues(tree))
@@ -182,14 +184,14 @@ assert "generate_reference" not in sys.modules
         tree = self.fresh_tree()
         d50 = next(
             node
-            for node in _all(tree, "symbol")
+            for node in sexpr_all(tree, "symbol")
             if any(
                 str(prop[1]) == "Reference" and str(prop[2]) == "D50"
-                for prop in _all(node, "property")
+                for prop in sexpr_all(node, "property")
             )
         )
-        value = next(prop for prop in _all(d50, "property") if str(prop[1]) == "Value")
-        x, y, width, height = _text_visual_bounds(str(value[2]), value)
+        value = next(prop for prop in sexpr_all(d50, "property") if str(prop[1]) == "Value")
+        x, y, width, height = text_visual_bounds(str(value[2]), value)
         tree.append(
             [
                 "wire",
@@ -208,15 +210,15 @@ assert "generate_reference" not in sys.modules
         tree = self.fresh_tree()
         d1 = next(
             node
-            for node in _all(tree, "symbol")
+            for node in sexpr_all(tree, "symbol")
             if any(
                 str(prop[1]) == "Reference" and str(prop[2]) == "D1"
-                for prop in _all(node, "property")
+                for prop in sexpr_all(node, "property")
             )
         )
-        value = next(prop for prop in _all(d1, "property") if str(prop[1]) == "Value")
-        d1_at = _direct(d1, "at")
-        value_at = _direct(value, "at")
+        value = next(prop for prop in sexpr_all(d1, "property") if str(prop[1]) == "Value")
+        d1_at = sexpr_direct(d1, "at")
+        value_at = sexpr_direct(value, "at")
         value_at[1] = f"{float(d1_at[1]) + 2.54:.3f}"
         value_at[2] = str(d1_at[2])
         self.assertTrue(
@@ -240,10 +242,10 @@ assert "generate_reference" not in sys.modules
         tree = self.fresh_tree()
         note = next(
             node
-            for node in _all(tree, "text_box")
+            for node in sexpr_all(tree, "text_box")
             if str(node[1]).startswith("Type-C receptacle and dual CC-line ESD protection.")
         )
-        at, size = _direct(note, "at"), _direct(note, "size")
+        at, size = sexpr_direct(note, "at"), sexpr_direct(note, "size")
         x = float(at[1]) + float(size[1]) / 2
         y = float(at[2]) + float(size[2]) / 2
         tree.append(
@@ -258,11 +260,11 @@ assert "generate_reference" not in sys.modules
         tree = self.fresh_tree()
         self.assertEqual(common_pin_net_issues(tree), [])
         self.assertEqual(required_no_connect_issues(tree), [])
-        pins = _pin_world_info(tree)
+        pins = pin_world_info(tree)
         markers = {
-            (round(float(_direct(node, "at")[1]), 3), round(float(_direct(node, "at")[2]), 3))
-            for node in _all(tree, "no_connect")
-            if _direct(node, "at") is not None
+            (round(float(sexpr_direct(node, "at")[1]), 3), round(float(sexpr_direct(node, "at")[2]), 3))
+            for node in sexpr_all(tree, "no_connect")
+            if sexpr_direct(node, "at") is not None
         }
         # U1.3 is already a hidden no_connect pin in its embedded symbol.
         self.assertNotIn(pins[("U1", "3")]["point"], markers)
@@ -272,9 +274,9 @@ assert "generate_reference" not in sys.modules
         marker_point = pins[("U1", "11")]["point"]
         marker = next(
             node
-            for node in _all(tree, "no_connect")
-            if _direct(node, "at") is not None
-            and (round(float(_direct(node, "at")[1]), 3), round(float(_direct(node, "at")[2]), 3))
+            for node in sexpr_all(tree, "no_connect")
+            if sexpr_direct(node, "at") is not None
+            and (round(float(sexpr_direct(node, "at")[1]), 3), round(float(sexpr_direct(node, "at")[2]), 3))
             == marker_point
         )
         tree.remove(marker)
@@ -282,12 +284,12 @@ assert "generate_reference" not in sys.modules
 
     def test_common_ground_contract_detects_a_wrong_decoupler_net(self) -> None:
         tree = self.fresh_tree()
-        dsu, pin_info = _wire_networks(tree)
+        dsu, pin_info = wire_networks(tree)
         root = dsu.find(pin_info[("C3", "2")]["point"])
         label = None
         for kind in ("label", "hierarchical_label", "global_label"):
-            for node in _all(tree, kind):
-                at = _direct(node, "at")
+            for node in sexpr_all(tree, kind):
+                at = sexpr_direct(node, "at")
                 if at is None:
                     continue
                 point = (round(float(at[1]), 3), round(float(at[2]), 3))

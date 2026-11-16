@@ -603,7 +603,7 @@ def _frame_bounds(tree: SExprList, zone: str) -> Rect | None:
     return None
 
 
-def _pin_world_info(tree: SExprList) -> dict[tuple[str, str], _PinWorldInfo]:
+def pin_world_info(tree: SExprList) -> dict[tuple[str, str], _PinWorldInfo]:
     """Resolve every component pin to a sheet coordinate and outward angle."""
     lib_symbols = _direct(tree, "lib_symbols")
     library: dict[str, SExprList] = {}
@@ -669,7 +669,7 @@ def wire_networks(tree: SExprList) -> tuple[_DSU, dict[tuple[str, str], _PinWorl
         for node in _all(tree, "junction")
         if _direct(node, "at") is not None
     }
-    pin_info = _pin_world_info(tree)
+    pin_info = pin_world_info(tree)
     label_points = {
         (round(_position(node)[0], 3), round(_position(node)[1], 3))
         for kind in ("label", "hierarchical_label", "global_label")
@@ -761,7 +761,7 @@ def pin_orientation_issues(tree: SExprList) -> list[str]:
     """Check declared ground-pin and downward hierarchical-label orientation."""
     _load_stusb4500_profile()
     issues = []
-    pin_info = _pin_world_info(tree)
+    pin_info = pin_world_info(tree)
     for key in ground_pins_down:
         reference, number = key.split(".", 1)
         pin = pin_info.get((reference, number))
@@ -944,7 +944,7 @@ def frame_and_component_issues(tree: SExprList) -> list[str]:
                 issues.append(
                     f"stage gap {left_name}->{right_name} is {gap:.2f} mm (expected {frame_gap:.2f})"
                 )
-    pin_info = _pin_world_info(tree)
+    pin_info = pin_world_info(tree)
     for zone, members in zones.items():
         rect = frames.get(zone)
         if rect is None:
@@ -1445,7 +1445,7 @@ def symbol_field_clearance_issues(tree: SExprList) -> list[str]:
     issues = []
     bodies = _symbol_primitives(tree)
     fields = _visible_properties(tree)
-    pin_info = _pin_world_info(tree)
+    pin_info = pin_world_info(tree)
     segments = [segment for segment in _segments(tree) if len(segment) == 2]
     text_boxes: list[tuple[str, Rect]] = []
     for index, node in enumerate(_all(tree, "text_box")):
@@ -1611,7 +1611,7 @@ def wire_obstacle_issues(tree: SExprList) -> list[str]:
     """Reject wires through actual symbol outlines, visible fields and intermediate pins."""
     issues = []
     bodies = _symbol_primitives(tree)
-    pin_info = _pin_world_info(tree)
+    pin_info = pin_world_info(tree)
     pins_by_reference: dict[str, set[Point]] = {}
     for (reference, pin_number), info in pin_info.items():
         pins_by_reference.setdefault(reference, set()).add(info["point"])
@@ -1714,7 +1714,7 @@ def required_no_connect_issues(tree: SExprList) -> list[str]:
     """Require explicit no-connect markers at configured intentionally-unused pins."""
     _load_stusb4500_profile()
     issues = []
-    pin_info = _pin_world_info(tree)
+    pin_info = pin_world_info(tree)
     markers = {
         (round(_position(node)[0], 3), round(_position(node)[1], 3))
         for node in _all(tree, "no_connect")

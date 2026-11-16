@@ -34,6 +34,14 @@ from kicad_blocks.sexpr import (
 _all = sexpr_all
 _direct = sexpr_direct
 
+
+def _number(value: SExpr) -> float:
+    """Convert a scalar S-expression atom to a float, rejecting nested nodes."""
+    if not isinstance(value, str):
+        raise ValueError("Expected a numeric atom in KiCad S-expression.")
+    return float(value)
+
+
 DATASHEET = "https://www.st.com/resource/en/datasheet/stusb4500.pdf"
 ROOT_UUID = str(uuid.uuid5(uuid.NAMESPACE_URL, "kicad-blocks:stusb4500-reference:root"))
 PROJECT = "functional-block-implementation"
@@ -567,7 +575,7 @@ def _label(
     y: float,
     *,
     hierarchical: bool = False,
-    shape: str = "passive",
+    shape: str | None = "passive",
     justify: str | None = "left",
     angle: int = 0,
     key: str,
@@ -581,6 +589,8 @@ def _label(
             )
         effects.append(["justify", justify, "bottom"])
     if hierarchical:
+        if shape is None:
+            raise ValueError("Hierarchical labels require an explicit KiCad shape.")
         node: SExprList = ["hierarchical_label", QuotedSExpr(name), ["shape", shape]]
     else:
         node: SExprList = ["label", QuotedSExpr(name)]
@@ -900,8 +910,8 @@ def _resolve_group_component_positions(
                     raise ValueError(
                         f"Invalid or duplicate layout target {component!r} in {group['id']}."
                     )
-                if kind == "offset":
-                    reference = str(rule["to"])
+                if rule["kind"] == "offset":
+                    reference = rule["to"]
                     if reference not in positions:
                         unresolved.append(rule)
                         continue
@@ -910,24 +920,24 @@ def _resolve_group_component_positions(
                         base[0] + float(rule["dx_mm"]),
                         base[1] + float(rule["dy_mm"]),
                     )
-                elif kind == "midpoint_offset":
-                    first_ref, second_ref = (str(item) for item in rule["between"])
+                elif rule["kind"] == "midpoint_offset":
+                    first_ref, second_ref = rule["between"]
                     if first_ref not in positions or second_ref not in positions:
                         unresolved.append(rule)
                         continue
                     first, second = positions[first_ref], positions[second_ref]
                     point = (
-                        (first[0] + second[0]) / 2 + float(rule.get("dx_mm", 0.0)),
-                        (first[1] + second[1]) / 2 + float(rule.get("dy_mm", 0.0)),
+                        (first[0] + second[0]) / 2 + rule["dx_mm"],
+                        (first[1] + second[1]) / 2 + rule["dy_mm"],
                     )
-                elif kind == "pin_offset":
-                    reference = str(rule["to"])
+                elif rule["kind"] == "pin_offset":
+                    reference = rule["to"]
                     if reference not in positions:
                         unresolved.append(rule)
                         continue
                     reference_spec = by_ref[reference]
                     definition = loaded[(reference_spec[1], reference_spec[2])]
-                    pin_number = str(rule["pin"])
+                    pin_number = rule["pin"]
                     pin = next(
                         (item for item in _pin_data(definition) if item["number"] == pin_number),
                         None,
@@ -1427,7 +1437,7 @@ def generate_reference_schematic(destination: Path) -> Path:
     no_connects: list[SExprList] = []
     label_points: dict[
         tuple[float, float],
-        tuple[str, str, str | None, float, float, str, int],
+        tuple[str, str, str | None, float, float, str | None, int],
     ] = {}
     pin_world_points: dict[tuple[str, str], tuple[float, float]] = {}
     no_connect_points: set[tuple[float, float]] = set()
@@ -1697,21 +1707,20 @@ def generate_reference_schematic(destination: Path) -> Path:
                 point = (round(px, 3), round(py, 3))
                 pin_world_points[(reference, pin["number"])] = point
                 no_connect_points.add(point)
-        instance.append(
+        project_instance: SExprList = [
+            "instances",
             [
-                "instances",
+                "project",
+                QuotedSExpr(PROJECT),
                 [
-                    "project",
-                    QuotedSExpr(PROJECT),
-                    [
-                        "path",
-                        QuotedSExpr(f"/{ROOT_UUID}"),
-                        ["reference", QuotedSExpr(reference)],
-                        ["unit", "1"],
-                    ],
+                    "path",
+                    QuotedSExpr(f"/{ROOT_UUID}"),
+                    ["reference", QuotedSExpr(reference)],
+                    ["unit", "1"],
                 ],
-            ]
-        )
+            ],
+        ]
+        instance.append(project_instance)
         instances.append(instance)
 
     # Generate label glyphs after wiring so consumed endpoints do not retain
@@ -2042,7 +2051,7 @@ def generate_reference_schematic(destination: Path) -> Path:
             if points_node is None:
                 continue
             points = [
-                (round(float(point[1]), 3), round(float(point[2]), 3))
+                (round(_number(point[1]), 3), round(_number(point[2]), 3))
                 for point in _all(points_node, "xy")
             ]
             for start, end in zip(points, points[1:]):
@@ -2071,7 +2080,7 @@ def generate_reference_schematic(destination: Path) -> Path:
             if points_node is None:
                 continue
             points = [
-                (round(float(point[1]), 3), round(float(point[2]), 3))
+                (round(_number(point[1]), 3), round(_number(point[2]), 3))
                 for point in _all(points_node, "xy")
             ]
             if any(frozenset((a, b)) == target for a, b in zip(points, points[1:])):
