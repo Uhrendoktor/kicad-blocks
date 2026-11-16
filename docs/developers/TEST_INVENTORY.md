@@ -8,7 +8,7 @@ programs rather than pytest modules are listed separately and must remain explic
 registered in STANDALONE_TESTS in scripts/test_inventory.py.
 
 - Pytest modules: **26**
-- Individually inventoried pytest cases: **291**
+- Individually inventoried pytest cases: **296**
 - Standalone acceptance runners: **7**
 - Additional CI validation runners: **2**
 
@@ -144,8 +144,8 @@ Schematic editor action routing, selected-sheet behavior, facade editing, transa
 | test_local_implementation_edit_opens_project_copy_not_library_source | Exercises local implementation edit opens project copy not library source. |
 | test_create_block_empty_selection_ipc_error_uses_active_sheet | Creates block empty selection ipc error uses active sheet. |
 | test_create_block_uses_selected_sheet_symbol_relative_to_active_sheet | Creates block uses selected sheet symbol relative to active sheet. |
-| test_task_hub_edit_facade_uses_native_cross_platform_ipc_handoff | Exercises task hub edit facade uses native cross platform ipc handoff. |
-| test_run_action_does_not_discover_foreign_window_handles | Exercises run action does not discover foreign window handles. |
+| test_task_hub_edit_facade_does_not_report_success_without_editor_handoff | Exercises task hub edit facade does not report success without editor handoff. |
+| test_create_block_keeps_owner_window_mapped | Creates block keeps owner window mapped. |
 | test_run_action_does_not_capture_native_windows_before_creating_tk | Exercises run action does not capture native windows before creating tk. |
 
 ### tests/test_extraction.py
@@ -217,6 +217,11 @@ Library search and selection, native previews, variants/profiles/layouts, cross-
 | test_mousewheel_accumulates_high_resolution_trackpad_deltas | Exercises mousewheel accumulates high resolution trackpad deltas. |
 | test_mousewheel_binding_can_cover_nested_controls | Exercises mousewheel binding can cover nested controls. |
 | test_dark_theme_can_be_forced_or_disabled | Exercises dark theme can be forced or disabled. |
+| test_system_theme_keeps_fixed_treeview_geometry_without_changing_native_colors | Exercises system theme keeps fixed treeview geometry without changing native colors. |
+| test_system_theme_reads_active_kicad_color_theme_through_ipc_paths | Exercises system theme reads active kicad color theme through ipc paths. |
+| test_system_theme_reads_absolute_kicad_color_theme_path | Exercises system theme reads absolute kicad color theme path. |
+| test_system_theme_falls_back_when_kicad_theme_data_is_missing | Exercises system theme falls back when kicad theme data is missing. |
+| test_system_theme_falls_back_when_theme_background_is_not_text | Exercises system theme falls back when theme background is not text. |
 | test_record_picker_returns_single_choice_without_opening_a_dialog | Exercises record picker returns single choice without opening a dialog. |
 | test_record_picker_reports_an_empty_library | Exercises record picker reports an empty library. |
 | test_search_keeps_selected_block_when_it_still_matches | Exercises search keeps selected block when it still matches. |
