@@ -5,11 +5,11 @@ This page is generated from the declarative UI catalog. It inventories the curre
 
 | Coverage status | Screens | Meaning |
 |---|---:|---|
-| Contracted | 1 | Widget-level execute/result assertions are registered and run in CI. |
-| Partial | 9 | Targeted GUI, integration, model, or screenshot checks exist; the full control matrix is not contracted. |
+| Contracted | 2 | Widget-level execute/result assertions are registered and run in CI. |
+| Partial | 8 | Targeted GUI, integration, model, or screenshot checks exist; the full control matrix is not contracted. |
 | Inventory only | 5 | Window/workflow is documented here; systematic interaction contracts remain future work. |
 
-The first contract milestone covers Task Hub routing and navigation, and selected interactions in the Functional Block Library. It does not claim that each downstream KiCad operation succeeds. KiCad IPC, generated files, real editor hand-offs, and platform-specific window-manager behavior require their own assertions.
+The first contract milestone covers Task Hub routing and navigation and the Add PCB layout dialog's application-owned controls. The Functional Block Library has substantial partial contract coverage. None of this implies that every downstream KiCad operation or native OS chooser has been proven.
 
 ## Screens
 
@@ -24,29 +24,29 @@ All thirteen action-button routes, the Close action, the three notebook views, w
 **Views and actions**
 
 - **Use & build**
-  - Browse and place blocks (`task-hub.action.manage-library`; behavior asserted)
-  - Create block from sheet (`task-hub.action.create-block`; behavior asserted)
-  - Open block implementation (`task-hub.action.open-implementation`; behavior asserted)
+  - Browse and place blocks (`manage-library`)
+  - Create block from sheet (`create-block`)
+  - Open block implementation (`open-implementation`)
 - **Edit & maintain**
-  - Configure selected instance (`task-hub.action.configure-instance`; behavior asserted)
-  - Edit facade symbol (`task-hub.action.edit-facade`; behavior asserted)
-  - Publish implementation (`task-hub.action.publish-block`; behavior asserted)
-  - Make selected instance local (`task-hub.action.make-local-copy`; behavior asserted)
-  - Synchronize local copy (`task-hub.action.synchronize-local-copy`; behavior asserted)
+  - Configure selected instance (`configure-instance`)
+  - Edit facade symbol (`edit-facade`)
+  - Publish implementation (`publish-block`)
+  - Make selected instance local (`make-local-copy`)
+  - Synchronize local copy (`synchronize-local-copy`)
 - **Checks & PCB**
-  - Validate registered libraries (`task-hub.action.validate-libraries`; behavior asserted)
-  - Export recursive BOM (`task-hub.action.recursive-bom`; behavior asserted)
-  - Run recursive ERC (`task-hub.action.recursive-erc`; behavior asserted)
-  - Apply selected PCB layout (`task-hub.action.apply-pcb-layout`; behavior asserted)
-  - Apply multiple PCB layouts (`task-hub.action.apply-multiple-pcb-layouts`; behavior asserted)
+  - Validate registered libraries (`validate-libraries`)
+  - Export recursive BOM (`recursive-bom`)
+  - Run recursive ERC (`recursive-erc`)
+  - Apply selected PCB layout (`apply-pcb-layout`)
+  - Apply multiple PCB layouts (`apply-multiple-pcb-layouts`)
 
 **Registered semantic controls**
 
-- Workflow tabs (`task-hub.views`; notebook; behavior asserted)
+- Workflow tabs (`task-hub.views`; notebook)
 
 **Other controls**
 
-- Close (`task-hub.close`; behavior asserted)
+- Close
 
 **Current automated evidence**
 
@@ -92,26 +92,26 @@ The production browser is captured in both themes and has targeted unit/integrat
 
 **Registered semantic controls**
 
-- Results and preview split panes (`library-browser.panes`; paned-window; behavior asserted)
-- Block results (`library-browser.results-pane`; pane; result observed)
-- Selected block preview and details (`library-browser.preview-pane`; pane; result observed)
-- Search blocks (`library-browser.search`; entry; behavior asserted)
-- Block list (`library-browser.results`; treeview; behavior asserted)
-- Library and filtered-result count (`library-browser.summary`; status-label; result observed)
-- Selected block name (`library-browser.selected-name`; selection-label; result observed)
-- Facade and Schematic tabs (`library-browser.preview.views`; notebook; behavior asserted)
-- Facade preview (`library-browser.preview.facade`; view; result observed)
-- Schematic preview (`library-browser.preview.schematic`; view; result observed)
-- Implementation selector (`library-browser.implementation`; combobox; discovered; interaction not yet asserted)
-- Sheet selector (`library-browser.sheet`; combobox; discovered; interaction not yet asserted)
-- Place block (`library-browser.action.place`; button; behavior asserted)
-- Implementation (`library-browser.action.implementation`; button; behavior asserted)
-- Edit facade (`library-browser.action.facade`; button; behavior asserted)
-- Variants (`library-browser.action.variants`; button; discovered; interaction not yet asserted)
-- Open PCB (`library-browser.action.open-pcb`; button; behavior asserted)
-- PCB layouts (`library-browser.action.manage-pcb-layouts`; button; discovered; interaction not yet asserted)
-- Refresh (`library-browser.action.refresh`; button; behavior asserted)
-- Libraries (`library-browser.action.libraries`; button; discovered; interaction not yet asserted)
+- Results and preview split panes (`library-browser.panes`; paned-window)
+- Block results (`library-browser.results-pane`; pane)
+- Selected block preview and details (`library-browser.preview-pane`; pane)
+- Search blocks (`library-browser.search`; entry)
+- Block list (`library-browser.results`; treeview)
+- Library and filtered-result count (`library-browser.summary`; status-label)
+- Selected block name (`library-browser.selected-name`; selection-label)
+- Facade and Schematic tabs (`library-browser.preview.views`; notebook)
+- Facade preview (`library-browser.preview.facade`; view)
+- Schematic preview (`library-browser.preview.schematic`; view)
+- Implementation selector (`library-browser.implementation`; combobox)
+- Sheet selector (`library-browser.sheet`; combobox)
+- Place block (`library-browser.action.place`; button)
+- Implementation (`library-browser.action.implementation`; button)
+- Edit facade (`library-browser.action.facade`; button)
+- Variants (`library-browser.action.variants`; button)
+- Open PCB (`library-browser.action.open-pcb`; button)
+- PCB layouts (`library-browser.action.manage-pcb-layouts`; button)
+- Refresh (`library-browser.action.refresh`; button)
+- Libraries (`library-browser.action.libraries`; button)
 
 **Current automated evidence**
 
@@ -424,9 +424,9 @@ The manager is captured in both themes and layout/model changes have substantial
 
 Create a blank board or import an existing board as a stored block layout.
 
-**Coverage:** Partial — targeted GUI, integration, or visual checks exist.
+**Coverage:** Contracted — widget action and expected UI transition asserted.
 
-Both blank-board and existing-file dialog modes are captured. The Add, file-picker, validation, rollback, and open-result paths need execute-and-assert contracts.
+Every application-owned interactive control in this dialog has a semantic ID and real-widget contract coverage: blank-board creation, switching to an existing PCB source, the file chooser callback, implementation association, invalid-name validation, and cancel without creating a board. The OS-native file chooser remains isolated behind a stub here and is tracked separately under native-document desktop coverage.
 
 **Major functionality**
 
@@ -435,10 +435,19 @@ Both blank-board and existing-file dialog modes are captured. The Add, file-pick
 - Associate the layout with an implementation
 - Save and open the stored board
 
+**Registered semantic controls**
+
+- PCB layout name (`add-pcb-layout.name`; entry)
+- Blank board or existing PCB (`add-pcb-layout.mode`; combobox)
+- Existing PCB source path (`add-pcb-layout.source`; entry)
+- Choose file (`add-pcb-layout.browse`; button)
+- Implementation association (`add-pcb-layout.implementation`; combobox)
+- Cancel (`add-pcb-layout.cancel`; button)
+- Add layout (`add-pcb-layout.add`; button)
+
 **Current automated evidence**
 
-- `tests/capture_visual_docs.py`
-- `tests/test_pcb_layout.py`
+- `tests/test_add_pcb_layout_contracts.py`
 
 **Production screenshots**
 
@@ -507,10 +516,8 @@ Some Eeschema and PCB hand-offs have real integration coverage. Cross-platform n
 
 ## Coverage interpretation
 
-- **Contracted** means the listed UI component's actual Tcl/Tk command was executed and its expected callback or visible state transition was asserted. It is not a substitute for verifying the downstream KiCad operation.
+- **Contracted** means the listed UI component's actual Tcl/Tk command was executed and its expected callback or visible state transition was asserted. It is not a substitute for verifying a downstream KiCad operation or a native OS file chooser.
 - **Partial** means there are useful targeted checks, but one or more controls, views, failure paths, or side effects are not covered by reusable contracts.
 - **Inventory only** means the screen and its major functions are recorded for discovery and rollout planning; do not treat it as tested.
-
-Per-control status is explicit: **behavior asserted** means a real interaction is executed and checked; **result observed** means a dependent state (such as a selected row's label or a visible pane) is checked; **discovered; interaction not yet asserted** means the control is present but its action still needs an interaction contract.
 
 For the reusable component model and framework decisions, see [UI testing architecture](explanation/ui-testing-architecture.md).
