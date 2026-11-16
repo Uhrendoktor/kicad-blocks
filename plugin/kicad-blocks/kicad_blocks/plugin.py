@@ -5308,6 +5308,8 @@ def _show_library_browser(
                 messagebox.showerror("Open implementation", str(exc), parent=window)
             return
         chooser = tk.Toplevel(window)
+        chooser._kicad_ui_screen_id = "open-implementation-chooser"
+        chooser._kicad_ui_contract_id = "open-implementation-chooser.window"
         chooser.title(f"Open implementation — {record.name}")
         chooser.transient(window)
         chooser.grab_set()
@@ -5322,6 +5324,7 @@ def _show_library_browser(
             state="readonly",
             width=42,
         )
+        combo._kicad_ui_contract_id = "open-implementation-chooser.choice"
         combo.pack(fill="x", pady=8)
 
         def launch_variant():
@@ -5344,10 +5347,16 @@ def _show_library_browser(
 
         buttons = ttk.Frame(frame)
         buttons.pack(fill="x")
-        _action_button(buttons, "Open", launch_variant, "open", "Open the selected implementation").pack(side="right")
-        _action_button(buttons, "Cancel", chooser.destroy, "cancel", "Close without opening an implementation").pack(
-            side="right", padx=(0, 6)
-        )
+        _action_button(
+            buttons, "Open", launch_variant, "open",
+            "Open the selected implementation",
+            contract_id="open-implementation-chooser.action.open",
+        ).pack(side="right")
+        _action_button(
+            buttons, "Cancel", chooser.destroy, "cancel",
+            "Close without opening an implementation",
+            contract_id="open-implementation-chooser.action.cancel",
+        ).pack(side="right", padx=(0, 6))
         _set_window_geometry(chooser, 500, 190, 440, 160)
         combo.focus_set()
 
@@ -5421,6 +5430,8 @@ def _show_library_browser(
         if not layouts:
             return
         chooser = tk.Toplevel(window)
+        chooser._kicad_ui_screen_id = "open-pcb-layout-chooser"
+        chooser._kicad_ui_contract_id = "open-pcb-layout-chooser.window"
         chooser.title(f"Open PCB layout — {record.name}")
         chooser.transient(window)
         chooser.grab_set()
@@ -5456,6 +5467,7 @@ def _show_library_browser(
         combo = ttk.Combobox(
             frame, textvariable=choice, values=labels, state="readonly", width=36
         )
+        combo._kicad_ui_contract_id = "open-pcb-layout-chooser.choice"
         combo.pack(fill="x", pady=8)
 
         def launch_layout():
@@ -5486,10 +5498,19 @@ def _show_library_browser(
 
         buttons = ttk.Frame(frame)
         buttons.pack(fill="x")
-        _action_button(buttons, "Manage layouts…", manage_layouts, "layouts", "Manage stored PCB layouts").pack(side="left")
-        _action_button(buttons, "Open", launch_layout, "open", "Open the selected PCB layout").pack(side="right")
         _action_button(
-            buttons, "Cancel", chooser.destroy, "cancel", "Close without opening a PCB layout",
+            buttons, "Manage layouts…", manage_layouts, "layouts",
+            "Manage stored PCB layouts",
+            contract_id="open-pcb-layout-chooser.action.manage",
+        ).pack(side="left")
+        _action_button(
+            buttons, "Open", launch_layout, "open", "Open the selected PCB layout",
+            contract_id="open-pcb-layout-chooser.action.open",
+        ).pack(side="right")
+        _action_button(
+            buttons, "Cancel", chooser.destroy, "cancel",
+            "Close without opening a PCB layout",
+            contract_id="open-pcb-layout-chooser.action.cancel",
         ).pack(side="right", padx=(0, 6))
         _set_window_geometry(chooser, 500, 200, 440, 170)
         combo.focus_set()
