@@ -207,7 +207,7 @@ def render_inventory(catalog: dict[str, Any]) -> str:
         [
             "## Coverage interpretation",
             "",
-            "- **Contracted** means the listed UI component's actual Tcl/Tk command was executed and its expected callback or visible state transition was asserted. It is not a substitute for verifying the downstream KiCad operation.",
+            "- **Contracted** means the listed UI component's actual Tcl/Tk command was executed and its expected callback or visible state transition was asserted. It is not a substitute for verifying a downstream KiCad operation or a native OS file chooser.",
             "- **Partial** means there are useful targeted checks, but one or more controls, views, failure paths, or side effects are not covered by reusable contracts.",
             "- **Inventory only** means the screen and its major functions are recorded for discovery and rollout planning; do not treat it as tested.",
             "",
