@@ -112,13 +112,14 @@ class ButtonContract(ComponentContract):
     expected_action: str | tuple[str, ...] | None
     destroys_window: bool = True
     expected_new_window_title: str | None = None
+    expected_closed_window_title: str | None = None
     expected_label: str | None = None
 
     def execute(self, context: UiTestContext) -> dict[str, Any]:
         button = context.require_widget(self.contract_id)
         label = str(button.cget("text"))
         existing_toplevels = {
-            child.winfo_id()
+            child.winfo_id(): child.title()
             for child in context.root.winfo_children()
             if child.winfo_class() == "Toplevel"
         }
@@ -129,19 +130,30 @@ class ButtonContract(ComponentContract):
             context.root.update()
             root_exists = not context.window_destroyed
         new_windows = []
+        remaining_toplevels = {}
         if root_exists:
-            new_windows = [
-                child.title()
+            remaining_toplevels = {
+                child.winfo_id(): child.title()
                 for child in context.root.winfo_children()
                 if child.winfo_class() == "Toplevel"
-                and child.winfo_id() not in existing_toplevels
+            }
+            new_windows = [
+                title
+                for window_id, title in remaining_toplevels.items()
+                if window_id not in existing_toplevels
             ]
+        closed_windows = [
+            title
+            for window_id, title in existing_toplevels.items()
+            if window_id not in remaining_toplevels
+        ]
         return {
             "invoke_result": result,
             "label": label,
             "action_calls": list(context.action_calls),
             "root_exists": root_exists,
             "new_windows": new_windows,
+            "closed_windows": closed_windows,
         }
 
     def assert_result(
@@ -159,6 +171,8 @@ class ButtonContract(ComponentContract):
             assert observation["label"] == self.expected_label
         if self.expected_new_window_title is not None:
             assert self.expected_new_window_title in observation["new_windows"]
+        if self.expected_closed_window_title is not None:
+            assert self.expected_closed_window_title in observation["closed_windows"]
 
 
 @dataclass(frozen=True)
