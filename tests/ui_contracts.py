@@ -103,28 +103,50 @@ class ButtonContract(ComponentContract):
     """Invoke one real Tk button and assert its route and lifecycle effect."""
 
     contract_id: str
-    expected_action: str | None
+    expected_action: str | tuple[str, ...] | None
     destroys_window: bool = True
+    expected_new_window_title: str | None = None
 
     def execute(self, context: UiTestContext) -> dict[str, Any]:
         button = context.require_widget(self.contract_id)
+        existing_toplevels = {
+            child.winfo_id()
+            for child in context.root.winfo_children()
+            if isinstance(child, tk.Toplevel)
+        }
         result = button.invoke()
+        context.root.update_idletasks()
+        context.root.update()
         try:
             root_exists = bool(context.root.winfo_exists())
         except tk.TclError:
             root_exists = False
+        new_windows = [
+            child.title()
+            for child in context.root.winfo_children()
+            if isinstance(child, tk.Toplevel)
+            and child.winfo_id() not in existing_toplevels
+        ]
         return {
             "invoke_result": result,
             "action_calls": list(context.action_calls),
             "root_exists": root_exists,
+            "new_windows": new_windows,
         }
 
     def assert_result(
         self, context: UiTestContext, observation: dict[str, Any]
     ) -> None:
-        expected = [] if self.expected_action is None else [self.expected_action]
+        if self.expected_action is None:
+            expected = []
+        elif isinstance(self.expected_action, tuple):
+            expected = list(self.expected_action)
+        else:
+            expected = [self.expected_action]
         assert observation["action_calls"] == expected
         assert observation["root_exists"] is (not self.destroys_window)
+        if self.expected_new_window_title is not None:
+            assert self.expected_new_window_title in observation["new_windows"]
 
 
 @dataclass(frozen=True)
