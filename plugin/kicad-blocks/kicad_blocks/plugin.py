@@ -4740,9 +4740,12 @@ def _show_library_browser(
     library_summary.pack(side="right", padx=(12, 0))
 
     panes = ttk.Panedwindow(outer, orient="horizontal")
+    panes._kicad_ui_contract_id = "library-browser.panes"
     panes.pack(fill="both", expand=True)
     left = ttk.Frame(panes, padding=(0, 0, 8, 0))
+    left._kicad_ui_contract_id = "library-browser.results-pane"
     right = ttk.Frame(panes, padding=(8, 0, 0, 0))
+    right._kicad_ui_contract_id = "library-browser.preview-pane"
     panes.add(left, weight=3)
     panes.add(right, weight=4)
 
@@ -4764,6 +4767,7 @@ def _show_library_browser(
         show="headings",
         selectmode="browse",
     )
+    tree._kicad_ui_contract_id = "library-browser.results"
     tree.heading("block", text="Block")
     tree.heading("library", text="Library")
     tree.heading("pins", text="I/O")
