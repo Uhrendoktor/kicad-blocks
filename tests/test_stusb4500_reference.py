@@ -17,15 +17,38 @@ from generate_reference import SCHEMATIC_GROUPS, reference_uid, generate_referen
 from kicad_blocks.sexpr import SExprList, parse_sexpr, sexpr_all, sexpr_direct
 from validate_schematic_style import (
     STYLE_RULES,
-    _text_visual_bounds,
-    _wire_networks,
     check_schematic_style,
     label_wire_overlap_issues,
+    text_visual_bounds,
+    wire_networks,
 )
 
 
+def _required_direct(node: SExprList, tag: str) -> SExprList:
+    """Return a required child node and fail with a useful assertion otherwise."""
+    child = sexpr_direct(node, tag)
+    if child is None:
+        raise AssertionError(f"Required {tag!r} child is missing.")
+    return child
+
+
+def _atom(node: SExprList, index: int) -> str:
+    """Read one scalar S-expression item, rejecting nested lists."""
+    if not 0 <= index < len(node):
+        raise AssertionError(f"S-expression item {index} is missing from {node!r}.")
+    value = node[index]
+    if isinstance(value, list):
+        raise AssertionError(f"S-expression item {index} must be an atom, not a list.")
+    return value
+
+
+def _number(node: SExprList, index: int) -> float:
+    """Read one numeric scalar from a parsed KiCad S-expression node."""
+    return float(_atom(node, index))
+
+
 def _instance_map(tree: SExprList) -> dict[str, SExprList]:
-    result = {}
+    result: dict[str, SExprList] = {}
     for instance in sexpr_all(tree, "symbol"):
         if sexpr_direct(instance, "lib_id") is None:
             continue
@@ -61,7 +84,7 @@ class STUSB4500ReferenceTests(unittest.TestCase):
 
         self.assertNotIn("(global_label", content)
         hierarchical = {
-            str(label[1]): str(sexpr_direct(label, "shape")[1])
+            str(label[1]): _atom(_required_direct(label, "shape"), 1)
             for label in sexpr_all(tree, "hierarchical_label")
         }
         self.assertEqual(
@@ -133,9 +156,9 @@ class STUSB4500ReferenceTests(unittest.TestCase):
         self.assertNotIn("OPTIONAL MCU / I2C INTERFACE", content)
         self.assertNotIn("ADDRESS / RESET STRAPS", content)
 
-        positions = {}
+        positions: dict[str, SExprList] = {}
         for reference in ("J1", "C50", "D4", "U1", "T4", "T1"):
-            at = sexpr_direct(instances[reference], "at")
+            at = _required_direct(instances[reference], "at")
             positions[reference] = (float(at[1]), float(at[2]))
         self.assertLess(positions["J1"][0], positions["C50"][0])
         self.assertLess(positions["C50"][0], positions["D4"][0])
@@ -149,12 +172,12 @@ class STUSB4500ReferenceTests(unittest.TestCase):
 
         for reference in ("R51", "R52", "R53", "R54"):
             self.assertIn(reference, instances)
-            self.assertEqual(float(sexpr_direct(instances[reference], "at")[3]), 90.0)
+            self.assertEqual(float(_required_direct(instances[reference], "at")[3]), 90.0)
         self.assertIn("R55", instances)
-        self.assertLess(float(sexpr_direct(instances["R55"], "at")[2]), 240.0)
+        self.assertLess(float(_required_direct(instances["R55"], "at")[2]), 240.0)
 
         r51, r52, r53, r54 = (
-            sexpr_direct(instances[reference], "at") for reference in ("R51", "R52", "R53", "R54")
+            _required_direct(instances[reference], "at") for reference in ("R51", "R52", "R53", "R54")
         )
         self.assertAlmostEqual(float(r51[2]), float(r53[2]), places=3)
         self.assertAlmostEqual(float(r52[2]), float(r54[2]), places=3)
@@ -174,7 +197,7 @@ class STUSB4500ReferenceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="stusb4500-pmos-link-") as temporary:
             content, tree, _instances = self._generate(temporary)
 
-        dsu, pins = _wire_networks(tree)
+        dsu, pins = wire_networks(tree)
         t4 = pins[("T4", "3")]["point"]
         t1 = pins[("T1", "2")]["point"]
         r10 = pins[("R10", "1")]["point"]
@@ -189,8 +212,8 @@ class STUSB4500ReferenceTests(unittest.TestCase):
 
         self.assertIn('(text_box "BACK-TO-BACK PMOS SWITCH"', content)
         self.assertIn('(text_box "VSNK OUTPUT"', content)
-        positions = {
-            reference: sexpr_direct(instances[reference], "at")
+        positions: dict[str, SExprList] = {
+            reference: _required_direct(instances[reference], "at")
             for reference in ("T4", "T1", "C10", "D11", "R2")
         }
         self.assertLess(float(positions["T4"][1]), float(positions["T1"][1]))
@@ -208,7 +231,7 @@ class STUSB4500ReferenceTests(unittest.TestCase):
                 and str(sexpr_direct(node, "uuid")[1])
                 == reference_uid(f"graphic:rectangle:zone:{name}")
             )
-            start, end = sexpr_direct(node, "start"), sexpr_direct(node, "end")
+            start, end = _required_direct(node, "start"), _required_direct(node, "end")
             return (float(start[1]), float(start[2]), float(end[1]), float(end[2]))
 
         switch, output = frame("power-switch"), frame("vsnk-output")
@@ -238,50 +261,50 @@ class STUSB4500ReferenceTests(unittest.TestCase):
         resistor_refs = ("R1", "R2", "R4", "R10", "R11", "R13", "R51", "R52", "R53", "R54", "R55")
         for reference in resistor_refs:
             instance = instances[reference]
-            symbol_at = sexpr_direct(instance, "at")
-            value_at = sexpr_direct(_property(instance, "Value"), "at")
+            symbol_at = _required_direct(instance, "at")
+            value_at = _required_direct(_property(instance, "Value"), "at")
             self.assertAlmostEqual(float(value_at[1]), float(symbol_at[1]), places=3, msg=reference)
             self.assertAlmostEqual(float(value_at[2]), float(symbol_at[2]), places=3, msg=reference)
-            effects = sexpr_direct(_property(instance, "Value"), "effects")
-            font = sexpr_direct(effects, "font")
-            size = sexpr_direct(font, "size")
+            effects = _required_direct(_property(instance, "Value"), "effects")
+            font = _required_direct(effects, "font")
+            size = _required_direct(font, "size")
             self.assertLessEqual(float(size[1]), 0.72, msg=reference)
             # KiCad centers fields by default. "center" is not a valid
             # horizontal justify direction and makes the entire sheet unloadable.
             self.assertIsNone(sexpr_direct(effects, "justify"), msg=reference)
             for field_name in ("Reference", "Value"):
-                field_angle = sexpr_direct(_property(instance, field_name), "at")[3]
+                field_angle = _required_direct(_property(instance, field_name), "at")[3]
                 self.assertEqual(float(field_angle), 90.0, f"{reference} {field_name} angle")
 
     def test_j1_and_u1_fields_are_close_and_inside_their_groups(self) -> None:
         with tempfile.TemporaryDirectory(prefix="stusb4500-fields-") as temporary:
             _, _, instances = self._generate(temporary)
 
-        j1 = sexpr_direct(instances["J1"], "at")
+        j1 = _required_direct(instances["J1"], "at")
         for field_name in ("Reference", "Value"):
-            at = sexpr_direct(_property(instances["J1"], field_name), "at")
+            at = _required_direct(_property(instances["J1"], field_name), "at")
             self.assertAlmostEqual(float(at[1]), float(j1[1]), places=3)
             self.assertLess(float(at[2]), float(j1[2]) - 27.94)
 
-        u1 = sexpr_direct(instances["U1"], "at")
+        u1 = _required_direct(instances["U1"], "at")
         for field_name, expected_y in (
             ("Reference", float(u1[2]) - 17.78),
             ("Value", float(u1[2]) - 15.24),
         ):
             prop = _property(instances["U1"], field_name)
-            at = sexpr_direct(prop, "at")
+            at = _required_direct(prop, "at")
             self.assertAlmostEqual(float(at[1]), float(u1[1]) + 15.24, places=3)
             self.assertAlmostEqual(float(at[2]), expected_y, places=3)
             if field_name == "Reference":
                 self.assertEqual(
-                    str(sexpr_direct(sexpr_direct(prop, "effects"), "justify")[1]), "left"
+                    _atom(_required_direct(_required_direct(prop, "effects"), "justify"), 1), "left"
                 )
             else:
                 self.assertEqual(
-                    str(sexpr_direct(sexpr_direct(prop, "effects"), "justify")[1]), "left"
+                    _atom(_required_direct(_required_direct(prop, "effects"), "justify"), 1), "left"
                 )
 
-        r55 = sexpr_direct(instances["R55"], "at")
+        r55 = _required_direct(instances["R55"], "at")
         self.assertAlmostEqual(float(r55[1]), float(u1[1]) - 22.86, places=3)
         self.assertLess(abs(float(r55[2]) - float(u1[2])), 15.0)
 
@@ -307,9 +330,9 @@ class STUSB4500ReferenceTests(unittest.TestCase):
             for node in sexpr_all(tree, "text_box")
             if str(node[1]) == "STUSB4500 USB-C / POWER DELIVERY SINK"
         )
-        self.assertGreater(float(sexpr_direct(header_title, "size")[1]), 350.0)
+        self.assertGreater(_number(_required_direct(header_title, "size"), 1), 350.0)
         self.assertEqual(
-            float(sexpr_direct(sexpr_direct(header_title, "stroke"), "width")[1]), -1.0
+            _number(_required_direct(_required_direct(header_title, "stroke"), "width"), 1), -1.0
         )
 
     def test_no_label_glyph_is_replaced_by_a_global_label(self) -> None:
@@ -340,9 +363,9 @@ class STUSB4500ReferenceTests(unittest.TestCase):
             for node in sexpr_all(tree, "rectangle")
             if sexpr_direct(node, "uuid") and str(sexpr_direct(node, "uuid")[1]) == zone_uuid
         )
-        start, end = sexpr_direct(zone, "start"), sexpr_direct(zone, "end")
+        start, end = _required_direct(zone, "start"), _required_direct(zone, "end")
         for reference in ("C50", "D50"):
-            at = sexpr_direct(instances[reference], "at")
+            at = _required_direct(instances[reference], "at")
             self.assertLess(float(start[1]), float(at[1]))
             self.assertLess(float(start[2]), float(at[2]))
             self.assertGreater(float(end[1]), float(at[1]))
@@ -378,11 +401,11 @@ class STUSB4500ReferenceTests(unittest.TestCase):
     def test_decoupler_ground_uses_one_physical_hierarchical_port(self) -> None:
         with tempfile.TemporaryDirectory(prefix="stusb4500-shared-gnd-") as temporary:
             content, tree, _instances = self._generate(temporary)
-        dsu, pins = _wire_networks(tree)
+        dsu, pins = wire_networks(tree)
         c2 = pins[("C2", "2")]["point"]
         c3 = pins[("C3", "2")]["point"]
         self.assertEqual(dsu.find(c2), dsu.find(c3))
-        ground_labels = []
+        ground_labels: list[SExprList] = []
         for node in sexpr_all(tree, "hierarchical_label"):
             at = sexpr_direct(node, "at")
             if str(node[1]) == "GND" and at is not None:
@@ -395,7 +418,7 @@ class STUSB4500ReferenceTests(unittest.TestCase):
     def test_controller_bypass_caps_are_repositioned_for_short_c1_route(self) -> None:
         with tempfile.TemporaryDirectory(prefix="stusb4500-bypass-layout-") as temporary:
             _content, tree, instances = self._generate(temporary)
-        u1_x = float(sexpr_direct(instances["U1"], "at")[1])
+        u1_x = _number(_required_direct(instances["U1"], "at"), 1)
         self.assertAlmostEqual(float(sexpr_direct(instances["C1"], "at")[1]), u1_x + 5.08, places=3)
         self.assertAlmostEqual(
             float(sexpr_direct(instances["C2"], "at")[1]), u1_x + 15.24, places=3
@@ -403,7 +426,7 @@ class STUSB4500ReferenceTests(unittest.TestCase):
         self.assertAlmostEqual(
             float(sexpr_direct(instances["C3"], "at")[1]), u1_x + 20.32, places=3
         )
-        dsu, pins = _wire_networks(tree)
+        dsu, pins = wire_networks(tree)
         c1 = pins[("C1", "1")]["point"]
         u1 = pins[("U1", "21")]["point"]
         self.assertEqual(c1[0], u1[0])
@@ -412,8 +435,8 @@ class STUSB4500ReferenceTests(unittest.TestCase):
     def test_back_to_back_fets_are_condensed(self) -> None:
         with tempfile.TemporaryDirectory(prefix="stusb4500-compact-fets-") as temporary:
             _content, _tree, instances = self._generate(temporary)
-        t4_x = float(sexpr_direct(instances["T4"], "at")[1])
-        t1_x = float(sexpr_direct(instances["T1"], "at")[1])
+        t4_x = float(_required_direct(instances["T4"], "at")[1])
+        t1_x = float(_required_direct(instances["T1"], "at")[1])
         self.assertAlmostEqual(t1_x - t4_x, 25.40, places=3)
 
     def test_vbus_filtered_nodes_use_local_labels_without_crossing_d4(self) -> None:
@@ -426,19 +449,19 @@ class STUSB4500ReferenceTests(unittest.TestCase):
             if len(node) > 1 and str(node[1]) == "VBUS_FILTERED"
         ]
         self.assertEqual(len(filtered_labels), 2)
-        self.assertEqual(float(sexpr_direct(instances["D4"], "at")[3]), 180.0)
+        self.assertEqual(_number(_required_direct(instances["D4"], "at"), 3), 180.0)
         sense_labels = [
             node
             for node in sexpr_all(tree, "label")
             if len(node) > 1 and str(node[1]) == "VBUS_VS_DISCH"
         ]
         self.assertEqual(len(sense_labels), 2)
-        r1, r4 = sexpr_direct(instances["R1"], "at"), sexpr_direct(instances["R4"], "at")
+        r1, r4 = _required_direct(instances["R1"], "at"), _required_direct(instances["R4"], "at")
         self.assertAlmostEqual(abs(float(r4[1]) - float(r1[1])), 5.08, places=3)
         self.assertAlmostEqual(float(r4[2]), float(r1[2]), places=3)
         for wire in sexpr_all(tree, "wire"):
             coords = [
-                (float(p[1]), float(p[2])) for p in sexpr_all(sexpr_direct(wire, "pts"), "xy")
+                (float(p[1]), float(p[2])) for p in sexpr_all(_required_direct(wire, "pts"), "xy")
             ]
             self.assertEqual(len(coords), 2)
             self.assertTrue(
@@ -450,8 +473,8 @@ class STUSB4500ReferenceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="stusb4500-esd-labels-") as temporary:
             content, tree, instances = self._generate(temporary)
 
-        self.assertEqual(float(sexpr_direct(instances["D1"], "at")[3]), 270.0)
-        self.assertEqual(float(sexpr_direct(instances["C1"], "at")[3]), 180.0)
+        self.assertEqual(_number(_required_direct(instances["D1"], "at"), 3), 270.0)
+        self.assertEqual(_number(_required_direct(instances["C1"], "at"), 3), 180.0)
         label_names = [str(node[1]) for node in sexpr_all(tree, "label")]
         self.assertGreaterEqual(label_names.count("CC1"), 2)
         self.assertGreaterEqual(label_names.count("CC2"), 2)
@@ -465,7 +488,7 @@ class STUSB4500ReferenceTests(unittest.TestCase):
         for wire in sexpr_all(tree, "wire"):
             coordinates = [
                 (float(point[1]), float(point[2]))
-                for point in sexpr_all(sexpr_direct(wire, "pts"), "xy")
+                for point in sexpr_all(_required_direct(wire, "pts"), "xy")
             ]
             self.assertEqual(len(coordinates), 2)
             self.assertNotEqual(coordinates[0], coordinates[1])
@@ -494,7 +517,7 @@ class STUSB4500ReferenceTests(unittest.TestCase):
         wires = sexpr_all(tree, "wire")
         self.assertTrue(wires)
         for wire in wires:
-            pts = sexpr_direct(wire, "pts")
+            pts = _required_direct(wire, "pts")
             coords = [(float(point[1]), float(point[2])) for point in sexpr_all(pts, "xy")]
             self.assertEqual(len(coords), 2)
             (x1, y1), (x2, y2) = coords
@@ -561,7 +584,7 @@ class STUSB4500ReferenceTests(unittest.TestCase):
             )
 
         def origin(reference: str) -> tuple[float, float]:
-            at = sexpr_direct(instances[reference], "at")
+            at = _required_direct(instances[reference], "at")
             return float(at[1]), float(at[2])
 
         def delta(first: str, second: str) -> tuple[float, float]:
@@ -591,7 +614,7 @@ class STUSB4500ReferenceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="stusb4500-frame-overlap-") as temporary:
             _content, tree, _instances = self._generate(temporary)
 
-        frames = {}
+        frames: dict[str, tuple[float, float, float, float]] = {}
         for group in SCHEMATIC_GROUPS:
             frame_uuid = reference_uid(f"graphic:rectangle:zone:{group['id']}")
             frame = next(
@@ -599,7 +622,7 @@ class STUSB4500ReferenceTests(unittest.TestCase):
                 for node in sexpr_all(tree, "rectangle")
                 if sexpr_direct(node, "uuid") and str(sexpr_direct(node, "uuid")[1]) == frame_uuid
             )
-            start, end = sexpr_direct(frame, "start"), sexpr_direct(frame, "end")
+            start, end = _required_direct(frame, "start"), _required_direct(frame, "end")
             frames[group["id"]] = (
                 float(start[1]),
                 float(start[2]),
@@ -631,7 +654,7 @@ class STUSB4500ReferenceTests(unittest.TestCase):
         for reference in ("R51", "R52"):
             instance = instances[reference]
             self.assertEqual(str(_property(instance, "Value")[2]), "100k")
-            self.assertEqual(str(sexpr_direct(instance, "dnp")[1]).lower(), "yes")
+            self.assertEqual(_atom(_required_direct(instance, "dnp"), 1).lower(), "yes")
 
     def test_style_linter_exposes_stable_rule_ids(self) -> None:
         rule_ids = tuple(STYLE_RULES)
@@ -646,7 +669,7 @@ class STUSB4500ReferenceTests(unittest.TestCase):
             _content, tree, _instances = self._generate(temporary)
 
         label = next(node for node in sexpr_all(tree, "label") if str(node[1]) == "CC1")
-        x, y, width, height = _text_visual_bounds(str(label[1]), label)
+        x, y, width, height = text_visual_bounds(str(label[1]), label)
         wire_y = y + height / 2
         tree.append(
             [
@@ -680,8 +703,8 @@ class STUSB4500ReferenceTests(unittest.TestCase):
     def test_r55_ground_label_stub_remains_local_and_does_not_cross_cc2(self) -> None:
         with tempfile.TemporaryDirectory(prefix="stusb4500-u1-gnd-cc2-") as temporary:
             _content, tree, instances = self._generate(temporary)
-        u1 = sexpr_direct(instances["U1"], "at")
-        r55 = sexpr_direct(instances["R55"], "at")
+        u1 = _required_direct(instances["U1"], "at")
+        r55 = _required_direct(instances["R55"], "at")
         self.assertAlmostEqual(float(r55[1]), float(u1[1]) - 22.86, places=3)
         self.assertLess(abs(float(r55[2]) - float(u1[2])), 15.0)
         self.assertEqual(check_schematic_style(tree), [])

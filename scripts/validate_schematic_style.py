@@ -658,7 +658,7 @@ def _pin_world_info(tree: SExprList) -> dict[tuple[str, str], _PinWorldInfo]:
     return result
 
 
-def _wire_networks(tree: SExprList) -> tuple[_DSU, dict[tuple[str, str], _PinWorldInfo]]:
+def wire_networks(tree: SExprList) -> tuple[_DSU, dict[tuple[str, str], _PinWorldInfo]]:
     """Return a DSU of physically connected wire segments (labels excluded)."""
     segments = [segment for segment in _segments(tree) if len(segment) == 2]
     junctions = {
@@ -710,7 +710,7 @@ def label_wire_overlap_issues(tree: SExprList) -> list[str]:
     segments = [segment for segment in _segments(tree) if len(segment) == 2]
     for kind in ("label", "hierarchical_label"):
         for node in _all(tree, kind):
-            bounds = _text_visual_bounds(str(node[1]), node)
+            bounds = text_visual_bounds(str(node[1]), node)
             if bounds is not None and any(_strict_line_hits_box(a, b, bounds) for a, b in segments):
                 at = _direct(node, "at")
                 issues.append(
@@ -724,7 +724,7 @@ def physical_topology_issues(tree: SExprList) -> list[str]:
     """Require decouplers and the back-to-back FET midpoint to be wire-connected."""
     _load_stusb4500_profile()
     issues = []
-    dsu, pin_info = _wire_networks(tree)
+    dsu, pin_info = wire_networks(tree)
     pairs = list(direct_decouplers) + [
         ("T4", "3", "T1", "2"),
         ("T1", "2", "R10", "1"),
@@ -875,7 +875,7 @@ def group_metadata_issues(tree: SExprList) -> list[str]:
     return issues
 
 
-def _text_visual_bounds(value: str, node: SExprList) -> Rect | None:
+def text_visual_bounds(value: str, node: SExprList) -> Rect | None:
     """Approximate the printable text rectangle for a label or symbol field."""
     at, effects = _direct(node, "at"), _direct(node, "effects")
     if at is None:
@@ -967,7 +967,7 @@ def frame_and_component_issues(tree: SExprList) -> list[str]:
                 prop = _property(instances[ref], name)
                 if prop is None or "hide" in (_direct(prop, "effects") or []):
                     continue
-                bounds = _text_visual_bounds(str(prop[2]), prop)
+                bounds = text_visual_bounds(str(prop[2]), prop)
                 if bounds is not None and not _rect_inside(bounds, rect):
                     issues.append(f"{ref} {name} text crosses outside its group frame {zone}")
     for zone, rect in frames.items():
@@ -984,7 +984,7 @@ def frame_and_component_issues(tree: SExprList) -> list[str]:
     # a valid containment exception.
     for kind in ("label", "hierarchical_label"):
         for node in _all(tree, kind):
-            bounds = _text_visual_bounds(str(node[1]), node)
+            bounds = text_visual_bounds(str(node[1]), node)
             at = _direct(node, "at")
             if bounds is None or at is None:
                 continue
@@ -1426,7 +1426,7 @@ def _visible_properties(tree: SExprList) -> list[VisibleProperty]:
             effects = _direct(prop, "effects")
             if effects is not None and _direct(effects, "hide") is not None:
                 continue
-            bounds = _text_visual_bounds(str(prop[2]), prop)
+            bounds = text_visual_bounds(str(prop[2]), prop)
             if bounds is not None:
                 fields.append((reference, name, bounds, prop))
     return fields
@@ -1463,7 +1463,7 @@ def symbol_field_clearance_issues(tree: SExprList) -> list[str]:
                 )
             )
     label_boxes = [
-        (str(node[1]), _text_visual_bounds(str(node[1]), node))
+        (str(node[1]), text_visual_bounds(str(node[1]), node))
         for kind in ("label", "hierarchical_label", "global_label")
         for node in _all(tree, kind)
     ]
@@ -1574,7 +1574,7 @@ def frame_content_clearance_issues(tree: SExprList) -> list[str]:
     }
     for kind in ("label", "hierarchical_label", "global_label"):
         for node in _all(tree, kind):
-            bounds = _text_visual_bounds(str(node[1]), node)
+            bounds = text_visual_bounds(str(node[1]), node)
             at = _direct(node, "at")
             if bounds is None or at is None:
                 continue
@@ -1656,7 +1656,7 @@ def common_pin_net_issues(tree: SExprList) -> list[str]:
     """Check configured pin groups for a common logical/physical network and label."""
     _load_stusb4500_profile()
     issues = []
-    dsu, pin_info = _wire_networks(tree)
+    dsu, pin_info = wire_networks(tree)
     names_by_root = {}
     labels_by_root = {}
     for kind in ("label", "hierarchical_label", "global_label"):
@@ -1796,7 +1796,7 @@ def label_text_collision_issues(tree: SExprList) -> list[str]:
     labels: list[tuple[str, str, Point, Rect]] = []
     for kind in ("label", "hierarchical_label", "global_label"):
         for node in _all(tree, kind):
-            bounds = _text_visual_bounds(str(node[1]), node)
+            bounds = text_visual_bounds(str(node[1]), node)
             at = _direct(node, "at")
             if bounds is not None and at is not None:
                 labels.append(
