@@ -56,7 +56,7 @@ def test_inventory_distinguishes_implemented_from_unimplemented_contracts():
     assert "Contracted — widget action and expected UI transition asserted" in rendered
     assert "Partial — targeted GUI, integration, or visual checks exist" in rendered
     assert "Inventory only — systematic UI contracts not implemented yet" in rendered
-    assert "does not claim that a screenshot or a visible control proves" in rendered
+    assert "a screenshot or a visible control proves the complete workflow" in rendered
 
 
 def test_every_current_screenshot_is_listed_in_the_generated_inventory():
