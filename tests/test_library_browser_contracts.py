@@ -647,10 +647,9 @@ def test_open_pcb_chooser_opens_the_selected_layout(monkeypatch, tmp_path):
     root, context, _records, _library, _project = _new_browser(
         monkeypatch, tmp_path, layouts=layouts
     )
-    effects = []
     monkeypatch.setattr(
         plugin_actions, "_launch_block_asset",
-        lambda _kicad, asset, *_args, **_kwargs: effects.append(Path(asset).name),
+        lambda _kicad, asset, *_args, **_kwargs: context.action_calls.append(Path(asset).name),
     )
     try:
         _select_first_record(context)
