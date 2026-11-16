@@ -515,6 +515,8 @@ def _action_button(
     command,
     icon: str,
     tooltip: str,
+    *,
+    contract_id: str | None = None,
     **button_options,
 ):
     """Create a consistently padded, semantic icon-and-label action button."""
@@ -524,6 +526,10 @@ def _action_button(
     if image is not None:
         options.update({"image": image, "compound": "left"})
     button = ttk.Button(parent, **options)
+    if contract_id is not None:
+        # Stable IDs let the UI contract suite discover and execute the same
+        # controls that production users see, without relying on screen text.
+        button._kicad_ui_contract_id = contract_id
     _add_tooltip(button, tooltip)
     return button
 
@@ -6078,6 +6084,7 @@ def _apply_selected_block_pcb_layouts(
 def _show_action_hub(root, kicad=None):
     """Show compact, icon-led task actions with secondary guidance in tooltips."""
     _configure_tk_theme(root, kicad)
+    root._kicad_ui_screen_id = "task-hub"
     root.title("KiCad Blocks — Tasks")
 
     outer = ttk.Frame(root, padding=14)
@@ -6089,6 +6096,7 @@ def _show_action_hub(root, kicad=None):
     ).pack(anchor="w", pady=(0, 10))
 
     tabs = ttk.Notebook(outer)
+    tabs._kicad_ui_contract_id = "task-hub.views"
     tabs.pack(fill="both", expand=True)
 
     groups = [
@@ -6203,13 +6211,21 @@ def _show_action_hub(root, kicad=None):
                 command=lambda selected=action_id: dispatch(selected),
                 icon=icon_name,
                 tooltip=description,
+                contract_id=f"task-hub.action.{action_id}",
             )
             button.pack(fill="x", expand=True)
         tab.columnconfigure(0, weight=1)
 
     footer = ttk.Frame(outer)
     footer.pack(fill="x", pady=(10, 0))
-    _action_button(footer, "Close", root.destroy, "close", "Close the task hub").pack(side="right")
+    _action_button(
+        footer,
+        "Close",
+        root.destroy,
+        "close",
+        "Close the task hub",
+        contract_id="task-hub.close",
+    ).pack(side="right")
     _set_window_geometry(root, 820, 580, 680, 480)
     return tabs
 
