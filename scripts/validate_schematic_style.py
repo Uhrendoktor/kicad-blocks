@@ -992,7 +992,9 @@ def frame_and_component_issues(tree: SExprList) -> list[str]:
                     f"{kind} {str(node[1])!r} at ({anchor[0]:.3f}, {anchor[1]:.3f}) "
                     f"extends outside its owning group frame {owners[0][0]}"
                 )
-    title_uuids = {reference_uid(f"graphic:text:zone-title:{group['id']}") for group in schematic_groups}
+    title_uuids = {
+        reference_uid(f"graphic:text:zone-title:{group['id']}") for group in schematic_groups
+    }
     for node in _all(tree, "text_box"):
         uid_node = _direct(node, "uuid")
         uid = str(uid_node[1]) if uid_node is not None else ""

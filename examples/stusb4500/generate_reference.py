@@ -1035,7 +1035,9 @@ def _pack_component_groups(
     return {reference: (point[0], point[1]) for reference, point in positions.items()}
 
 
-def _functional_group(group: _SchematicGroup, bounds: tuple[float, float, float, float]) -> list[SExprList]:
+def _functional_group(
+    group: _SchematicGroup, bounds: tuple[float, float, float, float]
+) -> list[SExprList]:
     """Generate a frame, title tab and descriptive source panel from bounds."""
     left, top, right, bottom = bounds
     title = str(group["title"])
@@ -1758,7 +1760,9 @@ def generate_reference_schematic(destination: Path) -> Path:
                     ["color", "0", "0", "0", "0"],
                     [
                         "uuid",
-                        QuotedSExpr(reference_uid(f"junction:{net_name}:{point[0]:.3f}:{point[1]:.3f}")),
+                        QuotedSExpr(
+                            reference_uid(f"junction:{net_name}:{point[0]:.3f}:{point[1]:.3f}")
+                        ),
                     ],
                 ]
             )
@@ -1780,7 +1784,10 @@ def generate_reference_schematic(destination: Path) -> Path:
                 ["at", f"{point[0]:.3f}", f"{point[1]:.3f}"],
                 ["diameter", "0"],
                 ["color", "0", "0", "0", "0"],
-                ["uuid", QuotedSExpr(reference_uid(f"junction:{key}:{point[0]:.3f}:{point[1]:.3f}"))],
+                [
+                    "uuid",
+                    QuotedSExpr(reference_uid(f"junction:{key}:{point[0]:.3f}:{point[1]:.3f}")),
+                ],
             ]
         )
 

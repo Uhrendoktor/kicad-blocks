@@ -205,7 +205,8 @@ class STUSB4500ReferenceTests(unittest.TestCase):
                 node
                 for node in sexpr_all(tree, "rectangle")
                 if sexpr_direct(node, "uuid")
-                and str(sexpr_direct(node, "uuid")[1]) == reference_uid(f"graphic:rectangle:zone:{name}")
+                and str(sexpr_direct(node, "uuid")[1])
+                == reference_uid(f"graphic:rectangle:zone:{name}")
             )
             start, end = sexpr_direct(node, "start"), sexpr_direct(node, "end")
             return (float(start[1]), float(start[2]), float(end[1]), float(end[2]))
@@ -272,9 +273,13 @@ class STUSB4500ReferenceTests(unittest.TestCase):
             self.assertAlmostEqual(float(at[1]), float(u1[1]) + 15.24, places=3)
             self.assertAlmostEqual(float(at[2]), expected_y, places=3)
             if field_name == "Reference":
-                self.assertEqual(str(sexpr_direct(sexpr_direct(prop, "effects"), "justify")[1]), "left")
+                self.assertEqual(
+                    str(sexpr_direct(sexpr_direct(prop, "effects"), "justify")[1]), "left"
+                )
             else:
-                self.assertEqual(str(sexpr_direct(sexpr_direct(prop, "effects"), "justify")[1]), "left")
+                self.assertEqual(
+                    str(sexpr_direct(sexpr_direct(prop, "effects"), "justify")[1]), "left"
+                )
 
         r55 = sexpr_direct(instances["R55"], "at")
         self.assertAlmostEqual(float(r55[1]), float(u1[1]) - 22.86, places=3)
@@ -303,7 +308,9 @@ class STUSB4500ReferenceTests(unittest.TestCase):
             if str(node[1]) == "STUSB4500 USB-C / POWER DELIVERY SINK"
         )
         self.assertGreater(float(sexpr_direct(header_title, "size")[1]), 350.0)
-        self.assertEqual(float(sexpr_direct(sexpr_direct(header_title, "stroke"), "width")[1]), -1.0)
+        self.assertEqual(
+            float(sexpr_direct(sexpr_direct(header_title, "stroke"), "width")[1]), -1.0
+        )
 
     def test_no_label_glyph_is_replaced_by_a_global_label(self) -> None:
         with tempfile.TemporaryDirectory(prefix="stusb4500-no-globals-") as temporary:
@@ -390,8 +397,12 @@ class STUSB4500ReferenceTests(unittest.TestCase):
             _content, tree, instances = self._generate(temporary)
         u1_x = float(sexpr_direct(instances["U1"], "at")[1])
         self.assertAlmostEqual(float(sexpr_direct(instances["C1"], "at")[1]), u1_x + 5.08, places=3)
-        self.assertAlmostEqual(float(sexpr_direct(instances["C2"], "at")[1]), u1_x + 15.24, places=3)
-        self.assertAlmostEqual(float(sexpr_direct(instances["C3"], "at")[1]), u1_x + 20.32, places=3)
+        self.assertAlmostEqual(
+            float(sexpr_direct(instances["C2"], "at")[1]), u1_x + 15.24, places=3
+        )
+        self.assertAlmostEqual(
+            float(sexpr_direct(instances["C3"], "at")[1]), u1_x + 20.32, places=3
+        )
         dsu, pins = _wire_networks(tree)
         c1 = pins[("C1", "1")]["point"]
         u1 = pins[("U1", "21")]["point"]
@@ -426,7 +437,9 @@ class STUSB4500ReferenceTests(unittest.TestCase):
         self.assertAlmostEqual(abs(float(r4[1]) - float(r1[1])), 5.08, places=3)
         self.assertAlmostEqual(float(r4[2]), float(r1[2]), places=3)
         for wire in sexpr_all(tree, "wire"):
-            coords = [(float(p[1]), float(p[2])) for p in sexpr_all(sexpr_direct(wire, "pts"), "xy")]
+            coords = [
+                (float(p[1]), float(p[2])) for p in sexpr_all(sexpr_direct(wire, "pts"), "xy")
+            ]
             self.assertEqual(len(coords), 2)
             self.assertTrue(
                 abs(coords[0][0] - coords[1][0]) < 0.001 or abs(coords[0][1] - coords[1][1]) < 0.001
@@ -451,7 +464,8 @@ class STUSB4500ReferenceTests(unittest.TestCase):
 
         for wire in sexpr_all(tree, "wire"):
             coordinates = [
-                (float(point[1]), float(point[2])) for point in sexpr_all(sexpr_direct(wire, "pts"), "xy")
+                (float(point[1]), float(point[2]))
+                for point in sexpr_all(sexpr_direct(wire, "pts"), "xy")
             ]
             self.assertEqual(len(coordinates), 2)
             self.assertNotEqual(coordinates[0], coordinates[1])
