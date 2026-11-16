@@ -246,7 +246,7 @@ jobs:
         run: |
           set -euo pipefail
           timeout 180s xvfb-run -a -s "-screen 0 1280x800x24" \
-            "${RUNNER_TEMP}/kicad-blocks-venv/bin/python" -m pytest -vv -o faulthandler_timeout=30 tests/test_ui_contracts.py tests/test_library_browser_contracts.py tests/test_add_pcb_layout_contracts.py
+            "${RUNNER_TEMP}/kicad-blocks-venv/bin/python" -m pytest -vv -o faulthandler_timeout=30 tests/test_ui_contracts.py tests/test_library_browser_contracts.py tests/test_add_pcb_layout_contracts.py tests/test_implementation_manager_contracts.py
 
       - name: Verify Create Block from Sheet against real KiCad IPC
         shell: bash
