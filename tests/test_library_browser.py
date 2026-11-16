@@ -121,9 +121,7 @@ _schematic_page_center_mm = cast(
 _system_prefers_dark_theme = cast(
     Callable[..., bool | None], _private_hook("_system_prefers_dark_theme")
 )
-_configure_tk_theme = cast(
-    Callable[..., None], _private_hook("_configure_tk_theme")
-)
+_configure_tk_theme = cast(Callable[..., None], _private_hook("_configure_tk_theme"))
 
 
 class LibraryBrowserTests(unittest.TestCase):
@@ -975,8 +973,9 @@ class LibraryBrowserTests(unittest.TestCase):
         with patch.dict(os.environ, {"KICAD_BLOCKS_THEME": "light"}):
             self.assertFalse(_system_prefers_dark_theme())
 
-
-    def test_system_theme_keeps_fixed_treeview_geometry_without_changing_native_colors(self) -> None:
+    def test_system_theme_keeps_fixed_treeview_geometry_without_changing_native_colors(
+        self,
+    ) -> None:
         style = Mock()
         root = SimpleNamespace()
         with (

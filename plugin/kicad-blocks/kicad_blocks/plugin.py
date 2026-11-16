@@ -38,7 +38,9 @@ else:
     simpledialog = None
     # The imported stub alias remains authoritative for static typing.
     # This concrete runtime union is only a valid target for typing.cast().
-    TkOption = str | int | float | bool | bytes | type(None) | tuple | list | dict | Sequence | Callable
+    TkOption = (
+        str | int | float | bool | bytes | type(None) | tuple | list | dict | Sequence | Callable
+    )
 
 from .auto_dependencies import synchronize_block_dependencies
 from .extraction import selected_sheet_file, selected_sheet_instance_uuid
@@ -478,7 +480,7 @@ def _theme_color_is_dark(value: str) -> bool | None:
     rgb: list[float]
     if hex_match:
         raw = hex_match.group(1)
-        rgb = [float(int(raw[index:index + 2], 16)) for index in (0, 2, 4)]
+        rgb = [float(int(raw[index : index + 2], 16)) for index in (0, 2, 4)]
     else:
         rgb_match = re.fullmatch(r"rgba?\(\s*([^)]+)\s*\)", text_value, re.IGNORECASE)
         if not rgb_match:
@@ -495,9 +497,7 @@ def _theme_color_is_dark(value: str) -> bool | None:
     for channel in rgb:
         normalized = channel / 255.0
         linear.append(
-            normalized / 12.92
-            if normalized <= 0.04045
-            else ((normalized + 0.055) / 1.055) ** 2.4
+            normalized / 12.92 if normalized <= 0.04045 else ((normalized + 0.055) / 1.055) ** 2.4
         )
     luminance = 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2]
     return luminance < 0.45
@@ -566,9 +566,7 @@ def _system_prefers_dark_theme(kicad: _KiCadApp | None = None) -> bool | None:
         return None
 
 
-def _configure_tk_theme(
-    root: tkinter_types.Misc, kicad: _KiCadApp | None = None
-) -> None:
+def _configure_tk_theme(root: tkinter_types.Misc, kicad: _KiCadApp | None = None) -> None:
     """Apply a compact KiCad-compatible palette to themed and classic Tk widgets."""
     dark = _system_prefers_dark_theme(kicad)
     if dark is None:
@@ -2496,7 +2494,8 @@ def _ask_create_block_details(
     result: list[tuple[str, str] | None] = [None]
     completed: tkinter_types.Variable | None = (
         cast(tkinter_types.Variable, tk.BooleanVar(master=dialog, value=False))
-        if reuse_parent else None
+        if reuse_parent
+        else None
     )
 
     def finish() -> None:
@@ -2516,9 +2515,7 @@ def _ask_create_block_details(
 
     buttons = ttk.Frame(frame)
     buttons.pack(fill="x")
-    _action_button(buttons, "Cancel", finish, "cancel", "Cancel block creation").pack(
-        side="right"
-    )
+    _action_button(buttons, "Cancel", finish, "cancel", "Cancel block creation").pack(side="right")
     _action_button(
         buttons, "Create Block", accept, "create", "Create the reusable block from this sheet"
     ).pack(side="right", padx=(0, 8))
@@ -4683,12 +4680,10 @@ def _show_block_variant_editor(
     palette = getattr(parent, "_kicad_blocks_palette", {})
     frame.columnconfigure(0, weight=1)
     frame.rowconfigure(2, weight=1)
-    ttk.Label(
-        frame, text="Circuit implementations", font=("TkDefaultFont", 12, "bold")
-    ).grid(row=0, column=0, sticky="w")
-    status_value = tk.StringVar(
-        value="Empty KB_VARIANT uses the default implementation."
+    ttk.Label(frame, text="Circuit implementations", font=("TkDefaultFont", 12, "bold")).grid(
+        row=0, column=0, sticky="w"
     )
+    status_value = tk.StringVar(value="Empty KB_VARIANT uses the default implementation.")
     ttk.Label(
         frame,
         textvariable=status_value,
@@ -4742,18 +4737,22 @@ def _show_block_variant_editor(
         selected_default = default_variant[0].casefold()
         selected = next(
             (
-                item for item in variants
+                item
+                for item in variants
                 if selected_default and item["value"].casefold() == selected_default
             ),
             None,
         )
-        filename = selected["file"] if selected is not None else record.manifest["implementation_file"]
+        filename = (
+            selected["file"] if selected is not None else record.manifest["implementation_file"]
+        )
         return Path(record.path) / str(filename)
 
     def alternative_variant_indices() -> list[int]:
         selected_default = default_variant[0].casefold()
         return [
-            index for index, item in enumerate(variants)
+            index
+            for index, item in enumerate(variants)
             if not selected_default or item["value"].casefold() != selected_default
         ]
 
@@ -4768,14 +4767,18 @@ def _show_block_variant_editor(
         tree.delete(*tree.get_children())
         default_path = default_implementation_path()
         tree.insert(
-            "", "end", iid="0",
+            "",
+            "end",
+            iid="0",
             values=("Default", default_path.name, "Current default"),
             tags=("even",),
         )
         for row_index, variant_index in enumerate(alternative_variant_indices(), start=1):
             item = variants[variant_index]
             tree.insert(
-                "", "end", iid=str(row_index),
+                "",
+                "end",
+                iid=str(row_index),
                 values=(item["value"], item["file"], "Alternative"),
                 tags=("odd" if row_index % 2 else "even",),
             )
@@ -4867,8 +4870,7 @@ def _show_block_variant_editor(
         referenced_profiles = [
             str(item.get("name", item.get("id", "Unnamed profile")))
             for item in record.manifest.get("profiles", [])
-            if str(item.get("variant", "")).casefold()
-            == candidate["value"].casefold()
+            if str(item.get("variant", "")).casefold() == candidate["value"].casefold()
         ]
         if referenced_profiles:
             messagebox.showinfo(
@@ -4911,9 +4913,7 @@ def _show_block_variant_editor(
             None,
         )
         try:
-            _save_block_variants(
-                record, variants, default_variant=default_variant[0] or None
-            )
+            _save_block_variants(record, variants, default_variant=default_variant[0] or None)
             from .repository import read_manifest
 
             saved = read_manifest(Path(record.path))
@@ -4923,7 +4923,8 @@ def _show_block_variant_editor(
                     "file": str(item["file"]),
                     **(
                         {"layout_id": str(item["layout_id"]).casefold()}
-                        if item.get("layout_id") else {}
+                        if item.get("layout_id")
+                        else {}
                     ),
                 }
                 for item in saved.get("variants", [])
@@ -4931,7 +4932,8 @@ def _show_block_variant_editor(
             default_variant[0] = str(saved.get("default_variant") or "")
             if open_value:
                 selected = next(
-                    item for item in saved.get("variants", [])
+                    item
+                    for item in saved.get("variants", [])
                     if str(item["value"]).casefold() == open_value.casefold()
                 )
                 new_implementation_to_open[0] = Path(record.path) / selected["file"]
@@ -4954,19 +4956,32 @@ def _show_block_variant_editor(
 
     actions = ttk.Frame(frame)
     actions.grid(row=3, column=0, sticky="ew", pady=(12, 0))
-    _action_button(actions, "Add variant", add_variant, "add", "Add a named implementation variant").pack(side="left")
-    edit_button = _action_button(actions, "Edit variant", edit_variant, "edit", "Edit the selected implementation", state="disabled")
+    _action_button(
+        actions, "Add variant", add_variant, "add", "Add a named implementation variant"
+    ).pack(side="left")
+    edit_button = _action_button(
+        actions,
+        "Edit variant",
+        edit_variant,
+        "edit",
+        "Edit the selected implementation",
+        state="disabled",
+    )
     edit_button.pack(side="left", padx=(8, 0))
     default_button = _action_button(
-        actions, "Set as default", make_default, "default",
-        "Set the selected implementation as default", state="disabled"
+        actions,
+        "Set as default",
+        make_default,
+        "default",
+        "Set the selected implementation as default",
+        state="disabled",
     )
     default_button.pack(side="left", padx=(8, 0))
     remove_button = _action_button(
-        actions, "Remove", remove_variant, "remove",
-        "Remove the selected variant", state="disabled"
+        actions, "Remove", remove_variant, "remove", "Remove the selected variant", state="disabled"
     )
     remove_button.pack(side="left", padx=(8, 0))
+
     def cancel_variant_edits() -> None:
         if dirty[0] and not messagebox.askyesno(
             "Discard implementation changes",
@@ -4977,12 +4992,18 @@ def _show_block_variant_editor(
         dialog.destroy()
 
     _action_button(
-        actions, "Close", cancel_variant_edits, "cancel",
+        actions,
+        "Close",
+        cancel_variant_edits,
+        "cancel",
         "Close the implementation manager",
     ).pack(side="right")
     save_button = _action_button(
-        actions, "Save & close", save_and_close, "save",
-        "Save any pending changes and close the implementation manager"
+        actions,
+        "Save & close",
+        save_and_close,
+        "save",
+        "Save any pending changes and close the implementation manager",
     )
     save_button.pack(side="right", padx=(0, 8))
 
@@ -6388,8 +6409,12 @@ def _export_recursive_bom(
     result = export_block_bom(
         record, Path(output), find_kicad_cli(), library_root, parameter_values=parameter_values
     )
-    LOG.info("%s: %s", "Block BOM Exported", f"Exported {result['row_count']} rows from {result['block_count']} block(s):\n"
-        f"{result['output']}")
+    LOG.info(
+        "%s: %s",
+        "Block BOM Exported",
+        f"Exported {result['row_count']} rows from {result['block_count']} block(s):\n"
+        f"{result['output']}",
+    )
 
 
 def _validate_shared_library(root: Path | list[Path], parent: tkinter_types.Misc) -> None:
@@ -6484,8 +6509,12 @@ def _validate_recursive_erc(
         f"{item['block']}: {'violations found' if item['violations'] else 'no violations'}"
         for item in reports
     )
-    LOG.info("%s: %s", "Recursive Block ERC", f"Checked {len(reports)} block implementation(s); "
-        f"{len(failed)} reported violations.\n\n{details}\n\nReports: {output}")
+    LOG.info(
+        "%s: %s",
+        "Recursive Block ERC",
+        f"Checked {len(reports)} block implementation(s); "
+        f"{len(failed)} reported violations.\n\n{details}\n\nReports: {output}",
+    )
 
 
 def _publish_block(
@@ -6504,11 +6533,15 @@ def _publish_block(
     result = refresh_library_block(record)
     if result["changed"]:
         _register_block(project_dir, record, kicad, library_paths)
-    LOG.info("%s: %s", "Library Block Published", f"Version: {result['version']}\n"
+    LOG.info(
+        "%s: %s",
+        "Library Block Published",
+        f"Version: {result['version']}\n"
         f"Changed files: {', '.join(result['changed']) or 'none'}\n"
         f"Automatically detected {dependency_result['count']} child block(s)"
         + ("; dependency manifest updated.\n" if dependency_result["changed"] else ".\n")
-        + "Local copies can now synchronize from this revision.")
+        + "Local copies can now synchronize from this revision.",
+    )
 
 
 def _block_record_for_instance(
@@ -6809,7 +6842,10 @@ def _apply_selected_block_pcb_layouts(
     ):
         _open_generated_pcb_copy(kicad, Path(result["output"]))
 
-    LOG.info("%s: %s", "PCB Block Layouts Applied", f"Created board copy: {result['output']}\n"
+    LOG.info(
+        "%s: %s",
+        "PCB Block Layouts Applied",
+        f"Created board copy: {result['output']}\n"
         f"Block instances: {result['block_count']}\n"
         f"Footprints added: {result['footprint_count']}\n"
         f"Board objects added: {result['object_count']}\n"
@@ -6817,7 +6853,8 @@ def _apply_selected_block_pcb_layouts(
         f"PCB net chains added: {', '.join(result['merged_board_chains']) or 'none'}\n"
         f"Interactive placement manifest: {placement_sidecar}\n"
         "Open the output in PCB Editor and choose Place Imported Block Layout once for each block instance. "
-        "The original board and project settings were not modified.")
+        "The original board and project settings were not modified.",
+    )
 
 
 def _show_action_hub(
@@ -7024,9 +7061,7 @@ def run_action(action: str, *, editor_window_id: str | None = None) -> None:
 
         if action == "create-block":
             setattr(root, "_kicad_blocks_reuse_for_create", True)
-            _create_and_place(
-                library_root, schematic, kicad, project_dir, root, editor_window_id
-            )
+            _create_and_place(library_root, schematic, kicad, project_dir, root, editor_window_id)
         else:
             root.withdraw()
         if action == "open-implementation":

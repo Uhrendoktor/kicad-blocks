@@ -488,10 +488,7 @@ def _select_default_implementation(dialog: tk.Toplevel) -> None:
             "The implementations table must expose one Default row, not a separate Base row: "
             f"{default_values!r}."
         )
-    if any(
-        "Base implementation" in str(tree.item(item, "values"))
-        for item in tree.get_children()
-    ):
+    if any("Base implementation" in str(tree.item(item, "values")) for item in tree.get_children()):
         raise RuntimeError("The implementations table must not expose Base as an extra state.")
     tree.selection_set("0")
     tree.focus("0")
