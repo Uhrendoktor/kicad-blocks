@@ -478,6 +478,308 @@ def _matches_netclass_pattern(pattern: str, net_name: str) -> bool:
         return False
 
 
+def _read_netclass_definitions(
+    settings: KiCadNetSettings,
+    *,
+    source_name: str,
+) -> list[KiCadNetclassDefinition]:
+    """Read the typed netclass definition list from one project.
+
+    Returns:
+        The project's validated netclass definitions.
+
+    Raises:
+        TypeError: If the project section is not an array of objects.
+    """
+    raw_classes = settings.get("classes", [])
+    if not isinstance(raw_classes, list) or any(
+        not isinstance(item, dict) for item in raw_classes
+    ):
+        raise TypeError(f"KiCad {source_name} net_settings.classes must be an array of objects.")
+    return cast(list[KiCadNetclassDefinition], raw_classes)
+
+
+def _read_netclass_patterns(settings: KiCadNetSettings) -> list[KiCadNetclassPattern]:
+    """Read and validate KiCad netclass pattern entries.
+
+    Returns:
+        The project's pattern entries.
+
+    Raises:
+        TypeError: If the pattern list or one of its required string fields is invalid.
+    """
+    raw_patterns = settings.get("netclass_patterns", [])
+    if not isinstance(raw_patterns, list):
+        raise TypeError("KiCad net_settings.netclass_patterns must be an array.")
+    for entry in raw_patterns:
+        if not isinstance(entry, dict) or not isinstance(entry.get("pattern"), str) or not isinstance(
+            entry.get("netclass"), str
+        ):
+            raise TypeError("KiCad net_settings.netclass_patterns entries require string fields.")
+    return cast(list[KiCadNetclassPattern], raw_patterns)
+
+
+def _collision_netclass_name(
+    original_name: str,
+    signature: str,
+    class_by_name: dict[str, KiCadNetclassDefinition],
+    instance_reference: str,
+) -> str:
+    """Choose a stable namespaced name for a conflicting block netclass."""
+    safe_class = re.sub(r"[^A-Za-z0-9_]+", "_", original_name).strip("_") or "Class"
+    base_name = f"{instance_reference}_{safe_class}"
+    desired_name = base_name
+    suffix = 2
+    while desired_name in class_by_name:
+        if _netclass_signature(class_by_name[desired_name]) == signature:
+            break
+        desired_name = f"{base_name}_{suffix}"
+        suffix += 1
+    return desired_name
+
+
+def _merge_netclass_definitions(
+    target_classes: list[KiCadNetclassDefinition],
+    source_classes: list[KiCadNetclassDefinition],
+    instance_reference: str,
+) -> tuple[dict[str, str], list[str]]:
+    """Reuse identical netclasses and namespace conflicting block definitions.
+
+    Returns:
+        A source-to-target class-name map and the names newly added to the project.
+
+    Raises:
+        TypeError: If a block netclass has no name.
+    """
+    class_by_name = {
+        str(item["name"]): item for item in target_classes if item.get("name") is not None
+    }
+    priorities = [
+        int(item["priority"])
+        for item in target_classes
+        if item.get("name") is not None
+        and str(item["name"]).casefold() != "default"
+        and item.get("priority") is not None
+    ]
+    next_priority = max(priorities, default=-1) + 1
+    class_map: dict[str, str] = {}
+    merged_classes: list[str] = []
+
+    for source_class in source_classes:
+        original_name = source_class.get("name")
+        if original_name is None:
+            raise TypeError(f"Malformed block netclass definition: {source_class!r}")
+        if original_name.casefold() == "default":
+            class_map[original_name] = "Default"
+            continue
+        signature = _netclass_signature(source_class)
+        current = class_by_name.get(original_name)
+        if current is not None and _netclass_signature(current) == signature:
+            class_map[original_name] = original_name
+            continue
+        desired_name = (
+            _collision_netclass_name(original_name, signature, class_by_name, instance_reference)
+            if current is not None
+            else original_name
+        )
+        if desired_name not in class_by_name:
+            copied = cast(KiCadNetclassDefinition, dict(source_class))
+            copied.pop("nets", None)
+            copied["name"] = desired_name
+            copied["priority"] = next_priority
+            next_priority += 1
+            target_classes.append(copied)
+            class_by_name[desired_name] = copied
+            merged_classes.append(desired_name)
+        class_map[original_name] = desired_name
+    return class_map, merged_classes
+
+
+def _reverse_layout_port_map(
+    layout_ports: dict[str, str],
+    pin_to_board_net: dict[str, str],
+) -> dict[str, str]:
+    """Map stored layout nets back to their destination project nets.
+
+    Raises:
+        ValueError: If two facade pins map one stored net to different project nets.
+    """
+    reverse_ports: dict[str, str] = {}
+    for pin_name, source_net in layout_ports.items():
+        destination = str(pin_to_board_net[pin_name]).strip()
+        if source_net in reverse_ports and reverse_ports[source_net] != destination:
+            raise ValueError(f"Layout port net {source_net!r} maps to two project nets.")
+        reverse_ports[source_net] = destination
+    return reverse_ports
+
+
+def _mapped_assignment_classes(
+    source_net: str,
+    assignments: str | list[str],
+    class_map: dict[str, str],
+) -> list[str]:
+    """Translate one source net's class assignment through the merged class map.
+
+    Raises:
+        ValueError: If an assignment references an undefined source netclass.
+    """
+    mapped: list[str] = []
+    for source_class_name in _normalise_class_assignment(assignments):
+        if source_class_name not in class_map:
+            raise ValueError(
+                f"Block net {source_net!r} references undefined netclass {source_class_name!r}."
+            )
+        target_class_name = class_map[source_class_name]
+        if target_class_name.casefold() != "default" and target_class_name not in mapped:
+            mapped.append(target_class_name)
+    return mapped
+
+
+def _merge_project_netclass_assignments(
+    source_assignments: dict[str, str | list[str]],
+    target_assignments: dict[str, str | list[str]],
+    layout_ports: dict[str, str],
+    pin_to_board_net: dict[str, str],
+    instance_reference: str,
+    class_map: dict[str, str],
+) -> tuple[dict[str, list[str]], list[str]]:
+    """Merge exact source netclass assignments onto mapped or namespaced project nets.
+
+    Returns:
+        The complete target assignment map and project nets receiving block classes.
+
+    Raises:
+        ValueError: If a layout port net maps to multiple project nets or a class is undefined.
+    """
+    reverse_ports = _reverse_layout_port_map(layout_ports, pin_to_board_net)
+    merged_assignments = {
+        str(net_name): _normalise_class_assignment(classes)
+        for net_name, classes in target_assignments.items()
+    }
+    assigned_nets: list[str] = []
+    for source_net, assignments in source_assignments.items():
+        destination_net = reverse_ports.get(source_net)
+        if destination_net is None:
+            safe_net = re.sub(r"[^A-Za-z0-9_./+-]+", "_", source_net).strip("_")
+            destination_net = f"{instance_reference}_{safe_net or 'NET'}"
+        mapped_classes = _mapped_assignment_classes(source_net, assignments, class_map)
+        if not mapped_classes:
+            continue
+        current = merged_assignments.setdefault(destination_net, [])
+        for class_name in mapped_classes:
+            if class_name not in current:
+                current.append(class_name)
+        if destination_net not in assigned_nets:
+            assigned_nets.append(destination_net)
+    return merged_assignments, assigned_nets
+
+
+def _apply_one_netclass_pattern(
+    entry: KiCadNetclassPattern,
+    source_net_map: dict[str, str],
+    target_assignments: dict[str, list[str]],
+    class_map: dict[str, str],
+) -> AppliedNetclassPattern | None:
+    """Expand one stored pattern onto only the block's mapped project nets.
+
+    Raises:
+        ValueError: If the pattern references an undefined source netclass.
+    """
+    pattern = entry["pattern"]
+    class_name = entry["netclass"]
+    if class_name not in class_map:
+        raise ValueError(
+            f"Block netclass pattern {pattern!r} references undefined netclass {class_name!r}."
+        )
+    expanded_patterns = _expand_netclass_bus_pattern(pattern)
+    if expanded_patterns is None:
+        return None
+    mapped_class = class_map[class_name]
+    if mapped_class.casefold() == "default":
+        return None
+
+    resolved_nets: list[str] = []
+    for source_net_name, destination_net in source_net_map.items():
+        matches = any(
+            _matches_netclass_pattern(member_pattern, source_net_name)
+            for member_pattern in expanded_patterns
+        )
+        if not matches:
+            continue
+        destination = str(destination_net)
+        current = target_assignments.setdefault(destination, [])
+        if mapped_class not in current:
+            current.append(mapped_class)
+        if destination not in resolved_nets:
+            resolved_nets.append(destination)
+    if not resolved_nets:
+        return None
+    return {"pattern": pattern, "netclass": class_name, "resolved_nets": resolved_nets}
+
+
+def _merge_project_netclass_patterns(
+    patterns: list[KiCadNetclassPattern],
+    source_net_map: dict[str, str],
+    target_assignments: dict[str, list[str]],
+    class_map: dict[str, str],
+) -> tuple[list[AppliedNetclassPattern], list[str]]:
+    """Apply supported patterns and report patterns with no safe net matches.
+
+    Returns:
+        Applied patterns and the original unmatched patterns.
+    """
+    applied: list[AppliedNetclassPattern] = []
+    unmatched: list[str] = []
+    for entry in patterns:
+        result = _apply_one_netclass_pattern(entry, source_net_map, target_assignments, class_map)
+        if result is None:
+            unmatched.append(entry["pattern"])
+        else:
+            applied.append(result)
+    return applied, unmatched
+
+
+def _merge_project_net_chain_mappings(
+    source_chain_classes: dict[str, str],
+    source_chain_netclasses: dict[str, str],
+    target_chain_classes: dict[str, str],
+    target_chain_netclasses: dict[str, str],
+    chain_name_map: dict[str, str],
+    class_map: dict[str, str],
+) -> tuple[list[str], list[str]]:
+    """Merge net-chain class and netclass associations under remapped names.
+
+    Returns:
+        The unresolved source chain entries and names merged into the project.
+
+    Raises:
+        ValueError: If a chain references an undefined netclass.
+    """
+    unmatched: list[str] = []
+    merged: list[str] = []
+    for source_name, source_class in source_chain_classes.items():
+        destination_name = chain_name_map.get(source_name)
+        if destination_name is None:
+            unmatched.append(f"net_chain_classes:{source_name}")
+            continue
+        target_chain_classes[destination_name] = source_class
+        if destination_name not in merged:
+            merged.append(destination_name)
+    for source_name, source_netclass in source_chain_netclasses.items():
+        destination_name = chain_name_map.get(source_name)
+        if destination_name is None:
+            unmatched.append(f"net_chain_netclasses:{source_name}")
+            continue
+        if source_netclass not in class_map:
+            raise ValueError(
+                f"Net chain {source_name!r} references undefined netclass {source_netclass!r}."
+            )
+        target_chain_netclasses[destination_name] = class_map[source_netclass]
+        if destination_name not in merged:
+            merged.append(destination_name)
+    return unmatched, merged
+
+
 def _merge_project_net_settings(
     target_project: Path,
     source_project: Path | None,
@@ -496,21 +798,24 @@ def _merge_project_net_settings(
     are remapped to project net names. Netclass regex/wildcard rules are resolved
     against only the nets physically present in the stored block PCB, then
     converted to exact assignments on the corresponding imported project nets.
-    This avoids copying a broad pattern that could affect unrelated project nets.
+
+    Returns:
+        None when neither the target nor source project-settings file exists;
+        otherwise the merged, typed project data and its mapping diagnostics.
+
+    Raises:
+        TypeError: If a project settings section has an invalid structural type.
+        ValueError: If a class association or facade port mapping is inconsistent.
     """
     if not target_project.is_file() and (source_project is None or not source_project.is_file()):
         return None
-
     if target_project.is_file():
-        target_data = _load_project_settings(
-            target_project, context="Invalid KiCad project JSON"
-        )
+        target_data = _load_project_settings(target_project, context="Invalid KiCad project JSON")
     else:
         target_data: KiCadProjectData = {
             "meta": {"filename": output_project.name, "version": 3},
             "net_settings": {"classes": [], "netclass_assignments": {}},
         }
-
     if source_project is not None and source_project.is_file():
         source_data = _load_project_settings(
             source_project, context="Invalid block project-settings JSON"
@@ -518,166 +823,37 @@ def _merge_project_net_settings(
     else:
         source_data: KiCadProjectData = {"net_settings": {}}
     source_settings: KiCadNetSettings = source_data.get("net_settings") or {}
-
     target_settings = target_data.get("net_settings")
     if target_settings is None:
         target_settings = {"classes": [], "netclass_assignments": {}}
         target_data["net_settings"] = target_settings
 
-    raw_target_classes = target_settings.get("classes", [])
-    if not isinstance(raw_target_classes, list):
-        raise TypeError("KiCad target net_settings.classes must be an array.")
-    target_classes = cast(list[KiCadNetclassDefinition], raw_target_classes)
-    raw_source_classes = source_settings.get("classes", [])
-    if not isinstance(raw_source_classes, list):
-        raise TypeError("KiCad source net_settings.classes must be an array.")
-    source_classes = cast(list[KiCadNetclassDefinition], raw_source_classes)
-
-    class_by_name: dict[str, KiCadNetclassDefinition] = {}
-    priorities: list[int] = []
-    for item in target_classes:
-        class_name = item.get("name")
-        if class_name is not None:
-            class_by_name[class_name] = item
-        priority = item.get("priority")
-        if class_name is not None and class_name.casefold() != "default" and priority is not None:
-            priorities.append(priority)
-    next_priority = max(priorities, default=-1) + 1
-    class_map: dict[str, str] = {}
-    merged_classes: list[str] = []
-
-    for source_class in source_classes:
-        original_name = source_class.get("name")
-        if original_name is None:
-            raise TypeError(f"Malformed block netclass definition: {source_class!r}")
-        if original_name.casefold() == "default":
-            class_map[original_name] = "Default"
-            continue
-
-        signature = _netclass_signature(source_class)
-        current = class_by_name.get(original_name)
-        if current is not None and _netclass_signature(current) == signature:
-            class_map[original_name] = original_name
-            continue
-
-        desired_name = original_name
-        if current is not None:
-            safe_class = re.sub(r"[^A-Za-z0-9_]+", "_", original_name).strip("_") or "Class"
-            base_name = f"{instance_reference}_{safe_class}"
-            desired_name = base_name
-            suffix = 2
-            while desired_name in class_by_name:
-                candidate = class_by_name[desired_name]
-                if _netclass_signature(candidate) == signature:
-                    break
-                desired_name = f"{base_name}_{suffix}"
-                suffix += 1
-        if desired_name not in class_by_name:
-            copied = cast(KiCadNetclassDefinition, dict(source_class))
-            copied.pop("nets", None)
-            copied["name"] = desired_name
-            copied["priority"] = next_priority
-            next_priority += 1
-            target_classes.append(copied)
-            class_by_name[desired_name] = copied
-            merged_classes.append(desired_name)
-        class_map[original_name] = desired_name
-
+    target_classes = _read_netclass_definitions(target_settings, source_name="target")
+    source_classes = _read_netclass_definitions(source_settings, source_name="source")
+    class_map, merged_classes = _merge_netclass_definitions(
+        target_classes, source_classes, instance_reference
+    )
     raw_source_assignments = source_settings.get("netclass_assignments", {})
     raw_target_assignments = target_settings.get("netclass_assignments", {})
     if not isinstance(raw_source_assignments, dict) or not isinstance(raw_target_assignments, dict):
         raise TypeError("KiCad net_settings.netclass_assignments must be an object.")
     source_assignments = cast(dict[str, str | list[str]], raw_source_assignments)
     target_assignment_values = cast(dict[str, str | list[str]], raw_target_assignments)
-    target_assignments: dict[str, list[str]] = {
-        str(net_name): _normalise_class_assignment(classes)
-        for net_name, classes in target_assignment_values.items()
-    }
+    target_assignments, assigned_nets = _merge_project_netclass_assignments(
+        source_assignments,
+        target_assignment_values,
+        layout_ports,
+        pin_to_board_net,
+        instance_reference,
+        class_map,
+    )
 
-    reverse_ports: dict[str, str] = {}
-    for pin_name, source_net in layout_ports.items():
-        destination = str(pin_to_board_net[pin_name]).strip()
-        if source_net in reverse_ports and reverse_ports[source_net] != destination:
-            raise ValueError(f"Layout port net {source_net!r} maps to two project nets.")
-        reverse_ports[str(source_net)] = destination
-
-    assigned_nets: list[str] = []
-    for source_net, classes in source_assignments.items():
-        destination_net = reverse_ports.get(str(source_net))
-        if destination_net is None:
-            safe_net = re.sub(r"[^A-Za-z0-9_./+-]+", "_", str(source_net)).strip("_")
-            destination_net = f"{instance_reference}_{safe_net or 'NET'}"
-        mapped_classes = []
-        for source_class_name in _normalise_class_assignment(classes):
-            if source_class_name not in class_map:
-                raise ValueError(
-                    f"Block net {source_net!r} references undefined netclass {source_class_name!r}."
-                )
-            target_class_name = class_map[source_class_name]
-            if (
-                target_class_name.casefold() != "default"
-                and target_class_name not in mapped_classes
-            ):
-                mapped_classes.append(target_class_name)
-        if mapped_classes:
-            current = target_assignments.setdefault(destination_net, [])
-            for class_name in mapped_classes:
-                if class_name not in current:
-                    current.append(class_name)
-            if destination_net not in assigned_nets:
-                assigned_nets.append(destination_net)
-
-    applied_patterns: list[AppliedNetclassPattern] = []
-    unmatched_patterns: list[str] = []
+    patterns = _read_netclass_patterns(source_settings)
     source_net_map = source_net_to_board_net or {}
-    raw_source_patterns = source_settings.get("netclass_patterns", [])
-    if not isinstance(raw_source_patterns, list):
-        raise TypeError("KiCad net_settings.netclass_patterns must be an array.")
-    source_patterns = cast(list[KiCadNetclassPattern], raw_source_patterns)
-
-    for entry in source_patterns:
-        pattern = entry.get("pattern")
-        class_name = entry.get("netclass")
-        if pattern is None or class_name is None:
-            unmatched_patterns.append(repr(entry))
-            continue
-        if class_name not in class_map:
-            raise ValueError(
-                f"Block netclass pattern {pattern!r} references undefined netclass {class_name!r}."
-            )
-        expanded_patterns = _expand_netclass_bus_pattern(pattern)
-        if expanded_patterns is None:
-            unmatched_patterns.append(pattern)
-            continue
-
-        resolved_nets: list[str] = []
-        for source_net_name, destination_net in source_net_map.items():
-            if not any(
-                _matches_netclass_pattern(member_pattern, str(source_net_name))
-                for member_pattern in expanded_patterns
-            ):
-                continue
-            mapped_class = class_map[class_name]
-            if mapped_class.casefold() == "default":
-                continue
-            current = target_assignments.setdefault(str(destination_net), [])
-            if mapped_class not in current:
-                current.append(mapped_class)
-            if str(destination_net) not in resolved_nets:
-                resolved_nets.append(str(destination_net))
-
-        if resolved_nets:
-            applied_patterns.append(
-                {
-                    "pattern": pattern,
-                    "netclass": class_name,
-                    "resolved_nets": resolved_nets,
-                }
-            )
-        else:
-            unmatched_patterns.append(pattern)
-
-    target_settings["netclass_assignments"] = cast(dict[str, str | list[str]], target_assignments)
+    applied_patterns, unmatched_patterns = _merge_project_netclass_patterns(
+        patterns, source_net_map, target_assignments, class_map
+    )
+    target_settings["netclass_assignments"] = target_assignments
     metadata: KiCadProjectMetadata = target_data.get("meta") or {}
     target_data["meta"] = metadata
     metadata["filename"] = output_project.name
@@ -691,33 +867,14 @@ def _merge_project_net_settings(
     target_chain_netclasses = target_settings.get("net_chain_netclasses") or {}
     target_settings["net_chain_classes"] = target_chain_classes
     target_settings["net_chain_netclasses"] = target_chain_netclasses
-
-    unmatched_chains: list[str] = []
-    merged_chain_names: list[str] = []
-    for source_name, source_class in source_chain_classes.items():
-        destination_name = chain_name_map.get(str(source_name))
-        if destination_name is None:
-            unmatched_chains.append(f"net_chain_classes:{source_name}")
-            continue
-        target_chain_classes[destination_name] = str(source_class)
-        if destination_name not in merged_chain_names:
-            merged_chain_names.append(destination_name)
-
-    for source_name, source_netclass in source_chain_netclasses.items():
-        destination_name = chain_name_map.get(str(source_name))
-        if destination_name is None:
-            unmatched_chains.append(f"net_chain_netclasses:{source_name}")
-            continue
-        source_netclass = str(source_netclass)
-        if source_netclass not in class_map:
-            raise ValueError(
-                f"Net chain {source_name!r} references undefined netclass {source_netclass!r}."
-            )
-        target_chain_netclasses[destination_name] = class_map[source_netclass]
-        if destination_name not in merged_chain_names:
-            merged_chain_names.append(destination_name)
-
-    ignored_chain_classes = bool(unmatched_chains)
+    unmatched_chains, merged_chain_names = _merge_project_net_chain_mappings(
+        source_chain_classes,
+        source_chain_netclasses,
+        target_chain_classes,
+        target_chain_netclasses,
+        chain_name_map,
+        class_map,
+    )
     return {
         "data": target_data,
         "output": str(output_project),
@@ -726,11 +883,10 @@ def _merge_project_net_settings(
         "ignored_patterns": ignored_patterns,
         "applied_patterns": applied_patterns,
         "unmatched_patterns": unmatched_patterns,
-        "ignored_chain_classes": ignored_chain_classes,
+        "ignored_chain_classes": bool(unmatched_chains),
         "merged_chain_names": merged_chain_names,
         "unmatched_chains": unmatched_chains,
     }
-
 
 # Public testing/integration surfaces for deterministic PCB transformations.
 rewrite_nets = _rewrite_nets
