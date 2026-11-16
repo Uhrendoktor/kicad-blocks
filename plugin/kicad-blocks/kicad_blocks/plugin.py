@@ -478,7 +478,7 @@ def _add_tooltip(widget, text: str) -> None:
     widget.bind("<ButtonPress>", hide, add="+")
 
 
-def _create_action_icon(parent, name: str):
+def _create_action_icon(parent, name: str, stroke_color: str | None = None):
     """Render one semantic 20px toolbar icon using the current KiCad palette."""
     drawings = {
         "place": '<rect x="4" y="4" width="12" height="12" rx="2"/><path d="M16 16l4 4M10 7v6M7 10h6"/>',
@@ -513,7 +513,7 @@ def _create_action_icon(parent, name: str):
     if not path_data:
         return None
     palette = getattr(parent.winfo_toplevel(), "_kicad_blocks_palette", {})
-    accent = palette.get("accent", "#4c789f")
+    accent = stroke_color or palette.get("accent", "#4c789f")
     svg = (
         '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">'
         f'<g fill="none" stroke="{accent}" stroke-width="1.7" stroke-linecap="round" '
@@ -550,7 +550,13 @@ def _action_button(
     **button_options,
 ):
     """Create a consistently padded, semantic icon-and-label action button."""
-    image = _create_action_icon(parent, icon)
+    palette = getattr(parent.winfo_toplevel(), "_kicad_blocks_palette", {})
+    icon_color = (
+        palette.get("accent_foreground")
+        if button_options.get("style") == "Primary.TButton"
+        else None
+    )
+    image = _create_action_icon(parent, icon, icon_color)
     options = {"text": text, "command": command, "padding": (8, 5)}
     options.update(button_options)
     if image is not None:
@@ -4799,7 +4805,7 @@ def _show_library_browser(
     header.pack(fill="x", pady=(0, 6))
     ttk.Label(header, text="Functional Block Library", style="Title.TLabel").pack(side="left")
     library_path = tk.StringVar()
-    library_summary = ttk.Label(header, textvariable=library_path)
+    library_summary = ttk.Label(header, textvariable=library_path, style="Muted.TLabel")
     library_summary._kicad_ui_contract_id = "library-browser.summary"
     library_summary.pack(side="right", padx=(12, 0))
 
@@ -4819,7 +4825,7 @@ def _show_library_browser(
     search = tk.StringVar()
     search_entry = ttk.Entry(left, textvariable=search)
     search_entry._kicad_ui_contract_id = "library-browser.search"
-    search_entry.grid(row=1, column=0, sticky="ew", pady=(4, 8))
+    search_entry.grid(row=1, column=0, sticky="ew", pady=(3, 6))
     _add_tooltip(search_entry, "Filter blocks · ↑/↓ browse · Enter place")
     tree_frame = ttk.Frame(left)
     tree_frame.grid(row=2, column=0, sticky="nsew")
@@ -4862,7 +4868,7 @@ def _show_library_browser(
     description_label = ttk.Label(
         right, text="", wraplength=560, justify="left", style="Muted.TLabel"
     )
-    description_label.grid(row=1, column=0, sticky="ew", pady=(4, 8))
+    description_label.grid(row=1, column=0, sticky="ew", pady=(3, 6))
 
     preview_box = ttk.LabelFrame(right, text="Preview", padding=4)
     preview_box.grid(row=2, column=0, sticky="nsew")
@@ -5610,6 +5616,9 @@ def _show_library_browser(
         contract_id="library-browser.action.variants",
     )
     variants_button.pack(side="left", padx=(4, 0))
+    ttk.Separator(action_toolbar, orient="vertical").pack(
+        side="left", fill="y", padx=7, pady=4
+    )
     open_layout_button[0] = _action_button(
         action_toolbar, "Open PCB", open_layout, "pcb",
         "Open one of the block's stored PCB layouts",
@@ -5622,6 +5631,9 @@ def _show_library_browser(
         contract_id="library-browser.action.manage-pcb-layouts",
     )
     manage_layout_button.pack(side="left", padx=(4, 0))
+    ttk.Separator(action_toolbar, orient="vertical").pack(
+        side="left", fill="y", padx=7, pady=4
+    )
     refresh_button = _action_button(
         action_toolbar, "Refresh", refresh_records, "refresh",
         "Reload registered libraries and block details",
