@@ -15,7 +15,7 @@ import tempfile
 from collections.abc import Callable, Iterator, Sequence
 from importlib import import_module
 from pathlib import Path
-from typing import TYPE_CHECKING, Protocol, TypedDict, cast
+from typing import TYPE_CHECKING, Any, Protocol, TypedDict, cast
 
 # The core block model and IPC helpers must remain importable in headless
 # environments. Load Tkinter only when the interactive manager is invoked.
@@ -48,6 +48,7 @@ from .manifest_types import (
     BlockLayoutEditInput,
     BlockParameter,
     BlockProfileInput,
+    ParameterScalar,
     BlockProfileManifest,
     BlockVariantEditInput,
     BlockVariantManifest,
@@ -372,9 +373,10 @@ class _TkEntryCursor(Protocol):
 
 
 class _TkPreviewCanvas(Protocol):
-    """Canvas retaining the native Tk image for the latest facade preview."""
+    """Canvas retaining native Tk images for the latest previews."""
 
-    _native_preview_photo: tkinter_types.PhotoImage | None
+    native_preview_photo: tkinter_types.PhotoImage | None
+    native_schematic_preview_photo: tkinter_types.PhotoImage | None
 
 
 class _TkGridManaged(Protocol):
@@ -1005,7 +1007,7 @@ def _action_button(
     button = ttk.Button(
         parent,
         text=text,
-        command=cast(TkOption, command),
+        command=cast(Any, command),
         padding=(9, 6),
         **button_options,
     )
@@ -1581,7 +1583,7 @@ def _show_selected_block_configuration(
                 raw_variant = variant_var.get().strip()
                 resolved_variant = _resolve_variant_text(
                     raw_variant,
-                    cast(_SchematicProject, schematic.get_project()),
+                    schematic.get_project(),
                     _sheet_variables_for_symbol(schematic, instance),
                 )
                 resolve_variant_implementation(block.manifest, resolved_variant)
@@ -1652,7 +1654,7 @@ def _show_selected_block_configuration(
         "save",
         "Save configuration on the selected instance",
     ).pack(side="right")
-    dialog.bind("<Escape>", lambda _event: dialog.destroy())
+    dialog.bind("<Escape>", lambda _event: tkinter_types.Event[tkinter_types.Misc]: dialog.destroy())
     dialog.protocol("WM_DELETE_WINDOW", dialog.destroy)
     _set_window_geometry(dialog, 700, 720, 580, 500)
     dialog.grab_set()
@@ -1681,7 +1683,7 @@ def sync_selected_local(
 
 def _pick_block_for_placement(
     records: list[BlockRecord], parent: tkinter_types.Misc
-) -> BlockRecord | None:
+) -> _BlockPlacementSelection | None:
     """Choose, inspect and configure a functional block before native placement."""
     if not records:
         raise ValueError("No blocks were found in the registered functional-block libraries.")
@@ -1910,9 +1912,9 @@ def _pick_block_for_placement(
     search.trace_add("write", render_results)
     tree.bind("<<TreeviewSelect>>", selection_changed)
     tree.bind("<Double-1>", choose)
-    search_entry.bind("<Return>", lambda _event: (tree.focus_set(), "break"))
+    search_entry.bind("<Return>", lambda _event: tkinter_types.Event[tkinter_types.Misc]: (tree.focus_set(), "break"))
     dialog.bind("<Return>", choose)
-    dialog.bind("<Escape>", lambda _event: dialog.destroy())
+    dialog.bind("<Escape>", lambda _event: tkinter_types.Event[tkinter_types.Misc]: dialog.destroy())
     variant_combo.bind("<<ComboboxSelected>>", variant_changed)
     profile_combo.bind("<<ComboboxSelected>>", profile_changed)
 
@@ -2106,7 +2108,7 @@ def _pick_record(
     tree.bind("<Return>", choose_selected)
     tree.bind("<Double-1>", choose_double_clicked)
     search_entry.bind("<Down>", focus_results)
-    dialog.bind("<Escape>", lambda _event: dialog.destroy())
+    dialog.bind("<Escape>", lambda _event: tkinter_types.Event[tkinter_types.Misc]: dialog.destroy())
     select_button.configure(command=choose_selected)
     dialog.protocol("WM_DELETE_WINDOW", dialog.destroy)
     search.trace_add("write", render_results)
@@ -2306,7 +2308,7 @@ def _collect_block_profiles(
                 )
             variant = matched_variant
 
-        parameter_values = {}
+        parameter_values: dict[str, ParameterScalar] = {}
         if parameters:
             parameter_text = simpledialog.askstring(
                 "Profile Parameter Overrides",
@@ -2322,7 +2324,9 @@ def _collect_block_profiles(
 
         layout_id = None
         if layouts:
-            labels = {f"{item['name']}  [{item['id']}]": str(item["id"]) for item in layouts}
+            labels: dict[str, str] = {
+                f"{item['name']}  [{item['id']}]": str(item["id"]) for item in layouts
+            }
             selected_layout = simpledialog.askstring(
                 "Profile PCB Layout",
                 "Choose a PCB layout:\n\n" + "\n".join(labels),
@@ -2331,7 +2335,7 @@ def _collect_block_profiles(
             )
             if selected_layout is None:
                 return None
-            layout_aliases = {}
+            layout_aliases: dict[str, str] = {}
             for item in layouts:
                 layout_aliases[item["name"].casefold()] = str(item["id"])
                 layout_aliases[str(item["id"]).casefold()] = str(item["id"])
@@ -2344,15 +2348,16 @@ def _collect_block_profiles(
                     + ", ".join(labels)
                 )
 
-        profiles.append(
-            {
-                "name": name.strip(),
-                "description": description.strip(),
-                "variant": variant,
-                "parameters": parameter_values,
-                "layout": layout_id,
-            }
-        )
+        profile_input: BlockProfileInput = {
+            "name": name.strip(),
+            "description": description.strip(),
+            "parameters": parameter_values,
+        }
+        if variant is not None:
+            profile_input["variant"] = variant
+        if layout_id is not None:
+            profile_input["layout"] = layout_id
+        profiles.append(profile_input)
         if not messagebox.askyesno(
             "Configuration Profiles",
             f"Added profile {name.strip()!r}. Add another profile?",
@@ -2523,8 +2528,8 @@ def _ask_create_block_details(
     def cancel() -> None:
         finish()
 
-    dialog.bind("<Return>", lambda _event: accept())
-    dialog.bind("<Escape>", lambda _event: cancel())
+    dialog.bind("<Return>", lambda _event: tkinter_types.Event[tkinter_types.Misc]: accept())
+    dialog.bind("<Escape>", lambda _event: tkinter_types.Event[tkinter_types.Misc]: cancel())
     dialog.protocol("WM_DELETE_WINDOW", cancel)
     _set_window_geometry(dialog, 660, 390, 580, 340)
     dialog.grab_set()
@@ -2658,7 +2663,7 @@ def _create_and_place(
         record = synchronize_block_dependencies(record, library_roots, find_kicad_cli())["block"]
         record = _register_block(project_dir, record, kicad, library_roots)
     except Exception as registration_error:
-        cleanup_errors = []
+        cleanup_errors: list[Exception] = []
         block_path = Path(record.path).expanduser().resolve()
         library_path = Path(root).expanduser().resolve()
         if block_path.parent != library_path:
@@ -3052,7 +3057,7 @@ def _clean_facade_preview_svg(svg_file: Path, record: BlockRecord, output_dir: P
     display_labels.discard("")
 
     def contained_labels(node: ET.Element) -> set[str]:
-        labels = set()
+        labels: set[str] = set()
         for child in node.iter():
             if child.tag.rsplit("}", 1)[-1] not in {"text", "desc"}:
                 continue
@@ -3222,7 +3227,7 @@ def _normalize_schematic_preview_svg(svg_file: Path, output_dir: Path) -> Path:
 
 
 def _native_schematic_preview_pages(
-    record,
+    record: BlockRecord,
     implementation: str = "",
     *,
     width: int = 900,
@@ -3322,10 +3327,16 @@ def _native_schematic_preview_pages(
     return pages
 
 
-_SCHEMATIC_PREVIEW_CACHE: dict[tuple, tuple[tuple[str, bytes], ...]] = {}
+_SCHEMATIC_PREVIEW_CACHE: dict[
+    tuple[str, tuple[tuple[str, int, int], ...], int], tuple[tuple[str, bytes], ...]
+] = {}
 
 
-def _draw_schematic_preview(canvas, pages, page_label: str | None = None) -> None:
+def _draw_schematic_preview(
+    canvas: tkinter_types.Canvas,
+    pages: list[tuple[str, bytes]],
+    page_label: str | None = None,
+) -> None:
     """Display one KiCad-rendered schematic sheet in a scrollable canvas."""
     canvas.delete("all")
     selected = next(
@@ -3336,7 +3347,7 @@ def _draw_schematic_preview(canvas, pages, page_label: str | None = None) -> Non
         return
     _label, png_data = selected
     photo = tk.PhotoImage(data=base64.b64encode(png_data).decode("ascii"))
-    canvas._native_schematic_preview_photo = photo
+    cast(_TkPreviewCanvas, canvas).native_schematic_preview_photo = photo
     canvas.create_image(8, 8, image=photo, anchor="nw")
     canvas.configure(scrollregion=(0, 0, photo.width() + 16, photo.height() + 16))
     canvas.xview_moveto(0)
@@ -3381,9 +3392,7 @@ def _draw_facade_preview(
         )
         return
 
-    if photo is None:
-        return
-    cast(_TkPreviewCanvas, canvas)._native_preview_photo = photo
+    cast(_TkPreviewCanvas, canvas).native_preview_photo = photo
     width = max(int(canvas.winfo_width()), 480)
     height = max(int(canvas.winfo_height()), 250)
     canvas.create_image(width / 2, height / 2, image=photo, anchor="center")
@@ -3493,12 +3502,12 @@ def _save_block_variants(
         for item in previous
         if item.get("layout_id")
     }
-    normalized = []
-    retained_files = set()
-    files_to_copy = []
-    added_files = set()
-    seen_values = set()
-    seen_files = set()
+    normalized: list[BlockVariantManifest] = []
+    retained_files: set[str] = set()
+    files_to_copy: list[tuple[Path, Path]] = []
+    added_files: set[str] = set()
+    seen_values: set[str] = set()
+    seen_files: set[str] = set()
 
     for item in variants:
         value = str(item.get("value", "")).strip()
@@ -3534,7 +3543,7 @@ def _save_block_variants(
             files_to_copy.append((source, destination))
             added_files.add(filename)
         retained_files.add(filename)
-        descriptor = {"value": value, "file": filename}
+        descriptor: BlockVariantManifest = {"value": value, "file": filename}
         linked_layout = (
             item.get("layout_id")
             or previous_layout_by_file.get(filename.casefold())
@@ -3558,7 +3567,7 @@ def _save_block_variants(
         )
 
     new_value_by_file = {str(item["file"]).casefold(): str(item["value"]) for item in normalized}
-    old_value_to_new = {}
+    old_value_to_new: dict[str, str | None] = {}
     for old in previous:
         replacement_value = new_value_by_file.get(str(old.get("file", "")).casefold())
         old_value_to_new[str(old.get("value", "")).casefold()] = replacement_value
@@ -3586,7 +3595,7 @@ def _save_block_variants(
                 f"Default implementation {default_variant!r} is not in the saved variant list."
             )
 
-    copied_paths = []
+    copied_paths: list[Path] = []
     try:
         for source, destination in files_to_copy:
             shutil.copy2(source, destination)
@@ -4026,8 +4035,8 @@ def _ask_layout_details(
     _action_button(
         buttons, "Add layout", accept, "create", "Add this PCB layout to the block"
     ).pack(side="right", padx=(0, 8))
-    dialog.bind("<Return>", lambda _event: accept())
-    dialog.bind("<Escape>", lambda _event: dialog.destroy())
+    dialog.bind("<Return>", lambda _event: tkinter_types.Event[tkinter_types.Misc]: accept())
+    dialog.bind("<Escape>", lambda _event: tkinter_types.Event[tkinter_types.Misc]: dialog.destroy())
     _set_window_geometry(dialog, 860, 620, 760, 560)
     dialog.grab_set()
     name_entry.focus_set()
@@ -4380,7 +4389,7 @@ def _show_block_layout_editor(
 
     save_button.configure(command=save_and_close)
     tree.bind("<<TreeviewSelect>>", update_actions)
-    dialog.bind("<Escape>", lambda _event: cancel_layout_edits())
+    dialog.bind("<Escape>", lambda _event: tkinter_types.Event[tkinter_types.Misc]: cancel_layout_edits())
     render(layouts[0]["id"] if layouts else None)
     dialog.protocol("WM_DELETE_WINDOW", cancel_layout_edits)
     _set_window_geometry(dialog, 1120, 800, 980, 650)
@@ -4653,8 +4662,8 @@ def _ask_implementation_details(
         "select",
         "Use the selected implementation",
     ).pack(side="right", padx=(0, 8))
-    dialog.bind("<Return>", lambda _event: accept())
-    dialog.bind("<Escape>", lambda _event: dialog.destroy())
+    dialog.bind("<Return>", lambda _event: tkinter_types.Event[tkinter_types.Misc]: accept())
+    dialog.bind("<Escape>", lambda _event: tkinter_types.Event[tkinter_types.Misc]: dialog.destroy())
     source_entry.xview_moveto(1.0)
     selector_entry.focus_set()
     _set_window_geometry(dialog, 860, 540, 740, 460)
@@ -5008,9 +5017,9 @@ def _show_block_variant_editor(
     save_button.pack(side="right", padx=(0, 8))
 
     tree.bind("<<TreeviewSelect>>", update_actions)
-    tree.bind("<Double-1>", lambda _event: edit_variant())
-    tree.bind("<Delete>", lambda _event: remove_variant())
-    dialog.bind("<Escape>", lambda _event: cancel_variant_edits())
+    tree.bind("<Double-1>", lambda _event: tkinter_types.Event[tkinter_types.Misc]: edit_variant())
+    tree.bind("<Delete>", lambda _event: tkinter_types.Event[tkinter_types.Misc]: remove_variant())
+    dialog.bind("<Escape>", lambda _event: tkinter_types.Event[tkinter_types.Misc]: cancel_variant_edits())
     render(0)
     dialog.protocol("WM_DELETE_WINDOW", cancel_variant_edits)
     _set_window_geometry(dialog, 1080, 740, 900, 620)
@@ -5582,8 +5591,8 @@ def _show_library_browser(
     selected_project_catalog: list[Path | None] = [None]
     schematic_pages: list[list[tuple[str, bytes]]] = [[]]
     implementation_choices: list[dict[str, str]] = [{}]
-    facade_button = [None]
-    open_layout_button = [None]
+    facade_button: list[ttk_types.Button | None] = [None]
+    open_layout_button: list[ttk_types.Button | None] = [None]
 
     def draw_facade_for_selection():
         record = selected_record[0]
@@ -5681,7 +5690,7 @@ def _show_library_browser(
                 )
             )
 
-    def set_details(record):
+    def set_details(record: BlockRecord | None) -> None:
         selected_record[0] = record
         selected_project_catalog[0] = None
         schematic_pages[0] = []
@@ -5779,16 +5788,22 @@ def _show_library_browser(
         else:
             render_schematic_for_selection()
 
-    def preview_tab_changed(_event=None):
+    def preview_tab_changed(
+        _event: tkinter_types.Event[tkinter_types.Misc] | None = None,
+    ) -> None:
         if preview_notebook.index(preview_notebook.select()) == 0:
             draw_facade_for_selection()
         else:
             render_schematic_for_selection()
 
-    def implementation_changed(_event=None):
+    def implementation_changed(
+        _event: tkinter_types.Event[tkinter_types.Misc] | None = None,
+    ) -> None:
         render_schematic_for_selection()
 
-    def sheet_changed(_event=None):
+    def sheet_changed(
+        _event: tkinter_types.Event[tkinter_types.Misc] | None = None,
+    ) -> None:
         _draw_schematic_preview(
             schematic_preview,
             schematic_pages[0],
@@ -5799,7 +5814,7 @@ def _show_library_browser(
     page_selector.bind("<<ComboboxSelected>>", sheet_changed)
     preview_notebook.bind("<<NotebookTabChanged>>", preview_tab_changed)
 
-    def render_records(*_args):
+    def render_records(*_args: str) -> None:
         visible = _filter_library_records(records, search.get())
         preferred = _preferred_library_selection(visible, selected_record[0])
         tree.delete(*tree.get_children())
@@ -6170,7 +6185,7 @@ def _show_library_browser(
     search_entry.bind("<Down>", focus_results)
     preview.bind(
         "<Configure>",
-        lambda _event: (
+        lambda _event: tkinter_types.Event[tkinter_types.Misc]: (
             draw_facade_for_selection()
             if selected_record[0] is not None
             and preview_notebook.index(preview_notebook.select()) == 0
@@ -6196,14 +6211,15 @@ def _show_library_browser(
         "Open the base or a named circuit implementation",
     )
     implementation_button.pack(side="left", padx=(6, 0))
-    facade_button[0] = _action_button(
+    facade_action = _action_button(
         action_toolbar,
         "Edit facade",
         edit_facade,
         "facade",
         "Open the generated library facade in KiCad Symbol Editor",
     )
-    facade_button[0].pack(side="left", padx=(6, 0))
+    facade_button[0] = facade_action
+    facade_action.pack(side="left", padx=(6, 0))
     variants_button = _action_button(
         action_toolbar,
         "Variants",
@@ -6212,14 +6228,15 @@ def _show_library_browser(
         "Add, edit, remove, or set the default circuit implementation",
     )
     variants_button.pack(side="left", padx=(6, 0))
-    open_layout_button[0] = _action_button(
+    open_layout_action = _action_button(
         action_toolbar,
         "Open PCB",
         open_layout,
         "pcb",
         "Open one of the block's stored PCB layouts",
     )
-    open_layout_button[0].pack(side="left", padx=(6, 0))
+    open_layout_button[0] = open_layout_action
+    open_layout_action.pack(side="left", padx=(6, 0))
     manage_layout_button = _action_button(
         action_toolbar,
         "PCB layouts",
@@ -6247,7 +6264,7 @@ def _show_library_browser(
     refresh_records()
     selection_changed()
     _set_window_geometry(window, 1600, 1000, 1200, 720)
-    window.bind("<FocusIn>", lambda _event: selection_changed(), add="+")
+    window.bind("<FocusIn>", lambda _event: tkinter_types.Event[tkinter_types.Misc]: selection_changed(), add="+")
     search_entry.focus_set()
 
 
@@ -6353,13 +6370,12 @@ def _open_selected_block_implementation(
         "implementation schematic",
         editor_window_id=getattr(parent, "_kicad_blocks_editor_window_id", None),
     )
-    if parent is not None:
-        detail = (
-            f"Opened {record.name} — variant {resolved_variant}."
-            if record.manifest.get("variants")
-            else f"Opened {record.name} implementation."
-        )
-        LOG.info("%s: %s", "Block Implementation", detail)
+    detail = (
+        f"Opened {record.name} — variant {resolved_variant}."
+        if record.manifest.get("variants")
+        else f"Opened {record.name} implementation."
+    )
+    LOG.info("%s: %s", "Block Implementation", detail)
     return process
 
 
@@ -6441,7 +6457,7 @@ def _validate_shared_library(root: Path | list[Path], parent: tkinter_types.Misc
     passed = sum(result["passed_count"] for _path, result in results)
     warnings = sum(result["warning_count"] for _path, result in results)
     failed = sum(result["failed_count"] for _path, result in results)
-    details = []
+    details: list[str] = []
     for library_path, result in results:
         details.append(f"Library: {library_path}")
         for item in result["blocks"]:
