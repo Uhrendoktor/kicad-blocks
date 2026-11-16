@@ -62,7 +62,9 @@ class SchematicStyleRuleTests(unittest.TestCase):
     def test_multiline_block_title_is_rejected(self) -> None:
         tree = self.fresh_tree()
         title = next(
-            node for node in sexpr_all(tree, "text_box") if str(node[1]) == "USB-C PORT / CC PROTECTION"
+            node
+            for node in sexpr_all(tree, "text_box")
+            if str(node[1]) == "USB-C PORT / CC PROTECTION"
         )
         title[1] = str(title[1]) + "\nWRAPPED"
         self.assertTrue(any("single line" in issue for issue in block_annotation_issues(tree)))
@@ -262,7 +264,10 @@ assert "generate_reference" not in sys.modules
         self.assertEqual(required_no_connect_issues(tree), [])
         pins = pin_world_info(tree)
         markers = {
-            (round(float(sexpr_direct(node, "at")[1]), 3), round(float(sexpr_direct(node, "at")[2]), 3))
+            (
+                round(float(sexpr_direct(node, "at")[1]), 3),
+                round(float(sexpr_direct(node, "at")[2]), 3),
+            )
             for node in sexpr_all(tree, "no_connect")
             if sexpr_direct(node, "at") is not None
         }
@@ -276,7 +281,10 @@ assert "generate_reference" not in sys.modules
             node
             for node in sexpr_all(tree, "no_connect")
             if sexpr_direct(node, "at") is not None
-            and (round(float(sexpr_direct(node, "at")[1]), 3), round(float(sexpr_direct(node, "at")[2]), 3))
+            and (
+                round(float(sexpr_direct(node, "at")[1]), 3),
+                round(float(sexpr_direct(node, "at")[2]), 3),
+            )
             == marker_point
         )
         tree.remove(marker)

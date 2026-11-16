@@ -177,7 +177,8 @@ class STUSB4500ReferenceTests(unittest.TestCase):
         self.assertLess(float(_required_direct(instances["R55"], "at")[2]), 240.0)
 
         r51, r52, r53, r54 = (
-            _required_direct(instances[reference], "at") for reference in ("R51", "R52", "R53", "R54")
+            _required_direct(instances[reference], "at")
+            for reference in ("R51", "R52", "R53", "R54")
         )
         self.assertAlmostEqual(float(r51[2]), float(r53[2]), places=3)
         self.assertAlmostEqual(float(r52[2]), float(r54[2]), places=3)
