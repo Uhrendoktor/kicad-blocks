@@ -54,6 +54,7 @@ def _load_project_settings(path: Path, *, context: str) -> KiCadProjectData:
     Raises:
         ValueError: If the document is not valid JSON.
         TypeError: If the root or a consumed settings section is not an object.
+
     """
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
