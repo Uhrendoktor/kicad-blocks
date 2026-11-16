@@ -26,13 +26,13 @@ from .model import (
 from .report_types import BlockCompositionItem, BlockCompositionReport, BlockCompositionStepResult
 from .repository import (
     BlockRecord,
-    load_block_record,
-    resolve_dependency_path,
     atomic_write,
     list_blocks,
+    load_block_record,
     read_manifest,
     refresh_library_block,
     register_project_symbol_library,
+    resolve_dependency_path,
 )
 
 

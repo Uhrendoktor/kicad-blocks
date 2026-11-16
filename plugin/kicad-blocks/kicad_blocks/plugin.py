@@ -5111,7 +5111,7 @@ def _show_library_roots_dialog(parent: tkinter_types.Misc) -> bool:
     horizontal_scroll = ttk.Scrollbar(
         table_frame,
         orient="horizontal",
-        command=cast(Callable[..., None], tree.xview),
+        command=_scrollbar_command(tree.xview),
         style="Horizontal.TScrollbar",
     )
     tree.configure(
@@ -5488,7 +5488,7 @@ def _show_library_browser(
     tree_x_scroll = ttk.Scrollbar(
         tree_frame,
         orient="horizontal",
-        command=cast(Callable[..., None], tree.xview),
+        command=_scrollbar_command(tree.xview),
         style="Horizontal.TScrollbar",
     )
     tree.configure(
@@ -5530,7 +5530,7 @@ def _show_library_browser(
         facade_frame, orient="vertical", command=_scrollbar_command(preview.yview), style="Vertical.TScrollbar"
     )
     preview_x_scroll = ttk.Scrollbar(
-        facade_frame, orient="horizontal", command=preview.xview, style="Horizontal.TScrollbar"
+        facade_frame, orient="horizontal", command=_scrollbar_command(preview.xview), style="Horizontal.TScrollbar"
     )
     preview.configure(
         yscrollcommand=preview_y_scroll.set,

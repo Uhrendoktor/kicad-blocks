@@ -486,6 +486,7 @@ def _merge_project_net_settings(
     if not target_project.is_file() and (source_project is None or not source_project.is_file()):
         return None
 
+    raw_target_data: dict[str, object]
     if target_project.is_file():
         raw_target_value: object = json.loads(target_project.read_text(encoding="utf-8"))
         if not isinstance(raw_target_value, dict):
