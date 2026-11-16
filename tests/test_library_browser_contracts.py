@@ -14,6 +14,7 @@ sys.path.insert(0, str(ROOT / "plugin" / "kicad-blocks"))
 sys.path.insert(0, str(ROOT / "tests"))
 
 from kicad_blocks import plugin as plugin_actions
+
 from ui_contracts import (
     ButtonContract,
     EntryInputContract,
@@ -252,7 +253,7 @@ def test_place_button_registers_selected_block_and_starts_native_placement(monke
 
 
 def test_implementation_button_registers_and_opens_default_document(monkeypatch, tmp_path):
-    root, context, _records, library_root, _project = _new_browser(monkeypatch, tmp_path)
+    root, context, _records, _library_root, _project = _new_browser(monkeypatch, tmp_path)
     context.action_calls.clear()
     monkeypatch.setattr(
         plugin_actions, "_register_implementation_catalog",
