@@ -300,7 +300,7 @@ def test_edit_variant_renames_selector_and_preserves_implementation_file(
 def test_add_variant_save_failure_can_be_retried_with_save_and_close(
     monkeypatch, tmp_path
 ):
-    record, sources = _new_manager_fixture(tmp_path)
+    record, _sources = _new_manager_fixture(tmp_path)
     source = tmp_path / "new-3v3.kicad_sch"
     source.write_text(
         '(kicad_sch (version 20250114) (generator "retry-test"))\n',
@@ -333,7 +333,8 @@ def test_add_variant_save_failure_can_be_retried_with_save_and_close(
     def add_and_retry(_dialog):
         _click(context, "implementations-manager.action.add", "Add variant")
         status = context.require_widget("implementations-manager.status")
-        assert "Save failed; use Save & close to retry." in status.get()
+        status_variable = str(status.cget("textvariable"))
+        assert "Save failed; use Save & close to retry." in status.getvar(status_variable)
         assert len(errors) == 1
         _click(
             context,
