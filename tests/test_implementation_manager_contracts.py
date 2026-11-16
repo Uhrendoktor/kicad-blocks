@@ -93,8 +93,9 @@ def _run_manager(root, record, context, action):
     callback_errors = []
 
     def drive():
-        dialog = _manager_dialog(root)
+        dialog = None
         try:
+            dialog = _manager_dialog(root)
             assert dialog._kicad_ui_screen_id == "implementations-manager"
             assert dialog.title() == f"Implementations — {record.name}"
             context.refresh_widgets()
@@ -106,8 +107,12 @@ def _run_manager(root, record, context, action):
             # close the modal, and re-raise after wait_window returns so CI
             # fails with the useful assertion instead of timing out.
             callback_errors.append(exc)
-            if dialog.winfo_exists():
+            if dialog is not None and dialog.winfo_exists():
                 dialog.destroy()
+            elif not context.window_destroyed:
+                for child in root.winfo_children():
+                    if child.winfo_class() == "Toplevel":
+                        child.destroy()
 
     root.after(100, drive)
     result = plugin_actions._show_block_variant_editor(record, root)
