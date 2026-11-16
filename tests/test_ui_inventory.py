@@ -51,11 +51,29 @@ def test_every_known_top_level_screen_is_in_catalog():
     assert expected <= ids
 
 
+def test_each_semantic_control_has_an_explicit_assertion_level():
+    catalog = load_catalog()
+    for screen in catalog["screens"]:
+        controls = list(screen.get("controls", []))
+        controls.extend(screen.get("footer_controls", []))
+        for view in screen.get("views", []):
+            controls.extend(view.get("actions", []))
+        ids = [item["contract_id"] for item in controls if item.get("contract_id")]
+        assert len(ids) == len(set(ids))
+        assert all(
+            item["assertion"] in {"asserted", "observed", "uncovered"}
+            for item in controls
+        )
+
+
 def test_inventory_distinguishes_implemented_from_unimplemented_contracts():
     rendered = render_inventory(load_catalog())
     assert "Contracted — widget action and expected UI transition asserted" in rendered
     assert "Partial — targeted GUI, integration, or visual checks exist" in rendered
     assert "Inventory only — systematic UI contracts not implemented yet" in rendered
+    assert "behavior asserted" in rendered
+    assert "result observed" in rendered
+    assert "discovered; interaction not yet asserted" in rendered
     assert "a screenshot or a visible control proves the complete workflow" in rendered
 
 
