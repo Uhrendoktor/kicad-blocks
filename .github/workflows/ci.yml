@@ -9,8 +9,8 @@ on:
   pull_request:
     types: [opened, reopened, synchronize, ready_for_review]
 
-# Keep only the newest pending validation for each ref. This runner is local
-# and serial; stale commit snapshots must not build an unbounded queue.
+# Keep only the newest validation for each ref. Older commit snapshots are
+# cancelled so CI time is spent on the current branch head.
 concurrency:
   group: kicad-blocks-${{ github.ref }}
   cancel-in-progress: true
@@ -240,13 +240,6 @@ jobs:
           echo "KICAD_EESCHEMA=$EESCHEMA" >> "$GITHUB_ENV"
           xvfb-run --help >/dev/null
           command -v xdotool
-
-      - name: Execute and assert reusable Tk UI component contracts
-        shell: bash
-        run: |
-          set -euo pipefail
-          timeout 180s xvfb-run -a -s "-screen 0 1280x800x24" \
-            "${RUNNER_TEMP}/kicad-blocks-venv/bin/python" -m pytest -vv -o faulthandler_timeout=30 tests/test_ui_contracts.py tests/test_library_browser_contracts.py tests/test_add_pcb_layout_contracts.py tests/test_implementation_manager_contracts.py
 
       - name: Verify Create Block from Sheet against real KiCad IPC
         shell: bash
@@ -487,6 +480,42 @@ jobs:
           git tag -a v1 "$TAG_TARGET_SHA" -m "KiCad Blocks v1"
           git push origin refs/tags/v1
 
+
+  ui-interaction-contracts:
+    # These tests exercise real Tk widgets and only stub KiCad/filesystem
+    # boundaries. They do not need the KiCad CLI or a running editor.
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Tk and virtual display
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends python3-tk xvfb
+          python3 -c "import tkinter; print('System Tkinter available')"
+          xvfb-run -a -s "-screen 0 1280x800x24" python3 -c "import tkinter; root=tkinter.Tk(); root.destroy(); print('Xvfb Tk window creation works')"
+
+      - name: Install plugin and test dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 --version
+          python3 -m venv "${RUNNER_TEMP}/kicad-blocks-ui-venv"
+          PY="${RUNNER_TEMP}/kicad-blocks-ui-venv/bin/python"
+          "$PY" -m pip install --upgrade pip
+          "$PY" -m pip install -r plugin/kicad-blocks/requirements.txt pytest
+          "$PY" -c "from kipy import KiCad; import tkinter; print('Tk and KiCad IPC Python modules import')"
+
+      - name: Execute and assert reusable Tk UI component contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 180s xvfb-run -a -s "-screen 0 1280x800x24" \
+            "${RUNNER_TEMP}/kicad-blocks-ui-venv/bin/python" -m pytest -vv -o faulthandler_timeout=30 tests/test_ui_contracts.py tests/test_library_browser_contracts.py tests/test_add_pcb_layout_contracts.py tests/test_implementation_manager_contracts.py
 
   visual-ui-audit:
     # Keep a separate hosted visual audit so screenshot evidence remains available
