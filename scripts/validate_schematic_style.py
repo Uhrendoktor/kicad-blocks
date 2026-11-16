@@ -326,6 +326,8 @@ def _position(node: SExprList) -> Point | None:
     if at is None or len(at) < 3:
         return None
     return _number(at[1]), _number(at[2])
+
+
 def _segments(tree: SExprList) -> list[RawSegment]:
     result: list[RawSegment] = []
     for wire in _all(tree, "wire"):
@@ -1027,6 +1029,8 @@ def _local_to_world(sx: float, sy: float, rotation: int, x: float, y: float) -> 
     if rotation == 270:
         return sx + y, sy + x
     raise ValueError(f"Unsupported symbol rotation {rotation}")
+
+
 def _symbol_primitives(tree: SExprList) -> dict[str, list[_SymbolPrimitive]]:
     """Return transformed, non-rectangular symbol primitives in sheet coordinates."""
     library = _direct(tree, "lib_symbols")
@@ -1373,6 +1377,8 @@ def _visible_properties(tree: SExprList) -> list[VisibleProperty]:
             if bounds is not None:
                 fields.append((reference, name, bounds, prop))
     return fields
+
+
 def symbol_field_clearance_issues(tree: SExprList) -> list[str]:
     """Check visible fields against actual symbol strokes, pins and other UI objects."""
     issues: list[str] = []
