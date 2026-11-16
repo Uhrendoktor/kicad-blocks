@@ -698,7 +698,7 @@ def read_manifest(block_path: Path) -> BlockManifest:
             choices = ", ".join(str(item["value"]) for item in variants)
             raise ValueError(
                 f"Default implementation {default_value!r} is not declared. "
-                f"Available variants: {choices or 'base implementation only'}. "
+                f"Available variants: {choices or 'default implementation only'}. "
             )
         manifest["default_variant"] = str(matching_variant["value"])
     else:

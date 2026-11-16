@@ -114,7 +114,7 @@ def _get_or_create_release(repo: str, token: str) -> dict:
         "body": (
             "Prebuilt KiCad Python schematic/PCB IPC bindings for the tested "
             "Linux x86_64, CPython 3.12 KiCad nightly environment. The asset is "
-            "refreshed by successful main-branch self-hosted CI runs."
+            "refreshed by successful main-branch GitHub-hosted KiCad integration runs."
         ),
         "draft": False,
         "prerelease": True,
