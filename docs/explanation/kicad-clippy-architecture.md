@@ -1,8 +1,9 @@
 # kicad-clippy: research and architecture proposal
 
-**Status:** Architecture proposal; implementation deliberately not started  
-**Scope:** A full Rust schematic linter that complements native KiCad ERC  
-**Decision sought:** Approve the architecture and staged migration before implementation
+**Status:** Architecture approved; Phase 1 foundation ported to the standalone [Uhrendoktor/kicad-clippy](https://github.com/Uhrendoktor/kicad-clippy) repository.  
+**Scope:** A full Rust schematic linter that complements native KiCad ERC.  
+**Implementation:** The initial parser, diagnostic contracts, native ERC adapter, CLI, strict Clippy policy, and project documentation are under review in [kicad-clippy PR #1](https://github.com/Uhrendoktor/kicad-clippy/pull/1).  
+**Remaining:** Custom SCH001–SCH020 execution, project profiles, SARIF, fix/layout proposals, and GUI integration remain future implementation stages.
 
 ## 1. Executive summary
 
