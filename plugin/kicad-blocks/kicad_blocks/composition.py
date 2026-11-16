@@ -7,7 +7,7 @@ import shutil
 import tempfile
 import uuid
 from pathlib import Path
-from typing import Protocol, cast
+from typing import Any, Protocol, cast
 
 from .manifest_types import BlockDependencyManifest
 from .model import (
@@ -22,8 +22,8 @@ from .model import (
 from .report_types import BlockCompositionItem, BlockCompositionReport, BlockCompositionStepResult
 from .repository import (
     BlockRecord,
-    _dependency_path,
-    _record,
+    load_block_record,
+    resolve_dependency_path,
     atomic_write,
     list_blocks,
     read_manifest,
@@ -38,6 +38,30 @@ class _LabelWithSpinStyle(Protocol):
     spin_style: int
 
 
+class _Position2D(Protocol):
+    """Coordinate properties consumed from KiCad geometry objects."""
+
+    x: int | float
+    y: int | float
+
+
+class _LabelText(Protocol):
+    value: str
+
+
+class _LabelId(Protocol):
+    value: str
+
+
+class _GlobalLabel(Protocol):
+    """Generated KiCad global-label fields used by the composition routine."""
+
+    position: _Position2D
+    text: _LabelText
+    id: _LabelId
+    shape: int
+
+
 def _child_record(
     parent: BlockRecord, dependency: BlockDependencyManifest, records: dict[str, BlockRecord]
 ) -> BlockRecord:
@@ -45,12 +69,12 @@ def _child_record(
     child = records.get(block_id)
     if child is not None:
         return child
-    path = _dependency_path(parent.path, parent.manifest, dependency)
+    path = resolve_dependency_path(parent.path, parent.manifest, dependency)
     if path is None or not path.is_dir():
         raise FileNotFoundError(
             f"Nested block {dependency.get('name', block_id)!r} ({block_id}) was not found."
         )
-    child = _record(path)
+    child = load_block_record(path)
     if child.manifest["block_id"] != block_id:
         raise ValueError(f"Nested dependency path for {block_id} resolves to another block.")
     records[block_id] = child
@@ -68,7 +92,7 @@ def _pin_records(record: BlockRecord) -> list[BlockPin]:
     ]
 
 
-def _point_key(position) -> tuple[int, int]:
+def _point_key(position: _Position2D) -> tuple[int, int]:
     return int(position.x), int(position.y)
 
 
@@ -128,18 +152,15 @@ def _compose_direct_children(
             timeout_ms=30000,
         )
         schematic = kicad.get_schematic()
-        if schematic is None:
-            raise RuntimeError(f"KiCad could not load block implementation {schematic_path}.")
-        kicad.load_all_libraries(types=[1])
-        kicad.wait_for_libraries(types=[1], timeout_s=120.0)
+        kicad.load_all_libraries()
+        kicad.wait_for_libraries(timeout_s=120.0)
 
         symbols_by_reference = {item.reference: item for item in schematic.get_symbols()}
-        labels_by_position = {
-            _point_key(item.position): item
-            for item in schematic.get_labels()
-            if hasattr(item, "position") and hasattr(item, "text")
+        known_labels = cast(list[_GlobalLabel], schematic.get_labels())
+        labels_by_position: dict[tuple[int, int], _GlobalLabel] = {
+            _point_key(item.position): item for item in known_labels
         }
-        new_labels = []
+        new_labels: list[_GlobalLabel] = []
         placed: list[str] = []
         for dependency, child in dependencies:
             reference = str(dependency.get("reference") or "B1")
@@ -169,7 +190,9 @@ def _compose_direct_children(
                 existing = schematic.place_symbol_from_library(
                     f"{nickname}:{symbol_name}",
                     Vector2.from_xy_mm(float(position[0]), float(position[1])),
-                    orientation=orientation,
+                    # The current public API documents integer degrees; the generated
+                    # wrapper stub models this argument as a protobuf ValueType.
+                    orientation=cast(Any, orientation),
                     reference=reference,
                 )
                 symbols_by_reference[reference] = existing
@@ -205,7 +228,7 @@ def _compose_direct_children(
                             f"by net {current_text!r}, not {net_name!r}."
                         )
                     continue
-                label = GlobalLabel()
+                label = cast(_GlobalLabel, GlobalLabel())
                 label.position = point
                 label.text.value = net_name
                 cast(_LabelWithSpinStyle, label).spin_style = spin_style
@@ -219,7 +242,9 @@ def _compose_direct_children(
                 label.id.value = str(uuid.uuid4())
                 label.shape = 5  # SLSH_PASSIVE
             try:
-                schematic.create_items(new_labels)
+                # KiCad's generated IPC stub does not currently expose the
+                # concrete generated message type for GlobalLabel.
+                schematic.create_items(cast(Any, new_labels))
             except AttributeError as exc:
                 # Some KiCad development builds have returned a CreateItem
                 # result with no packed Any payload even though the object
@@ -228,11 +253,8 @@ def _compose_direct_children(
                 if "type_url" not in str(exc):
                     raise
                 actual_labels = [
-                    (
-                        str(getattr(item.text, "value", "")),
-                        _point_key(item.position),
-                    )
-                    for item in schematic.get_labels()
+                    (str(item.text.value), _point_key(item.position))
+                    for item in cast(list[_GlobalLabel], schematic.get_labels())
                 ]
                 missing_labels = [
                     (str(label.text.value), _point_key(label.position))
@@ -303,10 +325,10 @@ def compose_block_implementation(
 
         if direct:
             refreshed_manifest = read_manifest(current.path)
-            revised_dependencies = []
+            revised_dependencies: list[BlockDependencyManifest] = []
             for dependency in refreshed_manifest.get("dependencies", []):
                 child = _child_record(current, dependency, records)
-                revised = dict(dependency)
+                revised = cast(BlockDependencyManifest, dict(dependency))
                 revised["revision"] = read_manifest(child.path).get("revision")
                 revised_dependencies.append(revised)
             if revised_dependencies != refreshed_manifest.get("dependencies", []):

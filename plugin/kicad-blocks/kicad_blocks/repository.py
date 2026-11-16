@@ -325,16 +325,27 @@ def synchronize_project_symbol_catalog(
                     source_digest = shared_digest
 
     state_file = project_catalog.with_name(f"{project_catalog.stem}.sync.json")
+    synchronized: dict[str, str] = {}
     if state_file.is_file():
         try:
-            state = json.loads(state_file.read_text(encoding="utf-8"))
+            loaded_state: object = json.loads(state_file.read_text(encoding="utf-8"))
         except json.JSONDecodeError as exc:
             raise ValueError(f"Invalid project symbol synchronization state: {state_file}") from exc
-        if not isinstance(state, dict) or not isinstance(state.get("symbols"), dict):
+        if not isinstance(loaded_state, dict):
             raise ValueError(f"Invalid project symbol synchronization state: {state_file}")
+        loaded_symbols = loaded_state.get("symbols")
+        if not isinstance(loaded_symbols, dict):
+            raise ValueError(f"Invalid project symbol synchronization state: {state_file}")
+        for name, digest in cast(dict[object, object], loaded_symbols).items():
+            if not isinstance(name, str) or not isinstance(digest, str):
+                raise ValueError(f"Invalid project symbol synchronization state: {state_file}")
+            synchronized[name] = digest
+        state: dict[str, object] = {
+            "schema_version": loaded_state.get("schema_version", 1),
+            "symbols": synchronized,
+        }
     else:
-        state = {"schema_version": 1, "symbols": {}}
-    synchronized = state["symbols"]
+        state = {"schema_version": 1, "symbols": synchronized}
 
     def save_state() -> None:
         atomic_write(
@@ -768,7 +779,7 @@ def read_manifest(block_path: Path) -> BlockManifest:
                 raise ValueError(
                     f"Layout {layout_id!r} ports must map every facade pin to a non-empty net name."
                 )
-            ports = cast(dict[str, _RawJsonScalar], ports_value)
+            ports = ports_value
             if set(ports) != pin_names or any(
                 not isinstance(value, str) or not value.strip() for value in ports.values()
             ):
@@ -846,6 +857,11 @@ def _record(path: Path) -> BlockRecord:
     return BlockRecord(path=path, manifest=read_manifest(path))
 
 
+def load_block_record(path: Path) -> BlockRecord:
+    """Load and validate one block directory for use by other modules."""
+    return _record(path)
+
+
 def list_blocks(root: Path) -> list[BlockRecord]:
     """Return valid shared blocks in a library root, sorted by display name.
 
@@ -855,7 +871,7 @@ def list_blocks(root: Path) -> list[BlockRecord]:
     root = Path(root).expanduser().resolve()
     if not root.exists():
         return []
-    records = []
+    records: list[BlockRecord] = []
     for manifest_path in root.glob("*.kicad_block/manifest.json"):
         try:
             record = _record(manifest_path.parent)
@@ -1061,11 +1077,11 @@ def create_block(
 
             ports = raw_layout.get("ports")
             if ports is not None:
-                if not isinstance(ports, dict) or set(ports) != expected_pins:
+                if set(ports) != expected_pins:
                     raise ValueError(
                         f"Layout {layout_name!r} ports must map every block facade pin exactly once."
                     )
-                if any(not isinstance(value, str) or not value.strip() for value in ports.values()):
+                if any(not value.strip() for value in ports.values()):
                     raise ValueError(
                         f"Layout {layout_name!r} port mappings cannot contain empty net names."
                     )
@@ -1355,18 +1371,19 @@ def _read_instance_links(path: Path) -> InstanceLinks:
 
     if not isinstance(raw_value, dict):
         raise ValueError(f"Invalid project block-link metadata: {path}")
-    raw = cast(dict[str, _RawInstanceLinksValue], raw_value)
+    raw = cast(dict[str, object], raw_value)
     raw_instances_value = raw.get("instances", {})
     if not isinstance(raw_instances_value, dict):
         raise ValueError(f"Invalid project block-link instance map: {path}")
 
     instances: dict[str, InstanceLink] = {}
-    for instance_id, raw_entry in raw_instances_value.items():
+    for instance_id, raw_entry in cast(dict[object, object], raw_instances_value).items():
         if not isinstance(instance_id, str) or not isinstance(raw_entry, dict):
             raise ValueError(f"Invalid project block-link entry in {path}")
-        local_path = raw_entry.get("local_path")
-        source_block_id = raw_entry.get("source_block_id")
-        updated_at = raw_entry.get("updated_at", "")
+        entry = cast(dict[str, object], raw_entry)
+        local_path = entry.get("local_path")
+        source_block_id = entry.get("source_block_id")
+        updated_at = entry.get("updated_at", "")
         if (
             not isinstance(local_path, str)
             or not isinstance(updated_at, str)
@@ -1462,7 +1479,7 @@ def synchronize_local_copy(local_block: BlockRecord) -> LocalCopySyncReport:
             "Create a reviewed replacement instance instead."
         )
 
-    base_hashes: dict[str, str] = cast(dict[str, str], manifest.get("base_hashes", {}))
+    base_hashes: dict[str, str] = manifest.get("base_hashes", {})
     local_hashes = _asset_hashes(local_block.path, manifest)
     source_hashes = _asset_hashes(source.path, source.manifest)
     base_dependencies = manifest.get("base_dependencies", manifest.get("dependencies", []))
@@ -2345,6 +2362,13 @@ def _dependency_path(
     if not candidate.is_absolute():
         candidate = _dependency_anchor(block_path, manifest) / candidate
     return candidate.resolve()
+
+
+def resolve_dependency_path(
+    block_path: Path, manifest: BlockManifest, dependency: BlockDependencyManifest
+) -> Path | None:
+    """Resolve one nested block's path from its parent manifest."""
+    return _dependency_path(block_path, manifest, dependency)
 
 
 def _depends_on(block_path: Path, target_id: str, visited: set[str]) -> bool:
