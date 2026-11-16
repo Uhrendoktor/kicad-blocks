@@ -73,7 +73,7 @@ class RecursiveBlockOperationTests(unittest.TestCase):
         self.assertEqual(result["row_count"], 1)
         self.assertNotEqual(observed_path[0], block.implementation)
         self.assertIn('(property "Value" "1.8"', observed_content[0])
-        self.assertNotIn("{{OUTPUT_VOLTAGE}}", observed["content"])
+        self.assertNotIn("{{OUTPUT_VOLTAGE}}", observed_content[0])
         self.assertIn("{{OUTPUT_VOLTAGE}}", block.implementation.read_text(encoding="utf-8"))
 
     def test_bom_rejects_undeclared_parameter_templates(self):

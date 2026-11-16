@@ -5,7 +5,7 @@ permissions:
 
 on:
   push:
-    branches: [main]
+    branches: [main, agents/strict-test-quality-contract-rebased]
   pull_request:
 
 # Keep only the newest pending validation for each ref. This runner is local

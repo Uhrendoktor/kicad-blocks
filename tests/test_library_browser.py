@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -94,7 +95,9 @@ _block_overview_text = cast(Callable[..., str], _private_hook("_block_overview_t
 _choose_block_layout = cast(
     Callable[..., _LayoutChoice | None], _private_hook("_choose_block_layout")
 )
-_clean_facade_preview_svg = cast(Callable[..., Path], _private_hook("_clean_facade_preview_svg"))
+_clean_facade_preview_svg = cast(
+    Callable[..., Path], _private_hook("_clean_facade_preview_svg")
+)
 _filter_library_records = cast(
     Callable[..., list[BlockRecord]], _private_hook("_filter_library_records")
 )
@@ -115,7 +118,9 @@ _pick_record = cast(Callable[..., BlockRecord | None], _private_hook("_pick_reco
 _preferred_library_selection = cast(
     Callable[..., BlockRecord | None], _private_hook("_preferred_library_selection")
 )
-_restore_placement_windows = cast(Callable[..., None], _private_hook("_restore_placement_windows"))
+_restore_placement_windows = cast(
+    Callable[..., None], _private_hook("_restore_placement_windows")
+)
 _save_block_layouts = cast(Callable[..., BlockRecord], _private_hook("_save_block_layouts"))
 _save_block_variants = cast(Callable[..., None], _private_hook("_save_block_variants"))
 _set_window_geometry = cast(Callable[..., None], _private_hook("_set_window_geometry"))
@@ -254,23 +259,23 @@ class LibraryBrowserTests(unittest.TestCase):
             )
         )
         updated_catalog = parse_sexpr(project_catalog.read_text(encoding="utf-8"))
-        updated_symbol = _named_symbol_node(
+        updated_symbol = named_symbol_node(
             updated_catalog,
             self.block.manifest["symbol_name"],
             project_catalog,
         )
-        filter_digest_after = _symbol_definition_digest(
-            _named_symbol_node(updated_catalog, filter_name, project_catalog)
+        filter_digest_after = symbol_definition_digest(
+            named_symbol_node(updated_catalog, filter_name, project_catalog)
         )
         self.assertEqual(
-            _symbol_definition_digest(
-                _named_symbol_node(
+            symbol_definition_digest(
+                named_symbol_node(
                     parse_sexpr(source_symbol.read_text(encoding="utf-8")),
                     self.block.manifest["symbol_name"],
                     source_symbol,
                 )
             ),
-            _symbol_definition_digest(updated_symbol),
+            symbol_definition_digest(updated_symbol),
         )
         self.assertEqual(filter_digest_after, filter_digest_before)
         self.assertFalse(

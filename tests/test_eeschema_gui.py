@@ -122,8 +122,6 @@ def main() -> None:
                 )
             if process is None:
                 raise AssertionError("Plugin edit action did not launch Eeschema.")
-            if process is None:
-                raise AssertionError("Plugin edit action did not launch Eeschema.")
             if process.args != [eeschema, str(implementation)]:
                 raise AssertionError(
                     f"Plugin edit action opened unexpected command: {process.args!r}"
