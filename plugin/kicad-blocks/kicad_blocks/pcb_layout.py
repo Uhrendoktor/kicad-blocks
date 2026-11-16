@@ -489,7 +489,9 @@ def _merge_project_net_settings(
 
     raw_target_data: JSONObject
     if target_project.is_file():
-        raw_target_value: JSONValue = cast(JSONValue, json.loads(target_project.read_text(encoding="utf-8")))
+        raw_target_value: JSONValue = cast(
+            JSONValue, json.loads(target_project.read_text(encoding="utf-8"))
+        )
         if not isinstance(raw_target_value, dict):
             raise ValueError(f"Invalid KiCad project JSON: {target_project}")
         raw_target_data = cast(JSONObject, raw_target_value)
@@ -502,7 +504,9 @@ def _merge_project_net_settings(
         }
 
     if source_project is not None and source_project.is_file():
-        raw_source_value: JSONValue = cast(JSONValue, json.loads(source_project.read_text(encoding="utf-8")))
+        raw_source_value: JSONValue = cast(
+            JSONValue, json.loads(source_project.read_text(encoding="utf-8"))
+        )
         if not isinstance(raw_source_value, dict):
             raise ValueError(f"Invalid block project-settings JSON: {source_project}")
         raw_source_data = cast(JSONObject, raw_source_value)
@@ -682,9 +686,7 @@ def _merge_project_net_settings(
         else:
             unmatched_patterns.append(pattern)
 
-    target_settings["netclass_assignments"] = cast(
-        dict[str, str | list[str]], target_assignments
-    )
+    target_settings["netclass_assignments"] = cast(dict[str, str | list[str]], target_assignments)
     raw_metadata = raw_target_data.get("meta")
     if raw_metadata is None:
         metadata: KiCadProjectMetadata = {}
@@ -1138,7 +1140,9 @@ def merge_block_layout(
                 if name_node is not None and len(name_node) >= 2:
                     existing_chain_names.add(str(name_node[1]).casefold())
     if target_project.is_file():
-        existing_project_value: JSONValue = cast(JSONValue, json.loads(target_project.read_text(encoding="utf-8")))
+        existing_project_value: JSONValue = cast(
+            JSONValue, json.loads(target_project.read_text(encoding="utf-8"))
+        )
         if not isinstance(existing_project_value, dict):
             raise ValueError(f"Invalid target project-settings JSON: {target_project}")
         existing_project = cast(JSONObject, existing_project_value)

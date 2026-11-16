@@ -384,6 +384,7 @@ def _after_event(
     callback: Callable[[], str | None],
 ) -> Callable[[tkinter_types.Event[tkinter_types.Misc]], str | None]:
     """Adapt a zero-argument action to a typed Tk event callback."""
+
     def handle(_event: tkinter_types.Event[tkinter_types.Misc]) -> str | None:
         return callback()
 
@@ -394,6 +395,7 @@ def _scrollbar_command(
     view: Callable[..., tuple[float, float]],
 ) -> Callable[..., str | None]:
     """Adapt Tk's viewport query to the Tcl command signature used by scrollbars."""
+
     def invoke(*arguments: str | int) -> str | None:
         view(*arguments)
         return None
@@ -4769,7 +4771,10 @@ def _show_block_variant_editor(
     tree.column("file", width=560, minwidth=320, stretch=True)
     tree.column("role", width=150, minwidth=130, stretch=False)
     scroll = ttk.Scrollbar(
-        table_frame, orient="vertical", command=_scrollbar_command(tree.yview), style="Vertical.TScrollbar"
+        table_frame,
+        orient="vertical",
+        command=_scrollbar_command(tree.yview),
+        style="Vertical.TScrollbar",
     )
     tree.configure(yscrollcommand=scroll.set)
     tree.grid(row=0, column=0, sticky="nsew")
@@ -5539,10 +5544,16 @@ def _show_library_browser(
         borderwidth=0,
     )
     preview_y_scroll = ttk.Scrollbar(
-        facade_frame, orient="vertical", command=_scrollbar_command(preview.yview), style="Vertical.TScrollbar"
+        facade_frame,
+        orient="vertical",
+        command=_scrollbar_command(preview.yview),
+        style="Vertical.TScrollbar",
     )
     preview_x_scroll = ttk.Scrollbar(
-        facade_frame, orient="horizontal", command=_scrollbar_command(preview.xview), style="Horizontal.TScrollbar"
+        facade_frame,
+        orient="horizontal",
+        command=_scrollbar_command(preview.xview),
+        style="Horizontal.TScrollbar",
     )
     preview.configure(
         yscrollcommand=preview_y_scroll.set,
@@ -5632,7 +5643,10 @@ def _show_library_browser(
         font=("TkDefaultFont", 9),
     )
     details_scroll = ttk.Scrollbar(
-        details_frame, orient="vertical", command=_scrollbar_command(details.yview), style="Vertical.TScrollbar"
+        details_frame,
+        orient="vertical",
+        command=_scrollbar_command(details.yview),
+        style="Vertical.TScrollbar",
     )
     details.configure(yscrollcommand=details_scroll.set)
     details.pack(side="left", fill="both", expand=True)

@@ -168,9 +168,7 @@ def _rebase_path_value(path_value: str, old_prefix: str, new_prefix: str) -> str
 
 
 def _path_nodes(node: SExprList) -> list[SExprList]:
-    return [
-        child for child in node[1:] if isinstance(child, list) and _head(child) == "path"
-    ]
+    return [child for child in node[1:] if isinstance(child, list) and _head(child) == "path"]
 
 
 def _normalize_instance_node(
@@ -221,11 +219,7 @@ def _normalize_instance_node(
             project[1:] = [
                 child
                 for child in project[1:]
-                if not (
-                    isinstance(child, list)
-                    and _head(child) == "path"
-                    and id(child) not in kept_ids
-                )
+                if not (isinstance(child, list) and _head(child) == "path" and id(child) not in kept_ids)
             ]
             for path in kept:
                 if len(path) >= 2:
@@ -278,11 +272,7 @@ def _normalize_sheet_instances(
         instances[1:] = [
             child
             for child in instances[1:]
-            if not (
-                isinstance(child, list)
-                and _head(child) == "path"
-                and id(child) not in kept_ids
-            )
+            if not (isinstance(child, list) and _head(child) == "path" and id(child) not in kept_ids)
         ]
     else:
         page_node: SExprList = ["page", _Quoted("1" if is_root else "2")]
@@ -381,9 +371,7 @@ def _prepare_sheet_tree(
 
     _normalize_sheet_instances(tree, old_prefix, new_prefix, is_root=is_root)
 
-    for sheet in [
-        node for node in tree[1:] if isinstance(node, list) and _head(node) == "sheet"
-    ]:
+    for sheet in [node for node in tree[1:] if isinstance(node, list) and _head(node) == "sheet"]:
         sheet_uuid_node = _direct(sheet, "uuid")
         if sheet_uuid_node is None or len(sheet_uuid_node) < 2:
             original_sheet_uuid = str(uuid.uuid4())
