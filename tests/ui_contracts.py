@@ -110,7 +110,7 @@ class ButtonContract(ComponentContract):
         existing_toplevels = {
             child.winfo_id()
             for child in context.root.winfo_children()
-            if isinstance(child, tk.Toplevel)
+            if child.winfo_class() == "Toplevel"
         }
         result = button.invoke()
         context.root.update_idletasks()
@@ -119,7 +119,7 @@ class ButtonContract(ComponentContract):
         new_windows = [
             child.title()
             for child in context.root.winfo_children()
-            if isinstance(child, tk.Toplevel)
+            if child.winfo_class() == "Toplevel"
             and child.winfo_id() not in existing_toplevels
         ]
         return {
