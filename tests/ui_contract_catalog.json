@@ -17,15 +17,21 @@
           "actions": [
             {
               "label": "Browse and place blocks",
-              "action_id": "manage-library"
+              "action_id": "manage-library",
+              "contract_id": "task-hub.action.manage-library",
+              "assertion": "asserted"
             },
             {
               "label": "Create block from sheet",
-              "action_id": "create-block"
+              "action_id": "create-block",
+              "contract_id": "task-hub.action.create-block",
+              "assertion": "asserted"
             },
             {
               "label": "Open block implementation",
-              "action_id": "open-implementation"
+              "action_id": "open-implementation",
+              "contract_id": "task-hub.action.open-implementation",
+              "assertion": "asserted"
             }
           ],
           "screenshots": [
@@ -38,23 +44,33 @@
           "actions": [
             {
               "label": "Configure selected instance",
-              "action_id": "configure-instance"
+              "action_id": "configure-instance",
+              "contract_id": "task-hub.action.configure-instance",
+              "assertion": "asserted"
             },
             {
               "label": "Edit facade symbol",
-              "action_id": "edit-facade"
+              "action_id": "edit-facade",
+              "contract_id": "task-hub.action.edit-facade",
+              "assertion": "asserted"
             },
             {
               "label": "Publish implementation",
-              "action_id": "publish-block"
+              "action_id": "publish-block",
+              "contract_id": "task-hub.action.publish-block",
+              "assertion": "asserted"
             },
             {
               "label": "Make selected instance local",
-              "action_id": "make-local-copy"
+              "action_id": "make-local-copy",
+              "contract_id": "task-hub.action.make-local-copy",
+              "assertion": "asserted"
             },
             {
               "label": "Synchronize local copy",
-              "action_id": "synchronize-local-copy"
+              "action_id": "synchronize-local-copy",
+              "contract_id": "task-hub.action.synchronize-local-copy",
+              "assertion": "asserted"
             }
           ],
           "screenshots": [
@@ -67,23 +83,33 @@
           "actions": [
             {
               "label": "Validate registered libraries",
-              "action_id": "validate-libraries"
+              "action_id": "validate-libraries",
+              "contract_id": "task-hub.action.validate-libraries",
+              "assertion": "asserted"
             },
             {
               "label": "Export recursive BOM",
-              "action_id": "recursive-bom"
+              "action_id": "recursive-bom",
+              "contract_id": "task-hub.action.recursive-bom",
+              "assertion": "asserted"
             },
             {
               "label": "Run recursive ERC",
-              "action_id": "recursive-erc"
+              "action_id": "recursive-erc",
+              "contract_id": "task-hub.action.recursive-erc",
+              "assertion": "asserted"
             },
             {
               "label": "Apply selected PCB layout",
-              "action_id": "apply-pcb-layout"
+              "action_id": "apply-pcb-layout",
+              "contract_id": "task-hub.action.apply-pcb-layout",
+              "assertion": "asserted"
             },
             {
               "label": "Apply multiple PCB layouts",
-              "action_id": "apply-multiple-pcb-layouts"
+              "action_id": "apply-multiple-pcb-layouts",
+              "contract_id": "task-hub.action.apply-multiple-pcb-layouts",
+              "assertion": "asserted"
             }
           ],
           "screenshots": [
@@ -96,7 +122,8 @@
         {
           "contract_id": "task-hub.views",
           "type": "notebook",
-          "label": "Workflow tabs"
+          "label": "Workflow tabs",
+          "assertion": "asserted"
         }
       ],
       "footer_controls": [
@@ -104,7 +131,8 @@
           "contract_id": "task-hub.close",
           "type": "button",
           "label": "Close",
-          "action_id": null
+          "action_id": null,
+          "assertion": "asserted"
         }
       ],
       "screenshots": [
@@ -142,102 +170,122 @@
         {
           "contract_id": "library-browser.panes",
           "type": "paned-window",
-          "label": "Results and preview split panes"
+          "label": "Results and preview split panes",
+          "assertion": "asserted"
         },
         {
           "contract_id": "library-browser.results-pane",
           "type": "pane",
-          "label": "Block results"
+          "label": "Block results",
+          "assertion": "observed"
         },
         {
           "contract_id": "library-browser.preview-pane",
           "type": "pane",
-          "label": "Selected block preview and details"
+          "label": "Selected block preview and details",
+          "assertion": "observed"
         },
         {
           "contract_id": "library-browser.search",
           "type": "entry",
-          "label": "Search blocks"
+          "label": "Search blocks",
+          "assertion": "asserted"
         },
         {
           "contract_id": "library-browser.results",
           "type": "treeview",
-          "label": "Block list"
+          "label": "Block list",
+          "assertion": "asserted"
         },
         {
           "contract_id": "library-browser.summary",
           "type": "status-label",
-          "label": "Library and filtered-result count"
+          "label": "Library and filtered-result count",
+          "assertion": "observed"
         },
         {
           "contract_id": "library-browser.selected-name",
           "type": "selection-label",
-          "label": "Selected block name"
+          "label": "Selected block name",
+          "assertion": "observed"
         },
         {
           "contract_id": "library-browser.preview.views",
           "type": "notebook",
-          "label": "Facade and Schematic tabs"
+          "label": "Facade and Schematic tabs",
+          "assertion": "asserted"
         },
         {
           "contract_id": "library-browser.preview.facade",
           "type": "view",
-          "label": "Facade preview"
+          "label": "Facade preview",
+          "assertion": "observed"
         },
         {
           "contract_id": "library-browser.preview.schematic",
           "type": "view",
-          "label": "Schematic preview"
+          "label": "Schematic preview",
+          "assertion": "observed"
         },
         {
           "contract_id": "library-browser.implementation",
           "type": "combobox",
-          "label": "Implementation selector"
+          "label": "Implementation selector",
+          "assertion": "uncovered"
         },
         {
           "contract_id": "library-browser.sheet",
           "type": "combobox",
-          "label": "Sheet selector"
+          "label": "Sheet selector",
+          "assertion": "uncovered"
         },
         {
           "contract_id": "library-browser.action.place",
           "type": "button",
-          "label": "Place block"
+          "label": "Place block",
+          "assertion": "asserted"
         },
         {
           "contract_id": "library-browser.action.implementation",
           "type": "button",
-          "label": "Implementation"
+          "label": "Implementation",
+          "assertion": "asserted"
         },
         {
           "contract_id": "library-browser.action.facade",
           "type": "button",
-          "label": "Edit facade"
+          "label": "Edit facade",
+          "assertion": "asserted"
         },
         {
           "contract_id": "library-browser.action.variants",
           "type": "button",
-          "label": "Variants"
+          "label": "Variants",
+          "assertion": "uncovered"
         },
         {
           "contract_id": "library-browser.action.open-pcb",
           "type": "button",
-          "label": "Open PCB"
+          "label": "Open PCB",
+          "assertion": "asserted"
         },
         {
           "contract_id": "library-browser.action.manage-pcb-layouts",
           "type": "button",
-          "label": "PCB layouts"
+          "label": "PCB layouts",
+          "assertion": "uncovered"
         },
         {
           "contract_id": "library-browser.action.refresh",
           "type": "button",
-          "label": "Refresh"
+          "label": "Refresh",
+          "assertion": "asserted"
         },
         {
           "contract_id": "library-browser.action.libraries",
           "type": "button",
-          "label": "Libraries"
+          "label": "Libraries",
+          "assertion": "uncovered"
         }
       ]
     },
