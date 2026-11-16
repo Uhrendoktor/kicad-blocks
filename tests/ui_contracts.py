@@ -1,0 +1,336 @@
+"""Reusable execute -> observe -> assert contracts for real Tk widgets.
+
+These helpers deliberately exercise Tcl/Tk widgets rather than replacing the
+application with mocks. External KiCad IPC and filesystem boundaries should be
+isolated in fixtures, while the widget command and resulting application state
+remain real.
+"""
+
+from __future__ import annotations
+
+from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
+from typing import Any
+
+
+@dataclass(frozen=True)
+class MenuEntry:
+    """A discoverable Tk menu command and its numeric Tcl/Tk index."""
+
+    menu: Any
+    index: int
+
+
+@dataclass
+class UiTestContext:
+    """Shared state available to component contracts during one test."""
+
+    root: Any
+    action_calls: list[str] = field(default_factory=list)
+    events: list[str] = field(default_factory=list)
+    widgets: dict[str, Any] = field(default_factory=dict)
+
+    def refresh_widgets(self) -> dict[str, Any]:
+        self.widgets = discover_interactive_controls(self.root)
+        return self.widgets
+
+    def require_widget(self, contract_id: str) -> Any:
+        if not self.widgets:
+            self.refresh_widgets()
+        try:
+            return self.widgets[contract_id]
+        except KeyError as exc:
+            raise AssertionError(
+                f"No Tk widget is registered as {contract_id!r}."
+            ) from exc
+
+
+class ComponentContract(ABC):
+    """Common lifecycle implemented by every testable UI component."""
+
+    @abstractmethod
+    def execute(self, context: UiTestContext) -> Any:
+        """Perform a real interaction and return its observable result."""
+
+    @abstractmethod
+    def assert_result(self, context: UiTestContext, observation: Any) -> None:
+        """Assert the externally observable result of that interaction."""
+
+    def run(self, context: UiTestContext) -> Any:
+        observation = self.execute(context)
+        self.assert_result(context, observation)
+        return observation
+
+
+@dataclass(frozen=True)
+class WindowContract(ComponentContract):
+    """Assert that the expected application window was created and shown."""
+
+    title: str
+    screen_id: str
+
+    def execute(self, context: UiTestContext) -> dict[str, Any]:
+        context.root.update_idletasks()
+        context.root.update()
+        return {
+            "title": context.root.title(),
+            "screen_id": getattr(context.root, "_kicad_ui_screen_id", None),
+            "exists": bool(context.root.winfo_exists()),
+            "visible": bool(context.root.winfo_viewable()),
+            "width": context.root.winfo_width(),
+            "height": context.root.winfo_height(),
+        }
+
+    def assert_result(
+        self, context: UiTestContext, observation: dict[str, Any]
+    ) -> None:
+        assert observation["title"] == self.title
+        assert observation["screen_id"] == self.screen_id
+        assert observation["exists"] is True
+        assert observation["visible"] is True
+        assert observation["width"] > 0
+        assert observation["height"] > 0
+
+
+@dataclass(frozen=True)
+class ButtonContract(ComponentContract):
+    """Invoke one real Tk button and assert its route and lifecycle effect."""
+
+    contract_id: str
+    expected_action: str | None
+    destroys_window: bool = True
+
+    def execute(self, context: UiTestContext) -> dict[str, Any]:
+        button = context.require_widget(self.contract_id)
+        result = button.invoke()
+        try:
+            root_exists = bool(context.root.winfo_exists())
+        except Exception:
+            root_exists = False
+        return {
+            "invoke_result": result,
+            "action_calls": list(context.action_calls),
+            "root_exists": root_exists,
+        }
+
+    def assert_result(
+        self, context: UiTestContext, observation: dict[str, Any]
+    ) -> None:
+        expected = [] if self.expected_action is None else [self.expected_action]
+        assert observation["action_calls"] == expected
+        assert observation["root_exists"] is (not self.destroys_window)
+
+
+@dataclass(frozen=True)
+class MenuItemContract(ComponentContract):
+    """Invoke a real Tk menu entry and assert the bound action ran."""
+
+    menu_item_id: str
+    expected_event: str
+
+    def execute(self, context: UiTestContext) -> dict[str, Any]:
+        entry = context.require_widget(self.menu_item_id)
+        if not isinstance(entry, MenuEntry):
+            raise AssertionError(
+                f"{self.menu_item_id!r} is not a discovered Tk menu entry."
+            )
+        result = entry.menu.invoke(entry.index)
+        return {"invoke_result": result, "events": list(context.events)}
+
+    def assert_result(
+        self, context: UiTestContext, observation: dict[str, Any]
+    ) -> None:
+        assert observation["events"] == [self.expected_event]
+
+
+@dataclass(frozen=True)
+class ChoiceViewContract(ComponentContract):
+    """Select every declared value in a real ttk Combobox."""
+
+    contract_id: str
+    value: str
+    expected_event: str
+
+    def execute(self, context: UiTestContext) -> dict[str, Any]:
+        choice = context.require_widget(self.contract_id)
+        choice.set(self.value)
+        choice.event_generate("<<ComboboxSelected>>")
+        context.root.update_idletasks()
+        return {
+            "value": choice.get(),
+            "events": list(context.events),
+        }
+
+    def assert_result(
+        self, context: UiTestContext, observation: dict[str, Any]
+    ) -> None:
+        assert observation["value"] == self.value
+        assert observation["events"] == [self.expected_event]
+
+
+@dataclass(frozen=True)
+class NotebookViewContract(ComponentContract):
+    """Visit every Notebook page and assert the expected controls are visible."""
+
+    contract_id: str
+    views: tuple[tuple[str, tuple[str, ...]], ...]
+
+    def execute(self, context: UiTestContext) -> list[dict[str, Any]]:
+        notebook = context.require_widget(self.contract_id)
+        observations = []
+        for label, control_ids in self.views:
+            tab_id = next(
+                (
+                    tab
+                    for tab in notebook.tabs()
+                    if notebook.tab(tab, "text") == label
+                ),
+                None,
+            )
+            if tab_id is None:
+                raise AssertionError(f"Notebook view {label!r} does not exist.")
+            notebook.select(tab_id)
+            context.root.update_idletasks()
+            context.root.update()
+            observations.append(
+                {
+                    "selected": notebook.tab(notebook.select(), "text"),
+                    "mapped": {
+                        control_id: bool(
+                            context.require_widget(control_id).winfo_ismapped()
+                        )
+                        for control_id in control_ids
+                    },
+                }
+            )
+        return observations
+
+    def assert_result(
+        self, context: UiTestContext, observation: list[dict[str, Any]]
+    ) -> None:
+        assert len(observation) == len(self.views)
+        for result, (label, control_ids) in zip(
+            observation, self.views, strict=True
+        ):
+            assert result["selected"] == label
+            assert set(result["mapped"]) == set(control_ids)
+            assert all(result["mapped"].values())
+
+
+@dataclass(frozen=True)
+class PaneGroupContract(ComponentContract):
+    """Assert a real paned window contains visible, non-zero child panes."""
+
+    contract_id: str
+    orientation: str
+    pane_ids: tuple[str, ...]
+
+    def execute(self, context: UiTestContext) -> dict[str, Any]:
+        group = context.require_widget(self.contract_id)
+        context.root.update_idletasks()
+        context.root.update()
+        panes = {
+            getattr(pane, "_kicad_ui_contract_id", None): pane
+            for pane in group.winfo_children()
+        }
+        return {
+            "orientation": str(group.cget("orient")),
+            "panes": {
+                pane_id: {
+                    "present": pane_id in panes,
+                    "width": panes[pane_id].winfo_width() if pane_id in panes else 0,
+                    "height": panes[pane_id].winfo_height() if pane_id in panes else 0,
+                }
+                for pane_id in self.pane_ids
+            },
+        }
+
+    def assert_result(
+        self, context: UiTestContext, observation: dict[str, Any]
+    ) -> None:
+        assert observation["orientation"] == self.orientation
+        assert set(observation["panes"]) == set(self.pane_ids)
+        for pane in observation["panes"].values():
+            assert pane["present"] is True
+            assert pane["width"] > 0
+            assert pane["height"] > 0
+
+
+INTERACTIVE_WIDGET_CLASSES = frozenset(
+    {
+        "Button",
+        "TButton",
+        "Checkbutton",
+        "TCheckbutton",
+        "Radiobutton",
+        "TRadiobutton",
+        "Menubutton",
+        "TMenubutton",
+        "Combobox",
+        "TCombobox",
+        "Spinbox",
+        "TSpinbox",
+        "Scale",
+        "TScale",
+        "Notebook",
+        "TNotebook",
+        "Panedwindow",
+        "TPanedwindow",
+    }
+)
+
+
+def _walk_widgets(root: Any):
+    yield root
+    try:
+        children = root.winfo_children()
+    except Exception:
+        return
+    for child in children:
+        yield from _walk_widgets(child)
+
+
+def discover_interactive_controls(root: Any) -> dict[str, Any]:
+    """Return all tagged action/view controls, including registered menu items.
+
+    The discovery list is intentionally limited to controls with an interaction
+    contract. Static labels and decorative frames are not actionable controls.
+    """
+    discovered: dict[str, Any] = {}
+    for widget in _walk_widgets(root):
+        widget_class = widget.winfo_class()
+        contract_id = getattr(widget, "_kicad_ui_contract_id", None)
+        if widget_class in INTERACTIVE_WIDGET_CLASSES and contract_id:
+            if contract_id in discovered:
+                raise AssertionError(f"Duplicate UI contract ID: {contract_id}")
+            discovered[contract_id] = widget
+
+        if widget_class == "Menu":
+            menu_items = getattr(widget, "_kicad_ui_menu_item_ids", {})
+            for item_id, index in menu_items.items():
+                if item_id in discovered:
+                    raise AssertionError(f"Duplicate UI contract ID: {item_id}")
+                discovered[item_id] = MenuEntry(widget, int(index))
+    return discovered
+
+
+def assert_control_coverage(root: Any, expected_ids: set[str]) -> dict[str, Any]:
+    """Fail when an interactive widget is untagged or outside the declared map."""
+    missing_tags = []
+    for widget in _walk_widgets(root):
+        if widget.winfo_class() not in INTERACTIVE_WIDGET_CLASSES:
+            continue
+        if not getattr(widget, "_kicad_ui_contract_id", None):
+            missing_tags.append(widget.winfo_class())
+
+    discovered = discover_interactive_controls(root)
+    actual_ids = set(discovered)
+    missing = sorted(expected_ids - actual_ids)
+    unexpected = sorted(actual_ids - expected_ids)
+    if missing_tags or missing or unexpected:
+        raise AssertionError(
+            "UI contract coverage mismatch: "
+            f"untagged={missing_tags!r}; missing={missing!r}; "
+            f"unexpected={unexpected!r}"
+        )
+    return discovered
