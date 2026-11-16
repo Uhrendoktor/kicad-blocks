@@ -113,9 +113,11 @@ class ButtonContract(ComponentContract):
             if child.winfo_class() == "Toplevel"
         }
         result = button.invoke()
-        context.root.update_idletasks()
-        context.root.update()
         root_exists = bool(context.root.winfo_exists())
+        if root_exists:
+            context.root.update_idletasks()
+            context.root.update()
+            root_exists = bool(context.root.winfo_exists())
         new_windows = [
             child.title()
             for child in context.root.winfo_children()
