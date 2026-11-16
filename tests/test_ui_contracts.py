@@ -15,8 +15,8 @@ TEST_SOURCE = ROOT / "tests"
 sys.path.insert(0, str(PLUGIN_SOURCE))
 sys.path.insert(0, str(TEST_SOURCE))
 
-from kicad_blocks import plugin as plugin_actions  # noqa: E402
-from ui_contracts import (  # noqa: E402
+from kicad_blocks import plugin as plugin_actions
+from ui_contracts import (
     ButtonContract,
     ChoiceViewContract,
     MenuItemContract,
