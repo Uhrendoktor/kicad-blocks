@@ -150,6 +150,68 @@ class MenuItemContract(ComponentContract):
 
 
 @dataclass(frozen=True)
+class EntryInputContract(ComponentContract):
+    """Enter text into a real Tk Entry and assert its dependent result list."""
+
+    contract_id: str
+    value: str
+    results_contract_id: str
+    expected_result_count: int
+    summary_contract_id: str
+    expected_summary: str
+
+    def execute(self, context: UiTestContext) -> dict[str, Any]:
+        entry = context.require_widget(self.contract_id)
+        entry.delete(0, "end")
+        entry.insert(0, self.value)
+        context.root.update_idletasks()
+        context.root.update()
+        results = context.require_widget(self.results_contract_id)
+        summary = context.require_widget(self.summary_contract_id)
+        return {
+            "value": entry.get(),
+            "result_count": len(results.get_children()),
+            "summary": str(summary.cget("text")),
+        }
+
+    def assert_result(
+        self, context: UiTestContext, observation: dict[str, Any]
+    ) -> None:
+        assert observation["value"] == self.value
+        assert observation["result_count"] == self.expected_result_count
+        assert observation["summary"] == self.expected_summary
+
+
+@dataclass(frozen=True)
+class TreeSelectionContract(ComponentContract):
+    """Select a real Treeview row and assert selection plus dependent details."""
+
+    contract_id: str
+    row_id: str
+    summary_contract_id: str
+    expected_summary: str
+
+    def execute(self, context: UiTestContext) -> dict[str, Any]:
+        tree = context.require_widget(self.contract_id)
+        tree.selection_set(self.row_id)
+        tree.focus(self.row_id)
+        tree.event_generate("<<TreeviewSelect>>")
+        context.root.update_idletasks()
+        context.root.update()
+        summary = context.require_widget(self.summary_contract_id)
+        return {
+            "selection": tuple(tree.selection()),
+            "summary": str(summary.cget("text")),
+        }
+
+    def assert_result(
+        self, context: UiTestContext, observation: dict[str, Any]
+    ) -> None:
+        assert observation["selection"] == (self.row_id,)
+        assert observation["summary"] == self.expected_summary
+
+
+@dataclass(frozen=True)
 class ChoiceViewContract(ComponentContract):
     """Select every declared value in a real ttk Combobox."""
 
@@ -278,6 +340,10 @@ INTERACTIVE_WIDGET_CLASSES = frozenset(
         "TSpinbox",
         "Scale",
         "TScale",
+        "Entry",
+        "TEntry",
+        "Treeview",
+        "TTreeview",
         "Notebook",
         "TNotebook",
         "Panedwindow",
@@ -306,7 +372,7 @@ def discover_interactive_controls(root: Any) -> dict[str, Any]:
     for widget in _walk_widgets(root):
         widget_class = widget.winfo_class()
         contract_id = getattr(widget, "_kicad_ui_contract_id", None)
-        if widget_class in INTERACTIVE_WIDGET_CLASSES and contract_id:
+        if contract_id:
             if contract_id in discovered:
                 raise AssertionError(f"Duplicate UI contract ID: {contract_id}")
             discovered[contract_id] = widget
