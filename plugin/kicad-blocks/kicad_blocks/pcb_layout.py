@@ -1082,6 +1082,7 @@ class _LayoutPlacement:
     anchor_mm: tuple[float, float]
     rotation_deg: float
     ports: dict[str, str]
+    source_net_to_board_net: dict[str, str]
 
 
 @dataclass(slots=True)
@@ -1220,14 +1221,23 @@ def _validate_layout_placement(
     )
     if set(ports) != pins:
         raise ValueError("Block layout_ports must map every facade pin exactly once.")
-    mapped_ports: dict[str, str] = {}
+    source_net_to_board_net: dict[str, str] = {}
     for pin, source_net in ports.items():
         source_name = str(source_net)
         destination = str(pin_to_board_net[pin]).strip()
-        if source_name in mapped_ports and mapped_ports[source_name] != destination:
+        if (
+            source_name in source_net_to_board_net
+            and source_net_to_board_net[source_name] != destination
+        ):
             raise ValueError(f"Layout net {source_name!r} maps to two project nets.")
-        mapped_ports[source_name] = destination
-    return _LayoutPlacement(position, anchor, rotation % 360.0, mapped_ports)
+        source_net_to_board_net[source_name] = destination
+    return _LayoutPlacement(
+        position,
+        anchor,
+        rotation % 360.0,
+        {str(pin): str(source_net) for pin, source_net in ports.items()},
+        source_net_to_board_net,
+    )
 
 
 def _read_layout_documents(files: _LayoutMergeFiles) -> tuple[SExprList, SExprList]:
@@ -1291,6 +1301,7 @@ def _prepare_layout_item(
     anchor_mm: tuple[float, float],
     position_mm: tuple[float, float],
     rotation_deg: float,
+    instance_reference: str,
 ) -> tuple[SExprList, str | None, str]:
     """Clone, transform, remap and validate one imported board object.
 
@@ -1304,17 +1315,23 @@ def _prepare_layout_item(
         if not old_reference:
             raise ValueError("Every stored layout footprint must have a Reference property.")
         reference = _unique_reference(
-            f"{reference_prefix}_{old_reference}", existing_references
+            f"{instance_reference}_{old_reference}", existing_references
         )
         _rewrite_footprint(item, reference, 0.0, 0.0, uuid_remap=pad_uuid_remap)
+        _transform_item(
+            item,
+            anchor_mm=anchor_mm,
+            position_mm=position_mm,
+            rotation_deg=rotation_deg,
+        )
     else:
+        _transform_item(
+            item,
+            anchor_mm=anchor_mm,
+            position_mm=position_mm,
+            rotation_deg=rotation_deg,
+        )
         _refresh_ids(item)
-    _transform_item(
-        item,
-        anchor_mm=anchor_mm,
-        position_mm=position_mm,
-        rotation_deg=rotation_deg,
-    )
     _rewrite_nets(item, net_map, include_net_name=(kind == "footprint"))
     item_id_node = _direct(item, "uuid") or _direct(item, "tstamp")
     if item_id_node is None or len(item_id_node) < 2:
@@ -1330,6 +1347,7 @@ def _prepare_layout_item(
 
 def _import_layout_items(
     source: SExprList,
+    target: SExprList,
     net_map: dict[int, tuple[int, str]],
     *,
     instance_reference: str,
@@ -1344,7 +1362,7 @@ def _import_layout_items(
     """
     existing_references = {
         reference.casefold()
-        for item in source[1:]
+        for item in target[1:]
         if isinstance(item, list) and _head(item) == "footprint"
         if (reference := _reference(item))
     }
@@ -1372,6 +1390,7 @@ def _import_layout_items(
             anchor_mm=anchor_mm,
             position_mm=position_mm,
             rotation_deg=rotation_deg,
+            instance_reference=instance_reference,
         )
         if reference is not None:
             references.append(reference)
@@ -1427,12 +1446,12 @@ def _write_layout_outputs(
     project_merge: ProjectSettingsMergeResult | None,
 ) -> None:
     """Write new board/project copies, removing a partial board if settings fail."""
-    _atomic_write(files.output_board, _dump(target) + "\\n")
+    _atomic_write(files.output_board, _dump(target) + "\n")
     try:
         if project_merge is not None:
             _atomic_write(
                 files.output_project,
-                json.dumps(project_merge["data"], indent=2, ensure_ascii=False) + "\\n",
+                json.dumps(project_merge["data"], indent=2, ensure_ascii=False) + "\n",
             )
     except Exception:
         files.output_board.unlink(missing_ok=True)
@@ -1474,10 +1493,11 @@ def merge_block_layout(
     )
     target, source = _read_layout_documents(files)
     net_mapping = _map_layout_nets(
-        source, target, placement.ports, instance_reference
+        source, target, placement.source_net_to_board_net, instance_reference
     )
     imported = _import_layout_items(
         source,
+        target,
         net_mapping.net_map,
         instance_reference=instance_reference,
         anchor_mm=placement.anchor_mm,

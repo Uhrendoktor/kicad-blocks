@@ -342,7 +342,7 @@ def _save_project_symbol_sync_state(
     state: ProjectSymbolSyncState,
 ) -> None:
     """Persist the validated project catalog synchronization baseline."""
-    atomic_write(state_file, json.dumps(state, indent=2, ensure_ascii=False) + "\\n")
+    atomic_write(state_file, json.dumps(state, indent=2, ensure_ascii=False) + "\n")
 
 
 def _synchronize_existing_project_symbol(
