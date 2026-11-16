@@ -20,7 +20,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, TypeVar, cast
 
-from .json_types import JSONValue, JSONObject
 from .pcb_types import (
     AppliedNetclassPattern,
     BatchBlockLayoutMergeResult,
@@ -44,6 +43,21 @@ if TYPE_CHECKING:
     from .repository import BlockRecord
 
 _T = TypeVar("_T")
+
+
+def _load_project_settings(path: Path, *, context: str) -> KiCadProjectData:
+    """Decode and validate the project sections consumed by the PCB importer."""
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"{context}: {path}") from exc
+    if not isinstance(data, dict):
+        raise ValueError(f"{context}: {path}")
+    for section_name in ("meta", "net_settings"):
+        section = data.get(section_name)
+        if section is not None and not isinstance(section, dict):
+            raise ValueError(f"{context}: invalid {section_name} section in {path}")
+    return cast(KiCadProjectData, data)
 
 # This helper remains available to existing internal integrations and tests.
 __all__ = ["_xy", "rewrite_nets", "transform_item", "merge_project_net_settings"]
@@ -487,57 +501,34 @@ def _merge_project_net_settings(
     if not target_project.is_file() and (source_project is None or not source_project.is_file()):
         return None
 
-    raw_target_data: JSONObject
     if target_project.is_file():
-        raw_target_value: JSONValue = cast(
-            JSONValue, json.loads(target_project.read_text(encoding="utf-8"))
+        target_data = _load_project_settings(
+            target_project, context="Invalid KiCad project JSON"
         )
-        if not isinstance(raw_target_value, dict):
-            raise ValueError(f"Invalid KiCad project JSON: {target_project}")
-        raw_target_data = cast(JSONObject, raw_target_value)
-        target_data: KiCadProjectData = cast(KiCadProjectData, raw_target_data)
     else:
-        raw_target_data = {}
-        target_data = {
+        target_data: KiCadProjectData = {
             "meta": {"filename": output_project.name, "version": 3},
             "net_settings": {"classes": [], "netclass_assignments": {}},
         }
 
     if source_project is not None and source_project.is_file():
-        raw_source_value: JSONValue = cast(
-            JSONValue, json.loads(source_project.read_text(encoding="utf-8"))
+        source_data = _load_project_settings(
+            source_project, context="Invalid block project-settings JSON"
         )
-        if not isinstance(raw_source_value, dict):
-            raise ValueError(f"Invalid block project-settings JSON: {source_project}")
-        raw_source_data = cast(JSONObject, raw_source_value)
-        raw_source_settings_value = raw_source_data.get("net_settings", {})
-        if not isinstance(raw_source_settings_value, dict):
-            raise ValueError("Block project file has an invalid net_settings section.")
-        raw_source_settings = cast(JSONObject, raw_source_settings_value)
-        source_settings = cast(KiCadNetSettings, raw_source_settings)
     else:
-        raw_source_settings = {}
-        source_settings = cast(KiCadNetSettings, raw_source_settings)
+        source_data: KiCadProjectData = {"net_settings": {}}
+    source_settings: KiCadNetSettings = source_data.get("net_settings") or {}
 
-    raw_target_settings_value = raw_target_data.get("net_settings")
-    if raw_target_settings_value is None:
-        raw_target_settings: JSONObject = {
-            "classes": [],
-            "netclass_assignments": {},
-        }
-        raw_target_data["net_settings"] = raw_target_settings
-    elif isinstance(raw_target_settings_value, dict):
-        raw_target_settings = cast(JSONObject, raw_target_settings_value)
-    else:
-        raise TypeError("Target project file has an invalid net_settings section.")
-    target_settings = cast(KiCadNetSettings, raw_target_settings)
-    target_data["net_settings"] = target_settings
+    target_settings = target_data.get("net_settings")
+    if target_settings is None:
+        target_settings = {"classes": [], "netclass_assignments": {}}
+        target_data["net_settings"] = target_settings
 
-    raw_target_classes = raw_target_settings.get("classes", [])
+    raw_target_classes = target_settings.get("classes", [])
     if not isinstance(raw_target_classes, list):
         raise TypeError("KiCad target net_settings.classes must be an array.")
     target_classes = cast(list[KiCadNetclassDefinition], raw_target_classes)
-    raw_source_classes = raw_source_settings.get("classes", [])
+    raw_source_classes = source_settings.get("classes", [])
     if not isinstance(raw_source_classes, list):
         raise TypeError("KiCad source net_settings.classes must be an array.")
     source_classes = cast(list[KiCadNetclassDefinition], raw_source_classes)
@@ -592,8 +583,8 @@ def _merge_project_net_settings(
             merged_classes.append(desired_name)
         class_map[original_name] = desired_name
 
-    raw_source_assignments = raw_source_settings.get("netclass_assignments", {})
-    raw_target_assignments = raw_target_settings.get("netclass_assignments", {})
+    raw_source_assignments = source_settings.get("netclass_assignments", {})
+    raw_target_assignments = target_settings.get("netclass_assignments", {})
     if not isinstance(raw_source_assignments, dict) or not isinstance(raw_target_assignments, dict):
         raise TypeError("KiCad net_settings.netclass_assignments must be an object.")
     source_assignments = cast(dict[str, str | list[str]], raw_source_assignments)
@@ -639,7 +630,7 @@ def _merge_project_net_settings(
     applied_patterns: list[AppliedNetclassPattern] = []
     unmatched_patterns: list[str] = []
     source_net_map = source_net_to_board_net or {}
-    raw_source_patterns = raw_source_settings.get("netclass_patterns", [])
+    raw_source_patterns = source_settings.get("netclass_patterns", [])
     if not isinstance(raw_source_patterns, list):
         raise TypeError("KiCad net_settings.netclass_patterns must be an array.")
     source_patterns = cast(list[KiCadNetclassPattern], raw_source_patterns)
@@ -687,16 +678,8 @@ def _merge_project_net_settings(
             unmatched_patterns.append(pattern)
 
     target_settings["netclass_assignments"] = cast(dict[str, str | list[str]], target_assignments)
-    raw_metadata = raw_target_data.get("meta")
-    if raw_metadata is None:
-        metadata: KiCadProjectMetadata = {}
-        target_data["meta"] = metadata
-    elif isinstance(raw_metadata, dict):
-        raw_metadata_dict = cast(JSONObject, raw_metadata)
-        metadata = cast(KiCadProjectMetadata, raw_metadata_dict)
-        target_data["meta"] = metadata
-    else:
-        raise TypeError("KiCad project meta section must be an object.")
+    metadata: KiCadProjectMetadata = target_data.get("meta") or {}
+    target_data["meta"] = metadata
     metadata["filename"] = output_project.name
     metadata.setdefault("version", 3)
 
@@ -1139,16 +1122,10 @@ def merge_block_layout(
                 if name_node is not None and len(name_node) >= 2:
                     existing_chain_names.add(str(name_node[1]).casefold())
     if target_project.is_file():
-        existing_project_value: JSONValue = cast(
-            JSONValue, json.loads(target_project.read_text(encoding="utf-8"))
+        existing_project = _load_project_settings(
+            target_project, context="Invalid target project-settings JSON"
         )
-        if not isinstance(existing_project_value, dict):
-            raise ValueError(f"Invalid target project-settings JSON: {target_project}")
-        existing_project = cast(JSONObject, existing_project_value)
-        existing_settings_value = existing_project.get("net_settings", {})
-        if not isinstance(existing_settings_value, dict):
-            raise ValueError(f"Invalid target net_settings JSON: {target_project}")
-        existing_settings = cast(JSONObject, existing_settings_value)
+        existing_settings: KiCadNetSettings = existing_project.get("net_settings") or {}
         for key in ("net_chain_classes", "net_chain_netclasses"):
             values = existing_settings.get(key, {})
             if isinstance(values, dict):

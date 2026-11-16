@@ -25,3 +25,10 @@ class InstanceLinks(TypedDict):
 
     schema_version: int
     instances: dict[str, InstanceLink]
+
+
+class ProjectSymbolSyncState(TypedDict):
+    """Project catalog synchronization baseline for each published symbol."""
+
+    schema_version: int
+    symbols: dict[str, str]

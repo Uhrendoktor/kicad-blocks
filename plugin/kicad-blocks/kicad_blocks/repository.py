@@ -20,7 +20,6 @@ from typing import cast
 from platformdirs import user_config_path
 
 from .extraction import extract_hierarchical_pins, prepare_block_implementation
-from .json_types import JSONValue, JSONObject
 from .manifest_types import (
     BlockDependencyManifest,
     BlockDependencyOccurrence,
@@ -46,7 +45,12 @@ from .model import (
     slugify,
 )
 from .report_types import BlockRevisionReport, LocalCopyPublishReport, LocalCopySyncReport
-from .settings_types import InstanceLink, InstanceLinks, LibrarySettings
+from .settings_types import (
+    InstanceLink,
+    InstanceLinks,
+    LibrarySettings,
+    ProjectSymbolSyncState,
+)
 from .sexpr import QuotedSExpr as _Quoted
 from .sexpr import SExpr, SExprList, parse_sexpr
 from .sexpr import dump_sexpr as _dump
@@ -329,27 +333,27 @@ def synchronize_project_symbol_catalog(
     synchronized: dict[str, str] = {}
     if state_file.is_file():
         try:
-            loaded_state: JSONValue = cast(
-                JSONValue, json.loads(state_file.read_text(encoding="utf-8"))
-            )
+            loaded_state = json.loads(state_file.read_text(encoding="utf-8"))
         except json.JSONDecodeError as exc:
             raise ValueError(f"Invalid project symbol synchronization state: {state_file}") from exc
         if not isinstance(loaded_state, dict):
             raise ValueError(f"Invalid project symbol synchronization state: {state_file}")
-        loaded_state_dict = cast(JSONObject, loaded_state)
-        loaded_symbols = loaded_state_dict.get("symbols")
+        loaded_symbols = loaded_state.get("symbols")
         if not isinstance(loaded_symbols, dict):
             raise ValueError(f"Invalid project symbol synchronization state: {state_file}")
-        for name, digest in cast(JSONObject, loaded_symbols).items():
+        for name, digest in loaded_symbols.items():
             if not isinstance(name, str) or not isinstance(digest, str):
                 raise ValueError(f"Invalid project symbol synchronization state: {state_file}")
             synchronized[name] = digest
-        state: JSONObject = {
-            "schema_version": loaded_state_dict.get("schema_version", 1),
+        schema_version = loaded_state.get("schema_version", 1)
+        if not isinstance(schema_version, int) or isinstance(schema_version, bool):
+            raise ValueError(f"Invalid project symbol synchronization state: {state_file}")
+        state: ProjectSymbolSyncState = {
+            "schema_version": schema_version,
             "symbols": synchronized,
         }
     else:
-        state: JSONObject = {"schema_version": 1, "symbols": synchronized}
+        state: ProjectSymbolSyncState = {"schema_version": 1, "symbols": synchronized}
 
     def save_state() -> None:
         atomic_write(

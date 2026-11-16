@@ -220,7 +220,9 @@ def _normalize_instance_node(
                 child
                 for child in project[1:]
                 if not (
-                    isinstance(child, list) and _head(child) == "path" and id(child) not in kept_ids
+                    isinstance(child, list)
+                    and _head(child) == "path"
+                    and id(child) not in kept_ids
                 )
             ]
             for path in kept:
@@ -275,7 +277,9 @@ def _normalize_sheet_instances(
             child
             for child in instances[1:]
             if not (
-                isinstance(child, list) and _head(child) == "path" and id(child) not in kept_ids
+                isinstance(child, list)
+                and _head(child) == "path"
+                and id(child) not in kept_ids
             )
         ]
     else:

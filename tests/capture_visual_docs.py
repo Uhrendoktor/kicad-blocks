@@ -683,7 +683,7 @@ def capture_ui_workflows(
                     widget
                     for widget in walk_widgets(root)
                     if widget.winfo_class() == "Canvas"
-                    and getattr(widget, "_native_schematic_preview_photo", None) is not None
+                    and getattr(widget, "native_schematic_preview_photo", None) is not None
                 ]
                 if not schematic_canvases:
                     raise RuntimeError(
