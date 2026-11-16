@@ -96,9 +96,7 @@ _block_overview_text = cast(Callable[..., str], _private_hook("_block_overview_t
 _choose_block_layout = cast(
     Callable[..., _LayoutChoice | None], _private_hook("_choose_block_layout")
 )
-_clean_facade_preview_svg = cast(
-    Callable[..., Path], _private_hook("_clean_facade_preview_svg")
-)
+_clean_facade_preview_svg = cast(Callable[..., Path], _private_hook("_clean_facade_preview_svg"))
 _filter_library_records = cast(
     Callable[..., list[BlockRecord]], _private_hook("_filter_library_records")
 )
@@ -119,9 +117,7 @@ _pick_record = cast(Callable[..., BlockRecord | None], _private_hook("_pick_reco
 _preferred_library_selection = cast(
     Callable[..., BlockRecord | None], _private_hook("_preferred_library_selection")
 )
-_restore_placement_windows = cast(
-    Callable[..., None], _private_hook("_restore_placement_windows")
-)
+_restore_placement_windows = cast(Callable[..., None], _private_hook("_restore_placement_windows"))
 _save_block_layouts = cast(Callable[..., BlockRecord], _private_hook("_save_block_layouts"))
 _save_block_variants = cast(Callable[..., None], _private_hook("_save_block_variants"))
 _set_window_geometry = cast(Callable[..., None], _private_hook("_set_window_geometry"))
