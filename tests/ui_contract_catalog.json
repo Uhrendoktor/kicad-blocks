@@ -427,8 +427,9 @@
       "title": "Implementations manager",
       "purpose": "Review the single Default implementation row and maintain named alternatives.",
       "coverage": "partial",
-      "coverage_note": "The real manager is captured in both themes and variant data mutations have unit coverage. Add/edit/promote/remove controls are not yet all executed through UI contracts.",
+      "coverage_note": "The current slice adds real-widget contracts for the manager's Treeview, Add, Edit, Set as default, Remove, Close, and Save & close controls. Tests exercise default promotion, manifest/file updates, renaming without recopying source data, profile-reference protection, and retry after a simulated save failure. The nested Implementation details form and every validation branch remain separately covered by its own screen.",
       "evidence": [
+        "tests/test_implementation_manager_contracts.py",
         "tests/test_library_browser.py",
         "tests/capture_visual_docs.py"
       ],
@@ -441,6 +442,62 @@
       "screenshots": [
         "implementation-variants-light.png",
         "implementation-variants-dark.png"
+      ],
+      "controls": [
+        {
+          "contract_id": "implementations-manager.window",
+          "type": "window",
+          "label": "Implementations manager dialog",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "implementations-manager.rows",
+          "type": "treeview",
+          "label": "Default and named implementations",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "implementations-manager.status",
+          "type": "status-label",
+          "label": "Persistence and usage status",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "implementations-manager.action.add",
+          "type": "button",
+          "label": "Add variant",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "implementations-manager.action.edit",
+          "type": "button",
+          "label": "Edit variant",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "implementations-manager.action.default",
+          "type": "button",
+          "label": "Set as default",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "implementations-manager.action.remove",
+          "type": "button",
+          "label": "Remove",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "implementations-manager.action.close",
+          "type": "button",
+          "label": "Close",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "implementations-manager.action.save-close",
+          "type": "button",
+          "label": "Save & close",
+          "assertion": "asserted"
+        }
       ]
     },
     {
