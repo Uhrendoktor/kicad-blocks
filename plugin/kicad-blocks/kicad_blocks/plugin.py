@@ -15,7 +15,7 @@ import tempfile
 from collections.abc import Callable, Iterator, Sequence
 from importlib import import_module
 from pathlib import Path
-from typing import TYPE_CHECKING, Protocol, TypeGuard, TypedDict, cast
+from typing import TYPE_CHECKING, Protocol, TypedDict, cast
 
 # The core block model and IPC helpers must remain importable in headless
 # environments. Load Tkinter only when the interactive manager is invoked.
@@ -1149,22 +1149,21 @@ def _is_empty_selection_error(error: BaseException) -> bool:
 class SchematicSelectionProvider(Protocol):
     """Minimal read-only selection surface used by instance-selection helpers."""
 
-    def get_selection(self) -> Sequence[object]: ...
+    def get_selection(self) -> Sequence[_SchematicSymbol]: ...
 
 
-def _is_schematic_selection_provider(value: object) -> TypeGuard[SchematicSelectionProvider]:
-    """Recognize modern IPC schematic objects while retaining legacy adapters."""
-    return callable(getattr(value, "get_selection", None))
-
-
-def _safe_schematic_selection(
-    schematic: object | None,
-) -> list[_SchematicSymbol]:
+def _safe_schematic_selection(schematic: _Schematic | None) -> list[_SchematicSymbol]:
     """Return current typed selection, or empty for legacy serialized-selection adapters."""
-    if schematic is None or not _is_schematic_selection_provider(schematic):
+    if schematic is None:
+        return []
+    getter = cast(
+        Callable[[], Sequence[_SchematicSymbol]] | None,
+        getattr(schematic, "get_selection", None),
+    )
+    if getter is None:
         return []
     try:
-        return cast(list[_SchematicSymbol], list(schematic.get_selection()))
+        return list(getter())
     except Exception as exc:
         if _is_empty_selection_error(exc):
             return []
@@ -7210,9 +7209,9 @@ def run() -> None:
 selected_symbols = _selected_symbols
 
 
-def symbol_identifier(instance: object) -> tuple[str, str]:
-    """Return a symbol's KiCad library id from an IPC object or adapter."""
-    return _symbol_identifier(cast(_SchematicSymbol, instance))
+def symbol_identifier(instance: _SchematicSymbol) -> tuple[str, str]:
+    """Return a symbol's KiCad library id from a typed IPC symbol instance."""
+    return _symbol_identifier(instance)
 
 
 register_block = _register_block

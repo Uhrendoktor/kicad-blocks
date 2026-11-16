@@ -22,7 +22,7 @@ from kicad_blocks.model import (
     substitute_parameter_templates,
     transform_symbol_point_to_schematic,
 )
-from kicad_blocks.manifest_types import BlockManifest
+from kicad_blocks.manifest_types import BlockDependencyManifest, BlockManifest
 from kicad_blocks.repository import (
     BlockRecord,
     add_dependency,
@@ -142,7 +142,7 @@ class BlockModelTests(unittest.TestCase):
     def test_multi_selection_extracts_all_symbol_instances(self):
         from types import SimpleNamespace
 
-        from kicad_blocks.plugin import selected_symbols
+        from kicad_blocks.plugin import SchematicSymbol, selected_symbols
 
         first = SimpleNamespace(
             definition=SimpleNamespace(id=SimpleNamespace(library="KBlocks", name="Buck"))
@@ -152,8 +152,12 @@ class BlockModelTests(unittest.TestCase):
         )
 
         class FakeSchematic:
-            def get_selection(self) -> list[object]:
-                return [first, object(), second]
+            def get_selection(self) -> list[SchematicSymbol]:
+                return [
+                    cast(SchematicSymbol, first),
+                    cast(SchematicSymbol, object()),
+                    cast(SchematicSymbol, second),
+                ]
 
         schematic = FakeSchematic()
 
@@ -458,12 +462,12 @@ class BlockRepositoryTests(unittest.TestCase):
     def test_facade_identifier_uses_one_stable_library_nickname(self):
         from types import SimpleNamespace
 
-        from kicad_blocks.plugin import symbol_identifier
+        from kicad_blocks.plugin import SchematicSymbol, symbol_identifier
 
         instance = SimpleNamespace(
             definition=SimpleNamespace(id=SimpleNamespace(library="KBlocks", name="buck_1234abcd"))
         )
-        self.assertEqual(symbol_identifier(instance), ("KBlocks", "buck_1234abcd"))
+        self.assertEqual(symbol_identifier(cast(SchematicSymbol, instance)), ("KBlocks", "buck_1234abcd"))
 
     def test_create_block_writes_facade_and_separate_implementation(self):
         record = create_block(self.root, "Buck Converter", self.pins, description="Step-down")
@@ -814,21 +818,21 @@ class BlockRepositoryTests(unittest.TestCase):
         child_b = create_block(self.root, "Power B", self.pins)
         local = make_local_copy(source, self.project)
         add_dependency(source, child_a)
-        local_manifest: dict[str, object] = dict(read_manifest(local.path))
-        local_manifest["dependencies"] = [
+        local_manifest = read_manifest(local.path)
+        local_manifest["dependencies"] = cast(list[BlockDependencyManifest], [
             {
                 "block_id": child_b.manifest["block_id"],
                 "name": child_b.name,
                 "path": str(child_b.path),
                 "revision": child_b.manifest["revision"],
             }
-        ]
+        ])
         (local.path / "manifest.json").write_text(
             json.dumps(local_manifest, indent=2) + "\n", encoding="utf-8"
         )
         malformed_record = BlockRecord(
             path=local.path,
-            manifest=cast(BlockManifest, local_manifest),
+            manifest=local_manifest,
         )
         with self.assertRaisesRegex(RuntimeError, "manifest.dependencies"):
             synchronize_local_copy(malformed_record)

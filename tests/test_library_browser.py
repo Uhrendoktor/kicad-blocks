@@ -12,7 +12,7 @@ from collections.abc import Callable, Sequence
 from importlib import import_module
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
-from typing import Protocol, TypedDict, cast
+from typing import Protocol, TypedDict, TypeVar, cast
 from unittest.mock import Mock, patch
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -37,11 +37,12 @@ from kicad_blocks.repository import (
 )
 
 plugin_actions = import_module("kicad_blocks.plugin")
+_HookResult = TypeVar("_HookResult")
 
 
-def _private_hook(name: str) -> Callable[..., object]:
+def _private_hook(name: str) -> Callable[..., _HookResult]:
     """Resolve a private UI test hook without importing its private symbol."""
-    return cast(Callable[..., object], getattr(plugin_actions, name))
+    return cast(Callable[..., _HookResult], getattr(plugin_actions, name))
 
 
 _native_schematic_preview_pages = cast(
@@ -125,7 +126,7 @@ _save_block_layouts = cast(Callable[..., BlockRecord], _private_hook("_save_bloc
 _save_block_variants = cast(Callable[..., None], _private_hook("_save_block_variants"))
 _set_window_geometry = cast(Callable[..., None], _private_hook("_set_window_geometry"))
 _start_native_symbol_placement = cast(
-    Callable[..., object], _private_hook("_start_native_symbol_placement")
+    Callable[..., plugin_actions.SchematicSymbol], _private_hook("_start_native_symbol_placement")
 )
 _schematic_page_center_mm = cast(
     Callable[..., tuple[float, float]], _private_hook("_schematic_page_center_mm")
@@ -188,9 +189,14 @@ class LibraryBrowserTests(unittest.TestCase):
         calls: list[Sequence[str]] = []
 
         def export(
-            arguments: Sequence[str], **kwargs: object
+            arguments: Sequence[str],
+            *,
+            capture_output: bool = False,
+            text: bool = False,
+            check: bool = False,
         ) -> subprocess.CompletedProcess[str]:
             calls.append(arguments)
+            del capture_output, text, check
             output_dir = Path(arguments[arguments.index("--output") + 1])
             output_dir.mkdir(parents=True, exist_ok=True)
             (output_dir / f"{symbol_name}.svg").write_text(

@@ -85,8 +85,8 @@ def main() -> None:
         )
 
         class FakeSchematic:
-            def get_selection(self) -> list[object]:
-                return [selected_instance]
+            def get_selection(self) -> list[plugin_actions.SchematicSymbol]:
+                return [cast(plugin_actions.SchematicSymbol, selected_instance)]
 
         def get_kicad_binary_path(name: str) -> str:
             del name
@@ -99,7 +99,7 @@ def main() -> None:
         )
         parent_window = cast(Misc, object())
 
-        def showinfo(*args: object, **kwargs: object) -> None:
+        def showinfo(*args: str, **kwargs: str) -> None:
             return None
 
         silent_messagebox = SimpleNamespace(showinfo=showinfo)

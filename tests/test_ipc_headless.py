@@ -218,8 +218,8 @@ def main() -> None:
 
             original_instance_id = str(instance.id)
             class FakeSelection:
-                def get_selection(self) -> list[object]:
-                    return [instance]
+                def get_selection(self) -> list[SchematicSymbol]:
+                    return [cast(SchematicSymbol, instance)]
 
             selection = FakeSelection()
             local_path = make_selected_local(
