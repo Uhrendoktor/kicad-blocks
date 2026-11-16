@@ -43,8 +43,11 @@ LIBRARY_ASSERTED_BUTTONS = {
     "library-browser.action.place",
     "library-browser.action.implementation",
     "library-browser.action.facade",
+    "library-browser.action.variants",
     "library-browser.action.open-pcb",
+    "library-browser.action.manage-pcb-layouts",
     "library-browser.action.refresh",
+    "library-browser.action.libraries",
 }
 
 PREVIEW_VIEWS = (
@@ -156,7 +159,7 @@ def test_library_browser_catalog_labels_each_toolbar_action_coverage_level():
         for control in controls.values()
     )
     assert all(
-        controls[contract_id]["assertion"] == "uncovered"
+        controls[contract_id]["assertion"] == "asserted"
         for contract_id in (
             "library-browser.action.variants",
             "library-browser.action.manage-pcb-layouts",
@@ -361,5 +364,151 @@ def test_open_pcb_button_creates_chooser_for_selected_block(monkeypatch, tmp_pat
         assert len(combos) == 1
         assert combos[0].get() == "Default [default-pcb]"
         assert tuple(combos[0]["values"]) == ("Default [default-pcb]",)
+    finally:
+        root.destroy()
+
+
+
+def _show_schematic_preview(root, context):
+    notebook = context.require_widget("library-browser.preview.views")
+    notebook.select(notebook.tabs()[1])
+    root.update_idletasks()
+    root.update()
+
+
+def test_implementation_selector_renders_the_selected_variant(monkeypatch, tmp_path):
+    root, context, records, _library, _project = _new_browser(monkeypatch, tmp_path)
+    records[0].manifest["variants"] = [
+        {"value": "1V8", "file": "implementation_1v8.kicad_sch"}
+    ]
+    rendered_implementations = []
+
+    def render_pages(_record, selector, **_kwargs):
+        rendered_implementations.append(selector)
+        return [("Main", None), ("Power Stage", None)]
+
+    monkeypatch.setattr(
+        plugin_actions, "_native_schematic_preview_pages", render_pages
+    )
+    monkeypatch.setattr(
+        plugin_actions, "_draw_schematic_preview", lambda *_args, **_kwargs: None
+    )
+    try:
+        _select_first_record(context)
+        _show_schematic_preview(root, context)
+        selector = context.require_widget("library-browser.implementation")
+        assert tuple(selector["values"]) == ("Default", "1V8")
+        rendered_implementations.clear()
+        selector.bind(
+            "<<ComboboxSelected>>",
+            lambda _event: context.events.append("implementation:1V8"),
+            add="+",
+        )
+        ChoiceViewContract(
+            contract_id="library-browser.implementation",
+            value="1V8",
+            expected_event="implementation:1V8",
+        ).run(context)
+        assert rendered_implementations[-1] == "1V8"
+        assert context.require_widget("library-browser.sheet").get() == "Main"
+    finally:
+        root.destroy()
+
+
+def test_sheet_selector_draws_the_selected_schematic_page(monkeypatch, tmp_path):
+    root, context, _records, _library, _project = _new_browser(monkeypatch, tmp_path)
+    drawn_pages = []
+    monkeypatch.setattr(
+        plugin_actions, "_native_schematic_preview_pages",
+        lambda *_args, **_kwargs: [("Main", None), ("Power Stage", None)],
+    )
+    monkeypatch.setattr(
+        plugin_actions,
+        "_draw_schematic_preview",
+        lambda _canvas, _pages, selected: drawn_pages.append(selected),
+    )
+    try:
+        _select_first_record(context)
+        _show_schematic_preview(root, context)
+        selector = context.require_widget("library-browser.sheet")
+        assert tuple(selector["values"]) == ("Main", "Power Stage")
+        assert selector.winfo_manager() == "pack"
+        drawn_pages.clear()
+        selector.bind(
+            "<<ComboboxSelected>>",
+            lambda _event: context.events.append("sheet:Power Stage"),
+            add="+",
+        )
+        ChoiceViewContract(
+            contract_id="library-browser.sheet",
+            value="Power Stage",
+            expected_event="sheet:Power Stage",
+        ).run(context)
+        assert drawn_pages[-1] == "Power Stage"
+    finally:
+        root.destroy()
+
+
+def test_variants_toolbar_opens_manager_and_refreshes_records(
+    monkeypatch, tmp_path
+):
+    root, context, _records, _library, _project = _new_browser(monkeypatch, tmp_path)
+    context.action_calls.clear()
+    monkeypatch.setattr(
+        plugin_actions, "_show_block_variant_editor",
+        lambda *_args, **_kwargs: context.action_calls.append("open-variants"),
+    )
+    try:
+        _select_first_record(context)
+        ButtonContract(
+            contract_id="library-browser.action.variants",
+            expected_action=("open-variants", "refresh"),
+            destroys_window=False,
+            expected_label="Variants",
+        ).run(context)
+        assert "2 of 2 blocks" in context.require_widget(
+            "library-browser.summary"
+        ).getvar(context.require_widget("library-browser.summary").cget("textvariable"))
+    finally:
+        root.destroy()
+
+
+def test_pcb_layouts_toolbar_opens_manager_and_refreshes_records(
+    monkeypatch, tmp_path
+):
+    root, context, _records, _library, _project = _new_browser(monkeypatch, tmp_path)
+    context.action_calls.clear()
+    monkeypatch.setattr(
+        plugin_actions, "_show_block_layout_editor",
+        lambda *_args, **_kwargs: context.action_calls.append("open-pcb-layouts"),
+    )
+    try:
+        _select_first_record(context)
+        ButtonContract(
+            contract_id="library-browser.action.manage-pcb-layouts",
+            expected_action=("open-pcb-layouts", "refresh"),
+            destroys_window=False,
+            expected_label="PCB layouts",
+        ).run(context)
+    finally:
+        root.destroy()
+
+
+def test_libraries_toolbar_opens_library_roots_manager_and_refreshes(
+    monkeypatch, tmp_path
+):
+    root, context, _records, _library, _project = _new_browser(monkeypatch, tmp_path)
+    context.action_calls.clear()
+    monkeypatch.setattr(
+        plugin_actions, "_show_library_roots_dialog",
+        lambda *_args, **_kwargs: context.action_calls.append("open-libraries"),
+    )
+    try:
+        ButtonContract(
+            contract_id="library-browser.action.libraries",
+            expected_action=("open-libraries", "refresh"),
+            destroys_window=False,
+            expected_label="Libraries",
+        ).run(context)
     finally:
         root.destroy()
