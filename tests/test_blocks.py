@@ -139,7 +139,7 @@ class BlockModelTests(unittest.TestCase):
     def test_multi_selection_extracts_all_symbol_instances(self):
         from types import SimpleNamespace
 
-        from kicad_blocks.plugin import _selected_symbols
+        from kicad_blocks.plugin import selected_symbols
 
         first = SimpleNamespace(
             definition=SimpleNamespace(id=SimpleNamespace(library="KBlocks", name="Buck"))
@@ -149,7 +149,7 @@ class BlockModelTests(unittest.TestCase):
         )
         schematic = SimpleNamespace(get_selection=lambda: [first, object(), second])
 
-        self.assertEqual(_selected_symbols(schematic), [first, second])
+        self.assertEqual(selected_symbols(schematic), [first, second])
 
     def test_plugin_manifest_has_valid_action_scope_contract(self):
         manifest = json.loads((PLUGIN / "plugin.json").read_text(encoding="utf-8"))
@@ -450,12 +450,12 @@ class BlockRepositoryTests(unittest.TestCase):
     def test_facade_identifier_uses_one_stable_library_nickname(self):
         from types import SimpleNamespace
 
-        from kicad_blocks.plugin import _symbol_identifier
+        from kicad_blocks.plugin import symbol_identifier
 
         instance = SimpleNamespace(
             definition=SimpleNamespace(id=SimpleNamespace(library="KBlocks", name="buck_1234abcd"))
         )
-        self.assertEqual(_symbol_identifier(instance), ("KBlocks", "buck_1234abcd"))
+        self.assertEqual(symbol_identifier(instance), ("KBlocks", "buck_1234abcd"))
 
     def test_create_block_writes_facade_and_separate_implementation(self):
         record = create_block(self.root, "Buck Converter", self.pins, description="Step-down")

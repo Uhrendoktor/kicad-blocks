@@ -27,10 +27,9 @@ from kicad_blocks.model import (
     resolve_variant_implementation,
 )
 from kicad_blocks.repository import (
-    LIBRARY_NICKNAME,
-    _named_symbol_node,
-    _symbol_definition_digest,
     BlockRecord,
+    named_symbol_node,
+    symbol_definition_digest,
     create_block,
     merge_symbol_catalog,
     read_manifest,
@@ -38,12 +37,9 @@ from kicad_blocks.repository import (
 )
 
 plugin_actions = import_module("kicad_blocks.plugin")
-_HookResult = TypeVar("_HookResult")
-
-
-def _private_hook(name: str) -> Callable[..., _HookResult]:
+def _private_hook(name: str) -> Callable[..., object]:
     """Resolve a private UI test hook without importing its private symbol."""
-    return cast(Callable[..., _HookResult], getattr(plugin_actions, name))
+    return cast(Callable[..., object], getattr(plugin_actions, name))
 
 
 _native_schematic_preview_pages = cast(
@@ -223,8 +219,8 @@ class LibraryBrowserTests(unittest.TestCase):
         )
         original_catalog = parse_sexpr(project_catalog.read_text(encoding="utf-8"))
         filter_name = self.filter_block.manifest["symbol_name"]
-        filter_digest_before = _symbol_definition_digest(
-            _named_symbol_node(original_catalog, filter_name, project_catalog)
+        filter_digest_before = symbol_definition_digest(
+            named_symbol_node(original_catalog, filter_name, project_catalog)
         )
 
         source_symbol = self.block.path / self.block.manifest["symbol_file"]

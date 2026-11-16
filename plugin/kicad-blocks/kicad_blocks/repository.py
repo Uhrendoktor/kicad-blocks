@@ -2670,3 +2670,8 @@ def build_project_symbol_catalog(project_dir: Path, roots: list[Path]) -> Path:
     destination = project_dir / ".kicad_blocks" / LIBRARY_CATALOG_NAME
     atomic_write(destination, _dump(catalog_tree) + "\n")
     return destination
+
+
+# Public operations for inspecting and comparing catalog symbol definitions.
+named_symbol_node = _named_symbol_node
+symbol_definition_digest = _symbol_definition_digest

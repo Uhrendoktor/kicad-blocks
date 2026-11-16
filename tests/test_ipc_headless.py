@@ -15,6 +15,8 @@ ROOT = Path(__file__).resolve().parents[1]
 PLUGIN = ROOT / "plugin" / "kicad-blocks"
 sys.path.insert(0, str(PLUGIN))
 
+from kicad_blocks.plugin import KiCadApp, Schematic, SchematicSymbol
+
 from kicad_blocks.model import (
     facade_pin_connection_points,
     parse_parameters,
@@ -25,8 +27,8 @@ from kicad_blocks.model import (
     transform_symbol_point_to_schematic,
 )
 from kicad_blocks.plugin import (
-    _register_block,
-    _write_instance_configuration,
+    register_block,
+    write_instance_configuration,
     make_selected_local,
     sync_selected_local,
 )
@@ -168,7 +170,7 @@ def main() -> None:
             # IPC helper used by the manager's configuration form. The KIID and
             # library identity must remain stable.
             original_configured_id = str(instance.id)
-            _write_instance_configuration(
+            write_instance_configuration(
                 schematic,
                 instance,
                 {
@@ -313,7 +315,7 @@ def main() -> None:
                 "Runtime-Registered Block",
                 parse_pins("A:input, B:output"),
             )
-            late_block = _register_block(project_dir, late_block, kicad)
+            late_block = register_block(project_dir, late_block, kicad)
             late_instance = schematic.place_symbol_from_library(
                 f"{late_block.manifest['library_nickname']}:{late_block.manifest['symbol_name']}",
                 Vector2.from_xy_mm(140.0, 100.0),

@@ -1146,12 +1146,20 @@ def _is_empty_selection_error(error: BaseException) -> bool:
     )
 
 
-def _safe_schematic_selection(schematic: _Schematic | None) -> list[_SchematicSymbol]:
+class SchematicSelectionProvider(Protocol):
+    """Minimal read-only selection surface used by instance-selection helpers."""
+
+    def get_selection(self) -> Sequence[object]: ...
+
+
+def _safe_schematic_selection(
+    schematic: SchematicSelectionProvider | None,
+) -> list[_SchematicSymbol]:
     """Return the current typed IPC selection, normalizing empty-selection errors."""
-    if schematic is None or not hasattr(schematic, "get_selection"):
+    if schematic is None:
         return []
     try:
-        return list(schematic.get_selection())
+        return cast(list[_SchematicSymbol], list(schematic.get_selection()))
     except Exception as exc:
         if _is_empty_selection_error(exc):
             return []
@@ -1174,7 +1182,7 @@ def _selection_fragment(schematic: _Schematic) -> str:
         ) from exc
 
 
-def _selected_symbols(schematic: _Schematic) -> list[_SchematicSymbol]:
+def _selected_symbols(schematic: SchematicSelectionProvider) -> list[_SchematicSymbol]:
     selection = _safe_schematic_selection(schematic)
     symbols = [
         item for item in selection if hasattr(item, "definition") and hasattr(item.definition, "id")
@@ -7191,3 +7199,17 @@ def run_action(action: str, *, editor_window_id: str | None = None) -> None:
 def run() -> None:
     """Compatibility entry point for older manager installations."""
     run_action("manage-library")
+
+
+# Stable public helpers used by test adapters and supported integrations.
+selected_symbols = _selected_symbols
+
+
+def symbol_identifier(instance: object) -> tuple[str, str]:
+    """Return a symbol's KiCad library id from an IPC object or adapter."""
+    return _symbol_identifier(cast(_SchematicSymbol, instance))
+
+
+register_block = _register_block
+write_instance_configuration = _write_instance_configuration
+new_blank_pcb_source = _new_blank_pcb_source

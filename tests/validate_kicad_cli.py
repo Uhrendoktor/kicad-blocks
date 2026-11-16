@@ -18,8 +18,14 @@ sys.path.insert(0, str(ROOT / "scripts"))
 from generate_reference import ROOT_UUID, generate_reference_schematic
 from kicad_blocks.model import parse_pins
 from kicad_blocks.operations import export_block_bom, validate_block_tree
-from kicad_blocks.pcb_layout import _all, _direct, _dump, _Quoted, parse_sexpr
-from kicad_blocks.plugin import _new_blank_pcb_source
+from kicad_blocks.pcb_layout import new_blank_pcb_source
+from kicad_blocks.sexpr import (
+    QuotedSExpr as _Quoted,
+    dump_sexpr as _dump,
+    parse_sexpr,
+    sexpr_all as _all,
+    sexpr_direct as _direct,
+)
 from kicad_blocks.repository import add_dependency, create_block
 from validate_schematic_style import validate_schematic_style
 
@@ -568,7 +574,7 @@ def main() -> None:
             raise RuntimeError("Recursive KiCad CLI ERC did not report both block implementations.")
         # Validate the exact empty-board document used by Add PCB Layout.
         # A file-copy/unit assertion alone cannot prove that PCBNEW can open it.
-        blank_board = _new_blank_pcb_source()
+        blank_board = new_blank_pcb_source()
         try:
             blank_board_svg = Path(temp) / "blank-board-svg"
             blank_board_svg.mkdir()
