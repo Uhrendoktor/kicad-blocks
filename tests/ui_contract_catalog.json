@@ -487,11 +487,10 @@
       "id": "add-pcb-layout",
       "title": "Add PCB layout",
       "purpose": "Create a blank board or import an existing board as a stored block layout.",
-      "coverage": "partial",
-      "coverage_note": "Both blank-board and existing-file dialog modes are captured. The Add, file-picker, validation, rollback, and open-result paths need execute-and-assert contracts.",
+      "coverage": "contracted",
+      "coverage_note": "Every application-owned interactive control in this dialog has a semantic ID and real-widget contract coverage: blank-board creation, switching to an existing PCB source, the file chooser callback, implementation association, invalid-name validation, and cancel without creating a board. The OS-native file chooser remains isolated behind a stub here and is tracked separately under native-document desktop coverage.",
       "evidence": [
-        "tests/capture_visual_docs.py",
-        "tests/test_pcb_layout.py"
+        "tests/test_add_pcb_layout_contracts.py"
       ],
       "functionality": [
         "Enter a layout name",
@@ -504,6 +503,43 @@
         "add-pcb-layout-blank-dark.png",
         "add-pcb-layout-file-light.png",
         "add-pcb-layout-file-dark.png"
+      ],
+      "controls": [
+        {
+          "contract_id": "add-pcb-layout.name",
+          "type": "entry",
+          "label": "PCB layout name"
+        },
+        {
+          "contract_id": "add-pcb-layout.mode",
+          "type": "combobox",
+          "label": "Blank board or existing PCB"
+        },
+        {
+          "contract_id": "add-pcb-layout.source",
+          "type": "entry",
+          "label": "Existing PCB source path"
+        },
+        {
+          "contract_id": "add-pcb-layout.browse",
+          "type": "button",
+          "label": "Choose file"
+        },
+        {
+          "contract_id": "add-pcb-layout.implementation",
+          "type": "combobox",
+          "label": "Implementation association"
+        },
+        {
+          "contract_id": "add-pcb-layout.cancel",
+          "type": "button",
+          "label": "Cancel"
+        },
+        {
+          "contract_id": "add-pcb-layout.add",
+          "type": "button",
+          "label": "Add layout"
+        }
       ]
     },
     {
