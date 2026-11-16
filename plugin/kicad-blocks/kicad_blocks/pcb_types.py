@@ -87,6 +87,7 @@ class ResolvedBlockLayout(TypedDict):
     file: str
     project_file: str | None
     ports: NotRequired[dict[str, str] | None]
+    implementations: NotRequired[list[str]]
 
 
 class BlockLayoutMergeResult(TypedDict):

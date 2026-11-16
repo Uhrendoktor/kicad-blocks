@@ -46,6 +46,7 @@ from .auto_dependencies import synchronize_block_dependencies
 from .extraction import selected_sheet_file, selected_sheet_instance_uuid
 from .manifest_types import (
     BlockLayoutEditInput,
+    BlockLayoutManifest,
     BlockParameter,
     BlockProfileInput,
     ParameterScalar,
@@ -3690,8 +3691,8 @@ def _save_block_layouts(
 
     block_path = Path(record.path).resolve()
     manifest = read_manifest(block_path)
-    previous = list(manifest.get("layouts", []))
-    previous_files = {
+    previous: list[BlockLayoutManifest] = list(manifest.get("layouts", []))
+    previous_files: set[str] = {
         str(name)
         for item in previous
         for name in (item.get("file"), item.get("project_file"))
@@ -3706,24 +3707,24 @@ def _save_block_layouts(
     if not raw_default and layouts:
         first = layouts[0]
         raw_default = str(first.get("id") or slugify(str(first.get("name", "")))).casefold()
-    variant_links = variant_layouts or {}
-    implementation_names = {
+    variant_links: dict[str, str] = variant_layouts or {}
+    implementation_names: dict[str, str] = {
         "default": "Default",
         **{
             str(item["value"]).casefold(): str(item["value"])
             for item in manifest.get("variants", [])
         },
     }
-    requested_implementation_links = {
+    requested_implementation_links: dict[str, list[str]] = {
         str(key).casefold(): list(values) for key, values in (layout_implementations or {}).items()
     }
 
-    normalized = []
-    files_to_copy = []
-    added_files = set()
-    seen_ids = set()
-    seen_names = set()
-    seen_files = set()
+    normalized: list[BlockLayoutManifest] = []
+    files_to_copy: list[tuple[Path, Path]] = []
+    added_files: set[str] = set()
+    seen_ids: set[str] = set()
+    seen_names: set[str] = set()
+    seen_files: set[str] = set()
 
     for item in layouts:
         name = str(item.get("name", "")).strip()
@@ -3789,7 +3790,9 @@ def _save_block_layouts(
                     f"Stored project-settings file is missing or unsafe: {project_filename!r}"
                 )
 
-        raw_links = requested_implementation_links.get(layout_id, item.get("implementations"))
+        raw_links = requested_implementation_links.get(layout_id)
+        if raw_links is None:
+            raw_links = item.get("implementations")
         if raw_links is None:
             raw_links = []
             if layout_id == raw_default:
@@ -3799,7 +3802,7 @@ def _save_block_layouts(
                 for value, linked in variant_links.items()
                 if str(linked).casefold() == layout_id
             )
-        normalized_links = []
+        normalized_links: list[str] = []
         for raw_link in raw_links:
             key = str(raw_link).strip().casefold()
             label = implementation_names.get(key)
@@ -3812,7 +3815,7 @@ def _save_block_layouts(
         if not normalized_links:
             normalized_links = ["Default"]
 
-        descriptor = {
+        descriptor: BlockLayoutManifest = {
             "id": layout_id,
             "name": name,
             "file": filename,
@@ -3829,9 +3832,9 @@ def _save_block_layouts(
     if normalized and not raw_default:
         raw_default = normalized[0]["id"]
 
-    updated_variants = []
+    updated_variants: list[BlockVariantManifest] = []
     for variant in manifest.get("variants", []):
-        updated = dict(variant)
+        updated = cast(BlockVariantManifest, dict(variant))
         if not normalized:
             updated.pop("layout_id", None)
             updated_variants.append(updated)
@@ -3854,7 +3857,7 @@ def _save_block_layouts(
             updated.pop("layout_id", None)
         updated_variants.append(updated)
 
-    copied_paths = []
+    copied_paths: list[Path] = []
     try:
         for source, destination in files_to_copy:
             shutil.copy2(source, destination)
@@ -3864,7 +3867,7 @@ def _save_block_layouts(
             copied.unlink(missing_ok=True)
         raise
 
-    removed_files = previous_files - {
+    removed_files: set[str] = previous_files - {
         str(name)
         for item in normalized
         for name in (item.get("file"), item.get("project_file"))
@@ -3875,10 +3878,12 @@ def _save_block_layouts(
     manifest["variants"] = updated_variants
     default_layout = next(
         (item for item in normalized if item["id"] == raw_default),
-        {},
+        None,
     )
-    manifest["layout_file"] = default_layout.get("file")
-    manifest["layout_project_file"] = default_layout.get("project_file")
+    manifest["layout_file"] = default_layout["file"] if default_layout is not None else None
+    manifest["layout_project_file"] = (
+        default_layout["project_file"] if default_layout is not None else None
+    )
     manifest["files"] = [name for name in manifest.get("files", []) if name not in removed_files]
     for name in sorted(added_files):
         if name not in manifest["files"]:
@@ -3971,7 +3976,7 @@ def _ask_layout_details(
         frame, "Choose file…", lambda: None, "file", "Choose an existing KiCad PCB file"
     )
     browse_button.grid(row=4, column=2, sticky="ew", padx=(8, 0), pady=(4, 12))
-    implementation_values = ["Default"] + [
+    implementation_values: list[str] = ["Default"] + [
         str(item["value"]) for item in record.manifest.get("variants", [])
     ]
     link_value = tk.StringVar(value=implementation_values[0])
@@ -4103,7 +4108,9 @@ def _show_block_layout_editor(
     tree.grid(row=0, column=0, sticky="nsew")
     scroll.grid(row=0, column=1, sticky="ns")
 
-    layouts = [dict(item) for item in _layout_choices(record)]
+    layouts: list[BlockLayoutEditInput] = [
+        cast(BlockLayoutEditInput, dict(item)) for item in _layout_choices(record)
+    ]
     for item in layouts:
         item["id"] = str(
             item.get("id") or slugify(str(item.get("name") or Path(item["file"]).stem))
@@ -4111,7 +4118,7 @@ def _show_block_layout_editor(
     default_layout_id = str(record.manifest.get("default_layout") or "").casefold()
     if not default_layout_id and layouts:
         default_layout_id = layouts[0]["id"]
-    default_layout_id_holder = [default_layout_id]
+    default_layout_id_holder: list[str | None] = [default_layout_id]
     variant_layouts = {
         str(item["value"]): str(item.get("layout_id") or default_layout_id).casefold()
         for item in record.manifest.get("variants", [])
@@ -4140,7 +4147,7 @@ def _show_block_layout_editor(
     def assigned_to(layout_id: str) -> str:
         return ", ".join(layout_implementations.get(layout_id, ["Default"]))
 
-    def render(selected_id: str | None = None):
+    def render(selected_id: str | None = None) -> None:
         tree.delete(*tree.get_children())
         for index, item in enumerate(layouts):
             iid = str(index)
@@ -4159,14 +4166,14 @@ def _show_block_layout_editor(
             implementation_value.set(links[0])
         update_actions()
 
-    def selected_layout():
+    def selected_layout() -> BlockLayoutEditInput | None:
         selection = tree.selection()
         if not selection:
             return None
         index = int(selection[0])
         return layouts[index] if 0 <= index < len(layouts) else None
 
-    def add_layout():
+    def add_layout() -> None:
         details = _ask_layout_details(dialog, record)
         if details is None:
             return
@@ -4181,11 +4188,10 @@ def _show_block_layout_editor(
             )
             return
         linked_implementation = str(details["linked_implementation"])
-        item = {
+        item: BlockLayoutEditInput = {
             "id": layout_id,
             "name": name,
             "source": details["source"],
-            "project_file": None,
             "implementations": [linked_implementation],
         }
         layouts.append(item)
@@ -4200,11 +4206,11 @@ def _show_block_layout_editor(
         render(layout_id)
         persist_layout_changes()
 
-    def remove_layout():
+    def remove_layout() -> None:
         item = selected_layout()
         if item is None:
             return
-        replacement_id = next(
+        replacement_id: str | None = next(
             (candidate["id"] for candidate in layouts if candidate["id"] != item["id"]),
             None,
         )
@@ -4243,7 +4249,7 @@ def _show_block_layout_editor(
         render(replacement_id)
         persist_layout_changes()
 
-    def make_default():
+    def make_default() -> None:
         item = selected_layout()
         if item is None:
             return
@@ -4261,7 +4267,7 @@ def _show_block_layout_editor(
     ]
     implementation_value = tk.StringVar(value="Default")
 
-    def link_selected():
+    def link_selected() -> None:
         item = selected_layout()
         if item is None:
             return
@@ -4339,7 +4345,7 @@ def _show_block_layout_editor(
     )
     link_button.pack(side="left", padx=(8, 0))
 
-    def cancel_layout_edits():
+    def cancel_layout_edits() -> None:
         if changed[0] and not messagebox.askyesno(
             "Discard layout changes",
             "Discard the unsaved PCB layout changes?",

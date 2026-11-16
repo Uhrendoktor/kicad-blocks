@@ -19,6 +19,7 @@ TkOption = (
     | Variable
     | PhotoImage
     | Sequence[str | int | float | bool | bytes | None]
+    | Sequence[tuple[str, str]]
     | Callable[..., str | None]
 )
 
