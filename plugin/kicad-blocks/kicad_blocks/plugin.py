@@ -15,7 +15,7 @@ import tempfile
 from collections.abc import Callable, Iterator, Sequence
 from importlib import import_module
 from pathlib import Path
-from typing import TYPE_CHECKING, Protocol, TypedDict, cast
+from typing import TYPE_CHECKING, Protocol, TypeGuard, TypedDict, cast
 
 # The core block model and IPC helpers must remain importable in headless
 # environments. Load Tkinter only when the interactive manager is invoked.
@@ -1152,11 +1152,16 @@ class SchematicSelectionProvider(Protocol):
     def get_selection(self) -> Sequence[object]: ...
 
 
+def _is_schematic_selection_provider(value: object) -> TypeGuard[SchematicSelectionProvider]:
+    """Recognize modern IPC schematic objects while retaining legacy adapters."""
+    return callable(getattr(value, "get_selection", None))
+
+
 def _safe_schematic_selection(
-    schematic: SchematicSelectionProvider | None,
+    schematic: object | None,
 ) -> list[_SchematicSymbol]:
-    """Return the current typed IPC selection, normalizing empty-selection errors."""
-    if schematic is None:
+    """Return current typed selection, or empty for legacy serialized-selection adapters."""
+    if schematic is None or not _is_schematic_selection_provider(schematic):
         return []
     try:
         return cast(list[_SchematicSymbol], list(schematic.get_selection()))
