@@ -126,6 +126,16 @@ def render_inventory(catalog: dict[str, Any]) -> str:
                 lines.append(f"- {item}")
         lines.append("")
 
+        controls = screen.get("controls", [])
+        if controls:
+            lines.append("**Registered semantic controls**")
+            lines.append("")
+            for control in controls:
+                lines.append(
+                    f"- {control['label']} ({TICK}{control['contract_id']}{TICK}; {control['type']})"
+                )
+            lines.append("")
+
         footer = screen.get("footer_controls", [])
         if footer:
             lines.append("**Other controls**")
