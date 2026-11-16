@@ -319,7 +319,7 @@ type _PinAssignment = tuple[str, str, str]
 type _ComponentSpec = tuple[str, str, str, str, None, dict[str, _PinAssignment]]
 
 
-def referencereference_uid(key: str) -> str:
+def reference_uid(key: str) -> str:
     return str(uuid.uuid5(uuid.NAMESPACE_URL, f"kicad-blocks:stusb4500-reference:{key}"))
 
 

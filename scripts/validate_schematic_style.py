@@ -125,7 +125,7 @@ class _STUSB4500Profile(Protocol):
     SCHEMATIC_GROUPS: tuple[_SchematicGroup, ...]
     WIRE_LENGTH_BUDGETS_MM: dict[str, float]
 
-    def referencereference_uid(self, key: str) -> str: ...
+    def reference_uid(self, key: str) -> str: ...
 
 
 # The generic linter deliberately has no dependency on the STUSB4500 example.
@@ -150,7 +150,7 @@ frame_gap: float = 2.54
 profile_loaded: bool = False
 
 
-def referencereference_uid(key: str) -> str:
+def reference_uid(key: str) -> str:
     raise RuntimeError(f"Profile-specific UUID requested before loading a design profile: {key}")
 
 
