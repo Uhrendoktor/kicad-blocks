@@ -4678,12 +4678,15 @@ def _show_block_variant_editor(
     palette = getattr(parent, "_kicad_blocks_palette", {})
     frame.columnconfigure(0, weight=1)
     frame.rowconfigure(2, weight=1)
-    ttk.Label(frame, text="Circuit implementations", font=("TkDefaultFont", 12, "bold")).grid(
-        row=0, column=0, sticky="w"
+    ttk.Label(
+        frame, text="Circuit implementations", font=("TkDefaultFont", 12, "bold")
+    ).grid(row=0, column=0, sticky="w")
+    status_value = tk.StringVar(
+        value="Empty KB_VARIANT uses the default implementation."
     )
     ttk.Label(
         frame,
-        text="Empty KB_VARIANT uses the default implementation.",
+        textvariable=status_value,
         foreground=palette.get("muted", "#5f6871"),
         font=("TkDefaultFont", 8),
     ).grid(row=1, column=0, sticky="w", pady=(3, 8))
@@ -4705,23 +4708,20 @@ def _show_block_variant_editor(
     tree.column("file", width=560, minwidth=320, stretch=True)
     tree.column("role", width=150, minwidth=130, stretch=False)
     scroll = ttk.Scrollbar(
-        table_frame,
-        orient="vertical",
-        command=cast(Callable[..., None], tree.yview),
-        style="Vertical.TScrollbar",
+        table_frame, orient="vertical", command=tree.yview, style="Vertical.TScrollbar"
     )
     tree.configure(yscrollcommand=scroll.set)
     tree.grid(row=0, column=0, sticky="nsew")
     scroll.grid(row=0, column=1, sticky="ns")
 
-    palette = getattr(parent, "kicad_blocks_palette", {})
+    palette = getattr(parent, "_kicad_blocks_palette", {})
     cast(_TkTagConfigurable, tree).tag_configure(
         "even", background=palette.get("surface", "#f4f5f6")
     )
     cast(_TkTagConfigurable, tree).tag_configure(
         "odd", background=palette.get("surface_alt", "#e8eaed")
     )
-    variants = [
+    variants: list[BlockVariantEditInput] = [
         {
             "value": str(item["value"]),
             "file": str(item["file"]),
@@ -4733,30 +4733,48 @@ def _show_block_variant_editor(
     dirty = [False]
     new_implementation_to_open: list[Path | None] = [None]
 
-    def render(selected_index: int | None = None):
+    def default_implementation_path() -> Path:
+        selected_default = default_variant[0].casefold()
+        selected = next(
+            (
+                item for item in variants
+                if selected_default and item["value"].casefold() == selected_default
+            ),
+            None,
+        )
+        filename = selected["file"] if selected is not None else record.manifest["implementation_file"]
+        return Path(record.path) / str(filename)
+
+    def alternative_variant_indices() -> list[int]:
+        selected_default = default_variant[0].casefold()
+        return [
+            index for index, item in enumerate(variants)
+            if not selected_default or item["value"].casefold() != selected_default
+        ]
+
+    def variant_index_for_row(row_index: int | None) -> int | None:
+        if row_index is None or row_index <= 0:
+            return None
+        visible = alternative_variant_indices()
+        offset = row_index - 1
+        return visible[offset] if offset < len(visible) else None
+
+    def render(selected_index: int | None = None) -> None:
         tree.delete(*tree.get_children())
-        base_role = "Current default" if not default_variant[0] else "Base fallback"
+        default_path = default_implementation_path()
         tree.insert(
-            "",
-            "end",
-            iid="0",
-            values=("Base implementation", str(record.manifest["implementation_file"]), base_role),
+            "", "end", iid="0",
+            values=("Default", default_path.name, "Current default"),
             tags=("even",),
         )
-        for index, item in enumerate(variants, start=1):
-            role = (
-                "Current default"
-                if item["value"].casefold() == default_variant[0].casefold()
-                else "Alternative"
-            )
+        for row_index, variant_index in enumerate(alternative_variant_indices(), start=1):
+            item = variants[variant_index]
             tree.insert(
-                "",
-                "end",
-                iid=str(index),
-                values=(item["value"], item["file"], role),
-                tags=("odd" if index % 2 else "even",),
+                "", "end", iid=str(row_index),
+                values=(item["value"], item["file"], "Alternative"),
+                tags=("odd" if row_index % 2 else "even",),
             )
-        if selected_index is not None and 0 <= selected_index <= len(variants):
+        if selected_index is not None and 0 <= selected_index <= len(alternative_variant_indices()):
             iid = str(selected_index)
             tree.selection_set(iid)
             tree.focus(iid)
@@ -4766,32 +4784,25 @@ def _show_block_variant_editor(
         selection = tree.selection()
         return int(selection[0]) if selection else None
 
-    def update_actions(_event: tkinter_types.Event[tkinter_types.Misc] | None = None):
+    def update_actions(
+        _event: tkinter_types.Event[tkinter_types.Misc] | None = None,
+    ) -> None:
         row_index = selected_index()
         has_selection = row_index is not None
         edit_button.configure(state="normal" if has_selection else "disabled")
-        edit_button.configure(text="Edit default" if row_index == 0 else "Edit variant")
+        edit_button.configure(text="Edit default" if row_index == 0 else "Edit implementation")
         remove_button.configure(
-            state="normal" if row_index is not None and row_index > 0 else "disabled"
+            state="normal" if variant_index_for_row(row_index) is not None else "disabled"
         )
         if row_index == 0:
-            default_button.configure(
-                text="Use base as default",
-                state="normal" if default_variant[0] else "disabled",
-            )
+            default_button.configure(text="Default selected", state="disabled")
         elif row_index is not None:
-            is_default = (
-                variants[row_index - 1]["value"].casefold() == default_variant[0].casefold()
-            )
-            default_button.configure(
-                text="Default selected" if is_default else "Set as default",
-                state="disabled" if is_default else "normal",
-            )
+            default_button.configure(text="Set as default", state="normal")
         else:
             default_button.configure(text="Set as default", state="disabled")
-        save_button.configure(state="normal" if dirty[0] else "disabled")
+        save_button.configure(state="normal")
 
-    def add_variant():
+    def add_variant() -> None:
         details = _ask_implementation_details(dialog, record=record, allow_create=True)
         if details is None:
             return
@@ -4803,16 +4814,19 @@ def _show_block_variant_editor(
             return
         variants.append({"value": value, "source": source, "open_after_save": True})
         dirty[0] = True
-        render(len(variants))
+        render(len(alternative_variant_indices()))
+        persist_variant_changes()
 
-    def edit_variant():
+    def edit_variant() -> None:
         row_index = selected_index()
         if row_index is None:
             return
         if row_index == 0:
-            save_and_close(Path(record.path) / str(record.manifest["implementation_file"]))
+            save_and_close(default_implementation_path())
             return
-        index = row_index - 1
+        index = variant_index_for_row(row_index)
+        if index is None:
+            return
         current = variants[index]
         current_source = current.get("source") or str(Path(record.path) / current["file"])
         details = _ask_implementation_details(
@@ -4834,22 +4848,22 @@ def _show_block_variant_editor(
             updated["layout_id"] = current["layout_id"]
         if current.get("open_after_save"):
             updated["open_after_save"] = True
-        if default_variant[0] and current["value"].casefold() == default_variant[0].casefold():
-            default_variant[0] = value
         variants[index] = updated
         dirty[0] = True
         render(row_index)
+        persist_variant_changes()
 
-    def remove_variant():
+    def remove_variant() -> None:
         row_index = selected_index()
-        if row_index is None or row_index == 0:
+        index = variant_index_for_row(row_index)
+        if index is None:
             return
-        index = row_index - 1
         candidate = variants[index]
         referenced_profiles = [
             str(item.get("name", item.get("id", "Unnamed profile")))
             for item in record.manifest.get("profiles", [])
-            if str(item.get("variant", "")).casefold() == candidate["value"].casefold()
+            if str(item.get("variant", "")).casefold()
+            == candidate["value"].casefold()
         ]
         if referenced_profiles:
             messagebox.showinfo(
@@ -4860,95 +4874,95 @@ def _show_block_variant_editor(
                 parent=dialog,
             )
             return
-        is_default = (
-            default_variant[0] and candidate["value"].casefold() == default_variant[0].casefold()
-        )
-        consequence = (
-            " It is the default, so new instances with an empty KB_VARIANT will use the base implementation."
-            if is_default
-            else ""
-        )
         if not messagebox.askyesno(
             "Remove implementation",
-            f"Remove {candidate['value']}?{consequence}",
+            f"Remove {candidate['value']}?",
             parent=dialog,
         ):
             return
         variants.pop(index)
-        if is_default:
-            default_variant[0] = ""
+        removed_file = candidate.get("file")
+        if removed_file and new_implementation_to_open[0] == Path(record.path) / removed_file:
+            new_implementation_to_open[0] = None
         dirty[0] = True
-        render(min(row_index, len(variants)) if variants else 0)
+        render(min(row_index, len(alternative_variant_indices())))
+        persist_variant_changes()
 
-    def make_default():
+    def make_default() -> None:
         row_index = selected_index()
-        if row_index is None:
+        index = variant_index_for_row(row_index)
+        if index is None:
             return
-        selected = "" if row_index == 0 else variants[row_index - 1]["value"]
-        if selected.casefold() == default_variant[0].casefold():
-            return
-        default_variant[0] = selected
+        default_variant[0] = variants[index]["value"]
         dirty[0] = True
-        render(row_index)
+        render(0)
+        persist_variant_changes()
 
-    def save_and_close(open_path: Path | None = None):
+    def persist_variant_changes() -> bool:
         if not dirty[0]:
-            if open_path is not None:
-                new_implementation_to_open[0] = open_path
-            dialog.destroy()
-            return
+            return True
         open_value = next(
             (str(item["value"]) for item in variants if item.get("open_after_save")),
             None,
         )
         try:
-            _save_block_variants(record, variants, default_variant=default_variant[0] or None)
-            if open_value:
-                from .repository import read_manifest
+            _save_block_variants(
+                record, variants, default_variant=default_variant[0] or None
+            )
+            from .repository import read_manifest
 
-                saved = read_manifest(Path(record.path))
+            saved = read_manifest(Path(record.path))
+            variants[:] = [
+                {
+                    "value": str(item["value"]),
+                    "file": str(item["file"]),
+                    **(
+                        {"layout_id": str(item["layout_id"]).casefold()}
+                        if item.get("layout_id") else {}
+                    ),
+                }
+                for item in saved.get("variants", [])
+            ]
+            default_variant[0] = str(saved.get("default_variant") or "")
+            if open_value:
                 selected = next(
-                    item
-                    for item in saved.get("variants", [])
+                    item for item in saved.get("variants", [])
                     if str(item["value"]).casefold() == open_value.casefold()
                 )
                 new_implementation_to_open[0] = Path(record.path) / selected["file"]
-            if open_path is not None:
-                new_implementation_to_open[0] = open_path
         except (OSError, RuntimeError, TypeError, ValueError, KeyError, StopIteration) as exc:
+            status_value.set("Save failed; use Save & close to retry.")
             messagebox.showerror("Save implementations", str(exc), parent=dialog)
+            update_actions()
+            return False
+        dirty[0] = False
+        status_value.set("Saved.")
+        update_actions()
+        return True
+
+    def save_and_close(open_path: Path | None = None) -> None:
+        if not persist_variant_changes():
             return
+        if open_path is not None:
+            new_implementation_to_open[0] = open_path
         dialog.destroy()
 
     actions = ttk.Frame(frame)
     actions.grid(row=3, column=0, sticky="ew", pady=(12, 0))
-    _action_button(
-        actions, "Add variant", add_variant, "add", "Add a named implementation variant"
-    ).pack(side="left")
-    edit_button = _action_button(
-        actions,
-        "Edit variant",
-        edit_variant,
-        "edit",
-        "Edit the selected implementation",
-        state="disabled",
-    )
+    _action_button(actions, "Add variant", add_variant, "add", "Add a named implementation variant").pack(side="left")
+    edit_button = _action_button(actions, "Edit variant", edit_variant, "edit", "Edit the selected implementation", state="disabled")
     edit_button.pack(side="left", padx=(8, 0))
     default_button = _action_button(
-        actions,
-        "Set as default",
-        make_default,
-        "default",
-        "Set the selected implementation as default",
-        state="disabled",
+        actions, "Set as default", make_default, "default",
+        "Set the selected implementation as default", state="disabled"
     )
     default_button.pack(side="left", padx=(8, 0))
     remove_button = _action_button(
-        actions, "Remove", remove_variant, "remove", "Remove the selected variant", state="disabled"
+        actions, "Remove", remove_variant, "remove",
+        "Remove the selected variant", state="disabled"
     )
     remove_button.pack(side="left", padx=(8, 0))
-
-    def cancel_variant_edits():
+    def cancel_variant_edits() -> None:
         if dirty[0] and not messagebox.askyesno(
             "Discard implementation changes",
             "Discard the unsaved implementation changes?",
@@ -4958,19 +4972,12 @@ def _show_block_variant_editor(
         dialog.destroy()
 
     _action_button(
-        actions,
-        "Cancel",
-        cancel_variant_edits,
-        "cancel",
-        "Close without saving implementation changes",
+        actions, "Close", cancel_variant_edits, "cancel",
+        "Close the implementation manager",
     ).pack(side="right")
     save_button = _action_button(
-        actions,
-        "Save changes",
-        save_and_close,
-        "save",
-        "Save implementation changes",
-        state="disabled",
+        actions, "Save & close", save_and_close, "save",
+        "Save any pending changes and close the implementation manager"
     )
     save_button.pack(side="right", padx=(0, 8))
 

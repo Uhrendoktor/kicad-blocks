@@ -61,6 +61,7 @@ class BlockVariantEditInput(TypedDict, total=False):
     source: FileSystemPath
     file: str
     layout_id: str
+    open_after_save: bool
 
 
 class BlockVariantManifest(TypedDict):
