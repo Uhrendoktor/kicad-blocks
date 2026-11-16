@@ -326,16 +326,6 @@ def _position(node: SExprList) -> Point | None:
     if at is None or len(at) < 3:
         return None
     return _number(at[1]), _number(at[2])
-
-
-def _direct_point(node: SExprList, tag: str = "at") -> Point | None:
-    """Read the first two numeric values from one direct child node."""
-    child = _direct(node, tag)
-    if child is None or len(child) < 3:
-        return None
-    return _number(child[1]), _number(child[2])
-
-
 def _segments(tree: SExprList) -> list[RawSegment]:
     result: list[RawSegment] = []
     for wire in _all(tree, "wire"):
@@ -559,7 +549,7 @@ def text_box_issues(tree: SExprList) -> list[str]:
         if at is None or size is None or margins is None or font_node is None:
             issues.append(f"text_box {index} is missing geometry, margins or font")
             continue
-        pads = [float(v) for v in margins[1:]]
+        pads = [_number(v) for v in margins[1:]]
         if len(pads) != 4 or any(abs(v - PADDING) > TOL for v in pads):
             issues.append(f"text_box {index} must have {PADDING:.2f} mm equal padding")
             continue
@@ -661,21 +651,18 @@ def pin_world_info(tree: SExprList) -> dict[tuple[str, str], _PinWorldInfo]:
 def wire_networks(tree: SExprList) -> tuple[_DSU, dict[tuple[str, str], _PinWorldInfo]]:
     """Return a DSU of physically connected wire segments (labels excluded)."""
     segments = [segment for segment in _segments(tree) if len(segment) == 2]
-    junctions = {
-        (
-            round(_position(node)[0], 3),
-            round(_position(node)[1], 3),
-        )
-        for node in _all(tree, "junction")
-        if _direct(node, "at") is not None
-    }
+    junctions: set[Point] = set()
+    for node in _all(tree, "junction"):
+        position = _position(node)
+        if position is not None:
+            junctions.add((round(position[0], 3), round(position[1], 3)))
     pin_info = pin_world_info(tree)
-    label_points = {
-        (round(_position(node)[0], 3), round(_position(node)[1], 3))
-        for kind in ("label", "hierarchical_label", "global_label")
-        for node in _all(tree, kind)
-        if _direct(node, "at") is not None
-    }
+    label_points: set[Point] = set()
+    for kind in ("label", "hierarchical_label", "global_label"):
+        for node in _all(tree, kind):
+            position = _position(node)
+            if position is not None:
+                label_points.add((round(position[0], 3), round(position[1], 3)))
     points = {info["point"] for info in pin_info.values()}
     points |= junctions | label_points | {point for segment in segments for point in segment}
     dsu = _DSU()
@@ -706,13 +693,15 @@ def _strict_line_hits_box(a: Point, b: Point, box: Rect) -> bool:
 
 def label_wire_overlap_issues(tree: SExprList) -> list[str]:
     """Reject wires that pass through visible local/hierarchical label glyphs."""
-    issues = []
+    issues: list[str] = []
     segments = [segment for segment in _segments(tree) if len(segment) == 2]
     for kind in ("label", "hierarchical_label"):
         for node in _all(tree, kind):
             bounds = text_visual_bounds(str(node[1]), node)
-            if bounds is not None and any(_strict_line_hits_box(a, b, bounds) for a, b in segments):
-                at = _direct(node, "at")
+            at = _direct(node, "at")
+            if bounds is None or at is None:
+                continue
+            if any(_strict_line_hits_box(a, b, bounds) for a, b in segments):
                 issues.append(
                     f"{kind} {str(node[1])!r} at "
                     f"({_number(at[1]):.3f}, {_number(at[2]):.3f}) overlaps a wire"
@@ -723,18 +712,18 @@ def label_wire_overlap_issues(tree: SExprList) -> list[str]:
 def physical_topology_issues(tree: SExprList) -> list[str]:
     """Require decouplers and the back-to-back FET midpoint to be wire-connected."""
     _load_stusb4500_profile()
-    issues = []
+    issues: list[str] = []
     dsu, pin_info = wire_networks(tree)
     pairs = list(direct_decouplers) + [
         ("T4", "3", "T1", "2"),
         ("T1", "2", "R10", "1"),
     ]
-    label_positions = {
-        (round(_position(node)[0], 3), round(_position(node)[1], 3))
-        for kind in ("label", "hierarchical_label")
-        for node in _all(tree, kind)
-        if _direct(node, "at") is not None
-    }
+    label_positions: set[Point] = set()
+    for kind in ("label", "hierarchical_label"):
+        for node in _all(tree, kind):
+            position = _position(node)
+            if position is not None:
+                label_positions.add((round(position[0], 3), round(position[1], 3)))
     for ref_a, pin_a, ref_b, pin_b in pairs:
         first, second = pin_info.get((ref_a, pin_a)), pin_info.get((ref_b, pin_b))
         if first is None or second is None:
@@ -760,7 +749,7 @@ def physical_topology_issues(tree: SExprList) -> list[str]:
 def pin_orientation_issues(tree: SExprList) -> list[str]:
     """Check declared ground-pin and downward hierarchical-label orientation."""
     _load_stusb4500_profile()
-    issues = []
+    issues: list[str] = []
     pin_info = pin_world_info(tree)
     for key in ground_pins_down:
         reference, number = key.split(".", 1)
@@ -798,7 +787,7 @@ def pin_orientation_issues(tree: SExprList) -> list[str]:
 def component_spacing_issues(tree: SExprList) -> list[str]:
     """Enforce declared adjacency and short component property offsets."""
     _load_stusb4500_profile()
-    issues = []
+    issues: list[str] = []
     instances = _instances(tree)
     positions: dict[str, Point] = {}
     for reference, instance in instances.items():
@@ -827,7 +816,7 @@ def component_spacing_issues(tree: SExprList) -> list[str]:
             continue
         sx, sy = _number(at[1]), _number(at[2])
         ref_prop, value_prop = _property(instance, "Reference"), _property(instance, "Value")
-        checks = []
+        checks: list[tuple[str, SExprList, float]] = []
         if reference.startswith("R") and ref_prop is not None:
             checks.append(
                 ("Reference", ref_prop, component_property_limits_mm["resistor_reference"])
@@ -1038,64 +1027,10 @@ def _local_to_world(sx: float, sy: float, rotation: int, x: float, y: float) -> 
     if rotation == 270:
         return sx + y, sy + x
     raise ValueError(f"Unsupported symbol rotation {rotation}")
-
-
-def _symbol_body_bounds(tree: SExprList) -> dict[str, Rect]:
-    """Approximate symbol body bounds from library rectangles, paths, circles and arcs."""
-    library = _direct(tree, "lib_symbols")
-    definitions: dict[str, SExprList] = {}
-    if library is not None:
-        definitions = {str(node[1]): node for node in _all(library, "symbol") if len(node) > 1}
-    result: dict[str, Rect] = {}
-    for reference, instance in _instances(tree).items():
-        lib_id, at = _direct(instance, "lib_id"), _direct(instance, "at")
-        if lib_id is None or at is None:
-            continue
-        definition = definitions.get(str(lib_id[1]))
-        if definition is None:
-            continue
-        sx, sy, rotation = _number(at[1]), _number(at[2]), int(_number(at[3]))
-        points: list[Point] = []
-        for node in _walk_nodes(definition):
-            kind = _head(node)
-            local_points: list[Point] = []
-            if kind == "rectangle":
-                for field in ("start", "end"):
-                    point = _direct(node, field)
-                    if point is not None:
-                        local_points.append((_number(point[1]), _number(point[2])))
-            elif kind in {"polyline", "polygon"}:
-                pts = _direct(node, "pts")
-                if pts is not None:
-                    local_points.extend(
-                        (_number(point[1]), _number(point[2])) for point in _all(pts, "xy")
-                    )
-            elif kind == "circle":
-                center, radius = _direct(node, "center"), _direct(node, "radius")
-                if center is not None and radius is not None:
-                    cx, cy, r = _number(center[1]), _number(center[2]), abs(_number(radius[1]))
-                    local_points.extend(((cx - r, cy - r), (cx + r, cy + r)))
-            elif kind == "arc":
-                for field in ("start", "mid", "end"):
-                    point = _direct(node, field)
-                    if point is not None:
-                        local_points.append((_number(point[1]), _number(point[2])))
-            points.extend(_local_to_world(sx, sy, rotation, x, y) for x, y in local_points)
-        if points:
-            xs, ys = [point[0] for point in points], [point[1] for point in points]
-            result[reference] = (
-                min(xs),
-                min(ys),
-                max(xs) - min(xs),
-                max(ys) - min(ys),
-            )
-    return result
-
-
 def _symbol_primitives(tree: SExprList) -> dict[str, list[_SymbolPrimitive]]:
     """Return transformed, non-rectangular symbol primitives in sheet coordinates."""
     library = _direct(tree, "lib_symbols")
-    definitions = {}
+    definitions: dict[str, SExprList] = {}
     if library is not None:
         definitions = {str(node[1]): node for node in _all(library, "symbol") if len(node) > 1}
 
@@ -1151,14 +1086,21 @@ def _symbol_primitives(tree: SExprList) -> dict[str, list[_SymbolPrimitive]]:
                 closed = kind == "polygon" or points[0] == points[-1]
                 if closed and points[0] == points[-1]:
                     points = points[:-1]
-                primitives.append(
-                    {
-                        "kind": "polygon" if closed else "path",
+                if closed:
+                    primitive: _SymbolPrimitive = {
+                        "kind": "polygon",
                         "points": points,
-                        "closed": closed,
+                        "closed": True,
                         "stroke": stroke_width,
                     }
-                )
+                else:
+                    primitive = {
+                        "kind": "path",
+                        "points": points,
+                        "closed": False,
+                        "stroke": stroke_width,
+                    }
+                primitives.append(primitive)
             elif kind == "circle":
                 center, radius_node = _direct(node, "center"), _direct(node, "radius")
                 if center is None or radius_node is None:
@@ -1207,9 +1149,11 @@ def _symbol_primitives(tree: SExprList) -> dict[str, list[_SymbolPrimitive]]:
 
 
 def _primitive_edges(primitive: _SymbolPrimitive) -> Iterator[Segment]:
+    if primitive["kind"] == "circle":
+        return
     points = primitive["points"]
     yield from pairwise(points)
-    if primitive.get("closed") and len(points) > 2:
+    if primitive["closed"] and len(points) > 2:
         yield points[-1], points[0]
 
 
@@ -1320,15 +1264,14 @@ def _segment_rect_distance(start: Point, end: Point, box: Rect) -> float:
 
 def _box_intersects_symbol(box: Rect, primitives: Sequence[_SymbolPrimitive]) -> bool:
     for primitive in primitives:
-        kind = primitive["kind"]
-        if kind == "circle":
+        if primitive["kind"] == "circle":
             if _point_rect_distance(primitive["center"], box) <= (
                 primitive["radius"] + primitive["stroke"] / 2 + TOL
             ):
                 return True
             continue
         points = primitive["points"]
-        if primitive.get("closed"):
+        if primitive["closed"]:
             if any(_point_in_polygon(corner, points) for corner in _box_corners(box)):
                 return True
             if any(_point_in_box(point, box) for point in points):
@@ -1351,7 +1294,7 @@ def _box_inside_symbol(box: Rect, primitives: Sequence[_SymbolPrimitive]) -> boo
                 for corner in corners
             ):
                 return True
-        elif primitive.get("closed") and (
+        elif primitive["closed"] and (
             all(_point_in_polygon(corner, primitive["points"]) for corner in corners)
             and not any(
                 _segment_intersects_box(start, end, box)
@@ -1405,7 +1348,7 @@ def _wire_crosses_symbol(
                 ) or (hypot(point[0] - end[0], point[1] - end[1]) <= TOL and end in pin_points)
                 if not at_allowed_pin:
                     return True
-        if primitive.get("closed"):
+        if primitive["closed"]:
             midpoint = ((start[0] + end[0]) / 2, (start[1] + end[1]) / 2)
             if (
                 _point_in_polygon(midpoint, primitive["points"])
@@ -1430,19 +1373,9 @@ def _visible_properties(tree: SExprList) -> list[VisibleProperty]:
             if bounds is not None:
                 fields.append((reference, name, bounds, prop))
     return fields
-
-
-def _box_gap(first: Rect, second: Rect) -> float:
-    ax, ay, aw, ah = first
-    bx, by, bw, bh = second
-    dx = max(0.0, bx - (ax + aw), ax - (bx + bw))
-    dy = max(0.0, by - (ay + ah), ay - (by + bh))
-    return hypot(dx, dy)
-
-
 def symbol_field_clearance_issues(tree: SExprList) -> list[str]:
     """Check visible fields against actual symbol strokes, pins and other UI objects."""
-    issues = []
+    issues: list[str] = []
     bodies = _symbol_primitives(tree)
     fields = _visible_properties(tree)
     pin_info = pin_world_info(tree)
@@ -1539,7 +1472,7 @@ def group_comment_outline_issues(tree: SExprList) -> list[str]:
     description_uuids = {
         reference_uid(f"graphic:text:group-description:{group['id']}") for group in schematic_groups
     }
-    issues = []
+    issues: list[str] = []
     for node in _all(tree, "text_box"):
         uid_node = _direct(node, "uuid")
         uid = str(uid_node[1]) if uid_node is not None else ""
@@ -1566,7 +1499,7 @@ def _rect_inside_margin(inner: Rect, outer: Rect, margin: float) -> bool:
 def frame_content_clearance_issues(tree: SExprList) -> list[str]:
     """Keep visible labels and group comment panels inset from their owning frame."""
     _load_stusb4500_profile()
-    issues = []
+    issues: list[str] = []
     frames = {zone: _frame_bounds(tree, zone) for zone in zones}
     description_uuids = {
         reference_uid(f"graphic:text:group-description:{group['id']}"): group["id"]
@@ -1609,7 +1542,7 @@ def frame_content_clearance_issues(tree: SExprList) -> list[str]:
 
 def wire_obstacle_issues(tree: SExprList) -> list[str]:
     """Reject wires through actual symbol outlines, visible fields and intermediate pins."""
-    issues = []
+    issues: list[str] = []
     bodies = _symbol_primitives(tree)
     pin_info = pin_world_info(tree)
     pins_by_reference: dict[str, set[Point]] = {}
@@ -1655,10 +1588,10 @@ def wire_obstacle_issues(tree: SExprList) -> list[str]:
 def common_pin_net_issues(tree: SExprList) -> list[str]:
     """Check configured pin groups for a common logical/physical network and label."""
     _load_stusb4500_profile()
-    issues = []
+    issues: list[str] = []
     dsu, pin_info = wire_networks(tree)
-    names_by_root = {}
-    labels_by_root = {}
+    names_by_root: dict[Point, set[str]] = {}
+    labels_by_root: dict[Point, list[tuple[str, str, Point]]] = {}
     for kind in ("label", "hierarchical_label", "global_label"):
         for node in _all(tree, kind):
             at = _direct(node, "at")
@@ -1672,7 +1605,7 @@ def common_pin_net_issues(tree: SExprList) -> list[str]:
 
     for group in common_pin_net_groups:
         expected = str(group["name"])
-        roots = []
+        roots: list[Point] = []
         for reference, number in group["pins"]:
             info = pin_info.get((reference, number))
             if info is None:
@@ -1713,13 +1646,13 @@ def common_pin_net_issues(tree: SExprList) -> list[str]:
 def required_no_connect_issues(tree: SExprList) -> list[str]:
     """Require explicit no-connect markers at configured intentionally-unused pins."""
     _load_stusb4500_profile()
-    issues = []
+    issues: list[str] = []
     pin_info = pin_world_info(tree)
-    markers = {
-        (round(_position(node)[0], 3), round(_position(node)[1], 3))
-        for node in _all(tree, "no_connect")
-        if _direct(node, "at") is not None
-    }
+    markers: set[Point] = set()
+    for node in _all(tree, "no_connect"):
+        position = _position(node)
+        if position is not None:
+            markers.add((round(position[0], 3), round(position[1], 3)))
     for key in required_no_connect_pins:
         reference, number = key.split(".", 1)
         info = pin_info.get((reference, number))
@@ -1735,7 +1668,7 @@ def wire_compactness_issues(
 ) -> list[str]:
     """Score total internal wire length in each group against a configurable budget."""
     _load_stusb4500_profile()
-    issues = []
+    issues: list[str] = []
     active_budgets = wire_length_budgets_mm if budgets is None else budgets
     for zone, limit in active_budgets.items():
         frame = _frame_bounds(tree, zone)
@@ -1761,7 +1694,7 @@ def wire_compactness_issues(
 def circuit_documentation_issues(tree: SExprList) -> list[str]:
     """Require non-trivial circuit groups to identify purpose and source evidence."""
     _load_stusb4500_profile()
-    issues = []
+    issues: list[str] = []
     text_by_uuid = {
         str(uid[1]): str(node[1])
         for node in _all(tree, "text_box")
@@ -1792,7 +1725,7 @@ def circuit_documentation_issues(tree: SExprList) -> list[str]:
 
 def label_text_collision_issues(tree: SExprList) -> list[str]:
     """Reject label glyph overlap with other labels, fields and annotation boxes."""
-    issues = []
+    issues: list[str] = []
     labels: list[tuple[str, str, Point, Rect]] = []
     for kind in ("label", "hierarchical_label", "global_label"):
         for node in _all(tree, kind):
@@ -1828,12 +1761,12 @@ def label_text_collision_issues(tree: SExprList) -> list[str]:
 
 def label_kind_consistency_issues(tree: SExprList) -> list[str]:
     """Disallow one electrical label name from mixing local/hierarchical/global types."""
-    kinds_by_name = {}
+    kinds_by_name: dict[str, set[str]] = {}
     for kind in ("label", "hierarchical_label", "global_label"):
         for node in _all(tree, kind):
             if len(node) > 1:
                 kinds_by_name.setdefault(str(node[1]), set()).add(kind)
-    names = {
+    names: dict[str, str] = {
         "label": "local",
         "hierarchical_label": "hierarchical",
         "global_label": "global",
