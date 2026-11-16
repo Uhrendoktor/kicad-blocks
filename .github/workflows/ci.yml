@@ -15,12 +15,12 @@ concurrency:
   group: kicad-blocks-${{ github.ref }}
   cancel-in-progress: true
 
-# The runner is owned by the repository maintainer. Do not execute fork PR code
-# on it: only pull requests whose head branch is in this repository are eligible.
+# Run the complete KiCad integration suite on a GitHub-hosted Linux runner.
+# Fork PRs remain excluded because this job uses repository write permissions.
 jobs:
   python-and-kicad:
     if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
-    runs-on: [self-hosted, linux, x64]
+    runs-on: ubuntu-24.04
     timeout-minutes: 50
     steps:
       - uses: actions/checkout@v4
@@ -30,8 +30,7 @@ jobs:
         run: |
           set -euo pipefail
           # Prefer the development build because the plugin targets the newer
-          # KiCad schematic IPC API. It is installed inside the self-hosted
-          # runner container, not on a GitHub-hosted VM.
+          # KiCad schematic IPC API. Install it into the ephemeral GitHub runner.
           CLI="$(command -v kicad-cli-nightly || command -v kicad-cli || true)"
           if [[ -z "$CLI" ]]; then
             if [[ "$(id -u)" -eq 0 ]]; then
@@ -39,7 +38,7 @@ jobs:
             elif command -v sudo >/dev/null 2>&1 && sudo -n true; then
               SUDO=(sudo)
             else
-              echo "::error::KiCad CLI is missing and this self-hosted runner has no non-interactive package-install privilege. Install kicad-nightly on the runner image or grant the runner container package-install access."
+              echo "::error::KiCad CLI installation failed on the GitHub-hosted runner."
               exit 1
             fi
             "${SUDO[@]}" apt-get update
@@ -82,7 +81,7 @@ jobs:
           test -f "$SYMBOLS_DIR/Interface_USB.kicad_symdir/STUSB4500QTR.kicad_sym"
           echo "KICAD_SYMBOL_DIR=$SYMBOLS_DIR" >> "$GITHUB_ENV"
 
-      - name: Inspect local runner
+      - name: Inspect GitHub-hosted runner
         shell: bash
         run: |
           set -euo pipefail
@@ -444,9 +443,8 @@ jobs:
 
 
   visual-ui-audit:
-    # Render the UI evidence on a hosted runner as well as the full self-hosted
-    # KiCad integration job. This keeps visual review available when the local
-    # KiCad runner is offline or queued.
+    # Keep a separate hosted visual audit so screenshot evidence remains available
+    # independently of the full live IPC integration job.
     if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
     runs-on: ubuntu-24.04
     timeout-minutes: 40
