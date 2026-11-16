@@ -117,8 +117,9 @@
       "title": "Functional Block Library",
       "purpose": "Search registered block libraries, inspect facade and schematic previews, choose implementations, configure a block, and start placement.",
       "coverage": "partial",
-      "coverage_note": "The production browser is captured in both themes and has targeted unit/integration coverage for search, selection, preview rendering, and placement hand-off. Its complete toolbar action set is not yet registered as execute-and-assert contracts.",
+      "coverage_note": "The production browser is captured in both themes and has targeted unit/integration coverage for filtering, result selection, and placement. Real-widget interaction contracts now assert search filtering, selected-record details, Facade/Schematic preview switching, both split panes, Refresh, Place, default implementation open, Edit Facade routing, and creation of the PCB-layout chooser. The Variants, Open PCB confirm/cancel, PCB layouts manager, and Libraries actions, as well as full failure-state coverage, remain to be contracted.",
       "evidence": [
+        "tests/test_library_browser_contracts.py",
         "tests/test_library_browser.py",
         "tests/capture_visual_docs.py"
       ],
@@ -136,6 +137,108 @@
         "library-browser-details-dark.png",
         "library-browser-schematic-light.png",
         "library-browser-schematic-dark.png"
+      ],
+      "controls": [
+        {
+          "contract_id": "library-browser.panes",
+          "type": "paned-window",
+          "label": "Results and preview split panes"
+        },
+        {
+          "contract_id": "library-browser.results-pane",
+          "type": "pane",
+          "label": "Block results"
+        },
+        {
+          "contract_id": "library-browser.preview-pane",
+          "type": "pane",
+          "label": "Selected block preview and details"
+        },
+        {
+          "contract_id": "library-browser.search",
+          "type": "entry",
+          "label": "Search blocks"
+        },
+        {
+          "contract_id": "library-browser.results",
+          "type": "treeview",
+          "label": "Block list"
+        },
+        {
+          "contract_id": "library-browser.summary",
+          "type": "status-label",
+          "label": "Library and filtered-result count"
+        },
+        {
+          "contract_id": "library-browser.selected-name",
+          "type": "selection-label",
+          "label": "Selected block name"
+        },
+        {
+          "contract_id": "library-browser.preview.views",
+          "type": "notebook",
+          "label": "Facade and Schematic tabs"
+        },
+        {
+          "contract_id": "library-browser.preview.facade",
+          "type": "view",
+          "label": "Facade preview"
+        },
+        {
+          "contract_id": "library-browser.preview.schematic",
+          "type": "view",
+          "label": "Schematic preview"
+        },
+        {
+          "contract_id": "library-browser.implementation",
+          "type": "combobox",
+          "label": "Implementation selector"
+        },
+        {
+          "contract_id": "library-browser.sheet",
+          "type": "combobox",
+          "label": "Sheet selector"
+        },
+        {
+          "contract_id": "library-browser.action.place",
+          "type": "button",
+          "label": "Place block"
+        },
+        {
+          "contract_id": "library-browser.action.implementation",
+          "type": "button",
+          "label": "Implementation"
+        },
+        {
+          "contract_id": "library-browser.action.facade",
+          "type": "button",
+          "label": "Edit facade"
+        },
+        {
+          "contract_id": "library-browser.action.variants",
+          "type": "button",
+          "label": "Variants"
+        },
+        {
+          "contract_id": "library-browser.action.open-pcb",
+          "type": "button",
+          "label": "Open PCB"
+        },
+        {
+          "contract_id": "library-browser.action.manage-pcb-layouts",
+          "type": "button",
+          "label": "PCB layouts"
+        },
+        {
+          "contract_id": "library-browser.action.refresh",
+          "type": "button",
+          "label": "Refresh"
+        },
+        {
+          "contract_id": "library-browser.action.libraries",
+          "type": "button",
+          "label": "Libraries"
+        }
       ]
     },
     {
