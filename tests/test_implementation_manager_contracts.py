@@ -90,16 +90,30 @@ def _manager_dialog(root):
 
 
 def _run_manager(root, record, context, action):
+    callback_errors = []
+
     def drive():
         dialog = _manager_dialog(root)
-        assert dialog._kicad_ui_screen_id == "implementations-manager"
-        assert dialog.title() == f"Implementations — {record.name}"
-        context.refresh_widgets()
-        assert_control_coverage(dialog, MANAGER_CONTROLS)
-        action(dialog)
+        try:
+            assert dialog._kicad_ui_screen_id == "implementations-manager"
+            assert dialog.title() == f"Implementations — {record.name}"
+            context.refresh_widgets()
+            assert_control_coverage(dialog, MANAGER_CONTROLS)
+            action(dialog)
+        except BaseException as exc:
+            # Tkinter reports callback exceptions to stderr and keeps a modal
+            # wait_window() alive. Capture the exception in the test thread,
+            # close the modal, and re-raise after wait_window returns so CI
+            # fails with the useful assertion instead of timing out.
+            callback_errors.append(exc)
+            if dialog.winfo_exists():
+                dialog.destroy()
 
     root.after(100, drive)
-    return plugin_actions._show_block_variant_editor(record, root)
+    result = plugin_actions._show_block_variant_editor(record, root)
+    if callback_errors:
+        raise callback_errors[0]
+    return result
 
 
 def _select_variant(context, row_id: str, expected_values: tuple[str, ...]):
