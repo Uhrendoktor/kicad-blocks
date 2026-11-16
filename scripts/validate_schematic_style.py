@@ -1709,7 +1709,9 @@ def required_no_connect_issues(tree: SExprList) -> list[str]:
     return issues
 
 
-def wire_compactness_issues(tree: SExprList, budgets: Mapping[str, float] | None = None) -> list[str]:
+def wire_compactness_issues(
+    tree: SExprList, budgets: Mapping[str, float] | None = None
+) -> list[str]:
     """Score total internal wire length in each group against a configurable budget."""
     _load_stusb4500_profile()
     issues = []
