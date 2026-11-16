@@ -696,7 +696,7 @@ def _note_box(
     y: float,
     lines: tuple[str, ...],
     key: str,
-) -> list[SExprList]
+) -> list[SExprList]:
     """Create one native note text_box sized from the supplied text."""
     if not lines or any(not line.strip() for line in lines):
         raise ValueError(f"Note {key!r} must contain non-empty lines.")
@@ -845,7 +845,7 @@ def _group_evidence_line(group: _SchematicGroup) -> str:
     )
 
 
-def _group_description(group: dict) -> str:
+def _group_description(group: _SchematicGroup) -> str:
     return f"{group['description']}\n{_group_evidence_line(group)}"
 
 
@@ -1951,7 +1951,6 @@ def generate_reference_schematic(destination: Path) -> Path:
     # exits to the right. The local rail ties its output to C4.1 and R1.1.
     d4_filtered = pin_world_points[("D4", "1")]
     c4_filtered = pin_world_points[("C4", "1")]
-    r1_filtered = pin_world_points[("R1", "1")]
     add_route("VBUS_FILTERED", [d4_filtered, c4_filtered], "d4-to-c4-filtered-rail")
     # The C4.1 wire island and R1.1 terminal island retain one matching
     # local label each. They are electrically joined by the label pair.
