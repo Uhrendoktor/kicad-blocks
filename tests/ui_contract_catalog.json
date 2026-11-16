@@ -508,37 +508,44 @@
         {
           "contract_id": "add-pcb-layout.name",
           "type": "entry",
-          "label": "PCB layout name"
+          "label": "PCB layout name",
+          "assertion": "asserted"
         },
         {
           "contract_id": "add-pcb-layout.mode",
           "type": "combobox",
-          "label": "Blank board or existing PCB"
+          "label": "Blank board or existing PCB",
+          "assertion": "asserted"
         },
         {
           "contract_id": "add-pcb-layout.source",
           "type": "entry",
-          "label": "Existing PCB source path"
+          "label": "Existing PCB source path",
+          "assertion": "asserted"
         },
         {
           "contract_id": "add-pcb-layout.browse",
           "type": "button",
-          "label": "Choose file"
+          "label": "Choose file",
+          "assertion": "asserted"
         },
         {
           "contract_id": "add-pcb-layout.implementation",
           "type": "combobox",
-          "label": "Implementation association"
+          "label": "Implementation association",
+          "assertion": "asserted"
         },
         {
           "contract_id": "add-pcb-layout.cancel",
           "type": "button",
-          "label": "Cancel"
+          "label": "Cancel",
+          "assertion": "asserted"
         },
         {
           "contract_id": "add-pcb-layout.add",
           "type": "button",
-          "label": "Add layout"
+          "label": "Add layout",
+          "assertion": "asserted"
         }
       ]
     },
