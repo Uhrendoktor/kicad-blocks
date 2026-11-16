@@ -4735,7 +4735,9 @@ def _show_library_browser(
     header.pack(fill="x", pady=(0, 8))
     ttk.Label(header, text="Functional Block Library").pack(side="left")
     library_path = tk.StringVar()
-    ttk.Label(header, textvariable=library_path).pack(side="right", padx=(12, 0))
+    library_summary = ttk.Label(header, textvariable=library_path)
+    library_summary._kicad_ui_contract_id = "library-browser.summary"
+    library_summary.pack(side="right", padx=(12, 0))
 
     panes = ttk.Panedwindow(outer, orient="horizontal")
     panes.pack(fill="both", expand=True)
@@ -4787,6 +4789,7 @@ def _show_library_browser(
     right.rowconfigure(2, weight=2)
     right.rowconfigure(3, weight=1)
     name_label = ttk.Label(right, text="Select a block")
+    name_label._kicad_ui_contract_id = "library-browser.selected-name"
     name_label.grid(row=0, column=0, sticky="ew")
     description_label = ttk.Label(
         right, text="", wraplength=560, justify="left"
