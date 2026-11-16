@@ -1,6 +1,6 @@
 #![forbid(unsafe_code)]
 
-//! Lossless KiCad schematic parsing over the kiutils S-expression CST.
+//! Lossless `KiCad` schematic parsing over the kiutils S-expression CST.
 
 mod schematic;
 
