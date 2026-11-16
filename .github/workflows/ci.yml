@@ -217,7 +217,14 @@ jobs:
           SCHEMATIC="${RUNNER_TEMP}/kicad-clippy-native-erc.kicad_sch"
           REPORT="${RUNNER_TEMP}/kicad-clippy-native-erc.json"
           python3 examples/stusb4500/generate_reference.py --output "$SCHEMATIC"
+          set +e
           target/debug/kicad-clippy lint "$SCHEMATIC" --kicad-cli "$KICAD_CLI" --format json > "$REPORT"
+          LINTER_STATUS=$?
+          set -e
+          if [[ ! -s "$REPORT" ]]; then
+            echo "::error::kicad-clippy did not produce a normalized JSON report (exit $LINTER_STATUS)."
+            exit 1
+          fi
           python3 - "$REPORT" <<'PY'
           import json
           import sys
@@ -235,6 +242,7 @@ jobs:
               f"{len(report['diagnostics'])} findings, zero errors."
           )
           PY
+          echo "kicad-clippy exit code: $LINTER_STATUS"
 
       - name: Install virtual-display GUI test dependencies
         shell: bash
