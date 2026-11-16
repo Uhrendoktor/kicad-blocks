@@ -9,8 +9,7 @@
       "coverage": "contracted",
       "coverage_note": "All thirteen action-button routes, the Close action, the three notebook views, window creation, and interactive-control inventory are exercised against the real Tk widgets. Downstream KiCad operations have separate integration tests and are not implied by this component-level coverage.",
       "evidence": [
-        "tests/test_ui_contracts.py",
-        "tests/entrypoints/action_hub.py --smoke-test"
+        "tests/test_ui_contracts.py"
       ],
       "views": [
         {
@@ -239,6 +238,38 @@
         "library-folders-light.png",
         "library-folders-dark.png"
       ]
+    },
+    {
+      "id": "open-implementation-chooser",
+      "title": "Open implementation chooser",
+      "purpose": "Select which named circuit implementation to open in the schematic editor.",
+      "coverage": "inventory-only",
+      "coverage_note": "The chooser is implemented as a transient Tk window in the functional block browser. It is not yet in the visual screenshot inventory or a reusable execute-and-assert component contract.",
+      "evidence": [
+        "tests/test_library_browser.py"
+      ],
+      "functionality": [
+        "Show available default and named implementations for the selected block",
+        "Return the selected implementation to the editor-open workflow",
+        "Cancel without opening a document"
+      ],
+      "screenshots": []
+    },
+    {
+      "id": "open-pcb-layout-chooser",
+      "title": "Open PCB layout chooser",
+      "purpose": "Select a stored PCB layout to open in PCB Editor.",
+      "coverage": "inventory-only",
+      "coverage_note": "The chooser is implemented as a transient Tk window in the functional block browser. It is not yet in the visual screenshot inventory or a reusable execute-and-assert component contract.",
+      "evidence": [
+        "tests/test_pcb_layout.py"
+      ],
+      "functionality": [
+        "Show stored PCB layouts for the selected block",
+        "Return the selected layout to the editor-open workflow",
+        "Cancel without opening a board"
+      ],
+      "screenshots": []
     },
     {
       "id": "implementations-manager",
