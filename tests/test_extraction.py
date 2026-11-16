@@ -11,6 +11,7 @@ sys.path.insert(0, str(PLUGIN))
 from kicad_blocks.extraction import selected_sheet_file, selected_sheet_instance_uuid
 from kicad_blocks.repository import create_block, read_manifest, refresh_library_block
 from kicad_blocks.sexpr import (
+    SExprList,
     dump_sexpr,
     parse_sexpr,
     sexpr_all,
@@ -65,6 +66,14 @@ def _source_sheet(path: Path) -> Path:
     """
     path.write_text(source, encoding="utf-8")
     return path
+
+
+def _required_direct(node: SExprList, tag: str) -> SExprList:
+    """Return a required direct child from a parsed schematic test fixture."""
+    child = sexpr_direct(node, tag)
+    if child is None:
+        raise AssertionError(f"Expected a direct {tag!r} node.")
+    return child
 
 
 class HierarchicalSheetExtractionTests(unittest.TestCase):
@@ -122,11 +131,15 @@ class HierarchicalSheetExtractionTests(unittest.TestCase):
             "/",
         )
         resistor = sexpr_all(implementation, "symbol")[0]
-        instances = sexpr_direct(resistor, "instances")
-        project = next(item for item in instances[1:] if sexpr_head(item) == "project")
-        path = next(item for item in project[1:] if sexpr_head(item) == "path")
+        instances = _required_direct(resistor, "instances")
+        projects = sexpr_all(instances, "project")
+        self.assertEqual(len(projects), 1)
+        project = projects[0]
+        paths = sexpr_all(project, "path")
+        self.assertEqual(len(paths), 1)
+        path = paths[0]
         self.assertEqual(str(path[1]), "/")
-        self.assertEqual(str(sexpr_direct(path, "reference")[1]), "R7")
+        self.assertEqual(str(_required_direct(path, "reference")[1]), "R7")
         self.assertEqual(str(project[1]), "TestProject")
 
         # Extracting a block must not modify the original project subsheet.
