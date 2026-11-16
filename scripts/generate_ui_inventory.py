@@ -26,6 +26,11 @@ COVERAGE_LABELS = {
     "partial": "Partial — targeted GUI, integration, or visual checks exist",
     "inventory-only": "Inventory only — systematic UI contracts not implemented yet",
 }
+ASSERTION_LABELS = {
+    "asserted": "behavior asserted",
+    "observed": "result observed",
+    "uncovered": "discovered; interaction not yet asserted",
+}
 
 
 def load_catalog(path: Path = CATALOG_PATH) -> dict[str, Any]:
@@ -44,6 +49,27 @@ def load_catalog(path: Path = CATALOG_PATH) -> dict[str, Any]:
     )
     if unknown_statuses:
         raise ValueError(f"Unknown UI coverage status: {unknown_statuses!r}")
+
+    for screen in screens:
+        control_records = list(screen.get("controls", []))
+        control_records.extend(screen.get("footer_controls", []))
+        for view in screen.get("views", []):
+            control_records.extend(view.get("actions", []))
+        control_ids = [item.get("contract_id") for item in control_records if item.get("contract_id")]
+        if len(control_ids) != len(set(control_ids)):
+            raise ValueError(f"Duplicate semantic control ID in screen {screen['id']!r}.")
+        invalid_assertions = sorted(
+            {
+                item.get("assertion")
+                for item in control_records
+                if item.get("assertion") not in ASSERTION_LABELS
+            }
+        )
+        if invalid_assertions:
+            raise ValueError(
+                f"Screen {screen['id']!r} has missing or invalid per-control assertion labels: "
+                f"{invalid_assertions!r}"
+            )
 
     missing_assets = sorted(referenced_assets(catalog) - ASSET_NAMES)
     if missing_assets:
@@ -116,8 +142,9 @@ def render_inventory(catalog: dict[str, Any]) -> str:
             for view in views:
                 lines.append(f"- **{view['label']}**")
                 for action in view.get("actions", []):
+                    status = ASSERTION_LABELS[action["assertion"]]
                     lines.append(
-                        f"  - {action['label']} ({TICK}{action['action_id']}{TICK})"
+                        f"  - {action['label']} ({TICK}{action['contract_id']}{TICK}; {status})"
                     )
         else:
             lines.append("**Major functionality**")
@@ -131,8 +158,9 @@ def render_inventory(catalog: dict[str, Any]) -> str:
             lines.append("**Registered semantic controls**")
             lines.append("")
             for control in controls:
+                status = ASSERTION_LABELS[control["assertion"]]
                 lines.append(
-                    f"- {control['label']} ({TICK}{control['contract_id']}{TICK}; {control['type']})"
+                    f"- {control['label']} ({TICK}{control['contract_id']}{TICK}; {control['type']}; {status})"
                 )
             lines.append("")
 
@@ -141,7 +169,10 @@ def render_inventory(catalog: dict[str, Any]) -> str:
             lines.append("**Other controls**")
             lines.append("")
             for control in footer:
-                lines.append(f"- {control['label']}")
+                status = ASSERTION_LABELS[control["assertion"]]
+                lines.append(
+                    f"- {control['label']} ({TICK}{control['contract_id']}{TICK}; {status})"
+                )
             lines.append("")
 
         evidence = screen.get("evidence", [])
