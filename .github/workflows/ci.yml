@@ -43,7 +43,16 @@ jobs:
             fi
             "${SUDO[@]}" apt-get update
             "${SUDO[@]}" apt-get install -y --no-install-recommends software-properties-common
-            "${SUDO[@]}" add-apt-repository --yes ppa:kicad/kicad-dev-nightly
+            for attempt in 1 2 3; do
+            if "${SUDO[@]}" add-apt-repository --yes ppa:kicad/kicad-dev-nightly; then
+              break
+            fi
+            if [[ "$attempt" -eq 3 ]]; then
+              echo "::error::Could not reach Launchpad to add the KiCad nightly PPA after 3 attempts."
+              exit 1
+            fi
+            sleep "$((attempt * 5))"
+          done
             "${SUDO[@]}" apt-get update
             "${SUDO[@]}" apt-get install -y --no-install-recommends kicad-nightly
             CLI="$(command -v kicad-cli-nightly || command -v kicad-cli || true)"
