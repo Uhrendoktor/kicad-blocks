@@ -187,10 +187,14 @@ class EntryInputContract(ComponentContract):
         context.root.update()
         results = context.require_widget(self.results_contract_id)
         summary = context.require_widget(self.summary_contract_id)
+        summary_text = str(summary.cget("text"))
+        text_variable = str(summary.cget("textvariable") or "")
+        if text_variable:
+            summary_text = str(summary.getvar(text_variable))
         return {
             "value": entry.get(),
             "result_count": len(results.get_children()),
-            "summary": str(summary.cget("text")),
+            "summary": summary_text,
         }
 
     def assert_result(
