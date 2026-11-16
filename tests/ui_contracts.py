@@ -68,10 +68,12 @@ class WindowContract(ComponentContract):
 
     title: str
     screen_id: str
+    required_widget_ids: tuple[str, ...] = ()
 
     def execute(self, context: UiTestContext) -> dict[str, Any]:
         context.root.update_idletasks()
         context.root.update()
+        widgets = context.refresh_widgets()
         return {
             "title": context.root.title(),
             "screen_id": getattr(context.root, "_kicad_ui_screen_id", None),
@@ -79,6 +81,7 @@ class WindowContract(ComponentContract):
             "visible": bool(context.root.winfo_viewable()),
             "width": context.root.winfo_width(),
             "height": context.root.winfo_height(),
+            "widget_ids": set(widgets),
         }
 
     def assert_result(
@@ -90,6 +93,7 @@ class WindowContract(ComponentContract):
         assert observation["visible"] is True
         assert observation["width"] > 0
         assert observation["height"] > 0
+        assert set(self.required_widget_ids) <= observation["widget_ids"]
 
 
 @dataclass(frozen=True)
@@ -318,10 +322,23 @@ def assert_control_coverage(root: Any, expected_ids: set[str]) -> dict[str, Any]
     """Fail when an interactive widget is untagged or outside the declared map."""
     missing_tags = []
     for widget in _walk_widgets(root):
-        if widget.winfo_class() not in INTERACTIVE_WIDGET_CLASSES:
-            continue
-        if not getattr(widget, "_kicad_ui_contract_id", None):
-            missing_tags.append(widget.winfo_class())
+        widget_class = widget.winfo_class()
+        if widget_class in INTERACTIVE_WIDGET_CLASSES:
+            if not getattr(widget, "_kicad_ui_contract_id", None):
+                missing_tags.append(widget_class)
+        elif widget_class == "Menu":
+            tagged_indexes = {
+                int(index)
+                for index in getattr(widget, "_kicad_ui_menu_item_ids", {}).values()
+            }
+            last_index = widget.index("end")
+            if last_index is None:
+                continue
+            for index in range(int(last_index) + 1):
+                if widget.type(index) in {"separator", "tearoff"}:
+                    continue
+                if index not in tagged_indexes:
+                    missing_tags.append(f"Menu entry {index}")
 
     discovered = discover_interactive_controls(root)
     actual_ids = set(discovered)
