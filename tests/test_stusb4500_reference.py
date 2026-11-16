@@ -78,6 +78,12 @@ def _property(instance: SExprList, name: str) -> SExprList:
     )
 
 
+def _has_uuid(node: SExprList, expected: str) -> bool:
+    """Return whether a node has the requested direct UUID atom."""
+    uuid_node = sexpr_direct(node, "uuid")
+    return uuid_node is not None and len(uuid_node) >= 2 and str(uuid_node[1]) == expected
+
+
 class STUSB4500ReferenceTests(unittest.TestCase):
     def _generate(self, directory: str) -> tuple[str, SExprList, dict[str, SExprList]]:
         path = generate_reference_schematic(Path(directory) / "reference.kicad_sch")
@@ -237,9 +243,7 @@ class STUSB4500ReferenceTests(unittest.TestCase):
             node = next(
                 node
                 for node in sexpr_all(tree, "rectangle")
-                if sexpr_direct(node, "uuid")
-                and str(sexpr_direct(node, "uuid")[1])
-                == reference_uid(f"graphic:rectangle:zone:{name}")
+                if _has_uuid(node, reference_uid(f"graphic:rectangle:zone:{name}"))
             )
             start, end = _required_direct(node, "start"), _required_direct(node, "end")
             return (
@@ -257,9 +261,9 @@ class STUSB4500ReferenceTests(unittest.TestCase):
             content, tree, _ = self._generate(temporary)
 
         text_by_uuid = {
-            str(sexpr_direct(node, "uuid")[1]): str(node[1])
+            str(uuid_node[1]): str(node[1])
             for node in sexpr_all(tree, "text_box")
-            if sexpr_direct(node, "uuid") is not None
+            if (uuid_node := sexpr_direct(node, "uuid")) is not None
         }
         group = next(item for item in SCHEMATIC_GROUPS if item["id"] == "vbus-monitor")
         description_uuid = reference_uid("graphic:text:group-description:vbus-monitor")
@@ -382,7 +386,7 @@ class STUSB4500ReferenceTests(unittest.TestCase):
         zone = next(
             node
             for node in sexpr_all(tree, "rectangle")
-            if sexpr_direct(node, "uuid") and str(sexpr_direct(node, "uuid")[1]) == zone_uuid
+            if _has_uuid(node, zone_uuid)
         )
         start, end = _required_direct(zone, "start"), _required_direct(zone, "end")
         for reference in ("C50", "D50"):
@@ -441,13 +445,13 @@ class STUSB4500ReferenceTests(unittest.TestCase):
             _content, tree, instances = self._generate(temporary)
         u1_x = _number(_required_direct(instances["U1"], "at"), 1)
         self.assertAlmostEqual(
-            _scalar_number(sexpr_direct(instances["C1"], "at")[1]), u1_x + 5.08, places=3
+            _scalar_number(_required_direct(instances["C1"], "at")[1]), u1_x + 5.08, places=3
         )
         self.assertAlmostEqual(
-            _scalar_number(sexpr_direct(instances["C2"], "at")[1]), u1_x + 15.24, places=3
+            _scalar_number(_required_direct(instances["C2"], "at")[1]), u1_x + 15.24, places=3
         )
         self.assertAlmostEqual(
-            _scalar_number(sexpr_direct(instances["C3"], "at")[1]), u1_x + 20.32, places=3
+            _scalar_number(_required_direct(instances["C3"], "at")[1]), u1_x + 20.32, places=3
         )
         dsu, pins = wire_networks(tree)
         c1 = pins[("C1", "1")]["point"]
@@ -647,7 +651,7 @@ class STUSB4500ReferenceTests(unittest.TestCase):
             frame = next(
                 node
                 for node in sexpr_all(tree, "rectangle")
-                if sexpr_direct(node, "uuid") and str(sexpr_direct(node, "uuid")[1]) == frame_uuid
+                if _has_uuid(node, frame_uuid)
             )
             start, end = _required_direct(frame, "start"), _required_direct(frame, "end")
             frames[group["id"]] = (
@@ -696,7 +700,10 @@ class STUSB4500ReferenceTests(unittest.TestCase):
             _content, tree, _instances = self._generate(temporary)
 
         label = next(node for node in sexpr_all(tree, "label") if str(node[1]) == "CC1")
-        x, y, width, height = text_visual_bounds(str(label[1]), label)
+        bounds = text_visual_bounds(str(label[1]), label)
+        if bounds is None:
+            self.fail("Expected visible label bounds for CC1.")
+        x, y, width, height = bounds
         wire_y = y + height / 2
         tree.append(
             [

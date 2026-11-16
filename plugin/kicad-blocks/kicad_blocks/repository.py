@@ -187,8 +187,8 @@ def ensure_library_gitignore(library_root: Path) -> Path:
 
 def _merge_symbol_node(
     catalog_path: Path,
-    source_tree: list,
-    symbol: list,
+    source_tree: SExprList,
+    symbol: SExprList,
 ) -> Path:
     """Replace one named symbol while retaining the catalog's other entries."""
     catalog_path = Path(catalog_path).expanduser().resolve()
