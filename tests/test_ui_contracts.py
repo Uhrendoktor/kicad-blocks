@@ -28,34 +28,33 @@ from ui_contracts import (
 )
 
 CATALOG_PATH = ROOT / "tests" / "ui_contract_catalog.json"
-TASK_HUB_ACTIONS = (
-    ("manage-library", "Browse and place blocks", "Use & build"),
-    ("create-block", "Create block from sheet", "Use & build"),
-    ("open-implementation", "Open block implementation", "Use & build"),
-    ("configure-instance", "Configure selected instance", "Edit & maintain"),
-    ("edit-facade", "Edit facade symbol", "Edit & maintain"),
-    ("publish-block", "Publish implementation", "Edit & maintain"),
-    ("make-local-copy", "Make selected instance local", "Edit & maintain"),
-    ("synchronize-local-copy", "Synchronize local copy", "Edit & maintain"),
-    ("validate-libraries", "Validate registered libraries", "Checks & PCB"),
-    ("recursive-bom", "Export recursive BOM", "Checks & PCB"),
-    ("recursive-erc", "Run recursive ERC", "Checks & PCB"),
-    ("apply-pcb-layout", "Apply selected PCB layout", "Checks & PCB"),
-    ("apply-multiple-pcb-layouts", "Apply multiple PCB layouts", "Checks & PCB"),
+TASK_HUB_SCREEN = next(
+    screen
+    for screen in json.loads(CATALOG_PATH.read_text(encoding="utf-8"))["screens"]
+    if screen["id"] == "task-hub"
 )
-TASK_HUB_VIEWS = (
+TASK_HUB_ACTIONS = tuple(
+    (action["action_id"], action["label"], view["label"])
+    for view in TASK_HUB_SCREEN["views"]
+    for action in view["actions"]
+)
+TASK_HUB_VIEWS = tuple(
     (
-        "Use & build",
-        tuple(f"task-hub.action.{action}" for action, _, view in TASK_HUB_ACTIONS if view == "Use & build"),
-    ),
-    (
-        "Edit & maintain",
-        tuple(f"task-hub.action.{action}" for action, _, view in TASK_HUB_ACTIONS if view == "Edit & maintain"),
-    ),
-    (
-        "Checks & PCB",
-        tuple(f"task-hub.action.{action}" for action, _, view in TASK_HUB_ACTIONS if view == "Checks & PCB"),
-    ),
+        view["label"],
+        tuple(action["contract_id"] for action in view["actions"]),
+    )
+    for view in TASK_HUB_SCREEN["views"]
+)
+TASK_HUB_CONTROL_IDS = {
+    control["contract_id"] for control in TASK_HUB_SCREEN["controls"]
+}
+TASK_HUB_CONTROL_IDS.update(
+    action["contract_id"]
+    for view in TASK_HUB_SCREEN["views"]
+    for action in view["actions"]
+)
+TASK_HUB_CONTROL_IDS.update(
+    control["contract_id"] for control in TASK_HUB_SCREEN.get("footer_controls", [])
 )
 
 
@@ -85,14 +84,7 @@ def test_task_hub_window_is_registered_and_visible(monkeypatch):
         WindowContract(
             title="KiCad Blocks — Tasks",
             screen_id="task-hub",
-            required_widget_ids=(
-                "task-hub.views",
-                "task-hub.close",
-                *(
-                    _button_contract_id(action_id)
-                    for action_id, _, _ in TASK_HUB_ACTIONS
-                ),
-            ),
+            required_widget_ids=tuple(sorted(TASK_HUB_CONTROL_IDS)),
         ).run(UiTestContext(root))
     finally:
         root.destroy()
@@ -107,22 +99,25 @@ def test_task_hub_declares_every_action_and_view_from_the_catalog():
         for view in screen["views"]
         for action in view["actions"]
     ]
+    assert len(TASK_HUB_ACTIONS) == 13
+    assert len({action[0] for action in TASK_HUB_ACTIONS}) == 13
     assert catalog_actions == list(TASK_HUB_ACTIONS)
     assert [view["label"] for view in screen["views"]] == [
         view[0] for view in TASK_HUB_VIEWS
     ]
+    assert all(
+        action["assertion"] == "asserted"
+        and action["contract_id"] == _button_contract_id(action["action_id"])
+        for view in screen["views"]
+        for action in view["actions"]
+    )
 
 
 def test_task_hub_widget_inventory_has_no_untagged_interactive_controls(monkeypatch):
     root, _notebook = _new_hub(monkeypatch)
     try:
-        expected = {
-            _button_contract_id(action_id)
-            for action_id, _, _ in TASK_HUB_ACTIONS
-        }
-        expected.update({"task-hub.close", "task-hub.views"})
-        discovered = assert_control_coverage(root, expected)
-        assert set(discovered) == expected
+        discovered = assert_control_coverage(root, TASK_HUB_CONTROL_IDS)
+        assert set(discovered) == TASK_HUB_CONTROL_IDS
     finally:
         root.destroy()
 
@@ -145,12 +140,12 @@ def test_task_hub_exposes_all_three_functional_notebook_views(monkeypatch):
 
 
 @pytest.mark.parametrize(
-    "action_id",
-    [action_id for action_id, _, _ in TASK_HUB_ACTIONS],
+    "action_id,expected_label,_view",
+    TASK_HUB_ACTIONS,
     ids=[action_id for action_id, _, _ in TASK_HUB_ACTIONS],
 )
 def test_each_task_hub_button_dispatches_exactly_its_action_id(
-    monkeypatch, action_id
+    monkeypatch, action_id, expected_label, _view
 ):
     root, _notebook = _new_hub(monkeypatch)
     context = UiTestContext(root)
@@ -164,6 +159,7 @@ def test_each_task_hub_button_dispatches_exactly_its_action_id(
             contract_id=_button_contract_id(action_id),
             expected_action=action_id,
             destroys_window=True,
+            expected_label=expected_label,
         ).run(context)
     finally:
         try:
