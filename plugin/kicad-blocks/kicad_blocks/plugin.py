@@ -36,7 +36,9 @@ else:
     filedialog = None
     messagebox = None
     simpledialog = None
-    TkOption = object
+    # The imported stub alias remains authoritative for static typing.
+    # This concrete runtime union is only a valid target for typing.cast().
+    TkOption = str | int | float | bool | bytes | type(None) | tuple | list | dict | Sequence | Callable
 
 from .auto_dependencies import synchronize_block_dependencies
 from .extraction import selected_sheet_file, selected_sheet_instance_uuid
