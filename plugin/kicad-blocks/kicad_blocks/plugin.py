@@ -4107,9 +4107,10 @@ def _show_block_layout_editor(
         layout_implementations[item["id"]] = list(dict.fromkeys(links))
 
     changed = [False]
-    added_ids = []
+    added_ids: list[str] = []
+    created_layout_to_open: list[Path | None] = [None]
     status_value = tk.StringVar(
-        value="Each saved PCB layout is associated with at least one implementation."
+        value="Each layout remains assigned to one or more implementations."
     )
 
     def assigned_to(layout_id: str) -> str:
@@ -4171,8 +4172,9 @@ def _show_block_layout_editor(
         else:
             variant_layouts[linked_implementation] = layout_id
         changed[0] = True
-        status_value.set(f"Added {name}.")
+        status_value.set(f"Added {name}; saving to the library.")
         render(layout_id)
+        persist_layout_changes()
 
     def remove_layout():
         item = selected_layout()
@@ -4213,8 +4215,9 @@ def _show_block_layout_editor(
                 else:
                     variant_layouts.pop(value)
         changed[0] = True
-        status_value.set(f"Removed {item['name']}.")
+        status_value.set(f"Removed {item['name']}; saving to the library.")
         render(replacement_id)
+        persist_layout_changes()
 
     def make_default():
         item = selected_layout()
@@ -4225,8 +4228,9 @@ def _show_block_layout_editor(
         if "Default" not in links:
             links.append("Default")
         changed[0] = True
-        status_value.set(f"Default: {item['name']}.")
+        status_value.set(f"Default: {item['name']}; saving to the library.")
         render(item["id"])
+        persist_layout_changes()
 
     implementation_values = ["Default"] + [
         str(item["value"]) for item in record.manifest.get("variants", [])
@@ -4246,15 +4250,18 @@ def _show_block_layout_editor(
         else:
             variant_layouts[selected] = item["id"]
         changed[0] = True
-        status_value.set(f"Assigned {item['name']} to {selected}.")
+        status_value.set(f"Assigned {item['name']} to {selected}; saving to the library.")
         render(item["id"])
+        persist_layout_changes()
 
-    def update_actions(_event: tkinter_types.Event[tkinter_types.Misc] | None = None):
+    def update_actions(
+        _event: tkinter_types.Event[tkinter_types.Misc] | None = None,
+    ) -> None:
         has_selection = selected_layout() is not None
         remove_button.configure(state="normal" if has_selection else "disabled")
         default_button.configure(state="normal" if has_selection else "disabled")
         link_button.configure(state="normal" if has_selection else "disabled")
-        save_button.configure(state="normal" if changed[0] else "disabled")
+        save_button.configure(state="normal")
 
     palette = getattr(parent, "_kicad_blocks_palette", {})
     ttk.Label(
@@ -4321,21 +4328,23 @@ def _show_block_layout_editor(
     footer.grid(row=5, column=0, sticky="ew", pady=(12, 0))
     _action_button(
         footer,
-        "Cancel",
+        "Close",
         cancel_layout_edits,
         "cancel",
-        "Close without saving layout changes",
+        "Close the PCB layout manager",
     ).pack(side="right")
     save_button = _action_button(
-        footer, "Save layouts", lambda: None, "save", "Save PCB layout changes", state="disabled"
+        footer,
+        "Save & close",
+        lambda: None,
+        "save",
+        "Save any pending changes and close the PCB layout manager",
     )
     save_button.pack(side="right", padx=(0, 8))
-    created_layout_to_open: list[Path | None] = [None]
 
-    def save_and_close():
+    def persist_layout_changes() -> bool:
         if not changed[0]:
-            dialog.destroy()
-            return
+            return True
         try:
             _save_block_layouts(
                 record,
@@ -4350,8 +4359,20 @@ def _show_block_layout_editor(
                     item for item in updated.get("layouts", []) if item["id"] == added_ids[-1]
                 )
                 created_layout_to_open[0] = Path(record.path) / new_item["file"]
+            else:
+                created_layout_to_open[0] = None
         except (OSError, RuntimeError, TypeError, ValueError, KeyError, StopIteration) as exc:
+            status_value.set("Save failed; use Save & close to retry.")
             messagebox.showerror("Save PCB layouts", str(exc), parent=dialog)
+            update_actions()
+            return False
+        changed[0] = False
+        status_value.set("Saved.")
+        update_actions()
+        return True
+
+    def save_and_close() -> None:
+        if not persist_layout_changes():
             return
         dialog.destroy()
 
