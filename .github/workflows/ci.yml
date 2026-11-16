@@ -442,6 +442,44 @@ jobs:
           git push origin refs/tags/v1
 
 
+  rust-quality:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install stable Rust toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustup toolchain install stable --profile minimal --component rustfmt --component clippy
+          rustup default stable
+          rustc --version
+          cargo --version
+
+      - name: Generate workspace lockfile
+        run: cargo generate-lockfile
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Run strict Clippy
+        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+
+      - name: Run unit and integration tests
+        run: cargo test --workspace --all-features
+
+      - name: Run documentation tests
+        run: cargo test --workspace --doc
+
+      - name: Upload generated lockfile for pinning
+        if: always() && hashFiles('Cargo.lock') != ''
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: kicad-clippy-cargo-lock
+          path: Cargo.lock
+          if-no-files-found: error
+
   visual-ui-audit:
     # Keep a separate hosted visual audit so screenshot evidence remains available
     # independently of the full live IPC integration job.

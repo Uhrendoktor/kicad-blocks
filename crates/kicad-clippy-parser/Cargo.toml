@@ -1,0 +1,17 @@
+
+[package]
+name = "kicad-clippy-parser"
+description = "Lossless KiCad schematic parsing and source-span access for kicad-clippy."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+kicad-clippy-core = { path = "../kicad-clippy-core" }
+kiutils_sexpr = { workspace = true }
+thiserror = { workspace = true }
+
+[lints]
+workspace = true

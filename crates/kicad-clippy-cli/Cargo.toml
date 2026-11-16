@@ -1,0 +1,25 @@
+
+[package]
+name = "kicad-clippy"
+description = "Clippy-inspired linting front end for KiCad schematics."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "kicad-clippy"
+path = "src/main.rs"
+
+[dependencies]
+clap = { workspace = true }
+kicad-clippy-core = { path = "../kicad-clippy-core" }
+kicad-clippy-erc = { path = "../kicad-clippy-erc" }
+kicad-clippy-parser = { path = "../kicad-clippy-parser" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[lints]
+workspace = true

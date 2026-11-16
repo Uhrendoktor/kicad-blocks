@@ -25,6 +25,7 @@ Read these pages to understand why KiCad Blocks behaves as it does.
 
 - [Architecture and design model](explanation/architecture.md) — facade symbols, stored implementations, variants, parameters, local copies, automatic child-block dependencies and the native KiCad boundary.
 - [Compatibility and test coverage](explanation/compatibility.md) — tested environment, interpreter coverage, unvalidated targets, and known gaps.
+- [Rust schematic linting](explanation/kicad-clippy.md) — build and run the initial kicad-clippy parser and native ERC adapter.
 
 ## Reference
 
