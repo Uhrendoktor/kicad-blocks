@@ -116,6 +116,7 @@ class ButtonContract(ComponentContract):
 
     def execute(self, context: UiTestContext) -> dict[str, Any]:
         button = context.require_widget(self.contract_id)
+        label = str(button.cget("text"))
         existing_toplevels = {
             child.winfo_id()
             for child in context.root.winfo_children()
@@ -137,7 +138,7 @@ class ButtonContract(ComponentContract):
             ]
         return {
             "invoke_result": result,
-            "label": str(button.cget("text")),
+            "label": label,
             "action_calls": list(context.action_calls),
             "root_exists": root_exists,
             "new_windows": new_windows,
