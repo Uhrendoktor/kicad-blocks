@@ -29,6 +29,14 @@ class UiTestContext:
     action_calls: list[str] = field(default_factory=list)
     events: list[str] = field(default_factory=list)
     widgets: dict[str, Any] = field(default_factory=dict)
+    window_destroyed: bool = False
+
+    def __post_init__(self) -> None:
+        self.root.bind("<Destroy>", self._observe_root_destroy, add="+")
+
+    def _observe_root_destroy(self, event: Any) -> None:
+        if event.widget is self.root:
+            self.window_destroyed = True
 
     def refresh_widgets(self) -> dict[str, Any]:
         self.widgets = discover_interactive_controls(self.root)
@@ -113,17 +121,19 @@ class ButtonContract(ComponentContract):
             if child.winfo_class() == "Toplevel"
         }
         result = button.invoke()
-        root_exists = bool(context.root.winfo_exists())
+        root_exists = not context.window_destroyed
         if root_exists:
             context.root.update_idletasks()
             context.root.update()
-            root_exists = bool(context.root.winfo_exists())
-        new_windows = [
-            child.title()
-            for child in context.root.winfo_children()
-            if child.winfo_class() == "Toplevel"
-            and child.winfo_id() not in existing_toplevels
-        ]
+            root_exists = not context.window_destroyed
+        new_windows = []
+        if root_exists:
+            new_windows = [
+                child.title()
+                for child in context.root.winfo_children()
+                if child.winfo_class() == "Toplevel"
+                and child.winfo_id() not in existing_toplevels
+            ]
         return {
             "invoke_result": result,
             "action_calls": list(context.action_calls),
