@@ -394,33 +394,93 @@
       "id": "open-implementation-chooser",
       "title": "Open implementation chooser",
       "purpose": "Select which named circuit implementation to open in the schematic editor.",
-      "coverage": "inventory-only",
-      "coverage_note": "The chooser is implemented as a transient Tk window in the functional block browser. It is not yet in the visual screenshot inventory or a reusable execute-and-assert component contract.",
+      "coverage": "contracted",
+      "coverage_note": "Real Tk contracts assert the transient window identity, available Default/named choices, opening the selected named implementation, and cancelling without launching a document.",
       "evidence": [
-        "tests/test_library_browser.py"
+        "tests/test_library_browser_contracts.py"
       ],
       "functionality": [
-        "Show available default and named implementations for the selected block",
-        "Return the selected implementation to the editor-open workflow",
+        "Show the default and all named implementations for the selected block",
+        "Open the selected implementation file in the schematic editor",
         "Cancel without opening a document"
       ],
-      "screenshots": []
+      "screenshots": [],
+      "controls": [
+        {
+          "contract_id": "open-implementation-chooser.window",
+          "type": "window",
+          "label": "Open implementation chooser",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "open-implementation-chooser.choice",
+          "type": "combobox",
+          "label": "Implementation selection",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "open-implementation-chooser.action.open",
+          "type": "button",
+          "label": "Open selected implementation",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "open-implementation-chooser.action.cancel",
+          "type": "button",
+          "label": "Cancel",
+          "assertion": "asserted"
+        }
+      ]
     },
     {
       "id": "open-pcb-layout-chooser",
       "title": "Open PCB layout chooser",
       "purpose": "Select a stored PCB layout to open in PCB Editor.",
-      "coverage": "inventory-only",
-      "coverage_note": "The chooser is implemented as a transient Tk window in the functional block browser. It is not yet in the visual screenshot inventory or a reusable execute-and-assert component contract.",
+      "coverage": "contracted",
+      "coverage_note": "Real Tk contracts assert the transient window identity, available layouts, opening the selected board file, cancelling without a launch, and entering the PCB layouts manager.",
       "evidence": [
+        "tests/test_library_browser_contracts.py",
         "tests/test_pcb_layout.py"
       ],
       "functionality": [
-        "Show stored PCB layouts for the selected block",
-        "Return the selected layout to the editor-open workflow",
+        "Show available stored PCB layouts for the selected block",
+        "Open the selected board in PCB Editor",
+        "Open the PCB layouts manager",
         "Cancel without opening a board"
       ],
-      "screenshots": []
+      "screenshots": [],
+      "controls": [
+        {
+          "contract_id": "open-pcb-layout-chooser.window",
+          "type": "window",
+          "label": "Open PCB layout chooser",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "open-pcb-layout-chooser.choice",
+          "type": "combobox",
+          "label": "PCB layout selection",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "open-pcb-layout-chooser.action.open",
+          "type": "button",
+          "label": "Open selected PCB layout",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "open-pcb-layout-chooser.action.cancel",
+          "type": "button",
+          "label": "Cancel",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "open-pcb-layout-chooser.action.manage",
+          "type": "button",
+          "label": "Manage layouts",
+          "assertion": "asserted"
+        }
+      ]
     },
     {
       "id": "implementations-manager",
