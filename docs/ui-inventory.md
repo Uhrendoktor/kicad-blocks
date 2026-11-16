@@ -80,7 +80,7 @@ Search registered block libraries, inspect facade and schematic previews, choose
 
 **Coverage:** Partial — targeted GUI, integration, or visual checks exist.
 
-The production browser is captured in both themes and has targeted unit/integration coverage for filtering, result selection, and placement. Real-widget interaction contracts now assert search filtering, selected-record details, Facade/Schematic preview switching, both split panes, Refresh, Place, default implementation open, Edit Facade routing, and creation of the PCB-layout chooser. The Variants, Open PCB confirm/cancel, PCB layouts manager, and Libraries actions, as well as full failure-state coverage, remain to be contracted.
+The production browser is captured in both themes. Real-widget contracts assert the results/pane inventory, search filtering and count, selection and selected details, Facade/Schematic navigation, implementation and sheet selector callbacks, split-pane geometry, and Refresh, Place, Implementation, Edit Facade, Variants, PCB layouts and Libraries toolbar callback routes. The Open PCB chooser is created with its default choice asserted. Confirm/cancel behavior in both transient choosers and end-to-end KiCad editor hand-off remain to be contracted.
 
 **Major functionality**
 
@@ -102,16 +102,16 @@ The production browser is captured in both themes and has targeted unit/integrat
 - Facade and Schematic tabs (`library-browser.preview.views`; notebook; behavior asserted)
 - Facade preview (`library-browser.preview.facade`; view; result observed)
 - Schematic preview (`library-browser.preview.schematic`; view; result observed)
-- Implementation selector (`library-browser.implementation`; combobox; discovered; interaction not yet asserted)
-- Sheet selector (`library-browser.sheet`; combobox; discovered; interaction not yet asserted)
+- Implementation selector (`library-browser.implementation`; combobox; behavior asserted)
+- Sheet selector (`library-browser.sheet`; combobox; behavior asserted)
 - Place block (`library-browser.action.place`; button; behavior asserted)
 - Implementation (`library-browser.action.implementation`; button; behavior asserted)
 - Edit facade (`library-browser.action.facade`; button; behavior asserted)
-- Variants (`library-browser.action.variants`; button; discovered; interaction not yet asserted)
+- Variants (`library-browser.action.variants`; button; behavior asserted)
 - Open PCB (`library-browser.action.open-pcb`; button; behavior asserted)
-- PCB layouts (`library-browser.action.manage-pcb-layouts`; button; discovered; interaction not yet asserted)
+- PCB layouts (`library-browser.action.manage-pcb-layouts`; button; behavior asserted)
 - Refresh (`library-browser.action.refresh`; button; behavior asserted)
-- Libraries (`library-browser.action.libraries`; button; discovered; interaction not yet asserted)
+- Libraries (`library-browser.action.libraries`; button; behavior asserted)
 
 **Current automated evidence**
 
