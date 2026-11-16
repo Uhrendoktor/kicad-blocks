@@ -13,8 +13,8 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "plugin" / "kicad-blocks"))
 sys.path.insert(0, str(ROOT / "tests"))
 
-from kicad_blocks import plugin as plugin_actions  # noqa: E402
-from ui_contracts import (  # noqa: E402
+from kicad_blocks import plugin as plugin_actions
+from ui_contracts import (
     ButtonContract,
     EntryInputContract,
     NotebookViewContract,
@@ -226,7 +226,7 @@ def test_refresh_button_reloads_records_through_real_ui_callback(monkeypatch, tm
 
 
 def test_place_button_registers_selected_block_and_starts_native_placement(monkeypatch, tmp_path):
-    root, context, _records, library_root, _project = _new_browser(monkeypatch, tmp_path)
+    root, context, _records, _library, _project = _new_browser(monkeypatch, tmp_path)
     context.action_calls.clear()
     monkeypatch.setattr(
         plugin_actions, "_register_block",
