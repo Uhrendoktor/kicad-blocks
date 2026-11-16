@@ -16,7 +16,7 @@ pub enum RuleLevel {
 }
 
 /// Stable metadata used to document and configure a rule.
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct RuleDescriptor {
     /// Stable identifier, for example SCH001.
     pub id: String,
@@ -79,6 +79,10 @@ impl RuleRegistry {
     }
 
     /// Registers a unique rule descriptor.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`RuleRegistryError`] when another rule already uses the identifier.
     pub fn register(&mut self, descriptor: RuleDescriptor) -> Result<(), RuleRegistryError> {
         match self.rules.entry(descriptor.id.clone()) {
             Entry::Vacant(entry) => {
