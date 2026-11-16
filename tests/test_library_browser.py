@@ -11,7 +11,7 @@ from collections.abc import Callable, Sequence
 from importlib import import_module
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
-from typing import Protocol, TypedDict, TypeVar, cast
+from typing import Protocol, TypedDict, cast
 from unittest.mock import Mock, patch
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -19,13 +19,12 @@ PLUGIN = ROOT / "plugin" / "kicad-blocks"
 sys.path.insert(0, str(PLUGIN))
 
 
-from kicad_blocks.pcb_layout import parse_sexpr
-
 from kicad_blocks.model import (
     parse_parameters,
     parse_pins,
     resolve_variant_implementation,
 )
+from kicad_blocks.pcb_layout import parse_sexpr
 from kicad_blocks.repository import (
     BlockRecord,
     named_symbol_node,
@@ -37,6 +36,8 @@ from kicad_blocks.repository import (
 )
 
 plugin_actions = import_module("kicad_blocks.plugin")
+
+
 def _private_hook(name: str) -> Callable[..., object]:
     """Resolve a private UI test hook without importing its private symbol."""
     return cast(Callable[..., object], getattr(plugin_actions, name))
@@ -48,6 +49,12 @@ _native_schematic_preview_pages = cast(
 _normalize_schematic_preview_svg = cast(
     Callable[..., Path], _private_hook("_normalize_schematic_preview_svg")
 )
+
+
+
+def _return_preview_svg(svg_file: Path, _record: BlockRecord, _output: Path) -> Path:
+    """Keep the fixture SVG unchanged while preserving the cleaner's contract."""
+    return svg_file
 
 
 class _MinimizableWindow(Protocol):
@@ -169,9 +176,9 @@ class LibraryBrowserTests(unittest.TestCase):
             self.block.symbol_library.read_text(encoding="utf-8"),
             encoding="utf-8",
         )
-        calls = []
+        calls: list[Sequence[str]] = []
 
-        def export(arguments, **kwargs):
+        def export(arguments: Sequence[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
             calls.append(arguments)
             output_dir = Path(arguments[arguments.index("--output") + 1])
             output_dir.mkdir(parents=True, exist_ok=True)
@@ -179,14 +186,14 @@ class LibraryBrowserTests(unittest.TestCase):
                 '<svg xmlns="http://www.w3.org/2000/svg"><g><text>VIN</text></g></svg>',
                 encoding="utf-8",
             )
-            return SimpleNamespace(returncode=0, stdout="", stderr="")
+            return subprocess.CompletedProcess(arguments, 0, "", "")
 
         with (
             patch("kicad_blocks.plugin.find_kicad_cli", return_value="/usr/bin/kicad-cli"),
             patch("kicad_blocks.plugin.subprocess.run", side_effect=export),
             patch(
                 "kicad_blocks.plugin._clean_facade_preview_svg",
-                side_effect=lambda svg_file, _record, _output: svg_file,
+                side_effect=_return_preview_svg,
             ),
             patch("resvg_py.svg_to_bytes", return_value=b"not-a-png"),
             patch(

@@ -308,7 +308,7 @@ def resolve_profile_configuration(
     }
 
 
-def parse_parameters(spec: str) -> list[dict[str, str]]:
+def parse_parameters(spec: str) -> list[BlockParameter]:
     """Parse NAME[:type]=DEFAULT declarations separated by commas."""
     parameters = []
     for token in str(spec).split(","):

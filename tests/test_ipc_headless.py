@@ -10,6 +10,7 @@ import sys
 import tempfile
 from pathlib import Path
 from types import SimpleNamespace
+from typing import cast
 
 ROOT = Path(__file__).resolve().parents[1]
 PLUGIN = ROOT / "plugin" / "kicad-blocks"
@@ -106,8 +107,8 @@ def main() -> None:
 
             # In headless mode libraries load asynchronously. Initialize the
             # symbol libraries, then register and reload the test library.
-            kicad.load_all_libraries(types=[1])
-            kicad.wait_for_libraries(types=[1], timeout_s=120.0)
+            kicad.load_all_libraries()
+            kicad.wait_for_libraries(timeout_s=120.0)
 
             instance = schematic.place_symbol_from_library(
                 f"{nickname}:{symbol_name}",
@@ -171,8 +172,8 @@ def main() -> None:
             # library identity must remain stable.
             original_configured_id = str(instance.id)
             write_instance_configuration(
-                schematic,
-                instance,
+                cast(Schematic, schematic),
+                cast(SchematicSymbol, instance),
                 {
                     "KB_PARAM_OUTPUT_VOLTAGE": "1.8",
                     "KB_PARAM_ENABLE": "false",
@@ -220,7 +221,9 @@ def main() -> None:
 
             original_instance_id = str(instance.id)
             selection = SimpleNamespace(get_selection=lambda: [instance])
-            local_path = make_selected_local(selection, kicad, project_dir, library_root)
+            local_path = make_selected_local(
+                cast(Schematic, selection), cast(KiCadApp, kicad), project_dir, library_root
+            )
             linked_local = local_copy_for_instance(project_dir, original_instance_id)
             link_file = project_dir / ".kicad_blocks" / "instances.json"
             link_data = json.loads(link_file.read_text(encoding="utf-8"))
@@ -259,7 +262,7 @@ def main() -> None:
                 local_text + "\n; local IPC publish test\n",
                 encoding="utf-8",
             )
-            published = sync_selected_local(selection, kicad, project_dir)
+            published = sync_selected_local(cast(Schematic, selection), cast(KiCadApp, kicad), project_dir)
             if "implementation.kicad_sch" not in published["published"]:
                 raise AssertionError(f"Local implementation edit was not published: {published!r}")
             if "; local IPC publish test" not in block.implementation.read_text(encoding="utf-8"):
@@ -272,7 +275,7 @@ def main() -> None:
                 source_text + "\n; upstream IPC pull test\n",
                 encoding="utf-8",
             )
-            pulled = sync_selected_local(selection, kicad, project_dir)
+            pulled = sync_selected_local(cast(Schematic, selection), cast(KiCadApp, kicad), project_dir)
             if "implementation.kicad_sch" not in pulled["pulled"]:
                 raise AssertionError(f"Upstream implementation edit was not pulled: {pulled!r}")
             if "; upstream IPC pull test" not in local.implementation.read_text(encoding="utf-8"):
@@ -289,7 +292,7 @@ def main() -> None:
                 encoding="utf-8",
             )
             try:
-                sync_selected_local(selection, kicad, project_dir)
+                sync_selected_local(cast(Schematic, selection), cast(KiCadApp, kicad), project_dir)
             except RuntimeError as conflict_error:
                 if "Synchronization conflict" not in str(conflict_error):
                     raise
@@ -315,7 +318,7 @@ def main() -> None:
                 "Runtime-Registered Block",
                 parse_pins("A:input, B:output"),
             )
-            late_block = register_block(project_dir, late_block, kicad)
+            late_block = register_block(project_dir, late_block, cast(KiCadApp, kicad))
             late_instance = schematic.place_symbol_from_library(
                 f"{late_block.manifest['library_nickname']}:{late_block.manifest['symbol_name']}",
                 Vector2.from_xy_mm(140.0, 100.0),
@@ -413,8 +416,8 @@ def main() -> None:
             parent_schematic = parent_kicad.get_schematic()
             if parent_schematic is None:
                 raise RuntimeError("Could not reopen the composed parent implementation.")
-            parent_kicad.load_all_libraries(types=[1])
-            parent_kicad.wait_for_libraries(types=[1], timeout_s=120.0)
+            parent_kicad.load_all_libraries()
+            parent_kicad.wait_for_libraries(timeout_s=120.0)
             nested_symbols = list(parent_schematic.get_symbols())
             nested_sheets = list(parent_schematic.get_sheet_symbols())
             symbols_by_reference = {symbol.reference: symbol for symbol in nested_symbols}
@@ -585,8 +588,8 @@ def main() -> None:
                 raise RuntimeError(
                     "Could not reopen the recursively composed child implementation."
                 )
-            child_kicad.load_all_libraries(types=[1])
-            child_kicad.wait_for_libraries(types=[1], timeout_s=120.0)
+            child_kicad.load_all_libraries()
+            child_kicad.wait_for_libraries(timeout_s=120.0)
             leaf_symbols = list(child_schematic.get_symbols())
             if len(leaf_symbols) != 1:
                 raise AssertionError(

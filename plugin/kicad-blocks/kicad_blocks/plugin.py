@@ -7213,3 +7213,8 @@ def symbol_identifier(instance: object) -> tuple[str, str]:
 register_block = _register_block
 write_instance_configuration = _write_instance_configuration
 new_blank_pcb_source = _new_blank_pcb_source
+
+# Public protocol names for typed adapters around KiCad's generated IPC objects.
+KiCadApp = _KiCadApp
+Schematic = _Schematic
+SchematicSymbol = _SchematicSymbol

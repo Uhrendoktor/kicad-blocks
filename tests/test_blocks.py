@@ -147,7 +147,11 @@ class BlockModelTests(unittest.TestCase):
         second = SimpleNamespace(
             definition=SimpleNamespace(id=SimpleNamespace(library="KBlocks", name="Buck"))
         )
-        schematic = SimpleNamespace(get_selection=lambda: [first, object(), second])
+        class FakeSchematic:
+            def get_selection(self) -> list[object]:
+                return [first, object(), second]
+
+        schematic = FakeSchematic()
 
         self.assertEqual(selected_symbols(schematic), [first, second])
 

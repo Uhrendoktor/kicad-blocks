@@ -10,6 +10,8 @@ import tempfile
 import time
 from pathlib import Path
 from types import SimpleNamespace
+from tkinter import Misc
+from typing import cast
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -77,9 +79,17 @@ def main() -> None:
                 )
             ),
         )
-        schematic = SimpleNamespace(get_selection=lambda: [selected_instance])
-        kicad = SimpleNamespace(get_kicad_binary_path=lambda name: eeschema)
-        parent_window = object()
+        class FakeSchematic:
+            def get_selection(self) -> list[object]:
+                return [selected_instance]
+
+        def get_kicad_binary_path(name: str) -> str:
+            del name
+            return eeschema
+
+        schematic = cast(plugin_actions.Schematic, FakeSchematic())
+        kicad = cast(plugin_actions.KiCadApp, SimpleNamespace(get_kicad_binary_path=get_kicad_binary_path))
+        parent_window = cast(Misc, object())
         silent_messagebox = SimpleNamespace(showinfo=lambda *args, **kwargs: None)
         window_id = None
         deadline = time.monotonic() + 35.0
@@ -105,6 +115,8 @@ def main() -> None:
                     root / "project",
                     parent_window,
                 )
+            if process is None:
+                raise AssertionError("Plugin edit action did not launch Eeschema.")
             if process.args != [eeschema, str(implementation)]:
                 raise AssertionError(
                     f"Plugin edit action opened unexpected command: {process.args!r}"
