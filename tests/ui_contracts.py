@@ -12,6 +12,8 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any
 
+import tkinter as tk
+
 
 @dataclass(frozen=True)
 class MenuEntry:
@@ -109,7 +111,7 @@ class ButtonContract(ComponentContract):
         result = button.invoke()
         try:
             root_exists = bool(context.root.winfo_exists())
-        except Exception:
+        except tk.TclError:
             root_exists = False
         return {
             "invoke_result": result,
@@ -135,7 +137,7 @@ class MenuItemContract(ComponentContract):
     def execute(self, context: UiTestContext) -> dict[str, Any]:
         entry = context.require_widget(self.menu_item_id)
         if not isinstance(entry, MenuEntry):
-            raise AssertionError(
+            raise TypeError(
                 f"{self.menu_item_id!r} is not a discovered Tk menu entry."
             )
         result = entry.menu.invoke(entry.index)
@@ -288,7 +290,7 @@ def _walk_widgets(root: Any):
     yield root
     try:
         children = root.winfo_children()
-    except Exception:
+    except tk.TclError:
         return
     for child in children:
         yield from _walk_widgets(child)
