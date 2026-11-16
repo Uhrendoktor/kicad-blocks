@@ -2476,7 +2476,7 @@ def _svg_dimension_to_pixels(value: str | None) -> float | None:
     if not value:
         return None
     match = re.fullmatch(
-        r"\\s*([+]?(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:[eE][-+]?\\d+)?)(px|pt|pc|mm|cm|in)?\\s*",
+        r"\s*([+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?)(px|pt|pc|mm|cm|in)?\s*",
         value,
         flags=re.IGNORECASE,
     )
@@ -2500,7 +2500,7 @@ def _normalize_svg_preview_viewport(root) -> None:
     """Give an SVG a positive pixel viewport that resvg can always rasterize."""
     view_box = root.attrib.get("viewBox") or root.attrib.get("viewbox") or ""
     values = re.findall(
-        r"[-+]?(?:\\d*\\.\\d+|\\d+\\.?\\d*)(?:[eE][-+]?\\d+)?",
+        r"[-+]?(?:\d*\.\d+|\d+\.?\d*)(?:[eE][-+]?\d+)?",
         view_box,
     )
     if len(values) == 4:
