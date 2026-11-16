@@ -15,7 +15,7 @@ import tempfile
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
 from platformdirs import user_config_path
 
@@ -45,12 +45,10 @@ from .model import (
     slugify,
 )
 from .report_types import BlockRevisionReport, LocalCopyPublishReport, LocalCopySyncReport
-from .settings_types import (
-    InstanceLink,
-    InstanceLinks,
-    LibrarySettings,
-    ProjectSymbolSyncState,
-)
+from .settings_types import InstanceLink, InstanceLinks, LibrarySettings
+
+if TYPE_CHECKING:
+    from .settings_types import ProjectSymbolSyncState
 from .sexpr import QuotedSExpr as _Quoted
 from .sexpr import SExpr, SExprList, parse_sexpr
 from .sexpr import dump_sexpr as _dump
@@ -270,6 +268,127 @@ def _symbol_definition_digest_from_file(path: Path, symbol_name: str) -> str:
     return _symbol_definition_digest(_named_symbol_node(tree, symbol_name, Path(path)))
 
 
+_INVALID_PROJECT_SYMBOL_SYNC_STATE = "Invalid project symbol synchronization state."
+_MISSING_SHARED_CATALOG_BASELINE = (
+    "Facade symbol conflict: the block asset and shared library catalog differ, "
+    "but this block has no published catalog baseline. Reconcile the two definitions manually."
+)
+_DIVERGENT_SHARED_CATALOG_EDIT = (
+    "Facade symbol conflict: both the block asset and shared library catalog changed "
+    "since the last publish. Reconcile the two definitions manually before refreshing the project."
+)
+
+
+def _resolve_project_symbol_source(
+    block_symbol_file: Path,
+    symbol_name: str,
+    shared_catalog_file: Path | None,
+    baseline_digest: str | None,
+) -> tuple[SExprList, SExprList, str]:
+    """Choose the authoritative block or shared-catalog symbol definition."""
+    source_tree = parse_sexpr(block_symbol_file.read_text(encoding="utf-8"))
+    source_symbol = _named_symbol_node(source_tree, symbol_name, block_symbol_file)
+    source_digest = _symbol_definition_digest(source_symbol)
+    if shared_catalog_file is None:
+        return source_tree, source_symbol, source_digest
+
+    shared_path = Path(shared_catalog_file).expanduser().resolve()
+    if not shared_path.is_file():
+        return source_tree, source_symbol, source_digest
+    shared_tree = parse_sexpr(shared_path.read_text(encoding="utf-8"))
+    shared_symbol = _named_symbol_node(shared_tree, symbol_name, shared_path)
+    shared_digest = _symbol_definition_digest(shared_symbol)
+    if shared_digest == source_digest:
+        return shared_tree, shared_symbol, shared_digest
+
+    baseline = str(baseline_digest) if baseline_digest else None
+    if baseline is None:
+        raise RuntimeError(_MISSING_SHARED_CATALOG_BASELINE)
+    block_changed = source_digest != baseline
+    shared_changed = shared_digest != baseline
+    if block_changed and shared_changed:
+        raise RuntimeError(_DIVERGENT_SHARED_CATALOG_EDIT)
+    if shared_changed:
+        return shared_tree, shared_symbol, shared_digest
+    return source_tree, source_symbol, source_digest
+
+
+def _load_project_symbol_sync_state(state_file: Path) -> ProjectSymbolSyncState:
+    """Read and validate the per-project symbol digest map."""
+    synchronized: dict[str, str] = {}
+    if not state_file.is_file():
+        return {"schema_version": 1, "symbols": synchronized}
+    try:
+        loaded_state = json.loads(state_file.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise ValueError(_INVALID_PROJECT_SYMBOL_SYNC_STATE) from exc
+    if not isinstance(loaded_state, dict):
+        raise ValueError(_INVALID_PROJECT_SYMBOL_SYNC_STATE)
+    loaded_symbols = loaded_state.get("symbols")
+    if not isinstance(loaded_symbols, dict):
+        raise ValueError(_INVALID_PROJECT_SYMBOL_SYNC_STATE)
+    for name, digest in loaded_symbols.items():
+        if not isinstance(name, str) or not isinstance(digest, str):
+            raise ValueError(_INVALID_PROJECT_SYMBOL_SYNC_STATE)
+        synchronized[name] = digest
+    schema_version = loaded_state.get("schema_version", 1)
+    if not isinstance(schema_version, int) or isinstance(schema_version, bool):
+        raise ValueError(_INVALID_PROJECT_SYMBOL_SYNC_STATE)
+    return {"schema_version": schema_version, "symbols": synchronized}
+
+
+def _save_project_symbol_sync_state(
+    state_file: Path,
+    state: ProjectSymbolSyncState,
+) -> None:
+    """Persist the validated project catalog synchronization baseline."""
+    atomic_write(state_file, json.dumps(state, indent=2, ensure_ascii=False) + "\\n")
+
+
+def _synchronize_existing_project_symbol(
+    project_catalog: Path,
+    symbol_name: str,
+    source_tree: SExprList,
+    source_symbol: SExprList,
+    source_digest: str,
+    baseline_digest: str | None,
+    state_file: Path,
+    state: ProjectSymbolSyncState,
+) -> bool:
+    """Update an unchanged project entry or preserve a divergent local edit."""
+    catalog_tree = parse_sexpr(project_catalog.read_text(encoding="utf-8"))
+    project_matches = [
+        item
+        for item in _all(catalog_tree, "symbol")
+        if len(item) >= 2 and str(item[1]) == symbol_name
+    ]
+    if not project_matches:
+        _merge_symbol_node(project_catalog, source_tree, source_symbol)
+        state["symbols"][symbol_name] = source_digest
+        _save_project_symbol_sync_state(state_file, state)
+        return True
+    if len(project_matches) != 1:
+        raise ValueError(
+            f"Expected exactly one {symbol_name!r} symbol in {project_catalog}; "
+            f"found {len(project_matches)}."
+        )
+
+    project_digest = _symbol_definition_digest(project_matches[0])
+    if project_digest == source_digest:
+        if state["symbols"].get(symbol_name) != source_digest:
+            state["symbols"][symbol_name] = source_digest
+            _save_project_symbol_sync_state(state_file, state)
+        return False
+
+    previous_digest = state["symbols"].get(symbol_name) or baseline_digest
+    if previous_digest and project_digest == str(previous_digest):
+        _merge_symbol_node(project_catalog, source_tree, source_symbol)
+        state["symbols"][symbol_name] = source_digest
+        _save_project_symbol_sync_state(state_file, state)
+        return True
+    return False
+
+
 def synchronize_project_symbol_catalog(
     project_catalog: Path,
     block_symbol_file: Path,
@@ -294,116 +413,26 @@ def synchronize_project_symbol_catalog(
     if not block_symbol_file.is_file():
         raise FileNotFoundError(block_symbol_file)
 
-    source_tree = parse_sexpr(block_symbol_file.read_text(encoding="utf-8"))
-    source_symbol = _named_symbol_node(source_tree, symbol_name, block_symbol_file)
-    source_digest = _symbol_definition_digest(source_symbol)
-
-    if shared_catalog_file is not None:
-        shared_catalog_file = Path(shared_catalog_file).expanduser().resolve()
-        if shared_catalog_file.is_file():
-            shared_tree = parse_sexpr(shared_catalog_file.read_text(encoding="utf-8"))
-            shared_symbol = _named_symbol_node(shared_tree, symbol_name, shared_catalog_file)
-            shared_digest = _symbol_definition_digest(shared_symbol)
-            if shared_digest == source_digest:
-                source_tree = shared_tree
-                source_symbol = shared_symbol
-                source_digest = shared_digest
-            else:
-                baseline = str(baseline_digest) if baseline_digest else None
-                if baseline is None:
-                    raise RuntimeError(
-                        "Facade symbol conflict: the block asset and shared "
-                        "library catalog differ, but this block has no published "
-                        "catalog baseline. Reconcile the two definitions manually."
-                    )
-                block_changed = source_digest != baseline
-                shared_changed = shared_digest != baseline
-                if block_changed and shared_changed:
-                    raise RuntimeError(
-                        "Facade symbol conflict: both the block asset and shared "
-                        "library catalog changed since the last publish. Reconcile "
-                        "the two definitions manually before refreshing the project."
-                    )
-                if shared_changed:
-                    source_tree = shared_tree
-                    source_symbol = shared_symbol
-                    source_digest = shared_digest
-
+    source_tree, source_symbol, source_digest = _resolve_project_symbol_source(
+        block_symbol_file, symbol_name, shared_catalog_file, baseline_digest
+    )
     state_file = project_catalog.with_name(f"{project_catalog.stem}.sync.json")
-    synchronized: dict[str, str] = {}
-    if state_file.is_file():
-        try:
-            loaded_state = json.loads(state_file.read_text(encoding="utf-8"))
-        except json.JSONDecodeError as exc:
-            raise ValueError(f"Invalid project symbol synchronization state: {state_file}") from exc
-        if not isinstance(loaded_state, dict):
-            raise ValueError(f"Invalid project symbol synchronization state: {state_file}")
-        loaded_symbols = loaded_state.get("symbols")
-        if not isinstance(loaded_symbols, dict):
-            raise ValueError(f"Invalid project symbol synchronization state: {state_file}")
-        for name, digest in loaded_symbols.items():
-            if not isinstance(name, str) or not isinstance(digest, str):
-                raise ValueError(f"Invalid project symbol synchronization state: {state_file}")
-            synchronized[name] = digest
-        schema_version = loaded_state.get("schema_version", 1)
-        if not isinstance(schema_version, int) or isinstance(schema_version, bool):
-            raise ValueError(f"Invalid project symbol synchronization state: {state_file}")
-        state: ProjectSymbolSyncState = {
-            "schema_version": schema_version,
-            "symbols": synchronized,
-        }
-    else:
-        state: ProjectSymbolSyncState = {"schema_version": 1, "symbols": synchronized}
-
-    def save_state() -> None:
-        atomic_write(
-            state_file,
-            json.dumps(state, indent=2, ensure_ascii=False) + "\n",
-        )
-
+    state = _load_project_symbol_sync_state(state_file)
     if not project_catalog.is_file():
         _merge_symbol_node(project_catalog, source_tree, source_symbol)
-        synchronized[symbol_name] = source_digest
-        save_state()
+        state["symbols"][symbol_name] = source_digest
+        _save_project_symbol_sync_state(state_file, state)
         return True
-
-    catalog_tree = parse_sexpr(project_catalog.read_text(encoding="utf-8"))
-    project_matches = [
-        item
-        for item in _all(catalog_tree, "symbol")
-        if len(item) >= 2 and str(item[1]) == symbol_name
-    ]
-    if not project_matches:
-        _merge_symbol_node(project_catalog, source_tree, source_symbol)
-        synchronized[symbol_name] = source_digest
-        save_state()
-        return True
-    if len(project_matches) != 1:
-        raise ValueError(
-            f"Expected exactly one {symbol_name!r} symbol in {project_catalog}; "
-            f"found {len(project_matches)}."
-        )
-
-    project_digest = _symbol_definition_digest(project_matches[0])
-    if project_digest == source_digest:
-        if synchronized.get(symbol_name) != source_digest:
-            synchronized[symbol_name] = source_digest
-            save_state()
-        return False
-
-    previous_digest = synchronized.get(symbol_name)
-    if previous_digest is None:
-        previous_digest = baseline_digest
-    if previous_digest and project_digest == str(previous_digest):
-        # Only this symbol is replaced; other project-local symbols remain intact.
-        _merge_symbol_node(project_catalog, source_tree, source_symbol)
-        synchronized[symbol_name] = source_digest
-        save_state()
-        return True
-
-    # The project entry diverged from the last synchronized definition. Keep
-    # that project-local edit; a later publish can make it the new source.
-    return False
+    return _synchronize_existing_project_symbol(
+        project_catalog,
+        symbol_name,
+        source_tree,
+        source_symbol,
+        source_digest,
+        baseline_digest,
+        state_file,
+        state,
+    )
 
 
 def _import_catalog_facade_edit(block: BlockRecord, manifest: BlockManifest) -> bool:
