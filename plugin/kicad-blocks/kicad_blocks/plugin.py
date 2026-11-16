@@ -4092,6 +4092,7 @@ def _show_block_variant_editor(
     """Manage named implementations and select which one empty KB_VARIANT uses."""
     dialog = tk.Toplevel(parent)
     dialog._kicad_ui_screen_id = "implementations-manager"
+    dialog._kicad_ui_contract_id = "implementations-manager.window"
     dialog.title(f"Implementations — {record.name}")
     dialog.transient(parent)
 
