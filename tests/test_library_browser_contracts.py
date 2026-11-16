@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 from pathlib import Path
@@ -29,27 +30,21 @@ pytestmark = pytest.mark.skipif(
     reason="Real Tk interaction contracts require an X display (run under xvfb-run).",
 )
 
+CATALOG_PATH = ROOT / "tests" / "ui_contract_catalog.json"
+LIBRARY_SCREEN = next(
+    screen
+    for screen in json.loads(CATALOG_PATH.read_text(encoding="utf-8"))["screens"]
+    if screen["id"] == "functional-block-library"
+)
 LIBRARY_CONTROLS = {
-    "library-browser.panes",
-    "library-browser.results-pane",
-    "library-browser.preview-pane",
-    "library-browser.search",
-    "library-browser.results",
-    "library-browser.summary",
-    "library-browser.selected-name",
-    "library-browser.preview.views",
-    "library-browser.preview.facade",
-    "library-browser.preview.schematic",
-    "library-browser.implementation",
-    "library-browser.sheet",
+    control["contract_id"] for control in LIBRARY_SCREEN["controls"]
+}
+LIBRARY_ASSERTED_BUTTONS = {
     "library-browser.action.place",
     "library-browser.action.implementation",
     "library-browser.action.facade",
-    "library-browser.action.variants",
     "library-browser.action.open-pcb",
-    "library-browser.action.manage-pcb-layouts",
     "library-browser.action.refresh",
-    "library-browser.action.libraries",
 }
 
 PREVIEW_VIEWS = (
@@ -145,6 +140,33 @@ def _select_first_record(context: UiTestContext, expected_name: str = "USB power
     return row_id
 
 
+def test_library_browser_catalog_labels_each_toolbar_action_coverage_level():
+    controls = {
+        control["contract_id"]: control
+        for control in LIBRARY_SCREEN["controls"]
+    }
+    asserted_buttons = {
+        contract_id
+        for contract_id, control in controls.items()
+        if control["type"] == "button" and control["assertion"] == "asserted"
+    }
+    assert asserted_buttons == LIBRARY_ASSERTED_BUTTONS
+    assert all(
+        control["assertion"] in {"asserted", "observed", "uncovered"}
+        for control in controls.values()
+    )
+    assert all(
+        controls[contract_id]["assertion"] == "uncovered"
+        for contract_id in (
+            "library-browser.action.variants",
+            "library-browser.action.manage-pcb-layouts",
+            "library-browser.action.libraries",
+            "library-browser.implementation",
+            "library-browser.sheet",
+        )
+    )
+
+
 def test_library_browser_widget_inventory_covers_major_controls(monkeypatch, tmp_path):
     root, _context, _records, _library, _project = _new_browser(monkeypatch, tmp_path)
     try:
@@ -219,6 +241,7 @@ def test_refresh_button_reloads_records_through_real_ui_callback(monkeypatch, tm
             contract_id="library-browser.action.refresh",
             expected_action="refresh",
             destroys_window=False,
+            expected_label="Refresh",
         ).run(context)
         assert "2 of 2 blocks" in context.require_widget("library-browser.summary").cget("text")
     finally:
@@ -253,6 +276,7 @@ def test_place_button_registers_selected_block_and_starts_native_placement(monke
             contract_id="library-browser.action.place",
             expected_action=("register-block", "start-placement"),
             destroys_window=False,
+            expected_label="Place block",
         ).run(context)
         assert context.events == []
     finally:
@@ -276,6 +300,7 @@ def test_implementation_button_registers_and_opens_default_document(monkeypatch,
             contract_id="library-browser.action.implementation",
             expected_action=("register-implementation", "open-implementation"),
             destroys_window=False,
+            expected_label="Implementation",
         ).run(context)
     finally:
         root.destroy()
@@ -294,6 +319,7 @@ def test_edit_facade_button_targets_selected_record(monkeypatch, tmp_path):
             contract_id="library-browser.action.facade",
             expected_action="usb-power",
             destroys_window=False,
+            expected_label="Edit facade",
         ).run(context)
     finally:
         root.destroy()
@@ -313,6 +339,7 @@ def test_open_pcb_button_creates_chooser_for_selected_block(monkeypatch, tmp_pat
             expected_action=None,
             destroys_window=False,
             expected_new_window_title="Open PCB layout — USB power block",
+            expected_label="Open PCB",
         ).run(context)
         dialogs = [
             child
