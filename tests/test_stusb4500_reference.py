@@ -338,9 +338,9 @@ class STUSB4500ReferenceTests(unittest.TestCase):
             content, tree, _ = self._generate(temporary)
 
         text_by_uuid = {
-            str(sexpr_direct(node, "uuid")[1]): str(node[1])
+            str(uuid_node[1]): str(node[1])
             for node in sexpr_all(tree, "text_box")
-            if sexpr_direct(node, "uuid") is not None
+            if (uuid_node := sexpr_direct(node, "uuid")) is not None
         }
         for group in SCHEMATIC_GROUPS:
             title_uuid = reference_uid(f"graphic:text:zone-title:{group['id']}")

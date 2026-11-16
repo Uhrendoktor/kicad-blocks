@@ -379,6 +379,17 @@ class _TkPreviewCanvas(Protocol):
     native_schematic_preview_photo: tkinter_types.PhotoImage | None
 
 
+def _after_event(
+    callback: Callable[[], object],
+) -> Callable[[tkinter_types.Event[tkinter_types.Misc]], str | None]:
+    """Adapt a zero-argument action to a typed Tk event callback."""
+    def handle(_event: tkinter_types.Event[tkinter_types.Misc]) -> str | None:
+        result = callback()
+        return result if isinstance(result, str) else None
+
+    return handle
+
+
 class _TkGridManaged(Protocol):
     """Grid-managed widget operation used to hide optional editor controls."""
 
@@ -1654,7 +1665,7 @@ def _show_selected_block_configuration(
         "save",
         "Save configuration on the selected instance",
     ).pack(side="right")
-    dialog.bind("<Escape>", lambda _event: tkinter_types.Event[tkinter_types.Misc]: dialog.destroy())
+    dialog.bind("<Escape>", _after_event(dialog.destroy))
     dialog.protocol("WM_DELETE_WINDOW", dialog.destroy)
     _set_window_geometry(dialog, 700, 720, 580, 500)
     dialog.grab_set()
@@ -1912,9 +1923,12 @@ def _pick_block_for_placement(
     search.trace_add("write", render_results)
     tree.bind("<<TreeviewSelect>>", selection_changed)
     tree.bind("<Double-1>", choose)
-    search_entry.bind("<Return>", lambda _event: tkinter_types.Event[tkinter_types.Misc]: (tree.focus_set(), "break"))
+    search_entry.bind(
+        "<Return>",
+        _after_event(lambda: (tree.focus_set(), "break")[1]),
+    )
     dialog.bind("<Return>", choose)
-    dialog.bind("<Escape>", lambda _event: tkinter_types.Event[tkinter_types.Misc]: dialog.destroy())
+    dialog.bind("<Escape>", _after_event(dialog.destroy))
     variant_combo.bind("<<ComboboxSelected>>", variant_changed)
     profile_combo.bind("<<ComboboxSelected>>", profile_changed)
 
@@ -2108,7 +2122,7 @@ def _pick_record(
     tree.bind("<Return>", choose_selected)
     tree.bind("<Double-1>", choose_double_clicked)
     search_entry.bind("<Down>", focus_results)
-    dialog.bind("<Escape>", lambda _event: tkinter_types.Event[tkinter_types.Misc]: dialog.destroy())
+    dialog.bind("<Escape>", _after_event(dialog.destroy))
     select_button.configure(command=choose_selected)
     dialog.protocol("WM_DELETE_WINDOW", dialog.destroy)
     search.trace_add("write", render_results)
@@ -2528,8 +2542,8 @@ def _ask_create_block_details(
     def cancel() -> None:
         finish()
 
-    dialog.bind("<Return>", lambda _event: tkinter_types.Event[tkinter_types.Misc]: accept())
-    dialog.bind("<Escape>", lambda _event: tkinter_types.Event[tkinter_types.Misc]: cancel())
+    dialog.bind("<Return>", _after_event(accept))
+    dialog.bind("<Escape>", _after_event(cancel))
     dialog.protocol("WM_DELETE_WINDOW", cancel)
     _set_window_geometry(dialog, 660, 390, 580, 340)
     dialog.grab_set()
@@ -2820,7 +2834,7 @@ def _edit_block_implementation(
     kicad: _KiCadApp,
     project_dir: Path,
     parent: tkinter_types.Misc,
-) -> None:
+) -> subprocess.Popen[bytes] | None:
     """Compatibility helper for opening a library implementation from the manager."""
     selected = _safe_schematic_selection(schematic)
     if len(selected) == 1 and hasattr(selected[0], "definition"):
@@ -4035,8 +4049,8 @@ def _ask_layout_details(
     _action_button(
         buttons, "Add layout", accept, "create", "Add this PCB layout to the block"
     ).pack(side="right", padx=(0, 8))
-    dialog.bind("<Return>", lambda _event: tkinter_types.Event[tkinter_types.Misc]: accept())
-    dialog.bind("<Escape>", lambda _event: tkinter_types.Event[tkinter_types.Misc]: dialog.destroy())
+    dialog.bind("<Return>", _after_event(accept))
+    dialog.bind("<Escape>", _after_event(dialog.destroy))
     _set_window_geometry(dialog, 860, 620, 760, 560)
     dialog.grab_set()
     name_entry.focus_set()
@@ -4389,7 +4403,7 @@ def _show_block_layout_editor(
 
     save_button.configure(command=save_and_close)
     tree.bind("<<TreeviewSelect>>", update_actions)
-    dialog.bind("<Escape>", lambda _event: tkinter_types.Event[tkinter_types.Misc]: cancel_layout_edits())
+    dialog.bind("<Escape>", _after_event(cancel_layout_edits))
     render(layouts[0]["id"] if layouts else None)
     dialog.protocol("WM_DELETE_WINDOW", cancel_layout_edits)
     _set_window_geometry(dialog, 1120, 800, 980, 650)
@@ -4662,8 +4676,8 @@ def _ask_implementation_details(
         "select",
         "Use the selected implementation",
     ).pack(side="right", padx=(0, 8))
-    dialog.bind("<Return>", lambda _event: tkinter_types.Event[tkinter_types.Misc]: accept())
-    dialog.bind("<Escape>", lambda _event: tkinter_types.Event[tkinter_types.Misc]: dialog.destroy())
+    dialog.bind("<Return>", _after_event(accept))
+    dialog.bind("<Escape>", _after_event(dialog.destroy))
     source_entry.xview_moveto(1.0)
     selector_entry.focus_set()
     _set_window_geometry(dialog, 860, 540, 740, 460)
@@ -5017,9 +5031,9 @@ def _show_block_variant_editor(
     save_button.pack(side="right", padx=(0, 8))
 
     tree.bind("<<TreeviewSelect>>", update_actions)
-    tree.bind("<Double-1>", lambda _event: tkinter_types.Event[tkinter_types.Misc]: edit_variant())
-    tree.bind("<Delete>", lambda _event: tkinter_types.Event[tkinter_types.Misc]: remove_variant())
-    dialog.bind("<Escape>", lambda _event: tkinter_types.Event[tkinter_types.Misc]: cancel_variant_edits())
+    tree.bind("<Double-1>", _after_event(edit_variant))
+    tree.bind("<Delete>", _after_event(remove_variant))
+    dialog.bind("<Escape>", _after_event(cancel_variant_edits))
     render(0)
     dialog.protocol("WM_DELETE_WINDOW", cancel_variant_edits)
     _set_window_geometry(dialog, 1080, 740, 900, 620)
@@ -6185,11 +6199,13 @@ def _show_library_browser(
     search_entry.bind("<Down>", focus_results)
     preview.bind(
         "<Configure>",
-        lambda _event: tkinter_types.Event[tkinter_types.Misc]: (
-            draw_facade_for_selection()
-            if selected_record[0] is not None
-            and preview_notebook.index(preview_notebook.select()) == 0
-            else None
+        _after_event(
+            lambda: (
+                draw_facade_for_selection()
+                if selected_record[0] is not None
+                and preview_notebook.index(preview_notebook.select()) == 0
+                else None
+            )
         ),
     )
 
@@ -6264,7 +6280,7 @@ def _show_library_browser(
     refresh_records()
     selection_changed()
     _set_window_geometry(window, 1600, 1000, 1200, 720)
-    window.bind("<FocusIn>", lambda _event: tkinter_types.Event[tkinter_types.Misc]: selection_changed(), add="+")
+    window.bind("<FocusIn>", _after_event(selection_changed), add="+")
     search_entry.focus_set()
 
 
