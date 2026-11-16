@@ -471,7 +471,7 @@ def load_tkinter() -> None:
 _load_tkinter = load_tkinter
 
 
-def _theme_color_is_dark(value: object) -> bool | None:
+def _theme_color_is_dark(value: str) -> bool | None:
     """Classify a KiCad theme RGB color by perceptual luminance."""
     text_value = str(value or "").strip()
     hex_match = re.fullmatch(r"#?([0-9a-fA-F]{6})", text_value)
@@ -555,6 +555,8 @@ def _system_prefers_dark_theme(kicad: _KiCadApp | None = None) -> bool | None:
         )
         schematic_colors = cast(dict[str, object], theme.get("schematic") or {})
         background = schematic_colors.get("background") or schematic_colors.get("sheet_background")
+        if not isinstance(background, str):
+            return None
         return _theme_color_is_dark(background)
     except (AttributeError, ImportError, KeyError, OSError, TypeError, ValueError):
         LOG.debug(

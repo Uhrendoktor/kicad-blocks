@@ -366,8 +366,8 @@ def main() -> int:
                 lineterm="",
             )
             for index, line in enumerate(diff):
-                if index >= 240:
-                    print("... inventory diff truncated after 240 lines ...", file=sys.stderr)
+                if index >= 5000:
+                    print("... inventory diff truncated after 5000 lines ...", file=sys.stderr)
                     break
                 print(line, file=sys.stderr)
             return 1

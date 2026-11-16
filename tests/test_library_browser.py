@@ -1060,6 +1060,25 @@ class LibraryBrowserTests(unittest.TestCase):
         ):
             self.assertIsNone(_system_prefers_dark_theme(kicad))
 
+    def test_system_theme_falls_back_when_theme_background_is_not_text(self) -> None:
+        settings = Path(self.temp.name) / "kicad-settings"
+        colors = settings / "colors"
+        colors.mkdir(parents=True)
+        (settings / "eeschema.json").write_text(
+            '{"appearance":{"color_theme":"invalid-theme"}}',
+            encoding="utf-8",
+        )
+        (colors / "invalid-theme.json").write_text(
+            '{"schematic":{"background":[26, 27, 38]}}',
+            encoding="utf-8",
+        )
+        kicad = SimpleNamespace(get_paths=Mock(return_value={11: str(settings)}))
+        with (
+            patch.dict(os.environ, {"KICAD_BLOCKS_THEME": "system"}),
+            patch.dict(sys.modules, self._theme_ipc_modules()),
+        ):
+            self.assertIsNone(_system_prefers_dark_theme(kicad))
+
     def test_record_picker_returns_single_choice_without_opening_a_dialog(self) -> None:
         self.assertIs(_pick_record([self.block], object(), "Pick Block"), self.block)
 
