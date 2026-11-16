@@ -9,7 +9,7 @@ This page is generated from the declarative UI catalog. It inventories the curre
 | Partial | 8 | Targeted GUI, integration, model, or screenshot checks exist; the full control matrix is not contracted. |
 | Inventory only | 5 | Window/workflow is documented here; systematic interaction contracts remain future work. |
 
-The first contract milestones cover Task Hub routing and navigation and the Add PCB layout dialog's application-owned controls. The Functional Block Library has substantial partial contract coverage. None of this implies that every downstream KiCad operation or native OS chooser has been proven.
+The first contract milestones cover Task Hub routing and navigation and the Add PCB layout dialog's application-owned controls. The Functional Block Library and implementation manager have substantial partial contract coverage. None of this implies that every downstream KiCad operation or native OS chooser has been proven.
 
 ## Screens
 
