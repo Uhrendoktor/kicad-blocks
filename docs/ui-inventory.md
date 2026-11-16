@@ -338,7 +338,7 @@ Review the single Default implementation row and maintain named alternatives.
 
 **Coverage:** Partial — targeted GUI, integration, or visual checks exist.
 
-The real manager is captured in both themes and variant data mutations have unit coverage. Add/edit/promote/remove controls are not yet all executed through UI contracts.
+The current slice adds real-widget contracts for the manager's Treeview, Add, Edit, Set as default, Remove, Close, and Save & close controls. Tests exercise default promotion, manifest/file updates, renaming without recopying source data, profile-reference protection, and retry after a simulated save failure. The nested Implementation details form and every validation branch remain separately covered by its own screen.
 
 **Major functionality**
 
@@ -347,8 +347,21 @@ The real manager is captured in both themes and variant data mutations have unit
 - Promote a named implementation to Default
 - Remove an alternative while preserving profile/layout constraints
 
+**Registered semantic controls**
+
+- Implementations manager dialog (`implementations-manager.window`; window; behavior asserted)
+- Default and named implementations (`implementations-manager.rows`; treeview; behavior asserted)
+- Persistence and usage status (`implementations-manager.status`; status-label; behavior asserted)
+- Add variant (`implementations-manager.action.add`; button; behavior asserted)
+- Edit variant (`implementations-manager.action.edit`; button; behavior asserted)
+- Set as default (`implementations-manager.action.default`; button; behavior asserted)
+- Remove (`implementations-manager.action.remove`; button; behavior asserted)
+- Close (`implementations-manager.action.close`; button; behavior asserted)
+- Save & close (`implementations-manager.action.save-close`; button; behavior asserted)
+
 **Current automated evidence**
 
+- `tests/test_implementation_manager_contracts.py`
 - `tests/test_library_browser.py`
 - `tests/capture_visual_docs.py`
 
