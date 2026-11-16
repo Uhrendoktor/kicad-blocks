@@ -12,8 +12,6 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any
 
-import tkinter as tk
-
 
 @dataclass(frozen=True)
 class MenuEntry:
@@ -117,10 +115,7 @@ class ButtonContract(ComponentContract):
         result = button.invoke()
         context.root.update_idletasks()
         context.root.update()
-        try:
-            root_exists = bool(context.root.winfo_exists())
-        except tk.TclError:
-            root_exists = False
+        root_exists = bool(context.root.winfo_exists())
         new_windows = [
             child.title()
             for child in context.root.winfo_children()
@@ -376,10 +371,7 @@ INTERACTIVE_WIDGET_CLASSES = frozenset(
 
 def _walk_widgets(root: Any):
     yield root
-    try:
-        children = root.winfo_children()
-    except tk.TclError:
-        return
+    children = root.winfo_children()
     for child in children:
         yield from _walk_widgets(child)
 
