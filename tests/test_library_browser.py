@@ -194,9 +194,10 @@ class LibraryBrowserTests(unittest.TestCase):
             capture_output: bool = False,
             text: bool = False,
             check: bool = False,
+            timeout: float | None = None,
         ) -> subprocess.CompletedProcess[str]:
             calls.append(arguments)
-            del capture_output, text, check
+            del capture_output, text, check, timeout
             output_dir = Path(arguments[arguments.index("--output") + 1])
             output_dir.mkdir(parents=True, exist_ok=True)
             (output_dir / f"{symbol_name}.svg").write_text(
