@@ -299,6 +299,16 @@ class _GroupLayout(TypedDict):
     constraints: tuple[_LayoutRule, ...]
 
 
+class _GroupEvidenceOverride(TypedDict, total=False):
+    """Optional group-specific override of the global datasheet evidence."""
+
+    datasheet: str
+    document: str
+    page: int
+    figure: str
+    screenshot_asset: str | None
+
+
 class _SchematicGroup(TypedDict, total=False):
     """Functional group metadata used for component layout and annotations."""
 
@@ -307,12 +317,13 @@ class _SchematicGroup(TypedDict, total=False):
     description: Required[str]
     members: Required[tuple[str, ...]]
     lane: Required[Literal["main", "secondary"]]
-    order: int
+    order: Required[int]
     documentation_members: tuple[str, ...]
     extra_top_padding_mm: float
     align_to: str
     y_offset_mm: float
-    layout: _GroupLayout
+    evidence: _GroupEvidenceOverride
+    layout: Required[_GroupLayout]
 
 
 type _PinAssignment = tuple[str, str, str]
@@ -735,7 +746,7 @@ def _sheet_header(
     title_y: float = 48.26,
     rule_right: float = 411.48,
     key: str = "sheet",
-) -> list[list]:
+) -> list[SExprList]:
     """Place a compact title/subtitle in the reserved top margin."""
     if title_y + 17.78 >= 81.28:
         raise ValueError("Sheet header must remain above the functional-block tabs.")
@@ -770,7 +781,7 @@ def _functional_block(
     title: str,
     tab_width: float,
     key: str,
-) -> list[list]:
+) -> list[SExprList]:
     """Generate one grid-aligned, thin-frame module with an attached title tab."""
     if not (x < right and y < bottom):
         raise ValueError(f"Invalid functional-block bounds for {key}.")
@@ -807,7 +818,7 @@ def _functional_zone(
     title: str,
     tab_width: float,
     key: str,
-) -> list[list]:
+) -> list[SExprList]:
     """Backward-compatible alias for the reusable functional-block helper."""
     return _functional_block(x, y, right, bottom, title, tab_width, key)
 
@@ -838,11 +849,11 @@ def _world_pin(sx: float, sy: float, rotation: int, pin: _PinData) -> tuple[floa
 
 
 def _group_evidence_line(group: _SchematicGroup) -> str:
-    evidence = {**GROUP_EVIDENCE, **group.get("evidence", {})}
-    return (
-        f"{str(evidence['document']).upper()} | "
-        f"PAGE {evidence['page']} | {str(evidence['figure']).upper()}"
-    )
+    override = group.get("evidence", {})
+    document = override.get("document", GROUP_EVIDENCE["document"])
+    page = override.get("page", GROUP_EVIDENCE["page"])
+    figure = override.get("figure", GROUP_EVIDENCE["figure"])
+    return f"{document.upper()} | PAGE {page} | {figure.upper()}"
 
 
 def _group_description(group: _SchematicGroup) -> str:
@@ -873,20 +884,18 @@ def _resolve_group_component_positions(
     by_ref: dict[str, _ComponentSpec] = {spec[0]: spec for spec in specs}
     positions: dict[str, list[float]] = {}
     for group in SCHEMATIC_GROUPS:
-        layout = group.get("layout")
-        if not isinstance(layout, dict):
-            raise ValueError(f"Group {group['id']} has no component layout metadata.")
-        anchor = str(layout.get("anchor", ""))
+        layout = group["layout"]
+        anchor = layout["anchor"]
         if anchor not in group["members"] or anchor not in by_ref:
             raise ValueError(f"Group {group['id']} has an invalid layout anchor {anchor!r}.")
         positions[anchor] = [0.0, float(layout["anchor_y_mm"])]
-        pending = list(layout.get("constraints", ()))
+        pending: list[_LayoutRule] = list(layout["constraints"])
         while pending:
-            unresolved = []
+            unresolved: list[_LayoutRule] = []
             progressed = False
             for rule in pending:
-                kind = str(rule["kind"])
-                component = str(rule["component"])
+                kind = rule["kind"]
+                component = rule["component"]
                 if component not in group["members"] or component in positions:
                     raise ValueError(
                         f"Invalid or duplicate layout target {component!r} in {group['id']}."
@@ -930,7 +939,8 @@ def _resolve_group_component_positions(
                         )
                     reference_rotation = _symbol_rotation(reference)
                     pin_point = _world_pin(
-                        *positions[reference],
+                        positions[reference][0],
+                        positions[reference][1],
                         reference_rotation,
                         pin,
                     )
@@ -978,7 +988,13 @@ def _pack_component_groups(
             rotation = _symbol_rotation(reference)
             definition = loaded[(spec[1], spec[2])]
             points.extend(
-                _world_pin(*positions[reference], rotation, pin) for pin in _pin_data(definition)
+                _world_pin(
+                    positions[reference][0],
+                    positions[reference][1],
+                    rotation,
+                    pin,
+                )
+                for pin in _pin_data(definition)
             )
         if not points:
             raise ValueError(f"Group {group['id']} contains no symbol pins.")

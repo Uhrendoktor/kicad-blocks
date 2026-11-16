@@ -26,6 +26,7 @@ from kicad_blocks.sexpr import (
 
 Point = tuple[float, float]
 Segment = tuple[Point, Point]
+RawSegment = tuple[Point, ...]
 Rect = tuple[float, float, float, float]
 LabelPoint = tuple[str, Point]
 VisibleProperty = tuple[str, str, Rect, SExprList]
@@ -335,8 +336,8 @@ def _direct_point(node: SExprList, tag: str = "at") -> Point | None:
     return _number(child[1]), _number(child[2])
 
 
-def _segments(tree: SExprList) -> list[Segment]:
-    result: list[Segment] = []
+def _segments(tree: SExprList) -> list[RawSegment]:
+    result: list[RawSegment] = []
     for wire in _all(tree, "wire"):
         pts = _direct(wire, "pts")
         xy = [(_number(p[1]), _number(p[2])) for p in _all(pts, "xy")] if pts else []
@@ -450,7 +451,8 @@ def label_network_issues(tree: SExprList) -> list[str]:
         split.sort(key=lambda p: p[axis], reverse=a[axis] > b[axis])
         for p, q in pairwise(split):
             dsu.union(p, q)
-    totals, island_uses = Counter(), Counter()
+    totals: Counter[str] = Counter()
+    island_uses: Counter[tuple[str, Point]] = Counter()
     issues: list[str] = []
     for name, point in local:
         totals[name] += 1
@@ -521,7 +523,7 @@ def _inside(point: Point, rect: Rect, margin: float = 0.0) -> bool:
 
 
 def _instances(tree: SExprList) -> dict[str, SExprList]:
-    result = {}
+    result: dict[str, SExprList] = {}
     for item in _all(tree, "symbol"):
         if _direct(item, "lib_id") is None:
             continue
@@ -539,7 +541,8 @@ def _property(instance: SExprList, name: str) -> SExprList | None:
 
 
 def text_box_issues(tree: SExprList) -> list[str]:
-    issues, boxes = [], []
+    issues: list[str] = []
+    boxes: list[tuple[str, Rect]] = []
     if _all(tree, "text"):
         issues.append("free-standing annotation text is forbidden; use KiCad text_box")
     for index, node in enumerate(_all(tree, "text_box")):
@@ -600,7 +603,7 @@ def _frame_bounds(tree: SExprList, zone: str) -> Rect | None:
 def _pin_world_info(tree: SExprList) -> dict[tuple[str, str], _PinWorldInfo]:
     """Resolve every component pin to a sheet coordinate and outward angle."""
     lib_symbols = _direct(tree, "lib_symbols")
-    library = {}
+    library: dict[str, SExprList] = {}
 
     def descendants(node: SExprList) -> Iterator[SExprList]:
         for child in node[1:]:
@@ -614,7 +617,7 @@ def _pin_world_info(tree: SExprList) -> dict[tuple[str, str], _PinWorldInfo]:
             if len(node) > 1:
                 library[str(node[1])] = node
 
-    result = {}
+    result: dict[tuple[str, str], _PinWorldInfo] = {}
     for reference, instance in _instances(tree).items():
         lib_id_node, at = _direct(instance, "lib_id"), _direct(instance, "at")
         if lib_id_node is None or at is None:
@@ -852,7 +855,7 @@ def component_spacing_issues(tree: SExprList) -> list[str]:
 def group_metadata_issues(tree: SExprList) -> list[str]:
     """Every declarative group must emit its generated title and description."""
     _load_stusb4500_profile()
-    issues = []
+    issues: list[str] = []
     text_uuids: set[str] = {
         str(uid[1]) for node in _all(tree, "text_box") if (uid := _direct(node, "uuid")) is not None
     }
@@ -907,7 +910,9 @@ def _rect_inside(inner: Rect, outer: Rect) -> bool:
 def frame_and_component_issues(tree: SExprList) -> list[str]:
     """Validate frame containment, field placement and optional population."""
     _load_stusb4500_profile()
-    issues, instances, frames = [], _instances(tree), {}
+    issues: list[str] = []
+    instances = _instances(tree)
+    frames: dict[str, Rect] = {}
     for ref, instance in instances.items():
         dnp_node, value_prop = _direct(instance, "dnp"), _property(instance, "Value")
         dnp = dnp_node is not None and str(dnp_node[1]).lower() == "yes"
@@ -1035,10 +1040,10 @@ def _local_to_world(sx: float, sy: float, rotation: int, x: float, y: float) -> 
 def _symbol_body_bounds(tree: SExprList) -> dict[str, Rect]:
     """Approximate symbol body bounds from library rectangles, paths, circles and arcs."""
     library = _direct(tree, "lib_symbols")
-    definitions = {}
+    definitions: dict[str, SExprList] = {}
     if library is not None:
         definitions = {str(node[1]): node for node in _all(library, "symbol") if len(node) > 1}
-    result = {}
+    result: dict[str, Rect] = {}
     for reference, instance in _instances(tree).items():
         lib_id, at = _direct(instance, "lib_id"), _direct(instance, "at")
         if lib_id is None or at is None:
@@ -1047,10 +1052,10 @@ def _symbol_body_bounds(tree: SExprList) -> dict[str, Rect]:
         if definition is None:
             continue
         sx, sy, rotation = _number(at[1]), _number(at[2]), int(_number(at[3]))
-        points = []
+        points: list[Point] = []
         for node in _walk_nodes(definition):
             kind = _head(node)
-            local_points = []
+            local_points: list[Point] = []
             if kind == "rectangle":
                 for field in ("start", "end"):
                     point = _direct(node, field)
@@ -1091,7 +1096,7 @@ def _symbol_primitives(tree: SExprList) -> dict[str, list[_SymbolPrimitive]]:
     if library is not None:
         definitions = {str(node[1]): node for node in _all(library, "symbol") if len(node) > 1}
 
-    result: dict[str, list[dict]] = {}
+    result: dict[str, list[_SymbolPrimitive]] = {}
     for reference, instance in _instances(tree).items():
         lib_id, at = _direct(instance, "lib_id"), _direct(instance, "at")
         if lib_id is None or at is None:
@@ -1120,8 +1125,10 @@ def _symbol_primitives(tree: SExprList) -> dict[str, list[_SymbolPrimitive]]:
                     _number(end[1]),
                     _number(end[2]),
                 )
-                local_points = [(x1, y1), (x2, y1), (x2, y2), (x1, y2)]
-                points = [_local_to_world(sx, sy, rotation, x, y) for x, y in local_points]
+                local_points: list[Point] = [(x1, y1), (x2, y1), (x2, y2), (x1, y2)]
+                points: list[Point] = [
+                    _local_to_world(sx, sy, rotation, x, y) for x, y in local_points
+                ]
                 primitives.append(
                     {
                         "kind": "polygon",
@@ -1169,7 +1176,7 @@ def _symbol_primitives(tree: SExprList) -> dict[str, list[_SymbolPrimitive]]:
                     }
                 )
             elif kind == "arc":
-                points = []
+                points: list[Point] = []
                 for field in ("start", "mid", "end"):
                     point = _direct(node, field)
                     if point is not None:
@@ -1224,7 +1231,7 @@ def _segment_intersection_points(a: Point, b: Point, c: Point, d: Point) -> list
     if abs(denominator) <= TOL:
         if abs(qx * ry - qy * rx) > TOL:
             return []
-        candidates = []
+        candidates: list[Point] = []
         for point in (a, b, c, d):
             if (
                 _point_on_segment_any(point, a, b)
@@ -1507,7 +1514,7 @@ def block_annotation_issues(tree: SExprList) -> list[str]:
     This rule uses native text-box presentation rather than project-specific UUIDs,
     so it can be applied unchanged to unrelated KiCad schematics.
     """
-    issues = []
+    issues: list[str] = []
     for index, node in enumerate(_all(tree, "text_box")):
         uid_node = _direct(node, "uuid")
         uid = str(uid_node[1]) if uid_node is not None else f"box-{index}"
