@@ -4091,6 +4091,7 @@ def _show_block_variant_editor(
 ) -> Path | None:
     """Manage named implementations and select which one empty KB_VARIANT uses."""
     dialog = tk.Toplevel(parent)
+    dialog._kicad_ui_screen_id = "implementations-manager"
     dialog.title(f"Implementations — {record.name}")
     dialog.transient(parent)
 
@@ -4105,12 +4106,14 @@ def _show_block_variant_editor(
     status_value = tk.StringVar(
         value="Empty KB_VARIANT uses the default implementation."
     )
-    ttk.Label(
+    status_label = ttk.Label(
         frame,
         textvariable=status_value,
         foreground=palette.get("muted", "#5f6871"),
         font=("TkDefaultFont", 8),
-    ).grid(row=1, column=0, sticky="w", pady=(3, 8))
+    )
+    status_label._kicad_ui_contract_id = "implementations-manager.status"
+    status_label.grid(row=1, column=0, sticky="w", pady=(3, 8))
 
     table_frame = ttk.Frame(frame)
     table_frame.grid(row=2, column=0, sticky="nsew")
@@ -4122,6 +4125,7 @@ def _show_block_variant_editor(
         show="headings",
         selectmode="browse",
     )
+    tree._kicad_ui_contract_id = "implementations-manager.rows"
     tree.heading("value", text="Implementation")
     tree.heading("file", text="Schematic file")
     tree.heading("role", text="Role")
@@ -4364,17 +4368,27 @@ def _show_block_variant_editor(
 
     actions = ttk.Frame(frame)
     actions.grid(row=3, column=0, sticky="ew", pady=(12, 0))
-    _action_button(actions, "Add variant", add_variant, "add", "Add a named implementation variant").pack(side="left")
-    edit_button = _action_button(actions, "Edit variant", edit_variant, "edit", "Edit the selected implementation", state="disabled")
+    _action_button(
+        actions, "Add variant", add_variant, "add",
+        "Add a named implementation variant",
+        contract_id="implementations-manager.action.add",
+    ).pack(side="left")
+    edit_button = _action_button(
+        actions, "Edit variant", edit_variant, "edit",
+        "Edit the selected implementation", state="disabled",
+        contract_id="implementations-manager.action.edit",
+    )
     edit_button.pack(side="left", padx=(8, 0))
     default_button = _action_button(
         actions, "Set as default", make_default, "default",
-        "Set the selected implementation as default", state="disabled"
+        "Set the selected implementation as default", state="disabled",
+        contract_id="implementations-manager.action.default",
     )
     default_button.pack(side="left", padx=(8, 0))
     remove_button = _action_button(
         actions, "Remove", remove_variant, "remove",
-        "Remove the selected variant", state="disabled"
+        "Remove the selected variant", state="disabled",
+        contract_id="implementations-manager.action.remove",
     )
     remove_button.pack(side="left", padx=(8, 0))
     def cancel_variant_edits():
@@ -4389,10 +4403,12 @@ def _show_block_variant_editor(
     _action_button(
         actions, "Close", cancel_variant_edits, "cancel",
         "Close the implementation manager",
+        contract_id="implementations-manager.action.close",
     ).pack(side="right")
     save_button = _action_button(
         actions, "Save & close", save_and_close, "save",
-        "Save any pending changes and close the implementation manager"
+        "Save any pending changes and close the implementation manager",
+        contract_id="implementations-manager.action.save-close",
     )
     save_button.pack(side="right", padx=(0, 8))
 
