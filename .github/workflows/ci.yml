@@ -44,7 +44,17 @@ jobs:
             fi
             "${SUDO[@]}" apt-get update
             "${SUDO[@]}" apt-get install -y --no-install-recommends software-properties-common
-            "${SUDO[@]}" add-apt-repository --yes ppa:kicad/kicad-dev-nightly
+            attempt=1
+            until "${SUDO[@]}" add-apt-repository --yes ppa:kicad/kicad-dev-nightly; do
+              if (( attempt >= 4 )); then
+                echo "::error::Unable to query the KiCad nightly PPA through Launchpad after ${attempt} attempts."
+                exit 1
+              fi
+              delay=$(( 5 * 2 ** (attempt - 1) ))
+              echo "::warning::Launchpad returned an incomplete PPA response; retrying in ${delay}s (attempt ${attempt}/4)."
+              sleep "$delay"
+              attempt=$(( attempt + 1 ))
+            done
             "${SUDO[@]}" apt-get update
             "${SUDO[@]}" apt-get install -y --no-install-recommends kicad-nightly
             CLI="$(command -v kicad-cli-nightly || command -v kicad-cli || true)"
