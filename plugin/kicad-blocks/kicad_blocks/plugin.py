@@ -2979,7 +2979,11 @@ def _save_block_variants(
 
         if item.get("file"):
             filename = str(item["file"])
-            source = None
+            source = (
+                Path(item["source"]).expanduser().resolve()
+                if item.get("source")
+                else None
+            )
         else:
             source = Path(item.get("source", "")).expanduser().resolve()
             if not source.is_file() or source.suffix.casefold() != ".kicad_sch":
@@ -4193,7 +4197,11 @@ def _show_block_variant_editor(
             item = variants[variant_index]
             tree.insert(
                 "", "end", iid=str(row_index),
-                values=(item["value"], item["file"], "Alternative"),
+                values=(
+                    item["value"],
+                    item.get("file") or Path(str(item.get("source") or "")).name or "Pending save",
+                    "Alternative",
+                ),
                 tags=("odd" if row_index % 2 else "even",),
             )
         if selected_index is not None and 0 <= selected_index <= len(alternative_variant_indices()):
@@ -4263,7 +4271,9 @@ def _show_block_variant_editor(
                 "Edit implementation", f"The value {value!r} already exists.", parent=dialog
             )
             return
-        updated = {"value": value, "source": source}
+        # Keep the existing library filename when a selector is renamed. A
+        # different source may still replace its contents at the same path.
+        updated = {"value": value, "file": current["file"], "source": source}
         if current.get("layout_id"):
             updated["layout_id"] = current["layout_id"]
         if current.get("open_after_save"):
