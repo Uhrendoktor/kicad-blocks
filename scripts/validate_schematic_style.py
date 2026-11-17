@@ -1725,15 +1725,16 @@ def circuit_documentation_issues(tree: SExprList) -> list[str]:
         for node in _all(tree, "text_box")
         if (uid := _direct(node, "uuid")) is not None
     }
-    evidence_ok = bool(group_evidence.get("datasheet") or group_evidence.get("screenshot_asset"))
-    if not evidence_ok:
-        issues.append("group evidence must provide a datasheet or reviewed screenshot asset")
-    if not group_evidence.get("screenshot_asset") and not (
+    has_document_reference = bool(
         group_evidence.get("document")
         and group_evidence.get("page")
         and group_evidence.get("figure")
-    ):
-        issues.append("group evidence must identify its document, page and figure")
+    )
+    has_reviewed_asset = bool(group_evidence.get("screenshot_asset"))
+    if not (has_document_reference or has_reviewed_asset):
+        issues.append(
+            "group evidence must identify a document/page/figure or a reviewed screenshot asset"
+        )
     for group in schematic_groups:
         members = tuple(group.get("documentation_members", ()))
         if not members:

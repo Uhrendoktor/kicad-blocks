@@ -532,10 +532,10 @@ class LibraryBrowserTests(unittest.TestCase):
             )
             return SimpleNamespace(returncode=0, stdout="", stderr="")
 
-        def rasterize(*, svg_path, width, height):
+        def rasterize(*, svg_string: str, width: int, height: int) -> bytes:
             from xml.etree import ElementTree as ET
 
-            root = ET.parse(svg_path).getroot()
+            root = ET.fromstring(svg_string)
             rasterized_dimensions.append(
                 (root.attrib.get("width"), root.attrib.get("height"))
             )

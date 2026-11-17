@@ -14,8 +14,16 @@ sys.path.insert(0, str(ROOT / "plugin" / "kicad-blocks"))
 sys.path.insert(0, str(ROOT / "examples" / "stusb4500"))
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from generate_reference import generate_reference_schematic
-from kicad_blocks.sexpr import SExpr, SExprList, parse_sexpr, sexpr_all, sexpr_direct
+from generate_reference import reference_uid, generate_reference_schematic
+from kicad_blocks.sexpr import (
+    SExpr,
+    SExprList,
+    parse_sexpr,
+    sexpr_all,
+    sexpr_direct,
+    sexpr_all as _all,
+    sexpr_direct as _direct,
+)
 from validate_schematic_style import (
     STYLE_RULES,
     pin_world_info,
@@ -112,9 +120,7 @@ class SchematicStyleRuleTests(unittest.TestCase):
         group = next(item for item in __import__("generate_reference").SCHEMATIC_GROUPS
                      if item["id"] == "vbus-monitor")
         purpose = group["component_purposes"]["R1"]
-        description_id = __import__("generate_reference")._uid(
-            "graphic:text:group-description:vbus-monitor"
-        )
+        description_id = reference_uid("graphic:text:group-description:vbus-monitor")
         description = next(
             node for node in _all(tree, "text_box")
             if str(_direct(node, "uuid")[1]) == description_id

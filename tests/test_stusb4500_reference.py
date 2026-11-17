@@ -14,7 +14,15 @@ sys.path.insert(0, str(ROOT / "examples" / "stusb4500"))
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from generate_reference import SCHEMATIC_GROUPS, reference_uid, generate_reference_schematic
-from kicad_blocks.sexpr import SExpr, SExprList, parse_sexpr, sexpr_all, sexpr_direct
+from kicad_blocks.sexpr import (
+    SExpr,
+    SExprList,
+    parse_sexpr,
+    sexpr_all,
+    sexpr_direct,
+    sexpr_all as _all,
+    sexpr_direct as _direct,
+)
 from validate_schematic_style import (
     STYLE_RULES,
     check_schematic_style,
