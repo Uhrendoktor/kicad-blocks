@@ -498,6 +498,8 @@ def test_pcb_layout_manager_add_and_save_failure_can_be_retried(monkeypatch, tmp
 
     def add_and_retry(_dialog):
         _click(context, "pcb-layout-manager.action.add", "Add layout")
+        tree = context.require_widget("pcb-layout-manager.rows")
+        assert tree.item("1", "values")[2] == "new-boost.kicad_pcb"
         status = context.require_widget("pcb-layout-manager.status")
         variable = str(status.cget("textvariable"))
         assert "Save failed; use Save & close to retry." in status.getvar(variable)
