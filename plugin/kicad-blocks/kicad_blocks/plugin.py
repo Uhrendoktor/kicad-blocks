@@ -454,14 +454,7 @@ class _TkStyleLayout(Protocol):
 class _ResvgPy(Protocol):
     """Narrow SVG-to-PNG renderer interface used by toolbar icon generation."""
 
-    def svg_to_bytes(
-        self,
-        *,
-        svg_string: str,
-        width: int,
-        height: int,
-        dpi: float = 0.0,
-    ) -> bytes: ...
+    def svg_to_bytes(self, *, svg_string: str, width: int, height: int) -> bytes: ...
 
 
 class _TkPaletteOwner(Protocol):
@@ -3210,9 +3203,6 @@ def _native_symbol_preview_photo(
                 svg_string=svg_file.read_text(encoding="utf-8"),
                 width=int(width),
                 height=int(max_height),
-                # KiCad exports physical dimensions in millimetres. resvg needs
-                # a concrete DPI to convert those units into its pixel viewport.
-                dpi=96.0,
             )
             try:
                 from io import BytesIO
@@ -4196,9 +4186,7 @@ def _show_block_layout_editor(
         if not links and item_id == default_layout_id:
             links = ["Default"]
         if not links:
-            links = [
-                str(value) for value, linked in variant_layouts.items() if linked == item_id
-            ]
+            links = [str(value) for value, linked in variant_layouts.items() if linked == item_id]
         if not links:
             links = ["Default"]
         layout_implementations[item_id] = list(dict.fromkeys(links))
@@ -4289,10 +4277,16 @@ def _show_block_layout_editor(
             None,
         )
         consequence = (
-            f" Variants linked to it will use {next(
-                (candidate.get("name", "") for candidate in layouts if candidate.get("id") == replacement_id),
-                "the remaining layout",
-            )} instead."
+            f" Variants linked to it will use {
+                next(
+                    (
+                        candidate.get('name', '')
+                        for candidate in layouts
+                        if candidate.get('id') == replacement_id
+                    ),
+                    'the remaining layout',
+                )
+            } instead."
             if replacement_id
             else " No PCB layouts will remain; variant layout assignments will be cleared."
         )
@@ -4857,7 +4851,11 @@ def _show_block_variant_editor(
             None,
         )
         filename = (
-            (selected.get("file") or selected.get("source") or record.manifest["implementation_file"])
+            (
+                selected.get("file")
+                or selected.get("source")
+                or record.manifest["implementation_file"]
+            )
             if selected is not None
             else record.manifest["implementation_file"]
         )

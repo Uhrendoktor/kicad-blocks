@@ -878,9 +878,7 @@ def _merge_project_net_settings(
     class_map, merged_classes = _merge_netclass_definitions(
         target_classes, source_classes, instance_reference
     )
-    source_assignments: dict[str, str | list[str]] = source_settings.get(
-        "netclass_assignments", {}
-    )
+    source_assignments: dict[str, str | list[str]] = source_settings.get("netclass_assignments", {})
     target_assignment_values: dict[str, str | list[str]] = target_settings.get(
         "netclass_assignments", {}
     )
@@ -898,9 +896,7 @@ def _merge_project_net_settings(
     applied_patterns, unmatched_patterns = _merge_project_netclass_patterns(
         patterns, source_net_map, target_assignments, class_map
     )
-    target_settings["netclass_assignments"] = cast(
-        dict[str, str | list[str]], target_assignments
-    )
+    target_settings["netclass_assignments"] = cast(dict[str, str | list[str]], target_assignments)
     metadata: KiCadProjectMetadata = target_data.get("meta") or {}
     target_data["meta"] = metadata
     metadata["filename"] = output_project.name

@@ -188,6 +188,7 @@ def main(screenshot_path: Path | None = None) -> None:
         interaction_errors: list[str] = []
         original_showinfo = plugin_actions.messagebox.showinfo
         original_showerror = plugin_actions.messagebox.showerror
+
         def showinfo(*_args: str, **_kwargs: str) -> None:
             return None
 
@@ -216,7 +217,11 @@ def main(screenshot_path: Path | None = None) -> None:
                 widgets = list(_walk(dialog))
                 combos = cast(
                     list[_TestCombobox],
-                    [widget for widget in widgets if isinstance(widget, plugin_actions.ttk.Combobox)],
+                    [
+                        widget
+                        for widget in widgets
+                        if isinstance(widget, plugin_actions.ttk.Combobox)
+                    ],
                 )
                 entries = cast(
                     list[_TestEntry],

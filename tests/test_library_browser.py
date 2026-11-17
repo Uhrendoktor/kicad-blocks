@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import math
 import os
 import subprocess
 import sys
@@ -209,7 +208,7 @@ class LibraryBrowserTests(unittest.TestCase):
                 "kicad_blocks.plugin._clean_facade_preview_svg",
                 side_effect=_return_preview_svg,
             ),
-            patch("resvg_py.svg_to_bytes", return_value=b"not-a-png") as render_svg,
+            patch("resvg_py.svg_to_bytes", return_value=b"not-a-png"),
             patch(
                 "kicad_blocks.plugin.tk",
                 SimpleNamespace(PhotoImage=Mock(return_value=object())),
@@ -222,8 +221,6 @@ class LibraryBrowserTests(unittest.TestCase):
             )
 
         self.assertEqual(len(calls), 1)
-        assert render_svg.call_args is not None
-        assert math.isclose(render_svg.call_args.kwargs["dpi"], 96.0)
         self.assertEqual(calls[0][-1], str(project_catalog.resolve()))
         self.assertNotEqual(
             calls[0][-1],

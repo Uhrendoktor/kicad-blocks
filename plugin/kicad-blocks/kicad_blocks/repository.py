@@ -316,7 +316,9 @@ def _resolve_project_symbol_source(
     return source_tree, source_symbol, source_digest
 
 
-type _ProjectSyncJson = str | int | float | bool | None | list[_ProjectSyncJson] | dict[str, _ProjectSyncJson]
+type _ProjectSyncJson = (
+    str | int | float | bool | None | list[_ProjectSyncJson] | dict[str, _ProjectSyncJson]
+)
 
 
 def _load_project_symbol_sync_state(state_file: Path) -> ProjectSymbolSyncState:
@@ -325,9 +327,7 @@ def _load_project_symbol_sync_state(state_file: Path) -> ProjectSymbolSyncState:
     if not state_file.is_file():
         return {"schema_version": 1, "symbols": synchronized}
     try:
-        loaded_state = cast(
-            _ProjectSyncJson, json.loads(state_file.read_text(encoding="utf-8"))
-        )
+        loaded_state = cast(_ProjectSyncJson, json.loads(state_file.read_text(encoding="utf-8")))
     except json.JSONDecodeError as exc:
         raise ValueError(_INVALID_PROJECT_SYMBOL_SYNC_STATE) from exc
     if not isinstance(loaded_state, dict):
