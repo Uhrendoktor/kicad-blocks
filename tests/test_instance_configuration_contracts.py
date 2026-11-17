@@ -457,6 +457,12 @@ def test_failed_instance_update_rolls_back_field_values_and_keeps_form_open(
         schematic.drop_commit.assert_called_once_with(commit)
         schematic.push_commit.assert_not_called()
         schematic.save.assert_not_called()
+        _click(
+            context,
+            "instance-configuration.action.cancel",
+            "Cancel",
+            closes=True,
+        )
 
     try:
         _run_dialog(root, context, library, project, schematic, retry_after_failure)
