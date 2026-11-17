@@ -1223,6 +1223,8 @@ def _pick_block_for_placement(records, parent):
         raise ValueError("No blocks were found in the registered functional-block libraries.")
 
     dialog = tk.Toplevel(parent)
+    dialog._kicad_ui_screen_id = "functional-block-picker"
+    dialog._kicad_ui_contract_id = "functional-block-picker.window"
     dialog.title("Place Functional Block")
     dialog.transient(parent)
 
@@ -1231,9 +1233,11 @@ def _pick_block_for_placement(records, parent):
     ttk.Label(outer, text="Search").pack(anchor="w")
     search = tk.StringVar()
     search_entry = ttk.Entry(outer, textvariable=search)
+    search_entry._kicad_ui_contract_id = "functional-block-picker.search"
     search_entry.pack(fill="x", pady=(3, 6))
 
     panes = ttk.Panedwindow(outer, orient="horizontal")
+    panes._kicad_ui_contract_id = "functional-block-picker.panes"
     panes.pack(fill="both", expand=True)
     left = ttk.Frame(panes, padding=(0, 0, 8, 0))
     right = ttk.Frame(panes, padding=(8, 0, 0, 0))
@@ -1243,6 +1247,7 @@ def _pick_block_for_placement(records, parent):
     left.columnconfigure(0, weight=1)
 
     tree = ttk.Treeview(left, columns=("block", "library"), show="headings", selectmode="browse")
+    tree._kicad_ui_contract_id = "functional-block-picker.results"
     tree.heading("block", text="Functional block")
     tree.heading("library", text="Library")
     tree.column("block", width=220, minwidth=160, stretch=True)
@@ -1257,8 +1262,10 @@ def _pick_block_for_placement(records, parent):
     _bind_mousewheel(tree, lambda amount: tree.yview_scroll(amount, "units"))
 
     name = ttk.Label(right, text="Select a functional block")
+    name._kicad_ui_contract_id = "functional-block-picker.name"
     name.pack(anchor="w")
     description = ttk.Label(right, text="", wraplength=620, justify="left")
+    description._kicad_ui_contract_id = "functional-block-picker.description"
     description.pack(fill="x", anchor="w", pady=(4, 10))
 
     config = ttk.Frame(right)
@@ -1267,19 +1274,23 @@ def _pick_block_for_placement(records, parent):
     ttk.Label(config, text="Implementation variant").grid(row=0, column=0, sticky="w", padx=(0, 10))
     variant_value = tk.StringVar()
     variant_combo = ttk.Combobox(config, textvariable=variant_value, state="readonly", width=32)
+    variant_combo._kicad_ui_contract_id = "functional-block-picker.variant"
     variant_combo.grid(row=0, column=1, sticky="ew", pady=2)
     ttk.Label(config, text="Configuration profile").grid(row=1, column=0, sticky="w", padx=(0, 10))
     profile_value = tk.StringVar()
     profile_combo = ttk.Combobox(config, textvariable=profile_value, state="readonly", width=32)
+    profile_combo._kicad_ui_contract_id = "functional-block-picker.profile"
     profile_combo.grid(row=1, column=1, sticky="ew", pady=2)
 
     preview_box = ttk.LabelFrame(right, text="KiCad facade preview", padding=5)
     preview_box.pack(fill="both", expand=True)
     preview = tk.Canvas(preview_box, height=270, highlightthickness=0, borderwidth=0)
+    preview._kicad_ui_contract_id = "functional-block-picker.preview"
     preview.pack(fill="both", expand=True)
     _bind_mousewheel(preview, lambda amount: preview.yview_scroll(amount, "units"))
 
     metadata = ttk.Label(right, text="", wraplength=620, justify="left")
+    metadata._kicad_ui_contract_id = "functional-block-picker.metadata"
     metadata.pack(fill="x", anchor="w", pady=(6, 0))
 
     records_by_id = {}
@@ -1430,8 +1441,16 @@ def _pick_block_for_placement(records, parent):
 
     buttons = ttk.Frame(outer)
     buttons.pack(fill="x", pady=(10, 0))
-    _action_button(buttons, "Cancel", dialog.destroy, "cancel", "Cancel and close this dialog").pack(side="right")
-    _action_button(buttons, "Place Block", choose, "place", "Start native symbol placement with this block").pack(side="right", padx=(0, 8))
+    _action_button(
+        buttons, "Cancel", dialog.destroy, "cancel",
+        "Cancel and close this dialog",
+        contract_id="functional-block-picker.action.cancel",
+    ).pack(side="right")
+    _action_button(
+        buttons, "Place Block", choose, "place",
+        "Start native symbol placement with this block",
+        contract_id="functional-block-picker.action.place",
+    ).pack(side="right", padx=(0, 8))
     render_results()
     _set_window_geometry(dialog, 1080, 720, 900, 580)
     dialog.grab_set()

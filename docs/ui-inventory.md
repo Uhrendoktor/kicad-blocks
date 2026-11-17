@@ -5,11 +5,11 @@ This page is generated from the declarative UI catalog. It inventories the curre
 
 | Coverage status | Screens | Meaning |
 |---|---:|---|
-| Contracted | 9 | Widget-level execute/result assertions are registered and run in CI. |
-| Partial | 4 | Targeted GUI, integration, model, or screenshot checks exist; the full control matrix is not contracted. |
+| Contracted | 10 | Widget-level execute/result assertions are registered and run in CI. |
+| Partial | 3 | Targeted GUI, integration, model, or screenshot checks exist; the full control matrix is not contracted. |
 | Inventory only | 2 | Window/workflow is documented here; systematic interaction contracts remain future work. |
 
-Task Hub, both transient block choosers, Add PCB Layout, Create Block form, Record picker, Instance Configuration, Manage Libraries, and PCB Layout Manager have full registered widget contracts. The Functional Block Library and implementation manager remain partial while every downstream KiCad operation and native OS chooser continues to be verified separately.
+Task Hub, both transient block choosers, Add PCB Layout, Create Block form, Record picker, Functional Block picker, Instance Configuration, Manage Libraries, and PCB Layout Manager have full registered widget contracts. The Functional Block Library and implementation manager remain partial while every downstream KiCad operation and native OS chooser continues to be verified separately.
 
 ## Screens
 
@@ -145,9 +145,9 @@ The production browser is captured in both themes. Real-widget contracts assert 
 
 Search for a block, choose profile and variant settings, and return a fully specified placement selection.
 
-**Coverage:** Partial — targeted GUI, integration, or visual checks exist.
+**Coverage:** Contracted — widget action and expected UI transition asserted.
 
-A real Tk/X11 GUI test drives the production chooser with keyboard input and asserts the selected block. Full contracts for every selector, cancel path, and error state remain to be added.
+Every application-owned picker action and view selector has a stable semantic ID and real-Tk interaction contract. Tests search/filter the real Treeview, assert selected-block name/description/metadata and preview callback output, choose an implementation profile and verify its linked variant/typed parameters/PCB layout, change the variant and assert a switch to Custom, verify empty-result selector/preview state and Place Block no-op, and exercise Cancel, Escape, and the empty-library guard. Native SVG generation and final placement are separately verified by the live KiCad picker/placement integration tests.
 
 **Major functionality**
 
@@ -156,8 +156,24 @@ A real Tk/X11 GUI test drives the production chooser with keyboard input and ass
 - Render the native KiCad facade preview
 - Return the selected record, variant, profile, and typed parameters
 
+**Registered semantic controls**
+
+- Place Functional Block dialog (`functional-block-picker.window`; window; behavior asserted)
+- Search blocks (`functional-block-picker.search`; entry; behavior asserted)
+- Search/results and configuration/preview panes (`functional-block-picker.panes`; panedwindow; behavior asserted)
+- Matching functional blocks (`functional-block-picker.results`; treeview; behavior asserted)
+- Selected block name (`functional-block-picker.name`; status-label; result observed)
+- Selected block description (`functional-block-picker.description`; status-label; result observed)
+- Implementation variant (`functional-block-picker.variant`; combobox; behavior asserted)
+- Configuration profile (`functional-block-picker.profile`; combobox; behavior asserted)
+- KiCad facade preview (`functional-block-picker.preview`; canvas; result observed)
+- Pin/parameter/layout metadata (`functional-block-picker.metadata`; status-label; result observed)
+- Cancel (`functional-block-picker.action.cancel`; button; behavior asserted)
+- Place Block (`functional-block-picker.action.place`; button; behavior asserted)
+
 **Current automated evidence**
 
+- `tests/test_functional_block_picker_contracts.py`
 - `tests/test_library_picker_gui.py`
 - `tests/capture_visual_docs.py`
 

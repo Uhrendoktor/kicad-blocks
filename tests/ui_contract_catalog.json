@@ -293,9 +293,10 @@
       "id": "functional-block-picker",
       "title": "Place Functional Block chooser",
       "purpose": "Search for a block, choose profile and variant settings, and return a fully specified placement selection.",
-      "coverage": "partial",
-      "coverage_note": "A real Tk/X11 GUI test drives the production chooser with keyboard input and asserts the selected block. Full contracts for every selector, cancel path, and error state remain to be added.",
+      "coverage": "contracted",
+      "coverage_note": "Every application-owned picker action and view selector has a stable semantic ID and real-Tk interaction contract. Tests search/filter the real Treeview, assert selected-block name/description/metadata and preview callback output, choose an implementation profile and verify its linked variant/typed parameters/PCB layout, change the variant and assert a switch to Custom, verify empty-result selector/preview state and Place Block no-op, and exercise Cancel, Escape, and the empty-library guard. Native SVG generation and final placement are separately verified by the live KiCad picker/placement integration tests.",
       "evidence": [
+        "tests/test_functional_block_picker_contracts.py",
         "tests/test_library_picker_gui.py",
         "tests/capture_visual_docs.py"
       ],
@@ -310,6 +311,80 @@
         "block-picker-filtered.png",
         "block-picker-profile.png",
         "block-picker-workflow.gif"
+      ],
+      "controls": [
+        {
+          "contract_id": "functional-block-picker.window",
+          "type": "window",
+          "label": "Place Functional Block dialog",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "functional-block-picker.search",
+          "type": "entry",
+          "label": "Search blocks",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "functional-block-picker.panes",
+          "type": "panedwindow",
+          "label": "Search/results and configuration/preview panes",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "functional-block-picker.results",
+          "type": "treeview",
+          "label": "Matching functional blocks",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "functional-block-picker.name",
+          "type": "status-label",
+          "label": "Selected block name",
+          "assertion": "observed"
+        },
+        {
+          "contract_id": "functional-block-picker.description",
+          "type": "status-label",
+          "label": "Selected block description",
+          "assertion": "observed"
+        },
+        {
+          "contract_id": "functional-block-picker.variant",
+          "type": "combobox",
+          "label": "Implementation variant",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "functional-block-picker.profile",
+          "type": "combobox",
+          "label": "Configuration profile",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "functional-block-picker.preview",
+          "type": "canvas",
+          "label": "KiCad facade preview",
+          "assertion": "observed"
+        },
+        {
+          "contract_id": "functional-block-picker.metadata",
+          "type": "status-label",
+          "label": "Pin/parameter/layout metadata",
+          "assertion": "observed"
+        },
+        {
+          "contract_id": "functional-block-picker.action.cancel",
+          "type": "button",
+          "label": "Cancel",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "functional-block-picker.action.place",
+          "type": "button",
+          "label": "Place Block",
+          "assertion": "asserted"
+        }
       ]
     },
     {

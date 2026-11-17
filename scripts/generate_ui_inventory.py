@@ -114,7 +114,7 @@ def render_inventory(catalog: dict[str, Any]) -> str:
         f"| Partial | {counts['partial']} | Targeted GUI, integration, model, or screenshot checks exist; the full control matrix is not contracted. |",
         f"| Inventory only | {counts['inventory-only']} | Window/workflow is documented here; systematic interaction contracts remain future work. |",
         "",
-        "Task Hub, both transient block choosers, Add PCB Layout, Create Block form, Record picker, Instance Configuration, Manage Libraries, and PCB Layout Manager have full registered widget contracts. The Functional Block Library and implementation manager remain partial while every downstream KiCad operation and native OS chooser continues to be verified separately.",
+        "Task Hub, both transient block choosers, Add PCB Layout, Create Block form, Record picker, Functional Block picker, Instance Configuration, Manage Libraries, and PCB Layout Manager have full registered widget contracts. The Functional Block Library and implementation manager remain partial while every downstream KiCad operation and native OS chooser continues to be verified separately.",
         "",
         "## Screens",
         "",
