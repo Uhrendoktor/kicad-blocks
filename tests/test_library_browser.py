@@ -11,8 +11,8 @@ import unittest
 from collections.abc import Callable, Sequence
 from importlib import import_module
 from pathlib import Path
-from types import ModuleType, SimpleNamespace
-from typing import Protocol, TypedDict, TypeVar, cast
+from types import SimpleNamespace
+from typing import Protocol, TypedDict, cast
 from unittest.mock import Mock, patch
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -37,19 +37,14 @@ from kicad_blocks.repository import (
 )
 
 plugin_actions = import_module("kicad_blocks.plugin")
-_HookResult = TypeVar("_HookResult")
-
-
-def _private_hook(name: str) -> Callable[..., _HookResult]:
-    """Resolve a private UI test hook without importing its private symbol."""
-    return cast(Callable[..., _HookResult], getattr(plugin_actions, name))
+from kicad_blocks.plugin import SchematicSymbol as SchematicSymbolType
 
 
 _native_schematic_preview_pages = cast(
-    Callable[..., list[tuple[str, bytes]]], _private_hook("_native_schematic_preview_pages")
+    Callable[..., list[tuple[str, bytes]]], getattr(plugin_actions, "_native_schematic_preview_pages")
 )
 _normalize_schematic_preview_svg = cast(
-    Callable[..., Path], _private_hook("_normalize_schematic_preview_svg")
+    Callable[..., Path], getattr(plugin_actions, "_normalize_schematic_preview_svg")
 )
 
 
@@ -84,52 +79,52 @@ class _LayoutChoice(TypedDict):
 # Resolve UI internals through the name-based fixture boundary. This keeps the
 # tests coupled to behavior without importing private production symbols.
 _attach_tk_window_to_editor = cast(
-    Callable[..., bool], _private_hook("_attach_tk_window_to_editor")
+    Callable[..., bool], getattr(plugin_actions, "_attach_tk_window_to_editor")
 )
 _native_symbol_preview_photo = cast(
-    Callable[..., None], _private_hook("_native_symbol_preview_photo")
+    Callable[..., None], getattr(plugin_actions, "_native_symbol_preview_photo")
 )
-_pick_save_file = cast(Callable[..., str | None], _private_hook("_pick_save_file"))
-_bind_mousewheel = cast(Callable[..., None], _private_hook("_bind_mousewheel"))
-_block_overview_text = cast(Callable[..., str], _private_hook("_block_overview_text"))
+_pick_save_file = cast(Callable[..., str | None], getattr(plugin_actions, "_pick_save_file"))
+_bind_mousewheel = cast(Callable[..., None], getattr(plugin_actions, "_bind_mousewheel"))
+_block_overview_text = cast(Callable[..., str], getattr(plugin_actions, "_block_overview_text"))
 _choose_block_layout = cast(
-    Callable[..., _LayoutChoice | None], _private_hook("_choose_block_layout")
+    Callable[..., _LayoutChoice | None], getattr(plugin_actions, "_choose_block_layout")
 )
-_clean_facade_preview_svg = cast(Callable[..., Path], _private_hook("_clean_facade_preview_svg"))
+_clean_facade_preview_svg = cast(Callable[..., Path], getattr(plugin_actions, "_clean_facade_preview_svg"))
 _filter_library_records = cast(
-    Callable[..., list[BlockRecord]], _private_hook("_filter_library_records")
+    Callable[..., list[BlockRecord]], getattr(plugin_actions, "_filter_library_records")
 )
-_layout_choices = cast(Callable[..., list[_LayoutChoice]], _private_hook("_layout_choices"))
+_layout_choices = cast(Callable[..., list[_LayoutChoice]], getattr(plugin_actions, "_layout_choices"))
 _library_record_for_instance = cast(
-    Callable[..., BlockRecord], _private_hook("_library_record_for_instance")
+    Callable[..., BlockRecord], getattr(plugin_actions, "_library_record_for_instance")
 )
 _library_record_for_tree_row = cast(
-    Callable[..., BlockRecord | None], _private_hook("_library_record_for_tree_row")
+    Callable[..., BlockRecord | None], getattr(plugin_actions, "_library_record_for_tree_row")
 )
 _minimize_placement_windows = cast(
-    Callable[..., list[_MinimizableWindow]], _private_hook("_minimize_placement_windows")
+    Callable[..., list[_MinimizableWindow]], getattr(plugin_actions, "_minimize_placement_windows")
 )
-_new_blank_pcb_source = cast(Callable[..., Path], _private_hook("_new_blank_pcb_source"))
-_pick_directory = cast(Callable[..., str | None], _private_hook("_pick_directory"))
-_pick_kicad_file = cast(Callable[..., str | None], _private_hook("_pick_kicad_file"))
-_pick_record = cast(Callable[..., BlockRecord | None], _private_hook("_pick_record"))
+_new_blank_pcb_source = cast(Callable[..., Path], getattr(plugin_actions, "_new_blank_pcb_source"))
+_pick_directory = cast(Callable[..., str | None], getattr(plugin_actions, "_pick_directory"))
+_pick_kicad_file = cast(Callable[..., str | None], getattr(plugin_actions, "_pick_kicad_file"))
+_pick_record = cast(Callable[..., BlockRecord | None], getattr(plugin_actions, "_pick_record"))
 _preferred_library_selection = cast(
-    Callable[..., BlockRecord | None], _private_hook("_preferred_library_selection")
+    Callable[..., BlockRecord | None], getattr(plugin_actions, "_preferred_library_selection")
 )
-_restore_placement_windows = cast(Callable[..., None], _private_hook("_restore_placement_windows"))
-_save_block_layouts = cast(Callable[..., BlockRecord], _private_hook("_save_block_layouts"))
-_save_block_variants = cast(Callable[..., None], _private_hook("_save_block_variants"))
-_set_window_geometry = cast(Callable[..., None], _private_hook("_set_window_geometry"))
+_restore_placement_windows = cast(Callable[..., None], getattr(plugin_actions, "_restore_placement_windows"))
+_save_block_layouts = cast(Callable[..., BlockRecord], getattr(plugin_actions, "_save_block_layouts"))
+_save_block_variants = cast(Callable[..., None], getattr(plugin_actions, "_save_block_variants"))
+_set_window_geometry = cast(Callable[..., None], getattr(plugin_actions, "_set_window_geometry"))
 _start_native_symbol_placement = cast(
-    Callable[..., plugin_actions.SchematicSymbol], _private_hook("_start_native_symbol_placement")
+    Callable[..., SchematicSymbolType], getattr(plugin_actions, "_start_native_symbol_placement")
 )
 _schematic_page_center_mm = cast(
-    Callable[..., tuple[float, float]], _private_hook("_schematic_page_center_mm")
+    Callable[..., tuple[float, float]], getattr(plugin_actions, "_schematic_page_center_mm")
 )
 _system_prefers_dark_theme = cast(
-    Callable[..., bool | None], _private_hook("_system_prefers_dark_theme")
+    Callable[..., bool | None], getattr(plugin_actions, "_system_prefers_dark_theme")
 )
-_configure_tk_theme = cast(Callable[..., None], _private_hook("_configure_tk_theme"))
+_configure_tk_theme = cast(Callable[..., None], getattr(plugin_actions, "_configure_tk_theme"))
 
 
 class LibraryBrowserTests(unittest.TestCase):
