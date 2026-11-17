@@ -20,7 +20,9 @@ except ImportError:  # Imported from a standalone test module.
         from github_api_types import GitHubApiResponse, JSONObject, decode_github_response
 
 
-def _request(method: str, url: str, token: str, payload: JSONObject | None = None) -> GitHubApiResponse | None:
+def _request(
+    method: str, url: str, token: str, payload: JSONObject | None = None
+) -> GitHubApiResponse | None:
     headers = {
         "Accept": "application/vnd.github+json",
         "Authorization": f"Bearer {token}",

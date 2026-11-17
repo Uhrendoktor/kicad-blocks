@@ -29,6 +29,7 @@ from kicad_blocks.pcb_layout import (
     parse_sexpr,
 )
 
+
 def _sexpr_number(node: SExprList, index: int) -> float:
     """Read one numeric atom from a recursive KiCad S-expression node."""
     if index >= len(node) or not isinstance(node[index], str):
@@ -45,7 +46,6 @@ def _required_child(node: SExprList, tag: str) -> SExprList:
     if child is None:
         raise AssertionError(f"PCB S-expression node is missing {tag!r}: {node!r}")
     return child
-
 
 
 def _find_cli() -> str:

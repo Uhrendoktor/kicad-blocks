@@ -87,9 +87,7 @@ def _api_root() -> str:
     return os.environ.get("GITHUB_API_URL", "https://api.github.com").rstrip("/")
 
 
-def _get_or_create_release(
-    repo: str, tag: str, source_sha: str, token: str
-) -> GitHubApiResponse:
+def _get_or_create_release(repo: str, tag: str, source_sha: str, token: str) -> GitHubApiResponse:
     root = _api_root()
     url = f"{root}/repos/{repo}/releases/tags/{quote(tag, safe='')}"
     release = _request("GET", url, token)

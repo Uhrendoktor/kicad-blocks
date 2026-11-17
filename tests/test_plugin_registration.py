@@ -608,8 +608,7 @@ def main() -> None:
                 if not reload_ok:
                     raise RuntimeError(
                         "Could not reload the generated KBlocks project catalog before "
-                        "checking Edit Facade capability: "
-                        + str(reload_warning)
+                        "checking Edit Facade capability: " + str(reload_warning)
                     )
                 try:
                     plugin_actions.edit_facade_symbol(

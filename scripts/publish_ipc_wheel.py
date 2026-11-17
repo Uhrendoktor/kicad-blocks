@@ -149,9 +149,7 @@ def _get_or_create_release(repo: str, token: str) -> GitHubApiResponse:
         raise
 
 
-def _matching_asset(
-    release: GitHubApiResponse, name: str, size: int
-) -> GitHubApiResponse | None:
+def _matching_asset(release: GitHubApiResponse, name: str, size: int) -> GitHubApiResponse | None:
     for asset in release.get("assets", []):
         if (
             asset.get("name") == name

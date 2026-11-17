@@ -509,6 +509,7 @@ def main() -> None:
                 )
             ),
         )
+
         class FakeLocalSchematic:
             def get_selection(self) -> list[plugin_actions.SchematicSymbol]:
                 return [cast(plugin_actions.SchematicSymbol, local_instance)]

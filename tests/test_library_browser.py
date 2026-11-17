@@ -41,7 +41,8 @@ from kicad_blocks.plugin import SchematicSymbol as SchematicSymbolType
 
 
 _native_schematic_preview_pages = cast(
-    Callable[..., list[tuple[str, bytes]]], getattr(plugin_actions, "_native_schematic_preview_pages")
+    Callable[..., list[tuple[str, bytes]]],
+    getattr(plugin_actions, "_native_schematic_preview_pages"),
 )
 _normalize_schematic_preview_svg = cast(
     Callable[..., Path], getattr(plugin_actions, "_normalize_schematic_preview_svg")
@@ -90,11 +91,15 @@ _block_overview_text = cast(Callable[..., str], getattr(plugin_actions, "_block_
 _choose_block_layout = cast(
     Callable[..., _LayoutChoice | None], getattr(plugin_actions, "_choose_block_layout")
 )
-_clean_facade_preview_svg = cast(Callable[..., Path], getattr(plugin_actions, "_clean_facade_preview_svg"))
+_clean_facade_preview_svg = cast(
+    Callable[..., Path], getattr(plugin_actions, "_clean_facade_preview_svg")
+)
 _filter_library_records = cast(
     Callable[..., list[BlockRecord]], getattr(plugin_actions, "_filter_library_records")
 )
-_layout_choices = cast(Callable[..., list[_LayoutChoice]], getattr(plugin_actions, "_layout_choices"))
+_layout_choices = cast(
+    Callable[..., list[_LayoutChoice]], getattr(plugin_actions, "_layout_choices")
+)
 _library_record_for_instance = cast(
     Callable[..., BlockRecord], getattr(plugin_actions, "_library_record_for_instance")
 )
@@ -111,8 +116,12 @@ _pick_record = cast(Callable[..., BlockRecord | None], getattr(plugin_actions, "
 _preferred_library_selection = cast(
     Callable[..., BlockRecord | None], getattr(plugin_actions, "_preferred_library_selection")
 )
-_restore_placement_windows = cast(Callable[..., None], getattr(plugin_actions, "_restore_placement_windows"))
-_save_block_layouts = cast(Callable[..., BlockRecord], getattr(plugin_actions, "_save_block_layouts"))
+_restore_placement_windows = cast(
+    Callable[..., None], getattr(plugin_actions, "_restore_placement_windows")
+)
+_save_block_layouts = cast(
+    Callable[..., BlockRecord], getattr(plugin_actions, "_save_block_layouts")
+)
 _save_block_variants = cast(Callable[..., None], getattr(plugin_actions, "_save_block_variants"))
 _set_window_geometry = cast(Callable[..., None], getattr(plugin_actions, "_set_window_geometry"))
 _start_native_symbol_placement = cast(
