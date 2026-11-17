@@ -4,7 +4,16 @@ from __future__ import annotations
 
 import os
 import sys
+from collections.abc import Callable, Sequence
 from pathlib import Path
+from typing import TYPE_CHECKING, TypeVar, cast
+
+from _pytest.monkeypatch import MonkeyPatch
+
+if TYPE_CHECKING:
+    from tkinter import Misc, Tk, Toplevel
+else:
+    Misc = Tk = Toplevel = object
 
 import pytest
 
@@ -13,6 +22,8 @@ sys.path.insert(0, str(ROOT / "plugin" / "kicad-blocks"))
 sys.path.insert(0, str(ROOT / "tests"))
 
 from kicad_blocks import plugin as plugin_actions
+from kicad_blocks.manifest_types import BlockProfileInput, BlockVariantInput
+from kicad_blocks.repository import BlockRecord
 from kicad_blocks.model import parse_pins
 from kicad_blocks.repository import create_block, read_manifest
 from ui_contracts import (
@@ -41,13 +52,32 @@ MANAGER_CONTROLS = {
 STATUS_TEXT = "Empty KB_VARIANT uses the default implementation."
 
 
-def _new_manager_fixture(tmp_path: Path, variants=(), profiles=()):
+_HookResult = TypeVar("_HookResult")
+
+
+def _private_hook(name: str) -> Callable[..., _HookResult]:
+    """Resolve a private plugin hook through a typed test boundary."""
+    return cast(Callable[..., _HookResult], getattr(plugin_actions, name))
+
+
+_load_tkinter = cast(Callable[[], None], _private_hook("_load_tkinter"))
+_show_block_variant_editor = cast(
+    Callable[..., Path | None], _private_hook("_show_block_variant_editor")
+)
+_save_block_variants = cast(Callable[..., None], _private_hook("_save_block_variants"))
+
+
+def _new_manager_fixture(
+    tmp_path: Path,
+    variants: Sequence[str] = (),
+    profiles: Sequence[BlockProfileInput] = (),
+) -> tuple[BlockRecord, dict[str, Path]]:
     library_root = tmp_path / "library"
     library_root.mkdir()
     source_root = tmp_path / "sources"
     source_root.mkdir()
-    variant_files = []
-    sources = {}
+    variant_files: list[BlockVariantInput] = []
+    sources: dict[str, Path] = {}
     for value in variants:
         source = source_root / f"{value.casefold()}.kicad_sch"
         source.write_text(
@@ -63,36 +93,44 @@ def _new_manager_fixture(tmp_path: Path, variants=(), profiles=()):
         variant_files=variant_files,
         profiles=list(profiles),
     )
-    plugin_actions._load_tkinter()
+    _load_tkinter()
     return record, sources
 
 
-def _new_root(monkeypatch):
-    monkeypatch.setattr(
-        plugin_actions,
-        "_create_action_icon",
-        lambda *_args: None,
-    )
-    root = plugin_actions.tk.Tk()
+def _new_root(monkeypatch: MonkeyPatch) -> Tk:
+    def no_icon(_parent: Misc, _name: str, _stroke_color: str | None = None) -> None:
+        return None
+
+    monkeypatch.setattr(plugin_actions, "_create_action_icon", no_icon)
+    root = cast(Tk, plugin_actions.tk.Tk())
     root.title("UI contract host")
     root.geometry("1280x800")
     root.update()
     return root
 
 
-def _manager_dialog(root):
-    return next(
-        child
-        for child in root.winfo_children()
-        if child.winfo_class() == "Toplevel" and child.title().startswith("Implementations — ")
+def _manager_dialog(root: Tk) -> Toplevel:
+    from tkinter import Toplevel as TkToplevel
+
+    child = next(
+        item
+        for item in root.winfo_children()
+        if item.winfo_class() == "Toplevel"
+        and cast(TkToplevel, item).title().startswith("Implementations — ")
     )
+    return cast(Toplevel, child)
 
 
-def _run_manager(root, record, context, action):
-    callback_errors = []
+def _run_manager(
+    root: Tk,
+    record: BlockRecord,
+    context: UiTestContext,
+    action: Callable[[Toplevel], None],
+) -> Path | None:
+    callback_errors: list[Exception] = []
 
-    def drive():
-        dialog = None
+    def drive() -> None:
+        dialog: Toplevel | None = None
         try:
             dialog = _manager_dialog(root)
             assert dialog._kicad_ui_screen_id == "implementations-manager"
@@ -120,16 +158,18 @@ def _run_manager(root, record, context, action):
             elif not context.window_destroyed:
                 for child in root.winfo_children():
                     if child.winfo_class() == "Toplevel":
-                        child.destroy()
+                        cast(Toplevel, child).destroy()
 
     root.after(100, drive)
-    result = plugin_actions._show_block_variant_editor(record, root)
+    result = _show_block_variant_editor(record, root)
     if callback_errors:
         raise callback_errors[0]
     return result
 
 
-def _select_variant(context, row_id: str, expected_values: tuple[str, ...]):
+def _select_variant(
+    context: UiTestContext, row_id: str, expected_values: tuple[str, ...]
+) -> None:
     TreeSelectionContract(
         contract_id="implementations-manager.rows",
         row_id=row_id,
@@ -140,7 +180,7 @@ def _select_variant(context, row_id: str, expected_values: tuple[str, ...]):
 
 
 def _click(
-    context,
+    context: UiTestContext,
     contract_id: str,
     label: str,
     *,
@@ -155,19 +195,18 @@ def _click(
     ).run(context)
 
 
-def test_implementation_manager_window_and_all_buttons_are_discoverable(monkeypatch, tmp_path):
+def test_implementation_manager_window_and_all_buttons_are_discoverable(monkeypatch: MonkeyPatch, tmp_path: Path):
     record, _sources = _new_manager_fixture(tmp_path, variants=("1V8",))
     root = _new_root(monkeypatch)
     context = UiTestContext(root)
 
-    def inspect_and_close(dialog):
+    def inspect_and_close(dialog: Toplevel) -> None:
         assert dialog.winfo_viewable()
-        widgets = context.widgets
-        tree = widgets["implementations-manager.rows"]
+        tree = context.require_treeview("implementations-manager.rows")
         assert tree.item("0", "values")[0] == "Default"
         assert tree.item("1", "values")[0] == "1V8"
-        assert widgets["implementations-manager.action.edit"].instate(["!disabled"])
-        assert widgets["implementations-manager.action.remove"].instate(["disabled"])
+        assert context.require_button("implementations-manager.action.edit").instate(["!disabled"])
+        assert context.require_button("implementations-manager.action.remove").instate(["disabled"])
         _click(context, "implementations-manager.action.close", "Close", closes=True)
 
     try:
@@ -178,7 +217,7 @@ def test_implementation_manager_window_and_all_buttons_are_discoverable(monkeypa
 
 
 def test_set_as_default_promotes_selected_implementation_and_persists_manifest(
-    monkeypatch, tmp_path
+    monkeypatch: MonkeyPatch, tmp_path: Path
 ):
     record, _sources = _new_manager_fixture(
         tmp_path,
@@ -188,11 +227,11 @@ def test_set_as_default_promotes_selected_implementation_and_persists_manifest(
     context = UiTestContext(root)
     manifest_path = record.path / "manifest.json"
 
-    def promote(_dialog):
-        tree = context.require_widget("implementations-manager.rows")
+    def promote(_dialog: Toplevel) -> None:
+        tree = context.require_treeview("implementations-manager.rows")
         row_values = tuple(tree.item("2", "values"))
         _select_variant(context, "2", row_values)
-        default_button = context.require_widget("implementations-manager.action.default")
+        default_button = context.require_button("implementations-manager.action.default")
         assert default_button.cget("text") == "Set as default"
         _click(context, "implementations-manager.action.default", "Set as default")
         saved = read_manifest(record.path)
@@ -217,15 +256,15 @@ def test_set_as_default_promotes_selected_implementation_and_persists_manifest(
         root.destroy()
 
 
-def test_remove_alternative_updates_manifest_and_removes_unreferenced_file(monkeypatch, tmp_path):
+def test_remove_alternative_updates_manifest_and_removes_unreferenced_file(monkeypatch: MonkeyPatch, tmp_path: Path):
     record, _sources = _new_manager_fixture(tmp_path, variants=("1V8",))
     variant_file = record.path / record.manifest["variants"][0]["file"]
     root = _new_root(monkeypatch)
     context = UiTestContext(root)
     monkeypatch.setattr(plugin_actions.messagebox, "askyesno", lambda *_args, **_kwargs: True)
 
-    def remove(_dialog):
-        tree = context.require_widget("implementations-manager.rows")
+    def remove(_dialog: Toplevel) -> None:
+        tree = context.require_treeview("implementations-manager.rows")
         _select_variant(context, "1", tuple(tree.item("1", "values")))
         _click(context, "implementations-manager.action.remove", "Remove")
         assert tree.get_children() == ("0",)
@@ -244,7 +283,7 @@ def test_remove_alternative_updates_manifest_and_removes_unreferenced_file(monke
         root.destroy()
 
 
-def test_remove_is_blocked_when_an_implementation_is_referenced_by_a_profile(monkeypatch, tmp_path):
+def test_remove_is_blocked_when_an_implementation_is_referenced_by_a_profile(monkeypatch: MonkeyPatch, tmp_path: Path):
     record, _sources = _new_manager_fixture(
         tmp_path,
         variants=("1V8",),
@@ -259,8 +298,8 @@ def test_remove_is_blocked_when_an_implementation_is_referenced_by_a_profile(mon
         lambda title, message, **_kwargs: notices.append((title, message)),
     )
 
-    def guard(_dialog):
-        tree = context.require_widget("implementations-manager.rows")
+    def guard(_dialog: Toplevel) -> None:
+        tree = context.require_treeview("implementations-manager.rows")
         _select_variant(context, "1", tuple(tree.item("1", "values")))
         _click(context, "implementations-manager.action.remove", "Remove")
         assert len(notices) == 1
@@ -275,7 +314,7 @@ def test_remove_is_blocked_when_an_implementation_is_referenced_by_a_profile(mon
         root.destroy()
 
 
-def test_edit_variant_renames_selector_and_preserves_implementation_file(monkeypatch, tmp_path):
+def test_edit_variant_renames_selector_and_preserves_implementation_file(monkeypatch: MonkeyPatch, tmp_path: Path):
     record, _sources = _new_manager_fixture(tmp_path, variants=("1V8",))
     current_file = record.path / record.manifest["variants"][0]["file"]
     original_bytes = current_file.read_bytes()
@@ -287,8 +326,8 @@ def test_edit_variant_renames_selector_and_preserves_implementation_file(monkeyp
     root = _new_root(monkeypatch)
     context = UiTestContext(root)
 
-    def edit(_dialog):
-        tree = context.require_widget("implementations-manager.rows")
+    def edit(_dialog: Toplevel) -> None:
+        tree = context.require_treeview("implementations-manager.rows")
         _select_variant(context, "1", tuple(tree.item("1", "values")))
         _click(
             context,
@@ -312,7 +351,7 @@ def test_edit_variant_renames_selector_and_preserves_implementation_file(monkeyp
         root.destroy()
 
 
-def test_add_variant_save_failure_can_be_retried_with_save_and_close(monkeypatch, tmp_path):
+def test_add_variant_save_failure_can_be_retried_with_save_and_close(monkeypatch: MonkeyPatch, tmp_path: Path):
     record, _sources = _new_manager_fixture(tmp_path)
     source = tmp_path / "new-3v3.kicad_sch"
     source.write_text(
@@ -324,15 +363,18 @@ def test_add_variant_save_failure_can_be_retried_with_save_and_close(monkeypatch
         "_ask_implementation_details",
         lambda *_args, **_kwargs: ("3V3", str(source)),
     )
-    original_save = plugin_actions._save_block_variants
-    attempts = []
-    errors = []
+    original_save = _save_block_variants
+    attempts: list[str] = []
+    errors: list[tuple[str, str]] = []
 
-    def fail_once(*args, **kwargs):
+    def fail_once(
+        *args: BlockRecord | list[BlockVariantInput] | str | None,
+        **kwargs: str | None,
+    ) -> None:
         attempts.append("attempt")
         if len(attempts) == 1:
             raise OSError("simulated write failure")
-        return original_save(*args, **kwargs)
+        original_save(*args, **kwargs)
 
     monkeypatch.setattr(plugin_actions, "_save_block_variants", fail_once)
     monkeypatch.setattr(
@@ -343,7 +385,7 @@ def test_add_variant_save_failure_can_be_retried_with_save_and_close(monkeypatch
     root = _new_root(monkeypatch)
     context = UiTestContext(root)
 
-    def add_and_retry(_dialog):
+    def add_and_retry(_dialog: Toplevel) -> None:
         _click(context, "implementations-manager.action.add", "Add variant")
         status = context.require_widget("implementations-manager.status")
         status_variable = str(status.cget("textvariable"))
