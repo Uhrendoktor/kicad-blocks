@@ -3550,6 +3550,8 @@ def _show_block_layout_editor(
     from .repository import read_manifest
 
     dialog = tk.Toplevel(parent)
+    dialog._kicad_ui_screen_id = "pcb-layout-manager"
+    dialog._kicad_ui_contract_id = "pcb-layout-manager.window"
     dialog.title(f"PCB layouts — {record.name}")
     dialog.transient(parent)
     frame = ttk.Frame(dialog, padding=14)
@@ -3569,6 +3571,7 @@ def _show_block_layout_editor(
         show="headings",
         selectmode="browse",
     )
+    tree._kicad_ui_contract_id = "pcb-layout-manager.rows"
     tree.heading("name", text="Layout")
     tree.heading("assigned", text="Available to")
     tree.heading("file", text="PCB file")
@@ -3766,21 +3769,30 @@ def _show_block_layout_editor(
         save_button.configure(state="normal")
 
     palette = getattr(parent, "_kicad_blocks_palette", {})
-    ttk.Label(
+    status_label = ttk.Label(
         frame,
         textvariable=status_value,
         foreground=palette.get("muted", "#5f6871"),
         font=("TkDefaultFont", 8),
         wraplength=900,
         justify="left",
-    ).grid(row=2, column=0, sticky="ew", pady=(2, 4))
+    )
+    status_label._kicad_ui_contract_id = "pcb-layout-manager.status"
+    status_label.grid(row=2, column=0, sticky="ew", pady=(2, 4))
     actions = ttk.Frame(frame)
     actions.grid(row=3, column=0, sticky="ew", pady=(8, 0))
-    _action_button(actions, "Add layout", add_layout, "add", "Add a PCB layout").pack(side="left")
-    remove_button = _action_button(actions, "Remove", remove_layout, "remove", "Remove the selected PCB layout", state="disabled")
+    _action_button(
+        actions, "Add layout", add_layout, "add", "Add a PCB layout",
+        contract_id="pcb-layout-manager.action.add",
+    ).pack(side="left")
+    remove_button = _action_button(
+        actions, "Remove", remove_layout, "remove", "Remove the selected PCB layout",
+        state="disabled", contract_id="pcb-layout-manager.action.remove",
+    )
     remove_button.pack(side="left", padx=(8, 0))
     default_button = _action_button(
-        actions, "Set default", make_default, "default", "Use this layout as the default", state="disabled"
+        actions, "Set default", make_default, "default", "Use this layout as the default",
+        state="disabled", contract_id="pcb-layout-manager.action.default",
     )
     default_button.pack(side="left", padx=(8, 0))
 
@@ -3791,10 +3803,12 @@ def _show_block_layout_editor(
         link_actions, textvariable=implementation_value,
         values=implementation_values, state="readonly", width=22,
     )
+    implementation_combo._kicad_ui_contract_id = "pcb-layout-manager.implementation"
     implementation_combo.pack(side="left", padx=(8, 0))
     link_button = _action_button(
         link_actions, "Assign", link_selected, "select",
-        "Associate the selected layout with this implementation", state="disabled"
+        "Associate the selected layout with this implementation", state="disabled",
+        contract_id="pcb-layout-manager.action.assign",
     )
     link_button.pack(side="left", padx=(8, 0))
 
@@ -3813,10 +3827,12 @@ def _show_block_layout_editor(
     _action_button(
         footer, "Close", cancel_layout_edits, "cancel",
         "Close the PCB layout manager",
+        contract_id="pcb-layout-manager.action.close",
     ).pack(side="right")
     save_button = _action_button(
         footer, "Save & close", lambda: None, "save",
         "Save any pending changes and close the PCB layout manager",
+        contract_id="pcb-layout-manager.action.save-close",
     )
     save_button.pack(side="right", padx=(0, 8))
 
@@ -4471,6 +4487,8 @@ def _show_block_variant_editor(
 def _show_library_roots_dialog(parent) -> bool:
     """Manage registered library folders with explicit add/create/edit actions."""
     dialog = tk.Toplevel(parent)
+    dialog._kicad_ui_screen_id = "manage-libraries"
+    dialog._kicad_ui_contract_id = "manage-libraries.window"
     dialog.title("Manage Libraries")
     dialog.transient(parent)
 
@@ -4494,6 +4512,7 @@ def _show_library_roots_dialog(parent) -> bool:
         show="headings",
         selectmode="browse",
     )
+    tree._kicad_ui_contract_id = "manage-libraries.rows"
     tree.heading("library", text="Library")
     tree.heading("blocks", text="Blocks")
     tree.heading("role", text="Use")
@@ -4517,11 +4536,13 @@ def _show_library_roots_dialog(parent) -> bool:
     _bind_mousewheel(tree, lambda amount: tree.yview_scroll(amount, "units"))
 
     status = tk.StringVar()
-    ttk.Label(
+    status_label = ttk.Label(
         outer,
         textvariable=status,
         foreground=getattr(parent, "_kicad_blocks_palette", {}).get("muted", "#5f6871"),
-    ).grid(row=2, column=0, sticky="w", pady=(6, 0))
+    )
+    status_label._kicad_ui_contract_id = "manage-libraries.status"
+    status_label.grid(row=2, column=0, sticky="w", pady=(6, 0))
 
     changed = [False]
     environment_value = os.environ.get("KICAD_BLOCKS_LIBRARY")
@@ -4691,10 +4712,12 @@ def _show_library_roots_dialog(parent) -> bool:
     _action_button(
         library_actions, "Add library", add_library, "add",
         "Register an existing block-library folder",
+        contract_id="manage-libraries.action.add",
     ).pack(side="left")
     _action_button(
         library_actions, "Create library", create_library, "create",
         "Create and register a new block-library folder",
+        contract_id="manage-libraries.action.create",
     ).pack(side="left", padx=(8, 0))
 
     ttk.Separator(outer, orient="horizontal").grid(
@@ -4705,28 +4728,41 @@ def _show_library_roots_dialog(parent) -> bool:
     change_button = _action_button(
         selected_actions, "Change folder", change_library_folder, "change",
         "Replace the selected registered folder without moving its files",
+        contract_id="manage-libraries.action.change",
     )
     change_button.pack(side="left")
     remove_button = _action_button(
         selected_actions, "Unregister", remove_library, "remove",
         "Remove the selected folder from the registered list; files remain on disk",
+        contract_id="manage-libraries.action.unregister",
     )
     remove_button.pack(side="left", padx=(8, 0))
     default_button = _action_button(
         selected_actions, "Set default", make_default, "default",
         "Use the selected library for newly created blocks",
+        contract_id="manage-libraries.action.default",
     )
     default_button.pack(side="left", padx=(8, 0))
     _action_button(
         selected_actions, "Close", dialog.destroy, "close",
         "Close Manage Libraries",
+        contract_id="manage-libraries.action.close",
     ).pack(side="right")
 
     def update_selection_actions(_event=None) -> None:
         path = selected_path()
         fixed = path is None or path == environment_root
         change_button.configure(state="disabled" if fixed else "normal")
-        remove_button.configure(state="disabled" if fixed else "normal")
+        other_roots_remain = any(
+            candidate != path for candidate in configured_library_roots()
+        )
+        remove_button.configure(
+            state=(
+                "normal"
+                if path is not None and path != environment_root and other_roots_remain
+                else "disabled"
+            )
+        )
         already_default = path is not None and path == default_library_root()
         default_button.configure(
             state=(
