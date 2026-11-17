@@ -367,7 +367,9 @@ def _prepare_sheet_tree(
                 None,
             )
             if comment is None:
-                title_block.append(cast("SExpr", ["comment", "1", _Quoted("Block ID: " + block_id)]))
+                title_block.append(
+                    cast("SExpr", ["comment", "1", _Quoted("Block ID: " + block_id)])
+                )
             else:
                 comment[2] = _Quoted("Block ID: " + block_id)
 
