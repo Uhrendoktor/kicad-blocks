@@ -3863,9 +3863,8 @@ def _save_block_layouts(
                     f"Stored project-settings file is missing or unsafe: {project_filename!r}"
                 )
 
-        requested_links = requested_implementation_links.get(layout_id)
-        if requested_links is not None:
-            raw_links = list(requested_links)
+        if layout_id in requested_implementation_links:
+            raw_links: list[str] = list(requested_implementation_links[layout_id])
         else:
             stored_links = item.get("implementations")
             if stored_links is not None:
@@ -4250,7 +4249,7 @@ def _show_block_layout_editor(
             implementation_value.set(links[0])
         update_actions()
 
-    def selected_layout() -> BlockLayoutEditInput | None:
+    def selected_layout() -> _LayoutEditorRow | None:
         selection = tree.selection()
         if not selection:
             return None
@@ -4272,7 +4271,7 @@ def _show_block_layout_editor(
             )
             return
         linked_implementation = details["linked_implementation"]
-        item: BlockLayoutEditInput = {
+        item: _LayoutEditorRow = {
             "id": layout_id,
             "name": name,
             "source": details["source"],
@@ -4811,7 +4810,7 @@ def _show_block_variant_editor(
 
     frame = ttk.Frame(dialog, padding=14)
     frame.pack(fill="both", expand=True)
-    palette = getattr(parent, "_kicad_blocks_palette", {})
+    palette = cast(dict[str, str], getattr(parent, "_kicad_blocks_palette", {}))
     frame.columnconfigure(0, weight=1)
     frame.rowconfigure(2, weight=1)
     ttk.Label(frame, text="Circuit implementations", font=("TkDefaultFont", 12, "bold")).grid(
@@ -4851,7 +4850,7 @@ def _show_block_variant_editor(
     tree.grid(row=0, column=0, sticky="nsew")
     scroll.grid(row=0, column=1, sticky="ns")
 
-    palette = getattr(parent, "_kicad_blocks_palette", {})
+    palette = cast(dict[str, str], getattr(parent, "_kicad_blocks_palette", {}))
     cast(_TkTagConfigurable, tree).tag_configure(
         "even", background=palette.get("surface", "#f4f5f6")
     )
