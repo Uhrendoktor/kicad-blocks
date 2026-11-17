@@ -15,7 +15,7 @@ import tempfile
 from collections.abc import Callable, Iterator, Sequence
 from importlib import import_module
 from pathlib import Path
-from typing import TYPE_CHECKING, BinaryIO, Protocol, TypeAlias, TypedDict, cast
+from typing import TYPE_CHECKING, BinaryIO, Protocol, Required, TypeAlias, TypedDict, cast
 
 # The core block model and IPC helpers must remain importable in headless
 # environments. Load Tkinter only when the interactive manager is invoked.
@@ -115,6 +115,13 @@ class _LayoutDialogChoice(TypedDict):
     name: str
     source: str
     linked_implementation: str
+
+
+class _LayoutEditorRow(BlockLayoutEditInput):
+    """Layout row after its generated ID and display name have been normalized."""
+
+    id: Required[str]
+    name: Required[str]
 
 
 class _TkMinimizableWindow(Protocol):
@@ -1053,7 +1060,7 @@ def _action_button(
         return result if isinstance(result, str) else None
 
     button = ttk.Button(
-        parent,
+        master=parent,
         **button_options,
         text=text,
         command=invoke,
@@ -2062,7 +2069,7 @@ def _pick_record(
         justify="left",
     )
     description.pack(fill="x", anchor="w", pady=(8, 0))
-    palette = getattr(parent, "_kicad_blocks_palette", {})
+    palette = cast(dict[str, str], getattr(parent, "_kicad_blocks_palette", {}))
     count_label = ttk.Label(
         outer,
         foreground=palette.get("muted", "#5f6871"),
@@ -2386,7 +2393,7 @@ def _collect_block_profiles(
             if parameter_text is None:
                 return None
             parsed_overrides = _parse_profile_parameter_overrides(parameter_text, parameters)
-            parameter_values.update(parsed_overrides)
+            parameter_values.update(cast(dict[str, ParameterScalar], parsed_overrides))
 
         layout_id = None
         if layouts:
@@ -3222,12 +3229,15 @@ def _native_symbol_preview_photo(
                     int(max_height) / max(1, image.height),
                 )
                 if scale < 1.0:
-                    image = image.resize(
+                    resize_image = cast(
+                        Callable[[tuple[int, int], int], _PreviewRaster], image.resize
+                    )
+                    image = resize_image(
                         (
                             max(1, round(image.width * scale)),
                             max(1, round(image.height * scale)),
                         ),
-                        Image.Resampling.LANCZOS,
+                        cast(int, Image.Resampling.LANCZOS),
                     )
                 buffer = BytesIO()
                 image.save(buffer, format="PNG")
@@ -3853,18 +3863,22 @@ def _save_block_layouts(
                     f"Stored project-settings file is missing or unsafe: {project_filename!r}"
                 )
 
-        raw_links: list[str] | None = requested_implementation_links.get(layout_id)
-        if raw_links is None:
-            raw_links = item.get("implementations")
-        if raw_links is None:
-            raw_links = []
-            if layout_id == raw_default:
-                raw_links.append("Default")
-            raw_links.extend(
-                str(value)
-                for value, linked in variant_links.items()
-                if str(linked).casefold() == layout_id
-            )
+        requested_links = requested_implementation_links.get(layout_id)
+        if requested_links is not None:
+            raw_links = list(requested_links)
+        else:
+            stored_links = item.get("implementations")
+            if stored_links is not None:
+                raw_links = list(stored_links)
+            else:
+                raw_links = []
+                if layout_id == raw_default:
+                    raw_links.append("Default")
+                raw_links.extend(
+                    str(value)
+                    for value, linked in variant_links.items()
+                    if str(linked).casefold() == layout_id
+                )
         normalized_links: list[str] = []
         for raw_link in raw_links:
             key = str(raw_link).strip().casefold()
@@ -4172,8 +4186,8 @@ def _show_block_layout_editor(
     tree.grid(row=0, column=0, sticky="nsew")
     scroll.grid(row=0, column=1, sticky="ns")
 
-    layouts: list[BlockLayoutEditInput] = [
-        cast(BlockLayoutEditInput, dict(item)) for item in _layout_choices(record)
+    layouts: list[_LayoutEditorRow] = [
+        cast(_LayoutEditorRow, dict(item)) for item in _layout_choices(record)
     ]
     for item in layouts:
         layout_file = item.get("file")
@@ -4181,6 +4195,7 @@ def _show_block_layout_editor(
             Path(layout_file).stem if layout_file is not None else "layout"
         )
         item["id"] = str(item.get("id") or slugify(str(layout_name))).casefold()
+        item["name"] = str(layout_name)
     default_layout_id = str(record.manifest.get("default_layout") or "").casefold()
     if not default_layout_id and layouts:
         default_layout_id = str(layouts[0].get("id") or "")
@@ -4221,7 +4236,7 @@ def _show_block_layout_editor(
                 "end",
                 iid=iid,
                 values=(
-                    item.get("name", item.get("id", "")),
+                    item["name"],
                     assigned_to(str(item.get("id") or "")),
                     item.get("file", ""),
                 ),
@@ -4256,7 +4271,7 @@ def _show_block_layout_editor(
                 "Add PCB layout", f"A layout named {name!r} already exists.", parent=dialog
             )
             return
-        linked_implementation = str(details["linked_implementation"])
+        linked_implementation = details["linked_implementation"]
         item: BlockLayoutEditInput = {
             "id": layout_id,
             "name": name,
@@ -4380,7 +4395,7 @@ def _show_block_layout_editor(
         link_button.configure(state="normal" if has_selection else "disabled")
         save_button.configure(state="normal")
 
-    palette = getattr(parent, "_kicad_blocks_palette", {})
+    palette = cast(dict[str, str], getattr(parent, "_kicad_blocks_palette", {}))
     ttk.Label(
         frame,
         textvariable=status_value,
@@ -4465,7 +4480,7 @@ def _show_block_layout_editor(
         try:
             _save_block_layouts(
                 record,
-                layouts,
+                cast(list[BlockLayoutEditInput], layouts),
                 default_layout_id=default_layout_id_holder[0],
                 variant_layouts=variant_layouts,
                 layout_implementations=layout_implementations,
@@ -4610,7 +4625,8 @@ def _ask_implementation_details(
     allow_create: bool = False,
 ) -> tuple[str, str] | None:
     """Collect an implementation selector and its starting schematic."""
-    if allow_create and record is None:
+    copy_record = record
+    if allow_create and copy_record is None:
         raise ValueError("An existing block record is required to copy an implementation.")
     dialog = tk.Toplevel(parent)
     dialog.title("Implementation details")
@@ -4696,20 +4712,21 @@ def _ask_implementation_details(
             browse_button.grid()
 
     if allow_create:
-        if record is None:
+        if copy_record is None:
             raise ValueError("Creating a new implementation requires a block record.")
         copy_sources.update(
             {
-                label: path
-                for label, path in [
+                label: source_path
+                for label, source_path in [
                     (
                         "Default",
-                        Path(record.path) / resolve_variant_implementation(record.manifest, ""),
+                        Path(copy_record.path)
+                        / resolve_variant_implementation(copy_record.manifest, ""),
                     )
                 ]
                 + [
-                    (str(item["value"]), Path(record.path) / str(item.get("file") or ""))
-                    for item in record.manifest.get("variants", [])
+                    (str(item["value"]), Path(copy_record.path) / str(item.get("file") or ""))
+                    for item in copy_record.manifest.get("variants", [])
                 ]
             }
         )
