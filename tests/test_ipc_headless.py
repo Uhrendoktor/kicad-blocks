@@ -15,6 +15,7 @@ PLUGIN = ROOT / "plugin" / "kicad-blocks"
 sys.path.insert(0, str(PLUGIN))
 sys.path.insert(0, str(ROOT / "tests"))
 
+from create_block_ipc_integration import run_kicad_cli
 from kicad_blocks.auto_dependencies import synchronize_block_dependencies
 from kicad_blocks.composition import compose_block_implementation
 from kicad_blocks.model import (
@@ -44,7 +45,6 @@ from kicad_blocks.repository import (
 )
 from kipy import KiCad
 from kipy.geometry import Vector2
-from create_block_ipc_integration import run_kicad_cli
 
 
 class _ExpectedNestedInstance(TypedDict):
@@ -56,7 +56,11 @@ class _ExpectedNestedInstance(TypedDict):
 
 
 def _fail(message: str) -> NoReturn:
-    """Fail an acceptance invariant without embedding messages in exception constructors."""
+    """Fail an acceptance invariant without embedding messages in exception constructors.
+
+    Raises:
+        AssertionError: When a KiCad acceptance invariant is not satisfied.
+    """
     raise AssertionError(message)
 
 

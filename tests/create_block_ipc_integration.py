@@ -13,13 +13,14 @@ import sys
 import tempfile
 import time
 import uuid
-from collections.abc import Callable, Sequence
+from collections.abc import Callable
 from pathlib import Path
 from types import SimpleNamespace
 from typing import TYPE_CHECKING, cast
 from unittest.mock import patch
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
     from tkinter import Misc
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -50,7 +51,11 @@ def run_kicad_cli(
     check: bool = True,
     capture_output: bool = False,
 ) -> subprocess.CompletedProcess[str]:
-    """Run a trusted KiCad CLI argument vector for standalone acceptance tests."""
+    """Run a trusted KiCad CLI argument vector for standalone acceptance tests.
+
+    Returns:
+        CompletedProcess[str]: The captured or checked KiCad CLI result.
+    """
     return subprocess.run(
         list(arguments),
         check=check,
