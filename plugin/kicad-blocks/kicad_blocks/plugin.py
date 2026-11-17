@@ -15,7 +15,7 @@ import tempfile
 from collections.abc import Callable, Iterator, Sequence
 from importlib import import_module
 from pathlib import Path
-from typing import TYPE_CHECKING, Protocol, TypedDict, cast
+from typing import TYPE_CHECKING, BinaryIO, Protocol, TypedDict, cast
 
 # The core block model and IPC helpers must remain importable in headless
 # environments. Load Tkinter only when the interactive manager is invoked.
@@ -371,6 +371,22 @@ class _TkEntryCursor(Protocol):
     """Entry cursor operation used when focusing the search field."""
 
     def icursor(self, index: str | int) -> None: ...
+
+
+
+class _PreviewRaster(Protocol):
+    """Minimal Pillow image surface consumed by native symbol preview cropping."""
+
+    width: int
+    height: int
+
+    def getbbox(self) -> tuple[int, int, int, int] | None: ...
+
+    def crop(self, box: tuple[int, int, int, int]) -> _PreviewRaster: ...
+
+    def resize(self, size: tuple[int, int], resample: int) -> _PreviewRaster: ...
+
+    def save(self, fp: BinaryIO, format: str) -> None: ...
 
 
 class _TkPreviewCanvas(Protocol):
@@ -1042,10 +1058,10 @@ def _action_button(
 
     button = ttk.Button(
         parent,
+        cnf=button_options,
         text=text,
         command=invoke,
         padding=(9, 6),
-        **button_options,
     )
     if image is not None:
         button.configure(image=image, compound="left")
@@ -1161,7 +1177,9 @@ class SchematicSelectionProvider(Protocol):
     def get_selection(self) -> Sequence[_SchematicSymbol]: ...
 
 
-def _safe_schematic_selection(schematic: _Schematic | None) -> list[_SchematicSymbol]:
+def _safe_schematic_selection(
+    schematic: _Schematic | SchematicSelectionProvider | None,
+) -> list[_SchematicSymbol]:
     """Return current typed selection, or empty for legacy serialized-selection adapters."""
     if schematic is None:
         return []
@@ -2371,7 +2389,8 @@ def _collect_block_profiles(
             )
             if parameter_text is None:
                 return None
-            parameter_values = _parse_profile_parameter_overrides(parameter_text, parameters)
+            parsed_overrides = _parse_profile_parameter_overrides(parameter_text, parameters)
+            parameter_values.update(parsed_overrides)
 
         layout_id = None
         if layouts:
@@ -3200,7 +3219,7 @@ def _native_symbol_preview_photo(
 
                 from PIL import Image
 
-                image = Image.open(BytesIO(png_data)).convert("RGBA")
+                image = cast(_PreviewRaster, Image.open(BytesIO(png_data)).convert("RGBA"))
                 bounds = image.getbbox()
                 if bounds:
                     image = image.crop(bounds)
@@ -3477,7 +3496,7 @@ def _block_overview_text(record: BlockRecord) -> str:
     lines.append(f"  Default · {resolve_variant_implementation(manifest, '')}")
     lines.extend(
         f"  {item.get('value')}"
-        + (f"  ·  PCB: {item['layout_id']}" if item.get("layout_id") else "")
+        + (f"  ·  PCB: {item.get('layout_id')}" if item.get("layout_id") else "")
         for item in variants
     )
     if layouts:
@@ -3570,7 +3589,7 @@ def _save_block_variants(
         seen_values.add(value.casefold())
 
         if item.get("file"):
-            filename = str(item["file"])
+            filename = str(item.get("file") or "")
             source = None
         else:
             source_value = item.get("source")
@@ -3867,8 +3886,9 @@ def _save_block_layouts(
             "project_file": project_filename,
             "implementations": normalized_links,
         }
-        if item.get("ports") is not None:
-            descriptor["ports"] = dict(item["ports"])
+        ports = item.get("ports")
+        if ports is not None:
+            descriptor["ports"] = dict(ports)
         normalized.append(descriptor)
 
     available_ids = {item["id"] for item in normalized}
@@ -4162,7 +4182,7 @@ def _show_block_layout_editor(
         ).casefold()
     default_layout_id = str(record.manifest.get("default_layout") or "").casefold()
     if not default_layout_id and layouts:
-        default_layout_id = layouts[0]["id"]
+        default_layout_id = str(layouts[0].get("id") or "")
     default_layout_id_holder: list[str | None] = [default_layout_id]
     variant_layouts: dict[str, str] = {
         str(item["value"]): str(item.get("layout_id") or default_layout_id).casefold()
@@ -4172,15 +4192,16 @@ def _show_block_layout_editor(
     layout_implementations: dict[str, list[str]] = {}
     for item in layouts:
         links = list(item.get("implementations") or [])
-        if not links and item["id"] == default_layout_id:
+        item_id = str(item.get("id") or "")
+        if not links and item_id == default_layout_id:
             links = ["Default"]
         if not links:
             links = [
-                str(value) for value, linked in variant_layouts.items() if linked == item["id"]
+                str(value) for value, linked in variant_layouts.items() if linked == item_id
             ]
         if not links:
             links = ["Default"]
-        layout_implementations[item["id"]] = list(dict.fromkeys(links))
+        layout_implementations[item_id] = list(dict.fromkeys(links))
 
     changed: list[bool] = [False]
     added_ids: list[str] = []
@@ -4200,10 +4221,14 @@ def _show_block_layout_editor(
                 "",
                 "end",
                 iid=iid,
-                values=(item.get("name", item["id"]), assigned_to(item["id"]), item["file"]),
+                values=(
+                    item.get("name", item.get("id", "")),
+                    assigned_to(str(item.get("id") or "")),
+                    item.get("file", ""),
+                ),
                 tags=("even" if index % 2 == 0 else "odd",),
             )
-            if item["id"] == selected_id:
+            if item.get("id") == selected_id:
                 tree.selection_set(iid)
                 tree.focus(iid)
         if selected_id is not None:
@@ -4225,7 +4250,7 @@ def _show_block_layout_editor(
         name = details["name"]
         layout_id = slugify(name).casefold()
         if any(
-            item["id"] == layout_id or str(item["name"]).casefold() == name.casefold()
+            item.get("id") == layout_id or str(item.get("name", "")).casefold() == name.casefold()
             for item in layouts
         ):
             messagebox.showerror(
@@ -4256,11 +4281,18 @@ def _show_block_layout_editor(
         if item is None:
             return
         replacement_id: str | None = next(
-            (candidate["id"] for candidate in layouts if candidate["id"] != item["id"]),
+            (
+                str(candidate.get("id") or "")
+                for candidate in layouts
+                if candidate.get("id") != item.get("id")
+            ),
             None,
         )
         consequence = (
-            f" Variants linked to it will use {next((candidate['name'] for candidate in layouts if candidate['id'] == replacement_id), 'the remaining layout')} instead."
+            f" Variants linked to it will use {next(
+                (candidate.get("name", "") for candidate in layouts if candidate.get("id") == replacement_id),
+                "the remaining layout",
+            )} instead."
             if replacement_id
             else " No PCB layouts will remain; variant layout assignments will be cleared."
         )
@@ -4270,7 +4302,7 @@ def _show_block_layout_editor(
             parent=dialog,
         ):
             return
-        removed_id = item["id"]
+        removed_id = str(item.get("id") or "")
         layouts.remove(item)
         layout_implementations.pop(removed_id, None)
         added_ids[:] = [item_id for item_id in added_ids if item_id != removed_id]
@@ -4298,13 +4330,14 @@ def _show_block_layout_editor(
         item = selected_layout()
         if item is None:
             return
-        default_layout_id_holder[0] = item["id"]
-        links = layout_implementations.setdefault(item["id"], [])
+        item_id = str(item.get("id") or "")
+        default_layout_id_holder[0] = item_id
+        links = layout_implementations.setdefault(item_id, [])
         if "Default" not in links:
             links.append("Default")
         changed[0] = True
         status_value.set(f"Default: {item['name']}; saving to the library.")
-        render(item["id"])
+        render(item_id)
         persist_layout_changes()
 
     implementation_values = ["Default"] + [
@@ -4317,13 +4350,14 @@ def _show_block_layout_editor(
         if item is None:
             return
         selected = implementation_value.get()
-        links = layout_implementations.setdefault(item["id"], [])
+        item_id = str(item.get("id") or "")
+        links = layout_implementations.setdefault(item_id, [])
         if selected not in links:
             links.append(selected)
         if selected == "Default":
             default_layout_id_holder[0] = item["id"]
         else:
-            variant_layouts[selected] = item["id"]
+            variant_layouts[selected] = item_id
         changed[0] = True
         status_value.set(f"Assigned {item['name']} to {selected}; saving to the library.")
         render(item["id"])
@@ -4654,6 +4688,8 @@ def _ask_implementation_details(
             browse_button.grid()
 
     if allow_create:
+        if record is None:
+            raise ValueError("Creating a new implementation requires a block record.")
         copy_sources.update(
             {
                 label: path
@@ -4664,7 +4700,7 @@ def _ask_implementation_details(
                     )
                 ]
                 + [
-                    (str(item["value"]), Path(record.path) / str(item["file"]))
+                    (str(item["value"]), Path(record.path) / str(item.get("file") or ""))
                     for item in record.manifest.get("variants", [])
                 ]
             }
@@ -4801,7 +4837,7 @@ def _show_block_variant_editor(
     for item in record.manifest.get("variants", []):
         editable: BlockVariantEditInput = {
             "value": str(item["value"]),
-            "file": str(item["file"]),
+            "file": str(item.get("file") or ""),
         }
         if item.get("layout_id"):
             editable["layout_id"] = str(item["layout_id"]).casefold()
@@ -4821,7 +4857,9 @@ def _show_block_variant_editor(
             None,
         )
         filename = (
-            selected["file"] if selected is not None else record.manifest["implementation_file"]
+            (selected.get("file") or selected.get("source") or record.manifest["implementation_file"])
+            if selected is not None
+            else record.manifest["implementation_file"]
         )
         return Path(record.path) / str(filename)
 
@@ -4856,7 +4894,7 @@ def _show_block_variant_editor(
                 "",
                 "end",
                 iid=str(row_index),
-                values=(item["value"], item["file"], "Alternative"),
+                values=(item["value"], item.get("file", ""), "Alternative"),
                 tags=("odd" if row_index % 2 else "even",),
             )
         if selected_index is not None and 0 <= selected_index <= len(alternative_variant_indices()):
@@ -4913,7 +4951,7 @@ def _show_block_variant_editor(
         if index is None:
             return
         current = variants[index]
-        current_source = str(current.get("source") or (Path(record.path) / current["file"]))
+        current_source = str(current.get("source") or (Path(record.path) / current.get("file", "")))
         details = _ask_implementation_details(
             dialog, value=current["value"], source=current_source, record=record
         )
@@ -5012,7 +5050,7 @@ def _show_block_variant_editor(
                     for item in saved.get("variants", [])
                     if str(item["value"]).casefold() == open_value.casefold()
                 )
-                new_implementation_to_open[0] = Path(record.path) / selected["file"]
+                new_implementation_to_open[0] = Path(record.path) / str(selected.get("file") or "")
         except (OSError, RuntimeError, TypeError, ValueError, KeyError, StopIteration) as exc:
             status_value.set("Save failed; use Save & close to retry.")
             messagebox.showerror("Save implementations", str(exc), parent=dialog)
@@ -5172,7 +5210,8 @@ def _show_library_roots_dialog(parent: tkinter_types.Misc) -> bool:
         selection = tree.selection()
         if not selection:
             return None
-        raw = tree.set(selection[0], "path")
+        raw_value = tree.set(selection[0], "path")
+        raw = raw_value if isinstance(raw_value, str) else raw_value.get("path", "")
         return Path(raw).expanduser().resolve() if raw else None
 
     def render(select_path: Path | None = None) -> None:
