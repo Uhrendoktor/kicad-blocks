@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import os
 import sys
+from collections.abc import Callable
 from pathlib import Path
+from tkinter import Tk, Toplevel
+from typing import cast
 from types import SimpleNamespace
 
 import pytest
@@ -56,20 +59,44 @@ def _new_parent_and_record(tmp_path: Path):
     return root, record
 
 
-def _schedule_dialog_action(root, context, action):
-    """Drive the modal dialog after its production wait_window starts."""
+def _schedule_dialog_action(
+    root: Tk,
+    context: UiTestContext,
+    action: Callable[[Toplevel], None],
+) -> list[Exception]:
+    """Drive a modal dialog and return any exception from its Tk after callback."""
+    callback_errors: list[Exception] = []
 
-    def drive():
-        dialog = next(
-            child
-            for child in root.winfo_children()
-            if child.winfo_class() == "Toplevel"
-            and child.title() == "Add PCB layout"
-        )
-        context.refresh_widgets()
-        action(dialog)
+    def drive() -> None:
+        dialog: Toplevel | None = None
+        try:
+            matching_dialog = next(
+                (
+                    child
+                    for child in root.winfo_children()
+                    if child.winfo_class() == "Toplevel"
+                    and cast(Toplevel, child).title() == "Add PCB layout"
+                ),
+                None,
+            )
+            if matching_dialog is None:
+                raise AssertionError("The Add PCB layout dialog was not created.")
+            dialog = cast(Toplevel, matching_dialog)
+            context.refresh_widgets()
+            action(dialog)
+        except Exception as exc:
+            callback_errors.append(exc)
+            if dialog is not None and dialog.winfo_exists():
+                dialog.destroy()
 
     root.after(100, drive)
+    return callback_errors
+
+
+def _raise_callback_errors(callback_errors: list[Exception]) -> None:
+    """Re-raise failures from Tk's asynchronous callback in the pytest thread."""
+    if callback_errors:
+        raise callback_errors[0]
 
 
 def _contract_button(context, contract_id, label, *, closes=False):
@@ -100,9 +127,10 @@ def test_add_pcb_layout_creates_blank_board_and_returns_selection(
         context.refresh_widgets()
         _contract_button(context, "add-pcb-layout.add", "Add layout", closes=True)
 
-    _schedule_dialog_action(root, context, interact)
+    callback_errors = _schedule_dialog_action(root, context, interact)
     try:
         result = plugin_actions._ask_layout_details(root, record)
+        _raise_callback_errors(callback_errors)
         observed["result"] = result
         assert result == {
             "name": "New layout",
@@ -146,9 +174,10 @@ def test_add_pcb_layout_switches_to_existing_file_and_uses_named_implementation(
         widgets["add-pcb-layout.implementation"].set("Boost")
         _contract_button(context, "add-pcb-layout.add", "Add layout", closes=True)
 
-    _schedule_dialog_action(root, context, interact)
+    callback_errors = _schedule_dialog_action(root, context, interact)
     try:
         result = plugin_actions._ask_layout_details(root, record)
+        _raise_callback_errors(callback_errors)
         assert result == {
             "name": "New layout",
             "source": str(existing_board.resolve()),
@@ -183,9 +212,10 @@ def test_add_pcb_layout_rejects_missing_name_and_keeps_dialog_open(
         )
         _contract_button(context, "add-pcb-layout.cancel", "Cancel", closes=True)
 
-    _schedule_dialog_action(root, context, interact)
+    callback_errors = _schedule_dialog_action(root, context, interact)
     try:
         result = plugin_actions._ask_layout_details(root, record)
+        _raise_callback_errors(callback_errors)
         assert result is None
         assert len(errors) == 1
     finally:
@@ -202,7 +232,7 @@ def test_add_pcb_layout_cancel_returns_none_without_creating_board(
         lambda: (created.append(True) or tmp_path / "should-not-exist.kicad_pcb"),
     )
     context = UiTestContext(root)
-    _schedule_dialog_action(
+    callback_errors = _schedule_dialog_action(
         root,
         context,
         lambda _dialog: _contract_button(
@@ -211,6 +241,7 @@ def test_add_pcb_layout_cancel_returns_none_without_creating_board(
     )
     try:
         result = plugin_actions._ask_layout_details(root, record)
+        _raise_callback_errors(callback_errors)
         assert result is None
         assert created == []
     finally:

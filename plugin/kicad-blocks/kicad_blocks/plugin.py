@@ -6485,7 +6485,8 @@ def _show_library_browser(
         "Open the generated library facade in KiCad Symbol Editor",
         contract_id="library-browser.action.facade",
     )
-    facade_button[0].pack(side="left", padx=(4, 0))
+    facade_button[0] = facade_action
+    facade_action.pack(side="left", padx=(4, 0))
     variants_button = _action_button(
         action_toolbar,
         "Variants",
@@ -6506,7 +6507,8 @@ def _show_library_browser(
         "Open one of the block's stored PCB layouts",
         contract_id="library-browser.action.open-pcb",
     )
-    open_layout_button[0].pack(side="left", padx=(4, 0))
+    open_layout_button[0] = open_layout_action
+    open_layout_action.pack(side="left", padx=(4, 0))
     manage_layout_button = _action_button(
         action_toolbar,
         "PCB layouts",

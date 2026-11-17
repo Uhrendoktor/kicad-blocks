@@ -6,7 +6,7 @@ import argparse
 import json
 import sys
 from pathlib import Path
-from typing import Any
+from typing import NotRequired, TypedDict, cast
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -33,29 +33,68 @@ ASSERTION_LABELS = {
 }
 
 
-def load_catalog(path: Path = CATALOG_PATH) -> dict[str, Any]:
-    catalog = json.loads(path.read_text(encoding="utf-8"))
+class UIControl(TypedDict):
+    contract_id: str
+    label: str
+    assertion: str
+    type: NotRequired[str]
+    action_id: NotRequired[str | None]
+
+
+class UIAction(UIControl):
+    action_id: str
+
+
+class UIView(TypedDict):
+    label: str
+    actions: NotRequired[list[UIAction]]
+    screenshots: NotRequired[list[str]]
+
+
+class UIScreen(TypedDict):
+    id: str
+    title: str
+    purpose: str
+    coverage: str
+    coverage_note: str
+    evidence: NotRequired[list[str]]
+    views: NotRequired[list[UIView]]
+    controls: NotRequired[list[UIControl]]
+    footer_controls: NotRequired[list[UIControl]]
+    screenshots: NotRequired[list[str]]
+    functionality: NotRequired[list[str]]
+
+
+class UICatalog(TypedDict):
+    schema_version: int
+    source_of_truth: str
+    screens: list[UIScreen]
+
+
+def load_catalog(path: Path = CATALOG_PATH) -> UICatalog:
+    """Load the UI catalog into its domain schema and check semantic invariants."""
+    catalog = cast(UICatalog, json.loads(path.read_text(encoding="utf-8")))
     if catalog.get("schema_version") != 1:
         raise ValueError("Unsupported UI contract catalog schema_version.")
-    screens = catalog.get("screens")
-    if not isinstance(screens, list) or not screens:
+    screens = catalog.get("screens", [])
+    if not screens:
         raise ValueError("The UI contract catalog must contain at least one screen.")
 
-    screen_ids = [screen.get("id") for screen in screens]
+    screen_ids = [screen["id"] for screen in screens]
     if len(screen_ids) != len(set(screen_ids)):
         raise ValueError("UI screen IDs must be unique.")
     unknown_statuses = sorted(
-        {screen.get("coverage") for screen in screens} - set(COVERAGE_LABELS)
+        {screen["coverage"] for screen in screens} - set(COVERAGE_LABELS)
     )
     if unknown_statuses:
         raise ValueError(f"Unknown UI coverage status: {unknown_statuses!r}")
 
     for screen in screens:
-        control_records = list(screen.get("controls", []))
+        control_records: list[UIControl] = list(screen.get("controls", []))
         control_records.extend(screen.get("footer_controls", []))
         for view in screen.get("views", []):
             control_records.extend(view.get("actions", []))
-        control_ids = [item.get("contract_id") for item in control_records if item.get("contract_id")]
+        control_ids = [item["contract_id"] for item in control_records]
         if len(control_ids) != len(set(control_ids)):
             raise ValueError(f"Duplicate semantic control ID in screen {screen['id']!r}.")
         invalid_assertions = sorted(
@@ -63,7 +102,8 @@ def load_catalog(path: Path = CATALOG_PATH) -> dict[str, Any]:
                 item.get("assertion")
                 for item in control_records
                 if item.get("assertion") not in ASSERTION_LABELS
-            }
+            },
+            key=lambda value: "" if value is None else value,
         )
         if invalid_assertions:
             raise ValueError(
@@ -80,23 +120,23 @@ def load_catalog(path: Path = CATALOG_PATH) -> dict[str, Any]:
     return catalog
 
 
-def referenced_assets(catalog: dict[str, Any]) -> set[str]:
+def referenced_assets(catalog: UICatalog) -> set[str]:
     assets: set[str] = set()
-    for screen in catalog.get("screens", []):
+    for screen in catalog["screens"]:
         assets.update(screen.get("screenshots", []))
         for view in screen.get("views", []):
             assets.update(view.get("screenshots", []))
     return assets
 
 
-def _unique_screenshots(screen: dict[str, Any]) -> list[str]:
+def _unique_screenshots(screen: UIScreen) -> list[str]:
     values = list(screen.get("screenshots", []))
     for view in screen.get("views", []):
         values.extend(view.get("screenshots", []))
     return list(dict.fromkeys(values))
 
 
-def render_inventory(catalog: dict[str, Any]) -> str:
+def render_inventory(catalog: UICatalog) -> str:
     screens = catalog["screens"]
     counts = {
         status: sum(screen["coverage"] == status for screen in screens)
@@ -160,7 +200,7 @@ def render_inventory(catalog: dict[str, Any]) -> str:
             for control in controls:
                 status = ASSERTION_LABELS[control["assertion"]]
                 lines.append(
-                    f"- {control['label']} ({TICK}{control['contract_id']}{TICK}; {control['type']}; {status})"
+                    f"- {control['label']} ({TICK}{control['contract_id']}{TICK}; {control.get('type', 'control')}; {status})"
                 )
             lines.append("")
 

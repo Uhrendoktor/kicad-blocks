@@ -149,11 +149,13 @@ def test_each_task_hub_button_dispatches_exactly_its_action_id(
 ):
     root, _notebook = _new_hub(monkeypatch)
     context = UiTestContext(root)
-    monkeypatch.setattr(
-        plugin_actions,
-        "run_action",
-        lambda selected: context.action_calls.append(selected),
-    )
+    def record_action(
+        selected: str, *, editor_window_id: str | None = None
+    ) -> None:
+        del editor_window_id
+        context.action_calls.append(selected)
+
+    monkeypatch.setattr(plugin_actions, "run_action", record_action)
     try:
         ButtonContract(
             contract_id=_button_contract_id(action_id),
@@ -171,11 +173,13 @@ def test_each_task_hub_button_dispatches_exactly_its_action_id(
 def test_task_hub_close_button_destroys_window_without_dispatch(monkeypatch):
     root, _notebook = _new_hub(monkeypatch)
     context = UiTestContext(root)
-    monkeypatch.setattr(
-        plugin_actions,
-        "run_action",
-        lambda selected: context.action_calls.append(selected),
-    )
+    def record_action(
+        selected: str, *, editor_window_id: str | None = None
+    ) -> None:
+        del editor_window_id
+        context.action_calls.append(selected)
+
+    monkeypatch.setattr(plugin_actions, "run_action", record_action)
     try:
         ButtonContract(
             contract_id="task-hub.close",

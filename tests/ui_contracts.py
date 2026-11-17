@@ -9,40 +9,104 @@ remain real.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from collections.abc import Iterator
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Generic, TypeVar, TypedDict, cast
+import tkinter as tk
+from tkinter import ttk
 
 
-@dataclass(frozen=True)
 class MenuEntry:
     """A discoverable Tk menu command and its numeric Tcl/Tk index."""
 
-    menu: Any
-    index: int
+    def __init__(self, menu: tk.Menu, index: int) -> None:
+        self.menu = menu
+        self.index = index
+
+
+class WindowObservation(TypedDict):
+    title: str
+    screen_id: str | None
+    exists: bool
+    visible: bool
+    width: int
+    height: int
+    widget_ids: set[str]
+
+
+class ButtonObservation(TypedDict):
+    invoke_result: str | int | None
+    label: str
+    action_calls: list[str]
+    root_exists: bool
+    new_windows: list[str]
+    closed_windows: list[str]
+
+
+class MenuItemObservation(TypedDict):
+    invoke_result: str | int | None
+    events: list[str]
+
+
+class EntryInputObservation(TypedDict):
+    value: str
+    result_count: int
+    summary: str
+
+
+class TreeSelectionObservation(TypedDict):
+    selection: tuple[str, ...]
+    summary: str
+    values: tuple[str, ...]
+
+
+class ChoiceViewObservation(TypedDict):
+    value: str
+    events: list[str]
+
+
+class NotebookPageObservation(TypedDict):
+    selected: str
+    mapped: dict[str, bool]
+
+
+class PaneObservation(TypedDict):
+    present: bool
+    width: int
+    height: int
+
+
+class PaneGroupObservation(TypedDict):
+    orientation: str
+    panes: dict[str, PaneObservation]
+
+
+UiWidget = tk.Misc | MenuEntry
+ObservationT = TypeVar("ObservationT")
 
 
 @dataclass
 class UiTestContext:
     """Shared state available to component contracts during one test."""
 
-    root: Any
+    root: tk.Tk
     action_calls: list[str] = field(default_factory=list)
     events: list[str] = field(default_factory=list)
-    widgets: dict[str, Any] = field(default_factory=dict)
+    widgets: dict[str, UiWidget] = field(default_factory=dict)
     window_destroyed: bool = False
 
     def __post_init__(self) -> None:
         self.root.bind("<Destroy>", self._observe_root_destroy, add="+")
 
-    def _observe_root_destroy(self, event: Any) -> None:
+    def _observe_root_destroy(self, event: tk.Event[tk.Misc]) -> None:
         if event.widget is self.root:
             self.window_destroyed = True
 
-    def refresh_widgets(self) -> dict[str, Any]:
+    def refresh_widgets(self) -> dict[str, UiWidget]:
         self.widgets = discover_interactive_controls(self.root)
         return self.widgets
 
-    def require_widget(self, contract_id: str) -> Any:
+    def require_widget(self, contract_id: str) -> UiWidget:
         if not self.widgets:
             self.refresh_widgets()
         try:
@@ -53,38 +117,51 @@ class UiTestContext:
             ) from exc
 
 
-class ComponentContract(ABC):
+class ComponentContract(ABC, Generic[ObservationT]):
     """Common lifecycle implemented by every testable UI component."""
 
     @abstractmethod
-    def execute(self, context: UiTestContext) -> Any:
+    def execute(self, context: UiTestContext) -> ObservationT:
         """Perform a real interaction and return its observable result."""
 
     @abstractmethod
-    def assert_result(self, context: UiTestContext, observation: Any) -> None:
+    def assert_result(
+        self, context: UiTestContext, observation: ObservationT
+    ) -> None:
         """Assert the externally observable result of that interaction."""
 
-    def run(self, context: UiTestContext) -> Any:
+    def run(self, context: UiTestContext) -> ObservationT:
         observation = self.execute(context)
         self.assert_result(context, observation)
         return observation
 
 
+def _open_toplevels(root: tk.Tk) -> dict[int, str]:
+    windows: dict[int, str] = {}
+    for child in root.winfo_children():
+        if child.winfo_class() == "Toplevel":
+            window = cast(tk.Toplevel, child)
+            windows[window.winfo_id()] = window.title()
+    return windows
+
+
 @dataclass(frozen=True)
-class WindowContract(ComponentContract):
+class WindowContract(ComponentContract[WindowObservation]):
     """Assert that the expected application window was created and shown."""
 
     title: str
     screen_id: str
     required_widget_ids: tuple[str, ...] = ()
 
-    def execute(self, context: UiTestContext) -> dict[str, Any]:
+    def execute(self, context: UiTestContext) -> WindowObservation:
         context.root.update_idletasks()
         context.root.update()
         widgets = context.refresh_widgets()
         return {
             "title": context.root.title(),
-            "screen_id": getattr(context.root, "_kicad_ui_screen_id", None),
+            "screen_id": cast(
+                str | None, getattr(context.root, "_kicad_ui_screen_id", None)
+            ),
             "exists": bool(context.root.winfo_exists()),
             "visible": bool(context.root.winfo_viewable()),
             "width": context.root.winfo_width(),
@@ -93,7 +170,7 @@ class WindowContract(ComponentContract):
         }
 
     def assert_result(
-        self, context: UiTestContext, observation: dict[str, Any]
+        self, context: UiTestContext, observation: WindowObservation
     ) -> None:
         assert observation["title"] == self.title
         assert observation["screen_id"] == self.screen_id
@@ -105,7 +182,7 @@ class WindowContract(ComponentContract):
 
 
 @dataclass(frozen=True)
-class ButtonContract(ComponentContract):
+class ButtonContract(ComponentContract[ButtonObservation]):
     """Invoke one real Tk button and assert its route and lifecycle effect."""
 
     contract_id: str
@@ -115,33 +192,22 @@ class ButtonContract(ComponentContract):
     expected_closed_window_title: str | None = None
     expected_label: str | None = None
 
-    def execute(self, context: UiTestContext) -> dict[str, Any]:
-        button = context.require_widget(self.contract_id)
+    def execute(self, context: UiTestContext) -> ButtonObservation:
+        button = cast(ttk.Button, context.require_widget(self.contract_id))
         label = str(button.cget("text"))
-        existing_toplevels = {
-            child.winfo_id(): child.title()
-            for child in context.root.winfo_children()
-            if child.winfo_class() == "Toplevel"
-        }
-        result = button.invoke()
+        existing_toplevels = _open_toplevels(context.root)
+        result = cast(str | int | None, button.invoke())
         root_exists = not context.window_destroyed
         if root_exists:
             context.root.update_idletasks()
             context.root.update()
             root_exists = not context.window_destroyed
-        new_windows = []
-        remaining_toplevels = {}
-        if root_exists:
-            remaining_toplevels = {
-                child.winfo_id(): child.title()
-                for child in context.root.winfo_children()
-                if child.winfo_class() == "Toplevel"
-            }
-            new_windows = [
-                title
-                for window_id, title in remaining_toplevels.items()
-                if window_id not in existing_toplevels
-            ]
+        remaining_toplevels = _open_toplevels(context.root) if root_exists else {}
+        new_windows = [
+            title
+            for window_id, title in remaining_toplevels.items()
+            if window_id not in existing_toplevels
+        ]
         closed_windows = [
             title
             for window_id, title in existing_toplevels.items()
@@ -157,10 +223,10 @@ class ButtonContract(ComponentContract):
         }
 
     def assert_result(
-        self, context: UiTestContext, observation: dict[str, Any]
+        self, context: UiTestContext, observation: ButtonObservation
     ) -> None:
         if self.expected_action is None:
-            expected = []
+            expected: list[str] = []
         elif isinstance(self.expected_action, tuple):
             expected = list(self.expected_action)
         else:
@@ -176,29 +242,29 @@ class ButtonContract(ComponentContract):
 
 
 @dataclass(frozen=True)
-class MenuItemContract(ComponentContract):
+class MenuItemContract(ComponentContract[MenuItemObservation]):
     """Invoke a real Tk menu entry and assert the bound action ran."""
 
     menu_item_id: str
     expected_event: str
 
-    def execute(self, context: UiTestContext) -> dict[str, Any]:
+    def execute(self, context: UiTestContext) -> MenuItemObservation:
         entry = context.require_widget(self.menu_item_id)
         if not isinstance(entry, MenuEntry):
-            raise TypeError(
-                f"{self.menu_item_id!r} is not a discovered Tk menu entry."
-            )
-        result = entry.menu.invoke(entry.index)
-        return {"invoke_result": result, "events": list(context.events)}
+            raise TypeError(f"{self.menu_item_id!r} is not a discovered Tk menu entry.")
+        return {
+            "invoke_result": cast(str | int | None, entry.menu.invoke(entry.index)),
+            "events": list(context.events),
+        }
 
     def assert_result(
-        self, context: UiTestContext, observation: dict[str, Any]
+        self, context: UiTestContext, observation: MenuItemObservation
     ) -> None:
         assert observation["events"] == [self.expected_event]
 
 
 @dataclass(frozen=True)
-class EntryInputContract(ComponentContract):
+class EntryInputContract(ComponentContract[EntryInputObservation]):
     """Enter text into a real Tk Entry and assert its dependent result list."""
 
     contract_id: str
@@ -208,14 +274,14 @@ class EntryInputContract(ComponentContract):
     summary_contract_id: str
     expected_summary: str
 
-    def execute(self, context: UiTestContext) -> dict[str, Any]:
-        entry = context.require_widget(self.contract_id)
+    def execute(self, context: UiTestContext) -> EntryInputObservation:
+        entry = cast(ttk.Entry, context.require_widget(self.contract_id))
         entry.delete(0, "end")
         entry.insert(0, self.value)
         context.root.update_idletasks()
         context.root.update()
-        results = context.require_widget(self.results_contract_id)
-        summary = context.require_widget(self.summary_contract_id)
+        results = cast(ttk.Treeview, context.require_widget(self.results_contract_id))
+        summary = cast(tk.Misc, context.require_widget(self.summary_contract_id))
         summary_text = str(summary.cget("text"))
         text_variable = str(summary.cget("textvariable") or "")
         if text_variable:
@@ -227,7 +293,7 @@ class EntryInputContract(ComponentContract):
         }
 
     def assert_result(
-        self, context: UiTestContext, observation: dict[str, Any]
+        self, context: UiTestContext, observation: EntryInputObservation
     ) -> None:
         assert observation["value"] == self.value
         assert observation["result_count"] == self.expected_result_count
@@ -235,7 +301,7 @@ class EntryInputContract(ComponentContract):
 
 
 @dataclass(frozen=True)
-class TreeSelectionContract(ComponentContract):
+class TreeSelectionContract(ComponentContract[TreeSelectionObservation]):
     """Select a real Treeview row and assert selection plus dependent details."""
 
     contract_id: str
@@ -244,26 +310,27 @@ class TreeSelectionContract(ComponentContract):
     expected_summary: str
     expected_values: tuple[str, ...] | None = None
 
-    def execute(self, context: UiTestContext) -> dict[str, Any]:
-        tree = context.require_widget(self.contract_id)
+    def execute(self, context: UiTestContext) -> TreeSelectionObservation:
+        tree = cast(ttk.Treeview, context.require_widget(self.contract_id))
         tree.selection_set(self.row_id)
         tree.focus(self.row_id)
         tree.event_generate("<<TreeviewSelect>>")
         context.root.update_idletasks()
         context.root.update()
-        summary = context.require_widget(self.summary_contract_id)
+        summary = cast(tk.Misc, context.require_widget(self.summary_contract_id))
         summary_text = str(summary.cget("text"))
         text_variable = str(summary.cget("textvariable") or "")
         if text_variable:
             summary_text = str(summary.getvar(text_variable))
+        row_values = cast(tuple[str, ...], tuple(tree.item(self.row_id, "values")))
         return {
             "selection": tuple(tree.selection()),
             "summary": summary_text,
-            "values": tuple(tree.item(self.row_id, "values")),
+            "values": row_values,
         }
 
     def assert_result(
-        self, context: UiTestContext, observation: dict[str, Any]
+        self, context: UiTestContext, observation: TreeSelectionObservation
     ) -> None:
         assert observation["selection"] == (self.row_id,)
         assert observation["summary"] == self.expected_summary
@@ -272,15 +339,15 @@ class TreeSelectionContract(ComponentContract):
 
 
 @dataclass(frozen=True)
-class ChoiceViewContract(ComponentContract):
+class ChoiceViewContract(ComponentContract[ChoiceViewObservation]):
     """Select every declared value in a real ttk Combobox."""
 
     contract_id: str
     value: str
     expected_event: str
 
-    def execute(self, context: UiTestContext) -> dict[str, Any]:
-        choice = context.require_widget(self.contract_id)
+    def execute(self, context: UiTestContext) -> ChoiceViewObservation:
+        choice = cast(ttk.Combobox, context.require_widget(self.contract_id))
         choice.set(self.value)
         choice.event_generate("<<ComboboxSelected>>")
         context.root.update_idletasks()
@@ -290,22 +357,22 @@ class ChoiceViewContract(ComponentContract):
         }
 
     def assert_result(
-        self, context: UiTestContext, observation: dict[str, Any]
+        self, context: UiTestContext, observation: ChoiceViewObservation
     ) -> None:
         assert observation["value"] == self.value
         assert observation["events"] == [self.expected_event]
 
 
 @dataclass(frozen=True)
-class NotebookViewContract(ComponentContract):
+class NotebookViewContract(ComponentContract[list[NotebookPageObservation]]):
     """Visit every Notebook page and assert the expected controls are visible."""
 
     contract_id: str
     views: tuple[tuple[str, tuple[str, ...]], ...]
 
-    def execute(self, context: UiTestContext) -> list[dict[str, Any]]:
-        notebook = context.require_widget(self.contract_id)
-        observations = []
+    def execute(self, context: UiTestContext) -> list[NotebookPageObservation]:
+        notebook = cast(ttk.Notebook, context.require_widget(self.contract_id))
+        observations: list[NotebookPageObservation] = []
         for label, control_ids in self.views:
             tab_id = next(
                 (
@@ -320,21 +387,22 @@ class NotebookViewContract(ComponentContract):
             notebook.select(tab_id)
             context.root.update_idletasks()
             context.root.update()
+            mapped = {
+                control_id: bool(
+                    cast(tk.Misc, context.require_widget(control_id)).winfo_ismapped()
+                )
+                for control_id in control_ids
+            }
             observations.append(
                 {
-                    "selected": notebook.tab(notebook.select(), "text"),
-                    "mapped": {
-                        control_id: bool(
-                            context.require_widget(control_id).winfo_ismapped()
-                        )
-                        for control_id in control_ids
-                    },
+                    "selected": str(notebook.tab(notebook.select(), "text")),
+                    "mapped": mapped,
                 }
             )
         return observations
 
     def assert_result(
-        self, context: UiTestContext, observation: list[dict[str, Any]]
+        self, context: UiTestContext, observation: list[NotebookPageObservation]
     ) -> None:
         assert len(observation) == len(self.views)
         for result, (label, control_ids) in zip(
@@ -346,21 +414,22 @@ class NotebookViewContract(ComponentContract):
 
 
 @dataclass(frozen=True)
-class PaneGroupContract(ComponentContract):
+class PaneGroupContract(ComponentContract[PaneGroupObservation]):
     """Assert a real paned window contains visible, non-zero child panes."""
 
     contract_id: str
     orientation: str
     pane_ids: tuple[str, ...]
 
-    def execute(self, context: UiTestContext) -> dict[str, Any]:
-        group = context.require_widget(self.contract_id)
+    def execute(self, context: UiTestContext) -> PaneGroupObservation:
+        group = cast(ttk.Panedwindow, context.require_widget(self.contract_id))
         context.root.update_idletasks()
         context.root.update()
-        panes = {
-            getattr(pane, "_kicad_ui_contract_id", None): pane
-            for pane in group.winfo_children()
-        }
+        panes: dict[str, tk.Misc] = {}
+        for pane in group.winfo_children():
+            contract_id = cast(str | None, getattr(pane, "_kicad_ui_contract_id", None))
+            if contract_id is not None:
+                panes[contract_id] = pane
         return {
             "orientation": str(group.cget("orient")),
             "panes": {
@@ -374,7 +443,7 @@ class PaneGroupContract(ComponentContract):
         }
 
     def assert_result(
-        self, context: UiTestContext, observation: dict[str, Any]
+        self, context: UiTestContext, observation: PaneGroupObservation
     ) -> None:
         assert observation["orientation"] == self.orientation
         assert set(observation["panes"]) == set(self.pane_ids)
@@ -412,55 +481,68 @@ INTERACTIVE_WIDGET_CLASSES = frozenset(
 )
 
 
-def _walk_widgets(root: Any):
+def _walk_widgets(root: tk.Misc) -> Iterator[tk.Misc]:
     yield root
-    children = root.winfo_children()
-    for child in children:
-        yield from _walk_widgets(child)
+    for child in root.winfo_children():
+        yield child
+        yield from _walk_widget_children(child)
 
 
-def discover_interactive_controls(root: Any) -> dict[str, Any]:
+def _walk_widget_children(widget: tk.Misc) -> Iterator[tk.Misc]:
+    for child in widget.winfo_children():
+        yield child
+        yield from _walk_widget_children(child)
+
+
+def discover_interactive_controls(root: tk.Misc) -> dict[str, UiWidget]:
     """Return all tagged action/view controls, including registered menu items.
 
     The discovery list is intentionally limited to controls with an interaction
     contract. Static labels and decorative frames are not actionable controls.
     """
-    discovered: dict[str, Any] = {}
+    discovered: dict[str, UiWidget] = {}
     for widget in _walk_widgets(root):
         widget_class = widget.winfo_class()
-        contract_id = getattr(widget, "_kicad_ui_contract_id", None)
+        contract_id = cast(str | None, getattr(widget, "_kicad_ui_contract_id", None))
         if contract_id:
             if contract_id in discovered:
                 raise AssertionError(f"Duplicate UI contract ID: {contract_id}")
             discovered[contract_id] = widget
 
         if widget_class == "Menu":
-            menu_items = getattr(widget, "_kicad_ui_menu_item_ids", {})
+            menu = cast(tk.Menu, widget)
+            menu_items = cast(
+                dict[str, int], getattr(menu, "_kicad_ui_menu_item_ids", {})
+            )
             for item_id, index in menu_items.items():
                 if item_id in discovered:
                     raise AssertionError(f"Duplicate UI contract ID: {item_id}")
-                discovered[item_id] = MenuEntry(widget, int(index))
+                discovered[item_id] = MenuEntry(menu, int(index))
     return discovered
 
 
-def assert_control_coverage(root: Any, expected_ids: set[str]) -> dict[str, Any]:
+def assert_control_coverage(
+    root: tk.Misc, expected_ids: set[str]
+) -> dict[str, UiWidget]:
     """Fail when an interactive widget is untagged or outside the declared map."""
-    missing_tags = []
+    missing_tags: list[str] = []
     for widget in _walk_widgets(root):
         widget_class = widget.winfo_class()
+        contract_id = cast(str | None, getattr(widget, "_kicad_ui_contract_id", None))
         if widget_class in INTERACTIVE_WIDGET_CLASSES:
-            if not getattr(widget, "_kicad_ui_contract_id", None):
+            if not contract_id:
                 missing_tags.append(widget_class)
         elif widget_class == "Menu":
-            tagged_indexes = {
-                int(index)
-                for index in getattr(widget, "_kicad_ui_menu_item_ids", {}).values()
-            }
-            last_index = widget.index("end")
+            menu = cast(tk.Menu, widget)
+            menu_items = cast(
+                dict[str, int], getattr(menu, "_kicad_ui_menu_item_ids", {})
+            )
+            tagged_indexes = {int(index) for index in menu_items.values()}
+            last_index = menu.index("end")
             if last_index is None:
                 continue
             for index in range(int(last_index) + 1):
-                if widget.type(index) in {"separator", "tearoff"}:
+                if menu.type(index) in {"separator", "tearoff"}:
                     continue
                 if index not in tagged_indexes:
                     missing_tags.append(f"Menu entry {index}")
