@@ -15,7 +15,7 @@ import os
 import re
 import tempfile
 import uuid
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, TypeVar, cast
@@ -42,6 +42,9 @@ from .sexpr import sexpr_head as _head
 if TYPE_CHECKING:
     from .repository import BlockRecord
 
+type _JSONValue = str | int | float | bool | None | list[_JSONValue] | dict[str, _JSONValue]
+
+
 _T = TypeVar("_T")
 
 
@@ -57,15 +60,47 @@ def _load_project_settings(path: Path, *, context: str) -> KiCadProjectData:
 
     """
     try:
-        data = json.loads(path.read_text(encoding="utf-8"))
+        data_value = cast(_JSONValue, json.loads(path.read_text(encoding="utf-8")))
     except json.JSONDecodeError as exc:
         raise ValueError(f"{context}: {path}") from exc
-    if not isinstance(data, dict):
+    if not isinstance(data_value, dict):
         raise TypeError(f"{context}: {path}")
+    data: dict[str, _JSONValue] = data_value
     for section_name in ("meta", "net_settings"):
         section = data.get(section_name)
         if section is not None and not isinstance(section, dict):
             raise TypeError(f"{context}: invalid {section_name} section in {path}")
+
+    net_settings = data.get("net_settings")
+    if isinstance(net_settings, dict):
+        classes = net_settings.get("classes", [])
+        if not isinstance(classes, list) or any(not isinstance(item, dict) for item in classes):
+            raise TypeError(f"{context}: invalid net_settings.classes section in {path}")
+        patterns = net_settings.get("netclass_patterns", [])
+        if not isinstance(patterns, list):
+            raise TypeError(f"{context}: invalid net_settings.netclass_patterns section in {path}")
+        for entry in patterns:
+            if (
+                not isinstance(entry, dict)
+                or not isinstance(entry.get("pattern"), str)
+                or not isinstance(entry.get("netclass"), str)
+            ):
+                raise TypeError(f"{context}: invalid netclass pattern entry in {path}")
+        assignments = net_settings.get("netclass_assignments", {})
+        if not isinstance(assignments, dict):
+            raise TypeError(f"{context}: invalid netclass assignments in {path}")
+        for value in assignments.values():
+            if isinstance(value, str):
+                continue
+            if not isinstance(value, list) or any(not isinstance(name, str) for name in value):
+                raise TypeError(f"{context}: invalid netclass assignment value in {path}")
+        for key in ("net_chain_classes", "net_chain_netclasses"):
+            chain_map = net_settings.get(key, {})
+            if not isinstance(chain_map, dict) or any(
+                not isinstance(name, str) or not isinstance(value, str)
+                for name, value in chain_map.items()
+            ):
+                raise TypeError(f"{context}: invalid {key} mapping in {path}")
     return cast(KiCadProjectData, data)
 
 
@@ -489,7 +524,7 @@ def _matches_netclass_pattern(pattern: str, net_name: str) -> bool:
 
 
 def _read_netclass_definitions(
-    settings: KiCadNetSettings,
+    settings: Mapping[str, _JSONValue],
     *,
     source_name: str,
 ) -> list[KiCadNetclassDefinition]:
@@ -507,7 +542,7 @@ def _read_netclass_definitions(
     return cast(list[KiCadNetclassDefinition], raw_classes)
 
 
-def _read_netclass_patterns(settings: KiCadNetSettings) -> list[KiCadNetclassPattern]:
+def _read_netclass_patterns(settings: Mapping[str, _JSONValue]) -> list[KiCadNetclassPattern]:
     """Read and validate KiCad netclass pattern entries.
 
     Returns:
@@ -562,13 +597,13 @@ def _merge_netclass_definitions(
         TypeError: If a block netclass has no name.
     """
     class_by_name = {
-        str(item["name"]): item for item in target_classes if item.get("name") is not None
+        str(item.get("name", "")): item for item in target_classes if item.get("name") is not None
     }
     priorities = [
-        int(item["priority"])
+        int(item.get("priority", 0))
         for item in target_classes
         if item.get("name") is not None
-        and str(item["name"]).casefold() != "default"
+        and str(item.get("name", "")).casefold() != "default"
         and item.get("priority") is not None
     ]
     next_priority = max(priorities, default=-1) + 1
@@ -843,12 +878,12 @@ def _merge_project_net_settings(
     class_map, merged_classes = _merge_netclass_definitions(
         target_classes, source_classes, instance_reference
     )
-    raw_source_assignments = source_settings.get("netclass_assignments", {})
-    raw_target_assignments = target_settings.get("netclass_assignments", {})
-    if not isinstance(raw_source_assignments, dict) or not isinstance(raw_target_assignments, dict):
-        raise TypeError("KiCad net_settings.netclass_assignments must be an object.")
-    source_assignments = cast(dict[str, str | list[str]], raw_source_assignments)
-    target_assignment_values = cast(dict[str, str | list[str]], raw_target_assignments)
+    source_assignments: dict[str, str | list[str]] = source_settings.get(
+        "netclass_assignments", {}
+    )
+    target_assignment_values: dict[str, str | list[str]] = target_settings.get(
+        "netclass_assignments", {}
+    )
     target_assignments, assigned_nets = _merge_project_netclass_assignments(
         source_assignments,
         target_assignment_values,
@@ -863,7 +898,9 @@ def _merge_project_net_settings(
     applied_patterns, unmatched_patterns = _merge_project_netclass_patterns(
         patterns, source_net_map, target_assignments, class_map
     )
-    target_settings["netclass_assignments"] = target_assignments
+    target_settings["netclass_assignments"] = cast(
+        dict[str, str | list[str]], target_assignments
+    )
     metadata: KiCadProjectMetadata = target_data.get("meta") or {}
     target_data["meta"] = metadata
     metadata["filename"] = output_project.name
@@ -871,10 +908,10 @@ def _merge_project_net_settings(
 
     ignored_patterns = bool(unmatched_patterns)
     chain_name_map = source_chain_name_map or {}
-    source_chain_classes = source_settings.get("net_chain_classes") or {}
-    source_chain_netclasses = source_settings.get("net_chain_netclasses") or {}
-    target_chain_classes = target_settings.get("net_chain_classes") or {}
-    target_chain_netclasses = target_settings.get("net_chain_netclasses") or {}
+    source_chain_classes: dict[str, str] = source_settings.get("net_chain_classes") or {}
+    source_chain_netclasses: dict[str, str] = source_settings.get("net_chain_netclasses") or {}
+    target_chain_classes: dict[str, str] = target_settings.get("net_chain_classes") or {}
+    target_chain_netclasses: dict[str, str] = target_settings.get("net_chain_netclasses") or {}
     target_settings["net_chain_classes"] = target_chain_classes
     target_settings["net_chain_netclasses"] = target_chain_netclasses
     unmatched_chains, merged_chain_names = _merge_project_net_chain_mappings(
