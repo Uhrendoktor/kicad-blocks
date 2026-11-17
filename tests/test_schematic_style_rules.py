@@ -94,19 +94,17 @@ class SchematicStyleRuleTests(unittest.TestCase):
         title[1] = str(title[1]) + "\nWRAPPED"
         self.assertTrue(any("single line" in issue for issue in block_annotation_issues(tree)))
 
-
     def test_symbol_field_gap_override_is_enforced_for_t1(self) -> None:
         tree = self.fresh_tree()
         t1 = next(
-            node for node in _all(tree, "symbol")
+            node
+            for node in _all(tree, "symbol")
             if any(
                 str(prop[1]) == "Reference" and str(prop[2]) == "T1"
                 for prop in _all(node, "property")
             )
         )
-        reference = next(
-            prop for prop in _all(t1, "property") if str(prop[1]) == "Reference"
-        )
+        reference = next(prop for prop in _all(t1, "property") if str(prop[1]) == "Reference")
         at = _direct(reference, "at")
         at[1] = str(float(at[1]) + 12.0)
         issues = check_schematic_style(tree)
@@ -117,12 +115,16 @@ class SchematicStyleRuleTests(unittest.TestCase):
 
     def test_component_purpose_requires_both_function_and_rationale(self) -> None:
         tree = self.fresh_tree()
-        group = next(item for item in __import__("generate_reference").SCHEMATIC_GROUPS
-                     if item["id"] == "vbus-monitor")
+        group = next(
+            item
+            for item in __import__("generate_reference").SCHEMATIC_GROUPS
+            if item["id"] == "vbus-monitor"
+        )
         purpose = group["component_purposes"]["R1"]
         description_id = reference_uid("graphic:text:group-description:vbus-monitor")
         description = next(
-            node for node in _all(tree, "text_box")
+            node
+            for node in _all(tree, "text_box")
             if str(_direct(node, "uuid")[1]) == description_id
         )
         description[1] = str(description[1]).replace(purpose["rationale"], "")
@@ -169,8 +171,7 @@ assert "generate_reference" not in sys.modules
     def test_unbordered_title_box_must_have_single_line_render_reserve(self) -> None:
         tree = self.fresh_tree()
         title = next(
-            node for node in _all(tree, "text_box")
-            if str(node[1]) == "VSNK BULK PROTECTION"
+            node for node in _all(tree, "text_box") if str(node[1]) == "VSNK BULK PROTECTION"
         )
 
     def test_group_comment_requires_its_own_outline(self) -> None:

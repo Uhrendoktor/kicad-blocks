@@ -47,8 +47,6 @@ from kicad_blocks.plugin import (
 )
 
 
-
-
 def _return_preview_svg(
     svg_file: Path,
     _record: BlockRecord,
@@ -536,9 +534,7 @@ class LibraryBrowserTests(unittest.TestCase):
             from xml.etree import ElementTree as ET
 
             root = ET.fromstring(svg_string)
-            rasterized_dimensions.append(
-                (root.attrib.get("width"), root.attrib.get("height"))
-            )
+            rasterized_dimensions.append((root.attrib.get("width"), root.attrib.get("height")))
             return b"not-a-png"
 
         with (

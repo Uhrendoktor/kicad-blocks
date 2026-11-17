@@ -17,8 +17,7 @@ from scripts.visual_asset_inventory import ASSET_NAMES  # noqa: E402
 CATALOG_PATH = ROOT / "tests" / "ui_contract_catalog.json"
 DEFAULT_OUTPUT = ROOT / "docs" / "ui-inventory.md"
 PREVIEW_BASE = (
-    "https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/"
-    "refs/heads/docs/previews/previews"
+    "https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews"
 )
 TICK = chr(96)
 COVERAGE_LABELS = {
@@ -83,9 +82,7 @@ def load_catalog(path: Path = CATALOG_PATH) -> UICatalog:
     screen_ids = [screen["id"] for screen in screens]
     if len(screen_ids) != len(set(screen_ids)):
         raise ValueError("UI screen IDs must be unique.")
-    unknown_statuses = sorted(
-        {screen["coverage"] for screen in screens} - set(COVERAGE_LABELS)
-    )
+    unknown_statuses = sorted({screen["coverage"] for screen in screens} - set(COVERAGE_LABELS))
     if unknown_statuses:
         raise ValueError(f"Unknown UI coverage status: {unknown_statuses!r}")
 

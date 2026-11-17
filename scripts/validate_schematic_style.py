@@ -1775,9 +1775,7 @@ def component_purpose_issues(tree: SExprList) -> list[str]:
             for field in ("function", "rationale"):
                 phrase = purpose.get(field, "").strip()
                 if not phrase:
-                    issues.append(
-                        f"group {group['id']} must provide {reference} {field}"
-                    )
+                    issues.append(f"group {group['id']} must provide {reference} {field}")
                 elif phrase not in description:
                     issues.append(
                         f"group {group['id']} description must include {reference} {field}"

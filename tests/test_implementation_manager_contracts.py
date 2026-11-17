@@ -84,8 +84,7 @@ def _manager_dialog(root):
     return next(
         child
         for child in root.winfo_children()
-        if child.winfo_class() == "Toplevel"
-        and child.title().startswith("Implementations — ")
+        if child.winfo_class() == "Toplevel" and child.title().startswith("Implementations — ")
     )
 
 
@@ -152,15 +151,11 @@ def _click(
         expected_action=None,
         destroys_window=False,
         expected_label=label,
-        expected_closed_window_title=(
-            "Implementations — USB power block" if closes else None
-        ),
+        expected_closed_window_title=("Implementations — USB power block" if closes else None),
     ).run(context)
 
 
-def test_implementation_manager_window_and_all_buttons_are_discoverable(
-    monkeypatch, tmp_path
-):
+def test_implementation_manager_window_and_all_buttons_are_discoverable(monkeypatch, tmp_path):
     record, _sources = _new_manager_fixture(tmp_path, variants=("1V8",))
     root = _new_root(monkeypatch)
     context = UiTestContext(root)
@@ -197,9 +192,7 @@ def test_set_as_default_promotes_selected_implementation_and_persists_manifest(
         tree = context.require_widget("implementations-manager.rows")
         row_values = tuple(tree.item("2", "values"))
         _select_variant(context, "2", row_values)
-        default_button = context.require_widget(
-            "implementations-manager.action.default"
-        )
+        default_button = context.require_widget("implementations-manager.action.default")
         assert default_button.cget("text") == "Set as default"
         _click(context, "implementations-manager.action.default", "Set as default")
         saved = read_manifest(record.path)
@@ -224,9 +217,7 @@ def test_set_as_default_promotes_selected_implementation_and_persists_manifest(
         root.destroy()
 
 
-def test_remove_alternative_updates_manifest_and_removes_unreferenced_file(
-    monkeypatch, tmp_path
-):
+def test_remove_alternative_updates_manifest_and_removes_unreferenced_file(monkeypatch, tmp_path):
     record, _sources = _new_manager_fixture(tmp_path, variants=("1V8",))
     variant_file = record.path / record.manifest["variants"][0]["file"]
     root = _new_root(monkeypatch)
@@ -253,9 +244,7 @@ def test_remove_alternative_updates_manifest_and_removes_unreferenced_file(
         root.destroy()
 
 
-def test_remove_is_blocked_when_an_implementation_is_referenced_by_a_profile(
-    monkeypatch, tmp_path
-):
+def test_remove_is_blocked_when_an_implementation_is_referenced_by_a_profile(monkeypatch, tmp_path):
     record, _sources = _new_manager_fixture(
         tmp_path,
         variants=("1V8",),
@@ -286,9 +275,7 @@ def test_remove_is_blocked_when_an_implementation_is_referenced_by_a_profile(
         root.destroy()
 
 
-def test_edit_variant_renames_selector_and_preserves_implementation_file(
-    monkeypatch, tmp_path
-):
+def test_edit_variant_renames_selector_and_preserves_implementation_file(monkeypatch, tmp_path):
     record, _sources = _new_manager_fixture(tmp_path, variants=("1V8",))
     current_file = record.path / record.manifest["variants"][0]["file"]
     original_bytes = current_file.read_bytes()
@@ -325,9 +312,7 @@ def test_edit_variant_renames_selector_and_preserves_implementation_file(
         root.destroy()
 
 
-def test_add_variant_save_failure_can_be_retried_with_save_and_close(
-    monkeypatch, tmp_path
-):
+def test_add_variant_save_failure_can_be_retried_with_save_and_close(monkeypatch, tmp_path):
     record, _sources = _new_manager_fixture(tmp_path)
     source = tmp_path / "new-3v3.kicad_sch"
     source.write_text(

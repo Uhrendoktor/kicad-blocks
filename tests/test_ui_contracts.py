@@ -45,13 +45,9 @@ TASK_HUB_VIEWS = tuple(
     )
     for view in TASK_HUB_SCREEN["views"]
 )
-TASK_HUB_CONTROL_IDS = {
-    control["contract_id"] for control in TASK_HUB_SCREEN["controls"]
-}
+TASK_HUB_CONTROL_IDS = {control["contract_id"] for control in TASK_HUB_SCREEN["controls"]}
 TASK_HUB_CONTROL_IDS.update(
-    action["contract_id"]
-    for view in TASK_HUB_SCREEN["views"]
-    for action in view["actions"]
+    action["contract_id"] for view in TASK_HUB_SCREEN["views"] for action in view["actions"]
 )
 TASK_HUB_CONTROL_IDS.update(
     control["contract_id"] for control in TASK_HUB_SCREEN.get("footer_controls", [])
@@ -102,9 +98,7 @@ def test_task_hub_declares_every_action_and_view_from_the_catalog():
     assert len(TASK_HUB_ACTIONS) == 13
     assert len({action[0] for action in TASK_HUB_ACTIONS}) == 13
     assert catalog_actions == list(TASK_HUB_ACTIONS)
-    assert [view["label"] for view in screen["views"]] == [
-        view[0] for view in TASK_HUB_VIEWS
-    ]
+    assert [view["label"] for view in screen["views"]] == [view[0] for view in TASK_HUB_VIEWS]
     assert all(
         action["assertion"] == "asserted"
         and action["contract_id"] == _button_contract_id(action["action_id"])
@@ -149,9 +143,8 @@ def test_each_task_hub_button_dispatches_exactly_its_action_id(
 ):
     root, _notebook = _new_hub(monkeypatch)
     context = UiTestContext(root)
-    def record_action(
-        selected: str, *, editor_window_id: str | None = None
-    ) -> None:
+
+    def record_action(selected: str, *, editor_window_id: str | None = None) -> None:
         del editor_window_id
         context.action_calls.append(selected)
 
@@ -173,9 +166,8 @@ def test_each_task_hub_button_dispatches_exactly_its_action_id(
 def test_task_hub_close_button_destroys_window_without_dispatch(monkeypatch):
     root, _notebook = _new_hub(monkeypatch)
     context = UiTestContext(root)
-    def record_action(
-        selected: str, *, editor_window_id: str | None = None
-    ) -> None:
+
+    def record_action(selected: str, *, editor_window_id: str | None = None) -> None:
         del editor_window_id
         context.action_calls.append(selected)
 
@@ -206,9 +198,7 @@ def test_task_hub_actions_use_a_compact_two_column_grid(monkeypatch):
                 for cell in tab.winfo_children()
                 for child in cell.winfo_children()
                 if isinstance(child, plugin_actions.ttk.Button)
-                and str(getattr(child, "_kicad_ui_contract_id", "")).startswith(
-                    "task-hub.action."
-                )
+                and str(getattr(child, "_kicad_ui_contract_id", "")).startswith("task-hub.action.")
             ]
             assert len(buttons) in {3, 5}
             positions = [button.master.grid_info() for button in buttons]
@@ -219,7 +209,6 @@ def test_task_hub_actions_use_a_compact_two_column_grid(monkeypatch):
                 assert positions[-1]["columnspan"] == 2
     finally:
         root.destroy()
-
 
 def test_choice_view_contract_invokes_selected_combobox_view():
     plugin_actions._load_tkinter()

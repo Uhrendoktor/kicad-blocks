@@ -123,9 +123,7 @@ class UiTestContext:
         try:
             return self.widgets[contract_id]
         except KeyError as exc:
-            raise AssertionError(
-                f"No Tk widget is registered as {contract_id!r}."
-            ) from exc
+            raise AssertionError(f"No Tk widget is registered as {contract_id!r}.") from exc
 
     def require_menu_entry(self, contract_id: str) -> MenuEntry:
         if not self.widgets and not self.menu_entries:
@@ -133,9 +131,7 @@ class UiTestContext:
         try:
             return self.menu_entries[contract_id]
         except KeyError as exc:
-            raise AssertionError(
-                f"No Tk menu entry is registered as {contract_id!r}."
-            ) from exc
+            raise AssertionError(f"No Tk menu entry is registered as {contract_id!r}.") from exc
 
 
 class ComponentContract(ABC, Generic[ObservationT]):
@@ -146,9 +142,7 @@ class ComponentContract(ABC, Generic[ObservationT]):
         """Perform a real interaction and return its observable result."""
 
     @abstractmethod
-    def assert_result(
-        self, context: UiTestContext, observation: ObservationT
-    ) -> None:
+    def assert_result(self, context: UiTestContext, observation: ObservationT) -> None:
         """Assert the externally observable result of that interaction."""
 
     def run(self, context: UiTestContext) -> ObservationT:
@@ -182,9 +176,7 @@ class WindowContract(ComponentContract[WindowObservation]):
         widgets = context.refresh_widgets()
         return {
             "title": context.root.title(),
-            "screen_id": cast(
-                str | None, getattr(context.root, "_kicad_ui_screen_id", None)
-            ),
+            "screen_id": cast(str | None, getattr(context.root, "_kicad_ui_screen_id", None)),
             "exists": bool(context.root.winfo_exists()),
             "visible": bool(context.root.winfo_viewable()),
             "width": context.root.winfo_width(),
@@ -192,9 +184,7 @@ class WindowContract(ComponentContract[WindowObservation]):
             "widget_ids": set(widgets) | set(context.menu_entries),
         }
 
-    def assert_result(
-        self, context: UiTestContext, observation: WindowObservation
-    ) -> None:
+    def assert_result(self, context: UiTestContext, observation: WindowObservation) -> None:
         assert observation["title"] == self.title
         assert observation["screen_id"] == self.screen_id
         assert observation["exists"] is True
@@ -247,9 +237,7 @@ class ButtonContract(ComponentContract[ButtonObservation]):
             "closed_windows": closed_windows,
         }
 
-    def assert_result(
-        self, context: UiTestContext, observation: ButtonObservation
-    ) -> None:
+    def assert_result(self, context: UiTestContext, observation: ButtonObservation) -> None:
         if self.expected_action is None:
             expected: list[str] = []
         elif isinstance(self.expected_action, tuple):
@@ -280,9 +268,7 @@ class MenuItemContract(ComponentContract[MenuItemObservation]):
             "events": list(context.events),
         }
 
-    def assert_result(
-        self, context: UiTestContext, observation: MenuItemObservation
-    ) -> None:
+    def assert_result(self, context: UiTestContext, observation: MenuItemObservation) -> None:
         assert observation["events"] == [self.expected_event]
 
 
@@ -317,9 +303,7 @@ class EntryInputContract(ComponentContract[EntryInputObservation]):
             "summary": summary_text,
         }
 
-    def assert_result(
-        self, context: UiTestContext, observation: EntryInputObservation
-    ) -> None:
+    def assert_result(self, context: UiTestContext, observation: EntryInputObservation) -> None:
         assert observation["value"] == self.value
         assert observation["result_count"] == self.expected_result_count
         assert observation["summary"] == self.expected_summary
@@ -356,9 +340,7 @@ class TreeSelectionContract(ComponentContract[TreeSelectionObservation]):
             "values": row_values,
         }
 
-    def assert_result(
-        self, context: UiTestContext, observation: TreeSelectionObservation
-    ) -> None:
+    def assert_result(self, context: UiTestContext, observation: TreeSelectionObservation) -> None:
         assert observation["selection"] == (self.row_id,)
         assert observation["summary"] == self.expected_summary
         if self.expected_values is not None:
@@ -385,9 +367,7 @@ class ChoiceViewContract(ComponentContract[ChoiceViewObservation]):
             "events": list(context.events),
         }
 
-    def assert_result(
-        self, context: UiTestContext, observation: ChoiceViewObservation
-    ) -> None:
+    def assert_result(self, context: UiTestContext, observation: ChoiceViewObservation) -> None:
         assert observation["value"] == self.value
         assert observation["events"] == [self.expected_event]
 
@@ -406,11 +386,7 @@ class NotebookViewContract(ComponentContract[list[NotebookPageObservation]]):
         observations: list[NotebookPageObservation] = []
         for label, control_ids in self.views:
             tab_id = next(
-                (
-                    tab
-                    for tab in notebook.tabs()
-                    if notebook.tab(tab, "text") == label
-                ),
+                (tab for tab in notebook.tabs() if notebook.tab(tab, "text") == label),
                 None,
             )
             if tab_id is None:
@@ -419,9 +395,7 @@ class NotebookViewContract(ComponentContract[list[NotebookPageObservation]]):
             context.root.update_idletasks()
             context.root.update()
             mapped = {
-                control_id: bool(
-                    context.require_widget(control_id).winfo_ismapped()
-                )
+                control_id: bool(context.require_widget(control_id).winfo_ismapped())
                 for control_id in control_ids
             }
             observations.append(
@@ -436,9 +410,7 @@ class NotebookViewContract(ComponentContract[list[NotebookPageObservation]]):
         self, context: UiTestContext, observation: list[NotebookPageObservation]
     ) -> None:
         assert len(observation) == len(self.views)
-        for result, (label, control_ids) in zip(
-            observation, self.views, strict=True
-        ):
+        for result, (label, control_ids) in zip(observation, self.views, strict=True):
             assert result["selected"] == label
             assert set(result["mapped"]) == set(control_ids)
             assert all(result["mapped"].values())
@@ -475,9 +447,7 @@ class PaneGroupContract(ComponentContract[PaneGroupObservation]):
             },
         }
 
-    def assert_result(
-        self, context: UiTestContext, observation: PaneGroupObservation
-    ) -> None:
+    def assert_result(self, context: UiTestContext, observation: PaneGroupObservation) -> None:
         assert observation["orientation"] == self.orientation
         assert set(observation["panes"]) == set(self.pane_ids)
         for pane in observation["panes"].values():
@@ -546,9 +516,7 @@ def discover_interactive_controls(root: tk.Misc) -> dict[str, tk.Misc | MenuEntr
 
         if widget_class == "Menu":
             menu = cast(Menu, widget)
-            menu_items = cast(
-                dict[str, int], getattr(menu, "_kicad_ui_menu_item_ids", {})
-            )
+            menu_items = cast(dict[str, int], getattr(menu, "_kicad_ui_menu_item_ids", {}))
             for item_id, index in menu_items.items():
                 if item_id in discovered:
                     raise AssertionError(f"Duplicate UI contract ID: {item_id}")
@@ -571,9 +539,7 @@ def assert_control_coverage(
                 missing_tags.append(widget_class)
         elif widget_class == "Menu":
             menu = cast(Menu, widget)
-            menu_items = cast(
-                dict[str, int], getattr(menu, "_kicad_ui_menu_item_ids", {})
-            )
+            menu_items = cast(dict[str, int], getattr(menu, "_kicad_ui_menu_item_ids", {}))
             tagged_indexes = {int(index) for index in menu_items.values()}
             last_index = menu.index("end")
             if last_index is None:

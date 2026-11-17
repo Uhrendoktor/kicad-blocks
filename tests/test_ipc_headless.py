@@ -74,8 +74,6 @@ def _find_cli() -> str:
     raise RuntimeError("KiCad CLI was not found; set KICAD_CLI or add it to PATH.")
 
 
-
-
 class _SelectionFixture:
     """Small typed adapter exposing the selected facade to production IPC actions."""
 
@@ -141,28 +139,14 @@ def _place_initial_facade(
     # instance values can be edited without replacing the facade ID.
     instance_fields = {field.name: field for field in instance.user_fields}
     parameter_fields = {
-        name: field
-        for name, field in instance_fields.items()
-        if name.startswith("KB_PARAM_")
+        name: field for name, field in instance_fields.items() if name.startswith("KB_PARAM_")
     }
     if set(parameter_fields) != {"KB_PARAM_OUTPUT_VOLTAGE", "KB_PARAM_ENABLE"}:
-        _fail(
-            f"Expected typed block parameter fields, got {sorted(parameter_fields)}."
-        )
-    if (
-        "KB_LAYOUT" not in instance_fields
-        or instance_fields["KB_LAYOUT"].text.value != "default"
-    ):
-        _fail(
-            "The generated facade did not expose its default PCB layout field."
-        )
-    if (
-        "KB_PROFILE" not in instance_fields
-        or instance_fields["KB_PROFILE"].text.value
-    ):
-        _fail(
-            "The generated facade did not expose its blank profile selector."
-        )
+        _fail(f"Expected typed block parameter fields, got {sorted(parameter_fields)}.")
+    if "KB_LAYOUT" not in instance_fields or instance_fields["KB_LAYOUT"].text.value != "default":
+        _fail("The generated facade did not expose its default PCB layout field.")
+    if "KB_PROFILE" not in instance_fields or instance_fields["KB_PROFILE"].text.value:
+        _fail("The generated facade did not expose its blank profile selector.")
     schematic.save()
 
     symbols = list(schematic.get_symbols())
@@ -186,19 +170,14 @@ def _place_initial_facade(
     if len(symbols) != 1:
         _fail(f"Expected one facade symbol; found {len(symbols)}.")
     if len(sheet_symbols) != 0:
-        _fail(
-            f"Expected zero hierarchical sheet symbols; found {len(sheet_symbols)}."
-        )
+        _fail(f"Expected zero hierarchical sheet symbols; found {len(sheet_symbols)}.")
 
     # Use the fully re-fetched document item, as the UI action does
     # through get_selection(), rather than the create response wrapper.
     instance = symbols[0]
     if instance.reference != "X1":
         _fail(f"Unexpected reference designator: {instance.reference!r}.")
-    if (
-        instance.definition.id.library != nickname
-        or instance.definition.id.name != symbol_name
-    ):
+    if instance.definition.id.library != nickname or instance.definition.id.name != symbol_name:
         _fail("Placed facade has the wrong KiCad library identifier.")
     return symbols[0]
 
@@ -241,15 +220,10 @@ def _configure_facade_instance(
         "KB_LAYOUT": "default",
         "KB_PROFILE": "default_profile",
     }:
-        _fail(
-            f"KiCad IPC did not persist the edited instance fields: {configured_values!r}"
-        )
+        _fail(f"KiCad IPC did not persist the edited instance fields: {configured_values!r}")
     if str(instance.id) != original_configured_id or instance.reference != "X1":
         _fail("Configuration changed the facade KIID or reference.")
-    if (
-        instance.definition.id.library != nickname
-        or instance.definition.id.name != symbol_name
-    ):
+    if instance.definition.id.library != nickname or instance.definition.id.name != symbol_name:
         _fail("Configuration changed the facade library identifier.")
     return instance
 
@@ -290,16 +264,12 @@ def _create_local_facade_copy(
         or symbols_after_local[0].reference != "X1"
         or str(symbols_after_local[0].id) != original_instance_id
     ):
-        _fail(
-            "Local-copy binding changed or duplicated the facade instance."
-        )
+        _fail("Local-copy binding changed or duplicated the facade instance.")
     if (
         symbols_after_local[0].definition.id.library != nickname
         or symbols_after_local[0].definition.id.name != symbol_name
     ):
-        _fail(
-            "Local-copy binding unexpectedly changed the facade library ID."
-        )
+        _fail("Local-copy binding unexpectedly changed the facade library ID.")
 
     return selection, local, original_instance_id
 
@@ -334,8 +304,6 @@ def _assert_local_sync_conflict(
         _fail("Conflict detection overwrote the library version.")
 
 
-
-
 def _validate_local_sync(
     block: BlockRecord,
     local: BlockRecord,
@@ -356,18 +324,14 @@ def _validate_local_sync(
     if "implementation.kicad_sch" not in published["published"]:
         _fail(f"Local implementation edit was not published: {published!r}")
     if "; local IPC publish test" not in block.implementation.read_text(encoding="utf-8"):
-        _fail(
-            "Publishing a local implementation did not update its library source."
-        )
+        _fail("Publishing a local implementation did not update its library source.")
 
     source_text = block.implementation.read_text(encoding="utf-8")
     block.implementation.write_text(
         source_text + "\n; upstream IPC pull test\n",
         encoding="utf-8",
     )
-    pulled = sync_selected_local(
-        cast("Schematic", selection), cast("KiCadApp", kicad), project_dir
-    )
+    pulled = sync_selected_local(cast("Schematic", selection), cast("KiCadApp", kicad), project_dir)
     if "implementation.kicad_sch" not in pulled["pulled"]:
         _fail(f"Upstream implementation edit was not pulled: {pulled!r}")
     if "; upstream IPC pull test" not in local.implementation.read_text(encoding="utf-8"):
@@ -405,9 +369,7 @@ def _register_runtime_facade(
     )
     schematic.save()
     if late_instance.definition.id.library != nickname:
-        _fail(
-            "A newly added facade did not reload through the stable KBlocks nickname."
-        )
+        _fail("A newly added facade did not reload through the stable KBlocks nickname.")
     return late_block
 
 
@@ -431,9 +393,7 @@ def _validate_saved_parent_schematic(
     if "(sheet " in saved_text:
         _fail("Saved parent schematic unexpectedly contains a child sheet.")
     if f'(lib_id "{nickname}:{late_block.manifest["symbol_name"]}")' not in saved_text:
-        _fail(
-            "The runtime-registered facade was not saved into the parent schematic."
-        )
+        _fail("The runtime-registered facade was not saved into the parent schematic.")
 
     print(
         "KiCad IPC passed: one stable catalog, local-instance metadata, runtime block addition, "
@@ -460,17 +420,11 @@ def _run_facade_ipc_scenario(cli: str, root: Path) -> None:
         selection, local, instance_id = _create_local_facade_copy(
             schematic, kicad, instance, project_dir, library_root, nickname, symbol_name
         )
-        _validate_local_sync(
-            block, local, selection, kicad, project_dir, schematic, instance_id
-        )
-        late_block = _register_runtime_facade(
-            schematic, kicad, project_dir, library_root, nickname
-        )
+        _validate_local_sync(block, local, selection, kicad, project_dir, schematic, instance_id)
+        late_block = _register_runtime_facade(schematic, kicad, project_dir, library_root, nickname)
     finally:
         kicad.close()
-    _validate_saved_parent_schematic(
-        project_dir, schematic_path, nickname, symbol_name, late_block
-    )
+    _validate_saved_parent_schematic(project_dir, schematic_path, nickname, symbol_name, late_block)
 
 
 def _create_nested_blocks(nested_library: Path) -> tuple[BlockRecord, BlockRecord]:
@@ -562,17 +516,12 @@ def _assert_nested_parent_symbols(
             f"found {sorted(symbols_by_reference)}."
         )
     if nested_sheets:
-        _fail(
-            f"Nested composition created {len(nested_sheets)} hierarchical sheets."
-        )
+        _fail(f"Nested composition created {len(nested_sheets)} hierarchical sheets.")
     for reference, expected in expected_instances.items():
         symbol = symbols_by_reference[reference]
         rotation = expected["orientation"]
         if int(symbol.transform.orientation) != schematic_symbol_orientation(rotation):
-            _fail(
-                f"Nested facade {reference} was not placed at {rotation} degrees."
-            )
-
+            _fail(f"Nested facade {reference} was not placed at {rotation} degrees.")
 
 
 def _assert_nested_parent_labels(
@@ -581,26 +530,18 @@ def _assert_nested_parent_labels(
 ) -> None:
     labels_by_name = {label.text.value: label for label in schematic.get_labels()}
     expected_names = {
-        net_name
-        for item in expected_instances.values()
-        for net_name in item["pin_map"].values()
+        net_name for item in expected_instances.values() for net_name in item["pin_map"].values()
     }
     if not expected_names.issubset(labels_by_name):
-        _fail(
-            f"Mapped nested labels missing: {sorted(expected_names - set(labels_by_name))}"
-        )
+        _fail(f"Mapped nested labels missing: {sorted(expected_names - set(labels_by_name))}")
 
-    pin_points = facade_pin_connection_points(
-        parse_pins("IN:input, GND:passive, OUT:output")
-    )
+    pin_points = facade_pin_connection_points(parse_pins("IN:input, GND:passive, OUT:output"))
     for expected in expected_instances.values():
         rotation = expected["orientation"]
         origin_x, origin_y = expected["origin"]
         pin_map = expected["pin_map"]
         for pin_name, (local_x, local_y, spin) in pin_points.items():
-            offset_x, offset_y = transform_symbol_point_to_schematic(
-                local_x, local_y, rotation
-            )
+            offset_x, offset_y = transform_symbol_point_to_schematic(local_x, local_y, rotation)
             expected_point = Vector2.from_xy_mm(origin_x + offset_x, origin_y + offset_y)
             actual_label = labels_by_name[pin_map[pin_name]]
             if int(actual_label.position.x) != int(expected_point.x) or int(
@@ -710,22 +651,16 @@ def _verify_nested_child(cli: str, child: BlockRecord) -> None:
         child_kicad.wait_for_libraries(timeout_s=120.0)
         leaf_symbols = list(child_schematic.get_symbols())
         if len(leaf_symbols) != 1:
-            _fail(
-                f"Expected one leaf facade in child implementation; found {len(leaf_symbols)}."
-            )
+            _fail(f"Expected one leaf facade in child implementation; found {len(leaf_symbols)}.")
         if leaf_symbols[0].reference != "B9":
-            _fail(
-                f"Expected nested leaf reference B9; found {leaf_symbols[0].reference!r}."
-            )
+            _fail(f"Expected nested leaf reference B9; found {leaf_symbols[0].reference!r}.")
         if int(leaf_symbols[0].transform.orientation) != schematic_symbol_orientation(270):
             _fail("Nested leaf facade was not placed at 270 degrees.")
         if child_schematic.get_sheet_symbols():
             _fail("Second-level composition created a hierarchical sheet.")
 
         child_labels = list(child_schematic.get_labels())
-        leaf_pin_points = facade_pin_connection_points(
-            parse_pins("A:input, GND:passive, B:output")
-        )
+        leaf_pin_points = facade_pin_connection_points(parse_pins("A:input, GND:passive, B:output"))
         leaf_pin_map = {"A": "IN", "GND": "GND", "B": "OUT"}
         for pin_name, (local_x, local_y, spin) in leaf_pin_points.items():
             delta_x, delta_y = transform_symbol_point_to_schematic(local_x, local_y, 270)
@@ -744,9 +679,7 @@ def _verify_nested_child(cli: str, child: BlockRecord) -> None:
                     f"leaf pin endpoint {expected_point}."
                 )
             if int(matching[0].spin_style) != expected_spin:
-                _fail(
-                    f"Second-level label {leaf_pin_map[pin_name]} has the wrong spin style."
-                )
+                _fail(f"Second-level label {leaf_pin_map[pin_name]} has the wrong spin style.")
     finally:
         child_kicad.close()
 
@@ -760,9 +693,7 @@ def _assert_implementation_export(
 ) -> None:
     schematics = sorted(path.name for path in block.path.glob("*.kicad_sch"))
     if schematics != ["implementation.kicad_sch"]:
-        _fail(
-            f"{description} generated an unexpected schematic file: {schematics!r}"
-        )
+        _fail(f"{description} generated an unexpected schematic file: {schematics!r}")
     svg_dir = root / export_directory
     svg_dir.mkdir()
     run_kicad_cli(
@@ -788,13 +719,9 @@ def _run_nested_ipc_scenario(cli: str, root: Path) -> None:
     _verify_nested_parent(cli, parent, expected_instances)
     _verify_child_dependency_discovery(child, nested_library, cli)
     _verify_parent_dependency_discovery(parent, nested_library, cli)
-    _assert_implementation_export(
-        parent, root, cli, "nested-parent-svg", "Nested parent"
-    )
+    _assert_implementation_export(parent, root, cli, "nested-parent-svg", "Nested parent")
     _verify_nested_child(cli, child)
-    _assert_implementation_export(
-        child, root, cli, "nested-child-svg", "Second-level child"
-    )
+    _assert_implementation_export(child, root, cli, "nested-child-svg", "Second-level child")
     print(
         "Nested block composition passed: two recursive levels (90° child and 270° leaf facades), "
         "zero hierarchical sheets and no copied child schematic."
@@ -808,8 +735,6 @@ def main() -> None:
         root = Path(temporary)
         _run_facade_ipc_scenario(cli, root)
         _run_nested_ipc_scenario(cli, root)
-
-
 
 
 if __name__ == "__main__":

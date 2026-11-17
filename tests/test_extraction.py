@@ -383,7 +383,9 @@ class HierarchicalSheetExtractionTests(unittest.TestCase):
 
         child_tree = parse_sexpr((record.path / root_child_file).read_text(encoding="utf-8"))
         child_sheets = [
-            node for node in child_tree[1:] if isinstance(node, list) and sexpr_head(node) == "sheet"
+            node
+            for node in child_tree[1:]
+            if isinstance(node, list) and sexpr_head(node) == "sheet"
         ]
         self.assertEqual(len(child_sheets), 1)
         child_sheet = child_sheets[0]

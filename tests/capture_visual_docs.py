@@ -947,8 +947,6 @@ def render_native_svgs(cli: str, record: BlockRecord, output_dir: Path) -> None:
     shutil.rmtree(schematic_dir)
 
 
-
-
 def _create_sensor_fixture(library: Path) -> BlockRecord:
     return create_block(
         library,
@@ -1119,6 +1117,7 @@ def main() -> int:
 
     _write_bundle_manifest(output_dir)
     return 0
+
 
 if __name__ == "__main__":
     raise SystemExit(main())

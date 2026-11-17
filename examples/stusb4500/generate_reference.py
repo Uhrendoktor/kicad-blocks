@@ -121,7 +121,8 @@ SCHEMATIC_GROUPS: tuple[_SchematicGroup, ...] = (
                 "rationale": "sets the VBUS sense-node bias for monitoring",
             },
         },
-        "lane": "main", "order": 2,
+        "lane": "main",
+        "order": 2,
         "extra_top_padding_mm": 10.16,
         "layout": {
             "anchor": "D4",
@@ -188,23 +189,33 @@ SCHEMATIC_GROUPS: tuple[_SchematicGroup, ...] = (
                 "rationale": "limits DISCH current while output capacitance drains",
             },
         },
-        "lane": "main", "order": 4,
+        "lane": "main",
+        "order": 4,
         "layout": {
             "anchor": "T4",
             "anchor_y_mm": 104.14,
             "constraints": (
                 {"kind": "offset", "component": "T1", "to": "T4", "dx_mm": 25.40, "dy_mm": 0.0},
                 {"kind": "offset", "component": "R2", "to": "T1", "dx_mm": 17.78, "dy_mm": 41.91},
-                {"kind": "midpoint_offset", "component": "R10", "between": ("T4", "T1"), "dx_mm": 0.0, "dy_mm": 17.78},
+                {
+                    "kind": "midpoint_offset",
+                    "component": "R10",
+                    "between": ("T4", "T1"),
+                    "dx_mm": 0.0,
+                    "dy_mm": 17.78,
+                },
                 {"kind": "offset", "component": "R11", "to": "R10", "dx_mm": 7.62, "dy_mm": 7.62},
                 {"kind": "offset", "component": "R13", "to": "R11", "dx_mm": 20.32, "dy_mm": 0.0},
             ),
         },
     },
     {
-        "id": "vsnk-output", "title": "VSNK BULK PROTECTION",
+        "id": "vsnk-output",
+        "title": "VSNK BULK PROTECTION",
         "description": "Local VSNK bypass capacitance and transient clamp at the sink output.",
-        "members": ("C10", "D11"), "lane": "main", "order": 5,
+        "members": ("C10", "D11"),
+        "lane": "main",
+        "order": 5,
         "layout": {
             "anchor": "C10",
             "anchor_y_mm": 99.06,
@@ -1067,100 +1078,314 @@ def generate_reference_schematic(destination: Path) -> Path:
     specs: list[_ComponentSpec] = [
         # ref, library, symbol, value, unused position slot, pin-number -> (net, kind, shape).
         # Component origins are resolved exclusively from SCHEMATIC_GROUPS layout constraints.
-        ("U1", "Interface_USB", "STUSB4500QTR", "STUSB4500QTR", None, {
-            "1": ("CC1", "local", ""), "2": ("CC1", "local", ""),
-            "4": ("CC2", "local", ""),
-            "5": ("CC2", "local", ""), "6": ("RESET", "hier", "input"),
-            "7": ("SCL", "hier", "input"), "8": ("SDA", "hier", "bidirectional"),
-            "9": ("DISCH", "local", ""), "10": ("GND", "hier", "passive"),
-            "11": ("NC", "nc", ""), "12": ("ADDR0", "local", ""),
-            "13": ("ADDR1", "local", ""), "14": ("NC", "nc", ""),
-            "15": ("NC", "nc", ""), "16": ("VBUS_EN_SNK", "local", ""),
-            "17": ("NC", "nc", ""), "18": ("VBUS_VS_DISCH", "local", ""),
-            "19": ("ALERT#", "hier", "output"), "20": ("NC", "nc", ""),
-            "21": ("VREG_1V2", "local", ""), "22": ("VSYS", "hier", "input"),
-            "23": ("VREG_2V7", "local", ""), "24": ("VBUS", "local", ""),
-            "25": ("GND", "local", ""),
-        }),
-        ("J1", "Connector", "USB_C_Receptacle", "USB 3.1 Type-C receptacle", None, {
-            "A1": ("GND", "local", ""), "A4": ("VBUS", "local", ""),
-            "A5": ("CC1", "local", ""), "A9": ("VBUS", "local", ""),
-            "A12": ("GND", "local", ""), "B1": ("GND", "local", ""),
-            "B4": ("VBUS", "local", ""), "B5": ("CC2", "local", ""),
-            "B9": ("VBUS", "local", ""), "B12": ("GND", "local", ""),
-        }),
-        ("C50", "Device", "C", "4.7uF", None, {
-            "1": ("VBUS", "local", ""), "2": ("GND", "local", ""),
-        }),
-        ("D50", "Device", "D_TVS", "ESDA25P35-1U1M", None, {
-            "1": ("VBUS", "local", ""), "2": ("GND", "local", ""),
-        }),
-        ("D1", "STUSB4500_Custom", "ESDA25W", "ESDA25W", None, {
-            "1": ("CC1", "local", ""), "2": ("CC2", "local", ""),
-            "3": ("GND", "local", ""),
-        }),
-        ("D4", "Device", "D", "", None, {
-            "1": ("VBUS_FILTERED", "local", ""), "2": ("VBUS", "local", ""),
-        }),
-        ("C4", "Device", "C", "1uF", None, {
-            "1": ("VBUS_FILTERED", "local", ""), "2": ("GND", "local", ""),
-        }),
-        ("R1", "Device", "R", "470", None, {
-            "1": ("VBUS_FILTERED", "local", ""), "2": ("VBUS_VS_DISCH", "local", ""),
-        }),
-        ("R4", "Device", "R", "1k", None, {
-            "1": ("VREG_2V7", "local", ""), "2": ("VBUS_VS_DISCH", "local", ""),
-        }),
-        ("C1", "Device", "C", "1uF", None, {
-            "1": ("VREG_1V2", "local", ""), "2": ("GND", "local", ""),
-        }),
-        ("C2", "Device", "C", "1uF", None, {
-            "1": ("VREG_2V7", "local", ""), "2": ("GND", "local", ""),
-        }),
-        ("C3", "Device", "C", "1uF", None, {
-            "1": ("VREG_2V7", "local", ""), "2": ("GND", "local", ""),
-        }),
-        ("R51", "Device", "R", "100k", None, {
-            "1": ("VREG_2V7", "local", ""), "2": ("ADDR1", "local", ""),
-        }),
-        ("R52", "Device", "R", "100k", None, {
-            "1": ("VREG_2V7", "local", ""), "2": ("ADDR0", "local", ""),
-        }),
-        ("R53", "Device", "R", "100k", None, {
-            "1": ("ADDR1", "local", ""), "2": ("GND", "local", ""),
-        }),
-        ("R54", "Device", "R", "100k", None, {
-            "1": ("ADDR0", "local", ""), "2": ("GND", "local", ""),
-        }),
-        ("R55", "Device", "R", "10k", None, {
-            "1": ("RESET", "local", ""), "2": ("GND", "local", ""),
-        }),
-        ("T4", "Transistor_FET", "Q_PMOS_GSD", "STL6P3LLH6", None, {
-            "1": ("VBUS_EN_SNK", "local", ""), "2": ("VBUS", "local", ""),
-            "3": ("FET_MID", "local", ""),
-        }),
-        ("T1", "Transistor_FET", "Q_PMOS_GSD", "STL6P3LLH6", None, {
-            "1": ("VSNK_GATE", "local", ""), "2": ("FET_MID", "local", ""),
-            "3": ("VSNK", "hier", "output"),
-        }),
-        ("R10", "Device", "R", "100k", None, {
-            "1": ("FET_MID", "local", ""), "2": ("VSNK_GATE", "local", ""),
-        }),
-        ("R11", "Device", "R", "22k", None, {
-            "1": ("VSNK_GATE", "local", ""), "2": ("GND", "local", ""),
-        }),
-        ("R13", "Device", "R", "100", None, {
-            "1": ("VSNK_GATE", "local", ""), "2": ("VBUS_EN_SNK", "local", ""),
-        }),
-        ("R2", "Device", "R", "1k", None, {
-            "1": ("DISCH", "local", ""), "2": ("VSNK", "hier", "output"),
-        }),
-        ("C10", "Device", "C", "100nF", None, {
-            "1": ("VSNK", "hier", "output"), "2": ("GND", "local", ""),
-        }),
-        ("D11", "Device", "D_TVS", "ESDA25P35-1U1M", None, {
-            "1": ("VSNK", "hier", "output"), "2": ("GND", "local", ""),
-        }),
+        (
+            "U1",
+            "Interface_USB",
+            "STUSB4500QTR",
+            "STUSB4500QTR",
+            None,
+            {
+                "1": ("CC1", "local", ""),
+                "2": ("CC1", "local", ""),
+                "4": ("CC2", "local", ""),
+                "5": ("CC2", "local", ""),
+                "6": ("RESET", "hier", "input"),
+                "7": ("SCL", "hier", "input"),
+                "8": ("SDA", "hier", "bidirectional"),
+                "9": ("DISCH", "local", ""),
+                "10": ("GND", "hier", "passive"),
+                "11": ("NC", "nc", ""),
+                "12": ("ADDR0", "local", ""),
+                "13": ("ADDR1", "local", ""),
+                "14": ("NC", "nc", ""),
+                "15": ("NC", "nc", ""),
+                "16": ("VBUS_EN_SNK", "local", ""),
+                "17": ("NC", "nc", ""),
+                "18": ("VBUS_VS_DISCH", "local", ""),
+                "19": ("ALERT#", "hier", "output"),
+                "20": ("NC", "nc", ""),
+                "21": ("VREG_1V2", "local", ""),
+                "22": ("VSYS", "hier", "input"),
+                "23": ("VREG_2V7", "local", ""),
+                "24": ("VBUS", "local", ""),
+                "25": ("GND", "local", ""),
+            },
+        ),
+        (
+            "J1",
+            "Connector",
+            "USB_C_Receptacle",
+            "USB 3.1 Type-C receptacle",
+            None,
+            {
+                "A1": ("GND", "local", ""),
+                "A4": ("VBUS", "local", ""),
+                "A5": ("CC1", "local", ""),
+                "A9": ("VBUS", "local", ""),
+                "A12": ("GND", "local", ""),
+                "B1": ("GND", "local", ""),
+                "B4": ("VBUS", "local", ""),
+                "B5": ("CC2", "local", ""),
+                "B9": ("VBUS", "local", ""),
+                "B12": ("GND", "local", ""),
+            },
+        ),
+        (
+            "C50",
+            "Device",
+            "C",
+            "4.7uF",
+            None,
+            {
+                "1": ("VBUS", "local", ""),
+                "2": ("GND", "local", ""),
+            },
+        ),
+        (
+            "D50",
+            "Device",
+            "D_TVS",
+            "ESDA25P35-1U1M",
+            None,
+            {
+                "1": ("VBUS", "local", ""),
+                "2": ("GND", "local", ""),
+            },
+        ),
+        (
+            "D1",
+            "STUSB4500_Custom",
+            "ESDA25W",
+            "ESDA25W",
+            None,
+            {
+                "1": ("CC1", "local", ""),
+                "2": ("CC2", "local", ""),
+                "3": ("GND", "local", ""),
+            },
+        ),
+        (
+            "D4",
+            "Device",
+            "D",
+            "",
+            None,
+            {
+                "1": ("VBUS_FILTERED", "local", ""),
+                "2": ("VBUS", "local", ""),
+            },
+        ),
+        (
+            "C4",
+            "Device",
+            "C",
+            "1uF",
+            None,
+            {
+                "1": ("VBUS_FILTERED", "local", ""),
+                "2": ("GND", "local", ""),
+            },
+        ),
+        (
+            "R1",
+            "Device",
+            "R",
+            "470",
+            None,
+            {
+                "1": ("VBUS_FILTERED", "local", ""),
+                "2": ("VBUS_VS_DISCH", "local", ""),
+            },
+        ),
+        (
+            "R4",
+            "Device",
+            "R",
+            "1k",
+            None,
+            {
+                "1": ("VREG_2V7", "local", ""),
+                "2": ("VBUS_VS_DISCH", "local", ""),
+            },
+        ),
+        (
+            "C1",
+            "Device",
+            "C",
+            "1uF",
+            None,
+            {
+                "1": ("VREG_1V2", "local", ""),
+                "2": ("GND", "local", ""),
+            },
+        ),
+        (
+            "C2",
+            "Device",
+            "C",
+            "1uF",
+            None,
+            {
+                "1": ("VREG_2V7", "local", ""),
+                "2": ("GND", "local", ""),
+            },
+        ),
+        (
+            "C3",
+            "Device",
+            "C",
+            "1uF",
+            None,
+            {
+                "1": ("VREG_2V7", "local", ""),
+                "2": ("GND", "local", ""),
+            },
+        ),
+        (
+            "R51",
+            "Device",
+            "R",
+            "100k",
+            None,
+            {
+                "1": ("VREG_2V7", "local", ""),
+                "2": ("ADDR1", "local", ""),
+            },
+        ),
+        (
+            "R52",
+            "Device",
+            "R",
+            "100k",
+            None,
+            {
+                "1": ("VREG_2V7", "local", ""),
+                "2": ("ADDR0", "local", ""),
+            },
+        ),
+        (
+            "R53",
+            "Device",
+            "R",
+            "100k",
+            None,
+            {
+                "1": ("ADDR1", "local", ""),
+                "2": ("GND", "local", ""),
+            },
+        ),
+        (
+            "R54",
+            "Device",
+            "R",
+            "100k",
+            None,
+            {
+                "1": ("ADDR0", "local", ""),
+                "2": ("GND", "local", ""),
+            },
+        ),
+        (
+            "R55",
+            "Device",
+            "R",
+            "10k",
+            None,
+            {
+                "1": ("RESET", "local", ""),
+                "2": ("GND", "local", ""),
+            },
+        ),
+        (
+            "T4",
+            "Transistor_FET",
+            "Q_PMOS_GSD",
+            "STL6P3LLH6",
+            None,
+            {
+                "1": ("VBUS_EN_SNK", "local", ""),
+                "2": ("VBUS", "local", ""),
+                "3": ("FET_MID", "local", ""),
+            },
+        ),
+        (
+            "T1",
+            "Transistor_FET",
+            "Q_PMOS_GSD",
+            "STL6P3LLH6",
+            None,
+            {
+                "1": ("VSNK_GATE", "local", ""),
+                "2": ("FET_MID", "local", ""),
+                "3": ("VSNK", "hier", "output"),
+            },
+        ),
+        (
+            "R10",
+            "Device",
+            "R",
+            "100k",
+            None,
+            {
+                "1": ("FET_MID", "local", ""),
+                "2": ("VSNK_GATE", "local", ""),
+            },
+        ),
+        (
+            "R11",
+            "Device",
+            "R",
+            "22k",
+            None,
+            {
+                "1": ("VSNK_GATE", "local", ""),
+                "2": ("GND", "local", ""),
+            },
+        ),
+        (
+            "R13",
+            "Device",
+            "R",
+            "100",
+            None,
+            {
+                "1": ("VSNK_GATE", "local", ""),
+                "2": ("VBUS_EN_SNK", "local", ""),
+            },
+        ),
+        (
+            "R2",
+            "Device",
+            "R",
+            "1k",
+            None,
+            {
+                "1": ("DISCH", "local", ""),
+                "2": ("VSNK", "hier", "output"),
+            },
+        ),
+        (
+            "C10",
+            "Device",
+            "C",
+            "100nF",
+            None,
+            {
+                "1": ("VSNK", "hier", "output"),
+                "2": ("GND", "local", ""),
+            },
+        ),
+        (
+            "D11",
+            "Device",
+            "D_TVS",
+            "ESDA25P35-1U1M",
+            None,
+            {
+                "1": ("VSNK", "hier", "output"),
+                "2": ("GND", "local", ""),
+            },
+        ),
     ]
 
     # All ground endpoints intentionally use the same hierarchical parent
@@ -1258,9 +1483,7 @@ def generate_reference_schematic(destination: Path) -> Path:
             # Keep diode identifiers near the symbol. D50's long part name
             # sits below the TVS body, on the clear side facing the frame gap.
             reference_x, reference_y = sx, sy - (3.81 if reference == "D50" else 6.35)
-            value_x, value_y = (
-                sx, sy + 5.08 if reference == "D50" else sy - 3.81
-            )
+            value_x, value_y = (sx, sy + 5.08 if reference == "D50" else sy - 3.81)
         elif reference.startswith("C"):
             # Put references on opposite sides of the decouplers where
             # adjacent bodies would otherwise crowd the field glyphs.

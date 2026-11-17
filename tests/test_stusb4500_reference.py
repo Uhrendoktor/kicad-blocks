@@ -242,18 +242,30 @@ class STUSB4500ReferenceTests(unittest.TestCase):
         self.assertLess(float(positions["T1"][1]), float(positions["R2"][1]))
         self.assertLess(float(positions["R2"][1]), float(positions["C10"][1]))
         self.assertAlmostEqual(
-            float(positions["R2"][1]) - float(positions["T1"][1]), 17.78, places=3,
+            float(positions["R2"][1]) - float(positions["T1"][1]),
+            17.78,
+            places=3,
         )
         self.assertAlmostEqual(
-            float(positions["R2"][2]) - float(positions["T1"][2]), 41.91, places=3,
+            float(positions["R2"][2]) - float(positions["T1"][2]),
+            41.91,
+            places=3,
         )
         output_x = {round(float(positions[reference][1]), 3) for reference in ("C10", "D11")}
         self.assertEqual(len(output_x), 1)
         self.assertAlmostEqual(
-            float(positions["D11"][2]) - float(positions["C10"][2]), 25.40, places=3,
+            float(positions["D11"][2]) - float(positions["C10"][2]),
+            25.40,
+            places=3,
         )
-        self.assertIn("R2", next(group for group in SCHEMATIC_GROUPS if group["id"] == "power-switch")["members"])
-        self.assertNotIn("R2", next(group for group in SCHEMATIC_GROUPS if group["id"] == "vsnk-output")["members"])
+        self.assertIn(
+            "R2",
+            next(group for group in SCHEMATIC_GROUPS if group["id"] == "power-switch")["members"],
+        )
+        self.assertNotIn(
+            "R2",
+            next(group for group in SCHEMATIC_GROUPS if group["id"] == "vsnk-output")["members"],
+        )
 
         def frame(name: str):
             node = next(
@@ -606,12 +618,17 @@ class STUSB4500ReferenceTests(unittest.TestCase):
         self.assertNotIn("STUSB4500 USB-C / POWER DELIVERY SINK", content)
         self.assertNotIn("DATASHEET-BASED REFERENCE", content)
         titles = {str(node[1]) for node in _all(tree, "text_box")}
-        self.assertTrue({
-            "USB-C PORT / CC PROTECTION", "VBUS BULK PROTECTION",
-            "VBUS MONITOR / FILTER", "STUSB4500 CONTROLLER",
-            "I2C ADDRESS STRAPS", "BACK-TO-BACK PMOS SWITCH",
-            "VSNK BULK PROTECTION",
-        }.issubset(titles))
+        self.assertTrue(
+            {
+                "USB-C PORT / CC PROTECTION",
+                "VBUS BULK PROTECTION",
+                "VBUS MONITOR / FILTER",
+                "STUSB4500 CONTROLLER",
+                "I2C ADDRESS STRAPS",
+                "BACK-TO-BACK PMOS SWITCH",
+                "VSNK BULK PROTECTION",
+            }.issubset(titles)
+        )
 
     def test_component_origins_are_derived_from_group_constraints(self) -> None:
         with tempfile.TemporaryDirectory(prefix="stusb4500-group-layout-") as temporary:
@@ -690,7 +707,6 @@ class STUSB4500ReferenceTests(unittest.TestCase):
                     f"Functional frames overlap: {first['id']} / {second['id']}",
                 )
 
-
     def test_d50_t1_t4_fields_stay_close_to_visible_symbol_bodies(self) -> None:
         with tempfile.TemporaryDirectory(prefix="stusb4500-field-clearance-") as temporary:
             _content, _tree, instances = self._generate(temporary)
@@ -710,11 +726,15 @@ class STUSB4500ReferenceTests(unittest.TestCase):
             for field_name, (dx, dy) in expected.items():
                 at = _direct(_property(instances[reference], field_name), "at")
                 self.assertAlmostEqual(
-                    float(at[1]) - float(origin[1]), dx, places=3,
+                    float(at[1]) - float(origin[1]),
+                    dx,
+                    places=3,
                     msg=f"{reference} {field_name} x",
                 )
                 self.assertAlmostEqual(
-                    float(at[2]) - float(origin[2]), dy, places=3,
+                    float(at[2]) - float(origin[2]),
+                    dy,
+                    places=3,
                     msg=f"{reference} {field_name} y",
                 )
 
@@ -724,7 +744,8 @@ class STUSB4500ReferenceTests(unittest.TestCase):
 
         origin = _direct(instances["C1"], "at")
         label = next(
-            node for node in _all(tree, "hierarchical_label")
+            node
+            for node in _all(tree, "hierarchical_label")
             if str(node[1]) == "GND"
             and abs(float(_direct(node, "at")[1]) - (float(origin[1]) - 5.08)) < 0.001
             and abs(float(_direct(node, "at")[2]) - (float(origin[2]) - 3.81)) < 0.001

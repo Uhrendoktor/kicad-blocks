@@ -38,6 +38,7 @@ from kicad_blocks.repository import (
 )
 from kipy import KiCad
 from kipy.errors import ApiError
+
 _NNGException = cast(
     type[Exception],
     getattr(import_module("pynng.exceptions"), "NNGException"),

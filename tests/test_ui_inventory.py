@@ -60,10 +60,7 @@ def test_each_semantic_control_has_an_explicit_assertion_level():
             controls.extend(view.get("actions", []))
         ids = [item["contract_id"] for item in controls if item.get("contract_id")]
         assert len(ids) == len(set(ids))
-        assert all(
-            item["assertion"] in {"asserted", "observed", "uncovered"}
-            for item in controls
-        )
+        assert all(item["assertion"] in {"asserted", "observed", "uncovered"} for item in controls)
 
 
 def test_inventory_distinguishes_implemented_from_unimplemented_contracts():

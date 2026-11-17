@@ -2,10 +2,8 @@
 
 class XA11yError(Exception): ...
 
-
 class _AccessibilityApp:
     def dump(self, *, max_depth: int = ...) -> str: ...
-
 
 class App:
     @staticmethod

@@ -629,19 +629,39 @@ def _configure_tk_theme(root: tkinter_types.Misc, kicad: _KiCadApp | None = None
         style.configure("Vertical.TScrollbar", width=12)
         style.configure("Horizontal.TScrollbar", width=12)
         return
-    colors = ({
-        "background": "#171c21", "surface": "#222a31", "surface_alt": "#2b343d",
-        "field": "#171c21", "hover": "#33404a", "selected": "#355169",
-        "foreground": "#e8edf2", "muted": "#a7b2bd", "border": "#414c56",
-        "accent": "#79b8e4", "accent_foreground": "#17232e",
-        "scroll_thumb": "#505d69", "scroll_trough": "#1d242a",
-    } if dark else {
-        "background": "#f1f4f7", "surface": "#ffffff", "surface_alt": "#edf1f5",
-        "field": "#ffffff", "hover": "#e7eff6", "selected": "#d5e6f4",
-        "foreground": "#202934", "muted": "#647180", "border": "#d6dee6",
-        "accent": "#2f6f9f", "accent_foreground": "#ffffff",
-        "scroll_thumb": "#c1cbd5", "scroll_trough": "#e8edf2",
-    })
+    colors = (
+        {
+            "background": "#171c21",
+            "surface": "#222a31",
+            "surface_alt": "#2b343d",
+            "field": "#171c21",
+            "hover": "#33404a",
+            "selected": "#355169",
+            "foreground": "#e8edf2",
+            "muted": "#a7b2bd",
+            "border": "#414c56",
+            "accent": "#79b8e4",
+            "accent_foreground": "#17232e",
+            "scroll_thumb": "#505d69",
+            "scroll_trough": "#1d242a",
+        }
+        if dark
+        else {
+            "background": "#f1f4f7",
+            "surface": "#ffffff",
+            "surface_alt": "#edf1f5",
+            "field": "#ffffff",
+            "hover": "#e7eff6",
+            "selected": "#d5e6f4",
+            "foreground": "#202934",
+            "muted": "#647180",
+            "border": "#d6dee6",
+            "accent": "#2f6f9f",
+            "accent_foreground": "#ffffff",
+            "scroll_thumb": "#c1cbd5",
+            "scroll_trough": "#e8edf2",
+        }
+    )
     style = ttk.Style(root)
     with contextlib.suppress(tk.TclError):
         style.theme_use("clam")
@@ -669,21 +689,39 @@ def _configure_tk_theme(root: tkinter_types.Misc, kicad: _KiCadApp | None = None
     style.configure("TPanedwindow", background=colors["background"])
     style.configure("TLabel", background=colors["background"], foreground=colors["foreground"])
     style.configure(
-        "Title.TLabel", background=colors["background"], foreground=colors["foreground"],
+        "Title.TLabel",
+        background=colors["background"],
+        foreground=colors["foreground"],
         font=("TkDefaultFont", 12, "bold"),
     )
     style.configure(
-        "Section.TLabel", background=colors["background"], foreground=colors["muted"],
+        "Section.TLabel",
+        background=colors["background"],
+        foreground=colors["muted"],
         font=("TkDefaultFont", 9, "bold"),
     )
     style.configure(
-        "Muted.TLabel", background=colors["background"], foreground=colors["muted"],
+        "Muted.TLabel",
+        background=colors["background"],
+        foreground=colors["muted"],
         font=("TkDefaultFont", 8),
     )
-    style.configure("TLabelframe", background=colors["background"], foreground=colors["foreground"],
-                    bordercolor=colors["border"], lightcolor=colors["border"],
-                    darkcolor=colors["border"], relief="solid", borderwidth=1)
-    style.configure("TLabelframe.Label", background=colors["background"], foreground=colors["muted"], padding=(4, 0))
+    style.configure(
+        "TLabelframe",
+        background=colors["background"],
+        foreground=colors["foreground"],
+        bordercolor=colors["border"],
+        lightcolor=colors["border"],
+        darkcolor=colors["border"],
+        relief="solid",
+        borderwidth=1,
+    )
+    style.configure(
+        "TLabelframe.Label",
+        background=colors["background"],
+        foreground=colors["muted"],
+        padding=(4, 0),
+    )
     style.configure(
         "TLabelframe",
         background=colors["background"],
@@ -730,45 +768,98 @@ def _configure_tk_theme(root: tkinter_types.Misc, kicad: _KiCadApp | None = None
     )
     style.configure(
         "Primary.TButton",
-        background=colors["accent"], foreground=colors["accent_foreground"],
-        bordercolor=colors["accent"], lightcolor=colors["accent"],
-        darkcolor=colors["accent"], borderwidth=0, focuscolor=colors["accent"],
-        focusthickness=1, padding=(10, 6), relief="flat",
+        background=colors["accent"],
+        foreground=colors["accent_foreground"],
+        bordercolor=colors["accent"],
+        lightcolor=colors["accent"],
+        darkcolor=colors["accent"],
+        borderwidth=0,
+        focuscolor=colors["accent"],
+        focusthickness=1,
+        padding=(10, 6),
+        relief="flat",
         font=("TkDefaultFont", 9, "bold"),
     )
     style.map(
         "Primary.TButton",
-        background=[("disabled", colors["surface_alt"]), ("pressed", colors["selected"]), ("active", colors["accent"])],
+        background=[
+            ("disabled", colors["surface_alt"]),
+            ("pressed", colors["selected"]),
+            ("active", colors["accent"]),
+        ],
         foreground=[("disabled", colors["muted"]), ("!disabled", colors["accent_foreground"])],
         bordercolor=[("focus", colors["accent"]), ("!focus", colors["accent"])],
         lightcolor=[("focus", colors["accent"]), ("!focus", colors["accent"])],
         darkcolor=[("focus", colors["accent"]), ("!focus", colors["accent"])],
     )
-    style.configure("TEntry", fieldbackground=colors["field"], foreground=colors["foreground"],
-                    insertcolor=colors["foreground"], bordercolor=colors["border"],
-                    lightcolor=colors["border"], darkcolor=colors["border"], padding=(7, 5))
-    style.map("TEntry", bordercolor=[("focus", colors["accent"])],
-              lightcolor=[("focus", colors["accent"])], darkcolor=[("focus", colors["accent"])])
-    style.configure("TCombobox", fieldbackground=colors["field"], background=colors["surface_alt"],
-                    foreground=colors["foreground"], arrowcolor=colors["foreground"],
-                    bordercolor=colors["border"], lightcolor=colors["border"],
-                    darkcolor=colors["border"], padding=(7, 5))
-    style.map("TCombobox", fieldbackground=[("readonly", colors["field"])],
-              selectbackground=[("readonly", colors["selected"])],
-              selectforeground=[("readonly", colors["foreground"])],
-              bordercolor=[("focus", colors["accent"])])
-    style.configure("Treeview", background=colors["surface"], fieldbackground=colors["surface"],
-                    foreground=colors["foreground"], bordercolor=colors["border"],
-                    lightcolor=colors["border"], darkcolor=colors["border"],
-                    rowheight=29, relief="flat", borderwidth=0, padding=(4, 2))
-    style.map("Treeview", background=[("selected", colors["selected"])],
-              foreground=[("selected", colors["foreground"])])
-    style.configure("Treeview.Heading", background=colors["surface_alt"], foreground=colors["muted"],
-                    bordercolor=colors["border"], lightcolor=colors["surface_alt"],
-                    darkcolor=colors["border"], relief="flat", padding=(8, 6),
-                    font=("TkDefaultFont", 9, "bold"))
-    style.map("Treeview.Heading", background=[("active", colors["hover"])],
-              foreground=[("active", colors["foreground"])])
+    style.configure(
+        "TEntry",
+        fieldbackground=colors["field"],
+        foreground=colors["foreground"],
+        insertcolor=colors["foreground"],
+        bordercolor=colors["border"],
+        lightcolor=colors["border"],
+        darkcolor=colors["border"],
+        padding=(7, 5),
+    )
+    style.map(
+        "TEntry",
+        bordercolor=[("focus", colors["accent"])],
+        lightcolor=[("focus", colors["accent"])],
+        darkcolor=[("focus", colors["accent"])],
+    )
+    style.configure(
+        "TCombobox",
+        fieldbackground=colors["field"],
+        background=colors["surface_alt"],
+        foreground=colors["foreground"],
+        arrowcolor=colors["foreground"],
+        bordercolor=colors["border"],
+        lightcolor=colors["border"],
+        darkcolor=colors["border"],
+        padding=(7, 5),
+    )
+    style.map(
+        "TCombobox",
+        fieldbackground=[("readonly", colors["field"])],
+        selectbackground=[("readonly", colors["selected"])],
+        selectforeground=[("readonly", colors["foreground"])],
+        bordercolor=[("focus", colors["accent"])],
+    )
+    style.configure(
+        "Treeview",
+        background=colors["surface"],
+        fieldbackground=colors["surface"],
+        foreground=colors["foreground"],
+        bordercolor=colors["border"],
+        lightcolor=colors["border"],
+        darkcolor=colors["border"],
+        rowheight=29,
+        relief="flat",
+        borderwidth=0,
+        padding=(4, 2),
+    )
+    style.map(
+        "Treeview",
+        background=[("selected", colors["selected"])],
+        foreground=[("selected", colors["foreground"])],
+    )
+    style.configure(
+        "Treeview.Heading",
+        background=colors["surface_alt"],
+        foreground=colors["muted"],
+        bordercolor=colors["border"],
+        lightcolor=colors["surface_alt"],
+        darkcolor=colors["border"],
+        relief="flat",
+        padding=(8, 6),
+        font=("TkDefaultFont", 9, "bold"),
+    )
+    style.map(
+        "Treeview.Heading",
+        background=[("active", colors["hover"])],
+        foreground=[("active", colors["foreground"])],
+    )
     style.configure(
         "TEntry",
         fieldbackground=colors["field"],
@@ -3195,10 +3286,7 @@ def _normalize_svg_preview_viewport(root) -> None:
             view_height = float(values[3])
         except ValueError:
             view_width = view_height = 0.0
-        if (
-            0 < view_width < float("inf")
-            and 0 < view_height < float("inf")
-        ):
+        if 0 < view_width < float("inf") and 0 < view_height < float("inf"):
             root.set("width", f"{view_width:g}px")
             root.set("height", f"{view_height:g}px")
             return
@@ -3669,11 +3757,7 @@ def _save_block_variants(
 
         if item.get("file"):
             filename = str(item.get("file") or "")
-            source = (
-                Path(item["source"]).expanduser().resolve()
-                if item.get("source")
-                else None
-            )
+            source = Path(item["source"]).expanduser().resolve() if item.get("source") else None
         else:
             source_value = item.get("source")
             if source_value is None or not str(source_value).strip():
@@ -4128,7 +4212,11 @@ def _ask_layout_details(
     source_entry._kicad_ui_contract_id = "add-pcb-layout.source"
     source_entry.grid(row=4, column=0, columnspan=2, sticky="ew", pady=(3, 8))
     browse_button = _action_button(
-        frame, "Choose file…", lambda: None, "file", "Choose an existing KiCad PCB file",
+        frame,
+        "Choose file…",
+        lambda: None,
+        "file",
+        "Choose an existing KiCad PCB file",
         contract_id="add-pcb-layout.browse",
     )
     browse_button.grid(row=4, column=2, sticky="ew", padx=(6, 0), pady=(3, 8))
@@ -4205,11 +4293,19 @@ def _ask_layout_details(
     buttons = ttk.Frame(frame)
     buttons.grid(row=7, column=0, columnspan=3, sticky="ew", pady=(6, 0))
     _action_button(
-        buttons, "Cancel", dialog.destroy, "cancel", "Cancel layout creation",
+        buttons,
+        "Cancel",
+        dialog.destroy,
+        "cancel",
+        "Cancel layout creation",
         contract_id="add-pcb-layout.cancel",
     ).pack(side="right")
     _action_button(
-        buttons, "Add layout", accept, "create", "Add this PCB layout to the block",
+        buttons,
+        "Add layout",
+        accept,
+        "create",
+        "Add this PCB layout to the block",
         contract_id="add-pcb-layout.add",
     ).pack(side="right", padx=(0, 8))
     dialog.bind("<Return>", lambda _event: accept())
@@ -4758,9 +4854,7 @@ def _ask_implementation_details(
         values=(),
         state="readonly",
     )
-    copy_combo.grid(
-        row=source_row + 1, column=0, columnspan=3, sticky="ew", pady=(3, 10)
-    )
+    copy_combo.grid(row=source_row + 1, column=0, columnspan=3, sticky="ew", pady=(3, 10))
     copy_combo.grid_remove()
 
     def browse():
@@ -5008,7 +5102,9 @@ def _show_block_variant_editor(
         for row_index, variant_index in enumerate(alternative_variant_indices(), start=1):
             item = variants[variant_index]
             tree.insert(
-                "", "end", iid=str(row_index),
+                "",
+                "end",
+                iid=str(row_index),
                 values=(
                     item["value"],
                     item.get("file") or Path(str(item.get("source") or "")).name or "Pending save",
@@ -5192,25 +5288,40 @@ def _show_block_variant_editor(
     actions = ttk.Frame(frame)
     actions.grid(row=3, column=0, sticky="ew", pady=(12, 0))
     _action_button(
-        actions, "Add variant", add_variant, "add",
+        actions,
+        "Add variant",
+        add_variant,
+        "add",
         "Add a named implementation variant",
         contract_id="implementations-manager.action.add",
     ).pack(side="left")
     edit_button = _action_button(
-        actions, "Edit variant", edit_variant, "edit",
-        "Edit the selected implementation", state="disabled",
+        actions,
+        "Edit variant",
+        edit_variant,
+        "edit",
+        "Edit the selected implementation",
+        state="disabled",
         contract_id="implementations-manager.action.edit",
     )
     edit_button.pack(side="left", padx=(8, 0))
     default_button = _action_button(
-        actions, "Set as default", make_default, "default",
-        "Set the selected implementation as default", state="disabled",
+        actions,
+        "Set as default",
+        make_default,
+        "default",
+        "Set the selected implementation as default",
+        state="disabled",
         contract_id="implementations-manager.action.default",
     )
     default_button.pack(side="left", padx=(8, 0))
     remove_button = _action_button(
-        actions, "Remove", remove_variant, "remove",
-        "Remove the selected variant", state="disabled",
+        actions,
+        "Remove",
+        remove_variant,
+        "remove",
+        "Remove the selected variant",
+        state="disabled",
         contract_id="implementations-manager.action.remove",
     )
     remove_button.pack(side="left", padx=(8, 0))
@@ -5233,7 +5344,10 @@ def _show_block_variant_editor(
         contract_id="implementations-manager.action.close",
     ).pack(side="right")
     save_button = _action_button(
-        actions, "Save & close", save_and_close, "save",
+        actions,
+        "Save & close",
+        save_and_close,
+        "save",
         "Save any pending changes and close the implementation manager",
         contract_id="implementations-manager.action.save-close",
     )
@@ -5965,9 +6079,7 @@ def _show_library_browser(
             return
 
         name_label.configure(text=record.name)
-        description = " ".join(
-            str(record.manifest.get("description", "") or "").split()
-        )
+        description = " ".join(str(record.manifest.get("description", "") or "").split())
         if len(description) > 150:
             description = description[:147].rstrip() + "…"
         description_label.configure(text=description)
@@ -6235,12 +6347,18 @@ def _show_library_browser(
         buttons = ttk.Frame(frame)
         buttons.pack(fill="x")
         _action_button(
-            buttons, "Open", launch_variant, "open",
+            buttons,
+            "Open",
+            launch_variant,
+            "open",
             "Open the selected implementation",
             contract_id="open-implementation-chooser.action.open",
         ).pack(side="right")
         _action_button(
-            buttons, "Cancel", chooser.destroy, "cancel",
+            buttons,
+            "Cancel",
+            chooser.destroy,
+            "cancel",
             "Close without opening an implementation",
             contract_id="open-implementation-chooser.action.cancel",
         ).pack(side="right", padx=(0, 6))
@@ -6359,9 +6477,7 @@ def _show_library_browser(
             labels[0],
         )
         choice = tk.StringVar(value=default_label)
-        combo = ttk.Combobox(
-            frame, textvariable=choice, values=labels, state="readonly", width=36
-        )
+        combo = ttk.Combobox(frame, textvariable=choice, values=labels, state="readonly", width=36)
         combo._kicad_ui_contract_id = "open-pcb-layout-chooser.choice"
         combo.pack(fill="x", pady=8)
 
@@ -6396,16 +6512,26 @@ def _show_library_browser(
         buttons = ttk.Frame(frame)
         buttons.pack(fill="x")
         _action_button(
-            buttons, "Manage layouts…", manage_layouts, "layouts",
+            buttons,
+            "Manage layouts…",
+            manage_layouts,
+            "layouts",
             "Manage stored PCB layouts",
             contract_id="open-pcb-layout-chooser.action.manage",
         ).pack(side="left")
         _action_button(
-            buttons, "Open", launch_layout, "open", "Open the selected PCB layout",
+            buttons,
+            "Open",
+            launch_layout,
+            "open",
+            "Open the selected PCB layout",
             contract_id="open-pcb-layout-chooser.action.open",
         ).pack(side="right")
         _action_button(
-            buttons, "Cancel", chooser.destroy, "cancel",
+            buttons,
+            "Cancel",
+            chooser.destroy,
+            "cancel",
             "Close without opening a PCB layout",
             contract_id="open-pcb-layout-chooser.action.cancel",
         ).pack(side="right", padx=(0, 6))
@@ -6497,9 +6623,7 @@ def _show_library_browser(
         contract_id="library-browser.action.variants",
     )
     variants_button.pack(side="left", padx=(4, 0))
-    ttk.Separator(action_toolbar, orient="vertical").pack(
-        side="left", fill="y", padx=7, pady=4
-    )
+    ttk.Separator(action_toolbar, orient="vertical").pack(side="left", fill="y", padx=7, pady=4)
     open_layout_action = _action_button(
         action_toolbar,
         "Open PCB",
@@ -6519,9 +6643,7 @@ def _show_library_browser(
         contract_id="library-browser.action.manage-pcb-layouts",
     )
     manage_layout_button.pack(side="left", padx=(4, 0))
-    ttk.Separator(action_toolbar, orient="vertical").pack(
-        side="left", fill="y", padx=7, pady=4
-    )
+    ttk.Separator(action_toolbar, orient="vertical").pack(side="left", fill="y", padx=7, pady=4)
     refresh_button = _action_button(
         action_toolbar,
         "Refresh",
@@ -7283,8 +7405,12 @@ def _show_action_hub(
             column_span = 2 if len(actions) % 2 and index == len(actions) - 1 else 1
             cell = ttk.Frame(tab)
             cell.grid(
-                row=row, column=column, columnspan=column_span,
-                sticky="ew", padx=4, pady=3,
+                row=row,
+                column=column,
+                columnspan=column_span,
+                sticky="ew",
+                padx=4,
+                pady=3,
             )
             button = _action_button(
                 cell,

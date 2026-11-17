@@ -114,15 +114,11 @@ def _contract_button(context, contract_id, label, *, closes=False):
     ).run(context)
 
 
-def test_add_pcb_layout_creates_blank_board_and_returns_selection(
-    monkeypatch, tmp_path
-):
+def test_add_pcb_layout_creates_blank_board_and_returns_selection(monkeypatch, tmp_path):
     root, record = _new_parent_and_record(tmp_path)
     blank_board = tmp_path / "new-board.kicad_pcb"
     blank_board.write_text("(kicad_pcb (version 20250114))\n", encoding="utf-8")
-    monkeypatch.setattr(
-        plugin_actions, "_new_blank_pcb_source", lambda: blank_board
-    )
+    monkeypatch.setattr(plugin_actions, "_new_blank_pcb_source", lambda: blank_board)
     context = UiTestContext(root)
     observed = {}
 
@@ -154,7 +150,8 @@ def test_add_pcb_layout_switches_to_existing_file_and_uses_named_implementation(
     existing_board = tmp_path / "existing.kicad_pcb"
     existing_board.write_text("(kicad_pcb (version 20250114))\n", encoding="utf-8")
     monkeypatch.setattr(
-        plugin_actions, "_pick_kicad_file",
+        plugin_actions,
+        "_pick_kicad_file",
         lambda *_args, **_kwargs: str(existing_board),
     )
     context = UiTestContext(root)
@@ -192,9 +189,7 @@ def test_add_pcb_layout_switches_to_existing_file_and_uses_named_implementation(
         root.destroy()
 
 
-def test_add_pcb_layout_rejects_missing_name_and_keeps_dialog_open(
-    monkeypatch, tmp_path
-):
+def test_add_pcb_layout_rejects_missing_name_and_keeps_dialog_open(monkeypatch, tmp_path):
     root, record = _new_parent_and_record(tmp_path)
     errors = []
     monkeypatch.setattr(
@@ -211,8 +206,7 @@ def test_add_pcb_layout_rejects_missing_name_and_keeps_dialog_open(
         _contract_button(context, "add-pcb-layout.add", "Add layout")
         assert errors and "1 to 80 characters" in errors[0][1]
         assert any(
-            child.winfo_class() == "Toplevel"
-            and child.title() == "Add PCB layout"
+            child.winfo_class() == "Toplevel" and child.title() == "Add PCB layout"
             for child in root.winfo_children()
         )
         _contract_button(context, "add-pcb-layout.cancel", "Cancel", closes=True)
@@ -227,22 +221,19 @@ def test_add_pcb_layout_rejects_missing_name_and_keeps_dialog_open(
         root.destroy()
 
 
-def test_add_pcb_layout_cancel_returns_none_without_creating_board(
-    monkeypatch, tmp_path
-):
+def test_add_pcb_layout_cancel_returns_none_without_creating_board(monkeypatch, tmp_path):
     root, record = _new_parent_and_record(tmp_path)
     created = []
     monkeypatch.setattr(
-        plugin_actions, "_new_blank_pcb_source",
-        lambda: (created.append(True) or tmp_path / "should-not-exist.kicad_pcb"),
+        plugin_actions,
+        "_new_blank_pcb_source",
+        lambda: created.append(True) or tmp_path / "should-not-exist.kicad_pcb",
     )
     context = UiTestContext(root)
     callback_errors = _schedule_dialog_action(
         root,
         context,
-        lambda _dialog: _contract_button(
-            context, "add-pcb-layout.cancel", "Cancel", closes=True
-        ),
+        lambda _dialog: _contract_button(context, "add-pcb-layout.cancel", "Cancel", closes=True),
     )
     try:
         result = plugin_actions._ask_layout_details(root, record)
