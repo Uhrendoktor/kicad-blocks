@@ -28,8 +28,12 @@ PICKER_CONTROLS = {
     "functional-block-picker.search",
     "functional-block-picker.panes",
     "functional-block-picker.results",
+    "functional-block-picker.name",
+    "functional-block-picker.description",
     "functional-block-picker.variant",
     "functional-block-picker.profile",
+    "functional-block-picker.preview",
+    "functional-block-picker.metadata",
     "functional-block-picker.action.cancel",
     "functional-block-picker.action.place",
 }
