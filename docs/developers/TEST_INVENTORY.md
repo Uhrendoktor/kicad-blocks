@@ -204,34 +204,6 @@ Installer Python/KiCad/platform compatibility, plugin metadata and dependency ch
 | test_installer_rejects_unsupported_platform_and_architecture | Exercises installer rejects unsupported platform and architecture. |
 | test_installer_rejects_invalid_kicad_version_format | Exercises installer rejects invalid kicad version format. |
 
-### tests/test_library_browser_contracts.py
-
-Reusable interaction contracts for the production Functional Block Library.
-
-| Test | Purpose |
-| --- | --- |
-| test_library_browser_catalog_labels_each_toolbar_action_coverage_level | Exercises library browser catalog labels each toolbar action coverage level. |
-| test_library_browser_widget_inventory_covers_major_controls | Exercises library browser widget inventory covers major controls. |
-| test_library_browser_search_filters_records_and_updates_count | Exercises library browser search filters records and updates count. |
-| test_library_browser_selection_updates_selected_block_details | Exercises library browser selection updates selected block details. |
-| test_library_browser_preview_switches_between_facade_and_schematic | Exercises library browser preview switches between facade and schematic. |
-| test_library_browser_split_panes_have_visible_geometry | Exercises library browser split panes have visible geometry. |
-| test_refresh_button_reloads_records_through_real_ui_callback | Exercises refresh button reloads records through real ui callback. |
-| test_place_button_registers_selected_block_and_starts_native_placement | Exercises place button registers selected block and starts native placement. |
-| test_implementation_button_registers_and_opens_default_document | Exercises implementation button registers and opens default document. |
-| test_edit_facade_button_targets_selected_record | Exercises edit facade button targets selected record. |
-| test_open_pcb_button_creates_chooser_for_selected_block | Exercises open pcb button creates chooser for selected block. |
-| test_implementation_selector_renders_the_selected_variant | Exercises implementation selector renders the selected variant. |
-| test_sheet_selector_draws_the_selected_schematic_page | Exercises sheet selector draws the selected schematic page. |
-| test_variants_toolbar_opens_manager_and_refreshes_records | Exercises variants toolbar opens manager and refreshes records. |
-| test_pcb_layouts_toolbar_opens_manager_and_refreshes_records | Exercises pcb layouts toolbar opens manager and refreshes records. |
-| test_libraries_toolbar_opens_library_roots_manager_and_refreshes | Exercises libraries toolbar opens library roots manager and refreshes. |
-| test_open_implementation_chooser_opens_the_selected_named_variant | Exercises open implementation chooser opens the selected named variant. |
-| test_open_implementation_chooser_cancel_closes_without_opening | Exercises open implementation chooser cancel closes without opening. |
-| test_open_pcb_chooser_opens_the_selected_layout | Exercises open pcb chooser opens the selected layout. |
-| test_open_pcb_chooser_cancel_closes_without_opening | Exercises open pcb chooser cancel closes without opening. |
-| test_open_pcb_chooser_manage_layouts_opens_manager_and_refreshes | Exercises open pcb chooser manage layouts opens manager and refreshes. |
-
 ### tests/test_library_browser.py
 
 Library search and selection, native previews, variants/profiles/layouts, cross-library lookup, theme and geometry behavior, scrolling, window restoration, and placement handoff.
@@ -289,6 +261,34 @@ Library search and selection, native previews, variants/profiles/layouts, cross-
 | test_place_block_creates_at_page_centre_focuses_and_selects_new_symbol | Exercises place block creates at page centre focuses and selects new symbol. |
 | test_place_block_rejects_invalid_symbol_id_before_connecting | Exercises place block rejects invalid symbol id before connecting. |
 | test_place_block_requires_an_active_schematic | Exercises place block requires an active schematic. |
+
+### tests/test_library_browser_contracts.py
+
+Reusable interaction contracts for the production Functional Block Library.
+
+| Test | Purpose |
+| --- | --- |
+| test_library_browser_catalog_labels_each_toolbar_action_coverage_level | Exercises library browser catalog labels each toolbar action coverage level. |
+| test_library_browser_widget_inventory_covers_major_controls | Exercises library browser widget inventory covers major controls. |
+| test_library_browser_search_filters_records_and_updates_count | Exercises library browser search filters records and updates count. |
+| test_library_browser_selection_updates_selected_block_details | Exercises library browser selection updates selected block details. |
+| test_library_browser_preview_switches_between_facade_and_schematic | Exercises library browser preview switches between facade and schematic. |
+| test_library_browser_split_panes_have_visible_geometry | Exercises library browser split panes have visible geometry. |
+| test_refresh_button_reloads_records_through_real_ui_callback | Exercises refresh button reloads records through real ui callback. |
+| test_place_button_registers_selected_block_and_starts_native_placement | Exercises place button registers selected block and starts native placement. |
+| test_implementation_button_registers_and_opens_default_document | Exercises implementation button registers and opens default document. |
+| test_edit_facade_button_targets_selected_record | Exercises edit facade button targets selected record. |
+| test_open_pcb_button_creates_chooser_for_selected_block | Exercises open pcb button creates chooser for selected block. |
+| test_implementation_selector_renders_the_selected_variant | Exercises implementation selector renders the selected variant. |
+| test_sheet_selector_draws_the_selected_schematic_page | Exercises sheet selector draws the selected schematic page. |
+| test_variants_toolbar_opens_manager_and_refreshes_records | Exercises variants toolbar opens manager and refreshes records. |
+| test_pcb_layouts_toolbar_opens_manager_and_refreshes_records | Exercises pcb layouts toolbar opens manager and refreshes records. |
+| test_libraries_toolbar_opens_library_roots_manager_and_refreshes | Exercises libraries toolbar opens library roots manager and refreshes. |
+| test_open_implementation_chooser_opens_the_selected_named_variant | Exercises open implementation chooser opens the selected named variant. |
+| test_open_implementation_chooser_cancel_closes_without_opening | Exercises open implementation chooser cancel closes without opening. |
+| test_open_pcb_chooser_opens_the_selected_layout | Exercises open pcb chooser opens the selected layout. |
+| test_open_pcb_chooser_cancel_closes_without_opening | Exercises open pcb chooser cancel closes without opening. |
+| test_open_pcb_chooser_manage_layouts_opens_manager_and_refreshes | Exercises open pcb chooser manage layouts opens manager and refreshes. |
 
 ### tests/test_library_gitignore.py
 
