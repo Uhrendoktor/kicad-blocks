@@ -11,8 +11,13 @@ from urllib.error import HTTPError
 from urllib.parse import quote
 from urllib.request import Request, urlopen
 
+try:  # Package import in tests; direct import when executed as a script.
+    from .github_api_types import GitHubApiResponse, JSONObject, decode_github_response
+except ImportError:  # pragma: no cover - exercised by the release CLI.
+    from github_api_types import GitHubApiResponse, JSONObject, decode_github_response
 
-def _request(method: str, url: str, token: str, payload: dict | None = None) -> dict | None:
+
+def _request(method: str, url: str, token: str, payload: JSONObject | None = None) -> GitHubApiResponse | None:
     headers = {
         "Accept": "application/vnd.github+json",
         "Authorization": f"Bearer {token}",
@@ -33,7 +38,7 @@ def _request(method: str, url: str, token: str, payload: dict | None = None) -> 
             f"GitHub API {method} {url} failed with HTTP {exc.code}: "
             f"{exc.read().decode('utf-8', errors='replace')}"
         ) from exc
-    return json.loads(raw.decode("utf-8")) if raw else {}
+    return decode_github_response(raw)
 
 
 def dispatch_release(repo: str, tag: str, source_sha: str, version: str, token: str) -> bool:
@@ -48,7 +53,11 @@ def dispatch_release(repo: str, tag: str, source_sha: str, version: str, token: 
     archive_name = f"kicad-blocks-{version}-linux-x86_64.zip"
     required_assets = {archive_name, archive_name + ".sha256"}
     if release is not None:
-        assets_by_name = {asset.get("name"): asset for asset in release.get("assets", [])}
+        assets_by_name: dict[str, GitHubApiResponse] = {
+            str(asset["name"]): asset
+            for asset in release.get("assets", [])
+            if asset.get("name") is not None
+        }
         if required_assets.issubset(assets_by_name):
             complete = all(
                 assets_by_name[name].get("size", 0) > 0
@@ -63,7 +72,7 @@ def dispatch_release(repo: str, tag: str, source_sha: str, version: str, token: 
                 print(f"Release {tag} already has its ZIP and checksum; not dispatching again.")
                 return False
 
-    payload = {
+    payload: JSONObject = {
         "ref": "main",
         "inputs": {
             "tag": tag,

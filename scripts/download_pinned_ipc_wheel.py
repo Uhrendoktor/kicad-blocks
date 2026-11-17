@@ -17,6 +17,16 @@ from urllib.error import HTTPError
 from urllib.parse import quote
 from urllib.request import Request, urlopen
 
+try:  # Package import in tests; direct import when executed as a script.
+    from .github_api_types import GitHubApiResponse, decode_github_response
+except ImportError:  # pragma: no cover - exercised by the release CLI.
+    from github_api_types import GitHubApiResponse, decode_github_response
+
+try:  # Package import in tests; direct import when executed as a script.
+    from .github_api_types import GitHubApiResponse, JSONObject, decode_github_response
+except ImportError:  # pragma: no cover - exercised by the release CLI.
+    from github_api_types import GitHubApiResponse, JSONObject, decode_github_response
+
 API_VERSION = "2022-11-28"
 SUPPORTED_PYTHON_MINOR_VERSIONS = frozenset({12, 13, 14})
 WHEEL_PREFIX = "kicad_python-0.9.0.dev0-"
@@ -31,7 +41,7 @@ def expected_wheel_name() -> str:
     return f"{WHEEL_PREFIX}{abi}-{abi}-linux_x86_64.whl"
 
 
-def _api_get_release(repo: str, tag: str, token: str) -> dict | None:
+def _api_get_release(repo: str, tag: str, token: str) -> GitHubApiResponse | None:
     api = os.environ.get("GITHUB_API_URL", "https://api.github.com").rstrip("/")
     request = Request(
         f"{api}/repos/{repo}/releases/tags/{quote(tag, safe='')}",
@@ -53,14 +63,11 @@ def _api_get_release(repo: str, tag: str, token: str) -> dict | None:
             f"{exc.read().decode('utf-8', errors='replace')}"
         ) from exc
     try:
-        result = json.loads(payload.decode("utf-8"))
-    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        return decode_github_response(payload)
+    except (UnicodeDecodeError, json.JSONDecodeError, RuntimeError) as exc:
         raise RuntimeError(
             "GitHub returned invalid JSON for the pinned KiCad IPC release."
         ) from exc
-    if not isinstance(result, dict):
-        raise RuntimeError("GitHub returned an unexpected pinned KiCad IPC release response.")
-    return result
 
 
 def _download_asset(url: str) -> bytes:

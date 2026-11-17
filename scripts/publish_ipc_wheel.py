@@ -13,6 +13,11 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import quote
 from urllib.request import Request, urlopen
 
+try:  # Package import in tests; direct import when executed as a script.
+    from .github_api_types import GitHubApiResponse, JSONObject, decode_github_response
+except ImportError:  # pragma: no cover - exercised by the release CLI.
+    from github_api_types import GitHubApiResponse, JSONObject, decode_github_response
+
 RELEASE_TAG = "kicad-python-dev"
 ASSET_PREFIX = "kicad_python-0.9.0.dev0-"
 TRANSIENT_HTTP_STATUS = {408, 425, 429, 500, 502, 503, 504}
@@ -35,13 +40,13 @@ def _api_request(
     url: str,
     token: str,
     *,
-    payload: dict | None = None,
+    payload: JSONObject | None = None,
     body: bytes | None = None,
     content_type: str = "application/vnd.github+json",
     allow_not_found: bool = False,
     timeout: float = 45.0,
     max_retries: int = 3,
-) -> dict | None:
+) -> GitHubApiResponse | None:
     """Call GitHub's API with bounded retries for transient network/API failures."""
     headers = {
         "Accept": "application/vnd.github+json",
@@ -63,7 +68,7 @@ def _api_request(
             if not raw:
                 return {}
             try:
-                return json.loads(raw.decode("utf-8"))
+                return decode_github_response(raw)
             except json.JSONDecodeError as exc:
                 raise RuntimeError(f"GitHub API returned non-JSON data for {url}.") from exc
         except HTTPError as exc:
@@ -100,7 +105,7 @@ def _release_url(repo: str) -> str:
     return f"{api}/repos/{repo}/releases/tags/{quote(RELEASE_TAG, safe='')}"
 
 
-def _get_or_create_release(repo: str, token: str) -> dict:
+def _get_or_create_release(repo: str, token: str) -> GitHubApiResponse:
     release_url = _release_url(repo)
     release = _api_request("GET", release_url, token, allow_not_found=True)
     if release is not None:
@@ -120,12 +125,15 @@ def _get_or_create_release(repo: str, token: str) -> dict:
         "prerelease": True,
     }
     try:
-        return _api_request(
+        created = _api_request(
             "POST",
             f"{api}/repos/{repo}/releases",
             token,
             payload=payload,
         )
+        if created is None:
+            raise RuntimeError("GitHub did not return the development wheel release.")
+        return created
     except RuntimeError:
         # POST may have succeeded even if the TLS response was lost. Re-read
         # the tag before deciding that release creation actually failed.
@@ -135,7 +143,9 @@ def _get_or_create_release(repo: str, token: str) -> dict:
         raise
 
 
-def _matching_asset(release: dict, name: str, size: int) -> dict | None:
+def _matching_asset(
+    release: GitHubApiResponse, name: str, size: int
+) -> GitHubApiResponse | None:
     for asset in release.get("assets", []):
         if (
             asset.get("name") == name
@@ -165,7 +175,7 @@ def publish_wheel(wheelhouse: Path, repo: str, token: str) -> str:
     api = os.environ.get("GITHUB_API_URL", "https://api.github.com").rstrip("/")
     release = _get_or_create_release(repo, token)
     release_id = release.get("id")
-    if not release_id:
+    if release_id is None:
         raise RuntimeError("GitHub did not return a release ID.")
 
     for asset in release.get("assets", []):
