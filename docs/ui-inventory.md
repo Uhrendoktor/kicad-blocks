@@ -5,11 +5,11 @@ This page is generated from the declarative UI catalog. It inventories the curre
 
 | Coverage status | Screens | Meaning |
 |---|---:|---|
-| Contracted | 4 | Widget-level execute/result assertions are registered and run in CI. |
-| Partial | 8 | Targeted GUI, integration, model, or screenshot checks exist; the full control matrix is not contracted. |
+| Contracted | 6 | Widget-level execute/result assertions are registered and run in CI. |
+| Partial | 6 | Targeted GUI, integration, model, or screenshot checks exist; the full control matrix is not contracted. |
 | Inventory only | 3 | Window/workflow is documented here; systematic interaction contracts remain future work. |
 
-The first contract milestones cover Task Hub routing and navigation and the Add PCB layout dialog's application-owned controls. The Functional Block Library and implementation manager have substantial partial contract coverage. None of this implies that every downstream KiCad operation or native OS chooser has been proven.
+Task Hub, both transient block choosers, Add PCB Layout, Manage Libraries, and PCB Layout Manager have full registered widget contracts. The Functional Block Library and implementation manager remain partial while every downstream KiCad operation and native OS chooser continues to be verified separately.
 
 ## Screens
 
@@ -262,9 +262,9 @@ The production form is captured in both themes and the extraction/IPC flow has e
 
 Register, create, change, and remove shared library roots.
 
-**Coverage:** Partial — targeted GUI, integration, or visual checks exist.
+**Coverage:** Contracted — widget action and expected UI transition asserted.
 
-The library-root manager is captured and has domain-level coverage for root configuration. Native chooser cancellation and all UI action outcomes are not yet contract-tested.
+All registered controls are discovered on the production dialog. Real Tk button invocations verify add-existing, create, change-folder, unregister, set-default and close; selection-dependent enabled states; chooser and confirmation cancellation; persistent registration changes; default fallback; and preservation of unregistered folders.
 
 **Major functionality**
 
@@ -273,10 +273,21 @@ The library-root manager is captured and has domain-level coverage for root conf
 - Remove a registration without deleting library data
 - Choose the default library root
 
+**Registered semantic controls**
+
+- Manage Libraries dialog (`manage-libraries.window`; window; behavior asserted)
+- Registered library rows (`manage-libraries.rows`; treeview; behavior asserted)
+- Registered-library count (`manage-libraries.status`; status-label; result observed)
+- Add existing library (`manage-libraries.action.add`; button; behavior asserted)
+- Create library (`manage-libraries.action.create`; button; behavior asserted)
+- Change folder (`manage-libraries.action.change`; button; behavior asserted)
+- Unregister library (`manage-libraries.action.unregister`; button; behavior asserted)
+- Set default library (`manage-libraries.action.default`; button; behavior asserted)
+- Close (`manage-libraries.action.close`; button; behavior asserted)
+
 **Current automated evidence**
 
-- `tests/test_library_browser.py`
-- `tests/capture_visual_docs.py`
+- `tests/test_library_and_pcb_manager_contracts.py`
 
 **Production screenshots**
 
@@ -424,9 +435,9 @@ The real dialog is captured in both themes. Its source mode, file chooser, valid
 
 Maintain stored PCB layouts, default selection, and implementation associations.
 
-**Coverage:** Partial — targeted GUI, integration, or visual checks exist.
+**Coverage:** Contracted — widget action and expected UI transition asserted.
 
-The manager is captured in both themes and layout/model changes have substantial unit coverage. The full UI state matrix and persistence failure paths do not yet have component contracts.
+All registered controls are discovered on the production dialog. Real Tk invocations verify default-layout persistence, variant association, remove and asset cleanup, confirmation cancellation, add/copy into the block, save-failure retry, no-selection disabled states, and close/save behavior.
 
 **Major functionality**
 
@@ -435,10 +446,23 @@ The manager is captured in both themes and layout/model changes have substantial
 - Refresh the table after mutations
 - Persist accepted changes and report write failures
 
+**Registered semantic controls**
+
+- PCB Layout Manager dialog (`pcb-layout-manager.window`; window; behavior asserted)
+- Stored PCB layouts (`pcb-layout-manager.rows`; treeview; behavior asserted)
+- Save and recovery status (`pcb-layout-manager.status`; status-label; result observed)
+- Implementation association selector (`pcb-layout-manager.implementation`; combobox; behavior asserted)
+- Add layout (`pcb-layout-manager.action.add`; button; behavior asserted)
+- Remove layout (`pcb-layout-manager.action.remove`; button; behavior asserted)
+- Set default (`pcb-layout-manager.action.default`; button; behavior asserted)
+- Assign implementation (`pcb-layout-manager.action.assign`; button; behavior asserted)
+- Close (`pcb-layout-manager.action.close`; button; behavior asserted)
+- Save and close (`pcb-layout-manager.action.save-close`; button; behavior asserted)
+
 **Current automated evidence**
 
-- `tests/test_library_browser.py`
-- `tests/capture_visual_docs.py`
+- `tests/test_library_and_pcb_manager_contracts.py`
+- `tests/test_add_pcb_layout_contracts.py`
 
 **Production screenshots**
 
