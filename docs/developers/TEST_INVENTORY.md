@@ -24,6 +24,7 @@ Real Tk interaction contracts for the Add PCB layout dialog.
 | test_add_pcb_layout_switches_to_existing_file_and_uses_named_implementation | Exercises add pcb layout switches to existing file and uses named implementation. |
 | test_add_pcb_layout_rejects_missing_name_and_keeps_dialog_open | Exercises add pcb layout rejects missing name and keeps dialog open. |
 | test_add_pcb_layout_cancel_returns_none_without_creating_board | Exercises add pcb layout cancel returns none without creating board. |
+
 ### tests/test_auto_dependencies.py
 
 Automatic child-block dependency discovery from KiCad netlists and schematic connectivity, including reconciliation, identity preservation, and cycle rejection.
@@ -37,6 +38,7 @@ Automatic child-block dependency discovery from KiCad netlists and schematic con
 | test_reconciliation_preserves_generated_kicad_net_names | Exercises reconciliation preserves generated kicad net names. |
 | test_reconciliation_rejects_a_dependency_cycle | Exercises reconciliation rejects a dependency cycle. |
 | test_reconciliation_preserves_instance_id_and_removes_deleted_facades | Exercises reconciliation preserves instance id and removes deleted facades. |
+
 ### tests/test_blocks.py
 
 Core block model, facade generation, parameter handling, library registration, creation, local copies, publishing, synchronization, and nested dependency behavior.
@@ -98,6 +100,7 @@ Core block model, facade generation, parameter handling, library registration, c
 | test_nested_dependency_graph_resolves_after_library_folder_move | Exercises nested dependency graph resolves after library folder move. |
 | test_nested_symbol_library_table_uses_relative_path_and_can_retarget | Exercises nested symbol library table uses relative path and can retarget. |
 | test_nested_dependencies_are_recorded_and_cycles_rejected | Exercises nested dependencies are recorded and cycles rejected. |
+
 ### tests/test_dispatch_release.py
 
 Release-workflow dispatch decisions, idempotency when assets already exist, and tag/source-commit mismatch rejection.
@@ -107,6 +110,7 @@ Release-workflow dispatch decisions, idempotency when assets already exist, and 
 | test_dispatches_release_workflow_when_release_is_not_published | Exercises dispatches release workflow when release is not published. |
 | test_does_not_dispatch_when_both_release_assets_exist | Ensures the system does not dispatch when both release assets exist. |
 | test_rejects_tag_and_source_sha_mismatches | Rejects tag and source sha mismatches. |
+
 ### tests/test_download_pinned_ipc_wheel.py
 
 Pinned KiCad IPC wheel reuse, release/ABI lookup, digest and archive validation, corrupt asset rejection, and source-SHA matching.
@@ -117,6 +121,7 @@ Pinned KiCad IPC wheel reuse, release/ABI lookup, digest and archive validation,
 | test_returns_none_when_release_or_abi_asset_is_missing | Returns none when release or abi asset is missing. |
 | test_rejects_corrupt_or_changed_asset_bytes | Rejects corrupt or changed asset bytes. |
 | test_rejects_wrong_source_sha | Rejects wrong source sha. |
+
 ### tests/test_editor_workflow.py
 
 Schematic editor action routing, selected-sheet behavior, facade editing, transactional instance updates, parameter/layout validation, and safe opening of generated PCB copies.
@@ -153,6 +158,7 @@ Schematic editor action routing, selected-sheet behavior, facade editing, transa
 | test_task_hub_edit_facade_does_not_report_success_without_editor_handoff | Exercises task hub edit facade does not report success without editor handoff. |
 | test_create_block_keeps_owner_window_mapped | Creates block keeps owner window mapped. |
 | test_run_action_does_not_capture_native_windows_before_creating_tk | Exercises run action does not capture native windows before creating tk. |
+
 ### tests/test_extraction.py
 
 Hierarchical-sheet selection and extraction, interface pin/electrical-shape syncing, facade-artwork preservation, concurrent-edit rejection, and nested sheet copying.
@@ -167,6 +173,7 @@ Hierarchical-sheet selection and extraction, interface pin/electrical-shape sync
 | test_publish_rejects_an_extracted_block_with_no_hierarchical_labels | Publishes rejects an extracted block with no hierarchical labels. |
 | test_conflicting_duplicate_hierarchical_label_shapes_are_rejected | Exercises conflicting duplicate hierarchical label shapes are rejected. |
 | test_nested_hierarchical_sheet_tree_is_copied_and_kept_internal | Exercises nested hierarchical sheet tree is copied and kept internal. |
+
 ### tests/test_implementation_manager_contracts.py
 
 Real Tk contracts for the implementation variants manager.
@@ -179,6 +186,7 @@ Real Tk contracts for the implementation variants manager.
 | test_remove_is_blocked_when_an_implementation_is_referenced_by_a_profile | Exercises remove is blocked when an implementation is referenced by a profile. |
 | test_edit_variant_renames_selector_and_preserves_implementation_file | Exercises edit variant renames selector and preserves implementation file. |
 | test_add_variant_save_failure_can_be_retried_with_save_and_close | Exercises add variant save failure can be retried with save and close. |
+
 ### tests/test_install.py
 
 Installer Python/KiCad/platform compatibility, plugin metadata and dependency checks, safe replacement, and dry-run behavior.
@@ -195,6 +203,7 @@ Installer Python/KiCad/platform compatibility, plugin metadata and dependency ch
 | test_installer_allows_kiCad_10_99_nightly_and_11_or_newer | Exercises installer allows kiCad 10 99 nightly and 11 or newer. |
 | test_installer_rejects_unsupported_platform_and_architecture | Exercises installer rejects unsupported platform and architecture. |
 | test_installer_rejects_invalid_kicad_version_format | Exercises installer rejects invalid kicad version format. |
+
 ### tests/test_library_browser_contracts.py
 
 Reusable interaction contracts for the production Functional Block Library.
@@ -222,6 +231,7 @@ Reusable interaction contracts for the production Functional Block Library.
 | test_open_pcb_chooser_opens_the_selected_layout | Exercises open pcb chooser opens the selected layout. |
 | test_open_pcb_chooser_cancel_closes_without_opening | Exercises open pcb chooser cancel closes without opening. |
 | test_open_pcb_chooser_manage_layouts_opens_manager_and_refreshes | Exercises open pcb chooser manage layouts opens manager and refreshes. |
+
 ### tests/test_library_browser.py
 
 Library search and selection, native previews, variants/profiles/layouts, cross-library lookup, theme and geometry behavior, scrolling, window restoration, and placement handoff.
@@ -279,6 +289,7 @@ Library search and selection, native previews, variants/profiles/layouts, cross-
 | test_place_block_creates_at_page_centre_focuses_and_selects_new_symbol | Exercises place block creates at page centre focuses and selects new symbol. |
 | test_place_block_rejects_invalid_symbol_id_before_connecting | Exercises place block rejects invalid symbol id before connecting. |
 | test_place_block_requires_an_active_schematic | Exercises place block requires an active schematic. |
+
 ### tests/test_library_gitignore.py
 
 Focused regression tests for this module.
@@ -289,6 +300,7 @@ Focused regression tests for this module.
 | test_registering_existing_library_initializes_ignore_file | Exercises registering existing library initializes ignore file. |
 | test_block_creation_initializes_an_unregistered_library | Exercises block creation initializes an unregistered library. |
 | test_project_local_copy_initializes_its_gitignore | Exercises project local copy initializes its gitignore. |
+
 ### tests/test_library_validation.py
 
 Machine-readable library validation reports, asset hashes/revisions, corrupt or missing assets, empty-library behavior, and recursive ERC when KiCad CLI is available.
@@ -301,6 +313,7 @@ Machine-readable library validation reports, asset hashes/revisions, corrupt or 
 | test_corrupt_manifest_is_reported_and_does_not_hide_other_blocks | Exercises corrupt manifest is reported and does not hide other blocks. |
 | test_full_validation_runs_recursive_erc_when_kicad_cli_is_available | Exercises full validation runs recursive erc when kicad cli is available. |
 | test_empty_library_is_valid | Exercises empty library is valid. |
+
 ### tests/test_operations.py
 
 Recursive BOM expansion and reference namespacing, parameter-template rejection, and one-time-per-block recursive ERC with recorded violations.
@@ -312,6 +325,7 @@ Recursive BOM expansion and reference namespacing, parameter-template rejection,
 | test_export_bom_combines_nested_blocks_and_namespaces_references | Exercises export bom combines nested blocks and namespaces references. |
 | test_repeated_child_instances_produce_separate_recursive_bom_rows | Exercises repeated child instances produce separate recursive bom rows. |
 | test_recursive_erc_runs_once_for_each_block_and_records_violations | Exercises recursive erc runs once for each block and records violations. |
+
 ### tests/test_pcb_layout_unit.py
 
 Deterministic PCB layout helpers: named/legacy layouts, net mapping, coordinate and angle transforms, netclass merging, bus-pattern matching, and invalid net-code rejection.
@@ -327,6 +341,7 @@ Deterministic PCB layout helpers: named/legacy layouts, net mapping, coordinate 
 | test_kicad_netclass_regex_and_bus_vector_patterns | Exercises kicad netclass regex and bus vector patterns. |
 | test_unmatched_project_chain_overrides_are_reported | Exercises unmatched project chain overrides are reported. |
 | test_unknown_net_code_is_rejected | Exercises unknown net code is rejected. |
+
 ### tests/test_pcb_placement.py
 
 Placement sidecar schema, exclusive writes, item-group identity, active-board matching, duplicate/missing-ID rejection, and safe native move handoff.
@@ -340,6 +355,7 @@ Placement sidecar schema, exclusive writes, item-group identity, active-board ma
 | test_manifest_rejects_different_active_board_path | Exercises manifest rejects different active board path. |
 | test_manifest_rejects_unknown_schema_and_duplicate_item_ids | Exercises manifest rejects unknown schema and duplicate item ids. |
 | test_missing_board_item_refuses_partial_move | Exercises missing board item refuses partial move. |
+
 ### tests/test_portability_contract.py
 
 Static guards that keep production feature paths free of OS-specific desktop APIs.
@@ -348,6 +364,7 @@ Static guards that keep production feature paths free of OS-specific desktop API
 | --- | --- |
 | test_runtime_package_does_not_call_os_specific_desktop_helpers | Exercises runtime package does not call os specific desktop helpers. |
 | test_library_settings_directory_uses_platformdirs_dependency | Exercises library settings directory uses platformdirs dependency. |
+
 ### tests/test_profiles.py
 
 Profile parsing and resolution across variants, typed parameter overrides, named PCB layouts, local-copy synchronization, publishing, and conflict rejection.
@@ -359,6 +376,7 @@ Profile parsing and resolution across variants, typed parameter overrides, named
 | test_profile_definitions_are_validated_against_block_declarations | Exercises profile definitions are validated against block declarations. |
 | test_profiles_round_trip_through_local_copy_sync_and_publish | Exercises profiles round trip through local copy sync and publish. |
 | test_divergent_profile_changes_are_rejected_without_overwrite | Exercises divergent profile changes are rejected without overwrite. |
+
 ### tests/test_publish_ipc_wheel.py
 
 IPC wheel release API retry behavior, permanent HTTP error handling, and recovery when the remote upload succeeded but its response was lost.
@@ -368,6 +386,7 @@ IPC wheel release API retry behavior, permanent HTTP error handling, and recover
 | test_api_request_retries_tls_timeout_then_succeeds | Exercises api request retries tls timeout then succeeds. |
 | test_api_request_does_not_retry_permanent_http_error | Exercises api request does not retry permanent http error. |
 | test_publish_recovers_when_upload_succeeded_but_response_was_lost | Publishes recovers when upload succeeded but response was lost. |
+
 ### tests/test_publish_pinned_ipc_wheel.py
 
 Immutable source-SHA-tagged wheel publication, idempotent asset reuse, digest verification, ABI selection, and refusal to overwrite different bytes.
@@ -379,6 +398,7 @@ Immutable source-SHA-tagged wheel publication, idempotent asset reuse, digest ve
 | test_new_asset_upload_is_verified_against_the_release_digest | Exercises new asset upload is verified against the release digest. |
 | test_publisher_selects_the_matching_tag_for_each_supported_python | Exercises publisher selects the matching tag for each supported python. |
 | test_invalid_source_sha_is_rejected | Exercises invalid source sha is rejected. |
+
 ### tests/test_publish_release.py
 
 Release archive and checksum upload, digest verification, and refusal to replace an existing release asset with changed content.
@@ -387,6 +407,7 @@ Release archive and checksum upload, digest verification, and refusal to replace
 | --- | --- |
 | test_release_assets_are_uploaded_and_verified_by_digest | Exercises release assets are uploaded and verified by digest. |
 | test_existing_asset_with_changed_digest_is_never_replaced | Exercises existing asset with changed digest is never replaced. |
+
 ### tests/test_quality_contracts.py
 
 Regression tests for the AST-based Any/object policy, annotation-debt ratchet, and property-based round trips for KiCad S-expressions and parameter escaping.
@@ -403,6 +424,7 @@ Regression tests for the AST-based Any/object policy, annotation-debt ratchet, a
 | test_reports_exact_duplicate_test_bodies_even_when_docstrings_differ | Reports exact duplicate test bodies even when docstrings differ. |
 | test_different_bodies_and_class_fixture_scopes_are_not_duplicates | Exercises different bodies and class fixture scopes are not duplicates. |
 | test_reports_empty_and_pass_only_test_bodies | Reports empty and pass only test bodies. |
+
 ### tests/test_release_package.py
 
 Deterministic release archive contents, installation from the extracted package, user-data path selection, and pinned binding URL consistency.
@@ -413,6 +435,7 @@ Deterministic release archive contents, installation from the extracted package,
 | test_archive_is_deterministic_and_contains_only_installable_release_inputs | Exercises archive is deterministic and contains only installable release inputs. |
 | test_extracted_release_archive_installs_using_its_bundled_installer | Exercises extracted release archive installs using its bundled installer. |
 | test_release_builder_rejects_mismatched_binding_dependency_url | Exercises release builder rejects mismatched binding dependency url. |
+
 ### tests/test_schematic_style_rules.py
 
 Regression tests for generic schematic style rules and profile contracts.
@@ -436,6 +459,7 @@ Regression tests for generic schematic style rules and profile contracts.
 | test_shared_decoupler_ground_and_visible_nc_markers_are_present | Exercises shared decoupler ground and visible nc markers are present. |
 | test_common_ground_contract_detects_a_wrong_decoupler_net | Exercises common ground contract detects a wrong decoupler net. |
 | test_wire_compactness_uses_a_normalized_budget_score | Exercises wire compactness uses a normalized budget score. |
+
 ### tests/test_stusb4500_reference.py
 
 Generated STUSB4500 example schematic, standard external electrical pin shapes, and functional PCB layout alignment/zoning.
@@ -477,6 +501,7 @@ Generated STUSB4500 example schematic, standard external electrical pin shapes, 
 | test_label_glyph_wire_overlap_is_a_dedicated_error | Exercises label glyph wire overlap is a dedicated error. |
 | test_native_text_boxes_have_uniform_padding_and_style_audit_passes | Exercises native text boxes have uniform padding and style audit passes. |
 | test_r55_ground_label_stub_remains_local_and_does_not_cross_cc2 | Exercises r55 ground label stub remains local and does not cross cc2. |
+
 ### tests/test_ui_contracts.py
 
 Execute and assert the production Task Hub through real Tk widgets.
@@ -495,6 +520,7 @@ Execute and assert the production Task Hub through real Tk widgets.
 | test_pane_group_contract_asserts_required_visible_panes | Exercises pane group contract asserts required visible panes. |
 | test_control_coverage_fails_for_untagged_buttons | Exercises control coverage fails for untagged buttons. |
 | test_control_coverage_fails_for_untagged_menu_entries | Exercises control coverage fails for untagged menu entries. |
+
 ### tests/test_ui_inventory.py
 
 Tests for the generated screen inventory and its honesty about coverage.
@@ -509,6 +535,7 @@ Tests for the generated screen inventory and its honesty about coverage.
 | test_committed_inventory_matches_the_catalog | Exercises committed inventory matches the catalog. |
 | test_catalog_rejects_duplicate_screen_ids | Exercises catalog rejects duplicate screen ids. |
 | test_catalog_rejects_unregistered_screenshot_assets | Exercises catalog rejects unregistered screenshot assets. |
+
 ### tests/test_validate_docs.py
 
 Markdown/HTML local-link and heading-anchor validation, image alt-text requirements, and exclusion of link-like text inside fenced code blocks.
@@ -518,6 +545,7 @@ Markdown/HTML local-link and heading-anchor validation, image alt-text requireme
 | test_checks_markdown_and_html_local_links_and_heading_anchors | Exercises checks markdown and html local links and heading anchors. |
 | test_requires_alt_text_for_markdown_and_html_images | Requires alt text for markdown and html images. |
 | test_ignores_links_and_images_inside_fenced_code | Exercises ignores links and images inside fenced code. |
+
 ### tests/test_variants.py
 
 Exact implementation-variant selection, invalid and duplicate variant handling, KiCad variable expansion, and variant synchronization/publishing.
@@ -531,6 +559,7 @@ Exact implementation-variant selection, invalid and duplicate variant handling, 
 | test_project_and_sheet_text_variables_are_expanded | Exercises project and sheet text variables are expanded. |
 | test_unresolved_variable_is_reported | Exercises unresolved variable is reported. |
 | test_variants_sync_with_local_copy_and_publish_back | Exercises variants sync with local copy and publish back. |
+
 ### tests/test_verify_release_gate.py
 
 Exact-commit release readiness: successful main push CI, correct tag/version mapping, and rejection of failed or wrong-SHA workflow runs.
@@ -541,6 +570,7 @@ Exact-commit release readiness: successful main push CI, correct tag/version map
 | test_refuses_failed_or_wrong_commit_ci | Exercises refuses failed or wrong commit ci. |
 | test_rejects_tag_that_does_not_match_version | Rejects tag that does not match version. |
 | test_release_workflow_requires_the_tag_commit_to_match_the_packaged_commit | Exercises release workflow requires the tag commit to match the packaged commit. |
+
 ### tests/test_visual_docs.py
 
 Visual evidence manifest completeness, source-commit provenance, exact asset inventory, and per-asset SHA-256 integrity.
