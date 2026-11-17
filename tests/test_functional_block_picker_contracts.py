@@ -384,7 +384,7 @@ def test_functional_block_picker_empty_search_disables_selectors_and_cancel_retu
         ).find_all() == ()
         assert _find_contract_widget(
             _dialog, "functional-block-picker.preview"
-        ).cget("height") == 270
+        ).cget("height") == "270"
         assert context.require_widget("functional-block-picker.variant").instate(["disabled"])
         assert context.require_widget("functional-block-picker.profile").instate(["disabled"])
         assert preview_calls[-1] == "Power Stage"
