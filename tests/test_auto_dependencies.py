@@ -17,6 +17,7 @@ from kicad_blocks.auto_dependencies import (
 )
 from kicad_blocks.model import parse_pins
 from kicad_blocks.repository import (
+    BlockRecord,
     add_dependency,
     create_block,
     read_manifest,
@@ -24,7 +25,13 @@ from kicad_blocks.repository import (
 )
 
 
-def _symbol(record, reference="B1", *, orientation=2, position=(100.0, 120.0)):
+def _symbol(
+    record: BlockRecord,
+    reference: str = "B1",
+    *,
+    orientation: int = 2,
+    position: tuple[float, float] = (100.0, 120.0),
+) -> SimpleNamespace:
     return SimpleNamespace(
         reference=reference,
         reference_field=SimpleNamespace(text=SimpleNamespace(value=reference)),
@@ -44,7 +51,7 @@ def _symbol(record, reference="B1", *, orientation=2, position=(100.0, 120.0)):
 
 
 class AutomaticDependencyTests(unittest.TestCase):
-    def setUp(self):
+    def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory()
         self.root = Path(self.temp.name) / "library"
         self.parent = create_block(
@@ -58,7 +65,7 @@ class AutomaticDependencyTests(unittest.TestCase):
             parse_pins("IN:input, GND:passive, OUT:output"),
         )
 
-    def tearDown(self):
+    def tearDown(self) -> None:
         self.temp.cleanup()
 
     def test_parse_kicad_xml_netlist_maps_reference_pin_numbers_to_nets(self):

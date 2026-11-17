@@ -234,15 +234,15 @@ class PCBNetRewriteTests(unittest.TestCase):
             self.assertEqual(target.read_bytes(), original_target)
             self.assertEqual(source.read_bytes(), original_source)
             merged = result["data"]
-            self.assertEqual(
-                merged["net_settings"]["netclass_assignments"]["VIN_BOARD"],
-                ["Fast", "X1_Fast"],
-            )
-            self.assertEqual(
-                merged["net_settings"]["netclass_assignments"]["X1_SW"],
-                ["X1_Fast"],
-            )
-            self.assertEqual(merged["meta"]["filename"], output.name)
+            merged_settings = merged.get("net_settings")
+            assert merged_settings is not None
+            merged_assignments = merged_settings.get("netclass_assignments")
+            assert merged_assignments is not None
+            self.assertEqual(merged_assignments["VIN_BOARD"], ["Fast", "X1_Fast"])
+            self.assertEqual(merged_assignments["X1_SW"], ["X1_Fast"])
+            merged_metadata = merged.get("meta")
+            assert merged_metadata is not None
+            self.assertEqual(merged_metadata.get("filename"), output.name)
 
     def test_kicad_netclass_regex_and_bus_vector_patterns(self):
         with tempfile.TemporaryDirectory() as temp:

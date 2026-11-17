@@ -29,6 +29,24 @@ from kicad_blocks.pcb_layout import (
     parse_sexpr,
 )
 
+def _sexpr_number(node: SExprList, index: int) -> float:
+    """Read one numeric atom from a recursive KiCad S-expression node."""
+    if index >= len(node) or not isinstance(node[index], str):
+        raise AssertionError(f"Expected numeric atom at index {index}: {node!r}")
+    return float(node[index])
+
+
+def _required_child(node: SExprList, tag: str) -> SExprList:
+    """Return one required direct list child from a parsed PCB item."""
+    child = next(
+        (value for value in node[1:] if isinstance(value, list) and value and value[0] == tag),
+        None,
+    )
+    if child is None:
+        raise AssertionError(f"PCB S-expression node is missing {tag!r}: {node!r}")
+    return child
+
+
 
 def _find_cli() -> str:
     configured = os.environ.get("KICAD_CLI")
@@ -478,8 +496,8 @@ def main() -> None:
             )
         if "X1_SW" not in nets.values() or "VIN_BOARD" not in nets.values():
             raise AssertionError(f"Project board nets were not merged: {nets!r}")
-        imported_footprints = []
-        imported_segments = []
+        imported_footprints: list[SExprList] = []
+        imported_segments: list[SExprList] = []
         for item in parsed[1:]:
             if not isinstance(item, list) or not item:
                 continue
@@ -495,7 +513,7 @@ def main() -> None:
                     ),
                     None,
                 )
-                if ref_prop and str(ref_prop[2]) == "X1_R1":
+                if ref_prop is not None and str(ref_prop[2]) == "X1_R1":
                     imported_footprints.append(item)
             if item[0] == "segment" and any(
                 isinstance(x, list)
@@ -508,46 +526,57 @@ def main() -> None:
                 imported_segments.append(item)
         if len(imported_footprints) != 1 or len(imported_segments) != 1:
             raise AssertionError("Imported footprint or routed segment was not found.")
-        copied_pad_nets = {}
+        copied_pad_nets: dict[str, tuple[int, str]] = {}
         for pad in imported_footprints[0][1:]:
             if isinstance(pad, list) and pad and pad[0] == "pad":
-                net_node = next(
-                    (x for x in pad[1:] if isinstance(x, list) and x and x[0] == "net"),
-                    None,
-                )
-                if net_node is None or len(net_node) != 3:
+                net_node = _required_child(pad, "net")
+                if len(net_node) != 3:
                     raise AssertionError(f"Imported pad does not have a named net: {pad!r}")
                 copied_pad_nets[str(pad[1])] = (int(str(net_node[1])), str(net_node[2]))
         if copied_pad_nets != {"1": (1, "VIN_BOARD"), "2": (2, "GND_BOARD")}:
             raise AssertionError(f"Imported pad nets were not mapped: {copied_pad_nets!r}")
-        fp_at = next(
-            x for x in imported_footprints[0][1:] if isinstance(x, list) and x and x[0] == "at"
-        )
-        if (float(fp_at[1]), float(fp_at[2]), float(fp_at[3])) != (120.0, 130.0, 90.0):
+        fp_at = _required_child(imported_footprints[0], "at")
+        if (
+            _sexpr_number(fp_at, 1),
+            _sexpr_number(fp_at, 2),
+            _sexpr_number(fp_at, 3),
+        ) != (120.0, 130.0, 90.0):
             raise AssertionError(f"Footprint was not rotated/translated: {fp_at!r}")
         ref_property = next(
-            x
-            for x in imported_footprints[0][1:]
-            if isinstance(x, list)
-            and x
-            and x[0] == "property"
-            and str(x[1]).casefold() == "reference"
+            (
+                x
+                for x in imported_footprints[0][1:]
+                if isinstance(x, list)
+                and x
+                and x[0] == "property"
+                and str(x[1]).casefold() == "reference"
+            ),
+            None,
         )
-        ref_at = next(x for x in ref_property[1:] if isinstance(x, list) and x and x[0] == "at")
-        if (float(ref_at[1]), float(ref_at[2]), float(ref_at[3])) != (118.0, 130.0, 90.0):
+        if ref_property is None:
+            raise AssertionError("Imported footprint has no reference property.")
+        ref_at = _required_child(ref_property, "at")
+        if (
+            _sexpr_number(ref_at, 1),
+            _sexpr_number(ref_at, 2),
+            _sexpr_number(ref_at, 3),
+        ) != (118.0, 130.0, 90.0):
             raise AssertionError(f"Footprint reference field was not rotated: {ref_at!r}")
         merged_segment = next(
-            item for item in parsed[1:] if isinstance(item, list) and item and item[0] == "segment"
+            (
+                item
+                for item in parsed[1:]
+                if isinstance(item, list) and item and item[0] == "segment"
+            ),
+            None,
         )
-        segment_start = next(
-            x for x in merged_segment[1:] if isinstance(x, list) and x and x[0] == "start"
-        )
-        segment_end = next(
-            x for x in merged_segment[1:] if isinstance(x, list) and x and x[0] == "end"
-        )
-        if (float(segment_start[1]), float(segment_start[2])) != (120.0, 130.0):
+        if merged_segment is None:
+            raise AssertionError("Merged board has no segment.")
+        segment_start = _required_child(merged_segment, "start")
+        segment_end = _required_child(merged_segment, "end")
+        if (_sexpr_number(segment_start, 1), _sexpr_number(segment_start, 2)) != (120.0, 130.0):
             raise AssertionError(f"Track start was not transformed: {segment_start!r}")
-        if (float(segment_end[1]), float(segment_end[2])) != (120.0, 125.0):
+        if (_sexpr_number(segment_end, 1), _sexpr_number(segment_end, 2)) != (120.0, 125.0):
             raise AssertionError(f"Track end was not transformed: {segment_end!r}")
 
         # KiCad CLI parser/export validates the complete generated board.
@@ -601,8 +630,6 @@ def main() -> None:
         kicad = KiCad(headless=True, kicad_cli_path=cli, file_path=str(output), timeout_ms=30000)
         try:
             board = kicad.get_board()
-            if board is None:
-                raise RuntimeError("KiCad IPC did not load the merged PCB board.")
             names = {item.name for item in board.get_nets()}
             if not {"VIN_BOARD", "GND_BOARD", "X1_SW"}.issubset(names):
                 raise AssertionError(f"Missing merged PCB nets: {sorted(names)}")
@@ -696,8 +723,6 @@ def main() -> None:
         )
         try:
             batch_board = batch_kicad.get_board()
-            if batch_board is None:
-                raise RuntimeError("KiCad IPC did not load the combined batch PCB.")
             batch_refs = {item.reference_field.text.value for item in batch_board.get_footprints()}
             if not {"R1", "X1_R1", "X2_R1"}.issubset(batch_refs):
                 raise AssertionError(f"Batch PCB IPC footprint refs are incomplete: {batch_refs}")
