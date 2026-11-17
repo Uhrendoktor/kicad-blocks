@@ -257,25 +257,34 @@ def test_record_picker_double_click_selects_the_clicked_record(monkeypatch, tmp_
         x, y, width, height = tree.bbox(row_id)
         click_x = x + min(10, width // 2)
         click_y = y + height // 2
-        # Tk recognizes a double click from two ordinary button sequences
-        # with timestamps inside its multi-click interval; event_generate
-        # does not accept a synthetic "<Double-1>" pattern directly.
-        for timestamp in (1000, 1100):
-            tree.event_generate(
-                "<ButtonPress-1>",
-                x=click_x,
-                y=click_y,
-                time=timestamp,
-                when="now",
-            )
-            tree.event_generate(
-                "<ButtonRelease-1>",
-                x=click_x,
-                y=click_y,
-                time=timestamp + 5,
-                when="now",
-            )
-            root.update()
+        # Tk recognizes a double click from two presses within its
+        # multi-click interval. The production <Double-1> handler destroys
+        # the modal on the second press, so do not send a release to the
+        # Treeview after that widget has been destroyed.
+        tree.event_generate(
+            "<ButtonPress-1>",
+            x=click_x,
+            y=click_y,
+            time=1000,
+            when="now",
+        )
+        tree.event_generate(
+            "<ButtonRelease-1>",
+            x=click_x,
+            y=click_y,
+            time=1005,
+            when="now",
+        )
+        root.update()
+        assert tree.winfo_exists()
+        tree.event_generate(
+            "<ButtonPress-1>",
+            x=click_x,
+            y=click_y,
+            time=1100,
+            when="now",
+        )
+        root.update()
         root.update_idletasks()
         assert not _find_dialog_exists(root)
 
