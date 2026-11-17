@@ -6,6 +6,16 @@ import json
 import os
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING, Callable, TypeVar, cast
+
+from _pytest.monkeypatch import MonkeyPatch
+
+if TYPE_CHECKING:
+    from tkinter import Event as TkEvent
+    from tkinter import Misc, Tk
+    from tkinter.ttk import Button, Notebook
+else:
+    TkEvent = Misc = Tk = Button = Notebook = object
 
 import pytest
 
@@ -60,11 +70,27 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-def _new_hub(monkeypatch):
-    plugin_actions._load_tkinter()
-    monkeypatch.setattr(plugin_actions, "_create_action_icon", lambda *_args: None)
-    root = plugin_actions.tk.Tk()
-    notebook = plugin_actions._show_action_hub(root)
+_HookResult = TypeVar("_HookResult")
+
+
+def _private_hook(name: str) -> Callable[..., _HookResult]:
+    """Resolve a private plugin hook through a typed test boundary."""
+    return cast(Callable[..., _HookResult], getattr(plugin_actions, name))
+
+
+_load_tkinter = cast(Callable[[], None], _private_hook("_load_tkinter"))
+_show_action_hub = cast(Callable[..., Notebook], _private_hook("_show_action_hub"))
+
+
+def _new_hub(monkeypatch: MonkeyPatch) -> tuple[Tk, Notebook]:
+    _load_tkinter()
+
+    def no_icon(_parent: Misc, _name: str, _stroke_color: str | None = None) -> None:
+        return None
+
+    monkeypatch.setattr(plugin_actions, "_create_action_icon", no_icon)
+    root = cast(Tk, plugin_actions.tk.Tk())
+    notebook = _show_action_hub(root)
     root.update_idletasks()
     root.update()
     return root, notebook
@@ -74,7 +100,7 @@ def _button_contract_id(action_id: str) -> str:
     return f"task-hub.action.{action_id}"
 
 
-def test_task_hub_window_is_registered_and_visible(monkeypatch):
+def test_task_hub_window_is_registered_and_visible(monkeypatch: MonkeyPatch) -> None:
     root, _notebook = _new_hub(monkeypatch)
     try:
         WindowContract(
@@ -107,7 +133,9 @@ def test_task_hub_declares_every_action_and_view_from_the_catalog():
     )
 
 
-def test_task_hub_widget_inventory_has_no_untagged_interactive_controls(monkeypatch):
+def test_task_hub_widget_inventory_has_no_untagged_interactive_controls(
+    monkeypatch: MonkeyPatch
+) -> None:
     root, _notebook = _new_hub(monkeypatch)
     try:
         discovered = assert_control_coverage(root, TASK_HUB_CONTROL_IDS)
@@ -116,7 +144,9 @@ def test_task_hub_widget_inventory_has_no_untagged_interactive_controls(monkeypa
         root.destroy()
 
 
-def test_task_hub_exposes_all_three_functional_notebook_views(monkeypatch):
+def test_task_hub_exposes_all_three_functional_notebook_views(
+    monkeypatch: MonkeyPatch
+) -> None:
     root, _notebook = _new_hub(monkeypatch)
     try:
         contract = NotebookViewContract(
@@ -139,8 +169,8 @@ def test_task_hub_exposes_all_three_functional_notebook_views(monkeypatch):
     ids=[action_id for action_id, _, _ in TASK_HUB_ACTIONS],
 )
 def test_each_task_hub_button_dispatches_exactly_its_action_id(
-    monkeypatch, action_id, expected_label, _view
-):
+    monkeypatch: MonkeyPatch, action_id: str, expected_label: str, _view: str
+) -> None:
     root, _notebook = _new_hub(monkeypatch)
     context = UiTestContext(root)
 
@@ -163,7 +193,9 @@ def test_each_task_hub_button_dispatches_exactly_its_action_id(
             pass
 
 
-def test_task_hub_close_button_destroys_window_without_dispatch(monkeypatch):
+def test_task_hub_close_button_destroys_window_without_dispatch(
+    monkeypatch: MonkeyPatch
+) -> None:
     root, _notebook = _new_hub(monkeypatch)
     context = UiTestContext(root)
 
@@ -186,7 +218,7 @@ def test_task_hub_close_button_destroys_window_without_dispatch(monkeypatch):
             pass
 
 
-def test_task_hub_actions_use_a_compact_two_column_grid(monkeypatch):
+def test_task_hub_actions_use_a_compact_two_column_grid(monkeypatch: MonkeyPatch) -> None:
     root, notebook = _new_hub(monkeypatch)
     try:
         assert root.winfo_width() >= 700
@@ -194,14 +226,14 @@ def test_task_hub_actions_use_a_compact_two_column_grid(monkeypatch):
         for tab_id in notebook.tabs():
             tab = notebook.nametowidget(tab_id)
             buttons = [
-                child
+                cast(Button, child)
                 for cell in tab.winfo_children()
                 for child in cell.winfo_children()
-                if isinstance(child, plugin_actions.ttk.Button)
+                if child.winfo_class() == "TButton"
                 and str(getattr(child, "_kicad_ui_contract_id", "")).startswith("task-hub.action.")
             ]
             assert len(buttons) in {3, 5}
-            positions = [button.master.grid_info() for button in buttons]
+            positions = [cast(Misc, button.master).grid_info() for button in buttons]
             assert positions[0]["column"] == 0
             assert positions[1]["column"] == 1
             assert positions[0]["row"] == positions[1]["row"]
@@ -211,8 +243,8 @@ def test_task_hub_actions_use_a_compact_two_column_grid(monkeypatch):
         root.destroy()
 
 
-def test_choice_view_contract_invokes_selected_combobox_view():
-    plugin_actions._load_tkinter()
+def test_choice_view_contract_invokes_selected_combobox_view() -> None:
+    _load_tkinter()
     tk = plugin_actions.tk
     ttk = plugin_actions.ttk
     root = tk.Tk()
@@ -222,9 +254,14 @@ def test_choice_view_contract_invokes_selected_combobox_view():
         choice._kicad_ui_contract_id = "preview.kind"
         choice.pack()
         context = UiTestContext(root)
+
+        def on_preview_selected(_event: TkEvent[Misc]) -> str | None:
+            context.events.append(f"preview:{choice.get()}")
+            return None
+
         choice.bind(
             "<<ComboboxSelected>>",
-            lambda _event: context.events.append(f"preview:{choice.get()}"),
+            on_preview_selected,
         )
         root.update()
 
@@ -237,17 +274,18 @@ def test_choice_view_contract_invokes_selected_combobox_view():
         root.destroy()
 
 
-def test_menu_item_contract_invokes_real_tk_menu_command():
-    plugin_actions._load_tkinter()
+def test_menu_item_contract_invokes_real_tk_menu_command() -> None:
+    _load_tkinter()
     tk = plugin_actions.tk
     root = tk.Tk()
     try:
-        events = []
+        events: list[str] = []
         menu = tk.Menu(root, tearoff=False)
-        menu.add_command(
-            label="Refresh",
-            command=lambda: events.append("refresh"),
-        )
+
+        def refresh() -> None:
+            events.append("refresh")
+
+        menu.add_command(label="Refresh", command=refresh)
         menu._kicad_ui_menu_item_ids = {"library.refresh": 0}
         root.configure(menu=menu)
         root.update()
@@ -263,8 +301,8 @@ def test_menu_item_contract_invokes_real_tk_menu_command():
         root.destroy()
 
 
-def test_pane_group_contract_asserts_required_visible_panes():
-    plugin_actions._load_tkinter()
+def test_pane_group_contract_asserts_required_visible_panes() -> None:
+    _load_tkinter()
     tk = plugin_actions.tk
     ttk = plugin_actions.ttk
     root = tk.Tk()
@@ -293,8 +331,8 @@ def test_pane_group_contract_asserts_required_visible_panes():
         root.destroy()
 
 
-def test_control_coverage_fails_for_untagged_buttons():
-    plugin_actions._load_tkinter()
+def test_control_coverage_fails_for_untagged_buttons() -> None:
+    _load_tkinter()
     tk = plugin_actions.tk
     ttk = plugin_actions.ttk
     root = tk.Tk()
@@ -307,8 +345,8 @@ def test_control_coverage_fails_for_untagged_buttons():
         root.destroy()
 
 
-def test_control_coverage_fails_for_untagged_menu_entries():
-    plugin_actions._load_tkinter()
+def test_control_coverage_fails_for_untagged_menu_entries() -> None:
+    _load_tkinter()
     tk = plugin_actions.tk
     root = tk.Tk()
     try:
