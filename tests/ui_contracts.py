@@ -92,7 +92,8 @@ class UiTestContext:
     root: tk.Tk
     action_calls: list[str] = field(default_factory=list)
     events: list[str] = field(default_factory=list)
-    widgets: dict[str, UiWidget] = field(default_factory=dict)
+    widgets: dict[str, tk.Misc] = field(default_factory=dict)
+    menu_entries: dict[str, MenuEntry] = field(default_factory=dict)
     window_destroyed: bool = False
 
     def __post_init__(self) -> None:
@@ -102,18 +103,38 @@ class UiTestContext:
         if event.widget is self.root:
             self.window_destroyed = True
 
-    def refresh_widgets(self) -> dict[str, UiWidget]:
-        self.widgets = discover_interactive_controls(self.root)
+    def refresh_widgets(self) -> dict[str, tk.Misc]:
+        controls = discover_interactive_controls(self.root)
+        self.widgets = {
+            contract_id: widget
+            for contract_id, widget in controls.items()
+            if not isinstance(widget, MenuEntry)
+        }
+        self.menu_entries = {
+            contract_id: widget
+            for contract_id, widget in controls.items()
+            if isinstance(widget, MenuEntry)
+        }
         return self.widgets
 
-    def require_widget(self, contract_id: str) -> UiWidget:
-        if not self.widgets:
+    def require_widget(self, contract_id: str) -> tk.Misc:
+        if not self.widgets and not self.menu_entries:
             self.refresh_widgets()
         try:
             return self.widgets[contract_id]
         except KeyError as exc:
             raise AssertionError(
                 f"No Tk widget is registered as {contract_id!r}."
+            ) from exc
+
+    def require_menu_entry(self, contract_id: str) -> MenuEntry:
+        if not self.widgets and not self.menu_entries:
+            self.refresh_widgets()
+        try:
+            return self.menu_entries[contract_id]
+        except KeyError as exc:
+            raise AssertionError(
+                f"No Tk menu entry is registered as {contract_id!r}."
             ) from exc
 
 
@@ -166,7 +187,7 @@ class WindowContract(ComponentContract[WindowObservation]):
             "visible": bool(context.root.winfo_viewable()),
             "width": context.root.winfo_width(),
             "height": context.root.winfo_height(),
-            "widget_ids": set(widgets),
+            "widget_ids": set(widgets) | set(context.menu_entries),
         }
 
     def assert_result(
@@ -249,9 +270,7 @@ class MenuItemContract(ComponentContract[MenuItemObservation]):
     expected_event: str
 
     def execute(self, context: UiTestContext) -> MenuItemObservation:
-        entry = context.require_widget(self.menu_item_id)
-        if not isinstance(entry, MenuEntry):
-            raise TypeError(f"{self.menu_item_id!r} is not a discovered Tk menu entry.")
+        entry = context.require_menu_entry(self.menu_item_id)
         return {
             "invoke_result": cast(str | int | None, entry.menu.invoke(entry.index)),
             "events": list(context.events),
