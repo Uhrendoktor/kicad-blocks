@@ -197,6 +197,7 @@ def test_add_pcb_layout_switches_to_existing_file_and_uses_named_implementation(
     root, record = _new_parent_and_record(tmp_path)
     existing_board = tmp_path / "existing.kicad_pcb"
     existing_board.write_text("(kicad_pcb (version 20250114))\n", encoding="utf-8")
+
     def pick_kicad_file(
         _parent: Misc,
         *,
@@ -226,7 +227,7 @@ def test_add_pcb_layout_switches_to_existing_file_and_uses_named_implementation(
             value="Choose an existing PCB file",
             expected_event="existing-board",
         ).run(context)
-        assert widgets["add-pcb-layout.source"].winfo_ismapped()
+        assert context.require_entry("add-pcb-layout.source").winfo_ismapped()
         _contract_button(context, "add-pcb-layout.browse", "Choose file…")
         assert context.require_entry("add-pcb-layout.source").get() == str(existing_board)
         context.require_combobox("add-pcb-layout.implementation").set("Boost")
