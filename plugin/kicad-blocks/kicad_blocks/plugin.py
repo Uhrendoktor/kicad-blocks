@@ -3631,7 +3631,11 @@ def _show_block_layout_editor(
             iid = str(index)
             tree.insert(
                 "", "end", iid=iid,
-                values=(item.get("name", item["id"]), assigned_to(item["id"]), item["file"]),
+                values=(
+                    item.get("name", item["id"]),
+                    assigned_to(item["id"]),
+                    item.get("file") or Path(str(item.get("source") or "")).name or "Pending save",
+                ),
                 tags=("even" if index % 2 == 0 else "odd",),
             )
             if item["id"] == selected_id:
