@@ -13,7 +13,7 @@ import sys
 import tempfile
 import time
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from pathlib import Path
 from types import SimpleNamespace
 from typing import TYPE_CHECKING, cast
@@ -42,6 +42,21 @@ _NNGException = cast(
     getattr(import_module("pynng.exceptions"), "NNGException"),
 )
 from test_plugin_registration import close_editor, find_executable, launch
+
+
+def run_kicad_cli(
+    arguments: Sequence[str],
+    *,
+    check: bool = True,
+    capture_output: bool = False,
+) -> subprocess.CompletedProcess[str]:
+    """Run a trusted KiCad CLI argument vector for standalone acceptance tests."""
+    return subprocess.run(
+        list(arguments),
+        check=check,
+        capture_output=capture_output,
+        text=True,
+    )
 
 
 def _find_cli() -> str:
@@ -375,7 +390,7 @@ def _validate_hierarchy_fixture(
     for label, source in [("parent", parent_path), *child_paths.items()]:
         destination = output_root / f"fixture-{label}-svg"
         destination.mkdir()
-        result = subprocess.run(
+        result = run_kicad_cli(
             [
                 cli,
                 "sch",
@@ -386,7 +401,6 @@ def _validate_hierarchy_fixture(
                 str(source),
             ],
             capture_output=True,
-            text=True,
             check=False,
         )
         if result.returncode != 0 or not list(destination.glob("*.svg")):

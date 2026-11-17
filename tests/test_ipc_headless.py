@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import os
 import shutil
-import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -14,6 +13,7 @@ from typing import NoReturn, TypedDict, cast
 ROOT = Path(__file__).resolve().parents[1]
 PLUGIN = ROOT / "plugin" / "kicad-blocks"
 sys.path.insert(0, str(PLUGIN))
+sys.path.insert(0, str(ROOT / "tests"))
 
 from kicad_blocks.auto_dependencies import synchronize_block_dependencies
 from kicad_blocks.composition import compose_block_implementation
@@ -44,6 +44,7 @@ from kicad_blocks.repository import (
 )
 from kipy import KiCad
 from kipy.geometry import Vector2
+from create_block_ipc_integration import run_kicad_cli
 
 
 class _ExpectedNestedInstance(TypedDict):
@@ -56,7 +57,7 @@ class _ExpectedNestedInstance(TypedDict):
 
 def _fail(message: str) -> NoReturn:
     """Fail an acceptance invariant without embedding messages in exception constructors."""
-    _fail(message)
+    raise AssertionError(message)
 
 
 def _find_cli() -> str:
@@ -760,7 +761,7 @@ def _assert_implementation_export(
         )
     svg_dir = root / export_directory
     svg_dir.mkdir()
-    subprocess.run(
+    run_kicad_cli(
         [
             cli,
             "sch",
@@ -769,8 +770,7 @@ def _assert_implementation_export(
             "--output",
             str(svg_dir),
             str(block.implementation),
-        ],
-        check=True,
+        ]
     )
     if not list(svg_dir.glob("*.svg")):
         _fail(f"KiCad CLI could not export the {description} implementation.")
