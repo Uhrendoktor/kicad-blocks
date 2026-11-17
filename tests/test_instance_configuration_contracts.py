@@ -405,7 +405,11 @@ def test_cancel_and_escape_discard_pending_instance_changes(monkeypatch, tmp_pat
 
     def escape(dialog):
         _assert_initial_state(context, dialog)
-        dialog.event_generate("<Escape>")
+        target = context.require_widget("instance-configuration.profile")
+        target.focus_force()
+        root.update()
+        assert root.focus_get() is target
+        target.event_generate("<Escape>", when="now")
         root.update_idletasks()
         root.update()
         assert not dialog.winfo_exists()
