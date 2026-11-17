@@ -17,8 +17,11 @@ from urllib.request import Request, urlopen
 
 try:  # Package import in tests; direct import when executed as a script.
     from .github_api_types import GitHubApiResponse, JSONObject, decode_github_response
-except ImportError:  # pragma: no cover - exercised by the release CLI.
-    from github_api_types import GitHubApiResponse, JSONObject, decode_github_response
+except ImportError:  # Imported from a standalone test module.
+    try:
+        from scripts.github_api_types import GitHubApiResponse, JSONObject, decode_github_response
+    except ImportError:  # pragma: no cover - exercised by the release CLI.
+        from github_api_types import GitHubApiResponse, JSONObject, decode_github_response
 
 WHEEL_PREFIX = "kicad_python-0.9.0.dev0-"
 API_VERSION = "2022-11-28"

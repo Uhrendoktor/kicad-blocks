@@ -15,8 +15,11 @@ from urllib.request import Request, urlopen
 
 try:  # Package import in tests; direct import when executed as a script.
     from .github_api_types import GitHubApiResponse, JSONObject, decode_github_response
-except ImportError:  # pragma: no cover - exercised by the release CLI.
-    from github_api_types import GitHubApiResponse, JSONObject, decode_github_response
+except ImportError:  # Imported from a standalone test module.
+    try:
+        from scripts.github_api_types import GitHubApiResponse, JSONObject, decode_github_response
+    except ImportError:  # pragma: no cover - exercised by the release CLI.
+        from github_api_types import GitHubApiResponse, JSONObject, decode_github_response
 
 RELEASE_TAG = "kicad-python-dev"
 ASSET_PREFIX = "kicad_python-0.9.0.dev0-"
@@ -25,8 +28,11 @@ TRANSIENT_HTTP_STATUS = {408, 425, 429, 500, 502, 503, 504}
 
 def _retry_delay(attempt: int, error: BaseException) -> float:
     """Return a bounded backoff, respecting a numeric Retry-After header."""
-    headers = getattr(error, "headers", None)
-    retry_after = headers.get("Retry-After") if headers is not None else None
+    retry_after = (
+        error.headers.get("Retry-After")
+        if isinstance(error, HTTPError) and error.headers is not None
+        else None
+    )
     if retry_after:
         try:
             return min(30.0, max(1.0, float(retry_after)))

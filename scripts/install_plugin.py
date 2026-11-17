@@ -14,12 +14,15 @@ import sys
 import tempfile
 import uuid
 from collections.abc import Sequence
-from typing import NotRequired, TypedDict, cast
+from typing import TypedDict, cast
 
 try:  # Package import in tests; direct import when executed as a script.
     from .github_api_types import JSONValue, JSONObject
-except ImportError:  # pragma: no cover - exercised by the install CLI.
-    from github_api_types import JSONValue, JSONObject
+except ImportError:  # Imported from a standalone test module.
+    try:
+        from scripts.github_api_types import JSONValue, JSONObject
+    except ImportError:  # pragma: no cover - exercised by the install CLI.
+        from github_api_types import JSONValue, JSONObject
 
 PLUGIN_IDENTIFIER = "org.uhrendoktor.kicadblocks"
 PLUGIN_DIRECTORY_NAME = "kicad-blocks"

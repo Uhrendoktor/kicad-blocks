@@ -19,8 +19,11 @@ from urllib.request import Request, urlopen
 
 try:  # Package import in tests; direct import when executed as a script.
     from .github_api_types import GitHubApiResponse, decode_github_response
-except ImportError:  # pragma: no cover - exercised by the release CLI.
-    from github_api_types import GitHubApiResponse, decode_github_response
+except ImportError:  # Imported from a standalone test module.
+    try:
+        from scripts.github_api_types import GitHubApiResponse, decode_github_response
+    except ImportError:  # pragma: no cover - exercised by the release CLI.
+        from github_api_types import GitHubApiResponse, decode_github_response
 
 API_VERSION = "2022-11-28"
 SUPPORTED_PYTHON_MINOR_VERSIONS = frozenset({12, 13, 14})
