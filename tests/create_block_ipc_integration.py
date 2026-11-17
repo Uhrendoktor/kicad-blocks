@@ -12,9 +12,10 @@ import sys
 import tempfile
 import time
 import uuid
+from collections.abc import Callable
 from pathlib import Path
 from types import SimpleNamespace
-from typing import TYPE_CHECKING, Callable, cast
+from typing import TYPE_CHECKING, cast
 
 if TYPE_CHECKING:
     from tkinter import Misc
@@ -35,6 +36,7 @@ from kicad_blocks.repository import (
 )
 from kipy import KiCad
 from kipy.errors import ApiError
+from pynng.exceptions import NNGException
 from test_plugin_registration import close_editor, find_executable, launch
 
 
@@ -182,31 +184,12 @@ def _write_source_sheets(project_dir: Path) -> tuple[Path, dict[str, Path]]:
     return parent_path, child_paths
 
 
-def _open_live_eeschema(
-    schematic_path: Path,
-    root: Path,
-) -> tuple[KiCad, subprocess.Popen[str], str, str]:
-    """Launch real Eeschema with IPC enabled and return its live schematic client."""
-    eeschema = os.environ.get("KICAD_EESCHEMA") or find_executable("eeschema-nightly", "eeschema")
-    xdotool = find_executable("xdotool")
-    if not os.environ.get("DISPLAY"):
-        raise RuntimeError("Run the Create Block IPC test under xvfb-run; DISPLAY is not set.")
-
+def _isolated_eeschema_environment(root: Path) -> tuple[Path, dict[str, str]]:
+    """Create isolated KiCad profile paths and remove inherited pip overrides."""
     home = root / "eeschema-home"
-    home.mkdir()
     documents_home = home / ".local" / "share"
     cache_home = home / ".cache"
-    version_output = subprocess.run(
-        [_find_cli(), "version"], capture_output=True, text=True, check=True
-    ).stdout
-    version_match = re.search(r"(\d+\.\d+)", version_output)
-    if version_match is None:
-        raise RuntimeError(f"Could not determine KiCad MAJOR.MINOR version: {version_output!r}")
-    version = version_match.group(1)
-    python_interpreter = shutil.which("python3")
-    if not python_interpreter:
-        raise FileNotFoundError("System python3 was not found for KiCad IPC configuration.")
-
+    home.mkdir()
     env = os.environ.copy()
     for key in (
         "PIP_FIND_LINKS",
@@ -228,13 +211,11 @@ def _open_live_eeschema(
             "KICAD_CACHE_HOME": str(cache_home),
         }
     )
+    return home, env
 
-    # First launch creates KiCad's version-specific profile and resolves any
-    # first-run setup dialog. Enable the IPC API in that isolated profile,
-    # then launch the actual test project with Eeschema's GUI server.
-    first_log = root / "create-block-first-run.log"
-    first_process, first_window = launch(eeschema, schematic_path, env, xdotool, first_log)
-    close_editor(first_process, first_window, xdotool)
+
+def _enable_eeschema_ipc(home: Path, version: str, python_interpreter: str) -> None:
+    """Persist the IPC server settings into the isolated KiCad profile."""
     config_files = list(home.rglob("kicad_common.json"))
     if not config_files:
         raise FileNotFoundError("Eeschema did not create kicad_common.json during first launch.")
@@ -251,22 +232,41 @@ def _open_live_eeschema(
         encoding="utf-8",
     )
 
-    editor_log = root / "create-block-editor.log"
-    process, window_id = launch(eeschema, schematic_path, env, xdotool, editor_log)
-    deadline = time.monotonic() + 30.0
-    last_error = None
+
+def _initialize_eeschema_ipc_profile(
+    eeschema: str,
+    schematic_path: Path,
+    root: Path,
+    env: dict[str, str],
+    xdotool: str,
+    version: str,
+    python_interpreter: str,
+) -> None:
+    """Run the one-time profile bootstrap and enable Eeschema's IPC server."""
+    first_log = root / "create-block-first-run.log"
+    first_process, first_window = launch(eeschema, schematic_path, env, xdotool, first_log)
+    close_editor(first_process, first_window, xdotool)
+    _enable_eeschema_ipc(root / "eeschema-home", version, python_interpreter)
+
+
+def _connect_live_eeschema(
+    process: subprocess.Popen[str],
+    editor_log: Path,
+    timeout_s: float = 30.0,
+) -> KiCad:
+    """Wait for Eeschema's NNG endpoint and return a validated live client."""
+    deadline = time.monotonic() + timeout_s
+    last_error: Exception | None = None
     while time.monotonic() < deadline:
         if process.poll() is not None:
             raise RuntimeError(
                 f"Eeschema exited before exposing the IPC API (exit {process.returncode}). "
                 f"{editor_log.read_text(errors='replace')[-8000:]}"
             )
-        client = None
+        client: KiCad | None = None
         try:
             client = KiCad(timeout_ms=30000)
-            schematic = client.get_schematic()
-            del schematic
-            return client, process, window_id, xdotool
+            client.get_schematic()
         except (ApiError, NNGException, OSError, TimeoutError) as exc:
             last_error = exc
             if client is not None:
@@ -274,12 +274,50 @@ def _open_live_eeschema(
                 if callable(close_client):
                     with contextlib.suppress(ApiError, OSError):
                         close_client()
+        else:
+            return client
         time.sleep(0.25)
     raise TimeoutError(
         "Eeschema opened but its schematic IPC endpoint did not become ready. "
         f"Last error: {last_error!r}; "
         f"log: {editor_log.read_text(errors='replace')[-8000:]}"
     )
+
+
+def _open_live_eeschema(
+    schematic_path: Path,
+    root: Path,
+) -> tuple[KiCad, subprocess.Popen[str], str, str]:
+    """Launch Eeschema with a fresh IPC-enabled profile and connect to it."""
+    eeschema = os.environ.get("KICAD_EESCHEMA") or find_executable("eeschema-nightly", "eeschema")
+    xdotool = find_executable("xdotool")
+    if not os.environ.get("DISPLAY"):
+        raise RuntimeError("Run the Create Block IPC test under xvfb-run; DISPLAY is not set.")
+
+    version_output = subprocess.run(
+        [_find_cli(), "version"], capture_output=True, text=True, check=True
+    ).stdout
+    version_match = re.search(r"(\d+\.\d+)", version_output)
+    if version_match is None:
+        raise RuntimeError(f"Could not determine KiCad MAJOR.MINOR version: {version_output!r}")
+    python_interpreter = shutil.which("python3")
+    if python_interpreter is None:
+        raise FileNotFoundError("System python3 was not found for KiCad IPC configuration.")
+
+    home, env = _isolated_eeschema_environment(root)
+    _initialize_eeschema_ipc_profile(
+        eeschema,
+        schematic_path,
+        root,
+        env,
+        xdotool,
+        version_match.group(1),
+        python_interpreter,
+    )
+    editor_log = root / "create-block-editor.log"
+    process, window_id = launch(eeschema, schematic_path, env, xdotool, editor_log)
+    client = _connect_live_eeschema(process, editor_log)
+    return client, process, window_id, xdotool
 
 
 def _assert_cli_exports(
@@ -352,6 +390,11 @@ def _validate_hierarchy_fixture(
                 f"KiCad CLI rejected the {label} source-sheet fixture {source}. "
                 f"exit={result.returncode}; stdout={result.stdout}; stderr={result.stderr}"
             )
+
+
+def _show_info(*_args: str) -> None:
+    """Suppress informational dialogs during the live IPC acceptance run."""
+    return None
 
 
 def main() -> None:
@@ -434,15 +477,15 @@ def main() -> None:
                     patch.object(
                         plugin_actions,
                         "messagebox",
-                        SimpleNamespace(showinfo=lambda *_args: None),
+                        SimpleNamespace(showinfo=_show_info),
                     ),
                 ):
                     plugin_actions.create_and_place(
                         library_root,
                         parent_schematic,
-                        cast(plugin_actions.KiCadApp, kicad),
+                        cast("plugin_actions.KiCadApp", kicad),
                         project_dir,
-                        cast(Misc, object()),
+                        cast("Misc", object()),
                     )
 
             run_creation(
