@@ -373,7 +373,6 @@ class _TkEntryCursor(Protocol):
     def icursor(self, index: str | int) -> None: ...
 
 
-
 class _PreviewRaster(Protocol):
     """Minimal Pillow image surface consumed by native symbol preview cropping."""
 
