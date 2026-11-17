@@ -2,6 +2,7 @@ name: CI
 
 permissions:
   contents: write
+  pull-requests: write
 
 on:
   push:
@@ -17,8 +18,52 @@ concurrency:
 # Run the complete KiCad integration suite on a GitHub-hosted Linux runner.
 # Fork PRs remain excluded because this job uses repository write permissions.
 jobs:
+  synchronize-main:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      updated: ${{ steps.sync.outputs.updated }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Synchronize the quality PR branch with current main
+        id: sync
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_HEAD: ${{ github.sha }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          echo "updated=false" >> "$GITHUB_OUTPUT"
+          if [[ "$REF_NAME" != "agents/strict-test-quality-contract-rebased" ]]; then
+            exit 0
+          fi
+          git fetch --no-tags origin main
+          if git merge-base --is-ancestor origin/main "$EXPECTED_HEAD"; then
+            echo "The PR head already contains current main."
+            exit 0
+          fi
+          echo "::notice::Updating PR #40 with the latest main branch."
+          gh api --method PUT "repos/${GITHUB_REPOSITORY}/pulls/40/update-branch" \
+            -f expected_head_sha="$EXPECTED_HEAD"
+          for attempt in $(seq 1 30); do
+            current_head="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/40" --jq '.head.sha')"
+            if [[ "$current_head" != "$EXPECTED_HEAD" ]]; then
+              echo "updated=true" >> "$GITHUB_OUTPUT"
+              echo "::notice::PR #40 now includes the current main branch."
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::GitHub did not update PR #40 after the update-branch request."
+          exit 1
+
   python-and-kicad:
-    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
+    needs: synchronize-main
+    if: ${{ needs.synchronize-main.outputs.updated != 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 50
     steps:
@@ -478,7 +523,8 @@ jobs:
   visual-ui-audit:
     # Keep a separate hosted visual audit so screenshot evidence remains available
     # independently of the full live IPC integration job.
-    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
+    needs: synchronize-main
+    if: ${{ needs.synchronize-main.outputs.updated != 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     steps:
