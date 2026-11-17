@@ -6,19 +6,23 @@ asset tree with their relative references and hierarchy paths rebased.
 """
 
 from __future__ import annotations
-from typing import cast
 
 import re
 import uuid
 from pathlib import Path
+from typing import cast
 
 from .model import BlockPin
-from .sexpr import QuotedSExpr as _Quoted
-from .sexpr import SExpr, SExprList, parse_sexpr
-from .sexpr import dump_sexpr as _dump
-from .sexpr import sexpr_all as _all
-from .sexpr import sexpr_direct as _direct
-from .sexpr import sexpr_head as _head
+from .sexpr import (
+    QuotedSExpr as _Quoted,
+    SExpr,
+    SExprList,
+    dump_sexpr as _dump,
+    parse_sexpr,
+    sexpr_all as _all,
+    sexpr_direct as _direct,
+    sexpr_head as _head,
+)
 
 _LABEL_SHAPES = {
     "input": "input",
@@ -263,8 +267,8 @@ def _normalize_sheet_instances(
 ) -> None:
     existing_instances = _direct(tree, "sheet_instances")
     if existing_instances is None:
-        instances = cast(SExprList, ["sheet_instances"])
-        tree.append(cast(SExpr, instances))
+        instances = cast("SExprList", ["sheet_instances"])
+        tree.append(cast("SExpr", instances))
     else:
         instances = existing_instances
     paths = _path_nodes(instances)
@@ -275,7 +279,7 @@ def _normalize_sheet_instances(
     if paths:
         kept_ids = {id(path) for path in kept}
         instances[1:] = cast(
-            list[SExpr],
+            "list[SExpr]",
             [
                 child
                 for child in instances[1:]
@@ -288,14 +292,14 @@ def _normalize_sheet_instances(
         page_node: SExprList = ["page", _Quoted("1" if is_root else "2")]
         path_node: SExprList = ["path", _Quoted(new_prefix), page_node]
         kept = [path_node]
-        instances.extend(cast(list[SExpr], kept))
+        instances.extend(cast("list[SExpr]", kept))
     for path in kept:
         if len(path) >= 2:
             path[1] = _Quoted(new_prefix)
         if is_root:
             page = _direct(path, "page")
             if page is None:
-                path.append(cast(SExpr, ["page", _Quoted("1")]))
+                path.append(cast("SExpr", ["page", _Quoted("1")]))
             elif len(page) >= 2:
                 page[1] = _Quoted("1")
 
@@ -351,7 +355,7 @@ def _prepare_sheet_tree(
         if title_block is not None:
             title = _direct(title_block, "title")
             if title is None:
-                title_block.append(cast(SExpr, ["title", _Quoted(display_name)]))
+                title_block.append(cast("SExpr", ["title", _Quoted(display_name)]))
             elif len(title) >= 2:
                 title[1] = _Quoted(display_name)
             comment = next(
@@ -363,7 +367,7 @@ def _prepare_sheet_tree(
                 None,
             )
             if comment is None:
-                title_block.append(cast(SExpr, ["comment", "1", _Quoted("Block ID: " + block_id)]))
+                title_block.append(cast("SExpr", ["comment", "1", _Quoted("Block ID: " + block_id)]))
             else:
                 comment[2] = _Quoted("Block ID: " + block_id)
 
