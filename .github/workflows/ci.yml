@@ -41,7 +41,7 @@ jobs:
               echo "::error::KiCad CLI installation failed on the GitHub-hosted runner."
               exit 1
             fi
-            "${SUDO[@]}" apt-get update
+            "${SUDO[@]}" apt-get -o Acquire::Languages=none update
             "${SUDO[@]}" apt-get install -y --no-install-recommends software-properties-common
             for attempt in 1 2 3; do
             if "${SUDO[@]}" add-apt-repository --yes ppa:kicad/kicad-dev-nightly; then
@@ -53,7 +53,7 @@ jobs:
             fi
             sleep "$((attempt * 5))"
           done
-            "${SUDO[@]}" apt-get update
+            "${SUDO[@]}" apt-get -o Acquire::Languages=none update
             "${SUDO[@]}" apt-get install -y --no-install-recommends kicad-nightly
             CLI="$(command -v kicad-cli-nightly || command -v kicad-cli || true)"
           fi
@@ -224,10 +224,10 @@ jobs:
             || ! command -v xwd >/dev/null 2>&1 \
             || ! python3 -c "import tkinter" >/dev/null 2>&1; then
             if [[ "$(id -u)" -eq 0 ]]; then
-              apt-get update
+              apt-get -o Acquire::Languages=none update
               apt-get install -y --no-install-recommends xvfb xdotool python3-tk x11-apps
             else
-              sudo -n apt-get update
+              sudo -n apt-get -o Acquire::Languages=none update
               sudo -n apt-get install -y --no-install-recommends xvfb xdotool python3-tk x11-apps
             fi
           fi
@@ -494,7 +494,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          sudo apt-get update
+          sudo apt-get -o Acquire::Languages=none update
           sudo apt-get install -y --no-install-recommends python3-tk xvfb
           python3 -c "import tkinter; print('System Tkinter available')"
           xvfb-run -a -s "-screen 0 1280x800x24" python3 -c "import tkinter; root=tkinter.Tk(); root.destroy(); print('Xvfb Tk window creation works')"
@@ -556,10 +556,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          sudo apt-get update
+          sudo apt-get -o Acquire::Languages=none update
           sudo apt-get install -y --no-install-recommends software-properties-common xvfb xdotool python3-tk
           sudo add-apt-repository --yes ppa:kicad/kicad-dev-nightly
-          sudo apt-get update
+          sudo apt-get -o Acquire::Languages=none update
           sudo apt-get install -y --no-install-recommends kicad-nightly
           CLI="$(command -v kicad-cli-nightly || command -v kicad-cli || true)"
           if [[ -z "$CLI" ]]; then
