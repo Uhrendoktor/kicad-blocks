@@ -307,7 +307,6 @@ def test_control_coverage_fails_for_untagged_buttons():
         root.destroy()
 
 
-
 def test_control_coverage_fails_for_untagged_menu_entries():
     plugin_actions._load_tkinter()
     tk = plugin_actions.tk
