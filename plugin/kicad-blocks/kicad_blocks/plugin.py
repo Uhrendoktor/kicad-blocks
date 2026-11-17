@@ -4902,7 +4902,7 @@ def _show_block_variant_editor(
     ttk.Label(frame, text="Circuit implementations", font=("TkDefaultFont", 12, "bold")).grid(
         row=0, column=0, sticky="w"
     )
-    status_value = tk.StringVar(value="")
+    status_value = tk.StringVar(value="Empty KB_VARIANT uses the default implementation.")
     status_label = ttk.Label(
         frame,
         textvariable=status_value,
