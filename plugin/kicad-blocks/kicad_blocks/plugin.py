@@ -3414,7 +3414,13 @@ def _draw_schematic_preview(
     _label, png_data = selected
     photo = tk.PhotoImage(data=base64.b64encode(png_data).decode("ascii"))
     cast(_TkPreviewCanvas, canvas).native_schematic_preview_photo = photo
-    canvas.create_image(8, 8, image=photo, anchor="nw")
+    canvas.create_image(
+        8,
+        8,
+        image=photo,
+        anchor="nw",
+        tags=("kicad-schematic-preview",),
+    )
     canvas.configure(scrollregion=(0, 0, photo.width() + 16, photo.height() + 16))
     canvas.xview_moveto(0)
     canvas.yview_moveto(0)

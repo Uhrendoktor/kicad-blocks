@@ -685,10 +685,11 @@ def capture_ui_workflows(
                     minimum_size=(1000, 650),
                 )
                 schematic_canvases = [
-                    widget
+                    cast(tk.Canvas, widget)
                     for widget in walk_widgets(root)
                     if widget.winfo_class() == "Canvas"
-                    and getattr(widget, "native_schematic_preview_photo", None) is not None
+                    and isinstance(widget, tk.Canvas)
+                    and widget.find_withtag("kicad-schematic-preview")
                 ]
                 if not schematic_canvases:
                     raise RuntimeError(
