@@ -1051,7 +1051,7 @@ def _action_button(
 
     button = ttk.Button(
         parent,
-        cnf=button_options,
+        **button_options,
         text=text,
         command=invoke,
         padding=(9, 6),
