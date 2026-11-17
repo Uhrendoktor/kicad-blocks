@@ -9,8 +9,9 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from collections.abc import Iterator
 from pathlib import Path
-from types import SimpleNamespace
+from typing import cast
 
 from kipy import KiCad
 
@@ -18,6 +19,9 @@ ROOT = Path(__file__).resolve().parents[1]
 PLUGIN = ROOT / "plugin" / "kicad-blocks"
 sys.path.insert(0, str(PLUGIN))
 
+from kicad_blocks.manifest_types import BlockManifest
+from kicad_blocks.repository import BlockRecord
+from kicad_blocks.sexpr import SExpr, SExprList
 from kicad_blocks.pcb_layout import (
     BlockLayoutPlacement,
     merge_block_layout,
@@ -223,15 +227,22 @@ def main() -> None:
         if not list(source_svg_dir.glob("*.svg")):
             raise AssertionError("KiCad did not accept/export the stored block layout.")
 
-        block = SimpleNamespace(
+        block = BlockRecord(
             path=block_dir,
-            name="Test Block",
-            manifest={
-                "layout_file": "layout.kicad_pcb",
-                "pins": [{"name": "VIN"}, {"name": "GND"}],
-                "layout_ports": {"VIN": "VIN", "GND": "GND"},
-                "layout_project_file": "layout.kicad_pro",
-            },
+            manifest=cast(
+                BlockManifest,
+                {
+                    "block_id": "12345678-1234-4234-8234-123456789abc",
+                    "name": "Test Block",
+                    "layout_file": "layout.kicad_pcb",
+                    "pins": [
+                        {"name": "VIN", "number": "1", "electrical_type": "input"},
+                        {"name": "GND", "number": "2", "electrical_type": "passive"},
+                    ],
+                    "layout_ports": {"VIN": "VIN", "GND": "GND"},
+                    "layout_project_file": "layout.kicad_pro",
+                },
+            ),
         )
         # Refuse collisions for either output member before writing or
         # replacing any files. This protects unrelated board/project files
@@ -424,7 +435,7 @@ def main() -> None:
             if isinstance(item, list) and item and item[0] == "terminal_pad"
         }
 
-        def _walk(node):
+        def _walk(node: SExpr) -> Iterator[SExprList]:
             if isinstance(node, list):
                 yield node
                 for child in node[1:]:
