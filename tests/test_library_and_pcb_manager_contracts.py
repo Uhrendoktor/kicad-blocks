@@ -284,6 +284,7 @@ def test_manage_libraries_set_default_persists_selected_library(monkeypatch, tmp
         tree = context.require_widget("manage-libraries.rows")
         selected = tree.selection()[0]
         assert tree.set(selected, "role") == "Default"
+        assert context.require_widget("manage-libraries.action.default").instate(["disabled"])
         _click(
             context, "manage-libraries.action.close", "Close",
             closes=True, title="Manage Libraries",
@@ -340,12 +341,21 @@ def test_manage_libraries_environment_override_and_empty_selection_states(
     context = UiTestContext(root)
 
     def inspect(_dialog):
-        for button_id in (
+        fixed_actions = (
             "manage-libraries.action.change",
             "manage-libraries.action.unregister",
             "manage-libraries.action.default",
-        ):
+        )
+        for button_id in fixed_actions:
             assert context.require_widget(button_id).instate(["disabled"])
+        _select_path(context, "manage-libraries.rows", first, path_column="path")
+        for button_id in fixed_actions:
+            assert context.require_widget(button_id).instate(["disabled"])
+        for button_id in (
+            "manage-libraries.action.add",
+            "manage-libraries.action.create",
+        ):
+            assert context.require_widget(button_id).instate(["!disabled"])
         _click(
             context, "manage-libraries.action.close", "Close",
             closes=True, title="Manage Libraries",
