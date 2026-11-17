@@ -817,9 +817,11 @@
       "id": "implementation-details",
       "title": "Implementation details",
       "purpose": "Define a named implementation and choose how its schematic source is created.",
-      "coverage": "partial",
-      "coverage_note": "The real dialog is captured in both themes. Its source mode, file chooser, validation, and cancel behavior still need contracts.",
+      "coverage": "contracted",
+      "coverage_note": "Every application-owned control in the nested form has a stable semantic ID and real-Tk interaction contract. Tests exercise existing-schematic path submission, browse callback and selected-file persistence, blank-selector validation/recovery, invalid-extension rejection and browse recovery, blank temporary schematic creation, copy-from-Default/named-variant selection, missing-copy-source rejection/recovery, and Cancel/Escape without library mutation. Native Eeschema launch/save remains separately verified by the full KiCad GUI integration.",
       "evidence": [
+        "tests/test_implementation_details_contracts.py",
+        "tests/test_implementation_manager_contracts.py",
         "tests/capture_visual_docs.py"
       ],
       "functionality": [
@@ -830,6 +832,62 @@
       "screenshots": [
         "implementation-details-light.png",
         "implementation-details-dark.png"
+      ],
+      "controls": [
+        {
+          "contract_id": "implementation-details.window",
+          "type": "window",
+          "label": "Implementation details dialog",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "implementation-details.variant",
+          "type": "entry",
+          "label": "Implementation selector value",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "implementation-details.mode",
+          "type": "combobox",
+          "label": "Starting-point mode (create flow only)",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "implementation-details.source-label",
+          "type": "status-label",
+          "label": "Source-mode instructions",
+          "assertion": "observed"
+        },
+        {
+          "contract_id": "implementation-details.source",
+          "type": "entry",
+          "label": "Source schematic path (file mode)",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "implementation-details.copy",
+          "type": "combobox",
+          "label": "Library implementation to copy (copy mode)",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "implementation-details.action.browse",
+          "type": "button",
+          "label": "Choose file",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "implementation-details.action.use",
+          "type": "button",
+          "label": "Use implementation",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "implementation-details.action.cancel",
+          "type": "button",
+          "label": "Cancel",
+          "assertion": "asserted"
+        }
       ]
     },
     {

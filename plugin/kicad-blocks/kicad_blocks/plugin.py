@@ -4037,6 +4037,8 @@ def _ask_implementation_details(
 ) -> tuple[str, str] | None:
     """Collect an implementation selector and its starting schematic."""
     dialog = tk.Toplevel(parent)
+    dialog._kicad_ui_screen_id = "implementation-details"
+    dialog._kicad_ui_contract_id = "implementation-details.window"
     dialog.title("Implementation details")
     dialog.transient(parent)
     frame = ttk.Frame(dialog, padding=12)
@@ -4052,6 +4054,7 @@ def _ask_implementation_details(
     )
     selector_value = tk.StringVar(value=value)
     selector_entry = ttk.Entry(frame, textvariable=selector_value)
+    selector_entry._kicad_ui_contract_id = "implementation-details.variant"
     selector_entry.grid(row=2, column=0, columnspan=3, sticky="ew", pady=(2, 8))
     _add_tooltip(selector_entry, "Stored in KB_VARIANT on the placed facade.")
 
@@ -4071,6 +4074,7 @@ def _ask_implementation_details(
         mode_combo = ttk.Combobox(
             frame, textvariable=mode_value, values=modes, state="readonly"
         )
+        mode_combo._kicad_ui_contract_id = "implementation-details.mode"
         mode_combo.grid(row=4, column=0, columnspan=3, sticky="ew", pady=(3, 8))
     else:
         modes = ["Choose a schematic file"]
@@ -4078,11 +4082,15 @@ def _ask_implementation_details(
 
     source_row = 5 if allow_create else 3
     source_label = ttk.Label(frame, text="Source schematic (.kicad_sch)")
+    source_label._kicad_ui_contract_id = "implementation-details.source-label"
     source_label.grid(row=source_row, column=0, columnspan=3, sticky="w")
     source_entry = ttk.Entry(frame, textvariable=source_value)
+    source_entry._kicad_ui_contract_id = "implementation-details.source"
     source_entry.grid(row=source_row + 1, column=0, columnspan=2, sticky="ew", pady=(3, 10))
     browse_button = _action_button(
-        frame, "Choose file…", lambda: None, "file", "Choose an implementation schematic"
+        frame, "Choose file…", lambda: None, "file",
+        "Choose an implementation schematic",
+        contract_id="implementation-details.action.browse",
     )
     browse_button.grid(row=source_row + 1, column=2, sticky="ew", padx=(8, 0), pady=(4, 14))
     copy_combo = ttk.Combobox(
@@ -4091,6 +4099,7 @@ def _ask_implementation_details(
         values=(),
         state="readonly",
     )
+    copy_combo._kicad_ui_contract_id = "implementation-details.copy"
     copy_combo.grid(
         row=source_row + 1, column=0, columnspan=3, sticky="ew", pady=(3, 10)
     )
@@ -4184,9 +4193,15 @@ def _ask_implementation_details(
 
     buttons = ttk.Frame(frame)
     buttons.grid(row=source_row + 2, column=0, columnspan=3, sticky="ew", pady=(8, 2))
-    _action_button(buttons, "Cancel", dialog.destroy, "cancel", "Cancel implementation setup").pack(side="right")
     _action_button(
-        buttons, "Use implementation", accept, "select", "Use the selected implementation",
+        buttons, "Cancel", dialog.destroy, "cancel",
+        "Cancel implementation setup",
+        contract_id="implementation-details.action.cancel",
+    ).pack(side="right")
+    _action_button(
+        buttons, "Use implementation", accept, "select",
+        "Use the selected implementation",
+        contract_id="implementation-details.action.use",
     ).pack(side="right", padx=(0, 8))
     dialog.bind("<Return>", lambda _event: accept())
     dialog.bind("<Escape>", lambda _event: dialog.destroy())

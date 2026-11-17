@@ -5,11 +5,11 @@ This page is generated from the declarative UI catalog. It inventories the curre
 
 | Coverage status | Screens | Meaning |
 |---|---:|---|
-| Contracted | 10 | Widget-level execute/result assertions are registered and run in CI. |
-| Partial | 3 | Targeted GUI, integration, model, or screenshot checks exist; the full control matrix is not contracted. |
+| Contracted | 11 | Widget-level execute/result assertions are registered and run in CI. |
+| Partial | 2 | Targeted GUI, integration, model, or screenshot checks exist; the full control matrix is not contracted. |
 | Inventory only | 2 | Window/workflow is documented here; systematic interaction contracts remain future work. |
 
-Task Hub, both transient block choosers, Add PCB Layout, Create Block form, Record picker, Functional Block picker, Instance Configuration, Manage Libraries, and PCB Layout Manager have full registered widget contracts. The Functional Block Library and implementation manager remain partial while every downstream KiCad operation and native OS chooser continues to be verified separately.
+Task Hub, both transient block choosers, Add PCB Layout, Create Block form, Record picker, Functional Block picker, Instance Configuration, Implementation details, Manage Libraries, and PCB Layout Manager have full registered widget contracts. The Functional Block Library and Implementations Manager remain partial while every downstream KiCad operation and native OS chooser continues to be verified separately.
 
 ## Screens
 
@@ -454,9 +454,9 @@ The current slice adds real-widget contracts for the manager's Treeview, Add, Ed
 
 Define a named implementation and choose how its schematic source is created.
 
-**Coverage:** Partial — targeted GUI, integration, or visual checks exist.
+**Coverage:** Contracted — widget action and expected UI transition asserted.
 
-The real dialog is captured in both themes. Its source mode, file chooser, validation, and cancel behavior still need contracts.
+Every application-owned control in the nested form has a stable semantic ID and real-Tk interaction contract. Tests exercise existing-schematic path submission, browse callback and selected-file persistence, blank-selector validation/recovery, invalid-extension rejection and browse recovery, blank temporary schematic creation, copy-from-Default/named-variant selection, missing-copy-source rejection/recovery, and Cancel/Escape without library mutation. Native Eeschema launch/save remains separately verified by the full KiCad GUI integration.
 
 **Major functionality**
 
@@ -464,8 +464,22 @@ The real dialog is captured in both themes. Its source mode, file chooser, valid
 - Choose blank, existing-file, or copy-from-implementation mode
 - Confirm or cancel without creating partial files
 
+**Registered semantic controls**
+
+- Implementation details dialog (`implementation-details.window`; window; behavior asserted)
+- Implementation selector value (`implementation-details.variant`; entry; behavior asserted)
+- Starting-point mode (create flow only) (`implementation-details.mode`; combobox; behavior asserted)
+- Source-mode instructions (`implementation-details.source-label`; status-label; result observed)
+- Source schematic path (file mode) (`implementation-details.source`; entry; behavior asserted)
+- Library implementation to copy (copy mode) (`implementation-details.copy`; combobox; behavior asserted)
+- Choose file (`implementation-details.action.browse`; button; behavior asserted)
+- Use implementation (`implementation-details.action.use`; button; behavior asserted)
+- Cancel (`implementation-details.action.cancel`; button; behavior asserted)
+
 **Current automated evidence**
 
+- `tests/test_implementation_details_contracts.py`
+- `tests/test_implementation_manager_contracts.py`
 - `tests/capture_visual_docs.py`
 
 **Production screenshots**
