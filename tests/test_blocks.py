@@ -22,7 +22,7 @@ from kicad_blocks.model import (
     substitute_parameter_templates,
     transform_symbol_point_to_schematic,
 )
-from kicad_blocks.manifest_types import BlockDependencyManifest, BlockManifest
+from kicad_blocks.manifest_types import BlockDependencyManifest
 from kicad_blocks.repository import (
     BlockRecord,
     add_dependency,
@@ -866,12 +866,15 @@ class BlockRepositoryTests(unittest.TestCase):
 
         result = synchronize_local_copy(local)
 
-        self.assertTrue(result["layouts_updated"])
+        self.assertTrue(result.get("layouts_updated"))
         local_manifest = read_manifest(local.path)
         self.assertEqual(local_manifest["default_layout"], "low_profile")
         self.assertEqual(local_manifest["layouts"][1]["name"], "Low profile Rev B")
-        self.assertEqual(local_manifest["base_layouts"]["default_layout"], "low_profile")
-        self.assertEqual(local_manifest["base_layouts"]["layouts"][1]["name"], "Low profile Rev B")
+        base_layouts = local_manifest.get("base_layouts")
+        self.assertIsNotNone(base_layouts)
+        assert base_layouts is not None
+        self.assertEqual(base_layouts.get("default_layout"), "low_profile")
+        self.assertEqual(base_layouts["layouts"][1]["name"], "Low profile Rev B")
 
     def test_layout_configuration_local_edits_publish_and_divergent_edits_conflict(self):
         first_board = self.project / "publish_standard.kicad_pcb"
@@ -903,7 +906,7 @@ class BlockRepositoryTests(unittest.TestCase):
         self.assertEqual(source_manifest["layouts"][1]["name"], "Compact Local")
         self.assertTrue(result["layouts_updated"])
         self.assertEqual(
-            read_manifest(local.path)["base_layouts"]["layouts"][1]["name"],
+            read_manifest(local.path).get("base_layouts", {})["layouts"][1]["name"],
             "Compact Local",
         )
 
@@ -940,7 +943,7 @@ class BlockRepositoryTests(unittest.TestCase):
         self.assertEqual(result["conflicts"], [])
         local_manifest = read_manifest(local.path)
         self.assertEqual(local_manifest["parameters"][0]["default"], "1.8")
-        self.assertEqual(local_manifest["base_parameters"], local_manifest["parameters"])
+        self.assertEqual(local_manifest.get("base_parameters"), local_manifest["parameters"])
 
     def test_parameter_schema_local_edits_publish_and_divergent_edits_conflict(self):
         source = create_block(
@@ -999,8 +1002,8 @@ class BlockRepositoryTests(unittest.TestCase):
         )
         source_manifest = read_manifest(source.path)
         local_manifest = read_manifest(local.path)
-        self.assertEqual(local_manifest["source_revision"], source_manifest["revision"])
-        self.assertEqual(local_manifest["base_hashes"], source_manifest["hashes"])
+        self.assertEqual(local_manifest.get("source_revision"), source_manifest["revision"])
+        self.assertEqual(local_manifest.get("base_hashes"), source_manifest["hashes"])
         self.assertEqual(publish_local_copy(local)["published"], [])
 
     def test_local_facade_publish_updates_shared_catalog(self):
@@ -1024,7 +1027,7 @@ class BlockRepositoryTests(unittest.TestCase):
         source_text = (source.path / source.manifest["symbol_file"]).read_text(encoding="utf-8")
         self.assertIn("local-catalog-marker", source_text)
         self.assertEqual(
-            read_manifest(local.path)["base_hashes"],
+            read_manifest(local.path).get("base_hashes"),
             read_manifest(source.path)["hashes"],
         )
 
@@ -1157,14 +1160,10 @@ class BlockRepositoryTests(unittest.TestCase):
 
         relocated_root = self.root.parent / "relocated-library"
         self.root.rename(relocated_root)
-        relocated_parent = type(
-            "Record",
-            (),
-            {
-                "path": relocated_root / parent.path.name,
-                "manifest": read_manifest(relocated_root / parent.path.name),
-            },
-        )()
+        relocated_parent = BlockRecord(
+            path=relocated_root / parent.path.name,
+            manifest=read_manifest(relocated_root / parent.path.name),
+        )
 
         graph = resolve_dependency_graph(relocated_parent, relocated_root)
 

@@ -141,7 +141,7 @@ assert "generate_reference" not in sys.modules
         )
 
     def test_label_names_cannot_mix_local_and_hierarchical_kinds(self) -> None:
-        tree = [
+        tree: SExprList = [
             "kicad_sch",
             ["label", "VSNK", ["at", "10", "10", "0"]],
             ["hierarchical_label", "VSNK", ["shape", "output"], ["at", "20", "10", "0"]],

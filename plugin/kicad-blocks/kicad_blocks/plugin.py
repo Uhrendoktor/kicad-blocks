@@ -7308,6 +7308,8 @@ publish_block = _publish_block
 edit_facade_symbol = _edit_facade_symbol
 start_native_symbol_placement = _start_native_symbol_placement
 safe_schematic_selection = _safe_schematic_selection
+parse_profile_parameter_overrides = _parse_profile_parameter_overrides
+resolve_variant_text = _resolve_variant_text
 
 
 def library_reload_status() -> tuple[bool, str | None]:

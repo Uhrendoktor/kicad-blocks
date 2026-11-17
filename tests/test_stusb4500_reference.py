@@ -656,7 +656,7 @@ class STUSB4500ReferenceTests(unittest.TestCase):
             )
         main = sorted(
             (group for group in SCHEMATIC_GROUPS if group["lane"] == "main"),
-            key=lambda group: int(group["order"]),
+            key=lambda group: int(group.get("order", 0)),
         )
         for first, second in pairwise(main):
             gap = frames[second["id"]][0] - frames[first["id"]][2]

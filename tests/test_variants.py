@@ -13,7 +13,7 @@ PLUGIN = ROOT / "plugin" / "kicad-blocks"
 sys.path.insert(0, str(PLUGIN))
 
 from kicad_blocks.model import parse_pins, resolve_variant_implementation
-from kicad_blocks.plugin import _resolve_variant_text
+from kicad_blocks.plugin import resolve_variant_text
 from kicad_blocks.repository import (
     create_block,
     make_local_copy,
@@ -23,10 +23,10 @@ from kicad_blocks.repository import (
 
 
 class _Project:
-    def __init__(self, values):
+    def __init__(self, values: dict[str, str]) -> None:
         self.values = values
 
-    def expand_text_variables(self, text):
+    def expand_text_variables(self, text: str) -> str:
         for name, value in self.values.items():
             text = text.replace("${" + name + "}", value)
         return text
@@ -115,17 +115,17 @@ class BlockVariantTests(unittest.TestCase):
     def test_project_and_sheet_text_variables_are_expanded(self):
         project = _Project({"RAIL": "1V8"})
         self.assertEqual(
-            _resolve_variant_text("${RAIL}", project, {}),
+            resolve_variant_text("${RAIL}", project, {}),
             "1V8",
         )
         self.assertEqual(
-            _resolve_variant_text("${SHEET_RAIL}", project, {"SHEET_RAIL": "${RAIL}"}),
+            resolve_variant_text("${SHEET_RAIL}", project, {"SHEET_RAIL": "${RAIL}"}),
             "1V8",
         )
 
     def test_unresolved_variable_is_reported(self):
         with self.assertRaisesRegex(ValueError, "Could not resolve KiCad text variable"):
-            _resolve_variant_text("${MISSING}", _Project({}), {})
+            resolve_variant_text("${MISSING}", _Project({}), {})
 
     def test_variants_sync_with_local_copy_and_publish_back(self):
         source = self.create_variant_block()

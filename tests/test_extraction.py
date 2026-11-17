@@ -126,10 +126,8 @@ class HierarchicalSheetExtractionTests(unittest.TestCase):
         implementation = parse_sexpr(record.implementation.read_text(encoding="utf-8"))
         self.assertEqual(len(sexpr_all(implementation, "hierarchical_label")), 3)
         self.assertEqual(len(sexpr_all(implementation, "sheet")), 0)
-        self.assertEqual(
-            str(sexpr_direct(sexpr_direct(implementation, "sheet_instances"), "path")[1]),
-            "/",
-        )
+        sheet_instances = _required_direct(implementation, "sheet_instances")
+        self.assertEqual(str(_required_direct(sheet_instances, "path")[1]), "/")
         resistor = sexpr_all(implementation, "symbol")[0]
         instances = _required_direct(resistor, "instances")
         projects = sexpr_all(instances, "project")
@@ -189,8 +187,8 @@ class HierarchicalSheetExtractionTests(unittest.TestCase):
             child for child in sexpr_all(symbol, "symbol") if str(child[1]).endswith("_0_1")
         )
         rectangle = sexpr_all(graphic_unit, "rectangle")[0]
-        stroke = sexpr_direct(rectangle, "stroke")
-        width = sexpr_direct(stroke, "width")
+        stroke = _required_direct(rectangle, "stroke")
+        width = _required_direct(stroke, "width")
         width[1] = "0.500"
         record.symbol_library.write_text(dump_sexpr(facade) + "\n", encoding="utf-8")
 
@@ -227,7 +225,7 @@ class HierarchicalSheetExtractionTests(unittest.TestCase):
                 child for child in sexpr_all(symbol, "symbol") if str(child[1]).endswith("_0_1")
             )
             rectangle = sexpr_all(graphic_unit, "rectangle")[0]
-            sexpr_direct(sexpr_direct(rectangle, "stroke"), "width")[1] = value
+            _required_direct(_required_direct(rectangle, "stroke"), "width")[1] = value
             path.write_text(dump_sexpr(tree) + "\n", encoding="utf-8")
 
         change_body_width(asset_path, "0.300")
@@ -370,34 +368,38 @@ class HierarchicalSheetExtractionTests(unittest.TestCase):
         self.assertTrue(all((record.path / name).is_file() for name in nested_files))
 
         root_tree = parse_sexpr(record.implementation.read_text(encoding="utf-8"))
-        root_sheets = [node for node in root_tree[1:] if sexpr_head(node) == "sheet"]
+        root_sheets = [
+            node for node in root_tree[1:] if isinstance(node, list) and sexpr_head(node) == "sheet"
+        ]
         self.assertEqual(len(root_sheets), 1)
         root_sheet = root_sheets[0]
         root_child_file = str(
             next(p for p in sexpr_all(root_sheet, "property") if str(p[1]) == "Sheetfile")[2]
         )
-        root_child_uuid = str(sexpr_direct(root_sheet, "uuid")[1])
+        root_child_uuid = str(_required_direct(root_sheet, "uuid")[1])
         self.assertTrue((record.path / root_child_file).is_file())
-        self.assertEqual(
-            str(sexpr_direct(sexpr_direct(root_tree, "sheet_instances"), "path")[1]), "/"
-        )
+        root_sheet_instances = _required_direct(root_tree, "sheet_instances")
+        self.assertEqual(str(_required_direct(root_sheet_instances, "path")[1]), "/")
 
         child_tree = parse_sexpr((record.path / root_child_file).read_text(encoding="utf-8"))
-        child_sheets = [node for node in child_tree[1:] if sexpr_head(node) == "sheet"]
+        child_sheets = [
+            node for node in child_tree[1:] if isinstance(node, list) and sexpr_head(node) == "sheet"
+        ]
         self.assertEqual(len(child_sheets), 1)
         child_sheet = child_sheets[0]
         leaf_file = str(
             next(p for p in sexpr_all(child_sheet, "property") if str(p[1]) == "Sheetfile")[2]
         )
-        leaf_uuid = str(sexpr_direct(child_sheet, "uuid")[1])
+        leaf_uuid = str(_required_direct(child_sheet, "uuid")[1])
         self.assertTrue((record.path / leaf_file).is_file())
+        child_sheet_instances = _required_direct(child_tree, "sheet_instances")
         self.assertEqual(
-            str(sexpr_direct(sexpr_direct(child_tree, "sheet_instances"), "path")[1]),
-            "/" + root_child_uuid,
+            str(_required_direct(child_sheet_instances, "path")[1]), "/" + root_child_uuid
         )
         leaf_tree = parse_sexpr((record.path / leaf_file).read_text(encoding="utf-8"))
+        leaf_sheet_instances = _required_direct(leaf_tree, "sheet_instances")
         self.assertEqual(
-            str(sexpr_direct(sexpr_direct(leaf_tree, "sheet_instances"), "path")[1]),
+            str(_required_direct(leaf_sheet_instances, "path")[1]),
             "/" + root_child_uuid + "/" + leaf_uuid,
         )
 
