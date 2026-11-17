@@ -6,6 +6,7 @@ asset tree with their relative references and hierarchy paths rebased.
 """
 
 from __future__ import annotations
+from typing import cast
 
 import re
 import uuid
