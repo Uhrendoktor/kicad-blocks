@@ -7294,3 +7294,16 @@ SchematicProject = _SchematicProject
 # Live schematic creation/inspection entry points used by supported integrations.
 create_and_place = _create_and_place
 active_sheet_source = _active_sheet_source
+
+
+# Stable public operations for GUI acceptance harnesses and supported integrations.
+edit_block_implementation = _edit_block_implementation
+publish_block = _publish_block
+edit_facade_symbol = _edit_facade_symbol
+start_native_symbol_placement = _start_native_symbol_placement
+safe_schematic_selection = _safe_schematic_selection
+
+
+def library_reload_status() -> tuple[bool, str | None]:
+    """Return the result of the most recent project symbol-library reload."""
+    return _LAST_LIBRARY_RELOAD_OK, _LAST_LIBRARY_RELOAD_WARNING

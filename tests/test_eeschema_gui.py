@@ -10,6 +10,7 @@ import tempfile
 import time
 from pathlib import Path
 from types import SimpleNamespace
+from collections.abc import Sequence
 from typing import TYPE_CHECKING, cast
 
 if TYPE_CHECKING:
@@ -120,7 +121,7 @@ def main() -> None:
                 ),
                 patch.object(plugin_actions, "messagebox", silent_messagebox),
             ):
-                process = plugin_actions._edit_block_implementation(
+                process = plugin_actions.edit_block_implementation(
                     library,
                     schematic,
                     kicad,
@@ -149,7 +150,7 @@ def main() -> None:
                         text=True,
                         check=False,
                     )
-                    windows = []
+                    windows: list[tuple[str, str, str]] = []
                     for candidate in search.stdout.splitlines():
                         if not candidate.strip().isdigit():
                             continue
@@ -227,7 +228,7 @@ def main() -> None:
                         text=True,
                         check=False,
                     )
-                    window_diagnostics = []
+                    window_diagnostics: list[dict[str, str]] = []
                     for candidate in search_all.stdout.splitlines():
                         if not candidate.strip().isdigit():
                             continue
@@ -292,7 +293,7 @@ def main() -> None:
                     check=False,
                 )
                 dialog_id = None
-                visible_windows = []
+                visible_windows: list[tuple[str, str]] = []
                 for candidate in dialog_search.stdout.splitlines():
                     if not candidate.strip().isdigit():
                         continue
@@ -436,26 +437,46 @@ def main() -> None:
         # Invoke the same Publish helper used by the plugin's manager action.
         # The existing local instance deliberately remains on its old baseline
         # until the following Sync action.
-        reload_calls = []
+        reload_calls: list[tuple[int, int, tuple[str, ...]]] = []
 
-        def reload_library(*, type, scope, nicknames):
+        def reload_library(
+            *,
+            type: int,
+            scope: int,
+            nicknames: list[str],
+        ) -> None:
             reload_calls.append((type, scope, tuple(nicknames)))
 
-        def wait_for_libraries(*, types, scope=None, timeout_s=None):
+        def wait_for_libraries(
+            *,
+            types: list[int],
+            scope: int,
+            timeout_s: float,
+        ) -> Sequence[plugin_actions._LibraryLoadStatus]:
+            del types, scope, timeout_s
+            return []
+
+        def get_kicad_binary_path(_name: str) -> str:
+            return eeschema
+
+        def show_publish_info(*_args: str, **_kwargs: str) -> None:
             return None
 
-        kicad_runtime = SimpleNamespace(
-            get_kicad_binary_path=lambda name: eeschema,
-            reload_library=reload_library,
-            wait_for_libraries=wait_for_libraries,
+        kicad_runtime = cast(
+            plugin_actions.KiCadApp,
+            SimpleNamespace(
+                get_kicad_binary_path=get_kicad_binary_path,
+                reload_library=reload_library,
+                wait_for_libraries=wait_for_libraries,
+            ),
         )
-        publish_messagebox = SimpleNamespace(showinfo=lambda *args, **kwargs: None)
+        publish_messagebox = SimpleNamespace(showinfo=show_publish_info)
         version_before_publish = read_manifest(block.path)["version"]
         with (
             patch.object(plugin_actions, "_pick_record", return_value=block),
             patch.object(plugin_actions, "messagebox", publish_messagebox),
         ):
-            plugin_actions._publish_block(
+            plugin_actions.publish_block(
                 library,
                 kicad_runtime,
                 project_dir,
@@ -488,11 +509,17 @@ def main() -> None:
                 )
             ),
         )
-        local_schematic = SimpleNamespace(get_selection=lambda: [local_instance])
-        sync_messagebox = SimpleNamespace(showinfo=lambda *args, **kwargs: None)
+        class FakeLocalSchematic:
+            def get_selection(self) -> list[plugin_actions.SchematicSymbol]:
+                return [cast(plugin_actions.SchematicSymbol, local_instance)]
+
+        def show_sync_info(*_args: str, **_kwargs: str) -> None:
+            return None
+
+        sync_messagebox = SimpleNamespace(showinfo=show_sync_info)
         with patch.object(plugin_actions, "messagebox", sync_messagebox):
             sync_result = plugin_actions.sync_selected_local(
-                local_schematic,
+                cast(plugin_actions.Schematic, FakeLocalSchematic()),
                 kicad_runtime,
                 project_dir,
             )

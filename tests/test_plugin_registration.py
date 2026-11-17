@@ -10,6 +10,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from collections.abc import Callable, Sequence
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -19,6 +20,7 @@ INSTALLER = ROOT / "scripts" / "install_plugin.py"
 sys.path.insert(0, str(PLUGIN_SOURCE))
 
 from kicad_blocks import plugin as plugin_actions
+from kicad_blocks.plugin import KiCadApp, Schematic, SchematicSymbol
 from kicad_blocks.model import parse_pins
 from kicad_blocks.repository import (
     LIBRARY_CATALOG_NAME,
@@ -43,7 +45,7 @@ def _windows(xdotool: str) -> list[tuple[str, str, str]]:
         text=True,
         check=False,
     )
-    windows = []
+    windows: list[tuple[str, str, str]] = []
     for candidate in result.stdout.splitlines():
         if not candidate.strip().isdigit():
             continue
@@ -146,10 +148,12 @@ def _dump_accessibility_tree(process_id: int) -> str:
 
 
 def _wait_for_window_title(
-    xdotool: str, predicate, timeout_s: float = 12.0
+    xdotool: str,
+    predicate: Callable[[str], bool],
+    timeout_s: float = 12.0,
 ) -> tuple[str, str, str]:
     deadline = time.monotonic() + timeout_s
-    last_windows = []
+    last_windows: list[tuple[str, str, str]] = []
     while time.monotonic() < deadline:
         last_windows = _windows(xdotool)
         match = next(
@@ -201,11 +205,13 @@ def _select_facade_in_test_harness(xdotool: str, symbol_name: str) -> None:
     )
 
 
-def _wait_for_symbol_document(kicad, expected_lib_id: str, timeout_s: float = 8.0) -> None:
+def _wait_for_symbol_document(
+    kicad: KiCadApp, expected_lib_id: str, timeout_s: float = 8.0
+) -> None:
     from kipy.proto.common.types import DocumentType
 
     deadline = time.monotonic() + timeout_s
-    observed = []
+    observed: list[str] = []
     while time.monotonic() < deadline:
         observed = []
         for document in kicad.get_open_documents(DocumentType.DOCTYPE_SYMBOL):
@@ -586,28 +592,27 @@ def main() -> None:
             _dump_accessibility_tree(process.pid)
             try:
                 live_schematic = facade_editor_client.get_schematic()
-                if live_schematic is None:
-                    raise RuntimeError("Live Eeschema IPC returned no schematic for Edit Facade.")
-                live_selection = plugin_actions._safe_schematic_selection(live_schematic)
+                live_selection = plugin_actions.safe_schematic_selection(live_schematic)
                 if live_selection:
                     raise AssertionError(
                         "Edit Facade capability test requires an empty schematic selection; "
                         f"found {len(live_selection)} selected item(s)."
                     )
-                refreshed_record = plugin_actions._register_block(
+                refreshed_record = plugin_actions.register_block(
                     project,
                     block,
-                    facade_editor_client,
+                    cast(KiCadApp, facade_editor_client),
                     [block.path.parent],
                 )
-                if not plugin_actions._LAST_LIBRARY_RELOAD_OK:
+                reload_ok, reload_warning = plugin_actions.library_reload_status()
+                if not reload_ok:
                     raise RuntimeError(
                         "Could not reload the generated KBlocks project catalog before "
                         "checking Edit Facade capability: "
-                        + str(plugin_actions._LAST_LIBRARY_RELOAD_WARNING)
+                        + str(reload_warning)
                     )
                 try:
-                    plugin_actions._edit_facade_symbol(
+                    plugin_actions.edit_facade_symbol(
                         refreshed_record,
                         facade_editor_client,
                         project_catalog=project / ".kicad_blocks" / LIBRARY_CATALOG_NAME,
@@ -627,8 +632,8 @@ def main() -> None:
                 facade_editor_client.close()
 
             placement_client = KiCad(timeout_ms=30000)
-            placed_instance = plugin_actions._start_native_symbol_placement(
-                placement_client,
+            placed_instance = plugin_actions.start_native_symbol_placement(
+                cast(KiCadApp, placement_client),
                 None,
                 placement_symbol_name,
             )
