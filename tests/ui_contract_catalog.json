@@ -353,9 +353,10 @@
       "id": "create-block-form",
       "title": "Create Functional Block",
       "purpose": "Name a block extracted from a selected hierarchical sheet and provide its description.",
-      "coverage": "partial",
-      "coverage_note": "The production form is captured in both themes and the extraction/IPC flow has end-to-end tests. Form validation, cancellation, and every control are not yet registered as UI contracts.",
+      "coverage": "contracted",
+      "coverage_note": "Every actionable form control has a stable semantic ID and a real-Tk interaction contract. Tests execute Create Block and Cancel, assert the returned name/description or cancellation result, reject a blank name without closing the dialog, verify recovery after validation, exercise Escape cancellation, and check that the initial form geometry exposes both primary actions. The full live Eeschema selection/extraction/registration workflow remains separately covered by the real KiCad IPC integration test.",
       "evidence": [
+        "tests/test_create_block_form_contracts.py",
         "tests/create_block_ipc_integration.py",
         "tests/capture_visual_docs.py"
       ],
@@ -367,6 +368,38 @@
       "screenshots": [
         "create-block-form-light.png",
         "create-block-form-dark.png"
+      ],
+      "controls": [
+        {
+          "contract_id": "create-block-form.window",
+          "type": "window",
+          "label": "Create Functional Block dialog",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "create-block-form.name",
+          "type": "entry",
+          "label": "Block name",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "create-block-form.description",
+          "type": "text",
+          "label": "Optional block description",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "create-block-form.action.create",
+          "type": "button",
+          "label": "Create Block",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "create-block-form.action.cancel",
+          "type": "button",
+          "label": "Cancel",
+          "assertion": "asserted"
+        }
       ]
     },
     {
