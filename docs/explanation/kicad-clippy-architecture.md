@@ -1,6 +1,6 @@
 # kicad-clippy: research and architecture proposal
 
-**Status:** Architecture approved; implementation has moved to the standalone [Uhrendoktor/kicad-clippy](https://github.com/Uhrendoktor/kicad-clippy) repository.  
+**Status:** Architecture and design record; implementation has moved to the standalone [Uhrendoktor/kicad-clippy](https://github.com/Uhrendoktor/kicad-clippy) repository.  
 **Current implementation:** The consolidated [kicad-clippy PR #27](https://github.com/Uhrendoktor/kicad-clippy/pull/27) carries the Rust workspace, native KiCad adapters, migrated schematic rules, and versioned project profiles. Earlier foundation/rules PRs #1–#4 were closed as superseded and are not the active review target.  
 **Remaining:** PR #27 explicitly tracks partial SCH004/SCH005/SCH009/SCH010/SCH012/SCH013 coverage; direct physical-connectivity inference, remaining layout rules, SARIF, verified fix/layout proposals, and GUI integration remain future work.
 
@@ -449,7 +449,7 @@ Preserve the current IDs during the port. The table below separates genuine kica
 | SCH017 | Circuit documentation and source evidence | Profile rule | Validate declared component/group purpose and evidence metadata. |
 | SCH018 | Label text collisions | kicad-clippy | General visual collision rule. |
 | SCH019 | Label-kind consistency | kicad-clippy + ERC boundary | Keep project-wide conventions; defer native same-local/global-label electrical conflicts to ERC. |
-| SCH020 | Component function and rationale documentation | Profile rule | Keep from the current hardening branch; make description requirements declarative and testable. |
+| SCH020 | Component function and rationale documentation | Profile rule | Preserve the rule from the merged STUSB4500 hardening change; keep description requirements declarative and testable. |
 
 The historical catalogue now has 20 IDs on main. SCH020 is part of the merged STUSB4500 hardening change and is included in the Rust migration; SCH021–SCH022 extend the standalone implementation with declarative component-intent and decoupling metadata.
 
@@ -640,7 +640,7 @@ Use snapshot tests to make diagnostic text and spans reviewable. Use property-ba
 - Agree the parser reuse decision and license review.
 - Agree the first supported KiCad CLI version and schema policy.
 
-**Exit condition:** Architecture and scope approved; no production linter code yet.
+**Exit condition:** Architecture and scope documented; production linter implementation is tracked separately.
 
 ### Phase 1 — foundation and native ERC adapter
 
@@ -652,6 +652,8 @@ Use snapshot tests to make diagnostic text and spans reviewable. Use property-ba
 - Provide rule registry, rule metadata and config loader with no custom rules yet.
 
 **Exit condition:** A command can run native ERC, preserve/parse findings and render precise native diagnostics without mutating the schematic.
+
+**Status:** The foundation is present in the standalone repository and is included in consolidated implementation PR #27; its final CI and merge state is tracked there.
 
 ### Phase 2 — generic custom rules
 
