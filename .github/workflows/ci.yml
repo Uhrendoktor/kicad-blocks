@@ -53,6 +53,13 @@ jobs:
             fi
             sleep "$((attempt * 5))"
           done
+            PPA_SOURCE="$(grep -rlF 'ppa.launchpadcontent.net/kicad/kicad-dev-nightly' /etc/apt/sources.list.d 2>/dev/null | head -n 1 || true)"
+            if [[ -z "$PPA_SOURCE" ]]; then
+              echo "::error::Could not locate the KiCad nightly PPA source entry."
+              exit 1
+            fi
+            "${SUDO[@]}" sed -i 's|ppa.launchpadcontent.net|ppa.launchpad.net|g' "$PPA_SOURCE"
+            grep -Fq 'ppa.launchpad.net/kicad/kicad-dev-nightly/ubuntu' "$PPA_SOURCE"
             "${SUDO[@]}" apt-get -o Acquire::Languages=none update
             "${SUDO[@]}" apt-get install -y --no-install-recommends kicad-nightly
             CLI="$(command -v kicad-cli-nightly || command -v kicad-cli || true)"
@@ -559,6 +566,13 @@ jobs:
           sudo apt-get -o Acquire::Languages=none update
           sudo apt-get install -y --no-install-recommends software-properties-common xvfb xdotool python3-tk
           sudo add-apt-repository --yes ppa:kicad/kicad-dev-nightly
+          PPA_SOURCE="$(sudo grep -rlF 'ppa.launchpadcontent.net/kicad/kicad-dev-nightly' /etc/apt/sources.list.d 2>/dev/null | head -n 1 || true)"
+          if [[ -z "$PPA_SOURCE" ]]; then
+            echo "::error::Could not locate the KiCad nightly PPA source entry."
+            exit 1
+          fi
+          sudo sed -i 's|ppa.launchpadcontent.net|ppa.launchpad.net|g' "$PPA_SOURCE"
+          sudo grep -Fq 'ppa.launchpad.net/kicad/kicad-dev-nightly/ubuntu' "$PPA_SOURCE"
           sudo apt-get -o Acquire::Languages=none update
           sudo apt-get install -y --no-install-recommends kicad-nightly
           CLI="$(command -v kicad-cli-nightly || command -v kicad-cli || true)"
