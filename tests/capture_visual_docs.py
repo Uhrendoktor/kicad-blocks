@@ -689,9 +689,9 @@ def capture_ui_workflows(
                     for widget in walk_widgets(root)
                     if widget.winfo_class() == "Canvas"
                     and isinstance(widget, tk.Canvas)
-                    and isinstance(
-                        getattr(widget, "native_schematic_preview_photo", None),
-                        tk.PhotoImage,
+                    and any(
+                        widget.type(item) == "image" and bool(widget.itemcget(item, "image"))
+                        for item in widget.find_withtag("kicad-schematic-preview")
                     )
                 ]
                 if not schematic_canvases:
