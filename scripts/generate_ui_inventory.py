@@ -114,7 +114,7 @@ def render_inventory(catalog: dict[str, Any]) -> str:
         f"| Partial | {counts['partial']} | Targeted GUI, integration, model, or screenshot checks exist; the full control matrix is not contracted. |",
         f"| Inventory only | {counts['inventory-only']} | Window/workflow is documented here; systematic interaction contracts remain future work. |",
         "",
-        "The first contract milestones cover Task Hub routing and navigation and the Add PCB layout dialog's application-owned controls. The Functional Block Library and implementation manager have substantial partial contract coverage. None of this implies that every downstream KiCad operation or native OS chooser has been proven.",
+        "Task Hub, both transient block choosers, Add PCB Layout, Manage Libraries, and PCB Layout Manager have full registered widget contracts. The Functional Block Library and implementation manager remain partial while every downstream KiCad operation and native OS chooser continues to be verified separately.",
         "",
         "## Screens",
         "",
