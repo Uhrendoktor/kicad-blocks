@@ -306,7 +306,7 @@ class EntryInputContract(ComponentContract[EntryInputObservation]):
         context.root.update_idletasks()
         context.root.update()
         results = cast(Treeview, context.require_widget(self.results_contract_id))
-        summary = cast(tk.Misc, context.require_widget(self.summary_contract_id))
+        summary = context.require_widget(self.summary_contract_id)
         summary_text = str(summary.cget("text"))
         text_variable = str(summary.cget("textvariable") or "")
         if text_variable:
@@ -344,7 +344,7 @@ class TreeSelectionContract(ComponentContract[TreeSelectionObservation]):
         tree.event_generate("<<TreeviewSelect>>")
         context.root.update_idletasks()
         context.root.update()
-        summary = cast(tk.Misc, context.require_widget(self.summary_contract_id))
+        summary = context.require_widget(self.summary_contract_id)
         summary_text = str(summary.cget("text"))
         text_variable = str(summary.cget("textvariable") or "")
         if text_variable:
@@ -420,7 +420,7 @@ class NotebookViewContract(ComponentContract[list[NotebookPageObservation]]):
             context.root.update()
             mapped = {
                 control_id: bool(
-                    cast(tk.Misc, context.require_widget(control_id)).winfo_ismapped()
+                    context.require_widget(control_id).winfo_ismapped()
                 )
                 for control_id in control_ids
             }
