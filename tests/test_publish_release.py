@@ -10,26 +10,14 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from scripts.github_api_types import GitHubApiResponse, GitHubRequestArgument
+
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "publish_release.py"
 SPEC = importlib.util.spec_from_file_location("publish_release", SCRIPT)
 if SPEC is None or SPEC.loader is None:
     raise RuntimeError("Could not load the release publisher.")
 publisher = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(publisher)
-
-
-class _Response:
-    def __init__(self, payload):
-        self.payload = json.dumps(payload).encode("utf-8")
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, *_args):
-        return False
-
-    def read(self):
-        return self.payload
 
 
 class PublishReleaseTests(unittest.TestCase):
@@ -42,24 +30,32 @@ class PublishReleaseTests(unittest.TestCase):
                 hashlib.sha256(archive.read_bytes()).hexdigest() + "  " + archive.name + "\n",
                 encoding="ascii",
             )
-            assets = []
-            calls = []
-            release = {
+            assets: list[GitHubApiResponse] = []
+            calls: list[tuple[str, str]] = []
+            release: GitHubApiResponse = {
                 "id": 99,
                 "tag_name": "v1.1.0",
                 "upload_url": "https://uploads.github.com/repos/owner/repo/releases/99/assets{?name,label}",
                 "assets": [],
             }
 
-            def fake_request(method, url, _token, **kwargs):
+            def fake_request(
+                method: str,
+                url: str,
+                _token: str,
+                **kwargs: GitHubRequestArgument,
+            ) -> GitHubApiResponse | None:
                 calls.append((method, url))
                 if method == "GET" and url.endswith("/releases/tags/v1.1.0"):
                     return None
                 if method == "POST" and url.endswith("/releases"):
-                    return dict(release)
+                    return release
                 if method == "POST" and url.startswith("https://uploads.github.com/"):
                     name = url.split("name=", 1)[1]
-                    payload = kwargs["body"]
+                    payload_value = kwargs["body"]
+                    if not isinstance(payload_value, bytes):
+                        raise AssertionError("Upload request did not include a byte payload.")
+                    payload = payload_value
                     from urllib.parse import unquote
 
                     name = unquote(name)
@@ -72,7 +68,8 @@ class PublishReleaseTests(unittest.TestCase):
                     )
                     return {}
                 if method == "GET" and url.endswith("/releases/99"):
-                    return {**release, "assets": list(assets)}
+                    response: GitHubApiResponse = {**release, "assets": list(assets)}
+                    return response
                 raise AssertionError((method, url))
 
             with patch.object(publisher, "_request", side_effect=fake_request):
@@ -95,7 +92,7 @@ class PublishReleaseTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             path = Path(temp) / "release.zip"
             path.write_bytes(b"new bytes")
-            release = {
+            release: GitHubApiResponse = {
                 "id": 10,
                 "tag_name": "v1.1.0",
                 "upload_url": "https://uploads.github.com/repos/owner/repo/releases/10/assets{?name,label}",

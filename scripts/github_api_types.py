@@ -8,6 +8,7 @@ from typing import TypedDict, cast
 
 type JSONValue = str | int | float | bool | None | list[JSONValue] | dict[str, JSONValue]
 type JSONObject = dict[str, JSONValue]
+type GitHubRequestArgument = JSONValue | bytes
 
 
 class GitHubApiResponse(TypedDict, total=False):
