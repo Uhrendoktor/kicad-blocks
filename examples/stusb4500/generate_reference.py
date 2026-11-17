@@ -13,9 +13,8 @@ import subprocess
 import sys
 import uuid
 from collections.abc import Iterator
-from typing import cast
 from pathlib import Path
-from typing import Literal, Required, TypedDict
+from typing import Literal, Required, TypedDict, cast
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "plugin" / "kicad-blocks"))
@@ -1760,16 +1759,16 @@ def generate_reference_schematic(destination: Path) -> Path:
                 cast(
                     SExprList,
                     [
-                    "junction",
-                    ["at", f"{point[0]:.3f}", f"{point[1]:.3f}"],
-                    ["diameter", "0"],
-                    ["color", "0", "0", "0", "0"],
-                    [
-                        "uuid",
-                        QuotedSExpr(
-                            reference_uid(f"junction:{net_name}:{point[0]:.3f}:{point[1]:.3f}")
-                        ),
-                    ],
+                        "junction",
+                        ["at", f"{point[0]:.3f}", f"{point[1]:.3f}"],
+                        ["diameter", "0"],
+                        ["color", "0", "0", "0", "0"],
+                        [
+                            "uuid",
+                            QuotedSExpr(
+                                reference_uid(f"junction:{net_name}:{point[0]:.3f}:{point[1]:.3f}")
+                            ),
+                        ],
                     ],
                 )
             )

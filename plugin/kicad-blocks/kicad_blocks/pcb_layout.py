@@ -520,7 +520,7 @@ def _matches_netclass_pattern(pattern: str, net_name: str) -> bool:
 
 
 def _read_netclass_definitions(
-    settings: Mapping[str, _JSONValue],
+    settings: KiCadNetSettings,
     *,
     source_name: str,
 ) -> list[KiCadNetclassDefinition]:
@@ -532,13 +532,10 @@ def _read_netclass_definitions(
     Raises:
         TypeError: If the project section is not an array of objects.
     """
-    raw_classes = settings.get("classes", [])
-    if not isinstance(raw_classes, list) or any(not isinstance(item, dict) for item in raw_classes):
-        raise TypeError(f"KiCad {source_name} net_settings.classes must be an array of objects.")
-    return cast(list[KiCadNetclassDefinition], raw_classes)
+    return list(settings.get("classes", []))
 
 
-def _read_netclass_patterns(settings: Mapping[str, _JSONValue]) -> list[KiCadNetclassPattern]:
+def _read_netclass_patterns(settings: KiCadNetSettings) -> list[KiCadNetclassPattern]:
     """Read and validate KiCad netclass pattern entries.
 
     Returns:
@@ -547,17 +544,7 @@ def _read_netclass_patterns(settings: Mapping[str, _JSONValue]) -> list[KiCadNet
     Raises:
         TypeError: If the pattern list or one of its required string fields is invalid.
     """
-    raw_patterns = settings.get("netclass_patterns", [])
-    if not isinstance(raw_patterns, list):
-        raise TypeError("KiCad net_settings.netclass_patterns must be an array.")
-    for entry in raw_patterns:
-        if (
-            not isinstance(entry, dict)
-            or not isinstance(entry.get("pattern"), str)
-            or not isinstance(entry.get("netclass"), str)
-        ):
-            raise TypeError("KiCad net_settings.netclass_patterns entries require string fields.")
-    return cast(list[KiCadNetclassPattern], raw_patterns)
+    return list(settings.get("netclass_patterns", []))
 
 
 def _collision_netclass_name(
