@@ -943,103 +943,124 @@ def render_native_svgs(cli: str, record: BlockRecord, output_dir: Path) -> None:
     shutil.rmtree(schematic_dir)
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--output-dir", type=Path, required=True)
-    args = parser.parse_args()
-    output_dir = args.output_dir.expanduser().resolve()
-    output_dir.mkdir(parents=True, exist_ok=True)
-    cli = os.environ.get("KICAD_CLI") or find_executable("kicad-cli-nightly", "kicad-cli")
 
-    with tempfile.TemporaryDirectory(prefix="kicad-blocks-visual-docs-") as temporary:
-        library = Path(temporary) / "library"
-        sensor = create_block(
-            library,
-            "Sensor Input",
-            parse_pins("SENSOR:input, GND:passive"),
-            description="A second library entry used to demonstrate searchable filtering.",
-        )
-        reference_source = Path(temporary) / "stusb4500-reference.kicad_sch"
-        generate_reference_schematic(reference_source)
-        layout_source = Path(temporary) / "stusb4500-reference.kicad_pcb"
-        layout_source.write_text("(kicad_pcb)\n", encoding="utf-8")
-        parameters: list[BlockParameterInput] = [
-            {
-                "name": "PDO_CURRENT_A",
-                "type": "number",
-                "default": "2.4",
-                "description": "Current rating of the selected sink PDO in amperes.",
-            }
-        ]
-        variant_files: list[BlockVariantInput] = [
-            {"value": "5V", "path": reference_source},
-            {"value": "9V", "path": reference_source},
-            {"value": "12V", "path": reference_source},
-        ]
-        layout_files: list[BlockLayoutInput] = [{"name": "Reference PCB", "path": layout_source}]
-        profiles: list[BlockProfileInput] = [
-            {
-                "id": "pdo1_5v_2a4",
-                "name": "5 V / 2.4 A (PDO1)",
-                "description": "Datasheet Table 19 example: fixed 5 V sink PDO.",
-                "variant": "5V",
-                "parameters": {"PDO_CURRENT_A": "2.4"},
-            },
-            {
-                "id": "pdo2_9v_1a33",
-                "name": "9 V / 1.33 A (PDO2)",
-                "description": "Datasheet Table 19 example: 9 V sink PDO.",
-                "variant": "9V",
-                "parameters": {"PDO_CURRENT_A": "1.33"},
-            },
-            {
-                "id": "pdo3_12v_1a",
-                "name": "12 V / 1.0 A (PDO3)",
-                "description": "Datasheet Table 19 example: 12 V sink PDO.",
-                "variant": "12V",
-                "parameters": {"PDO_CURRENT_A": "1.0"},
-            },
-        ]
-        target = create_block(
-            library,
-            "STUSB4500 USB-PD Sink",
-            parse_pins(
-                "VBUS:input, GND:passive, CC1:bidir, CC2:bidir, VSNK:output, "
-                "SCL:input, SDA:bidir, ALERT#:output, RESET:input, VMCU:input"
-            ),
-            description=(
-                "STUSB4500QTR USB Type-C PD sink reference circuit based on "
-                "ST DS12499 Rev. 8 Figure 10."
-            ),
-            parameters=parameters,
-            variant_files=variant_files,
-            layout_files=layout_files,
-            profiles=profiles,
-        )
-        shutil.copy2(reference_source, target.implementation)
-        manifest_path = target.path / "manifest.json"
-        manifest = cast(BlockManifest, json.loads(manifest_path.read_text(encoding="utf-8")))
-        manifest["hashes"]["implementation.kicad_sch"] = hashlib.sha256(
-            target.implementation.read_bytes()
-        ).hexdigest()
-        manifest["revision"] = revision_for_hashes(manifest["hashes"])
-        manifest_path.write_text(
-            json.dumps(manifest, indent=2, ensure_ascii=False) + "\n",
-            encoding="utf-8",
-        )
-        target.manifest.update(manifest)
-        render_native_svgs(cli, target, output_dir)
-        extra_library = Path(temporary) / "support-library"
-        create_block(
-            extra_library,
-            "USB Protection",
-            parse_pins("VBUS:input, GND:passive, USB_P:bidirectional, USB_N:bidirectional"),
-            description="Input ESD protection and common-mode filtering.",
-        )
-        capture_ui_workflows([library, extra_library], target, Path(temporary), output_dir)
-        capture_picker([target, sensor], output_dir)
-        build_gif(output_dir)
 
+def _create_sensor_fixture(library: Path) -> BlockRecord:
+    return create_block(
+        library,
+        "Sensor Input",
+        parse_pins("SENSOR:input, GND:passive"),
+        description="A second library entry used to demonstrate searchable filtering.",
+    )
+
+
+def _create_reference_source(
+    temporary: Path,
+) -> tuple[
+    Path,
+    Path,
+    list[BlockParameterInput],
+    list[BlockVariantInput],
+    list[BlockLayoutInput],
+    list[BlockProfileInput],
+]:
+    reference_source = temporary / "stusb4500-reference.kicad_sch"
+    generate_reference_schematic(reference_source)
+    layout_source = temporary / "stusb4500-reference.kicad_pcb"
+    layout_source.write_text("(kicad_pcb)\\n", encoding="utf-8")
+    parameters: list[BlockParameterInput] = [
+        {
+            "name": "PDO_CURRENT_A",
+            "type": "number",
+            "default": "2.4",
+            "description": "Current rating of the selected sink PDO in amperes.",
+        }
+    ]
+    variant_files: list[BlockVariantInput] = [
+        {"value": "5V", "path": reference_source},
+        {"value": "9V", "path": reference_source},
+        {"value": "12V", "path": reference_source},
+    ]
+    layout_files: list[BlockLayoutInput] = [{"name": "Reference PCB", "path": layout_source}]
+    profiles: list[BlockProfileInput] = [
+        {
+            "id": "pdo1_5v_2a4",
+            "name": "5 V / 2.4 A (PDO1)",
+            "description": "Datasheet Table 19 example: fixed 5 V sink PDO.",
+            "variant": "5V",
+            "parameters": {"PDO_CURRENT_A": "2.4"},
+        },
+        {
+            "id": "pdo2_9v_1a33",
+            "name": "9 V / 1.33 A (PDO2)",
+            "description": "Datasheet Table 19 example: 9 V sink PDO.",
+            "variant": "9V",
+            "parameters": {"PDO_CURRENT_A": "1.33"},
+        },
+        {
+            "id": "pdo3_12v_1a",
+            "name": "12 V / 1.0 A (PDO3)",
+            "description": "Datasheet Table 19 example: 12 V sink PDO.",
+            "variant": "12V",
+            "parameters": {"PDO_CURRENT_A": "1.0"},
+        },
+    ]
+    return reference_source, layout_source, parameters, variant_files, layout_files, profiles
+
+
+def _create_stusb4500_fixture(
+    library: Path,
+    temporary: Path,
+    cli: str,
+    output_dir: Path,
+) -> BlockRecord:
+    reference_source, _layout_source, parameters, variants, layouts, profiles = (
+        _create_reference_source(temporary)
+    )
+    target = create_block(
+        library,
+        "STUSB4500 USB-PD Sink",
+        parse_pins(
+            "VBUS:input, GND:passive, CC1:bidir, CC2:bidir, VSNK:output, "
+            "SCL:input, SDA:bidir, ALERT#:output, RESET:input, VMCU:input"
+        ),
+        description=(
+            "STUSB4500QTR USB Type-C PD sink reference circuit based on "
+            "ST DS12499 Rev. 8 Figure 10."
+        ),
+        parameters=parameters,
+        variant_files=variants,
+        layout_files=layouts,
+        profiles=profiles,
+    )
+    shutil.copy2(reference_source, target.implementation)
+    manifest_path = target.path / "manifest.json"
+    manifest = cast(BlockManifest, json.loads(manifest_path.read_text(encoding="utf-8")))
+    manifest["hashes"]["implementation.kicad_sch"] = hashlib.sha256(
+        target.implementation.read_bytes()
+    ).hexdigest()
+    manifest["revision"] = revision_for_hashes(manifest["hashes"])
+    manifest_path.write_text(
+        json.dumps(manifest, indent=2, ensure_ascii=False) + "\\n",
+        encoding="utf-8",
+    )
+    target.manifest.update(manifest)
+    render_native_svgs(cli, target, output_dir)
+    return target
+
+
+def _create_support_library(temporary: Path) -> Path:
+    extra_library = temporary / "support-library"
+    create_block(
+        extra_library,
+        "USB Protection",
+        parse_pins("VBUS:input, GND:passive, USB_P:bidirectional, USB_N:bidirectional"),
+        description="Input ESD protection and common-mode filtering.",
+    )
+    return extra_library
+
+
+def _write_bundle_manifest(output_dir: Path) -> None:
     assets: dict[str, str] = {}
     for name in sorted(ASSET_NAMES):
         path = output_dir / name
@@ -1065,15 +1086,35 @@ def main() -> int:
         "assets": assets,
     }
     (output_dir / "manifest.json").write_text(
-        json.dumps(bundle_manifest, indent=2, sort_keys=True) + "\n",
+        json.dumps(bundle_manifest, indent=2, sort_keys=True) + "\\n",
         encoding="utf-8",
     )
     print(
         f"kicad-visual-docs=passed asset_count={len(assets)} "
         f"source_sha={bundle_manifest['source_sha']} output={output_dir}"
     )
-    return 0
 
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--output-dir", type=Path, required=True)
+    args = parser.parse_args()
+    output_dir = args.output_dir.expanduser().resolve()
+    output_dir.mkdir(parents=True, exist_ok=True)
+    cli = os.environ.get("KICAD_CLI") or find_executable("kicad-cli-nightly", "kicad-cli")
+
+    with tempfile.TemporaryDirectory(prefix="kicad-blocks-visual-docs-") as temporary_name:
+        temporary = Path(temporary_name)
+        library = temporary / "library"
+        sensor = _create_sensor_fixture(library)
+        target = _create_stusb4500_fixture(library, temporary, cli, output_dir)
+        extra_library = _create_support_library(temporary)
+        capture_ui_workflows([library, extra_library], target, temporary, output_dir)
+        capture_picker([target, sensor], output_dir)
+        build_gif(output_dir)
+
+    _write_bundle_manifest(output_dir)
+    return 0
 
 if __name__ == "__main__":
     raise SystemExit(main())
