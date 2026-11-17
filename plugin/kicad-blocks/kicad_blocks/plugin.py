@@ -1550,7 +1550,9 @@ def _pick_record(records, parent, title: str):
         record = records_by_id.get(selection[0]) if selection else None
         selected_record[0] = record
         if record is None:
-            description.configure(text="")
+            description.configure(
+                text="No matching blocks." if not tree.get_children() else ""
+            )
             select_button.configure(state="disabled")
         else:
             description.configure(text=short_description(record))
