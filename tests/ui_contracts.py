@@ -11,9 +11,10 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from collections.abc import Iterator
 from dataclasses import dataclass, field
-from typing import Generic, TypeVar, TypedDict, cast
-import tkinter as tk
-from tkinter import ttk
+from typing import TYPE_CHECKING, Generic, TypeVar, TypedDict, cast
+
+if TYPE_CHECKING:
+    import tkinter as tk
 
 
 class MenuEntry:
@@ -81,7 +82,6 @@ class PaneGroupObservation(TypedDict):
     panes: dict[str, PaneObservation]
 
 
-UiWidget = tk.Misc | MenuEntry
 ObservationT = TypeVar("ObservationT")
 
 
@@ -158,10 +158,12 @@ class ComponentContract(ABC, Generic[ObservationT]):
 
 
 def _open_toplevels(root: tk.Tk) -> dict[int, str]:
+    from tkinter import Toplevel
+
     windows: dict[int, str] = {}
     for child in root.winfo_children():
         if child.winfo_class() == "Toplevel":
-            window = cast(tk.Toplevel, child)
+            window = cast(Toplevel, child)
             windows[window.winfo_id()] = window.title()
     return windows
 
@@ -214,7 +216,9 @@ class ButtonContract(ComponentContract[ButtonObservation]):
     expected_label: str | None = None
 
     def execute(self, context: UiTestContext) -> ButtonObservation:
-        button = cast(ttk.Button, context.require_widget(self.contract_id))
+        from tkinter.ttk import Button
+
+        button = cast(Button, context.require_widget(self.contract_id))
         label = str(button.cget("text"))
         existing_toplevels = _open_toplevels(context.root)
         result = cast(str | int | None, button.invoke())
@@ -294,12 +298,14 @@ class EntryInputContract(ComponentContract[EntryInputObservation]):
     expected_summary: str
 
     def execute(self, context: UiTestContext) -> EntryInputObservation:
-        entry = cast(ttk.Entry, context.require_widget(self.contract_id))
+        from tkinter.ttk import Entry, Treeview
+
+        entry = cast(Entry, context.require_widget(self.contract_id))
         entry.delete(0, "end")
         entry.insert(0, self.value)
         context.root.update_idletasks()
         context.root.update()
-        results = cast(ttk.Treeview, context.require_widget(self.results_contract_id))
+        results = cast(Treeview, context.require_widget(self.results_contract_id))
         summary = cast(tk.Misc, context.require_widget(self.summary_contract_id))
         summary_text = str(summary.cget("text"))
         text_variable = str(summary.cget("textvariable") or "")
@@ -330,7 +336,9 @@ class TreeSelectionContract(ComponentContract[TreeSelectionObservation]):
     expected_values: tuple[str, ...] | None = None
 
     def execute(self, context: UiTestContext) -> TreeSelectionObservation:
-        tree = cast(ttk.Treeview, context.require_widget(self.contract_id))
+        from tkinter.ttk import Treeview
+
+        tree = cast(Treeview, context.require_widget(self.contract_id))
         tree.selection_set(self.row_id)
         tree.focus(self.row_id)
         tree.event_generate("<<TreeviewSelect>>")
@@ -366,7 +374,9 @@ class ChoiceViewContract(ComponentContract[ChoiceViewObservation]):
     expected_event: str
 
     def execute(self, context: UiTestContext) -> ChoiceViewObservation:
-        choice = cast(ttk.Combobox, context.require_widget(self.contract_id))
+        from tkinter.ttk import Combobox
+
+        choice = cast(Combobox, context.require_widget(self.contract_id))
         choice.set(self.value)
         choice.event_generate("<<ComboboxSelected>>")
         context.root.update_idletasks()
@@ -390,7 +400,9 @@ class NotebookViewContract(ComponentContract[list[NotebookPageObservation]]):
     views: tuple[tuple[str, tuple[str, ...]], ...]
 
     def execute(self, context: UiTestContext) -> list[NotebookPageObservation]:
-        notebook = cast(ttk.Notebook, context.require_widget(self.contract_id))
+        from tkinter.ttk import Notebook
+
+        notebook = cast(Notebook, context.require_widget(self.contract_id))
         observations: list[NotebookPageObservation] = []
         for label, control_ids in self.views:
             tab_id = next(
@@ -441,7 +453,9 @@ class PaneGroupContract(ComponentContract[PaneGroupObservation]):
     pane_ids: tuple[str, ...]
 
     def execute(self, context: UiTestContext) -> PaneGroupObservation:
-        group = cast(ttk.Panedwindow, context.require_widget(self.contract_id))
+        from tkinter.ttk import Panedwindow
+
+        group = cast(Panedwindow, context.require_widget(self.contract_id))
         context.root.update_idletasks()
         context.root.update()
         panes: dict[str, tk.Misc] = {}
@@ -513,13 +527,15 @@ def _walk_widget_children(widget: tk.Misc) -> Iterator[tk.Misc]:
         yield from _walk_widget_children(child)
 
 
-def discover_interactive_controls(root: tk.Misc) -> dict[str, UiWidget]:
+def discover_interactive_controls(root: tk.Misc) -> dict[str, tk.Misc | MenuEntry]:
     """Return all tagged action/view controls, including registered menu items.
 
     The discovery list is intentionally limited to controls with an interaction
     contract. Static labels and decorative frames are not actionable controls.
     """
-    discovered: dict[str, UiWidget] = {}
+    from tkinter import Menu
+
+    discovered: dict[str, tk.Misc | MenuEntry] = {}
     for widget in _walk_widgets(root):
         widget_class = widget.winfo_class()
         contract_id = cast(str | None, getattr(widget, "_kicad_ui_contract_id", None))
@@ -529,7 +545,7 @@ def discover_interactive_controls(root: tk.Misc) -> dict[str, UiWidget]:
             discovered[contract_id] = widget
 
         if widget_class == "Menu":
-            menu = cast(tk.Menu, widget)
+            menu = cast(Menu, widget)
             menu_items = cast(
                 dict[str, int], getattr(menu, "_kicad_ui_menu_item_ids", {})
             )
@@ -542,8 +558,10 @@ def discover_interactive_controls(root: tk.Misc) -> dict[str, UiWidget]:
 
 def assert_control_coverage(
     root: tk.Misc, expected_ids: set[str]
-) -> dict[str, UiWidget]:
+) -> dict[str, tk.Misc | MenuEntry]:
     """Fail when an interactive widget is untagged or outside the declared map."""
+    from tkinter import Menu
+
     missing_tags: list[str] = []
     for widget in _walk_widgets(root):
         widget_class = widget.winfo_class()
@@ -552,7 +570,7 @@ def assert_control_coverage(
             if not contract_id:
                 missing_tags.append(widget_class)
         elif widget_class == "Menu":
-            menu = cast(tk.Menu, widget)
+            menu = cast(Menu, widget)
             menu_items = cast(
                 dict[str, int], getattr(menu, "_kicad_ui_menu_item_ids", {})
             )

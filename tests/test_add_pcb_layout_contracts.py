@@ -6,9 +6,14 @@ import os
 import sys
 from collections.abc import Callable
 from pathlib import Path
-from tkinter import Tk, Toplevel
-from typing import cast
 from types import SimpleNamespace
+from typing import TYPE_CHECKING, cast
+
+if TYPE_CHECKING:
+    from tkinter import Tk, Toplevel
+else:
+    Tk = object
+    Toplevel = object
 
 import pytest
 
@@ -122,7 +127,7 @@ def test_add_pcb_layout_creates_blank_board_and_returns_selection(
     observed = {}
 
     def interact(dialog):
-        assert dialog._kicad_ui_screen_id == "add-pcb-layout"
+        assert getattr(dialog, "_kicad_ui_screen_id", None) == "add-pcb-layout"
         assert_control_coverage(dialog, ADD_LAYOUT_CONTROLS)
         context.refresh_widgets()
         _contract_button(context, "add-pcb-layout.add", "Add layout", closes=True)
