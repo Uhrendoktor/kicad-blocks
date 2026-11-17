@@ -16,10 +16,10 @@ from collections.abc import Callable
 from pathlib import Path
 from types import SimpleNamespace
 from typing import TYPE_CHECKING, cast
+from unittest.mock import patch
 
 if TYPE_CHECKING:
     from tkinter import Misc
-from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 PLUGIN = ROOT / "plugin" / "kicad-blocks"
@@ -236,17 +236,17 @@ def _enable_eeschema_ipc(home: Path, version: str, python_interpreter: str) -> N
 def _initialize_eeschema_ipc_profile(
     eeschema: str,
     schematic_path: Path,
-    root: Path,
+    home: Path,
     env: dict[str, str],
     xdotool: str,
     version: str,
     python_interpreter: str,
 ) -> None:
     """Run the one-time profile bootstrap and enable Eeschema's IPC server."""
-    first_log = root / "create-block-first-run.log"
+    first_log = home.parent / "create-block-first-run.log"
     first_process, first_window = launch(eeschema, schematic_path, env, xdotool, first_log)
     close_editor(first_process, first_window, xdotool)
-    _enable_eeschema_ipc(root / "eeschema-home", version, python_interpreter)
+    _enable_eeschema_ipc(home, version, python_interpreter)
 
 
 def _connect_live_eeschema(
@@ -308,7 +308,7 @@ def _open_live_eeschema(
     _initialize_eeschema_ipc_profile(
         eeschema,
         schematic_path,
-        root,
+        home,
         env,
         xdotool,
         version_match.group(1),
@@ -394,7 +394,6 @@ def _validate_hierarchy_fixture(
 
 def _show_info(*_args: str) -> None:
     """Suppress informational dialogs during the live IPC acceptance run."""
-    return None
 
 
 def main() -> None:
