@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Generic, TypeVar, TypedDict, cast
 
 if TYPE_CHECKING:
     import tkinter as tk
+    from tkinter.ttk import Button, Combobox, Entry, Notebook, Panedwindow, Treeview
 
 
 class MenuEntry:
@@ -132,6 +133,42 @@ class UiTestContext:
             return self.menu_entries[contract_id]
         except KeyError as exc:
             raise AssertionError(f"No Tk menu entry is registered as {contract_id!r}.") from exc
+
+    def require_treeview(self, contract_id: str) -> Treeview:
+        """Return one registered ttk Treeview with its row/selection API."""
+        from tkinter.ttk import Treeview
+
+        return cast(Treeview, self.require_widget(contract_id))
+
+    def require_combobox(self, contract_id: str) -> Combobox:
+        """Return one registered ttk Combobox with its choice API."""
+        from tkinter.ttk import Combobox
+
+        return cast(Combobox, self.require_widget(contract_id))
+
+    def require_entry(self, contract_id: str) -> Entry:
+        """Return one registered ttk Entry with its text-input API."""
+        from tkinter.ttk import Entry
+
+        return cast(Entry, self.require_widget(contract_id))
+
+    def require_button(self, contract_id: str) -> Button:
+        """Return one registered ttk Button with its invocation/state API."""
+        from tkinter.ttk import Button
+
+        return cast(Button, self.require_widget(contract_id))
+
+    def require_notebook(self, contract_id: str) -> Notebook:
+        """Return one registered ttk Notebook with its page-selection API."""
+        from tkinter.ttk import Notebook
+
+        return cast(Notebook, self.require_widget(contract_id))
+
+    def require_panedwindow(self, contract_id: str) -> Panedwindow:
+        """Return one registered ttk Panedwindow with its child-pane API."""
+        from tkinter.ttk import Panedwindow
+
+        return cast(Panedwindow, self.require_widget(contract_id))
 
 
 class ComponentContract(ABC, Generic[ObservationT]):
