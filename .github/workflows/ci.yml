@@ -56,7 +56,18 @@ jobs:
               attempt=$(( attempt + 1 ))
             done
             "${SUDO[@]}" apt-get update
-            "${SUDO[@]}" apt-get install -y --no-install-recommends kicad-nightly
+            attempt=1
+            until "${SUDO[@]}" apt-get -o Acquire::Retries=3 install -y --no-install-recommends kicad-nightly; do
+              if (( attempt >= 4 )); then
+                echo "::error::Unable to download the KiCad nightly packages after ${attempt} install attempts."
+                exit 1
+              fi
+              delay=$(( 5 * 2 ** (attempt - 1) ))
+              echo "::warning::KiCad nightly package fetch failed; retrying in ${delay}s (attempt ${attempt}/4)."
+              sleep "$delay"
+              "${SUDO[@]}" apt-get update
+              attempt=$(( attempt + 1 ))
+            done
             CLI="$(command -v kicad-cli-nightly || command -v kicad-cli || true)"
           fi
           if [[ -z "$CLI" ]]; then
@@ -519,7 +530,18 @@ jobs:
             attempt=$(( attempt + 1 ))
           done
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends kicad-nightly
+          attempt=1
+          until sudo apt-get -o Acquire::Retries=3 install -y --no-install-recommends kicad-nightly; do
+            if (( attempt >= 4 )); then
+              echo "::error::Unable to download the KiCad nightly packages after ${attempt} install attempts."
+              exit 1
+            fi
+            delay=$(( 5 * 2 ** (attempt - 1) ))
+            echo "::warning::KiCad nightly package fetch failed; retrying in ${delay}s (attempt ${attempt}/4)."
+            sleep "$delay"
+            sudo apt-get update
+            attempt=$(( attempt + 1 ))
+          done
           CLI="$(command -v kicad-cli-nightly || command -v kicad-cli || true)"
           if [[ -z "$CLI" ]]; then
             echo "::error::KiCad CLI was not installed."
