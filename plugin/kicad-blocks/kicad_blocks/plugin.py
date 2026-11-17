@@ -1433,6 +1433,8 @@ def _pick_record(records, parent, title: str):
         return records[0]
 
     dialog = tk.Toplevel(parent)
+    dialog._kicad_ui_screen_id = "record-picker"
+    dialog._kicad_ui_contract_id = "record-picker.window"
     dialog.title(title)
     dialog.transient(parent)
 
@@ -1441,6 +1443,7 @@ def _pick_record(records, parent, title: str):
     ttk.Label(outer, text="Search the block library").pack(anchor="w")
     search = tk.StringVar()
     search_entry = ttk.Entry(outer, textvariable=search)
+    search_entry._kicad_ui_contract_id = "record-picker.search"
     search_entry.pack(fill="x", pady=(4, 3))
     results_frame = ttk.Frame(outer)
     results_frame.pack(fill="both", expand=True)
@@ -1452,6 +1455,7 @@ def _pick_record(records, parent, title: str):
         show="headings",
         selectmode="browse",
     )
+    tree._kicad_ui_contract_id = "record-picker.results"
     tree.heading("block", text="Block")
     tree.heading("library", text="Library")
     tree.heading("pins", text="Pins")
@@ -1476,6 +1480,7 @@ def _pick_record(records, parent, title: str):
         wraplength=700,
         justify="left",
     )
+    description._kicad_ui_contract_id = "record-picker.description"
     description.pack(fill="x", anchor="w", pady=(8, 0))
     palette = getattr(parent, "_kicad_blocks_palette", {})
     count_label = ttk.Label(
@@ -1483,6 +1488,7 @@ def _pick_record(records, parent, title: str):
         foreground=palette.get("muted", "#5f6871"),
         font=("TkDefaultFont", 8),
     )
+    count_label._kicad_ui_contract_id = "record-picker.count"
     count_label.pack(anchor="w", pady=(3, 0))
 
     def short_description(record) -> str:
@@ -1495,10 +1501,12 @@ def _pick_record(records, parent, title: str):
     select_button = _action_button(
         outer, "Select block", lambda: None, "select",
         "Use the highlighted block", state="disabled",
+        contract_id="record-picker.action.select",
     )
     select_button.pack(side="right", pady=(10, 0))
     _action_button(
         outer, "Cancel", dialog.destroy, "cancel", "Close without selecting a block",
+        contract_id="record-picker.action.cancel",
     ).pack(side="right", padx=(0, 8), pady=(10, 0))
 
     def render_results(*_args):
