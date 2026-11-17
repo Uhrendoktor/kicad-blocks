@@ -373,11 +373,10 @@
       "id": "manage-libraries",
       "title": "Manage Libraries",
       "purpose": "Register, create, change, and remove shared library roots.",
-      "coverage": "partial",
-      "coverage_note": "The library-root manager is captured and has domain-level coverage for root configuration. Native chooser cancellation and all UI action outcomes are not yet contract-tested.",
+      "coverage": "contracted",
+      "coverage_note": "All registered controls are discovered on the production dialog. Real Tk button invocations verify add-existing, create, change-folder, unregister, set-default and close; selection-dependent enabled states; chooser and confirmation cancellation; persistent registration changes; default fallback; and preservation of unregistered folders.",
       "evidence": [
-        "tests/test_library_browser.py",
-        "tests/capture_visual_docs.py"
+        "tests/test_library_and_pcb_manager_contracts.py"
       ],
       "functionality": [
         "Add or create a library root",
@@ -388,6 +387,62 @@
       "screenshots": [
         "library-folders-light.png",
         "library-folders-dark.png"
+      ],
+      "controls": [
+        {
+          "contract_id": "manage-libraries.window",
+          "type": "window",
+          "label": "Manage Libraries dialog",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "manage-libraries.rows",
+          "type": "treeview",
+          "label": "Registered library rows",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "manage-libraries.status",
+          "type": "status-label",
+          "label": "Registered-library count",
+          "assertion": "observed"
+        },
+        {
+          "contract_id": "manage-libraries.action.add",
+          "type": "button",
+          "label": "Add existing library",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "manage-libraries.action.create",
+          "type": "button",
+          "label": "Create library",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "manage-libraries.action.change",
+          "type": "button",
+          "label": "Change folder",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "manage-libraries.action.unregister",
+          "type": "button",
+          "label": "Unregister library",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "manage-libraries.action.default",
+          "type": "button",
+          "label": "Set default library",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "manage-libraries.action.close",
+          "type": "button",
+          "label": "Close",
+          "assertion": "asserted"
+        }
       ]
     },
     {
@@ -583,11 +638,11 @@
       "id": "pcb-layout-manager",
       "title": "PCB Layout Manager",
       "purpose": "Maintain stored PCB layouts, default selection, and implementation associations.",
-      "coverage": "partial",
-      "coverage_note": "The manager is captured in both themes and layout/model changes have substantial unit coverage. The full UI state matrix and persistence failure paths do not yet have component contracts.",
+      "coverage": "contracted",
+      "coverage_note": "All registered controls are discovered on the production dialog. Real Tk invocations verify default-layout persistence, variant association, remove and asset cleanup, confirmation cancellation, add/copy into the block, save-failure retry, no-selection disabled states, and close/save behavior.",
       "evidence": [
-        "tests/test_library_browser.py",
-        "tests/capture_visual_docs.py"
+        "tests/test_library_and_pcb_manager_contracts.py",
+        "tests/test_add_pcb_layout_contracts.py"
       ],
       "functionality": [
         "Add, remove, or set a layout as Default",
@@ -598,6 +653,68 @@
       "screenshots": [
         "pcb-layout-manager-light.png",
         "pcb-layout-manager-dark.png"
+      ],
+      "controls": [
+        {
+          "contract_id": "pcb-layout-manager.window",
+          "type": "window",
+          "label": "PCB Layout Manager dialog",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "pcb-layout-manager.rows",
+          "type": "treeview",
+          "label": "Stored PCB layouts",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "pcb-layout-manager.status",
+          "type": "status-label",
+          "label": "Save and recovery status",
+          "assertion": "observed"
+        },
+        {
+          "contract_id": "pcb-layout-manager.implementation",
+          "type": "combobox",
+          "label": "Implementation association selector",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "pcb-layout-manager.action.add",
+          "type": "button",
+          "label": "Add layout",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "pcb-layout-manager.action.remove",
+          "type": "button",
+          "label": "Remove layout",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "pcb-layout-manager.action.default",
+          "type": "button",
+          "label": "Set default",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "pcb-layout-manager.action.assign",
+          "type": "button",
+          "label": "Assign implementation",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "pcb-layout-manager.action.close",
+          "type": "button",
+          "label": "Close",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "pcb-layout-manager.action.save-close",
+          "type": "button",
+          "label": "Save and close",
+          "assertion": "asserted"
+        }
       ]
     },
     {
