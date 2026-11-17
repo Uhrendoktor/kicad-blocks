@@ -338,8 +338,6 @@ def synchronize_block_dependencies(
     )
     try:
         schematic = kicad.get_schematic()
-        if schematic is None:
-            raise RuntimeError(f"KiCad could not open {parent.name!r} for dependency discovery.")
         typed_schematic = cast(_SchematicForDependencyScan, schematic)
         occurrences = discover_block_dependencies(
             parent,

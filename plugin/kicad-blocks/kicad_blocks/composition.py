@@ -43,10 +43,13 @@ class _LabelWithSpinStyle(Protocol):
 
 
 class _Position2D(Protocol):
-    """Coordinate properties consumed from KiCad geometry objects."""
+    """Read-only coordinate properties consumed from KiCad geometry objects."""
 
-    x: int | float
-    y: int | float
+    @property
+    def x(self) -> float: ...
+
+    @property
+    def y(self) -> float: ...
 
 
 class _LabelText(Protocol):

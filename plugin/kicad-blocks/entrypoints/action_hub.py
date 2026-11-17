@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import sys
+from collections.abc import Iterator
 from importlib import import_module
 from pathlib import Path
+from typing import Protocol, cast
 
 # KiCad runs this file from the entrypoints directory. Add the plugin root so
 # the package import is stable for both the managed runtime and direct tests.
@@ -16,6 +18,14 @@ plugin_module = import_module("kicad_blocks.plugin")
 run_action = plugin_module.run_action
 
 
+class _Widget(Protocol):
+    """Minimal Tk widget interface used by the action-hub smoke test."""
+
+    def winfo_children(self) -> list[_Widget]: ...
+
+    def cget(self, option: str) -> str | bytes: ...
+
+
 def _smoke_test() -> None:
     """Build and inspect the real Tk task hub without a window-manager dependency."""
     plugin_module._load_tkinter()
@@ -25,14 +35,14 @@ def _smoke_test() -> None:
         root.update()
         tab_names = [notebook.tab(tab_id, "text") for tab_id in notebook.tabs()]
 
-        def descendants(widget):
+        def descendants(widget: _Widget) -> Iterator[_Widget]:
             for child in widget.winfo_children():
                 yield child
                 yield from descendants(child)
 
         buttons = {
             str(widget.cget("text"))
-            for widget in descendants(root)
+            for widget in descendants(cast(_Widget, root))
             if isinstance(widget, plugin_module.ttk.Button)
         }
         expected_tabs = ["Use & build", "Edit & maintain", "Checks & PCB"]
