@@ -301,30 +301,31 @@ def _assert_local_sync_conflict(
     kicad: KiCadApp,
     project_dir: Path,
 ) -> None:
-        local_before_conflict = local.implementation.read_text(encoding="utf-8")
-        source_before_conflict = block.implementation.read_text(encoding="utf-8")
-        local.implementation.write_text(
-            local_before_conflict + "\n; local concurrent edit\n",
-            encoding="utf-8",
-        )
-        block.implementation.write_text(
-            source_before_conflict + "\n; library concurrent edit\n",
-            encoding="utf-8",
-        )
-        try:
-            sync_selected_local(cast(Schematic, selection), cast(KiCadApp, kicad), project_dir)
-        except RuntimeError as conflict_error:
-            if "Synchronization conflict" not in str(conflict_error):
-                raise
-        else:
-            raise AssertionError("Divergent local/library edits were not rejected.")
-        if "; local concurrent edit" not in local.implementation.read_text(encoding="utf-8"):
-            raise AssertionError("Conflict detection overwrote the local version.")
-        if "; library concurrent edit" not in block.implementation.read_text(encoding="utf-8"):
-            raise AssertionError("Conflict detection overwrote the library version.")
+    local_before_conflict = local.implementation.read_text(encoding="utf-8")
+    source_before_conflict = block.implementation.read_text(encoding="utf-8")
+    local.implementation.write_text(
+        local_before_conflict + "\n; local concurrent edit\n",
+        encoding="utf-8",
+    )
+    block.implementation.write_text(
+        source_before_conflict + "\n; library concurrent edit\n",
+        encoding="utf-8",
+    )
+    try:
+        sync_selected_local(cast(Schematic, selection), cast(KiCadApp, kicad), project_dir)
+    except RuntimeError as conflict_error:
+        if "Synchronization conflict" not in str(conflict_error):
+            raise
+    else:
+        raise AssertionError("Divergent local/library edits were not rejected.")
+    if "; local concurrent edit" not in local.implementation.read_text(encoding="utf-8"):
+        raise AssertionError("Conflict detection overwrote the local version.")
+    if "; library concurrent edit" not in block.implementation.read_text(encoding="utf-8"):
+        raise AssertionError("Conflict detection overwrote the library version.")
 
 
- 
+
+
 def _validate_local_sync(
     block: BlockRecord,
     local: BlockRecord,
