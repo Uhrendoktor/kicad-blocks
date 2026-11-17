@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from typing import NotRequired, TypedDict, cast
+from typing import TypedDict, cast
 
 
 type JSONValue = str | int | float | bool | None | list[JSONValue] | dict[str, JSONValue]

@@ -13,6 +13,13 @@ import shutil
 import sys
 import tempfile
 import uuid
+from collections.abc import Sequence
+from typing import NotRequired, TypedDict, cast
+
+try:  # Package import in tests; direct import when executed as a script.
+    from .github_api_types import JSONValue, JSONObject
+except ImportError:  # pragma: no cover - exercised by the install CLI.
+    from github_api_types import JSONValue, JSONObject
 
 PLUGIN_IDENTIFIER = "org.uhrendoktor.kicadblocks"
 PLUGIN_DIRECTORY_NAME = "kicad-blocks"
@@ -27,7 +34,7 @@ SUPPORTED_PYTHON_MINOR_VERSIONS = frozenset({12, 13, 14})
 def validate_python_runtime(
     *,
     implementation: str | None = None,
-    version_info=None,
+    version_info: Sequence[int | str] | None = None,
 ) -> None:
     """Require one of the tested CPython minor versions for the IPC wheel."""
     selected_implementation = implementation or sys.implementation.name
@@ -107,58 +114,95 @@ def default_documents_home() -> pathlib.Path:
     return data_home.expanduser().resolve()
 
 
-def validate_plugin_package(source: pathlib.Path) -> dict:
+class _PluginRuntime(TypedDict, total=False):
+    type: str
+
+
+_PluginAction = TypedDict(
+    "_PluginAction",
+    {
+        "entrypoint": str,
+        "identifier": str,
+        "args": list[str],
+        "icons-light": list[str],
+        "icons-dark": list[str],
+    },
+    total=False,
+)
+
+
+class PluginManifest(TypedDict):
+    identifier: str
+    runtime: _PluginRuntime
+    actions: list[_PluginAction]
+
+
+def validate_plugin_package(source: pathlib.Path) -> PluginManifest:
     """Fail before installation if the package manifest or entrypoint is invalid."""
     source = source.expanduser().resolve()
     manifest_path = source / "plugin.json"
     if not source.is_dir() or not manifest_path.is_file():
         raise FileNotFoundError(f"KiCad plugin package is incomplete: {source}")
 
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    identifier = manifest.get("identifier")
-    if not isinstance(identifier, str) or not re.fullmatch(
-        r"[\w\d]{2,}\.[\w\d]+\.[\w\d]+",
-        identifier,
+    manifest_value: JSONValue = cast(
+        JSONValue, json.loads(manifest_path.read_text(encoding="utf-8"))
+    )
+    if not isinstance(manifest_value, dict):
+        raise ValueError("plugin.json must contain a JSON object.")
+    manifest_data = cast(JSONObject, manifest_value)
+    identifier_value = manifest_data.get("identifier")
+    if not isinstance(identifier_value, str) or not re.fullmatch(
+        r"[\\w\\d]{2,}\\.[\\w\\d]+\\.[\\w\\d]+",
+        identifier_value,
         flags=re.ASCII,
     ):
         raise ValueError(
             "KiCad IPC plugin identifiers must use reverse-DNS form with at least "
             "three components, for example 'org.example.myplugin'."
         )
-    if identifier != PLUGIN_IDENTIFIER:
-        raise ValueError(f"Expected plugin identifier {PLUGIN_IDENTIFIER!r}, got {identifier!r}.")
-    runtime = manifest.get("runtime", {})
+    if identifier_value != PLUGIN_IDENTIFIER:
+        raise ValueError(
+            f"Expected plugin identifier {PLUGIN_IDENTIFIER!r}, got {identifier_value!r}."
+        )
+    runtime_value = manifest_data.get("runtime", {})
+    if not isinstance(runtime_value, dict):
+        raise ValueError("KiCad Blocks must use the Python IPC plugin runtime.")
+    runtime = cast(JSONObject, runtime_value)
     if runtime.get("type") != "python":
         raise ValueError("KiCad Blocks must use the Python IPC plugin runtime.")
 
-    actions = manifest.get("actions")
-    if not isinstance(actions, list) or not actions:
+    actions_value = manifest_data.get("actions")
+    if not isinstance(actions_value, list) or not actions_value:
         raise ValueError("plugin.json must declare at least one action.")
-    for action in actions:
-        entrypoint = action.get("entrypoint")
-        if not entrypoint:
+    for action_value in actions_value:
+        if not isinstance(action_value, dict):
+            raise ValueError("Every plugin action must be a JSON object.")
+        action = cast(JSONObject, action_value)
+        entrypoint_value = action.get("entrypoint")
+        if not isinstance(entrypoint_value, str) or not entrypoint_value:
             raise ValueError("Every plugin action must declare an entrypoint.")
-        entrypoint_path = (source / entrypoint).resolve()
+        entrypoint_path = (source / entrypoint_value).resolve()
         if not entrypoint_path.is_relative_to(source) or not entrypoint_path.is_file():
             raise FileNotFoundError(
-                f"Plugin action entrypoint is missing or outside the package: {entrypoint!r}"
+                f"Plugin action entrypoint is missing or outside the package: {entrypoint_value!r}"
             )
-        arguments = action.get("args", [])
-        if not isinstance(arguments, list) or any(
-            not isinstance(argument, str) for argument in arguments
+        arguments_value = action.get("args", [])
+        if not isinstance(arguments_value, list) or any(
+            not isinstance(argument, str) for argument in arguments_value
         ):
             raise ValueError(
                 f"Plugin action arguments must be a list of strings: {action.get('identifier')!r}"
             )
         for icon_key in ("icons-light", "icons-dark"):
-            icons = action.get(icon_key, [])
-            if not isinstance(icons, list):
+            icons_value = action.get(icon_key, [])
+            if not isinstance(icons_value, list) or any(
+                not isinstance(icon, str) for icon in icons_value
+            ):
                 raise ValueError(
-                    f"Plugin action {icon_key} must be a list: {action.get('identifier')!r}"
+                    f"Plugin action {icon_key} must be a list of strings: "
+                    f"{action.get('identifier')!r}"
                 )
-            for icon in icons:
-                if not isinstance(icon, str):
-                    raise ValueError(f"Plugin action icon path must be a string: {icon!r}")
+            for icon in icons_value:
                 icon_path = (source / icon).resolve()
                 if (
                     not icon_path.is_relative_to(source)
@@ -171,7 +215,7 @@ def validate_plugin_package(source: pathlib.Path) -> dict:
     requirements = source / "requirements.txt"
     if not requirements.is_file():
         raise FileNotFoundError("KiCad plugin package is missing requirements.txt.")
-    return manifest
+    return cast(PluginManifest, manifest_data)
 
 
 def install_plugin(
@@ -227,9 +271,12 @@ def install_plugin(
     if legacy_destination != destination and legacy_destination.is_dir():
         legacy_manifest_path = legacy_destination / "plugin.json"
         try:
-            legacy_manifest = json.loads(legacy_manifest_path.read_text(encoding="utf-8"))
+            legacy_value: JSONValue = cast(
+                JSONValue, json.loads(legacy_manifest_path.read_text(encoding="utf-8"))
+            )
         except (OSError, json.JSONDecodeError):
-            legacy_manifest = {}
+            legacy_value = {}
+        legacy_manifest = cast(JSONObject, legacy_value) if isinstance(legacy_value, dict) else {}
         if legacy_manifest.get("identifier") == "kicad-blocks":
             shutil.rmtree(legacy_destination)
     return destination
