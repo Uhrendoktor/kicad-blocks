@@ -41,16 +41,12 @@ from kicad_blocks.plugin import (
     KiCadApp as KiCadAppType,
     Schematic as SchematicType,
     SchematicSymbol as SchematicSymbolType,
+    native_schematic_preview_pages as _native_schematic_preview_pages,
+    normalize_schematic_preview_svg as _normalize_schematic_preview_svg,
+    start_native_symbol_placement as _start_native_symbol_placement,
 )
 
 
-_native_schematic_preview_pages = cast(
-    Callable[..., list[tuple[str, bytes]]],
-    getattr(plugin_actions, "_native_schematic_preview_pages"),
-)
-_normalize_schematic_preview_svg = cast(
-    Callable[..., Path], getattr(plugin_actions, "_normalize_schematic_preview_svg")
-)
 
 
 def _return_preview_svg(
@@ -128,9 +124,6 @@ _save_block_layouts = cast(
 )
 _save_block_variants = cast(Callable[..., None], getattr(plugin_actions, "_save_block_variants"))
 _set_window_geometry = cast(Callable[..., None], getattr(plugin_actions, "_set_window_geometry"))
-_start_native_symbol_placement = cast(
-    Callable[..., SchematicSymbolType], getattr(plugin_actions, "_start_native_symbol_placement")
-)
 _schematic_page_center_mm = cast(
     Callable[..., tuple[float, float]], getattr(plugin_actions, "_schematic_page_center_mm")
 )

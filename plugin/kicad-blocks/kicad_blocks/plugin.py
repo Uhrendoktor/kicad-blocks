@@ -15,7 +15,7 @@ import tempfile
 from collections.abc import Callable, Iterator, Sequence
 from importlib import import_module
 from pathlib import Path
-from typing import TYPE_CHECKING, BinaryIO, Protocol, TypedDict, cast
+from typing import TYPE_CHECKING, BinaryIO, Protocol, TypeAlias, TypedDict, cast
 
 # The core block model and IPC helpers must remain importable in headless
 # environments. Load Tkinter only when the interactive manager is invoked.
@@ -7295,16 +7295,16 @@ write_instance_configuration = _write_instance_configuration
 new_blank_pcb_source = _new_blank_pcb_source
 
 # Public protocol names for typed adapters around KiCad's generated IPC objects.
-KiCadApp = _KiCadApp
-Schematic = _Schematic
-SchematicSymbol = _SchematicSymbol
+KiCadApp: TypeAlias = _KiCadApp
+Schematic: TypeAlias = _Schematic
+SchematicSymbol: TypeAlias = _SchematicSymbol
 
 
 # Stable public entry points for UI integrations and headless test adapters.
 configure_tk_theme = _configure_tk_theme
 update_schematic_item_checked = _update_schematic_item_checked
 show_selected_block_configuration = _show_selected_block_configuration
-SchematicProject = _SchematicProject
+SchematicProject: TypeAlias = _SchematicProject
 
 
 # Live schematic creation/inspection entry points used by supported integrations.
@@ -7317,6 +7317,8 @@ edit_block_implementation = _edit_block_implementation
 publish_block = _publish_block
 edit_facade_symbol = _edit_facade_symbol
 start_native_symbol_placement = _start_native_symbol_placement
+native_schematic_preview_pages = _native_schematic_preview_pages
+normalize_schematic_preview_svg = _normalize_schematic_preview_svg
 safe_schematic_selection = _safe_schematic_selection
 parse_profile_parameter_overrides = _parse_profile_parameter_overrides
 resolve_variant_text = _resolve_variant_text

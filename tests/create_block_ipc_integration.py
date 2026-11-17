@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+from importlib import import_module
 import os
 import re
 import shutil
@@ -36,7 +37,10 @@ from kicad_blocks.repository import (
 )
 from kipy import KiCad
 from kipy.errors import ApiError
-from pynng.exceptions import NNGException
+_NNGException = cast(
+    type[Exception],
+    getattr(import_module("pynng.exceptions"), "NNGException"),
+)
 from test_plugin_registration import close_editor, find_executable, launch
 
 
@@ -267,7 +271,7 @@ def _connect_live_eeschema(
         try:
             client = KiCad(timeout_ms=30000)
             client.get_schematic()
-        except (ApiError, NNGException, OSError, TimeoutError) as exc:
+        except (ApiError, _NNGException, OSError, TimeoutError) as exc:
             last_error = exc
             if client is not None:
                 close_client = getattr(client, "close", None)
