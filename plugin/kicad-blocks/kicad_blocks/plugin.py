@@ -3010,9 +3010,75 @@ def _save_block_variants(
             raise ValueError(f"Implementation values must be unique and non-empty: {value!r}")
         seen_values.add(value.casefold())
 
-        if item.get("file")
-                    or Path(str(item.get("source") or "")).name
-                    or "Pending save",
+        if item.get("file"):
+            filename = str(item["file"])
+            source = (
+                Path(item["source"]).expanduser().resolve()
+                if item.get("source")
+                else None
+            )
+        else:
+            source = Path(item.get("source", "")).expanduser().resolve()
+            if not source.is_file() or source.suffix.casefold() != ".kicad_sch":
+                raise ValueError("Implementation variant must be an existing .kicad_sch file: " + str(source))
+            stem = slugify(value)
+            filename = f"implementation_{stem}.kicad_sch"
+            suffix = 2
+            while (
+                ((block_path / filename).exists() and filename not in previous_files)
+                or filename.casefold() in seen_files
+            ):
+                filename = f"implementation_{stem}_{suffix}.kicad_sch"
+                suffix += 1
+
+        if Path(filename).name != filename or Path(filename).suffix.casefold() != ".kicad_sch":
+            raise ValueError(f"Unsafe implementation filename: {filename!r}")
+        if filename.casefold() in seen_files:
+            raise ValueError(f"Two implementation variants use the same file: {filename!r}")
+        seen_files.add(filename.casefold())
+        destination = block_path / filename
+        if source is not None and source != destination.resolve():
+            files_to_copy.append((source, destination))
+            added_files.add(filename)
+        retained_files.add(filename)
+        descriptor = {"value": value, "file": filename}
+        linked_layout = (
+            item.get("layout_id")
+            or previous_layout_by_file.get(filename.casefold())
+            or previous_layout_by_value.get(value.casefold())
+        )
+        if linked_layout:
+            descriptor["layout_id"] = str(linked_layout).casefold()
+        normalized.append(descriptor)
+
+    available_values = {item["value"].casefold() for item in normalized}
+    dangling_profiles = [
+        str(item.get("name", item.get("id", "Unnamed profile")))
+        for item in manifest.get("profiles", [])
+        if item.get("variant") and str(item["variant"]).casefold() not in available_values
+    ]
+    if dangling_profiles:
+        raise ValueError(
+            "These configuration profiles still use an implementation being removed or renamed: "
+            + ", ".join(dangling_profiles)
+            + ". Update those profiles before changing the implementation list."
+        )
+
+    new_value_by_file = {str(item["file"]).casefold(): str(item["value"]) for item in normalized}
+    old_value_to_new = {}
+    for old in previous:
+        replacement_value = new_value_by_file.get(str(old.get("file", "")).casefold())
+        old_value_to_new[str(old.get("value", "")).casefold()] = replacement_value
+
+    if default_variant is _KEEP_DEFAULT_VARIANT:
+        previous_default = str(manifest.get("default_variant") or "").casefold()
+        selected_default = old_value_to_new.get(previous_default) if previous_default else None
+    elif default_variant is None or str(default_variant).strip().casefold() in {"", "default", "base"}:
+        selected_default = None
+    else:
+        selected_default = next(
+            (item["value"] for item in normalized
+             if item["value"].casefold() == str(default_variant).strip().casefold()),
             None,
         )
         if selected_default is None:
@@ -3568,7 +3634,9 @@ def _show_block_layout_editor(
                 values=(
                     item.get("name", item["id"]),
                     assigned_to(item["id"]),
-                    item.get("file") or Path(str(item.get("source") or "")).name or "Pending save",
+                    item.get("file")
+                    or Path(str(item.get("source") or "")).name
+                    or "Pending save",
                 ),
                 tags=("even" if index % 2 == 0 else "odd",),
             )
