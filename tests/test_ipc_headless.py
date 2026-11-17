@@ -17,8 +17,6 @@ sys.path.insert(0, str(PLUGIN))
 
 from kicad_blocks.auto_dependencies import synchronize_block_dependencies
 from kicad_blocks.composition import compose_block_implementation
-from kicad_blocks.plugin import KiCadApp, Schematic, SchematicSymbol
-
 from kicad_blocks.model import (
     facade_pin_connection_points,
     parse_parameters,
@@ -29,10 +27,13 @@ from kicad_blocks.model import (
     transform_symbol_point_to_schematic,
 )
 from kicad_blocks.plugin import (
-    register_block,
-    write_instance_configuration,
+    KiCadApp,
+    Schematic,
+    SchematicSymbol,
     make_selected_local,
+    register_block,
     sync_selected_local,
+    write_instance_configuration,
 )
 from kicad_blocks.repository import (
     BlockRecord,

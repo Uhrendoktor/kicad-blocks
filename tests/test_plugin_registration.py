@@ -623,7 +623,7 @@ def main() -> None:
                 try:
                     plugin_actions.edit_facade_symbol(
                         refreshed_record,
-                        cast(KiCadApp, facade_editor_client),
+                        cast("KiCadApp", facade_editor_client),
                         project_catalog=project / ".kicad_blocks" / LIBRARY_CATALOG_NAME,
                     )
                 except RuntimeError as exc:

@@ -10,8 +10,8 @@ import os
 import shutil
 import subprocess
 import sys
-import time
 import tempfile
+import time
 import tkinter as tk
 from collections.abc import Callable, Iterator
 from pathlib import Path
