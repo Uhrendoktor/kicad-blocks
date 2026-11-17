@@ -5,11 +5,11 @@ This page is generated from the declarative UI catalog. It inventories the curre
 
 | Coverage status | Screens | Meaning |
 |---|---:|---|
-| Contracted | 6 | Widget-level execute/result assertions are registered and run in CI. |
-| Partial | 6 | Targeted GUI, integration, model, or screenshot checks exist; the full control matrix is not contracted. |
+| Contracted | 7 | Widget-level execute/result assertions are registered and run in CI. |
+| Partial | 5 | Targeted GUI, integration, model, or screenshot checks exist; the full control matrix is not contracted. |
 | Inventory only | 3 | Window/workflow is documented here; systematic interaction contracts remain future work. |
 
-Task Hub, both transient block choosers, Add PCB Layout, Manage Libraries, and PCB Layout Manager have full registered widget contracts. The Functional Block Library and implementation manager remain partial while every downstream KiCad operation and native OS chooser continues to be verified separately.
+Task Hub, both transient block choosers, Add PCB Layout, Create Block form, Manage Libraries, and PCB Layout Manager have full registered widget contracts. The Functional Block Library and implementation manager remain partial while every downstream KiCad operation and native OS chooser continues to be verified separately.
 
 ## Screens
 
@@ -233,9 +233,9 @@ Selection and empty-library behavior have unit tests, but the full window intera
 
 Name a block extracted from a selected hierarchical sheet and provide its description.
 
-**Coverage:** Partial — targeted GUI, integration, or visual checks exist.
+**Coverage:** Contracted — widget action and expected UI transition asserted.
 
-The production form is captured in both themes and the extraction/IPC flow has end-to-end tests. Form validation, cancellation, and every control are not yet registered as UI contracts.
+Every actionable form control has a stable semantic ID and a real-Tk interaction contract. Tests execute Create Block and Cancel, assert the returned name/description or cancellation result, reject a blank name without closing the dialog, verify recovery after validation, exercise Escape cancellation, and check that the initial form geometry exposes both primary actions. The full live Eeschema selection/extraction/registration workflow remains separately covered by the real KiCad IPC integration test.
 
 **Major functionality**
 
@@ -243,8 +243,17 @@ The production form is captured in both themes and the extraction/IPC flow has e
 - Enter the required block name and optional description
 - Create or cancel without leaving partial library files
 
+**Registered semantic controls**
+
+- Create Functional Block dialog (`create-block-form.window`; window; behavior asserted)
+- Block name (`create-block-form.name`; entry; behavior asserted)
+- Optional block description (`create-block-form.description`; text; behavior asserted)
+- Create Block (`create-block-form.action.create`; button; behavior asserted)
+- Cancel (`create-block-form.action.cancel`; button; behavior asserted)
+
 **Current automated evidence**
 
+- `tests/test_create_block_form_contracts.py`
 - `tests/create_block_ipc_integration.py`
 - `tests/capture_visual_docs.py`
 
