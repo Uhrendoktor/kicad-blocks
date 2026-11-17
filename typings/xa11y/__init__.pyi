@@ -1,9 +1,11 @@
-"""Typing surface for the optional xa11y test diagnostic package."""
+# Copyright (c) 2026 Uhrendoktor
 
 class XA11yError(Exception): ...
 
+
 class _AccessibilityApp:
     def dump(self, *, max_depth: int = ...) -> str: ...
+
 
 class App:
     @staticmethod

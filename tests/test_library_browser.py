@@ -1169,10 +1169,6 @@ class LibraryBrowserTests(unittest.TestCase):
                 self.events.append("deiconify")
                 self.current_state = "normal"
 
-            def deiconify(self) -> None:
-                self.events.append("deiconify")
-                self.current_state = "normal"
-
         manager = FakeWindow()
         browser = FakeWindow(master=manager)
         minimized = _minimize_placement_windows(browser)
@@ -1280,8 +1276,8 @@ class LibraryBrowserTests(unittest.TestCase):
             def save(self) -> None:
                 self.saved = True
 
-        schematic = cast(SchematicType, Schematic())
-        kicad = cast(KiCadAppType, SimpleNamespace(get_schematic=lambda: schematic))
+        schematic = cast("SchematicType", Schematic())
+        kicad = cast("KiCadAppType", SimpleNamespace(get_schematic=lambda: schematic))
         focus = Mock(return_value=schematic)
 
         def from_xy_mm(x: float, y: float) -> tuple[float, float]:

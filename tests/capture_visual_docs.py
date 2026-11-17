@@ -11,6 +11,7 @@ import shutil
 import subprocess
 import sys
 import time
+import tempfile
 import tkinter as tk
 from collections.abc import Callable, Iterator
 from pathlib import Path
@@ -298,7 +299,7 @@ def capture_picker(records: list[BlockRecord], output_dir: Path) -> PlacementSel
             capture_window(xdotool, identifier, frame_paths[0])
             widgets = list(walk_widgets(dialog))
             entries = [
-                cast(tk.Entry | ttk.Entry, item)
+                cast("tk.Entry | ttk.Entry", item)
                 for item in widgets
                 if item.winfo_class() in ("TEntry", "Entry")
             ]
@@ -527,7 +528,7 @@ def _select_existing_pcb_file(dialog: tk.Toplevel) -> None:
     combos[0].event_generate("<<ComboboxSelected>>")
     dialog.update_idletasks()
     fields = [
-        cast(tk.Entry | ttk.Entry, widget)
+        cast("tk.Entry | ttk.Entry", widget)
         for widget in walk_widgets(dialog)
         if widget.winfo_class() in {"TEntry", "Entry"}
     ]
@@ -565,7 +566,7 @@ def _assert_layout_manager_footer(dialog: tk.Toplevel) -> None:
 
 def _assert_blank_pcb_file_picker_hidden(dialog: tk.Toplevel) -> None:
     fields = [
-        cast(tk.Entry | ttk.Entry, widget)
+        cast("tk.Entry | ttk.Entry", widget)
         for widget in walk_widgets(dialog)
         if widget.winfo_class() in {"TEntry", "Entry"}
     ]
@@ -652,7 +653,7 @@ def capture_ui_workflows(
                     minimum_size=(1000, 650),
                 )
                 browser_entries = [
-                    cast(tk.Entry | ttk.Entry, widget)
+                    cast("tk.Entry | ttk.Entry", widget)
                     for widget in walk_widgets(root)
                     if widget.winfo_class() in {"TEntry", "Entry"}
                 ]
@@ -949,8 +950,6 @@ def main() -> int:
     output_dir = args.output_dir.expanduser().resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
     cli = os.environ.get("KICAD_CLI") or find_executable("kicad-cli-nightly", "kicad-cli")
-
-    import tempfile
 
     with tempfile.TemporaryDirectory(prefix="kicad-blocks-visual-docs-") as temporary:
         library = Path(temporary) / "library"

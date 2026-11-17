@@ -32,8 +32,8 @@ from kipy import KiCad
 
 
 __all__ = [
-    "_select_native_symbol_in_test_harness",
     "_select_facade_in_test_harness",
+    "_select_native_symbol_in_test_harness",
     "_wait_for_symbol_document",
 ]
 
@@ -601,7 +601,7 @@ def main() -> None:
             try:
                 live_schematic = facade_editor_client.get_schematic()
                 live_selection = plugin_actions.safe_schematic_selection(
-                    cast(SchematicSelectionProvider, live_schematic)
+                    cast("SchematicSelectionProvider", live_schematic)
                 )
                 if live_selection:
                     raise AssertionError(
@@ -611,7 +611,7 @@ def main() -> None:
                 refreshed_record = plugin_actions.register_block(
                     project,
                     block,
-                    cast(KiCadApp, facade_editor_client),
+                    cast("KiCadApp", facade_editor_client),
                     [block.path.parent],
                 )
                 reload_ok, reload_warning = plugin_actions.library_reload_status()
@@ -642,7 +642,7 @@ def main() -> None:
 
             placement_client = KiCad(timeout_ms=30000)
             placed_instance = plugin_actions.start_native_symbol_placement(
-                cast(KiCadApp, placement_client),
+                cast("KiCadApp", placement_client),
                 None,
                 placement_symbol_name,
             )
