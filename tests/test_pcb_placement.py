@@ -7,6 +7,8 @@ import json
 import sys
 import tempfile
 import unittest
+from collections.abc import Sequence
+from dataclasses import dataclass
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
 from unittest.mock import patch
@@ -24,15 +26,27 @@ from kicad_blocks.pcb_placement import (
 )
 
 
-class FakeBoard:
-    def __init__(self, values):
-        self.items = [SimpleNamespace(id=SimpleNamespace(value=value)) for value in values]
-        self.moved = None
+@dataclass
+class _FakeBoardItemId:
+    value: str
 
-    def get_items(self):
+
+@dataclass
+class _FakeBoardItem:
+    id: _FakeBoardItemId
+
+
+class FakeBoard:
+    def __init__(self, values: Sequence[str]) -> None:
+        self.items: list[_FakeBoardItem] = [
+            _FakeBoardItem(_FakeBoardItemId(value)) for value in values
+        ]
+        self.moved: list[_FakeBoardItemId] | None = None
+
+    def get_items(self) -> list[_FakeBoardItem]:
         return self.items
 
-    def interactive_move(self, item_ids):
+    def interactive_move(self, item_ids: Sequence[_FakeBoardItemId]) -> None:
         self.moved = list(item_ids)
 
 
@@ -64,6 +78,7 @@ class PcbPlacementManifestTests(unittest.TestCase):
         board = FakeBoard([self.first, unrelated, self.second])
         moved = move_placement_at_cursor(board, payload["placements"][0])
         self.assertEqual(moved, 2)
+        assert board.moved is not None
         self.assertEqual([item.value for item in board.moved], [self.first, self.second])
 
     def test_pcb_editor_entrypoint_uses_active_board_file_and_native_move(self):
@@ -85,7 +100,7 @@ class PcbPlacementManifestTests(unittest.TestCase):
                 return board
 
         kipy = ModuleType("kipy")
-        kipy.KiCad = FakeKiCad
+        setattr(kipy, "KiCad", FakeKiCad)
         entrypoint = PLUGIN / "place_imported_layout.py"
         spec = importlib.util.spec_from_file_location("kblocks_pcb_action_test", entrypoint)
         if spec is None or spec.loader is None:
@@ -96,6 +111,7 @@ class PcbPlacementManifestTests(unittest.TestCase):
         with patch.dict(sys.modules, {"kipy": kipy}):
             action.main()
 
+        assert board.moved is not None
         self.assertEqual(
             [item.value for item in board.moved],
             [self.first, self.second],
@@ -144,9 +160,7 @@ class PcbPlacementManifestTests(unittest.TestCase):
         other = Path(self.temp.name) / "other.kicad_pcb"
         other.write_text("(kicad_pcb)\n", encoding="utf-8")
         wrong_board_sidecar = placement_manifest_path(other)
-        wrong_board_sidecar.write_bytes(
-            placement_manifest_path(self.board_path).read_bytes()
-        )
+        wrong_board_sidecar.write_bytes(placement_manifest_path(self.board_path).read_bytes())
         with self.assertRaisesRegex(ValueError, "different board path"):
             read_pcb_placement_manifest(other)
 

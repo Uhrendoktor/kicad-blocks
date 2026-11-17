@@ -9,6 +9,9 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 from urllib.error import HTTPError
+from types import TracebackType
+
+from scripts.github_api_types import GitHubApiResponse, GitHubRequestArgument
 
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "publish_ipc_wheel.py"
 SPEC = importlib.util.spec_from_file_location("publish_ipc_wheel", SCRIPT)
@@ -22,13 +25,18 @@ class _Response:
     def __init__(self, payload: bytes):
         self.payload = payload
 
-    def __enter__(self):
+    def __enter__(self) -> _Response:
         return self
 
-    def __exit__(self, *_args):
+    def __exit__(
+        self,
+        _exc_type: type[BaseException] | None,
+        _exc_value: BaseException | None,
+        _traceback: TracebackType | None,
+    ) -> bool:
         return False
 
-    def read(self):
+    def read(self, _size: int = -1) -> bytes:
         return self.payload
 
 
@@ -70,29 +78,36 @@ class PublishIpcWheelTests(unittest.TestCase):
 
     def test_publish_recovers_when_upload_succeeded_but_response_was_lost(self):
         with tempfile.TemporaryDirectory() as temp:
-            wheel = Path(temp) / (
-                "kicad_python-0.9.0.dev0-cp312-cp312-linux_x86_64.whl"
-            )
+            wheel = Path(temp) / ("kicad_python-0.9.0.dev0-cp312-cp312-linux_x86_64.whl")
             wheel.write_bytes(b"wheel-bytes")
             release_url = "https://api.github.com/repos/owner/repo/releases/tags/kicad-python-dev"
             upload_url = "https://uploads.github.com/repos/owner/repo/releases/1/assets"
-            asset = {
+            asset: GitHubApiResponse = {
                 "name": wheel.name,
                 "size": wheel.stat().st_size,
                 "state": "uploaded",
                 "browser_download_url": "https://example.invalid/" + wheel.name,
             }
-            release = {
+            release: GitHubApiResponse = {
                 "id": 1,
                 "upload_url": upload_url + "{?name,label}",
                 "assets": [],
             }
-            calls = []
+            calls: list[tuple[str, str]] = []
 
-            def fake_request(method, url, _token, **_kwargs):
+            def fake_request(
+                method: str,
+                url: str,
+                _token: str,
+                **_kwargs: GitHubRequestArgument,
+            ) -> GitHubApiResponse | None:
                 calls.append((method, url))
                 if method == "GET" and url == release_url:
-                    return {**release, "assets": [asset] if len(calls) > 1 else []}
+                    response: GitHubApiResponse = {
+                        **release,
+                        "assets": [asset] if len(calls) > 1 else [],
+                    }
+                    return response
                 if method == "POST" and url.startswith(upload_url):
                     raise RuntimeError("upload response timed out after server accepted bytes")
                 return {}

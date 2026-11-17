@@ -5,6 +5,8 @@ from __future__ import annotations
 import argparse
 import contextlib
 import sys
+from collections.abc import Iterator
+from typing import Protocol, cast
 import tempfile
 import time
 from pathlib import Path
@@ -20,13 +22,53 @@ from kicad_blocks.model import parse_parameters, parse_pins
 from kicad_blocks.repository import create_block
 
 
-def _walk(widget):
+class _TestWidget(Protocol):
+    """Minimal widget tree surface used by the GUI smoke test."""
+
+    def winfo_children(self) -> list[_TestWidget]: ...
+
+
+class _TestWindow(_TestWidget, Protocol):
+    """Window geometry and update operations used by the screenshot helper."""
+
+    def update_idletasks(self) -> None: ...
+
+    def update(self) -> None: ...
+
+    def winfo_rootx(self) -> int: ...
+
+    def winfo_rooty(self) -> int: ...
+
+    def winfo_width(self) -> int: ...
+
+    def winfo_height(self) -> int: ...
+
+
+class _TestCombobox(Protocol):
+    def current(self, index: int) -> None: ...
+
+    def event_generate(self, sequence: str) -> None: ...
+
+    def get(self) -> str: ...
+
+
+class _TestEntry(Protocol):
+    def get(self) -> str: ...
+
+
+class _TestButton(Protocol):
+    def cget(self, option: str) -> str: ...
+
+    def invoke(self) -> None: ...
+
+
+def _walk(widget: _TestWidget) -> Iterator[_TestWidget]:
     yield widget
     for child in widget.winfo_children():
         yield from _walk(child)
 
 
-def _capture_dialog(dialog, destination: Path) -> None:
+def _capture_dialog(dialog: _TestWindow, destination: Path) -> None:
     """Save a screenshot of the actual configuration dialog while it is visible."""
     from PIL import ImageGrab, ImageStat
 
@@ -36,15 +78,11 @@ def _capture_dialog(dialog, destination: Path) -> None:
     x, y = dialog.winfo_rootx(), dialog.winfo_rooty()
     width, height = dialog.winfo_width(), dialog.winfo_height()
     if width < 500 or height < 260:
-        raise AssertionError(
-            f"Configuration dialog is unexpectedly small: {width}x{height}."
-        )
+        raise AssertionError(f"Configuration dialog is unexpectedly small: {width}x{height}.")
     destination.parent.mkdir(parents=True, exist_ok=True)
     image = ImageGrab.grab(bbox=(x, y, x + width, y + height))
     if image.width < 500 or image.height < 260:
-        raise AssertionError(
-            f"Captured configuration image is unexpectedly small: {image.size!r}."
-        )
+        raise AssertionError(f"Captured configuration image is unexpectedly small: {image.size!r}.")
     sample = image.convert("RGB").resize((48, 32))
     if max(ImageStat.Stat(sample).stddev) < 2.0:
         raise AssertionError("Configuration dialog screenshot appears blank.")
@@ -52,7 +90,7 @@ def _capture_dialog(dialog, destination: Path) -> None:
 
 
 def main(screenshot_path: Path | None = None) -> None:
-    plugin_actions._load_tkinter()
+    plugin_actions.load_tkinter()
     with tempfile.TemporaryDirectory(prefix="kicad-block-config-gui-") as temp:
         root_dir = Path(temp)
         library = root_dir / "library"
@@ -64,8 +102,12 @@ def main(screenshot_path: Path | None = None) -> None:
         variant_33 = root_dir / "implementation_3v3.kicad_sch"
         standard.write_text("(kicad_pcb)\\n", encoding="utf-8")
         compact.write_text("(kicad_pcb)\\n", encoding="utf-8")
-        variant_18.write_text('(kicad_sch (version 20250114) (generator "test"))\\n', encoding="utf-8")
-        variant_33.write_text('(kicad_sch (version 20250114) (generator "test"))\\n', encoding="utf-8")
+        variant_18.write_text(
+            '(kicad_sch (version 20250114) (generator "test"))\\n', encoding="utf-8"
+        )
+        variant_33.write_text(
+            '(kicad_sch (version 20250114) (generator "test"))\\n', encoding="utf-8"
+        )
         block = create_block(
             library,
             "Configuration GUI Block",
@@ -118,18 +160,27 @@ def main(screenshot_path: Path | None = None) -> None:
             user_fields=fields,
         )
         commit = object()
-        schematic = SimpleNamespace(
-            get_selection=lambda: [instance],
-            get_project=lambda: SimpleNamespace(
-                expand_text_variables=lambda value: value
+        project_handle = SimpleNamespace(expand_text_variables=lambda value: str(value))
+
+        def get_selection() -> list[plugin_actions.SchematicSymbol]:
+            return [cast(plugin_actions.SchematicSymbol, instance)]
+
+        def get_project() -> plugin_actions.SchematicProject:
+            return cast(plugin_actions.SchematicProject, project_handle)
+
+        schematic = cast(
+            plugin_actions.Schematic,
+            SimpleNamespace(
+                get_selection=get_selection,
+                get_project=get_project,
+                begin_commit=Mock(return_value=commit),
+                push_commit=Mock(),
+                drop_commit=Mock(),
+                save=Mock(),
             ),
-            begin_commit=Mock(return_value=commit),
-            push_commit=Mock(),
-            drop_commit=Mock(),
-            save=Mock(),
         )
         parent = plugin_actions.tk.Tk()
-        plugin_actions._configure_tk_theme(parent)
+        plugin_actions.configure_tk_theme(parent)
         parent.title("KiCad Blocks Configuration Test Parent")
         parent.geometry("380x120+20+20")
         parent.update()
@@ -137,15 +188,23 @@ def main(screenshot_path: Path | None = None) -> None:
         interaction_errors: list[str] = []
         original_showinfo = plugin_actions.messagebox.showinfo
         original_showerror = plugin_actions.messagebox.showerror
-        plugin_actions.messagebox.showinfo = lambda *_args, **_kwargs: None
-        plugin_actions.messagebox.showerror = lambda _title, message, **_kwargs: interaction_errors.append(str(message))
+
+        def showinfo(*_args: str, **_kwargs: str) -> None:
+            return None
+
+        def showerror(_title: str, message: str, **_kwargs: str) -> None:
+            interaction_errors.append(message)
+
+        plugin_actions.messagebox.showinfo = showinfo
+        plugin_actions.messagebox.showerror = showerror
         deadline = time.monotonic() + 8.0
 
         def drive_form() -> None:
             try:
+                widgets = cast(_TestWidget, parent).winfo_children()
                 dialogs = [
-                    child
-                    for child in parent.winfo_children()
+                    cast(_TestWindow, child)
+                    for child in widgets
                     if isinstance(child, plugin_actions.tk.Toplevel)
                     and child.title().startswith("Configure X1")
                 ]
@@ -156,19 +215,27 @@ def main(screenshot_path: Path | None = None) -> None:
                     raise TimeoutError("The Configure Block Instance form did not appear.")
                 dialog = dialogs[-1]
                 widgets = list(_walk(dialog))
-                combos = [
-                    widget for widget in widgets
-                    if isinstance(widget, plugin_actions.ttk.Combobox)
-                ]
-                entries = [
-                    widget for widget in widgets
-                    if isinstance(widget, plugin_actions.ttk.Entry)
-                    and not isinstance(widget, plugin_actions.ttk.Combobox)
-                ]
-                buttons = [
-                    widget for widget in widgets
-                    if isinstance(widget, plugin_actions.ttk.Button)
-                ]
+                combos = cast(
+                    list[_TestCombobox],
+                    [
+                        widget
+                        for widget in widgets
+                        if isinstance(widget, plugin_actions.ttk.Combobox)
+                    ],
+                )
+                entries = cast(
+                    list[_TestEntry],
+                    [
+                        widget
+                        for widget in widgets
+                        if isinstance(widget, plugin_actions.ttk.Entry)
+                        and not isinstance(widget, plugin_actions.ttk.Combobox)
+                    ],
+                )
+                buttons = cast(
+                    list[_TestButton],
+                    [widget for widget in widgets if isinstance(widget, plugin_actions.ttk.Button)],
+                )
                 save_button = next(
                     (button for button in buttons if button.cget("text") == "Save instance"),
                     None,
@@ -182,9 +249,13 @@ def main(screenshot_path: Path | None = None) -> None:
                 combos[0].event_generate("<<ComboboxSelected>>")
                 dialog.update()
                 if entries[0].get() != "1.8":
-                    raise AssertionError("Selecting the profile did not apply its typed parameter preset.")
+                    raise AssertionError(
+                        "Selecting the profile did not apply its typed parameter preset."
+                    )
                 if combos[1].get() != "1V8":
-                    raise AssertionError("Selecting the profile did not choose its schematic variant.")
+                    raise AssertionError(
+                        "Selecting the profile did not choose its schematic variant."
+                    )
                 if combos[2].get() != "Compact  [compact]":
                     raise AssertionError("Selecting the profile did not choose its PCB layout.")
                 if screenshot_path is not None:
@@ -198,23 +269,26 @@ def main(screenshot_path: Path | None = None) -> None:
                 plugin_actions.tk.TclError,
             ) as exc:
                 interaction_errors.append(str(exc))
-                for child in parent.winfo_children():
+                for child in cast(_TestWidget, parent).winfo_children():
                     if child is not parent:
                         with contextlib.suppress(Exception):
                             child.destroy()
 
         update_calls: list[str] = []
-        original_update = plugin_actions._update_schematic_item_checked
-        plugin_actions._update_schematic_item_checked = (
-            lambda _schematic, target: update_calls.append(str(target.reference))
-        )
+        original_update = plugin_actions.update_schematic_item_checked
+
+        def fake_update(
+            _schematic: plugin_actions.Schematic,
+            target: plugin_actions.SchematicSymbol,
+        ) -> None:
+            update_calls.append(target.reference)
+
+        plugin_actions.update_schematic_item_checked = fake_update
         parent.after(200, drive_form)
         try:
-            plugin_actions._show_selected_block_configuration(
-                schematic, project, library, parent
-            )
+            plugin_actions.show_selected_block_configuration(schematic, project, library, parent)
         finally:
-            plugin_actions._update_schematic_item_checked = original_update
+            plugin_actions.update_schematic_item_checked = original_update
             plugin_actions.messagebox.showinfo = original_showinfo
             plugin_actions.messagebox.showerror = original_showerror
             with contextlib.suppress(plugin_actions.tk.TclError):
@@ -237,9 +311,7 @@ def main(screenshot_path: Path | None = None) -> None:
         }:
             raise AssertionError(f"Configuration form did not save the edited fields: {values!r}")
         schematic.begin_commit.assert_called_once_with()
-        schematic.push_commit.assert_called_once_with(
-            commit, "Configure KiCad block instance"
-        )
+        schematic.push_commit.assert_called_once_with(commit, "Configure KiCad block instance")
         schematic.save.assert_called_once_with()
         print(
             "Editable block instance configuration GUI passed: "

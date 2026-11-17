@@ -17,6 +17,7 @@ from kicad_blocks.auto_dependencies import (
 )
 from kicad_blocks.model import parse_pins
 from kicad_blocks.repository import (
+    BlockRecord,
     add_dependency,
     create_block,
     read_manifest,
@@ -24,21 +25,22 @@ from kicad_blocks.repository import (
 )
 
 
-def _symbol(record, reference="B1", *, orientation=2, position=(100.0, 120.0)):
+def _symbol(
+    record: BlockRecord,
+    reference: str = "B1",
+    *,
+    orientation: int = 2,
+    position: tuple[float, float] = (100.0, 120.0),
+) -> SimpleNamespace:
     return SimpleNamespace(
         reference=reference,
-        reference_field=SimpleNamespace(
-            text=SimpleNamespace(value=reference)
-        ),
+        reference_field=SimpleNamespace(text=SimpleNamespace(value=reference)),
         definition=SimpleNamespace(
             id=SimpleNamespace(
                 library=record.manifest["library_nickname"],
                 name=record.manifest["symbol_name"],
             ),
-            pins=[
-                SimpleNamespace(number=str(pin["number"]))
-                for pin in record.manifest["pins"]
-            ],
+            pins=[SimpleNamespace(number=str(pin["number"])) for pin in record.manifest["pins"]],
         ),
         transform=SimpleNamespace(orientation=orientation),
         position=SimpleNamespace(
@@ -49,7 +51,7 @@ def _symbol(record, reference="B1", *, orientation=2, position=(100.0, 120.0)):
 
 
 class AutomaticDependencyTests(unittest.TestCase):
-    def setUp(self):
+    def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory()
         self.root = Path(self.temp.name) / "library"
         self.parent = create_block(
@@ -63,7 +65,7 @@ class AutomaticDependencyTests(unittest.TestCase):
             parse_pins("IN:input, GND:passive, OUT:output"),
         )
 
-    def tearDown(self):
+    def tearDown(self) -> None:
         self.temp.cleanup()
 
     def test_parse_kicad_xml_netlist_maps_reference_pin_numbers_to_nets(self):
@@ -103,9 +105,7 @@ class AutomaticDependencyTests(unittest.TestCase):
             "pin_nets": {"B1": {"1": "VIN_PARENT", "2": "GND_PARENT"}},
         }
 
-        dependencies = discover_block_dependencies(
-            self.parent, [self.child], [symbol], netlist
-        )
+        dependencies = discover_block_dependencies(self.parent, [self.child], [symbol], netlist)
 
         self.assertEqual(len(dependencies), 1)
         dependency = dependencies[0]
@@ -120,9 +120,7 @@ class AutomaticDependencyTests(unittest.TestCase):
 
     def test_discovery_ignores_non_block_symbols(self):
         ordinary_symbol = SimpleNamespace(
-            definition=SimpleNamespace(
-                id=SimpleNamespace(library="Device", name="R")
-            )
+            definition=SimpleNamespace(id=SimpleNamespace(library="Device", name="R"))
         )
 
         self.assertEqual(

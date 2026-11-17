@@ -4,15 +4,24 @@
 from __future__ import annotations
 
 import argparse
+from collections.abc import Sequence
 import hashlib
 import json
 import os
-from pathlib import Path
 import re
 import sys
+from pathlib import Path
 from urllib.error import HTTPError
 from urllib.parse import quote
 from urllib.request import Request, urlopen
+
+try:  # Package import in tests; direct import when executed as a script.
+    from .github_api_types import GitHubApiResponse, JSONObject, decode_github_response
+except ImportError:  # Imported from a standalone test module.
+    try:
+        from scripts.github_api_types import GitHubApiResponse, JSONObject, decode_github_response
+    except ImportError:  # pragma: no cover - exercised by the release CLI.
+        from github_api_types import GitHubApiResponse, JSONObject, decode_github_response
 
 WHEEL_PREFIX = "kicad_python-0.9.0.dev0-"
 API_VERSION = "2022-11-28"
@@ -21,7 +30,7 @@ SUPPORTED_PYTHON_MINOR_VERSIONS = frozenset({12, 13, 14})
 
 def expected_wheel_abi_tag(
     implementation: str | None = None,
-    version_info=None,
+    version_info: Sequence[int | str] | None = None,
 ) -> str:
     """Return the wheel ABI/platform suffix for the running supported CPython."""
     selected_implementation = implementation or sys.implementation.name
@@ -33,8 +42,7 @@ def expected_wheel_abi_tag(
         or minor not in SUPPORTED_PYTHON_MINOR_VERSIONS
     ):
         raise ValueError(
-            "Pinned KiCad IPC wheels can only be published using CPython 3.12, "
-            "3.13 or 3.14."
+            "Pinned KiCad IPC wheels can only be published using CPython 3.12, 3.13 or 3.14."
         )
     abi = f"cp{major}{minor}"
     return f"{abi}-{abi}-linux_x86_64"
@@ -45,10 +53,10 @@ def _request(
     url: str,
     token: str,
     *,
-    payload: dict | None = None,
+    payload: JSONObject | None = None,
     body: bytes | None = None,
     content_type: str = "application/vnd.github+json",
-) -> dict | None:
+) -> GitHubApiResponse | None:
     headers = {
         "Accept": "application/vnd.github+json",
         "Authorization": f"Bearer {token}",
@@ -61,7 +69,9 @@ def _request(
     elif body is not None:
         headers["Content-Type"] = content_type
     try:
-        with urlopen(Request(url, data=data, headers=headers, method=method), timeout=60) as response:
+        with urlopen(
+            Request(url, data=data, headers=headers, method=method), timeout=60
+        ) as response:
             raw = response.read()
     except HTTPError as exc:
         if exc.code == 404 and method == "GET":
@@ -70,14 +80,14 @@ def _request(
             f"GitHub API {method} {url} failed with HTTP {exc.code}: "
             f"{exc.read().decode('utf-8', errors='replace')}"
         ) from exc
-    return json.loads(raw.decode("utf-8")) if raw else {}
+    return decode_github_response(raw)
 
 
 def _api_root() -> str:
     return os.environ.get("GITHUB_API_URL", "https://api.github.com").rstrip("/")
 
 
-def _get_or_create_release(repo: str, tag: str, source_sha: str, token: str) -> dict:
+def _get_or_create_release(repo: str, tag: str, source_sha: str, token: str) -> GitHubApiResponse:
     root = _api_root()
     url = f"{root}/repos/{repo}/releases/tags/{quote(tag, safe='')}"
     release = _request("GET", url, token)
@@ -128,9 +138,7 @@ def publish_pinned_wheel(wheelhouse: Path, repo: str, source_sha: str, token: st
     if not re.fullmatch(r"[0-9a-f]{40}", source_sha):
         raise ValueError("The pinned kicad-python source revision must be a 40-character SHA.")
     wheelhouse = Path(wheelhouse).expanduser().resolve()
-    wheels = sorted(
-        item for item in wheelhouse.glob(f"{WHEEL_PREFIX}*.whl") if item.is_file()
-    )
+    wheels = sorted(item for item in wheelhouse.glob(f"{WHEEL_PREFIX}*.whl") if item.is_file())
     if len(wheels) != 1:
         raise FileNotFoundError(
             f"Expected one {WHEEL_PREFIX}*.whl in {wheelhouse}, got {[p.name for p in wheels]!r}."
@@ -147,7 +155,7 @@ def publish_pinned_wheel(wheelhouse: Path, repo: str, source_sha: str, token: st
     tag = f"kicad-python-{source_sha[:8]}"
     release = _get_or_create_release(repo, tag, source_sha, token)
     release_id = release.get("id")
-    if not release_id:
+    if release_id is None:
         raise RuntimeError("The pinned wheel release has no release ID.")
 
     existing = next(
@@ -155,7 +163,10 @@ def publish_pinned_wheel(wheelhouse: Path, repo: str, source_sha: str, token: st
         None,
     )
     if existing is not None:
-        if existing.get("digest") != expected_digest or existing.get("size") != wheel.stat().st_size:
+        if (
+            existing.get("digest") != expected_digest
+            or existing.get("size") != wheel.stat().st_size
+        ):
             raise RuntimeError(
                 "Pinned dependency asset already exists with different bytes; refusing to replace "
                 f"the immutable release asset. Expected {expected_digest}, "
@@ -194,7 +205,9 @@ def publish_pinned_wheel(wheelhouse: Path, repo: str, source_sha: str, token: st
         raise RuntimeError(
             f"Pinned wheel upload could not be verified against {expected_digest}: {uploaded!r}"
         )
-    print(f"Verified immutable dependency asset: {uploaded['browser_download_url']} ({expected_digest})")
+    print(
+        f"Verified immutable dependency asset: {uploaded['browser_download_url']} ({expected_digest})"
+    )
     return str(uploaded["browser_download_url"])
 
 

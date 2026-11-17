@@ -12,12 +12,27 @@ from urllib.error import HTTPError
 from urllib.parse import quote
 from urllib.request import Request, urlopen
 
+try:  # Package import in tests; direct import when executed as a script.
+    from .github_api_types import GitHubApiResponse, JSONObject, decode_github_response
+except ImportError:  # Imported from a standalone test module.
+    try:
+        from scripts.github_api_types import GitHubApiResponse, JSONObject, decode_github_response
+    except ImportError:  # pragma: no cover - exercised by the release CLI.
+        from github_api_types import GitHubApiResponse, JSONObject, decode_github_response
+
 API_VERSION = "2022-11-28"
 
 
-def _request(method: str, url: str, token: str, *, payload: dict | None = None,
-             body: bytes | None = None, content_type: str = "application/vnd.github+json",
-             allow_not_found: bool = False) -> dict | None:
+def _request(
+    method: str,
+    url: str,
+    token: str,
+    *,
+    payload: JSONObject | None = None,
+    body: bytes | None = None,
+    content_type: str = "application/vnd.github+json",
+    allow_not_found: bool = False,
+) -> GitHubApiResponse | None:
     headers = {
         "Accept": "application/vnd.github+json",
         "Authorization": f"Bearer {token}",
@@ -30,7 +45,9 @@ def _request(method: str, url: str, token: str, *, payload: dict | None = None,
     elif body is not None:
         headers["Content-Type"] = content_type
     try:
-        with urlopen(Request(url, data=data, headers=headers, method=method), timeout=60) as response:
+        with urlopen(
+            Request(url, data=data, headers=headers, method=method), timeout=60
+        ) as response:
             raw = response.read()
     except HTTPError as exc:
         if allow_not_found and exc.code == 404:
@@ -39,7 +56,7 @@ def _request(method: str, url: str, token: str, *, payload: dict | None = None,
             f"GitHub API {method} {url} failed with HTTP {exc.code}: "
             f"{exc.read().decode('utf-8', errors='replace')}"
         ) from exc
-    return json.loads(raw.decode("utf-8")) if raw else {}
+    return decode_github_response(raw)
 
 
 def _digest(path: Path) -> str:
@@ -77,7 +94,7 @@ def publish_release(
                 "make_latest": "true",
             },
         )
-    if not release or not release.get("id") or release.get("tag_name") != tag:
+    if release is None or not release.get("id") or release.get("tag_name") != tag:
         raise RuntimeError("Could not create or retrieve the expected versioned release.")
 
     release_id = release["id"]
@@ -85,7 +102,7 @@ def publish_release(
     if not upload_url:
         raise RuntimeError("GitHub release is missing upload_url.")
 
-    expected = {}
+    expected: dict[str, tuple[int, str]] = {}
     for raw_path in assets:
         path = Path(raw_path).expanduser().resolve()
         if not path.is_file():
@@ -96,7 +113,9 @@ def publish_release(
             None,
         )
         if existing is not None:
-            if existing.get("size") != path.stat().st_size or existing.get("digest") != _digest(path):
+            if existing.get("size") != path.stat().st_size or existing.get("digest") != _digest(
+                path
+            ):
                 raise RuntimeError(
                     f"Release asset {path.name!r} already exists with different bytes; refusing overwrite."
                 )

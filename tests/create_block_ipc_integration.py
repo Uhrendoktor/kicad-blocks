@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+from importlib import import_module
 import os
 import re
 import shutil
@@ -12,9 +13,15 @@ import sys
 import tempfile
 import time
 import uuid
+from collections.abc import Callable
 from pathlib import Path
 from types import SimpleNamespace
+from typing import TYPE_CHECKING, cast
 from unittest.mock import patch
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+    from tkinter import Misc
 
 ROOT = Path(__file__).resolve().parents[1]
 PLUGIN = ROOT / "plugin" / "kicad-blocks"
@@ -24,14 +31,37 @@ sys.path.insert(0, str(ROOT / "tests"))
 from kicad_blocks import plugin as plugin_actions
 from kicad_blocks.model import parse_pins, render_implementation_schematic
 from kicad_blocks.repository import (
+    BlockRecord,
     LIBRARY_CATALOG_NAME,
     LIBRARY_NICKNAME,
     list_blocks,
 )
 from kipy import KiCad
 from kipy.errors import ApiError
-from pynng.exceptions import NNGException
-from test_plugin_registration import _close_editor, _find_executable, _launch
+_NNGException = cast(
+    type[Exception],
+    getattr(import_module("pynng.exceptions"), "NNGException"),
+)
+from test_plugin_registration import close_editor, find_executable, launch
+
+
+def run_kicad_cli(
+    arguments: Sequence[str],
+    *,
+    check: bool = True,
+    capture_output: bool = False,
+) -> subprocess.CompletedProcess[str]:
+    """Run a trusted KiCad CLI argument vector for standalone acceptance tests.
+
+    Returns:
+        CompletedProcess[str]: The captured or checked KiCad CLI result.
+    """
+    return subprocess.run(
+        list(arguments),
+        check=check,
+        capture_output=capture_output,
+        text=True,
+    )
 
 
 def _find_cli() -> str:
@@ -56,13 +86,13 @@ def _schematic_sheet(
     x: int,
 ) -> str:
     """Return a real KiCad hierarchical sheet symbol with typed interface pins."""
-    pin_lines = []
+    pin_lines: list[str] = []
     for index, (pin_name, electrical_type) in enumerate(pins):
         pin_uuid = str(uuid.uuid4())
         pin_y = 90 + index * 10
         pin_lines.append(
             f'    (pin "{pin_name}" {electrical_type} (at {x} {pin_y} 180) '
-            f'(effects (font (size 1.27 1.27)) (justify right)) '
+            f"(effects (font (size 1.27 1.27)) (justify right)) "
             f'(uuid "{pin_uuid}"))'
         )
     return "\n".join(
@@ -76,11 +106,11 @@ def _schematic_sheet(
             f'    (uuid "{sheet_uuid}")',
             (
                 f'    (property "Sheetname" "{name}" (at {x} 77 0) '
-                '(effects (font (size 1.27 1.27)) (justify left bottom)))'
+                "(effects (font (size 1.27 1.27)) (justify left bottom)))"
             ),
             (
                 f'    (property "Sheetfile" "{filename}" (at {x} 80 0) '
-                '(effects (font (size 1.27 1.27)) (justify left bottom)))'
+                "(effects (font (size 1.27 1.27)) (justify left bottom)))"
             ),
             *pin_lines,
             "    (instances",
@@ -114,10 +144,7 @@ def _write_source_sheets(project_dir: Path) -> tuple[Path, dict[str, Path]]:
             160,
         ),
     )
-    sheet_entries = [
-        (spec, str(uuid.uuid4()))
-        for spec in sheet_specs
-    ]
+    sheet_entries = [(spec, str(uuid.uuid4())) for spec in sheet_specs]
     sheets_directory = project_dir / "sheets"
     sheets_directory.mkdir(parents=True)
     parent_path = project_dir / f"{project_name}.kicad_sch"
@@ -144,14 +171,16 @@ def _write_source_sheets(project_dir: Path) -> tuple[Path, dict[str, Path]]:
                 x=x,
             )
         )
-    parent_content.extend([
-        '  (sheet_instances (path "/" (page "1")))',
-        ")",
-    ])
+    parent_content.extend(
+        [
+            '  (sheet_instances (path "/" (page "1")))',
+            ")",
+        ]
+    )
     parent_path.write_text("\n".join(parent_content) + "\n", encoding="utf-8")
 
     child_paths: dict[str, Path] = {}
-    for spec, sheet_uuid in sheet_entries:
+    for spec, _sheet_uuid in sheet_entries:
         name, relative_path, pin_spec, _pins, page, _x = spec
         child_path = project_dir / relative_path
         child_path.parent.mkdir(parents=True, exist_ok=True)
@@ -166,7 +195,9 @@ def _write_source_sheets(project_dir: Path) -> tuple[Path, dict[str, Path]]:
         # hierarchical paths on symbol instances inside the child.
         old_instances = '(sheet_instances (path "/" (page "1")))'
         if old_instances not in child_content:
-            raise AssertionError("The generated child template has no root sheet-instance placeholder.")
+            raise AssertionError(
+                "The generated child template has no root sheet-instance placeholder."
+            )
         child_path.write_text(
             child_content.replace(old_instances, ""),
             encoding="utf-8",
@@ -176,33 +207,13 @@ def _write_source_sheets(project_dir: Path) -> tuple[Path, dict[str, Path]]:
     (project_dir / f"{project_name}.kicad_pro").write_text("{}\n", encoding="utf-8")
     return parent_path, child_paths
 
-def _open_live_eeschema(
-    schematic_path: Path,
-    root: Path,
-) -> tuple[KiCad, subprocess.Popen, str, str]:
-    """Launch real Eeschema with IPC enabled and return its live schematic client."""
-    eeschema = os.environ.get("KICAD_EESCHEMA") or _find_executable(
-        "eeschema-nightly", "eeschema"
-    )
-    xdotool = _find_executable("xdotool")
-    if not os.environ.get("DISPLAY"):
-        raise RuntimeError("Run the Create Block IPC test under xvfb-run; DISPLAY is not set.")
 
+def _isolated_eeschema_environment(root: Path) -> tuple[Path, dict[str, str]]:
+    """Create isolated KiCad profile paths and remove inherited pip overrides."""
     home = root / "eeschema-home"
-    home.mkdir()
     documents_home = home / ".local" / "share"
     cache_home = home / ".cache"
-    version_output = subprocess.run(
-        [_find_cli(), "version"], capture_output=True, text=True, check=True
-    ).stdout
-    version_match = re.search(r"(\d+\.\d+)", version_output)
-    if version_match is None:
-        raise RuntimeError(f"Could not determine KiCad MAJOR.MINOR version: {version_output!r}")
-    version = version_match.group(1)
-    python_interpreter = shutil.which("python3")
-    if not python_interpreter:
-        raise FileNotFoundError("System python3 was not found for KiCad IPC configuration.")
-
+    home.mkdir()
     env = os.environ.copy()
     for key in (
         "PIP_FIND_LINKS",
@@ -224,20 +235,14 @@ def _open_live_eeschema(
             "KICAD_CACHE_HOME": str(cache_home),
         }
     )
+    return home, env
 
-    # First launch creates KiCad's version-specific profile and resolves any
-    # first-run setup dialog. Enable the IPC API in that isolated profile,
-    # then launch the actual test project with Eeschema's GUI server.
-    first_log = root / "create-block-first-run.log"
-    first_process, first_window = _launch(
-        eeschema, schematic_path, env, xdotool, first_log
-    )
-    _close_editor(first_process, first_window, xdotool)
+
+def _enable_eeschema_ipc(home: Path, version: str, python_interpreter: str) -> None:
+    """Persist the IPC server settings into the isolated KiCad profile."""
     config_files = list(home.rglob("kicad_common.json"))
     if not config_files:
-        raise FileNotFoundError(
-            "Eeschema did not create kicad_common.json during first launch."
-        )
+        raise FileNotFoundError("Eeschema did not create kicad_common.json during first launch.")
     common_path = next(
         (item for item in config_files if item.parent.name == version),
         config_files[0],
@@ -251,31 +256,50 @@ def _open_live_eeschema(
         encoding="utf-8",
     )
 
-    editor_log = root / "create-block-editor.log"
-    process, window_id = _launch(
-        eeschema, schematic_path, env, xdotool, editor_log
-    )
-    deadline = time.monotonic() + 30.0
-    last_error = None
+
+def _initialize_eeschema_ipc_profile(
+    eeschema: str,
+    schematic_path: Path,
+    home: Path,
+    env: dict[str, str],
+    xdotool: str,
+    version: str,
+    python_interpreter: str,
+) -> None:
+    """Run the one-time profile bootstrap and enable Eeschema's IPC server."""
+    first_log = home.parent / "create-block-first-run.log"
+    first_process, first_window = launch(eeschema, schematic_path, env, xdotool, first_log)
+    close_editor(first_process, first_window, xdotool)
+    _enable_eeschema_ipc(home, version, python_interpreter)
+
+
+def _connect_live_eeschema(
+    process: subprocess.Popen[str],
+    editor_log: Path,
+    timeout_s: float = 30.0,
+) -> KiCad:
+    """Wait for Eeschema's NNG endpoint and return a validated live client."""
+    deadline = time.monotonic() + timeout_s
+    last_error: Exception | None = None
     while time.monotonic() < deadline:
         if process.poll() is not None:
             raise RuntimeError(
                 f"Eeschema exited before exposing the IPC API (exit {process.returncode}). "
                 f"{editor_log.read_text(errors='replace')[-8000:]}"
             )
-        client = None
+        client: KiCad | None = None
         try:
             client = KiCad(timeout_ms=30000)
-            schematic = client.get_schematic()
-            if schematic is not None:
-                return client, process, window_id, xdotool
-        except (ApiError, NNGException, OSError, TimeoutError) as exc:
+            client.get_schematic()
+        except (ApiError, _NNGException, OSError, TimeoutError) as exc:
             last_error = exc
             if client is not None:
                 close_client = getattr(client, "close", None)
                 if callable(close_client):
-                    with contextlib.suppress(ApiError, NNGException, OSError):
+                    with contextlib.suppress(ApiError, OSError):
                         close_client()
+        else:
+            return client
         time.sleep(0.25)
     raise TimeoutError(
         "Eeschema opened but its schematic IPC endpoint did not become ready. "
@@ -284,7 +308,45 @@ def _open_live_eeschema(
     )
 
 
-def _assert_cli_exports(cli: str, record, parent_path: Path, output_root: Path) -> None:
+def _open_live_eeschema(
+    schematic_path: Path,
+    root: Path,
+) -> tuple[KiCad, subprocess.Popen[str], str, str]:
+    """Launch Eeschema with a fresh IPC-enabled profile and connect to it."""
+    eeschema = os.environ.get("KICAD_EESCHEMA") or find_executable("eeschema-nightly", "eeschema")
+    xdotool = find_executable("xdotool")
+    if not os.environ.get("DISPLAY"):
+        raise RuntimeError("Run the Create Block IPC test under xvfb-run; DISPLAY is not set.")
+
+    version_output = subprocess.run(
+        [_find_cli(), "version"], capture_output=True, text=True, check=True
+    ).stdout
+    version_match = re.search(r"(\d+\.\d+)", version_output)
+    if version_match is None:
+        raise RuntimeError(f"Could not determine KiCad MAJOR.MINOR version: {version_output!r}")
+    python_interpreter = shutil.which("python3")
+    if python_interpreter is None:
+        raise FileNotFoundError("System python3 was not found for KiCad IPC configuration.")
+
+    home, env = _isolated_eeschema_environment(root)
+    _initialize_eeschema_ipc_profile(
+        eeschema,
+        schematic_path,
+        home,
+        env,
+        xdotool,
+        version_match.group(1),
+        python_interpreter,
+    )
+    editor_log = root / "create-block-editor.log"
+    process, window_id = launch(eeschema, schematic_path, env, xdotool, editor_log)
+    client = _connect_live_eeschema(process, editor_log)
+    return client, process, window_id, xdotool
+
+
+def _assert_cli_exports(
+    cli: str, record: BlockRecord, parent_path: Path, output_root: Path
+) -> None:
     symbol_output = output_root / (record.path.name + "-symbol")
     schematic_output = output_root / (record.path.name + "-schematic")
     symbol_output.mkdir()
@@ -296,7 +358,15 @@ def _assert_cli_exports(cli: str, record, parent_path: Path, output_root: Path) 
         text=True,
     )
     subprocess.run(
-        [cli, "sch", "export", "svg", "--output", str(schematic_output), str(record.implementation)],
+        [
+            cli,
+            "sch",
+            "export",
+            "svg",
+            "--output",
+            str(schematic_output),
+            str(record.implementation),
+        ],
         check=True,
         capture_output=True,
         text=True,
@@ -318,12 +388,14 @@ def _assert_cli_exports(cli: str, record, parent_path: Path, output_root: Path) 
         raise AssertionError("KiCad CLI did not export the original multi-sheet project.")
 
 
-def _validate_hierarchy_fixture(cli: str, parent_path: Path, child_paths: dict[str, Path], output_root: Path) -> None:
+def _validate_hierarchy_fixture(
+    cli: str, parent_path: Path, child_paths: dict[str, Path], output_root: Path
+) -> None:
     """Fail with KiCad's parser diagnostics before starting the IPC server."""
     for label, source in [("parent", parent_path), *child_paths.items()]:
         destination = output_root / f"fixture-{label}-svg"
         destination.mkdir()
-        result = subprocess.run(
+        result = run_kicad_cli(
             [
                 cli,
                 "sch",
@@ -334,7 +406,6 @@ def _validate_hierarchy_fixture(cli: str, parent_path: Path, child_paths: dict[s
                 str(source),
             ],
             capture_output=True,
-            text=True,
             check=False,
         )
         if result.returncode != 0 or not list(destination.glob("*.svg")):
@@ -342,6 +413,10 @@ def _validate_hierarchy_fixture(cli: str, parent_path: Path, child_paths: dict[s
                 f"KiCad CLI rejected the {label} source-sheet fixture {source}. "
                 f"exit={result.returncode}; stdout={result.stdout}; stderr={result.stderr}"
             )
+
+
+def _show_info(*_args: str) -> None:
+    """Suppress informational dialogs during the live IPC acceptance run."""
 
 
 def main() -> None:
@@ -357,21 +432,15 @@ def main() -> None:
         _validate_hierarchy_fixture(cli, parent_path, child_paths, root)
 
         original_files = {
-            path: path.read_bytes()
-            for path in (parent_path, project_path, *child_paths.values())
+            path: path.read_bytes() for path in (parent_path, project_path, *child_paths.values())
         }
         kicad = None
         process = None
         window_id = None
         xdotool = None
         try:
-            kicad, process, window_id, xdotool = _open_live_eeschema(
-                parent_path, root
-            )
+            kicad, process, window_id, xdotool = _open_live_eeschema(parent_path, root)
             schematic = kicad.get_schematic()
-            if schematic is None:
-                raise RuntimeError("Live Eeschema IPC returned no schematic document.")
-
             hierarchy = schematic.get_hierarchy()
             root_sheet = getattr(hierarchy, "root", None)
             if root_sheet is None:
@@ -388,8 +457,7 @@ def main() -> None:
                     f"Expected two real SheetSymbol objects from IPC, found {len(typed_sheets)}."
                 )
             selected = next(
-                item for item in typed_sheets
-                if str(item.name_field.text.value) == "Power Stage"
+                item for item in typed_sheets if str(item.name_field.text.value) == "Power Stage"
             )
             filename_value = str(selected.filename_field.text.value)
             if filename_value.replace("\\", "/") != "sheets/power_stage.kicad_sch":
@@ -405,19 +473,24 @@ def main() -> None:
                     "KiCad did not preserve the selected hierarchical sheet as a typed SheetSymbol."
                 )
 
-            def create_details(name: str, description: str):
-                return lambda _parent, _source: (name, description)
+            def create_details(
+                name: str, description: str
+            ) -> Callable[[Misc, Path], tuple[str, str]]:
+                def details(_parent: Misc, _source: Path) -> tuple[str, str]:
+                    return name, description
 
-            def run_creation(parent_schematic, name: str, description: str):
+                return details
+
+            def run_creation(
+                parent_schematic: plugin_actions.Schematic, name: str, description: str
+            ) -> None:
                 with (
                     patch.object(
                         plugin_actions,
                         "configured_library_roots",
                         return_value=[library_root],
                     ),
-                    patch.object(
-                        plugin_actions, "_reload_symbol_library", return_value=True
-                    ),
+                    patch.object(plugin_actions, "_reload_symbol_library", return_value=True),
                     patch.object(
                         plugin_actions,
                         "_ask_create_block_details",
@@ -426,11 +499,15 @@ def main() -> None:
                     patch.object(
                         plugin_actions,
                         "messagebox",
-                        SimpleNamespace(showinfo=lambda *args, **kwargs: None),
+                        SimpleNamespace(showinfo=_show_info),
                     ),
                 ):
-                    plugin_actions._create_and_place(
-                        library_root, parent_schematic, kicad, project_dir, object()
+                    plugin_actions.create_and_place(
+                        library_root,
+                        parent_schematic,
+                        cast("plugin_actions.KiCadApp", kicad),
+                        project_dir,
+                        cast("Misc", object()),
                     )
 
             run_creation(
@@ -447,33 +524,38 @@ def main() -> None:
             selected_record = records[0]
             selected_manifest = selected_record.manifest
             if selected_manifest["interface_source"] != "hierarchical_labels":
-                raise AssertionError("The selected-sheet block did not retain its extraction provenance.")
+                raise AssertionError(
+                    "The selected-sheet block did not retain its extraction provenance."
+                )
             if [item["name"] for item in selected_manifest["pins"]] != ["VIN", "GND", "VOUT"]:
                 raise AssertionError(
                     f"Selected-sheet facade pins were not derived from its labels: {selected_manifest['pins']!r}"
                 )
             project_catalog = project_dir / ".kicad_blocks" / LIBRARY_CATALOG_NAME
-            if (
-                not project_catalog.is_file()
-                or selected_manifest["symbol_name"] not in project_catalog.read_text(encoding="utf-8")
-            ):
-                raise AssertionError("Create Block did not rebuild the project's unified facade catalog.")
+            if not project_catalog.is_file() or selected_manifest[
+                "symbol_name"
+            ] not in project_catalog.read_text(encoding="utf-8"):
+                raise AssertionError(
+                    "Create Block did not rebuild the project's unified facade catalog."
+                )
             symbol_table = project_dir / "sym-lib-table"
-            if (
-                not symbol_table.is_file()
-                or LIBRARY_NICKNAME not in symbol_table.read_text(encoding="utf-8")
+            if not symbol_table.is_file() or LIBRARY_NICKNAME not in symbol_table.read_text(
+                encoding="utf-8"
             ):
-                raise AssertionError("Create Block did not register the facade catalog in sym-lib-table.")
+                raise AssertionError(
+                    "Create Block did not register the facade catalog in sym-lib-table."
+                )
 
             # Scope a real IPC schematic object to the other child sheet. This
             # is the same path-bound view the action receives when a user has
             # opened that subsheet with no canvas selection.
             other_instance = next(
-                item for item in sheet_instances
+                item
+                for item in sheet_instances
                 if str(getattr(item, "name", "")) == "Control Interface"
             )
             open_sheet = schematic.for_sheet(other_instance)
-            active_source, active_sheet_uuid = plugin_actions._active_sheet_source(
+            active_source, active_sheet_uuid = plugin_actions.active_sheet_source(
                 open_sheet, project_dir
             )
             if active_source != child_paths["Control Interface"].resolve():
@@ -481,11 +563,15 @@ def main() -> None:
                     f"The subsheet IPC view resolved to the wrong source: {active_source}."
                 )
             if not active_sheet_uuid:
-                raise AssertionError("The active subsheet IPC view did not expose its instance UUID.")
+                raise AssertionError(
+                    "The active subsheet IPC view did not expose its instance UUID."
+                )
             schematic.clear_selection()
             open_selection = list(open_sheet.get_selection())
             if open_selection:
-                raise AssertionError("Subsheet IPC view unexpectedly retained the previous sheet selection.")
+                raise AssertionError(
+                    "Subsheet IPC view unexpectedly retained the previous sheet selection."
+                )
 
             run_creation(
                 open_sheet,
@@ -505,7 +591,9 @@ def main() -> None:
                 )
 
             if not all(path.read_bytes() == original for path, original in original_files.items()):
-                raise AssertionError("Create Block modified one or more original project sheet files.")
+                raise AssertionError(
+                    "Create Block modified one or more original project sheet files."
+                )
 
             _assert_cli_exports(cli, selected_record, parent_path, root)
             _assert_cli_exports(cli, active_record, parent_path, root)
@@ -516,10 +604,10 @@ def main() -> None:
             )
         finally:
             if kicad is not None:
-                with contextlib.suppress(ApiError, NNGException, OSError):
+                with contextlib.suppress(ApiError, OSError):
                     kicad.close()
             if process is not None and process.poll() is None and window_id and xdotool:
-                _close_editor(process, window_id, xdotool)
+                close_editor(process, window_id, xdotool)
 
 
 if __name__ == "__main__":

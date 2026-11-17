@@ -10,7 +10,9 @@ import subprocess
 import sys
 import tempfile
 import time
+from collections.abc import Callable
 from pathlib import Path
+from typing import cast
 
 ROOT = Path(__file__).resolve().parents[1]
 PLUGIN_SOURCE = ROOT / "plugin" / "kicad-blocks"
@@ -19,6 +21,7 @@ INSTALLER = ROOT / "scripts" / "install_plugin.py"
 sys.path.insert(0, str(PLUGIN_SOURCE))
 
 from kicad_blocks import plugin as plugin_actions
+from kicad_blocks.plugin import KiCadApp, SchematicSelectionProvider
 from kicad_blocks.model import parse_pins
 from kicad_blocks.repository import (
     LIBRARY_CATALOG_NAME,
@@ -26,6 +29,13 @@ from kicad_blocks.repository import (
     register_project_symbol_library,
 )
 from kipy import KiCad
+
+
+__all__ = [
+    "_select_facade_in_test_harness",
+    "_select_native_symbol_in_test_harness",
+    "_wait_for_symbol_document",
+]
 
 
 def _find_executable(*names: str) -> str:
@@ -43,7 +53,7 @@ def _windows(xdotool: str) -> list[tuple[str, str, str]]:
         text=True,
         check=False,
     )
-    windows = []
+    windows: list[tuple[str, str, str]] = []
     for candidate in result.stdout.splitlines():
         if not candidate.strip().isdigit():
             continue
@@ -64,7 +74,7 @@ def _windows(xdotool: str) -> list[tuple[str, str, str]]:
 
 
 def _wait_for_editor(
-    process: subprocess.Popen,
+    process: subprocess.Popen[str],
     schematic: Path,
     xdotool: str,
     log_path: Path,
@@ -80,11 +90,7 @@ def _wait_for_editor(
             )
         windows = _windows(xdotool)
         setup = next(
-            (
-                item
-                for item in windows
-                if "kicad setup" in (item[1] + " " + item[2]).casefold()
-            ),
+            (item for item in windows if "kicad setup" in (item[1] + " " + item[2]).casefold()),
             None,
         )
         if setup is not None and setup_steps < 12:
@@ -114,10 +120,7 @@ def _wait_for_editor(
                 item
                 for item in reversed(windows)
                 if schematic.stem.casefold() in item[1].casefold()
-                and (
-                    "schematic editor" in item[1].casefold()
-                    or "eeschema" in item[2].casefold()
-                )
+                and ("schematic editor" in item[1].casefold() or "eeschema" in item[2].casefold())
             ),
             None,
         )
@@ -151,12 +154,19 @@ def _dump_accessibility_tree(process_id: int) -> str:
     print("--- end xa11y accessibility tree ---", flush=True)
     return tree
 
-def _wait_for_window_title(xdotool: str, predicate, timeout_s: float = 12.0) -> tuple[str, str, str]:
+
+def _wait_for_window_title(
+    xdotool: str,
+    predicate: Callable[[str], bool],
+    timeout_s: float = 12.0,
+) -> tuple[str, str, str]:
     deadline = time.monotonic() + timeout_s
-    last_windows = []
+    last_windows: list[tuple[str, str, str]] = []
     while time.monotonic() < deadline:
         last_windows = _windows(xdotool)
-        match = next((item for item in reversed(last_windows) if predicate(item[1].casefold())), None)
+        match = next(
+            (item for item in reversed(last_windows) if predicate(item[1].casefold())), None
+        )
         if match is not None:
             return match
         time.sleep(0.1)
@@ -168,25 +178,48 @@ def _select_native_symbol_in_test_harness(xdotool: str, symbol_name: str) -> Non
     chooser = _wait_for_window_title(
         xdotool, lambda title: "choose symbol" in title or "select symbol" in title
     )
-    subprocess.run([xdotool, "windowfocus", "--sync", chooser[0]], check=True, capture_output=True, text=True)
-    subprocess.run([xdotool, "type", "--clearmodifiers", "--delay", "12", symbol_name], check=True, capture_output=True, text=True)
-    subprocess.run([xdotool, "key", "--clearmodifiers", "Return"], check=True, capture_output=True, text=True)
+    subprocess.run(
+        [xdotool, "windowfocus", "--sync", chooser[0]], check=True, capture_output=True, text=True
+    )
+    subprocess.run(
+        [xdotool, "type", "--clearmodifiers", "--delay", "12", symbol_name],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    subprocess.run(
+        [xdotool, "key", "--clearmodifiers", "Return"], check=True, capture_output=True, text=True
+    )
 
 
 def _select_facade_in_test_harness(xdotool: str, symbol_name: str) -> None:
     """Complete the native Symbol Editor library-tree search in the X11 test session."""
     editor = _wait_for_window_title(xdotool, lambda title: "symbol editor" in title)
-    subprocess.run([xdotool, "windowfocus", "--sync", editor[0]], check=True, capture_output=True, text=True)
-    subprocess.run([xdotool, "key", "--clearmodifiers", "ctrl+l"], check=True, capture_output=True, text=True)
-    subprocess.run([xdotool, "type", "--clearmodifiers", "--delay", "12", symbol_name], check=True, capture_output=True, text=True)
+    subprocess.run(
+        [xdotool, "windowfocus", "--sync", editor[0]], check=True, capture_output=True, text=True
+    )
+    subprocess.run(
+        [xdotool, "key", "--clearmodifiers", "ctrl+l"], check=True, capture_output=True, text=True
+    )
+    subprocess.run(
+        [xdotool, "type", "--clearmodifiers", "--delay", "12", symbol_name],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
     time.sleep(0.35)
-    subprocess.run([xdotool, "key", "--clearmodifiers", "Return"], check=True, capture_output=True, text=True)
+    subprocess.run(
+        [xdotool, "key", "--clearmodifiers", "Return"], check=True, capture_output=True, text=True
+    )
 
 
-def _wait_for_symbol_document(kicad, expected_lib_id: str, timeout_s: float = 8.0) -> None:
+def _wait_for_symbol_document(
+    kicad: KiCadApp, expected_lib_id: str, timeout_s: float = 8.0
+) -> None:
     from kipy.proto.common.types import DocumentType
+
     deadline = time.monotonic() + timeout_s
-    observed = []
+    observed: list[str] = []
     while time.monotonic() < deadline:
         observed = []
         for document in kicad.get_open_documents(DocumentType.DOCTYPE_SYMBOL):
@@ -202,7 +235,8 @@ def _wait_for_symbol_document(kicad, expected_lib_id: str, timeout_s: float = 8.
         time.sleep(0.1)
     raise AssertionError(f"Symbol Editor did not report {expected_lib_id!r}; observed={observed!r}")
 
-def _close_editor(process: subprocess.Popen, window_id: str, xdotool: str) -> None:
+
+def _close_editor(process: subprocess.Popen[str], window_id: str, xdotool: str) -> None:
     subprocess.run(
         [xdotool, "windowclose", window_id],
         check=False,
@@ -226,7 +260,7 @@ def _launch(
     env: dict[str, str],
     xdotool: str,
     log_path: Path,
-) -> tuple[subprocess.Popen, str]:
+) -> tuple[subprocess.Popen[str], str]:
     with log_path.open("w", encoding="utf-8") as stream:
         process = subprocess.Popen(
             [eeschema, str(schematic)],
@@ -250,12 +284,8 @@ def _launch(
 
 
 def main() -> None:
-    eeschema = os.environ.get("KICAD_EESCHEMA") or _find_executable(
-        "eeschema-nightly", "eeschema"
-    )
-    cli = os.environ.get("KICAD_CLI") or _find_executable(
-        "kicad-cli-nightly", "kicad-cli"
-    )
+    eeschema = os.environ.get("KICAD_EESCHEMA") or _find_executable("eeschema-nightly", "eeschema")
+    cli = os.environ.get("KICAD_CLI") or _find_executable("kicad-cli-nightly", "kicad-cli")
     xdotool = _find_executable("xdotool")
     if not os.environ.get("DISPLAY"):
         raise RuntimeError("Run this test under xvfb-run; DISPLAY is not set.")
@@ -332,9 +362,7 @@ def main() -> None:
         # Let KiCad create its version-specific first-run profile, and accept
         # its default setup wizard before enabling the API preference.
         first_log = root / "eeschema-first-run.log"
-        first_process, first_window = _launch(
-            eeschema, schematic, env, xdotool, first_log
-        )
+        first_process, first_window = _launch(eeschema, schematic, env, xdotool, first_log)
         _close_editor(first_process, first_window, xdotool)
 
         config_files = list(home.rglob("kicad_common.json"))
@@ -372,9 +400,7 @@ def main() -> None:
             capture_output=True,
             text=True,
         )
-        installed_plugin = (
-            documents_home / "kicad" / version / "plugins" / PLUGIN_IDENTIFIER
-        )
+        installed_plugin = documents_home / "kicad" / version / "plugins" / PLUGIN_IDENTIFIER
         plugin_manifest_path = installed_plugin / "plugin.json"
         manifest = json.loads(plugin_manifest_path.read_text(encoding="utf-8"))
         if manifest.get("runtime", {}).get("min_version") != "3.12":
@@ -394,9 +420,7 @@ def main() -> None:
                 "schematic actions, and the PCB placement action."
             )
         for identifier, (entrypoint, show_button) in expected_schematic_actions.items():
-            action = next(
-                item for item in manifest["actions"] if item["identifier"] == identifier
-            )
+            action = next(item for item in manifest["actions"] if item["identifier"] == identifier)
             if action.get("scopes") != ["schematic"]:
                 raise AssertionError(f"{identifier} is not scoped to Eeschema: {action!r}")
             if action.get("show-button", False) is not show_button:
@@ -406,9 +430,7 @@ def main() -> None:
             if not (installed_plugin / entrypoint).is_file():
                 raise FileNotFoundError(f"Installed action entrypoint is missing: {entrypoint}")
         pcb_action = next(
-            item
-            for item in manifest["actions"]
-            if item["identifier"] == "place-imported-layout"
+            item for item in manifest["actions"] if item["identifier"] == "place-imported-layout"
         )
         if pcb_action.get("scopes") != ["pcb"] or not pcb_action.get("show-button"):
             raise AssertionError(
@@ -440,9 +462,7 @@ def main() -> None:
         process, window_id = _launch(eeschema, schematic, env, xdotool, log_path)
         placement_client = None
         try:
-            environment = (
-                cache_home / "kicad" / version / "python-environments" / PLUGIN_IDENTIFIER
-            )
+            environment = cache_home / "kicad" / version / "python-environments" / PLUGIN_IDENTIFIER
             env_python = environment / "bin" / "python"
             # A cold KiCad-managed environment may need several minutes to download
             # ABI-specific wheels (notably the CPython 3.14 Pillow wheel). Keep the
@@ -508,10 +528,7 @@ def main() -> None:
                 check=False,
                 timeout=20.0,
             )
-            if (
-                hub_probe.returncode != 0
-                or "task hub ui passed" not in hub_probe.stdout.casefold()
-            ):
+            if hub_probe.returncode != 0 or "task hub ui passed" not in hub_probe.stdout.casefold():
                 raise RuntimeError(
                     "The KiCad Blocks task hub UI smoke test failed. "
                     f"exit={hub_probe.returncode}; "
@@ -583,30 +600,30 @@ def main() -> None:
             _dump_accessibility_tree(process.pid)
             try:
                 live_schematic = facade_editor_client.get_schematic()
-                if live_schematic is None:
-                    raise RuntimeError("Live Eeschema IPC returned no schematic for Edit Facade.")
-                live_selection = plugin_actions._safe_schematic_selection(live_schematic)
+                live_selection = plugin_actions.safe_schematic_selection(
+                    cast("SchematicSelectionProvider", live_schematic)
+                )
                 if live_selection:
                     raise AssertionError(
                         "Edit Facade capability test requires an empty schematic selection; "
                         f"found {len(live_selection)} selected item(s)."
                     )
-                refreshed_record = plugin_actions._register_block(
+                refreshed_record = plugin_actions.register_block(
                     project,
                     block,
-                    facade_editor_client,
+                    cast("KiCadApp", facade_editor_client),
                     [block.path.parent],
                 )
-                if not plugin_actions._LAST_LIBRARY_RELOAD_OK:
+                reload_ok, reload_warning = plugin_actions.library_reload_status()
+                if not reload_ok:
                     raise RuntimeError(
                         "Could not reload the generated KBlocks project catalog before "
-                        "checking Edit Facade capability: "
-                        + str(plugin_actions._LAST_LIBRARY_RELOAD_WARNING)
+                        "checking Edit Facade capability: " + str(reload_warning)
                     )
                 try:
-                    plugin_actions._edit_facade_symbol(
+                    plugin_actions.edit_facade_symbol(
                         refreshed_record,
-                        facade_editor_client,
+                        cast("KiCadApp", facade_editor_client),
                         project_catalog=project / ".kicad_blocks" / LIBRARY_CATALOG_NAME,
                     )
                 except RuntimeError as exc:
@@ -624,8 +641,8 @@ def main() -> None:
                 facade_editor_client.close()
 
             placement_client = KiCad(timeout_ms=30000)
-            placed_instance = plugin_actions._start_native_symbol_placement(
-                placement_client,
+            placed_instance = plugin_actions.start_native_symbol_placement(
+                cast("KiCadApp", placement_client),
                 None,
                 placement_symbol_name,
             )
@@ -643,9 +660,7 @@ def main() -> None:
                     f"selected={selected_instances[0].id!s}"
                 )
 
-            expected_lib_id = (
-                f'{block.manifest["library_nickname"]}:{placement_symbol_name}'
-            )
+            expected_lib_id = f"{block.manifest['library_nickname']}:{placement_symbol_name}"
             saved_schematic = schematic.read_text(encoding="utf-8")
             if expected_lib_id not in saved_schematic:
                 raise AssertionError(
@@ -673,7 +688,9 @@ def main() -> None:
                 text=True,
             )
             if not list(placement_svg.glob("*.svg")):
-                raise AssertionError("KiCad CLI could not parse the schematic containing the placed block.")
+                raise AssertionError(
+                    "KiCad CLI could not parse the schematic containing the placed block."
+                )
             print(
                 f"Functional Block Library placement helper selected and placed "
                 f"{expected_lib_id}; the saved schematic passed KiCad CLI export."
@@ -691,3 +708,9 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+
+# Shared Eeschema test utilities for other live-IPC integration checks.
+find_executable = _find_executable
+launch = _launch
+close_editor = _close_editor

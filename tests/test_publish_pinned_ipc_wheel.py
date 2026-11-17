@@ -9,6 +9,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from scripts.github_api_types import GitHubApiResponse, GitHubRequestArgument
+
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "publish_pinned_ipc_wheel.py"
 SPEC = importlib.util.spec_from_file_location("publish_pinned_ipc_wheel", SCRIPT)
 if SPEC is None or SPEC.loader is None:
@@ -21,7 +23,12 @@ WHEEL_NAME = "kicad_python-0.9.0.dev0-cp312-cp312-linux_x86_64.whl"
 
 
 class PinnedWheelPublisherTests(unittest.TestCase):
-    def setUp(self):
+    wheelhouse: Path
+    wheel: Path
+    digest: str
+    release: GitHubApiResponse
+
+    def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory()
         self.wheelhouse = Path(self.temp.name)
         self.wheel = self.wheelhouse / WHEEL_NAME
@@ -34,7 +41,7 @@ class PinnedWheelPublisherTests(unittest.TestCase):
             "assets": [],
         }
 
-    def tearDown(self):
+    def tearDown(self) -> None:
         self.temp.cleanup()
 
     def test_existing_identical_asset_is_idempotent_and_never_uploaded_again(self):
@@ -52,7 +59,9 @@ class PinnedWheelPublisherTests(unittest.TestCase):
         self.assertEqual(request.call_count, 2)
         self.assertEqual(request.call_args_list[0].args[0], "GET")
         self.assertEqual(request.call_args_list[1].args[0], "PATCH")
-        self.assertIn("CPython 3.12, 3.13 and 3.14", request.call_args_list[1].kwargs["payload"]["body"])
+        self.assertIn(
+            "CPython 3.12, 3.13 and 3.14", request.call_args_list[1].kwargs["payload"]["body"]
+        )
 
     def test_existing_asset_with_different_digest_is_not_overwritten(self):
         asset = {
@@ -61,9 +70,10 @@ class PinnedWheelPublisherTests(unittest.TestCase):
             "digest": "sha256:" + "0" * 64,
             "browser_download_url": "https://example.invalid/wrong.whl",
         }
-        with patch.object(
-            publisher, "_request", return_value={**self.release, "assets": [asset]}
-        ), self.assertRaisesRegex(RuntimeError, "refusing to replace"):
+        with (
+            patch.object(publisher, "_request", return_value={**self.release, "assets": [asset]}),
+            self.assertRaisesRegex(RuntimeError, "refusing to replace"),
+        ):
             publisher.publish_pinned_wheel(self.wheelhouse, "owner/repo", SHA, "token")
 
     def test_new_asset_upload_is_verified_against_the_release_digest(self):
@@ -73,18 +83,31 @@ class PinnedWheelPublisherTests(unittest.TestCase):
             "digest": self.digest,
             "browser_download_url": "https://example.invalid/pinned.whl",
         }
-        calls = []
+        calls: list[tuple[str, str]] = []
 
-        def fake_request(method, url, _token, **_kwargs):
+        def fake_request(
+            method: str,
+            url: str,
+            _token: str,
+            **_kwargs: GitHubRequestArgument,
+        ) -> GitHubApiResponse | None:
             calls.append((method, url))
             if method == "GET" and url.endswith("/releases/tags/kicad-python-76b47d25"):
-                return dict(self.release)
+                return self.release
             if method == "PATCH" and url.endswith("/releases/18"):
-                return {**self.release, "body": _kwargs["payload"]["body"]}
+                payload_value = _kwargs.get("payload")
+                if not isinstance(payload_value, dict):
+                    raise AssertionError("Release update did not include a JSON payload.")
+                body_value = payload_value.get("body")
+                if not isinstance(body_value, str):
+                    raise AssertionError("Release update body must be a string.")
+                response: GitHubApiResponse = {**self.release, "body": body_value}
+                return response
             if method == "POST" and url.startswith("https://uploads.github.com/"):
                 return {}
             if method == "GET" and url.endswith("/releases/18"):
-                return {**self.release, "assets": [asset]}
+                response: GitHubApiResponse = {**self.release, "assets": [asset]}
+                return response
             raise AssertionError((method, url))
 
         with patch.object(publisher, "_request", side_effect=fake_request):

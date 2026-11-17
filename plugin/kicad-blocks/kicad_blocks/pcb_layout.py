@@ -5,112 +5,114 @@ no general add-existing-track/zone-from-another-board operation. This module
 therefore creates a new validated board copy. It never overwrites the project
 board currently open in PCB Editor.
 """
+
 from __future__ import annotations
 
+import contextlib
 import json
 import math
 import os
 import re
 import tempfile
 import uuid
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, TypeVar, cast
+
+from .pcb_types import (
+    AppliedNetclassPattern,
+    BatchBlockLayoutMergeResult,
+    BlockLayoutMergeResult,
+    KiCadNetclassDefinition,
+    KiCadNetclassPattern,
+    KiCadNetSettings,
+    KiCadProjectData,
+    KiCadProjectMetadata,
+    ProjectSettingsMergeResult,
+    ResolvedBlockLayout,
+)
+from .sexpr import QuotedSExpr as _Quoted
+from .sexpr import SExpr, SExprList, parse_sexpr
+from .sexpr import dump_sexpr as _dump
+from .sexpr import sexpr_all as _all
+from .sexpr import sexpr_direct as _direct
+from .sexpr import sexpr_head as _head
+
+if TYPE_CHECKING:
+    from .repository import BlockRecord
+
+type _JSONValue = str | int | float | bool | None | list[_JSONValue] | dict[str, _JSONValue]
 
 
-class _Quoted(str):
-    """Keep quoted S-expression strings distinct from bare atoms."""
+_T = TypeVar("_T")
 
 
-def _lex(source: str):
-    i = 0
-    while i < len(source):
-        ch = source[i]
-        if ch.isspace():
-            i += 1
-            continue
-        if ch == ";":
-            end = source.find("\n", i)
-            i = len(source) if end < 0 else end + 1
-            continue
-        if ch in "()":
-            yield ch
-            i += 1
-            continue
-        if ch == '"':
-            i += 1
-            escaped = False
-            out = []
-            while i < len(source):
-                cur = source[i]
-                if escaped:
-                    out.append("\\" + cur)
-                    escaped = False
-                elif cur == "\\":
-                    escaped = True
-                elif cur == '"':
-                    break
-                else:
-                    out.append(cur)
-                i += 1
-            if i >= len(source):
-                raise ValueError("Unterminated quoted string in KiCad S-expression.")
-            try:
-                value = json.loads('"' + "".join(out) + '"')
-            except json.JSONDecodeError as exc:
-                raise ValueError(f"Invalid quoted string in KiCad S-expression: {exc}") from exc
-            yield _Quoted(value)
-            i += 1
-            continue
-        start = i
-        while i < len(source) and not source[i].isspace() and source[i] not in "()":
-            i += 1
-        yield source[start:i]
+def _load_project_settings(path: Path, *, context: str) -> KiCadProjectData:
+    """Decode and validate the project sections consumed by the PCB importer.
 
+    Returns:
+        The decoded KiCad project document narrowed to its domain schema.
 
-def parse_sexpr(source: str) -> list:
-    """Parse one S-expression into nested lists and scalar tokens."""
-    root: list = []
-    stack = [root]
-    for token in _lex(source):
-        if token == "(":
-            node: list = []
-            stack[-1].append(node)
-            stack.append(node)
-        elif token == ")":
-            if len(stack) == 1:
-                raise ValueError("Unexpected ')' in KiCad S-expression.")
-            stack.pop()
-        else:
-            stack[-1].append(token)
-    if len(stack) != 1 or len(root) != 1 or not isinstance(root[0], list):
-        raise ValueError("Malformed KiCad S-expression document.")
-    return root[0]
+    Raises:
+        ValueError: If the document is not valid JSON.
+        TypeError: If the root or a consumed settings section is not an object.
 
-
-def _dump(value: Any) -> str:
-    if isinstance(value, list):
-        return "(" + " ".join(_dump(item) for item in value) + ")"
-    if isinstance(value, _Quoted):
-        return json.dumps(str(value), ensure_ascii=False)
-    return str(value)
-
-
-def _head(node: Any) -> str | None:
-    return str(node[0]) if isinstance(node, list) and node and isinstance(node[0], str) else None
-
-
-def _direct(node: list, tag: str) -> list | None:
-    return next((child for child in node[1:] if _head(child) == tag), None)
-
-
-def _all(node: list, tag: str) -> list[list]:
-    return [child for child in node[1:] if _head(child) == tag]
-
-
-def _num(value: Any) -> float:
+    """
     try:
-        result = float(str(value))
+        data_value = cast(_JSONValue, json.loads(path.read_text(encoding="utf-8")))
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"{context}: {path}") from exc
+    if not isinstance(data_value, dict):
+        raise TypeError(f"{context}: {path}")
+    data: dict[str, _JSONValue] = data_value
+    for section_name in ("meta", "net_settings"):
+        section = data.get(section_name)
+        if section is not None and not isinstance(section, dict):
+            raise TypeError(f"{context}: invalid {section_name} section in {path}")
+
+    net_settings = data.get("net_settings")
+    if isinstance(net_settings, dict):
+        classes = net_settings.get("classes", [])
+        if not isinstance(classes, list) or any(not isinstance(item, dict) for item in classes):
+            raise TypeError(f"{context}: invalid net_settings.classes section in {path}")
+        patterns = net_settings.get("netclass_patterns", [])
+        if not isinstance(patterns, list):
+            raise TypeError(f"{context}: invalid net_settings.netclass_patterns section in {path}")
+        for entry in patterns:
+            if (
+                not isinstance(entry, dict)
+                or not isinstance(entry.get("pattern"), str)
+                or not isinstance(entry.get("netclass"), str)
+            ):
+                raise TypeError(f"{context}: invalid netclass pattern entry in {path}")
+        assignments = net_settings.get("netclass_assignments", {})
+        if not isinstance(assignments, dict):
+            raise TypeError(f"{context}: invalid netclass assignments in {path}")
+        for value in assignments.values():
+            if isinstance(value, str):
+                continue
+            if not isinstance(value, list):
+                raise TypeError(f"{context}: invalid netclass assignment value in {path}")
+        for key in ("net_chain_classes", "net_chain_netclasses"):
+            chain_map = net_settings.get(key, {})
+            if not isinstance(chain_map, dict) or any(
+                not isinstance(name, str) or not isinstance(value, str)
+                for name, value in chain_map.items()
+            ):
+                raise TypeError(f"{context}: invalid {key} mapping in {path}")
+    return cast(KiCadProjectData, data)
+
+
+# This helper remains available to existing internal integrations and tests.
+__all__ = ["_xy", "rewrite_nets", "transform_item", "merge_project_net_settings"]
+
+
+def _num(value: SExpr) -> float:
+    if isinstance(value, list):
+        raise ValueError(f"Expected a scalar token, found an S-expression: {_dump(value)}")
+    try:
+        result = float(value)
     except (TypeError, ValueError) as exc:
         raise ValueError(f"Invalid coordinate/net code token {value!r}.") from exc
     if not math.isfinite(result):
@@ -125,14 +127,14 @@ def _fmt(value: float) -> str:
     return f"{value:.6f}".rstrip("0").rstrip(".") or "0"
 
 
-def _xy(node: list, dx: float, dy: float) -> None:
+def _xy(node: SExprList, dx: float, dy: float) -> None:
     if len(node) < 3:
         raise ValueError(f"Malformed coordinate node {_dump(node)}")
     node[1] = _fmt(_num(node[1]) + dx)
     node[2] = _fmt(_num(node[2]) + dy)
 
 
-def _get_nets(board: list) -> dict[int, str]:
+def _get_nets(board: SExprList) -> dict[int, str]:
     result = {0: ""}
     for node in _all(board, "net"):
         if len(node) >= 3:
@@ -143,21 +145,21 @@ def _get_nets(board: list) -> dict[int, str]:
     return result
 
 
-def _get_layers(board: list) -> set[str]:
+def _get_layers(board: SExprList) -> set[str]:
     layers = _direct(board, "layers")
     if layers is None:
         raise ValueError("PCB file does not define a layers list.")
     return {str(row[1]) for row in layers[1:] if isinstance(row, list) and len(row) >= 2}
 
 
-def _reference(footprint: list) -> str | None:
+def _reference(footprint: SExprList) -> str | None:
     for prop in _all(footprint, "property"):
         if len(prop) >= 3 and str(prop[1]).casefold() == "reference":
             return str(prop[2])
     return None
 
 
-def _refresh_ids(node: Any, id_remap: dict[str, str] | None = None) -> None:
+def _refresh_ids(node: SExpr, id_remap: dict[str, str] | None = None) -> None:
     """Regenerate item IDs, optionally retaining old-to-new UUID correspondence."""
     if not isinstance(node, list):
         return
@@ -172,7 +174,7 @@ def _refresh_ids(node: Any, id_remap: dict[str, str] | None = None) -> None:
 
 
 def _rewrite_nets(
-    node: Any,
+    node: SExpr,
     mapping: dict[int, tuple[int, str]],
     *,
     include_net_name: bool,
@@ -192,17 +194,17 @@ def _rewrite_nets(
         if old_code not in mapping:
             raise ValueError(f"Board item references undefined source net code {old_code}.")
         code, name = mapping[old_code]
+        rewritten: list[SExpr] = [str(code)]
         if include_net_name:
-            node[1:] = [str(code), _Quoted(name)]
-        else:
-            node[1:] = [str(code)]
+            rewritten.append(_Quoted(name))
+        node[1:] = rewritten
         return
     for child in node[1:]:
         _rewrite_nets(child, mapping, include_net_name=include_net_name)
 
 
 def _transform_point(
-    node: list,
+    node: SExprList,
     *,
     anchor_mm: tuple[float, float],
     position_mm: tuple[float, float],
@@ -222,7 +224,7 @@ def _transform_point(
     node[2] = _fmt(position_mm[1] - source_x * sine + source_y * cosine)
 
 
-def _rotate_angle_node(node: list, rotation_deg: float) -> None:
+def _rotate_angle_node(node: SExprList, rotation_deg: float) -> None:
     """Add the block rotation to an item's existing absolute orientation."""
     if len(node) >= 4:
         try:
@@ -233,7 +235,7 @@ def _rotate_angle_node(node: list, rotation_deg: float) -> None:
 
 
 def _transform_item(
-    node: list,
+    node: SExprList,
     *,
     anchor_mm: tuple[float, float],
     position_mm: tuple[float, float],
@@ -265,14 +267,14 @@ def _transform_item(
 
     absolute_tags = {"at", "start", "mid", "end", "center", "xy", "pts"}
 
-    def walk(item: Any) -> None:
+    def walk(item: SExpr) -> None:
         if not isinstance(item, list):
             return
         tag = _head(item)
         if tag in absolute_tags:
             if tag == "pts":
                 for point in item[1:]:
-                    if _head(point) == "xy":
+                    if isinstance(point, list) and _head(point) == "xy":
                         _transform_point(
                             point,
                             anchor_mm=anchor_mm,
@@ -295,10 +297,8 @@ def _transform_item(
     walk(node)
 
 
-
-
 def _rewrite_footprint(
-    footprint: list,
+    footprint: SExprList,
     reference: str,
     dx: float,
     dy: float,
@@ -336,8 +336,8 @@ def _unique_reference(base: str, existing: set[str]) -> str:
 
 
 def _merge_net_chain_sections(
-    source_board: list,
-    target_board: list,
+    source_board: SExprList,
+    target_board: SExprList,
     *,
     source_nets: dict[int, str],
     source_net_to_board_net: dict[str, str],
@@ -352,12 +352,12 @@ def _merge_net_chain_sections(
 
     target_section = _direct(target_board, "net_chains")
     if target_section is None:
-        target_section = ["net_chains"]
+        target_section = cast(SExprList, ["net_chains"])
         target_board.append(target_section)
 
     # Include names already present in the destination PCB section.
     for chain in target_section[1:]:
-        if _head(chain) != "net_chain":
+        if not isinstance(chain, list) or _head(chain) != "net_chain":
             continue
         name_node = _direct(chain, "name")
         if name_node is not None and len(name_node) >= 2:
@@ -365,7 +365,7 @@ def _merge_net_chain_sections(
 
     chain_name_map: dict[str, str] = {}
     for raw_chain in source_section[1:]:
-        if _head(raw_chain) != "net_chain":
+        if not isinstance(raw_chain, list) or _head(raw_chain) != "net_chain":
             continue
         chain = parse_sexpr(_dump(raw_chain))
         name_node = _direct(chain, "name")
@@ -382,7 +382,8 @@ def _merge_net_chain_sections(
 
         members = _direct(chain, "members")
         if members is not None:
-            def rewrite_member(node: Any, chain_name: str = source_name) -> None:
+
+            def rewrite_member(node: SExpr, chain_name: str = source_name) -> None:
                 if not isinstance(node, list):
                     return
                 if _head(node) == "net" and len(node) >= 2:
@@ -431,26 +432,21 @@ def _atomic_write(path: Path, content: str) -> None:
             os.fsync(stream.fileno())
         os.replace(temp_name, path)
     except Exception:
-        try:
+        with contextlib.suppress(OSError):
             os.unlink(temp_name)
-        except OSError:
-            pass
         raise
 
 
-
-def _normalise_class_assignment(value: Any) -> list[str]:
+def _normalise_class_assignment(value: str | list[str] | None) -> list[str]:
     """Normalize old single-class and current list-valued project assignments."""
     if value is None:
         return []
     if isinstance(value, str):
         return [value] if value else []
-    if isinstance(value, list) and all(isinstance(item, str) for item in value):
-        return list(value)
-    raise ValueError(f"Invalid KiCad netclass assignment value: {value!r}")
+    return list(value)
 
 
-def _netclass_signature(netclass: dict[str, Any]) -> str:
+def _netclass_signature(netclass: KiCadNetclassDefinition) -> str:
     """Compare classes by their electrical properties, excluding identity/order."""
     values = dict(netclass)
     values.pop("name", None)
@@ -519,13 +515,314 @@ def _matches_netclass_pattern(pattern: str, net_name: str) -> bool:
         pass
 
     wildcard_regex = "".join(
-        ".*" if char == "*" else "." if char == "?" else re.escape(char)
-        for char in pattern
+        ".*" if char == "*" else "." if char == "?" else re.escape(char) for char in pattern
     )
     try:
         return re.fullmatch(wildcard_regex, net_name) is not None
     except re.error:
         return False
+
+
+def _read_netclass_definitions(
+    settings: Mapping[str, _JSONValue],
+    *,
+    source_name: str,
+) -> list[KiCadNetclassDefinition]:
+    """Read the typed netclass definition list from one project.
+
+    Returns:
+        The project's validated netclass definitions.
+
+    Raises:
+        TypeError: If the project section is not an array of objects.
+    """
+    raw_classes = settings.get("classes", [])
+    if not isinstance(raw_classes, list) or any(not isinstance(item, dict) for item in raw_classes):
+        raise TypeError(f"KiCad {source_name} net_settings.classes must be an array of objects.")
+    return cast(list[KiCadNetclassDefinition], raw_classes)
+
+
+def _read_netclass_patterns(settings: Mapping[str, _JSONValue]) -> list[KiCadNetclassPattern]:
+    """Read and validate KiCad netclass pattern entries.
+
+    Returns:
+        The project's pattern entries.
+
+    Raises:
+        TypeError: If the pattern list or one of its required string fields is invalid.
+    """
+    raw_patterns = settings.get("netclass_patterns", [])
+    if not isinstance(raw_patterns, list):
+        raise TypeError("KiCad net_settings.netclass_patterns must be an array.")
+    for entry in raw_patterns:
+        if (
+            not isinstance(entry, dict)
+            or not isinstance(entry.get("pattern"), str)
+            or not isinstance(entry.get("netclass"), str)
+        ):
+            raise TypeError("KiCad net_settings.netclass_patterns entries require string fields.")
+    return cast(list[KiCadNetclassPattern], raw_patterns)
+
+
+def _collision_netclass_name(
+    original_name: str,
+    signature: str,
+    class_by_name: dict[str, KiCadNetclassDefinition],
+    instance_reference: str,
+) -> str:
+    """Choose a stable namespaced name for a conflicting block netclass."""
+    safe_class = re.sub(r"[^A-Za-z0-9_]+", "_", original_name).strip("_") or "Class"
+    base_name = f"{instance_reference}_{safe_class}"
+    desired_name = base_name
+    suffix = 2
+    while desired_name in class_by_name:
+        if _netclass_signature(class_by_name[desired_name]) == signature:
+            break
+        desired_name = f"{base_name}_{suffix}"
+        suffix += 1
+    return desired_name
+
+
+def _merge_netclass_definitions(
+    target_classes: list[KiCadNetclassDefinition],
+    source_classes: list[KiCadNetclassDefinition],
+    instance_reference: str,
+) -> tuple[dict[str, str], list[str]]:
+    """Reuse identical netclasses and namespace conflicting block definitions.
+
+    Returns:
+        A source-to-target class-name map and the names newly added to the project.
+
+    Raises:
+        TypeError: If a block netclass has no name.
+    """
+    class_by_name = {
+        str(item.get("name", "")): item for item in target_classes if item.get("name") is not None
+    }
+    priorities = [
+        int(item.get("priority", 0))
+        for item in target_classes
+        if item.get("name") is not None
+        and str(item.get("name", "")).casefold() != "default"
+        and item.get("priority") is not None
+    ]
+    next_priority = max(priorities, default=-1) + 1
+    class_map: dict[str, str] = {}
+    merged_classes: list[str] = []
+
+    for source_class in source_classes:
+        original_name = source_class.get("name")
+        if original_name is None:
+            raise TypeError(f"Malformed block netclass definition: {source_class!r}")
+        if original_name.casefold() == "default":
+            class_map[original_name] = "Default"
+            continue
+        signature = _netclass_signature(source_class)
+        current = class_by_name.get(original_name)
+        if current is not None and _netclass_signature(current) == signature:
+            class_map[original_name] = original_name
+            continue
+        desired_name = (
+            _collision_netclass_name(original_name, signature, class_by_name, instance_reference)
+            if current is not None
+            else original_name
+        )
+        if desired_name not in class_by_name:
+            copied = cast(KiCadNetclassDefinition, dict(source_class))
+            copied.pop("nets", None)
+            copied["name"] = desired_name
+            copied["priority"] = next_priority
+            next_priority += 1
+            target_classes.append(copied)
+            class_by_name[desired_name] = copied
+            merged_classes.append(desired_name)
+        class_map[original_name] = desired_name
+    return class_map, merged_classes
+
+
+def _reverse_layout_port_map(
+    layout_ports: dict[str, str],
+    pin_to_board_net: dict[str, str],
+) -> dict[str, str]:
+    """Map stored layout nets back to their destination project nets.
+
+    Raises:
+        ValueError: If two facade pins map one stored net to different project nets.
+    """
+    reverse_ports: dict[str, str] = {}
+    for pin_name, source_net in layout_ports.items():
+        destination = str(pin_to_board_net[pin_name]).strip()
+        if source_net in reverse_ports and reverse_ports[source_net] != destination:
+            raise ValueError(f"Layout port net {source_net!r} maps to two project nets.")
+        reverse_ports[source_net] = destination
+    return reverse_ports
+
+
+def _mapped_assignment_classes(
+    source_net: str,
+    assignments: str | list[str],
+    class_map: dict[str, str],
+) -> list[str]:
+    """Translate one source net's class assignment through the merged class map.
+
+    Raises:
+        ValueError: If an assignment references an undefined source netclass.
+    """
+    mapped: list[str] = []
+    for source_class_name in _normalise_class_assignment(assignments):
+        if source_class_name not in class_map:
+            raise ValueError(
+                f"Block net {source_net!r} references undefined netclass {source_class_name!r}."
+            )
+        target_class_name = class_map[source_class_name]
+        if target_class_name.casefold() != "default" and target_class_name not in mapped:
+            mapped.append(target_class_name)
+    return mapped
+
+
+def _merge_project_netclass_assignments(
+    source_assignments: dict[str, str | list[str]],
+    target_assignments: dict[str, str | list[str]],
+    layout_ports: dict[str, str],
+    pin_to_board_net: dict[str, str],
+    instance_reference: str,
+    class_map: dict[str, str],
+) -> tuple[dict[str, list[str]], list[str]]:
+    """Merge exact source netclass assignments onto mapped or namespaced project nets.
+
+    Returns:
+        The complete target assignment map and project nets receiving block classes.
+
+    Raises:
+        ValueError: If a layout port net maps to multiple project nets or a class is undefined.
+    """
+    reverse_ports = _reverse_layout_port_map(layout_ports, pin_to_board_net)
+    merged_assignments = {
+        str(net_name): _normalise_class_assignment(classes)
+        for net_name, classes in target_assignments.items()
+    }
+    assigned_nets: list[str] = []
+    for source_net, assignments in source_assignments.items():
+        destination_net = reverse_ports.get(source_net)
+        if destination_net is None:
+            safe_net = re.sub(r"[^A-Za-z0-9_./+-]+", "_", source_net).strip("_")
+            destination_net = f"{instance_reference}_{safe_net or 'NET'}"
+        mapped_classes = _mapped_assignment_classes(source_net, assignments, class_map)
+        if not mapped_classes:
+            continue
+        current = merged_assignments.setdefault(destination_net, [])
+        for class_name in mapped_classes:
+            if class_name not in current:
+                current.append(class_name)
+        if destination_net not in assigned_nets:
+            assigned_nets.append(destination_net)
+    return merged_assignments, assigned_nets
+
+
+def _apply_one_netclass_pattern(
+    entry: KiCadNetclassPattern,
+    source_net_map: dict[str, str],
+    target_assignments: dict[str, list[str]],
+    class_map: dict[str, str],
+) -> AppliedNetclassPattern | None:
+    """Expand one stored pattern onto only the block's mapped project nets.
+
+    Raises:
+        ValueError: If the pattern references an undefined source netclass.
+    """
+    pattern = entry["pattern"]
+    class_name = entry["netclass"]
+    if class_name not in class_map:
+        raise ValueError(
+            f"Block netclass pattern {pattern!r} references undefined netclass {class_name!r}."
+        )
+    expanded_patterns = _expand_netclass_bus_pattern(pattern)
+    if expanded_patterns is None:
+        return None
+    mapped_class = class_map[class_name]
+    if mapped_class.casefold() == "default":
+        return None
+
+    resolved_nets: list[str] = []
+    for source_net_name, destination_net in source_net_map.items():
+        matches = any(
+            _matches_netclass_pattern(member_pattern, source_net_name)
+            for member_pattern in expanded_patterns
+        )
+        if not matches:
+            continue
+        destination = str(destination_net)
+        current = target_assignments.setdefault(destination, [])
+        if mapped_class not in current:
+            current.append(mapped_class)
+        if destination not in resolved_nets:
+            resolved_nets.append(destination)
+    if not resolved_nets:
+        return None
+    return {"pattern": pattern, "netclass": class_name, "resolved_nets": resolved_nets}
+
+
+def _merge_project_netclass_patterns(
+    patterns: list[KiCadNetclassPattern],
+    source_net_map: dict[str, str],
+    target_assignments: dict[str, list[str]],
+    class_map: dict[str, str],
+) -> tuple[list[AppliedNetclassPattern], list[str]]:
+    """Apply supported patterns and report patterns with no safe net matches.
+
+    Returns:
+        Applied patterns and the original unmatched patterns.
+    """
+    applied: list[AppliedNetclassPattern] = []
+    unmatched: list[str] = []
+    for entry in patterns:
+        result = _apply_one_netclass_pattern(entry, source_net_map, target_assignments, class_map)
+        if result is None:
+            unmatched.append(entry["pattern"])
+        else:
+            applied.append(result)
+    return applied, unmatched
+
+
+def _merge_project_net_chain_mappings(
+    source_chain_classes: dict[str, str],
+    source_chain_netclasses: dict[str, str],
+    target_chain_classes: dict[str, str],
+    target_chain_netclasses: dict[str, str],
+    chain_name_map: dict[str, str],
+    class_map: dict[str, str],
+) -> tuple[list[str], list[str]]:
+    """Merge net-chain class and netclass associations under remapped names.
+
+    Returns:
+        The unresolved source chain entries and names merged into the project.
+
+    Raises:
+        ValueError: If a chain references an undefined netclass.
+    """
+    unmatched: list[str] = []
+    merged: list[str] = []
+    for source_name, source_class in source_chain_classes.items():
+        destination_name = chain_name_map.get(source_name)
+        if destination_name is None:
+            unmatched.append(f"net_chain_classes:{source_name}")
+            continue
+        target_chain_classes[destination_name] = source_class
+        if destination_name not in merged:
+            merged.append(destination_name)
+    for source_name, source_netclass in source_chain_netclasses.items():
+        destination_name = chain_name_map.get(source_name)
+        if destination_name is None:
+            unmatched.append(f"net_chain_netclasses:{source_name}")
+            continue
+        if source_netclass not in class_map:
+            raise ValueError(
+                f"Net chain {source_name!r} references undefined netclass {source_netclass!r}."
+            )
+        target_chain_netclasses[destination_name] = class_map[source_netclass]
+        if destination_name not in merged:
+            merged.append(destination_name)
+    return unmatched, merged
 
 
 def _merge_project_net_settings(
@@ -538,7 +835,7 @@ def _merge_project_net_settings(
     pin_to_board_net: dict[str, str],
     source_net_to_board_net: dict[str, str] | None = None,
     source_chain_name_map: dict[str, str] | None = None,
-) -> dict[str, Any] | None:
+) -> ProjectSettingsMergeResult | None:
     """Build a copied project file with block netclasses/assignments merged.
 
     The target project's settings remain authoritative. Named block netclasses
@@ -546,237 +843,81 @@ def _merge_project_net_settings(
     are remapped to project net names. Netclass regex/wildcard rules are resolved
     against only the nets physically present in the stored block PCB, then
     converted to exact assignments on the corresponding imported project nets.
-    This avoids copying a broad pattern that could affect unrelated project nets.
+
+    Returns:
+        None when neither the target nor source project-settings file exists;
+        otherwise the merged, typed project data and its mapping diagnostics.
+
+    Raises:
+        TypeError: If a project settings section has an invalid structural type.
+        ValueError: If a class association or facade port mapping is inconsistent.
     """
     if not target_project.is_file() and (source_project is None or not source_project.is_file()):
         return None
-
     if target_project.is_file():
-        target_data = json.loads(target_project.read_text(encoding="utf-8"))
-        if not isinstance(target_data, dict):
-            raise ValueError(f"Invalid KiCad project JSON: {target_project}")
+        target_data = _load_project_settings(target_project, context="Invalid KiCad project JSON")
     else:
-        target_data = {
+        target_data: KiCadProjectData = {
             "meta": {"filename": output_project.name, "version": 3},
             "net_settings": {"classes": [], "netclass_assignments": {}},
         }
-
     if source_project is not None and source_project.is_file():
-        source_data = json.loads(source_project.read_text(encoding="utf-8"))
-        if not isinstance(source_data, dict):
-            raise ValueError(f"Invalid block project-settings JSON: {source_project}")
-        source_settings = source_data.get("net_settings", {})
-        if not isinstance(source_settings, dict):
-            raise ValueError("Block project file has an invalid net_settings section.")
+        source_data = _load_project_settings(
+            source_project, context="Invalid block project-settings JSON"
+        )
     else:
-        source_settings = {}
+        source_data: KiCadProjectData = {"net_settings": {}}
+    source_settings: KiCadNetSettings = source_data.get("net_settings") or {}
+    target_settings: KiCadNetSettings | None = target_data.get("net_settings")
+    if target_settings is None:
+        target_settings = {"classes": [], "netclass_assignments": {}}
+        target_data["net_settings"] = target_settings
 
-    target_settings = target_data.setdefault("net_settings", {})
-    if not isinstance(target_settings, dict):
-        raise TypeError("Target project file has an invalid net_settings section.")
-    target_classes = target_settings.setdefault("classes", [])
-    source_classes = source_settings.get("classes", [])
-    if not isinstance(target_classes, list) or not isinstance(source_classes, list):
-        raise TypeError("KiCad net_settings.classes must be arrays.")
+    target_classes = _read_netclass_definitions(target_settings, source_name="target")
+    source_classes = _read_netclass_definitions(source_settings, source_name="source")
+    class_map, merged_classes = _merge_netclass_definitions(
+        target_classes, source_classes, instance_reference
+    )
+    source_assignments: dict[str, str | list[str]] = source_settings.get("netclass_assignments", {})
+    target_assignment_values: dict[str, str | list[str]] = target_settings.get(
+        "netclass_assignments", {}
+    )
+    target_assignments, assigned_nets = _merge_project_netclass_assignments(
+        source_assignments,
+        target_assignment_values,
+        layout_ports,
+        pin_to_board_net,
+        instance_reference,
+        class_map,
+    )
 
-    class_by_name: dict[str, dict[str, Any]] = {
-        str(item["name"]): item
-        for item in target_classes
-        if isinstance(item, dict) and isinstance(item.get("name"), str)
-    }
-    priorities = [
-        int(item.get("priority", 0))
-        for item in target_classes
-        if isinstance(item, dict)
-        and str(item.get("name", "")).casefold() != "default"
-        and isinstance(item.get("priority", 0), int)
-    ]
-    next_priority = max(priorities, default=-1) + 1
-    class_map: dict[str, str] = {}
-    merged_classes: list[str] = []
-
-    for source_class in source_classes:
-        if not isinstance(source_class, dict) or not isinstance(source_class.get("name"), str):
-            raise TypeError(f"Malformed block netclass definition: {source_class!r}")
-        original_name = source_class["name"]
-        if original_name.casefold() == "default":
-            class_map[original_name] = "Default"
-            continue
-
-        signature = _netclass_signature(source_class)
-        current = class_by_name.get(original_name)
-        if current is not None and _netclass_signature(current) == signature:
-            class_map[original_name] = original_name
-            continue
-
-        desired_name = original_name
-        if current is not None:
-            safe_class = re.sub(r"[^A-Za-z0-9_]+", "_", original_name).strip("_") or "Class"
-            base_name = f"{instance_reference}_{safe_class}"
-            desired_name = base_name
-            suffix = 2
-            while desired_name in class_by_name:
-                candidate = class_by_name[desired_name]
-                if _netclass_signature(candidate) == signature:
-                    break
-                desired_name = f"{base_name}_{suffix}"
-                suffix += 1
-        if desired_name not in class_by_name:
-            copied = dict(source_class)
-            copied.pop("nets", None)
-            copied["name"] = desired_name
-            copied["priority"] = next_priority
-            next_priority += 1
-            target_classes.append(copied)
-            class_by_name[desired_name] = copied
-            merged_classes.append(desired_name)
-        class_map[original_name] = desired_name
-
-    source_assignments = source_settings.get("netclass_assignments") or {}
-    target_assignments = target_settings.get("netclass_assignments") or {}
-    if not isinstance(source_assignments, dict) or not isinstance(target_assignments, dict):
-        raise TypeError("KiCad net_settings.netclass_assignments must be an object.")
-    target_assignments = {
-        str(net_name): _normalise_class_assignment(classes)
-        for net_name, classes in target_assignments.items()
-    }
-
-    reverse_ports: dict[str, str] = {}
-    for pin_name, source_net in layout_ports.items():
-        destination = str(pin_to_board_net[pin_name]).strip()
-        if source_net in reverse_ports and reverse_ports[source_net] != destination:
-            raise ValueError(f"Layout port net {source_net!r} maps to two project nets.")
-        reverse_ports[str(source_net)] = destination
-
-    assigned_nets: list[str] = []
-    for source_net, classes in source_assignments.items():
-        destination_net = reverse_ports.get(str(source_net))
-        if destination_net is None:
-            safe_net = re.sub(r"[^A-Za-z0-9_./+-]+", "_", str(source_net)).strip("_")
-            destination_net = f"{instance_reference}_{safe_net or 'NET'}"
-        mapped_classes = []
-        for source_class_name in _normalise_class_assignment(classes):
-            if source_class_name not in class_map:
-                raise ValueError(
-                    f"Block net {source_net!r} references undefined netclass "
-                    f"{source_class_name!r}."
-                )
-            target_class_name = class_map[source_class_name]
-            if target_class_name.casefold() != "default" and target_class_name not in mapped_classes:
-                mapped_classes.append(target_class_name)
-        if mapped_classes:
-            current = target_assignments.setdefault(destination_net, [])
-            for class_name in mapped_classes:
-                if class_name not in current:
-                    current.append(class_name)
-            if destination_net not in assigned_nets:
-                assigned_nets.append(destination_net)
-
-    applied_patterns: list[dict[str, Any]] = []
-    unmatched_patterns: list[str] = []
+    patterns = _read_netclass_patterns(source_settings)
     source_net_map = source_net_to_board_net or {}
-    source_patterns = source_settings.get("netclass_patterns") or []
-    if not isinstance(source_patterns, list):
-        raise TypeError("KiCad net_settings.netclass_patterns must be an array.")
-
-    for entry in source_patterns:
-        if not isinstance(entry, dict):
-            unmatched_patterns.append(repr(entry))
-            continue
-        pattern = entry.get("pattern")
-        class_name = entry.get("netclass")
-        if not isinstance(pattern, str) or not isinstance(class_name, str):
-            unmatched_patterns.append(repr(entry))
-            continue
-        if class_name not in class_map:
-            raise ValueError(
-                f"Block netclass pattern {pattern!r} references undefined netclass "
-                f"{class_name!r}."
-            )
-        expanded_patterns = _expand_netclass_bus_pattern(pattern)
-        if expanded_patterns is None:
-            unmatched_patterns.append(pattern)
-            continue
-
-        resolved_nets: list[str] = []
-        for source_net_name, destination_net in source_net_map.items():
-            if not any(
-                _matches_netclass_pattern(member_pattern, str(source_net_name))
-                for member_pattern in expanded_patterns
-            ):
-                continue
-            mapped_class = class_map[class_name]
-            if mapped_class.casefold() == "default":
-                continue
-            current = target_assignments.setdefault(str(destination_net), [])
-            if mapped_class not in current:
-                current.append(mapped_class)
-            if str(destination_net) not in resolved_nets:
-                resolved_nets.append(str(destination_net))
-
-        if resolved_nets:
-            applied_patterns.append(
-                {
-                    "pattern": pattern,
-                    "netclass": class_name,
-                    "resolved_nets": resolved_nets,
-                }
-            )
-        else:
-            unmatched_patterns.append(pattern)
-
-    target_settings["netclass_assignments"] = target_assignments
-    metadata = target_data.setdefault("meta", {})
-    if not isinstance(metadata, dict):
-        raise TypeError("KiCad project meta section must be an object.")
+    applied_patterns, unmatched_patterns = _merge_project_netclass_patterns(
+        patterns, source_net_map, target_assignments, class_map
+    )
+    target_settings["netclass_assignments"] = cast(dict[str, str | list[str]], target_assignments)
+    metadata: KiCadProjectMetadata = target_data.get("meta") or {}
+    target_data["meta"] = metadata
     metadata["filename"] = output_project.name
     metadata.setdefault("version", 3)
 
     ignored_patterns = bool(unmatched_patterns)
     chain_name_map = source_chain_name_map or {}
-    source_chain_classes = source_settings.get("net_chain_classes") or {}
-    source_chain_netclasses = source_settings.get("net_chain_netclasses") or {}
-    target_chain_classes = target_settings.get("net_chain_classes") or {}
-    target_chain_netclasses = target_settings.get("net_chain_netclasses") or {}
+    source_chain_classes: dict[str, str] = source_settings.get("net_chain_classes") or {}
+    source_chain_netclasses: dict[str, str] = source_settings.get("net_chain_netclasses") or {}
+    target_chain_classes: dict[str, str] = target_settings.get("net_chain_classes") or {}
+    target_chain_netclasses: dict[str, str] = target_settings.get("net_chain_netclasses") or {}
     target_settings["net_chain_classes"] = target_chain_classes
     target_settings["net_chain_netclasses"] = target_chain_netclasses
-    if not all(
-        isinstance(value, dict)
-        for value in (
-            source_chain_classes,
-            source_chain_netclasses,
-            target_chain_classes,
-            target_chain_netclasses,
-        )
-    ):
-        raise TypeError("KiCad net-chain settings must be objects.")
-
-    unmatched_chains: list[str] = []
-    merged_chain_names: list[str] = []
-    for source_name, source_class in source_chain_classes.items():
-        destination_name = chain_name_map.get(str(source_name))
-        if destination_name is None:
-            unmatched_chains.append(f"net_chain_classes:{source_name}")
-            continue
-        target_chain_classes[destination_name] = str(source_class)
-        if destination_name not in merged_chain_names:
-            merged_chain_names.append(destination_name)
-
-    for source_name, source_netclass in source_chain_netclasses.items():
-        destination_name = chain_name_map.get(str(source_name))
-        if destination_name is None:
-            unmatched_chains.append(f"net_chain_netclasses:{source_name}")
-            continue
-        source_netclass = str(source_netclass)
-        if source_netclass not in class_map:
-            raise ValueError(
-                f"Net chain {source_name!r} references undefined netclass {source_netclass!r}."
-            )
-        target_chain_netclasses[destination_name] = class_map[source_netclass]
-        if destination_name not in merged_chain_names:
-            merged_chain_names.append(destination_name)
-
-    ignored_chain_classes = bool(unmatched_chains)
+    unmatched_chains, merged_chain_names = _merge_project_net_chain_mappings(
+        source_chain_classes,
+        source_chain_netclasses,
+        target_chain_classes,
+        target_chain_netclasses,
+        chain_name_map,
+        class_map,
+    )
     return {
         "data": target_data,
         "output": str(output_project),
@@ -785,13 +926,19 @@ def _merge_project_net_settings(
         "ignored_patterns": ignored_patterns,
         "applied_patterns": applied_patterns,
         "unmatched_patterns": unmatched_patterns,
-        "ignored_chain_classes": ignored_chain_classes,
+        "ignored_chain_classes": bool(unmatched_chains),
         "merged_chain_names": merged_chain_names,
         "unmatched_chains": unmatched_chains,
     }
 
 
-def resolve_block_layout(block, layout_id: str | None = None) -> dict[str, Any]:
+# Public testing/integration surfaces for deterministic PCB transformations.
+rewrite_nets = _rewrite_nets
+transform_item = _transform_item
+merge_project_net_settings = _merge_project_net_settings
+
+
+def resolve_block_layout(block: BlockRecord, layout_id: str | None = None) -> ResolvedBlockLayout:
     """Resolve a named layout asset, retaining support for legacy single-layout blocks."""
     layouts = block.manifest.get("layouts") or []
     if layouts:
@@ -799,7 +946,8 @@ def resolve_block_layout(block, layout_id: str | None = None) -> dict[str, Any]:
             default_layout = block.manifest.get("default_layout")
             selected = next(
                 (
-                    item for item in layouts
+                    item
+                    for item in layouts
                     if default_layout is not None
                     and str(item.get("id", "")).casefold() == str(default_layout).casefold()
                 ),
@@ -815,7 +963,8 @@ def resolve_block_layout(block, layout_id: str | None = None) -> dict[str, Any]:
         else:
             selected = next(
                 (
-                    item for item in layouts
+                    item
+                    for item in layouts
                     if str(item.get("id", "")).casefold() == str(layout_id).casefold()
                     or str(item.get("name", "")).casefold() == str(layout_id).casefold()
                 ),
@@ -852,7 +1001,7 @@ def resolve_block_layout(block, layout_id: str | None = None) -> dict[str, Any]:
 class BlockLayoutPlacement:
     """One schematic block occurrence and its desired PCB placement."""
 
-    block: Any
+    block: BlockRecord
     instance_reference: str
     position_mm: tuple[float, float]
     pin_to_board_net: dict[str, str]
@@ -865,7 +1014,7 @@ def merge_block_layouts(
     target_board: Path,
     placements: list[BlockLayoutPlacement],
     output_board: Path,
-) -> dict[str, Any]:
+) -> BatchBlockLayoutMergeResult:
     """Apply several block layouts to one new output board, in order.
 
     Intermediate board/project copies live in a temporary directory. The
@@ -894,17 +1043,13 @@ def merge_block_layouts(
     if len(references) != len(set(references)):
         raise ValueError("Each selected block instance must have a unique reference designator.")
 
-    results: list[dict[str, Any]] = []
+    results: list[BlockLayoutMergeResult] = []
     current_board = target_board
     with tempfile.TemporaryDirectory(prefix="kicad-block-batch-") as temp:
         stage_root = Path(temp)
         for index, item in enumerate(placements):
             is_last = index == len(placements) - 1
-            stage_output = (
-                output_board
-                if is_last
-                else stage_root / f"stage_{index + 1}.kicad_pcb"
-            )
+            stage_output = output_board if is_last else stage_root / f"stage_{index + 1}.kicad_pcb"
             result = merge_block_layout(
                 current_board,
                 item.block,
@@ -919,10 +1064,10 @@ def merge_block_layouts(
             results.append(result)
             current_board = stage_output
 
-    def flatten(key: str) -> list:
-        values = []
-        for result in results:
-            for value in result.get(key, []):
+    def flatten(values_by_placement: Sequence[list[_T]]) -> list[_T]:
+        values: list[_T] = []
+        for placement_values in values_by_placement:
+            for value in placement_values:
                 if value not in values:
                     values.append(value)
         return values
@@ -936,19 +1081,23 @@ def merge_block_layouts(
         ),
         "block_count": len(results),
         "placements": results,
-        "footprints": flatten("footprints"),
+        "footprints": flatten([item["footprints"] for item in results]),
         "footprint_count": sum(item["footprint_count"] for item in results),
         "object_count": sum(item["object_count"] for item in results),
         "new_net_count": sum(item["new_net_count"] for item in results),
-        "new_nets": flatten("new_nets"),
-        "merged_netclasses": flatten("merged_netclasses"),
-        "assigned_project_nets": flatten("assigned_project_nets"),
-        "applied_project_patterns": flatten("applied_project_patterns"),
-        "unmatched_project_patterns": flatten("unmatched_project_patterns"),
-        "merged_project_chain_names": flatten("merged_project_chain_names"),
-        "unmatched_project_chains": flatten("unmatched_project_chains"),
-        "merged_board_chains": flatten("merged_board_chains"),
-        "skipped_top_level_items": flatten("skipped_top_level_items"),
+        "new_nets": flatten([item["new_nets"] for item in results]),
+        "merged_netclasses": flatten([item["merged_netclasses"] for item in results]),
+        "assigned_project_nets": flatten([item["assigned_project_nets"] for item in results]),
+        "applied_project_patterns": flatten([item["applied_project_patterns"] for item in results]),
+        "unmatched_project_patterns": flatten(
+            [item["unmatched_project_patterns"] for item in results]
+        ),
+        "merged_project_chain_names": flatten(
+            [item["merged_project_chain_names"] for item in results]
+        ),
+        "unmatched_project_chains": flatten([item["unmatched_project_chains"] for item in results]),
+        "merged_board_chains": flatten([item["merged_board_chains"] for item in results]),
+        "skipped_top_level_items": flatten([item["skipped_top_level_items"] for item in results]),
         "ignored_project_patterns": any(item["ignored_project_patterns"] for item in results),
         "ignored_project_chain_classes": any(
             item["ignored_project_chain_classes"] for item in results
@@ -956,95 +1105,245 @@ def merge_block_layouts(
     }
 
 
-def merge_block_layout(
-    target_board: Path,
-    block,
-    output_board: Path,
-    *,
-    instance_reference: str,
-    position_mm: tuple[float, float],
-    pin_to_board_net: dict[str, str],
-    layout_anchor_mm: tuple[float, float] = (0.0, 0.0),
-    rotation_deg: float = 0.0,
-    layout_id: str | None = None,
-) -> dict[str, Any]:
-    """Merge a stored block layout into a new copy of a project board.
+@dataclass(frozen=True, slots=True)
+class _LayoutMergeFiles:
+    """Resolved source and destination assets for one block layout merge."""
 
-    The manifest's optional layout_ports map relates facade pin names to
-    the net names used in the stored PCB. Without it, names are assumed equal.
-    Internal source nets are namespaced with the block instance reference.
-    The input project board is never modified.
+    target_board: Path
+    source_board: Path
+    output_board: Path
+    target_project: Path
+    output_project: Path
+    source_project: Path | None
+    selected_layout: ResolvedBlockLayout
+
+
+@dataclass(frozen=True, slots=True)
+class _LayoutPlacement:
+    """Validated physical placement and facade-to-layout net mapping."""
+
+    position_mm: tuple[float, float]
+    anchor_mm: tuple[float, float]
+    rotation_deg: float
+    ports: dict[str, str]
+    source_net_to_board_net: dict[str, str]
+
+
+@dataclass(slots=True)
+class _BoardNetMapping:
+    """Source and target net tables plus the remapped net nodes to insert."""
+
+    source_nets: dict[int, str]
+    target_nets: dict[int, str]
+    net_map: dict[int, tuple[int, str]]
+    new_net_nodes: list[SExprList]
+
+
+@dataclass(slots=True)
+class _ImportedLayoutItems:
+    """Prepared interactive board objects and their identity/mapping metadata."""
+
+    items: list[SExprList]
+    references: list[str]
+    item_uuids: list[str]
+    skipped: set[str]
+    pad_uuid_remap: dict[str, str]
+
+
+@dataclass(frozen=True, slots=True)
+class _LayoutItemImportSettings:
+    """Immutable geometry and net mapping for one block layout import."""
+
+    instance_reference: str
+    net_map: dict[int, tuple[int, str]]
+    anchor_mm: tuple[float, float]
+    position_mm: tuple[float, float]
+    rotation_deg: float
+
+
+@dataclass(slots=True)
+class _LayoutItemContext:
+    """Shared mutable collision and identity state for imported PCB objects."""
+
+    settings: _LayoutItemImportSettings
+    existing_references: set[str]
+    used_item_uuids: set[str]
+    pad_uuid_remap: dict[str, str]
+
+
+_IGNORED_LAYOUT_TOP_LEVEL_KINDS = {
+    "version",
+    "generator",
+    "general",
+    "paper",
+    "layers",
+    "setup",
+    "net",
+    "net_class",
+    "net_chains",
+    "embedded_fonts",
+    "uuid",
+}
+_SUPPORTED_LAYOUT_ITEM_KINDS = {
+    "footprint",
+    "segment",
+    "arc",
+    "via",
+    "zone",
+    "gr_line",
+    "gr_arc",
+    "gr_circle",
+    "gr_rect",
+    "gr_poly",
+    "gr_curve",
+    "gr_text",
+    "gr_text_box",
+    "dimension",
+    "target",
+}
+
+
+def _resolve_layout_merge_files(
+    target_board: Path,
+    block: BlockRecord,
+    output_board: Path,
+    instance_reference: str,
+    layout_id: str | None,
+) -> _LayoutMergeFiles:
+    """Resolve layout files and validate that outputs cannot overwrite inputs.
+
+    Raises:
+        FileNotFoundError: If the target board or stored block layout is missing.
+        FileExistsError: If an output PCB or project file already exists.
+        ValueError: If the reference designator or output path is invalid.
     """
-    target_board = Path(target_board).expanduser().resolve()
-    output_board = Path(output_board).expanduser().resolve()
+    target_path = Path(target_board).expanduser().resolve()
+    output_path = Path(output_board).expanduser().resolve()
     selected_layout = resolve_block_layout(block, layout_id)
-    layout_name = selected_layout["file"]
-    source_board = (Path(block.path) / layout_name).resolve()
-    layout_project_file = selected_layout.get("project_file")
-    source_project = (Path(block.path) / str(layout_project_file)).resolve() if layout_project_file else None
-    target_project = target_board.with_suffix(".kicad_pro")
-    output_project = output_board.with_suffix(".kicad_pro")
-    if not target_board.is_file() or not source_board.is_file():
+    source_path = (Path(block.path) / selected_layout["file"]).resolve()
+    project_filename = selected_layout.get("project_file")
+    source_project = (
+        (Path(block.path) / str(project_filename)).resolve() if project_filename else None
+    )
+    target_project = target_path.with_suffix(".kicad_pro")
+    output_project = output_path.with_suffix(".kicad_pro")
+    if not target_path.is_file() or not source_path.is_file():
         raise FileNotFoundError("Project board or stored block PCB layout does not exist.")
-    if output_board == target_board:
+    if output_path == target_path:
         raise ValueError("Output must be a new file; the project board is never overwritten.")
-    if output_board.exists():
+    if output_path.exists():
         raise FileExistsError(
-            f"Output PCB already exists and will not be overwritten: {output_board}"
+            f"Output PCB already exists and will not be overwritten: {output_path}"
         )
     if output_project.exists():
         raise FileExistsError(
             f"Output project settings already exist and will not be overwritten: {output_project}"
         )
     if not re.fullmatch(r"[A-Za-z][A-Za-z0-9_]*", instance_reference):
-        raise ValueError("Block instance reference must start with a letter and use only letters, digits and underscores.")
+        raise ValueError(
+            "Block instance reference must start with a letter and use only letters, digits and underscores."
+        )
+    return _LayoutMergeFiles(
+        target_path,
+        source_path,
+        output_path,
+        target_project,
+        output_project,
+        source_project,
+        selected_layout,
+    )
+
+
+def _validate_layout_placement(
+    block: BlockRecord,
+    selected_layout: ResolvedBlockLayout,
+    position_mm: tuple[float, float],
+    layout_anchor_mm: tuple[float, float],
+    rotation_deg: float,
+    pin_to_board_net: dict[str, str],
+) -> _LayoutPlacement:
+    """Validate coordinates and derive the source-port to project-net map.
+
+    Raises:
+        ValueError: If coordinates, facade pin maps, or target net names are invalid.
+    """
     if len(position_mm) != 2 or len(layout_anchor_mm) != 2:
         raise ValueError("Placement position and layout anchor must each contain two coordinates.")
-    x, y = map(float, position_mm)
-    anchor_x, anchor_y = map(float, layout_anchor_mm)
-    rotation_deg = float(rotation_deg)
-    if not all(math.isfinite(value) for value in (x, y, anchor_x, anchor_y, rotation_deg)):
+    position = (float(position_mm[0]), float(position_mm[1]))
+    anchor = (float(layout_anchor_mm[0]), float(layout_anchor_mm[1]))
+    rotation = float(rotation_deg)
+    if not all(math.isfinite(value) for value in (*position, *anchor, rotation)):
         raise ValueError("Placement position, layout anchor and rotation must be finite.")
-    rotation_deg %= 360.0
-
     pins = {str(pin["name"]) for pin in block.manifest.get("pins", [])}
     if set(pin_to_board_net) != pins:
         raise ValueError(f"Map every facade pin exactly once. Expected {sorted(pins)}.")
     if any(not str(name).strip() for name in pin_to_board_net.values()):
         raise ValueError("Target board net names cannot be empty.")
+    ports = (
+        selected_layout.get("ports")
+        or block.manifest.get("layout_ports")
+        or {pin: pin for pin in pins}
+    )
+    if set(ports) != pins:
+        raise ValueError("Block layout_ports must map every facade pin exactly once.")
+    source_net_to_board_net: dict[str, str] = {}
+    for pin, source_net in ports.items():
+        source_name = str(source_net)
+        destination = str(pin_to_board_net[pin]).strip()
+        if (
+            source_name in source_net_to_board_net
+            and source_net_to_board_net[source_name] != destination
+        ):
+            raise ValueError(f"Layout net {source_name!r} maps to two project nets.")
+        source_net_to_board_net[source_name] = destination
+    return _LayoutPlacement(
+        position,
+        anchor,
+        rotation % 360.0,
+        {str(pin): str(source_net) for pin, source_net in ports.items()},
+        source_net_to_board_net,
+    )
 
-    target = parse_sexpr(target_board.read_text(encoding="utf-8"))
-    source = parse_sexpr(source_board.read_text(encoding="utf-8"))
+
+def _read_layout_documents(files: _LayoutMergeFiles) -> tuple[SExprList, SExprList]:
+    """Parse both board documents and ensure the target supports every source layer.
+
+    Raises:
+        ValueError: If either file is not a KiCad PCB document or required layers are absent.
+    """
+    target = parse_sexpr(files.target_board.read_text(encoding="utf-8"))
+    source = parse_sexpr(files.source_board.read_text(encoding="utf-8"))
     if _head(target) != "kicad_pcb" or _head(source) != "kicad_pcb":
         raise ValueError("Both files must be KiCad PCB S-expression documents.")
     missing_layers = sorted(_get_layers(source) - _get_layers(target))
     if missing_layers:
-        raise ValueError("Project board lacks layers required by the block: " + ", ".join(missing_layers))
+        raise ValueError(
+            "Project board lacks layers required by the block: " + ", ".join(missing_layers)
+        )
+    return target, source
 
+
+def _map_layout_nets(
+    source: SExprList,
+    target: SExprList,
+    ports: dict[str, str],
+    instance_reference: str,
+) -> _BoardNetMapping:
+    """Map block nets to project nets, namespacing non-port nets by instance."""
     source_nets = _get_nets(source)
     target_nets = _get_nets(target)
     target_codes = {name: code for code, name in target_nets.items()}
     next_code = max(target_nets, default=0) + 1
-    ports = selected_layout.get("ports") or block.manifest.get("layout_ports") or {pin: pin for pin in pins}
-    if set(ports) != pins:
-        raise ValueError("Block layout_ports must map every facade pin exactly once.")
-    port_map: dict[str, str] = {}
-    for pin, layout_net in ports.items():
-        layout_net = str(layout_net)
-        destination = str(pin_to_board_net[pin]).strip()
-        if layout_net in port_map and port_map[layout_net] != destination:
-            raise ValueError(f"Layout net {layout_net!r} maps to two project nets.")
-        port_map[layout_net] = destination
-
     net_map: dict[int, tuple[int, str]] = {0: (0, "")}
-    new_net_nodes: list[list] = []
+    new_net_nodes: list[SExprList] = []
     for old_code, source_name in source_nets.items():
         if old_code == 0:
             continue
-        if source_name in port_map:
-            destination_name = port_map[source_name]
-        else:
-            safe_name = re.sub(r"[^A-Za-z0-9_./+-]+", "_", source_name).strip("_") or f"NET{old_code}"
+        destination_name = ports.get(source_name)
+        if destination_name is None:
+            safe_name = (
+                re.sub(r"[^A-Za-z0-9_./+-]+", "_", source_name).strip("_") or f"NET{old_code}"
+            )
             destination_name = f"{instance_reference}_{safe_name}"
         destination_code = target_codes.get(destination_name)
         if destination_code is None:
@@ -1053,148 +1352,261 @@ def merge_block_layout(
             target_codes[destination_name] = destination_code
             new_net_nodes.append(["net", str(destination_code), _Quoted(destination_name)])
         net_map[old_code] = (destination_code, destination_name)
+    return _BoardNetMapping(source_nets, target_nets, net_map, new_net_nodes)
 
+
+def _prepare_layout_item(
+    raw_item: SExpr,
+    kind: str,
+    context: _LayoutItemContext,
+) -> tuple[SExprList, str | None, str]:
+    """Clone, transform, remap and validate one imported board object.
+
+    Raises:
+        ValueError: If a footprint lacks a reference or an item lacks a unique UUID/TSTAMP.
+    """
+    settings = context.settings
+    item = parse_sexpr(_dump(raw_item))
+    reference: str | None = None
+    if kind == "footprint":
+        old_reference = _reference(item)
+        if not old_reference:
+            raise ValueError("Every stored layout footprint must have a Reference property.")
+        reference = _unique_reference(
+            f"{settings.instance_reference}_{old_reference}", context.existing_references
+        )
+        _rewrite_footprint(item, reference, 0.0, 0.0, uuid_remap=context.pad_uuid_remap)
+        _transform_item(
+            item,
+            anchor_mm=settings.anchor_mm,
+            position_mm=settings.position_mm,
+            rotation_deg=settings.rotation_deg,
+        )
+    else:
+        _transform_item(
+            item,
+            anchor_mm=settings.anchor_mm,
+            position_mm=settings.position_mm,
+            rotation_deg=settings.rotation_deg,
+        )
+        _refresh_ids(item)
+    _rewrite_nets(item, settings.net_map, include_net_name=(kind == "footprint"))
+    item_id_node = _direct(item, "uuid") or _direct(item, "tstamp")
+    if item_id_node is None or len(item_id_node) < 2:
+        raise ValueError(
+            f"Imported PCB {kind} object has no top-level UUID/TSTAMP for interactive placement."
+        )
+    item_uuid = str(item_id_node[1]).strip()
+    if not item_uuid or item_uuid in context.used_item_uuids:
+        raise ValueError(f"Imported PCB object has a missing or duplicate UUID: {item_uuid!r}.")
+    context.used_item_uuids.add(item_uuid)
+    return item, reference, item_uuid
+
+
+def _import_layout_items(
+    source: SExprList,
+    target: SExprList,
+    settings: _LayoutItemImportSettings,
+) -> _ImportedLayoutItems:
+    """Prepare every supported layout item and report unsupported top-level kinds.
+
+    Raises:
+        ValueError: If no supported items remain or any object lacks required identifiers.
+    """
     existing_references = {
         reference.casefold()
         for item in target[1:]
-        if _head(item) == "footprint"
+        if isinstance(item, list) and _head(item) == "footprint"
         if (reference := _reference(item))
     }
-    supported = {
-        "footprint", "segment", "arc", "via", "zone", "gr_line", "gr_arc",
-        "gr_circle", "gr_rect", "gr_poly", "gr_curve", "gr_text",
-        "gr_text_box", "dimension", "target",
-    }
-    imported: list[list] = []
-    imported_references: list[str] = []
-    interactive_item_uuids: list[str] = []
+    context = _LayoutItemContext(settings, existing_references, set(), {})
+    imported: list[SExprList] = []
+    references: list[str] = []
+    item_uuids: list[str] = []
     skipped: set[str] = set()
-    pad_uuid_remap: dict[str, str] = {}
-    anchor = (anchor_x, anchor_y)
-    position = (x, y)
     for raw_item in source[1:]:
         kind = _head(raw_item)
-        if kind in {"version", "generator", "general", "paper", "layers", "setup", "net", "net_class", "net_chains", "embedded_fonts", "uuid"}:
+        if kind in _IGNORED_LAYOUT_TOP_LEVEL_KINDS:
             continue
-        if kind not in supported:
+        if kind not in _SUPPORTED_LAYOUT_ITEM_KINDS:
             if kind:
                 skipped.add(kind)
             continue
-        item = parse_sexpr(_dump(raw_item))
-        if kind == "footprint":
-            old_reference = _reference(item)
-            if not old_reference:
-                raise ValueError("Every stored layout footprint must have a Reference property.")
-            new_reference = _unique_reference(f"{instance_reference}_{old_reference}", existing_references)
-            _rewrite_footprint(item, new_reference, 0.0, 0.0, uuid_remap=pad_uuid_remap)
-            _transform_item(
-                item,
-                anchor_mm=anchor,
-                position_mm=position,
-                rotation_deg=rotation_deg,
-            )
-            imported_references.append(new_reference)
-        else:
-            _transform_item(
-                item,
-                anchor_mm=anchor,
-                position_mm=position,
-                rotation_deg=rotation_deg,
-            )
-            _refresh_ids(item)
-        _rewrite_nets(item, net_map, include_net_name=(kind == "footprint"))
-        item_id_node = _direct(item, "uuid") or _direct(item, "tstamp")
-        if item_id_node is None or len(item_id_node) < 2:
-            raise ValueError(
-                f"Imported PCB {kind} object has no top-level UUID/TSTAMP for interactive placement."
-            )
-        item_uuid = str(item_id_node[1]).strip()
-        if not item_uuid or item_uuid in interactive_item_uuids:
-            raise ValueError(f"Imported PCB object has a missing or duplicate UUID: {item_uuid!r}.")
-        interactive_item_uuids.append(item_uuid)
+        item, reference, item_uuid = _prepare_layout_item(raw_item, str(kind), context)
+        if reference is not None:
+            references.append(reference)
         imported.append(item)
-
+        item_uuids.append(item_uuid)
     if not imported:
-        raise ValueError(f"Block {block.name!r} has no importable PCB objects.")
-    last_net = max((i for i, item in enumerate(target) if _head(item) == "net"), default=0)
+        raise ValueError("The stored block layout contains no importable PCB objects.")
+    return _ImportedLayoutItems(imported, references, item_uuids, skipped, context.pad_uuid_remap)
+
+
+def _insert_layout_items(
+    target: SExprList,
+    new_net_nodes: list[SExprList],
+    imported_items: list[SExprList],
+) -> None:
+    """Insert newly declared nets before the imported board primitives."""
+    last_net = max((index for index, item in enumerate(target) if _head(item) == "net"), default=0)
     for offset, net_node in enumerate(new_net_nodes, start=1):
         target.insert(last_net + offset, net_node)
-    target.extend(imported)
+    target.extend(imported_items)
 
-    source_net_to_board_net = {
-        source_name: net_map[code][1]
-        for code, source_name in source_nets.items()
-        if code in net_map and code != 0
-    }
-    existing_chain_names = set()
+
+def _existing_project_chain_names(target: SExprList, target_project: Path) -> set[str]:
+    """Collect net-chain names already used by the target board and project.
+
+    Raises:
+        ValueError: If the target project settings file is malformed.
+    """
+    existing: set[str] = set()
     target_chain_section = _direct(target, "net_chains")
     if target_chain_section is not None:
         for chain in target_chain_section[1:]:
-            if _head(chain) == "net_chain":
+            if isinstance(chain, list) and _head(chain) == "net_chain":
                 name_node = _direct(chain, "name")
                 if name_node is not None and len(name_node) >= 2:
-                    existing_chain_names.add(str(name_node[1]).casefold())
+                    existing.add(str(name_node[1]).casefold())
     if target_project.is_file():
-        existing_project = json.loads(target_project.read_text(encoding="utf-8"))
-        existing_settings = existing_project.get("net_settings", {})
-        for key in ("net_chain_classes", "net_chain_netclasses"):
-            values = existing_settings.get(key, {}) if isinstance(existing_settings, dict) else {}
-            if isinstance(values, dict):
-                existing_chain_names.update(str(name).casefold() for name in values)
+        project_data = _load_project_settings(
+            target_project, context="Invalid target project-settings JSON"
+        )
+        project_settings: KiCadNetSettings = project_data.get("net_settings") or {}
+        for values in (
+            project_settings.get("net_chain_classes") or {},
+            project_settings.get("net_chain_netclasses") or {},
+        ):
+            existing.update(str(name).casefold() for name in values)
+    return existing
 
+
+def _write_layout_outputs(
+    files: _LayoutMergeFiles,
+    target: SExprList,
+    project_merge: ProjectSettingsMergeResult | None,
+) -> None:
+    """Write new board/project copies, removing a partial board if settings fail."""
+    _atomic_write(files.output_board, _dump(target) + "\n")
+    try:
+        if project_merge is not None:
+            _atomic_write(
+                files.output_project,
+                json.dumps(project_merge["data"], indent=2, ensure_ascii=False) + "\n",
+            )
+    except Exception:
+        files.output_board.unlink(missing_ok=True)
+        raise
+
+
+def merge_block_layout(
+    target_board: Path,
+    block: BlockRecord,
+    output_board: Path,
+    *,
+    instance_reference: str,
+    position_mm: tuple[float, float],
+    pin_to_board_net: dict[str, str],
+    layout_anchor_mm: tuple[float, float] = (0.0, 0.0),
+    rotation_deg: float = 0.0,
+    layout_id: str | None = None,
+) -> BlockLayoutMergeResult:
+    """Merge a stored block layout into a new copy of a project board.
+
+    Returns:
+        The merged board path, mapping decisions and imported board-object counts.
+
+    Raises:
+        FileNotFoundError: If the project board or stored block layout is missing.
+        FileExistsError: If either output file already exists.
+        ValueError: If placement, layers, net mappings, or imported board items are invalid.
+    """
+    files = _resolve_layout_merge_files(
+        target_board, block, output_board, instance_reference, layout_id
+    )
+    placement = _validate_layout_placement(
+        block,
+        files.selected_layout,
+        position_mm,
+        layout_anchor_mm,
+        rotation_deg,
+        pin_to_board_net,
+    )
+    target, source = _read_layout_documents(files)
+    net_mapping = _map_layout_nets(
+        source, target, placement.source_net_to_board_net, instance_reference
+    )
+    item_settings = _LayoutItemImportSettings(
+        instance_reference=instance_reference,
+        net_map=net_mapping.net_map,
+        anchor_mm=placement.anchor_mm,
+        position_mm=placement.position_mm,
+        rotation_deg=placement.rotation_deg,
+    )
+    imported = _import_layout_items(source, target, item_settings)
+    _insert_layout_items(target, net_mapping.new_net_nodes, imported.items)
+    source_net_to_board_net = {
+        source_name: net_mapping.net_map[code][1]
+        for code, source_name in net_mapping.source_nets.items()
+        if code in net_mapping.net_map and code != 0
+    }
+    existing_chain_names = _existing_project_chain_names(target, files.target_project)
     chain_name_map = _merge_net_chain_sections(
         source,
         target,
-        source_nets=source_nets,
+        source_nets=net_mapping.source_nets,
         source_net_to_board_net=source_net_to_board_net,
-        pad_uuid_remap=pad_uuid_remap,
+        pad_uuid_remap=imported.pad_uuid_remap,
         instance_reference=instance_reference,
         existing_chain_names=existing_chain_names,
     )
-
     project_merge = _merge_project_net_settings(
-        target_project,
-        source_project,
-        output_project,
+        files.target_project,
+        files.source_project,
+        files.output_project,
         instance_reference=instance_reference,
-        layout_ports={str(key): str(value) for key, value in ports.items()},
+        layout_ports=placement.ports,
         pin_to_board_net=pin_to_board_net,
         source_net_to_board_net=source_net_to_board_net,
         source_chain_name_map=chain_name_map,
     )
-    _atomic_write(output_board, _dump(target) + "\n")
-    try:
-        if project_merge is not None:
-            _atomic_write(
-                output_project,
-                json.dumps(project_merge["data"], indent=2, ensure_ascii=False) + "\n",
-            )
-    except Exception:
-        output_board.unlink(missing_ok=True)
-        raise
-
+    _write_layout_outputs(files, target, project_merge)
     return {
-        "output": str(output_board),
+        "output": str(files.output_board),
         "block": block.name,
-        "layout_id": selected_layout.get("id"),
-        "layout_name": selected_layout.get("name"),
+        "layout_id": files.selected_layout.get("id"),
+        "layout_name": files.selected_layout.get("name"),
         "instance_reference": instance_reference,
-        "rotation_deg": rotation_deg,
-        "project_file": project_merge["output"] if project_merge is not None else None,
+        "rotation_deg": placement.rotation_deg,
+        "project_file": (str(files.output_project) if files.output_project.is_file() else None),
         "merged_netclasses": project_merge["merged_classes"] if project_merge is not None else [],
-        "assigned_project_nets": project_merge["assigned_nets"] if project_merge is not None else [],
-        "ignored_project_patterns": project_merge["ignored_patterns"] if project_merge is not None else False,
-        "applied_project_patterns": project_merge["applied_patterns"] if project_merge is not None else [],
-        "unmatched_project_patterns": project_merge["unmatched_patterns"] if project_merge is not None else [],
-        "ignored_project_chain_classes": project_merge["ignored_chain_classes"] if project_merge is not None else False,
-        "merged_project_chain_names": project_merge["merged_chain_names"] if project_merge is not None else [],
-        "unmatched_project_chains": project_merge["unmatched_chains"] if project_merge is not None else [],
+        "assigned_project_nets": project_merge["assigned_nets"]
+        if project_merge is not None
+        else [],
+        "ignored_project_patterns": project_merge["ignored_patterns"]
+        if project_merge is not None
+        else False,
+        "applied_project_patterns": project_merge["applied_patterns"]
+        if project_merge is not None
+        else [],
+        "unmatched_project_patterns": project_merge["unmatched_patterns"]
+        if project_merge is not None
+        else [],
+        "ignored_project_chain_classes": project_merge["ignored_chain_classes"]
+        if project_merge is not None
+        else False,
+        "merged_project_chain_names": project_merge["merged_chain_names"]
+        if project_merge is not None
+        else [],
+        "unmatched_project_chains": project_merge["unmatched_chains"]
+        if project_merge is not None
+        else [],
         "merged_board_chains": sorted(chain_name_map.values()),
-        "footprints": imported_references,
-        "interactive_item_uuids": interactive_item_uuids,
-        "footprint_count": len(imported_references),
-        "object_count": len(imported),
-        "new_net_count": len(new_net_nodes),
-        "new_nets": [str(node[2]) for node in new_net_nodes],
-        "skipped_top_level_items": sorted(skipped),
+        "footprints": imported.references,
+        "interactive_item_uuids": imported.item_uuids,
+        "footprint_count": len(imported.references),
+        "object_count": len(imported.items),
+        "new_net_count": len(net_mapping.new_net_nodes),
+        "new_nets": [str(node[2]) for node in net_mapping.new_net_nodes],
+        "skipped_top_level_items": sorted(imported.skipped),
     }
