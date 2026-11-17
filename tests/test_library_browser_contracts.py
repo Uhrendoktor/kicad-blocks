@@ -441,11 +441,10 @@ def test_open_pcb_button_creates_chooser_for_selected_block(monkeypatch: MonkeyP
         ]
         assert len(dialogs) == 1
 
-        def walk_widgets(parent: Toplevel) -> Iterator[Misc]:
+        def walk_widgets(parent: Misc) -> Iterator[Misc]:
             for child in parent.winfo_children():
                 yield child
-                if child.winfo_class() == "Toplevel":
-                    yield from walk_widgets(cast(Toplevel, child))
+                yield from walk_widgets(child)
 
         combos = [
             cast(Combobox, item)
