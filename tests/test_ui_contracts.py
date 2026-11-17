@@ -210,6 +210,7 @@ def test_task_hub_actions_use_a_compact_two_column_grid(monkeypatch):
     finally:
         root.destroy()
 
+
 def test_choice_view_contract_invokes_selected_combobox_view():
     plugin_actions._load_tkinter()
     tk = plugin_actions.tk
