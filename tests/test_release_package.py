@@ -68,6 +68,7 @@ class ReleasePackageTests(unittest.TestCase):
                 self.assertIn(prefix + "VERSION", names)
                 self.assertIn(prefix + "CHANGELOG.md", names)
                 self.assertIn(prefix + "scripts/install_plugin.py", names)
+                self.assertIn(prefix + "scripts/github_api_types.py", names)
                 self.assertIn(prefix + "plugin/kicad-blocks/plugin.json", names)
                 self.assertIn(prefix + "plugin/kicad-blocks/requirements.txt", names)
                 self.assertIn(prefix + "RELEASE_INFO.json", names)

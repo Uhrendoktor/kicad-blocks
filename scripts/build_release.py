@@ -18,7 +18,10 @@ from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
 ROOT = Path(__file__).resolve().parents[1]
 PACKAGE_RELATIVE = Path("plugin") / "kicad-blocks"
 TOP_LEVEL_FILES = ("README.md", "CHANGELOG.md", "VERSION", "LICENSE")
-EXTRA_FILES = (Path("scripts") / "install_plugin.py",)
+EXTRA_FILES = (
+    Path("scripts") / "github_api_types.py",
+    Path("scripts") / "install_plugin.py",
+)
 
 
 def _load_installer(root: Path):
