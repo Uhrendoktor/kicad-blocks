@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 import tempfile
 import unittest
 from pathlib import Path
-from types import SimpleNamespace
+from types import ModuleType, SimpleNamespace
 from unittest.mock import Mock, patch
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -26,6 +27,7 @@ from kicad_blocks.plugin import (
     _block_overview_text,
     _choose_block_layout,
     _clean_facade_preview_svg,
+    _configure_tk_theme,
     _filter_library_records,
     _layout_choices,
     _library_record_for_instance,
@@ -422,6 +424,59 @@ class LibraryBrowserTests(unittest.TestCase):
         self.assertEqual([label for label, _png in pages], ["Root sheet", "Sheet 2 · sheet1"])
         self.assertEqual(pages, cached_pages)
         self.assertTrue(all(png == b"schematic-png" for _label, png in pages))
+
+    def test_native_facade_preview_normalizes_physical_dimensions_before_rasterizing(self):
+        symbol_name = self.block.manifest["symbol_name"]
+        rasterized_dimensions = []
+
+        def export(arguments, **kwargs):
+            output_dir = Path(arguments[arguments.index("--output") + 1])
+            output_dir.mkdir(parents=True, exist_ok=True)
+            # KiCad symbol exports can declare the intrinsic canvas in mm and
+            # omit viewBox; this is the physical-size case seen in the UI audit.
+            (output_dir / f"{symbol_name}.svg").write_text(
+                '<svg xmlns="http://www.w3.org/2000/svg" '
+                'width="21.4662mm" height="23.6534mm">'
+                '<g><path d="M 1 1 L 12 12"/></g></svg>',
+                encoding="utf-8",
+            )
+            return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+        def rasterize(*, svg_path, width, height):
+            from xml.etree import ElementTree as ET
+
+            root = ET.parse(svg_path).getroot()
+            rasterized_dimensions.append(
+                (root.attrib.get("width"), root.attrib.get("height"))
+            )
+            return b"not-a-png"
+
+        with (
+            patch("kicad_blocks.plugin.find_kicad_cli", return_value="/usr/bin/kicad-cli"),
+            patch("kicad_blocks.plugin.subprocess.run", side_effect=export),
+            patch("resvg_py.svg_to_bytes", side_effect=rasterize),
+            patch(
+                "kicad_blocks.plugin.tk",
+                SimpleNamespace(PhotoImage=Mock(return_value=object())),
+            ),
+            patch("kicad_blocks.plugin._NATIVE_PREVIEW_CACHE", {}),
+        ):
+            _native_symbol_preview_photo(self.block)
+
+        self.assertEqual(len(rasterized_dimensions), 1)
+        width, height = rasterized_dimensions[0]
+        self.assertTrue(width.endswith("px"))
+        self.assertTrue(height.endswith("px"))
+        self.assertAlmostEqual(
+            float(width.removesuffix("px")),
+            21.4662 * 96.0 / 25.4,
+            places=3,
+        )
+        self.assertAlmostEqual(
+            float(height.removesuffix("px")),
+            23.6534 * 96.0 / 25.4,
+            places=3,
+        )
 
     def test_native_facade_preview_removes_reference_and_component_name(self):
         from xml.etree import ElementTree as ET
@@ -919,6 +974,90 @@ class LibraryBrowserTests(unittest.TestCase):
         ):
             self.assertIsNone(_system_prefers_dark_theme())
         run_process.assert_not_called()
+
+    def test_system_theme_keeps_fixed_treeview_geometry_without_changing_native_colors(self):
+        style = Mock()
+        root = SimpleNamespace()
+        with (
+            patch.dict(os.environ, {"KICAD_BLOCKS_THEME": "system"}),
+            patch("kicad_blocks.plugin.ttk", SimpleNamespace(Style=Mock(return_value=style))),
+        ):
+            _configure_tk_theme(root)
+        self.assertEqual(root._kicad_blocks_palette, {})
+        style.configure.assert_any_call("Treeview", rowheight=29, padding=(4, 2))
+        style.configure.assert_any_call("Treeview.Heading", padding=(8, 6))
+
+    def _theme_ipc_modules(self):
+        package = ModuleType("kipy")
+        package.__path__ = []
+        proto = ModuleType("kipy.proto")
+        proto.__path__ = []
+        common = ModuleType("kipy.proto.common")
+        common.__path__ = []
+        path_types = ModuleType("kipy.proto.common.types")
+        path_types.PathType = SimpleNamespace(PATH_USER_SETTINGS=11)
+        package.proto = proto
+        proto.common = common
+        common.types = path_types
+        return {
+            "kipy": package,
+            "kipy.proto": proto,
+            "kipy.proto.common": common,
+            "kipy.proto.common.types": path_types,
+        }
+
+    def test_system_theme_reads_active_kicad_color_theme_through_ipc_paths(self):
+        settings = Path(self.temp.name) / "kicad-settings"
+        colors = settings / "colors"
+        colors.mkdir(parents=True)
+        (settings / "eeschema.json").write_text(
+            '{"appearance":{"color_theme":"tokyo_night"}}',
+            encoding="utf-8",
+        )
+        (colors / "tokyo_night.json").write_text(
+            '{"schematic":{"background":"rgb(26, 27, 38)"}}',
+            encoding="utf-8",
+        )
+        kicad = SimpleNamespace(get_paths=Mock(return_value={11: str(settings)}))
+        with (
+            patch.dict(os.environ, {"KICAD_BLOCKS_THEME": "system"}),
+            patch.dict(sys.modules, self._theme_ipc_modules()),
+        ):
+            self.assertTrue(_system_prefers_dark_theme(kicad))
+        kicad.get_paths.assert_called_once_with()
+
+    def test_system_theme_reads_absolute_kicad_color_theme_path(self):
+        settings = Path(self.temp.name) / "kicad-settings"
+        settings.mkdir()
+        theme_file = Path(self.temp.name) / "imported-theme.json"
+        theme_file.write_text(
+            '{"schematic":{"background":"rgb(250, 250, 250)"}}',
+            encoding="utf-8",
+        )
+        (settings / "eeschema.json").write_text(
+            json.dumps({"appearance": {"color_theme": str(theme_file)}}),
+            encoding="utf-8",
+        )
+        kicad = SimpleNamespace(get_paths=Mock(return_value={11: str(settings)}))
+        with (
+            patch.dict(os.environ, {"KICAD_BLOCKS_THEME": "system"}),
+            patch.dict(sys.modules, self._theme_ipc_modules()),
+        ):
+            self.assertFalse(_system_prefers_dark_theme(kicad))
+
+    def test_system_theme_falls_back_when_kicad_theme_data_is_missing(self):
+        settings = Path(self.temp.name) / "kicad-settings"
+        settings.mkdir()
+        (settings / "eeschema.json").write_text(
+            '{"appearance":{"color_theme":"missing-theme"}}',
+            encoding="utf-8",
+        )
+        kicad = SimpleNamespace(get_paths=Mock(return_value={11: str(settings)}))
+        with (
+            patch.dict(os.environ, {"KICAD_BLOCKS_THEME": "system"}),
+            patch.dict(sys.modules, self._theme_ipc_modules()),
+        ):
+            self.assertIsNone(_system_prefers_dark_theme(kicad))
 
     def test_record_picker_returns_single_choice_without_opening_a_dialog(self):
         self.assertIs(_pick_record([self.block], object(), "Pick Block"), self.block)

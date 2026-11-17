@@ -10,21 +10,15 @@ Use a shared implementation when a change should be available to every project t
 4. Choose **Edit default** or **Edit variant**.
 5. Edit the schematic in Eeschema and save it.
 
-The **Default** row is an editable implementation. **Edit default** opens the default schematic; it is not a read-only label.
+The manager shows exactly one **Default** row for the active default schematic, followed by the named alternatives. It does not expose a second Base row. **Edit default** opens the schematic currently represented by the Default row.
 
-To add a named implementation, choose **Add variant** in the Implementations dialog. Give it a unique variant value and select an existing schematic, create a blank schematic, or copy another library implementation. Save the list with **Save changes**.
+To add a named implementation, choose **Add variant** in the Implementations dialog. Give it a unique variant value and select an existing schematic, create a blank schematic, or copy another library implementation. The accepted operation is saved immediately. The new row appears at once; **Save & close** is only a retry path after a failed write.
 
 ## Edit the facade symbol
 
-The facade is the symbol that projects place in their schematics. To edit its artwork or pin arrangement:
+Direct facade editing from KiCad Blocks is currently unavailable. The tested Eeschema IPC API does not expose a supported operation to open Symbol Editor and select the exact library symbol. The current action reports this capability gap rather than claiming an editor handoff succeeded.
 
-1. Select exactly one placed instance of the block in Eeschema.
-2. Open the library browser for that schematic.
-3. Choose **Edit selected facade**, or choose **Edit facade symbol** from the task hub.
-4. Edit the symbol in KiCad Symbol Editor and save it.
-5. Publish the implementation so KiCad Blocks can reconcile the facade pins with the root hierarchical labels.
-
-The browser enables **Edit selected facade** only when the selected Eeschema instance matches the highlighted library block. The plugin preserves edited body artwork while refreshing the facade interface from hierarchical labels.
+Until KiCad exposes that operation, open Symbol Editor manually from Eeschema or the project manager, open/select the project's `KBlocks:<symbol>` library entry, edit and save it, then use **Publish implementation** to reconcile the facade pins with the block's root hierarchical labels. This manual path is a workaround, not a completed plugin feature.
 
 ## Publish a shared implementation
 

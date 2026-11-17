@@ -24,7 +24,7 @@ concurrency:
 
 jobs:
   package-and-publish:
-    runs-on: [self-hosted, linux, x64]
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     env:
       RELEASE_TAG: ${{ inputs.tag || github.ref_name }}

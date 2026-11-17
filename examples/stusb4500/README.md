@@ -81,11 +81,11 @@ for the layout, labeling, and electrical-routing rules applied to this example.
 
 ## Declarative groups and automatic layout
 
-The generator declares functional groups by component membership rather than by manually positioned frame rectangles. It measures member pins from the loaded KiCad symbols, derives each group's box/title/description panel, and packs the primary stages left-to-right with a constant 2.54 mm gap. The address straps form a secondary row aligned to the controller. Group descriptions carry the datasheet source, page and figure metadata. A screenshot-asset field is reserved, but automatic datasheet image embedding is not implemented yet.
+The generator declares functional groups by component membership rather than by manually positioned frame rectangles. It measures member pins from the loaded KiCad symbols, derives each group's box/title/description panel, and packs the primary stages left-to-right with a constant 2.54 mm gap. The address straps form a secondary row aligned to the controller. Group descriptions cite the shared document, page and figure without repeating a datasheet URL in every group; the primary datasheet link is kept here and in U1's hidden KiCad part property. A screenshot-asset field is reserved, but automatic datasheet image embedding is not implemented yet.
 
 Component origins are now resolved from declarative per-group anchors and relationships: relative offsets, midpoint placement (R10 between T4/T1), and pin-relative placement (R55 from U1.6). The symbol specification no longer carries per-component sheet coordinates. The group packer translates the resolved component topology as a unit and derives the frame from member-pin extents. The constraints are explicit schematic-design intent rather than an automatic net-graph optimizer; a future placer can infer more relationships from connectivity and symbol roles. Each group retains one vertical anchor baseline as a layout tuning parameter; primary horizontal placement, component-relative positions, and frame dimensions are derived.
 
-The schematic Clippy checker runs as part of KiCad CLI validation and exposes 18 stable IDs (SCH001–SCH018). Generic rules cover orthogonal wire geometry, label topology/collisions, symbol-field clearance, single-line block titles, bordered comment panels, wire-vs-symbol obstacles and annotation geometry. Profile rules add this design's physical-net contracts, shared C2/C3 GND, the required U1.3 no-connect marker, group padding, circuit documentation and a scored wire-length budget for the back-to-back FET stage. Run `python scripts/validate_schematic_style.py --list-rules` to list IDs and scope; run `python scripts/validate_schematic_style.py --generic-only PATH_TO_SCHEMATIC` to apply the reusable presentation/geometry subset without importing this example's generator or electrical contracts. See [SCHEMATIC_STYLE_CHECKLIST.md](SCHEMATIC_STYLE_CHECKLIST.md) for details.
+The schematic Clippy checker runs as part of KiCad CLI validation and exposes 20 stable IDs (SCH001–SCH020). Generic rules cover orthogonal wire geometry, label topology/collisions, symbol-field clearance, single-line block titles, bordered comment panels, wire-vs-symbol obstacles and annotation geometry. Profile rules add this design's physical-net contracts, shared C2/C3 GND, the required U1.3 no-connect marker, group padding, component function/rationale documentation and a scored wire-length budget for the back-to-back FET stage. D50, T1 and T4 also have tighter symbol-field distance limits than the generic default. Run `python scripts/validate_schematic_style.py --list-rules` to list IDs and scope; run `python scripts/validate_schematic_style.py --generic-only PATH_TO_SCHEMATIC` to apply the reusable presentation/geometry subset without importing this example's generator or electrical contracts. See [SCHEMATIC_STYLE_CHECKLIST.md](SCHEMATIC_STYLE_CHECKLIST.md) for details.
 
 ## Component set
 
@@ -98,13 +98,13 @@ The schematic Clippy checker runs as part of KiCad CLI validation and exposes 18
 | C4 | 1 µF | VBUS_VS_DISCH filter capacitor |
 | C10 | 100 nF | VSNK output bypass capacitor |
 | C50 | 4.7 µF | VBUS input capacitance |
-| D4 | Generic diode symbol; no part specified by ST | Fast-charge path for C4; select a suitably rated part |
+| D4 |  | Series path associated with the C4 VBUS filter; select and rate the diode for the target design |
 | D1 | ESDA25W | Dual CC-line protection array |
 | D50, D11 | ESDA25P35-1U1M | VBUS / VSNK transient protection |
-| R1 | 470 Ω | VBUS_VS_DISCH filter path |
-| R2 | 1 kΩ | DISCH-to-VSNK discharge path |
+| R1 | 470 Ω | Series current limiter at U1's VBUS_VS_DISCH pin; limits current during receptacle-side VBUS discharge |
+| R2 | 1 kΩ | External discharge resistor from VSNK to U1 DISCH; limits pin current while output capacitance is discharged |
 | R3, R5, R6 | 4.7 kΩ | MCU interface pull-ups |
-| R4 | 1 kΩ | VBUS_VS_DISCH monitor network |
+| R4 | 1 kΩ | Bias from VREG_2V7 to the VBUS_VS_DISCH sense node in the reference monitor network |
 | R10 | 100 kΩ | Power-switch gate network |
 | R11 | 22 kΩ | Power-switch gate network |
 | R13 | 100 Ω | Power-switch control network |

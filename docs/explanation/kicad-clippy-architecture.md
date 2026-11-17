@@ -1,9 +1,8 @@
 # kicad-clippy: research and architecture proposal
 
-**Status:** Architecture approved; Phase 1 foundation ported to the standalone [Uhrendoktor/kicad-clippy](https://github.com/Uhrendoktor/kicad-clippy) repository.  
-**Scope:** A full Rust schematic linter that complements native KiCad ERC.  
-**Implementation:** The initial parser, diagnostic contracts, native ERC adapter, CLI, strict Clippy policy, and project documentation are under review in [kicad-clippy PR #1](https://github.com/Uhrendoktor/kicad-clippy/pull/1).  
-**Remaining:** Custom SCH001–SCH020 execution, project profiles, SARIF, fix/layout proposals, and GUI integration remain future implementation stages.
+**Status:** Architecture approved; implementation has moved to the standalone [Uhrendoktor/kicad-clippy](https://github.com/Uhrendoktor/kicad-clippy) repository.  
+**Current implementation:** The consolidated [kicad-clippy PR #27](https://github.com/Uhrendoktor/kicad-clippy/pull/27) carries the Rust workspace, native KiCad adapters, migrated schematic rules, and versioned project profiles. Earlier foundation/rules PRs #1–#4 were closed as superseded and are not the active review target.  
+**Remaining:** PR #27 explicitly tracks partial SCH004/SCH005/SCH009/SCH010/SCH012/SCH013 coverage; direct physical-connectivity inference, remaining layout rules, SARIF, verified fix/layout proposals, and GUI integration remain future work.
 
 ## 1. Executive summary
 
@@ -162,7 +161,7 @@ The current prototype is a useful behavioral specification, but several current 
 5. Declarative group layout already has useful concepts: anchors, offsets, midpoint relations, pin-relative relations, member sets and automatically derived frame extents.
 6. Tests cover generated examples and individual rule functions, but need a general rule-fixture contract and machine-readable diagnostic snapshots.
 
-The current rule IDs are SCH001–SCH019 on main. The open schematic-hardening work also adds SCH020 (component function/rationale documentation). Preserve existing IDs during migration to avoid breaking examples, tests and user documentation. Treat the hardening branch's SCH020 as part of the migration set once that work is merged.
+The main branch's historical catalogue contains SCH001–SCH020 after the STUSB4500 hardening change merged. SCH020 adds component function/rationale documentation. Preserve those IDs during migration to avoid breaking examples, tests and user documentation; the current Rust migration in kicad-clippy PR #27 includes SCH020 and also introduces SCH021–SCH022 for component-intent and decoupling metadata.
 
 ## 4. Proposed architecture
 
@@ -452,7 +451,7 @@ Preserve the current IDs during the port. The table below separates genuine kica
 | SCH019 | Label-kind consistency | kicad-clippy + ERC boundary | Keep project-wide conventions; defer native same-local/global-label electrical conflicts to ERC. |
 | SCH020 | Component function and rationale documentation | Profile rule | Keep from the current hardening branch; make description requirements declarative and testable. |
 
-The existing catalogue has 19 IDs on main; SCH020 is present on the open hardening branch. Keep that branch's addition in the migration plan, but do not silently assume it has already landed on main.
+The historical catalogue now has 20 IDs on main. SCH020 is part of the merged STUSB4500 hardening change and is included in the Rust migration; SCH021–SCH022 extend the standalone implementation with declarative component-intent and decoupling metadata.
 
 ### Recommended future rule families
 
@@ -747,4 +746,4 @@ Use snapshot tests to make diagnostic text and spans reviewable. Use property-ba
 
 ---
 
-**Recommendation:** Approve this architecture, then implement Phase 1 as a separately reviewable foundation PR. The first implementation should prove source spans, native ERC normalization and stable diagnostics before any large-scale rule port or automatic layout editing.
+**Recommendation:** Retain the architecture boundaries described here as the stable design contract. The standalone kicad-clippy implementation has progressed beyond the foundation-only stage: consolidated PR #27 contains the current Rust rule/profile migration, with several checks deliberately marked partial. Prioritize completing those partial rule contracts with KiCad-exported netlists and transformed symbol-pin geometry before broadening automatic fixes or adding GUI integration.

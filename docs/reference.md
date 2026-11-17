@@ -58,15 +58,15 @@ The Functional Block Library browser presents these primary actions:
 
 - **Place block** — starts KiCad's native symbol chooser and placement tool. Select the displayed `KBlocks:<symbol>` entry in KiCad's chooser, then place it on the schematic.
 - **Open implementation** — opens the default or selected implementation schematic.
-- **Edit facade** — validates the generated library symbol shown in the preview, opens KiCad's native Symbol Editor, and displays its exact `KBlocks:<symbol>` identifier for selection in the library tree. No placed schematic instance is required. KiCad edits the project's existing **KBlocks** catalog, which is refreshed from the registered shared libraries before the editor opens. Save the symbol, then use **Publish implementation** to import the project-catalog edit into the block's revisioned facade asset and update the shared catalog. Conflicting project/shared edits are rejected rather than overwritten.
+- **Edit facade** — currently reports an unsupported-operation error. The tested Eeschema IPC API has no supported operation to open Symbol Editor and select a particular library symbol. Do not treat the action as a working editor handoff. Until KiCad exposes that API, open Symbol Editor manually and select the project's `KBlocks:<symbol>` library entry.
 - **Implementations** — opens the default and named implementation list.
 - **Open PCB layout** — opens a stored board file for inspection.
 - **Manage PCB layouts** — edits stored boards, implementation links, and the default layout.
 - **Refresh** — reloads the registered library list.
 
-The Implementations dialog contains a **Default** row and any named variants. Selecting **Default** enables **Edit default**, which opens the default schematic. Named rows enable **Edit variant**. A variant can be added from an existing schematic, a new blank schematic, or a copy of another library implementation.
+The Implementations dialog contains exactly one **Default** row for the active default schematic and the remaining named alternatives. Selecting **Default** enables **Edit default**, which opens the current default schematic. Selecting an alternative enables **Edit implementation** and **Set as default**; promoting it replaces the single Default row rather than adding a separate Base state. Named alternatives can be added from an existing schematic, a new blank schematic, or a copy of another library implementation. Accepted changes are persisted immediately; **Save & close** retries failed writes.
 
-The PCB layout manager separates the layout table, assignment controls, and Save/Cancel footer. The **Assign selected layout to** selector can choose **Default**, a named variant, or **No variant link**.
+The PCB layout manager separates the layout table and assignment controls. The **Assign selected layout to** selector can choose **Default** or a named variant. Every layout remains linked to at least one implementation. Accepted Add, Remove, Assign, and Set default operations persist immediately and refresh the table. **Save & close** retries failed writes; **Close** exits the manager.
 
 The **Add PCB layout** dialog supports two starting modes: **Create a new empty board** and **Choose an existing PCB file**. The file entry and **Choose file** button are visible only in the existing-file mode. **Use for implementation** associates the new board with **Default** or a named variant.
 
@@ -148,7 +148,7 @@ The selected root instance's overrides are applied to its implementation. Nested
 A variant maps a `KB_VARIANT` string to an alternative implementation schematic.
 
 - Matching is case-insensitive but otherwise exact.
-- If a block declares variants, an empty, unresolved, or unknown value is an error. The plugin does not guess a default.
+- An empty `KB_VARIANT` selects the configured default implementation. An explicit named value selects its matching alternative; an unknown explicit value remains an error.
 - A block without variants uses `implementation.kicad_sch`.
 
 A named profile is a reusable partial configuration containing a profile name and ID, a variant value, optional typed parameter overrides, and an optional PCB layout ID. Parameters not specified by the profile inherit block defaults.

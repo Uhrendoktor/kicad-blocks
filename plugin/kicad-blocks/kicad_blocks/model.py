@@ -57,7 +57,7 @@ def resolve_variant_implementation(manifest: dict, value: str) -> str:
     """Resolve an explicit selector or the configured default implementation.
 
     An empty KB_VARIANT selects default_variant when one is configured,
-    otherwise the base implementation. An unknown explicit selector remains
+    otherwise the manifest's default implementation file. An unknown explicit selector remains
     an error and never silently falls back.
     """
     variants = manifest.get("variants") or []
