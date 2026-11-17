@@ -92,7 +92,7 @@ def _load_project_settings(path: Path, *, context: str) -> KiCadProjectData:
         for value in assignments.values():
             if isinstance(value, str):
                 continue
-            if not isinstance(value, list) or any(not isinstance(name, str) for name in value):
+            if not isinstance(value, list):
                 raise TypeError(f"{context}: invalid netclass assignment value in {path}")
         for key in ("net_chain_classes", "net_chain_netclasses"):
             chain_map = net_settings.get(key, {})
@@ -868,7 +868,7 @@ def _merge_project_net_settings(
     else:
         source_data: KiCadProjectData = {"net_settings": {}}
     source_settings: KiCadNetSettings = source_data.get("net_settings") or {}
-    target_settings = target_data.get("net_settings")
+    target_settings: KiCadNetSettings | None = target_data.get("net_settings")
     if target_settings is None:
         target_settings = {"classes": [], "netclass_assignments": {}}
         target_data["net_settings"] = target_settings

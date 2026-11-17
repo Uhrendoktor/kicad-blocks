@@ -3843,7 +3843,7 @@ def _save_block_layouts(
                     f"Stored project-settings file is missing or unsafe: {project_filename!r}"
                 )
 
-        raw_links = requested_implementation_links.get(layout_id)
+        raw_links: list[str] | None = requested_implementation_links.get(layout_id)
         if raw_links is None:
             raw_links = item.get("implementations")
         if raw_links is None:
@@ -4166,9 +4166,11 @@ def _show_block_layout_editor(
         cast(BlockLayoutEditInput, dict(item)) for item in _layout_choices(record)
     ]
     for item in layouts:
-        item["id"] = str(
-            item.get("id") or slugify(str(item.get("name") or Path(item["file"]).stem))
-        ).casefold()
+        layout_file = item.get("file")
+        layout_name = item.get("name") or (
+            Path(layout_file).stem if layout_file is not None else "layout"
+        )
+        item["id"] = str(item.get("id") or slugify(str(layout_name))).casefold()
     default_layout_id = str(record.manifest.get("default_layout") or "").casefold()
     if not default_layout_id and layouts:
         default_layout_id = str(layouts[0].get("id") or "")
@@ -4347,13 +4349,16 @@ def _show_block_layout_editor(
         links = layout_implementations.setdefault(item_id, [])
         if selected not in links:
             links.append(selected)
-        if selected == "Default":
-            default_layout_id_holder[0] = item["id"]
+        selected_layout_id = item.get("id")
+        if selected == "Default" and selected_layout_id is not None:
+            default_layout_id_holder[0] = selected_layout_id
         else:
             variant_layouts[selected] = item_id
         changed[0] = True
-        status_value.set(f"Assigned {item['name']} to {selected}; saving to the library.")
-        render(item["id"])
+        status_value.set(
+            f"Assigned {item.get('name', 'layout')} to {selected}; saving to the library."
+        )
+        render(selected_layout_id)
         persist_layout_changes()
 
     def update_actions(
@@ -4481,7 +4486,7 @@ def _show_block_layout_editor(
     save_button.configure(command=save_and_close)
     tree.bind("<<TreeviewSelect>>", update_actions)
     dialog.bind("<Escape>", _after_event(cancel_layout_edits))
-    render(layouts[0]["id"] if layouts else None)
+    render(layouts[0].get("id") if layouts else None)
     dialog.protocol("WM_DELETE_WINDOW", cancel_layout_edits)
     _set_window_geometry(dialog, 1120, 800, 980, 650)
     dialog.grab_set()
@@ -4830,7 +4835,7 @@ def _show_block_variant_editor(
     for item in record.manifest.get("variants", []):
         editable: BlockVariantEditInput = {
             "value": str(item["value"]),
-            "file": str(item.get("file") or ""),
+            "file": str(item.get("file") or item.get("source") or ""),
         }
         if item.get("layout_id"):
             editable["layout_id"] = str(item["layout_id"]).casefold()
@@ -4964,8 +4969,9 @@ def _show_block_variant_editor(
             )
             return
         updated: BlockVariantEditInput = {"value": value, "source": source}
-        if current.get("layout_id"):
-            updated["layout_id"] = current["layout_id"]
+        current_layout_id = current.get("layout_id")
+        if current_layout_id:
+            updated["layout_id"] = current_layout_id
         if current.get("open_after_save"):
             updated["open_after_save"] = True
         variants[index] = updated
@@ -5034,7 +5040,7 @@ def _show_block_variant_editor(
             for item in saved.get("variants", []):
                 editable: BlockVariantEditInput = {
                     "value": str(item["value"]),
-                    "file": str(item["file"]),
+                    "file": str(item.get("file") or item.get("source") or ""),
                 }
                 if item.get("layout_id"):
                     editable["layout_id"] = str(item["layout_id"]).casefold()
@@ -7306,4 +7312,4 @@ safe_schematic_selection = _safe_schematic_selection
 
 def library_reload_status() -> tuple[bool, str | None]:
     """Return the result of the most recent project symbol-library reload."""
-    return _LAST_LIBRARY_RELOAD_OK, _LAST_LIBRARY_RELOAD_WARNING
+    return _last_library_reload_ok, _last_library_reload_warning

@@ -13,6 +13,7 @@ import re
 import shutil
 import tempfile
 import uuid
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
@@ -948,7 +949,7 @@ def create_block(
     layout_file: Path | None = None,
     layout_project_file: Path | None = None,
     layout_files: list[BlockLayoutInput] | None = None,
-    parameters: list[BlockParameterInput | BlockParameter] | None = None,
+    parameters: Iterable[BlockParameterInput | BlockParameter] | None = None,
     variant_files: list[BlockVariantInput] | None = None,
     profiles: list[BlockProfileInput] | None = None,
 ) -> BlockRecord:

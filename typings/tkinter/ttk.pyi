@@ -34,7 +34,6 @@ class Button(Widget):
     def __init__(
         self,
         master: Misc | None = ...,
-        cnf: Mapping[str, TkOption] | None = ...,
         **kwargs: TkOption,
     ) -> None: ...
     def invoke(self) -> str: ...

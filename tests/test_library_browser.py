@@ -261,7 +261,7 @@ class LibraryBrowserTests(unittest.TestCase):
                 source_symbol,
                 self.block.manifest["symbol_name"],
                 shared_catalog_file=self.block.symbol_library,
-                baseline_digest=self.block.manifest["catalog_symbol_hash"],
+                baseline_digest=self.block.manifest.get("catalog_symbol_hash"),
             )
         )
         updated_catalog = parse_sexpr(project_catalog.read_text(encoding="utf-8"))
@@ -290,7 +290,7 @@ class LibraryBrowserTests(unittest.TestCase):
                 source_symbol,
                 self.block.manifest["symbol_name"],
                 shared_catalog_file=self.block.symbol_library,
-                baseline_digest=self.block.manifest["catalog_symbol_hash"],
+                baseline_digest=self.block.manifest.get("catalog_symbol_hash"),
             )
         )
 
@@ -306,7 +306,7 @@ class LibraryBrowserTests(unittest.TestCase):
                 source_symbol,
                 self.block.manifest["symbol_name"],
                 shared_catalog_file=self.block.symbol_library,
-                baseline_digest=self.block.manifest["catalog_symbol_hash"],
+                baseline_digest=self.block.manifest.get("catalog_symbol_hash"),
             )
         )
 
@@ -335,7 +335,7 @@ class LibraryBrowserTests(unittest.TestCase):
                 block_symbol,
                 self.block.manifest["symbol_name"],
                 shared_catalog_file=shared_catalog,
-                baseline_digest=self.block.manifest["catalog_symbol_hash"],
+                baseline_digest=self.block.manifest.get("catalog_symbol_hash"),
             )
         )
         self.assertIn(
@@ -375,7 +375,7 @@ class LibraryBrowserTests(unittest.TestCase):
                 source_symbol,
                 self.block.manifest["symbol_name"],
                 shared_catalog_file=self.block.symbol_library,
-                baseline_digest=self.block.manifest["catalog_symbol_hash"],
+                baseline_digest=self.block.manifest.get("catalog_symbol_hash"),
             )
         )
         self.assertEqual(
@@ -459,8 +459,18 @@ class LibraryBrowserTests(unittest.TestCase):
     def test_native_schematic_preview_exports_selected_implementation_and_all_sheets(self):
         calls = []
 
-        def export(arguments, **kwargs):
+        calls: list[Sequence[str]] = []
+
+        def export(
+            arguments: Sequence[str],
+            *,
+            capture_output: bool = False,
+            text: bool = False,
+            check: bool = False,
+            timeout: float | None = None,
+        ) -> subprocess.CompletedProcess[str]:
             calls.append(arguments)
+            del capture_output, text, check, timeout
             output_dir = Path(arguments[arguments.index("--output") + 1])
             output_dir.mkdir(parents=True, exist_ok=True)
             schematic_stem = Path(arguments[-1]).stem
@@ -572,7 +582,7 @@ class LibraryBrowserTests(unittest.TestCase):
         self.assertEqual(manifest["layouts"][0]["name"], "Native")
         self.assertEqual(manifest["layouts"][0]["file"], "layout_native.kicad_pcb")
         self.assertTrue((self.filter_block.path / manifest["layouts"][0]["file"]).is_file())
-        self.assertEqual(manifest["layouts"][0]["implementations"], ["Default"])
+        self.assertEqual(manifest["layouts"][0].get("implementations"), ["Default"])
 
     def test_each_pcb_layout_keeps_multiple_implementation_associations(self) -> None:
         layouts = [dict(item) for item in self.block.manifest["layouts"]]
@@ -585,11 +595,11 @@ class LibraryBrowserTests(unittest.TestCase):
         )
         manifest = read_manifest(updated.path)
         self.assertEqual(
-            manifest["layouts"][0]["implementations"],
+            manifest["layouts"][0].get("implementations"),
             ["Default", "1V8"],
         )
         self.assertEqual(
-            next(item for item in manifest["variants"] if item["value"] == "1V8")["layout_id"],
+            next(item for item in manifest["variants"] if item["value"] == "1V8").get("layout_id"),
             "compact",
         )
 
@@ -652,7 +662,7 @@ class LibraryBrowserTests(unittest.TestCase):
         )
         manifest = read_manifest(self.block.path)
         linked_variant = next(item for item in manifest["variants"] if item["value"] == "1V8")
-        self.assertEqual(linked_variant["layout_id"], "compact")
+        self.assertEqual(linked_variant.get("layout_id"), "compact")
 
         instance = SimpleNamespace(
             reference="X1",
@@ -668,6 +678,8 @@ class LibraryBrowserTests(unittest.TestCase):
             ],
         )
         resolved = _choose_block_layout(updated_block, object(), instance=instance)
+        self.assertIsNotNone(resolved)
+        assert resolved is not None
         self.assertEqual(resolved["id"], "compact")
 
     def test_implementation_link_supersedes_implicit_default_layout(self) -> None:
@@ -701,6 +713,8 @@ class LibraryBrowserTests(unittest.TestCase):
             ],
         )
         resolved = _choose_block_layout(updated_block, object(), instance=instance)
+        self.assertIsNotNone(resolved)
+        assert resolved is not None
         self.assertEqual(resolved["id"], "standard")
 
     def test_manifest_rejects_variant_link_to_unknown_layout(self) -> None:
@@ -733,7 +747,7 @@ class LibraryBrowserTests(unittest.TestCase):
 
         after = read_manifest(self.block.path)
         variant_1v8 = next(item for item in after["variants"] if item["value"] == "1V8")
-        self.assertEqual(variant_1v8["layout_id"], "compact")
+        self.assertEqual(variant_1v8.get("layout_id"), "compact")
 
         replacement_source = Path(self.temp.name) / "renamed_implementation.kicad_sch"
         replacement_source.write_text(
@@ -759,7 +773,7 @@ class LibraryBrowserTests(unittest.TestCase):
         renamed_implementation = next(
             item for item in renamed["variants"] if item["value"] == "1V8 low-noise"
         )
-        self.assertEqual(renamed_implementation["layout_id"], "compact")
+        self.assertEqual(renamed_implementation.get("layout_id"), "compact")
 
     def test_default_implementation_is_persisted_and_used_for_empty_selector(self) -> None:
         _save_block_variants(
@@ -771,7 +785,7 @@ class LibraryBrowserTests(unittest.TestCase):
             default_variant="3V3",
         )
         manifest = read_manifest(self.block.path)
-        self.assertEqual(manifest["default_variant"], "3V3")
+        self.assertEqual(manifest.get("default_variant"), "3V3")
         self.assertEqual(
             resolve_variant_implementation(manifest, ""),
             "implementation_3v3.kicad_sch",
@@ -938,7 +952,7 @@ class LibraryBrowserTests(unittest.TestCase):
                 return self.children
 
         widget = FakeWidget()
-        scrolls = []
+        scrolls: list[int] = []
         _bind_mousewheel(widget, scrolls.append)
 
         widget.bindings["<MouseWheel>"](SimpleNamespace(delta=120, num=None))
@@ -1015,10 +1029,10 @@ class LibraryBrowserTests(unittest.TestCase):
         common = ModuleType("kipy.proto.common")
         common.__path__ = []
         path_types = ModuleType("kipy.proto.common.types")
-        path_types.PathType = SimpleNamespace(PATH_USER_SETTINGS=11)
-        package.proto = proto
-        proto.common = common
-        common.types = path_types
+        setattr(path_types, "PathType", SimpleNamespace(PATH_USER_SETTINGS=11))
+        setattr(package, "proto", proto)
+        setattr(proto, "common", common)
+        setattr(common, "types", path_types)
         return {
             "kipy": package,
             "kipy.proto": proto,
@@ -1146,6 +1160,10 @@ class LibraryBrowserTests(unittest.TestCase):
             def iconify(self) -> None:
                 self.events.append("iconify")
                 self.current_state = "iconic"
+
+            def deiconify(self) -> None:
+                self.events.append("deiconify")
+                self.current_state = "normal"
 
             def deiconify(self) -> None:
                 self.events.append("deiconify")
