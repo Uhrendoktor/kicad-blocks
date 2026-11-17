@@ -14,12 +14,11 @@ from kicad_blocks.pcb_layout import (
     merge_project_net_settings,
     rewrite_nets,
     transform_item,
-    parse_sexpr,
     resolve_block_layout,
 )
 from kicad_blocks.manifest_types import BlockManifest
 from kicad_blocks.repository import BlockRecord
-from kicad_blocks.sexpr import QuotedSExpr, dump_sexpr
+from kicad_blocks.sexpr import QuotedSExpr, dump_sexpr, parse_sexpr
 
 
 class PCBNetRewriteTests(unittest.TestCase):

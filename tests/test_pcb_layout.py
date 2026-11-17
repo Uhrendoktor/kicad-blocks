@@ -26,8 +26,8 @@ from kicad_blocks.pcb_layout import (
     BlockLayoutPlacement,
     merge_block_layout,
     merge_block_layouts,
-    parse_sexpr,
 )
+from kicad_blocks.sexpr import parse_sexpr
 
 
 def _sexpr_number(node: SExprList, index: int) -> float:
@@ -39,10 +39,12 @@ def _sexpr_number(node: SExprList, index: int) -> float:
 
 def _required_child(node: SExprList, tag: str) -> SExprList:
     """Return one required direct list child from a parsed PCB item."""
-    child = next(
-        (value for value in node[1:] if isinstance(value, list) and value and value[0] == tag),
-        None,
-    )
+    children: list[SExprList] = [
+        cast(SExprList, value)
+        for value in node[1:]
+        if isinstance(value, list) and value and value[0] == tag
+    ]
+    child = children[0] if children else None
     if child is None:
         raise AssertionError(f"PCB S-expression node is missing {tag!r}: {node!r}")
     return child
@@ -455,8 +457,9 @@ def main() -> None:
 
         def _walk(node: SExpr) -> Iterator[SExprList]:
             if isinstance(node, list):
-                yield node
-                for child in node[1:]:
+                list_node = cast(SExprList, node)
+                yield list_node
+                for child in list_node[1:]:
                     yield from _walk(child)
 
         pad_ids = {
