@@ -260,7 +260,7 @@ def test_place_button_registers_selected_block_and_starts_native_placement(monke
         plugin_actions, "_register_block",
         lambda *_args, **_kwargs: context.action_calls.append("register-block"),
     )
-    monkeypatch.setattr(plugin_actions, "_LAST_LIBRARY_RELOAD_OK", True)
+    monkeypatch.setattr(plugin_actions, "_last_library_reload_ok", True)
     monkeypatch.setattr(
         plugin_actions, "_minimize_placement_windows", lambda _window: []
     )
@@ -314,10 +314,11 @@ def test_implementation_button_registers_and_opens_default_document(monkeypatch,
 def test_edit_facade_button_targets_selected_record(monkeypatch, tmp_path):
     root, context, _records, _library, _project = _new_browser(monkeypatch, tmp_path)
     context.action_calls.clear()
-    monkeypatch.setattr(
-        plugin_actions, "_edit_facade_symbol",
-        lambda record, *_args, **_kwargs: context.action_calls.append(record.manifest["block_id"]),
-    )
+    def edit_facade(record, *_args, **_kwargs) -> bool:
+        context.action_calls.append(record.manifest["block_id"])
+        return True
+
+    monkeypatch.setattr(plugin_actions, "_edit_facade_symbol", edit_facade)
     try:
         _select_first_record(context)
         ButtonContract(
