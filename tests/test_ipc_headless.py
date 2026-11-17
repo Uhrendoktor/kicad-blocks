@@ -148,7 +148,7 @@ def _place_initial_facade(
         )
     if (
         "KB_PROFILE" not in instance_fields
-        or instance_fields["KB_PROFILE"].text.value != ""
+        or instance_fields["KB_PROFILE"].text.value
     ):
         raise AssertionError(
             "The generated facade did not expose its blank profile selector."
@@ -173,11 +173,23 @@ def _place_initial_facade(
             f"{saved_parameter_values!r}"
         )
 
+    if len(symbols) != 1:
+        raise AssertionError(f"Expected one facade symbol; found {len(symbols)}.")
+    if len(sheet_symbols) != 0:
+        raise AssertionError(
+            f"Expected zero hierarchical sheet symbols; found {len(sheet_symbols)}."
+        )
+
     # Use the fully re-fetched document item, as the UI action does
     # through get_selection(), rather than the create response wrapper.
     instance = symbols[0]
-
-    # Edit fields on the selected facade through the same transactional
+    if instance.reference != "X1":
+        raise AssertionError(f"Unexpected reference designator: {instance.reference!r}.")
+    if (
+        instance.definition.id.library != nickname
+        or instance.definition.id.name != symbol_name
+    ):
+        raise AssertionError("Placed facade has the wrong KiCad library identifier.")
     return instance
 
 
@@ -224,21 +236,11 @@ def _configure_facade_instance(
         )
     if str(instance.id) != original_configured_id or instance.reference != "X1":
         raise AssertionError("Configuration changed the facade KIID or reference.")
-    if len(symbols) != 1:
-        raise AssertionError(f"Expected one facade symbol; found {len(symbols)}.")
-    if len(sheet_symbols) != 0:
-        raise AssertionError(
-            f"Expected zero hierarchical sheet symbols; found {len(sheet_symbols)}."
-        )
-    if instance.reference != "X1":
-        raise AssertionError(f"Unexpected reference designator: {instance.reference!r}.")
     if (
         instance.definition.id.library != nickname
         or instance.definition.id.name != symbol_name
     ):
-        raise AssertionError("Placed facade has the wrong KiCad library identifier.")
-
-    original_instance_id = str(instance.id)
+        raise AssertionError("Configuration changed the facade library identifier.")
     return instance
 
 
@@ -248,8 +250,10 @@ def _create_local_facade_copy(
     instance: SchematicSymbol,
     project_dir: Path,
     library_root: Path,
+    nickname: str,
+    symbol_name: str,
 ) -> tuple[_SelectionFixture, BlockRecord, str]:
-
+    original_instance_id = str(instance.id)
     selection = _SelectionFixture(instance)
     local_path = make_selected_local(
         cast(Schematic, selection), cast(KiCadApp, kicad), project_dir, library_root
@@ -290,12 +294,45 @@ def _create_local_facade_copy(
     return selection, local, original_instance_id
 
 
+def _assert_local_sync_conflict(
+    block: BlockRecord,
+    local: BlockRecord,
+    selection: _SelectionFixture,
+    kicad: KiCadApp,
+    project_dir: Path,
+) -> None:
+        local_before_conflict = local.implementation.read_text(encoding="utf-8")
+        source_before_conflict = block.implementation.read_text(encoding="utf-8")
+        local.implementation.write_text(
+            local_before_conflict + "\n; local concurrent edit\n",
+            encoding="utf-8",
+        )
+        block.implementation.write_text(
+            source_before_conflict + "\n; library concurrent edit\n",
+            encoding="utf-8",
+        )
+        try:
+            sync_selected_local(cast(Schematic, selection), cast(KiCadApp, kicad), project_dir)
+        except RuntimeError as conflict_error:
+            if "Synchronization conflict" not in str(conflict_error):
+                raise
+        else:
+            raise AssertionError("Divergent local/library edits were not rejected.")
+        if "; local concurrent edit" not in local.implementation.read_text(encoding="utf-8"):
+            raise AssertionError("Conflict detection overwrote the local version.")
+        if "; library concurrent edit" not in block.implementation.read_text(encoding="utf-8"):
+            raise AssertionError("Conflict detection overwrote the library version.")
+
+
+ 
 def _validate_local_sync(
     block: BlockRecord,
     local: BlockRecord,
     selection: _SelectionFixture,
     kicad: KiCadApp,
     project_dir: Path,
+    schematic: Schematic,
+    original_instance_id: str,
 ) -> None:
     local_text = local.implementation.read_text(encoding="utf-8")
     local.implementation.write_text(
@@ -325,28 +362,7 @@ def _validate_local_sync(
     if "; upstream IPC pull test" not in local.implementation.read_text(encoding="utf-8"):
         raise AssertionError("Synchronizing did not pull the library implementation edit.")
 
-    local_before_conflict = local.implementation.read_text(encoding="utf-8")
-    source_before_conflict = block.implementation.read_text(encoding="utf-8")
-    local.implementation.write_text(
-        local_before_conflict + "\n; local concurrent edit\n",
-        encoding="utf-8",
-    )
-    block.implementation.write_text(
-        source_before_conflict + "\n; library concurrent edit\n",
-        encoding="utf-8",
-    )
-    try:
-        sync_selected_local(cast(Schematic, selection), cast(KiCadApp, kicad), project_dir)
-    except RuntimeError as conflict_error:
-        if "Synchronization conflict" not in str(conflict_error):
-            raise
-    else:
-        raise AssertionError("Divergent local/library edits were not rejected.")
-    if "; local concurrent edit" not in local.implementation.read_text(encoding="utf-8"):
-        raise AssertionError("Conflict detection overwrote the local version.")
-    if "; library concurrent edit" not in block.implementation.read_text(encoding="utf-8"):
-        raise AssertionError("Conflict detection overwrote the library version.")
-
+    _assert_local_sync_conflict(block, local, selection, kicad, project_dir)
     symbols_after_sync = list(schematic.get_symbols())
     if (
         len(symbols_after_sync) != 1
@@ -430,10 +446,12 @@ def _run_facade_ipc_scenario(cli: str, root: Path) -> None:
         kicad.wait_for_libraries(timeout_s=120.0)
         instance = _place_initial_facade(schematic, nickname, symbol_name)
         instance = _configure_facade_instance(schematic, instance, nickname, symbol_name)
-        selection, local, _instance_id = _create_local_facade_copy(
-            schematic, kicad, instance, project_dir, library_root
+        selection, local, instance_id = _create_local_facade_copy(
+            schematic, kicad, instance, project_dir, library_root, nickname, symbol_name
         )
-        _validate_local_sync(block, local, selection, kicad, project_dir)
+        _validate_local_sync(
+            block, local, selection, kicad, project_dir, schematic, instance_id
+        )
         late_block = _register_runtime_facade(
             schematic, kicad, project_dir, library_root, nickname
         )
@@ -484,7 +502,6 @@ def _create_nested_blocks(nested_library: Path) -> tuple[BlockRecord, BlockRecor
         orientation=0,
         pin_map={"IN": "VIN_CHILD2", "GND": "GND_CHILD2", "OUT": "VOUT_CHILD2"},
     )
-    composition = compose_block_implementation(parent, nested_library, cli)
     return child, parent
 
 
@@ -525,8 +542,8 @@ def _assert_nested_parent_symbols(
     schematic: Schematic,
     expected_instances: dict[str, _ExpectedNestedInstance],
 ) -> None:
-    nested_symbols = list(parent_schematic.get_symbols())
-    nested_sheets = list(parent_schematic.get_sheet_symbols())
+    nested_symbols = list(schematic.get_symbols())
+    nested_sheets = list(schematic.get_sheet_symbols())
     symbols_by_reference = {symbol.reference: symbol for symbol in nested_symbols}
     if set(symbols_by_reference) != {"B1", "B2"}:
         raise AssertionError(
@@ -551,7 +568,7 @@ def _assert_nested_parent_labels(
     schematic: Schematic,
     expected_instances: dict[str, _ExpectedNestedInstance],
 ) -> None:
-    labels_by_name = {label.text.value: label for label in parent_schematic.get_labels()}
+    labels_by_name = {label.text.value: label for label in schematic.get_labels()}
     expected_names = {
         net_name
         for item in expected_instances.values()
