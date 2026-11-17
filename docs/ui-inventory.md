@@ -5,11 +5,11 @@ This page is generated from the declarative UI catalog. It inventories the curre
 
 | Coverage status | Screens | Meaning |
 |---|---:|---|
-| Contracted | 7 | Widget-level execute/result assertions are registered and run in CI. |
+| Contracted | 8 | Widget-level execute/result assertions are registered and run in CI. |
 | Partial | 5 | Targeted GUI, integration, model, or screenshot checks exist; the full control matrix is not contracted. |
-| Inventory only | 3 | Window/workflow is documented here; systematic interaction contracts remain future work. |
+| Inventory only | 2 | Window/workflow is documented here; systematic interaction contracts remain future work. |
 
-Task Hub, both transient block choosers, Add PCB Layout, Create Block form, Manage Libraries, and PCB Layout Manager have full registered widget contracts. The Functional Block Library and implementation manager remain partial while every downstream KiCad operation and native OS chooser continues to be verified separately.
+Task Hub, both transient block choosers, Add PCB Layout, Create Block form, Record picker, Manage Libraries, and PCB Layout Manager have full registered widget contracts. The Functional Block Library and implementation manager remain partial while every downstream KiCad operation and native OS chooser continues to be verified separately.
 
 ## Screens
 
@@ -210,9 +210,9 @@ A GUI test exercises profile selection and the resulting schematic update. Every
 
 Choose one block record for an action that operates on a library entry.
 
-**Coverage:** Inventory only — systematic UI contracts not implemented yet.
+**Coverage:** Contracted — widget action and expected UI transition asserted.
 
-Selection and empty-library behavior have unit tests, but the full window interaction and every button/key path are not yet covered by UI contracts.
+Every actionable control has a stable semantic ID and real-Tk interaction contracts. Tests filter the records and assert the result count/description, disable Select when no records match, invoke Select and Cancel, exercise Down/Return and double-click selection, and verify empty and one-record fast paths do not leave a modal window. These contracts test the production picker widgets; downstream operations that consume the chosen record remain separately covered.
 
 **Major functionality**
 
@@ -221,8 +221,19 @@ Selection and empty-library behavior have unit tests, but the full window intera
 - Cancel without changing the selected object
 - Exercise empty and single-record libraries
 
+**Registered semantic controls**
+
+- Searchable record picker dialog (`record-picker.window`; window; behavior asserted)
+- Search block library (`record-picker.search`; entry; behavior asserted)
+- Matching library blocks (`record-picker.results`; treeview; behavior asserted)
+- Selected block description (`record-picker.description`; status-label; behavior asserted)
+- Filtered result count (`record-picker.count`; status-label; behavior asserted)
+- Select block (`record-picker.action.select`; button; behavior asserted)
+- Cancel (`record-picker.action.cancel`; button; behavior asserted)
+
 **Current automated evidence**
 
+- `tests/test_record_picker_contracts.py`
 - `tests/test_library_browser.py`
 
 **Production screenshots:** Not yet captured for this surface.
