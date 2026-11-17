@@ -78,7 +78,16 @@ def _run_modal(root, context, title, expected_ids, action, invoke):
             context.refresh_widgets()
             assert_control_coverage(dialog, expected_ids)
             action(dialog)
-        except Exception as exc:
+        except (
+            AssertionError,
+            AttributeError,
+            LookupError,
+            OSError,
+            RuntimeError,
+            TypeError,
+            ValueError,
+            plugin_actions.tk.TclError,
+        ) as exc:
             callback_errors.append(exc)
             if dialog is not None and dialog.winfo_exists():
                 dialog.destroy()
