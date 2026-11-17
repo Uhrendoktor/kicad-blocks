@@ -589,68 +589,54 @@ def test_close_confirmation_can_keep_pending_changes_or_discard_them(
         root.destroy()
 
 
-def test_add_button_opens_real_implementation_details_dialog_and_persists_source(
+def test_add_button_routes_to_create_mode_details_and_persists_source(
     monkeypatch, tmp_path
 ):
     record, _sources = _new_manager_fixture(tmp_path)
-    source = tmp_path / "add-dialog-source.kicad_sch"
-    source.write_text(
+    source_file = tmp_path / "add-dialog-source.kicad_sch"
+    source_file.write_text(
         '(kicad_sch (version 20250114) (generator "nested-dialog-contract"))\n',
         encoding="utf-8",
     )
+    requests = []
+
+    def ask_details(
+        parent,
+        *,
+        value="",
+        source="",
+        record=None,
+        allow_create=False,
+    ):
+        requests.append((parent.title(), value, source, record, allow_create))
+        return "5V", str(source_file)
+
+    monkeypatch.setattr(
+        plugin_actions,
+        "_ask_implementation_details",
+        ask_details,
+    )
     root = _new_root(monkeypatch)
     context = UiTestContext(root)
-    nested_callback_errors = []
 
-    def complete_nested_details():
-        nested = None
-        try:
-            nested = next(
-                child
-                for child in root.winfo_children()
-                if child.winfo_class() == "Toplevel"
-                and child.title() == "Implementation details"
-            )
-            assert nested._kicad_ui_screen_id == "implementation-details"
-            selector = context.require_widget("implementation-details.variant")
-            selector.delete(0, "end")
-            selector.insert(0, "5V")
-            source_entry = context.require_widget("implementation-details.source")
-            source_entry.insert(0, str(source))
-            ButtonContract(
-                contract_id="implementation-details.action.use",
-                expected_action=None,
-                destroys_window=False,
-                expected_label="Use implementation",
-                expected_closed_window_title="Implementation details",
-            ).run(context)
-        except (
-            AssertionError,
-            AttributeError,
-            LookupError,
-            OSError,
-            RuntimeError,
-            TypeError,
-            ValueError,
-            plugin_actions.tk.TclError,
-        ) as exc:
-            nested_callback_errors.append(exc)
-            for child in root.winfo_children():
-                if child.winfo_class() == "Toplevel":
-                    child.destroy()
-
-    def add_from_nested_dialog(_dialog):
-        root.after(100, complete_nested_details)
+    def add_from_details(_dialog):
         _click(context, "implementations-manager.action.add", "Add variant")
-        if nested_callback_errors:
-            raise nested_callback_errors[0]
+        assert requests == [
+            (
+                "Implementations — USB power block",
+                "",
+                "",
+                record,
+                True,
+            )
+        ]
         tree = context.require_widget("implementations-manager.rows")
         assert tree.get_children() == ("0", "1")
         assert tree.item("1", "values")[0] == "5V"
         saved_variant = read_manifest(record.path)["variants"][0]
         library_source = Path(record.path) / saved_variant["file"]
         assert library_source.is_file()
-        assert library_source.read_bytes() == source.read_bytes()
+        assert library_source.read_bytes() == source_file.read_bytes()
         _click(
             context,
             "implementations-manager.action.save-close",
@@ -659,7 +645,7 @@ def test_add_button_opens_real_implementation_details_dialog_and_persists_source
         )
 
     try:
-        result = _run_manager(root, record, context, add_from_nested_dialog)
+        result = _run_manager(root, record, context, add_from_details)
         saved_variant = read_manifest(record.path)["variants"][0]
         assert result == Path(record.path) / saved_variant["file"]
         assert result.is_file()
