@@ -5,8 +5,18 @@ from __future__ import annotations
 import json
 import os
 import sys
+from collections.abc import Callable, Iterator, Sequence
 from pathlib import Path
-from types import SimpleNamespace
+from typing import TYPE_CHECKING, TypeVar, cast
+
+from _pytest.monkeypatch import MonkeyPatch
+
+if TYPE_CHECKING:
+    from tkinter import Canvas as TkCanvas
+    from tkinter import Misc, Tk, Toplevel
+    from tkinter.ttk import Combobox
+else:
+    TkCanvas = Misc = Tk = Toplevel = Combobox = object
 
 import pytest
 
@@ -15,6 +25,9 @@ sys.path.insert(0, str(ROOT / "plugin" / "kicad-blocks"))
 sys.path.insert(0, str(ROOT / "tests"))
 
 from kicad_blocks import plugin as plugin_actions
+from kicad_blocks.manifest_types import BlockManifest
+from kicad_blocks.pcb_types import ResolvedBlockLayout
+from kicad_blocks.repository import BlockRecord
 from ui_contracts import (
     ButtonContract,
     ChoiceViewContract,
@@ -56,30 +69,62 @@ PREVIEW_VIEWS = (
 )
 
 
-def _record(library_root: Path, block_id: str, name: str, description: str):
+_HookResult = TypeVar("_HookResult")
+
+
+def _private_hook(name: str) -> Callable[..., _HookResult]:
+    """Resolve a private plugin hook through a typed test boundary."""
+    return cast(Callable[..., _HookResult], getattr(plugin_actions, name))
+
+
+_load_tkinter = cast(Callable[[], None], _private_hook("_load_tkinter"))
+_show_library_browser = cast(Callable[..., None], _private_hook("_show_library_browser"))
+
+
+def _record(library_root: Path, block_id: str, name: str, description: str) -> BlockRecord:
     block_path = library_root / block_id
     block_path.mkdir(parents=True, exist_ok=True)
-    return SimpleNamespace(
-        name=name,
-        path=block_path,
-        implementation=block_path / "implementation.kicad_sch",
-        manifest={
+    manifest = cast(
+        BlockManifest,
+        {
+            "schema_version": 1,
             "block_id": block_id,
-            "symbol_name": f"{block_id}_facade",
             "name": name,
-            "description": description,
             "slug": block_id,
+            "description": description,
+            "version": 1,
+            "revision": "",
+            "created_by": "test fixture",
+            "interface_source": "manual",
+            "library_nickname": "KBlocks",
+            "symbol_name": f"{block_id}_facade",
+            "catalog_file": "KBlocks.kicad_sym",
+            "symbol_file": "block.kicad_sym",
+            "implementation_file": "implementation.kicad_sch",
+            "layout_file": None,
+            "layout_project_file": None,
+            "layouts": [],
+            "default_layout": None,
+            "reference_prefix": "X",
             "pins": [],
             "parameters": [],
             "variants": [],
-            "implementation_file": "implementation.kicad_sch",
+            "profiles": [],
+            "dependencies": [],
+            "files": ["implementation.kicad_sch"],
+            "hashes": {},
         },
     )
+    return BlockRecord(path=block_path, manifest=manifest)
 
 
-def _new_browser(monkeypatch, tmp_path: Path, *, layouts=None):
-    plugin_actions._load_tkinter()
-    monkeypatch.setattr(plugin_actions, "_create_action_icon", lambda *_args: None)
+def _new_browser(
+    monkeypatch: MonkeyPatch,
+    tmp_path: Path,
+    *,
+    layouts: list[ResolvedBlockLayout] | None = None,
+) -> tuple[Tk, UiTestContext, list[BlockRecord], Path, Path]:
+    _load_tkinter()
     library_root = tmp_path / "library"
     library_root.mkdir()
     project_dir = tmp_path / "project"
@@ -92,33 +137,72 @@ def _new_browser(monkeypatch, tmp_path: Path, *, layouts=None):
     ]
     effects: list[str] = []
 
-    monkeypatch.setattr(plugin_actions, "configured_library_roots", lambda: [library_root])
-    monkeypatch.setattr(plugin_actions, "_library_roots_for", lambda _value=None: [library_root])
-    monkeypatch.setattr(
-        plugin_actions,
-        "_list_library_records",
-        lambda _roots=None: effects.append("refresh") or list(records),
-    )
-    monkeypatch.setattr(plugin_actions, "_layout_choices", lambda _record: list(layouts or []))
-    monkeypatch.setattr(
-        plugin_actions,
-        "_ensure_project_facade_catalog",
-        lambda *_args, **_kwargs: project_dir / "project.kicad_sym",
-    )
-    monkeypatch.setattr(plugin_actions, "_draw_facade_preview", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(
-        plugin_actions,
-        "_native_schematic_preview_pages",
-        lambda *_args, **_kwargs: [("Main", None)],
-    )
-    monkeypatch.setattr(plugin_actions, "_draw_schematic_preview", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(plugin_actions, "_block_overview_text", lambda record: record.name)
+    def no_icon(_parent: Misc, _name: str, _stroke_color: str | None = None) -> None:
+        return None
 
-    root = plugin_actions.tk.Tk()
-    plugin_actions._show_library_browser(
+    def current_roots() -> list[Path]:
+        return [library_root]
+
+    def roots_for(_value: str | Path | Sequence[str | Path] | None = None) -> list[Path]:
+        return [library_root]
+
+    def list_library_records(
+        _roots: Path | Sequence[Path] | None = None,
+    ) -> list[BlockRecord]:
+        effects.append("refresh")
+        return list(records)
+
+    def select_layouts(_record: BlockRecord) -> list[ResolvedBlockLayout]:
+        return list(layouts or [])
+
+    def ensure_facade_catalog(
+        _project_dir: Path, _record: BlockRecord, _kicad: plugin_actions.KiCadApp
+    ) -> Path:
+        return project_dir / "project.kicad_sym"
+
+    def draw_facade_preview(
+        _canvas: TkCanvas,
+        _record: BlockRecord,
+        *,
+        library_file: str | Path | None = None,
+    ) -> None:
+        del library_file
+
+    def schematic_pages(
+        _record: BlockRecord,
+        _implementation: str = "",
+        *,
+        width: int = 900,
+    ) -> list[tuple[str, bytes]]:
+        del width
+        return [("Main", b"")]
+
+    def draw_schematic_preview(
+        _canvas: TkCanvas,
+        _pages: list[tuple[str, bytes]],
+        _page_label: str | None = None,
+    ) -> None:
+        return None
+
+    def overview_text(record: BlockRecord) -> str:
+        return record.name
+
+    monkeypatch.setattr(plugin_actions, "configured_library_roots", current_roots)
+    monkeypatch.setattr(plugin_actions, "_library_roots_for", roots_for)
+    monkeypatch.setattr(plugin_actions, "_list_library_records", list_library_records)
+    monkeypatch.setattr(plugin_actions, "_layout_choices", select_layouts)
+    monkeypatch.setattr(plugin_actions, "_ensure_project_facade_catalog", ensure_facade_catalog)
+    monkeypatch.setattr(plugin_actions, "_draw_facade_preview", draw_facade_preview)
+    monkeypatch.setattr(plugin_actions, "_native_schematic_preview_pages", schematic_pages)
+    monkeypatch.setattr(plugin_actions, "_draw_schematic_preview", draw_schematic_preview)
+    monkeypatch.setattr(plugin_actions, "_block_overview_text", overview_text)
+    monkeypatch.setattr(plugin_actions, "_create_action_icon", no_icon)
+
+    root = cast(Tk, plugin_actions.tk.Tk())
+    _show_library_browser(
         root,
-        schematic=None,
-        kicad=object(),
+        schematic=cast(plugin_actions.Schematic, None),
+        kicad=cast(plugin_actions.KiCadApp, None),
         project_dir=project_dir,
         library_root=[library_root],
         editor_window_id=None,
@@ -132,8 +216,10 @@ def _new_browser(monkeypatch, tmp_path: Path, *, layouts=None):
     return root, context, records, library_root, project_dir
 
 
-def _select_first_record(context: UiTestContext, expected_name: str = "USB power block"):
-    tree = context.require_widget("library-browser.results")
+def _select_first_record(
+    context: UiTestContext, expected_name: str = "USB power block"
+) -> str:
+    tree = context.require_treeview("library-browser.results")
     row_id = tree.get_children()[0]
     TreeSelectionContract(
         contract_id="library-browser.results",
@@ -168,7 +254,7 @@ def test_library_browser_catalog_labels_each_toolbar_action_coverage_level():
     )
 
 
-def test_library_browser_widget_inventory_covers_major_controls(monkeypatch, tmp_path):
+def test_library_browser_widget_inventory_covers_major_controls(monkeypatch: MonkeyPatch, tmp_path: Path):
     root, _context, _records, _library, _project = _new_browser(monkeypatch, tmp_path)
     try:
         discovered = assert_control_coverage(root, LIBRARY_CONTROLS)
@@ -177,7 +263,7 @@ def test_library_browser_widget_inventory_covers_major_controls(monkeypatch, tmp
         root.destroy()
 
 
-def test_library_browser_search_filters_records_and_updates_count(monkeypatch, tmp_path):
+def test_library_browser_search_filters_records_and_updates_count(monkeypatch: MonkeyPatch, tmp_path: Path):
     root, context, _records, _library, _project = _new_browser(monkeypatch, tmp_path)
     try:
         EntryInputContract(
@@ -196,10 +282,10 @@ def test_library_browser_search_filters_records_and_updates_count(monkeypatch, t
         root.destroy()
 
 
-def test_library_browser_selection_updates_selected_block_details(monkeypatch, tmp_path):
+def test_library_browser_selection_updates_selected_block_details(monkeypatch: MonkeyPatch, tmp_path: Path):
     root, context, _records, _library, _project = _new_browser(monkeypatch, tmp_path)
     try:
-        tree = context.require_widget("library-browser.results")
+        tree = context.require_treeview("library-browser.results")
         row_id = tree.get_children()[1]
         TreeSelectionContract(
             contract_id="library-browser.results",
@@ -211,7 +297,7 @@ def test_library_browser_selection_updates_selected_block_details(monkeypatch, t
         root.destroy()
 
 
-def test_library_browser_preview_switches_between_facade_and_schematic(monkeypatch, tmp_path):
+def test_library_browser_preview_switches_between_facade_and_schematic(monkeypatch: MonkeyPatch, tmp_path: Path):
     root, context, _records, _library, _project = _new_browser(monkeypatch, tmp_path)
     try:
         _select_first_record(context)
@@ -223,7 +309,7 @@ def test_library_browser_preview_switches_between_facade_and_schematic(monkeypat
         root.destroy()
 
 
-def test_library_browser_split_panes_have_visible_geometry(monkeypatch, tmp_path):
+def test_library_browser_split_panes_have_visible_geometry(monkeypatch: MonkeyPatch, tmp_path: Path):
     root, context, _records, _library, _project = _new_browser(monkeypatch, tmp_path)
     try:
         PaneGroupContract(
@@ -238,7 +324,7 @@ def test_library_browser_split_panes_have_visible_geometry(monkeypatch, tmp_path
         root.destroy()
 
 
-def test_refresh_button_reloads_records_through_real_ui_callback(monkeypatch, tmp_path):
+def test_refresh_button_reloads_records_through_real_ui_callback(monkeypatch: MonkeyPatch, tmp_path: Path):
     root, context, _records, _library, _project = _new_browser(monkeypatch, tmp_path)
     try:
         ButtonContract(
@@ -252,7 +338,7 @@ def test_refresh_button_reloads_records_through_real_ui_callback(monkeypatch, tm
         root.destroy()
 
 
-def test_place_button_registers_selected_block_and_starts_native_placement(monkeypatch, tmp_path):
+def test_place_button_registers_selected_block_and_starts_native_placement(monkeypatch: MonkeyPatch, tmp_path: Path):
     root, context, _records, _library, _project = _new_browser(monkeypatch, tmp_path)
     context.action_calls.clear()
     monkeypatch.setattr(
@@ -287,7 +373,7 @@ def test_place_button_registers_selected_block_and_starts_native_placement(monke
         root.destroy()
 
 
-def test_implementation_button_registers_and_opens_default_document(monkeypatch, tmp_path):
+def test_implementation_button_registers_and_opens_default_document(monkeypatch: MonkeyPatch, tmp_path: Path):
     root, context, _records, _library_root, _project = _new_browser(monkeypatch, tmp_path)
     context.action_calls.clear()
     monkeypatch.setattr(
@@ -312,7 +398,7 @@ def test_implementation_button_registers_and_opens_default_document(monkeypatch,
         root.destroy()
 
 
-def test_edit_facade_button_targets_selected_record(monkeypatch, tmp_path):
+def test_edit_facade_button_targets_selected_record(monkeypatch: MonkeyPatch, tmp_path: Path):
     root, context, _records, _library, _project = _new_browser(monkeypatch, tmp_path)
     context.action_calls.clear()
 
@@ -333,7 +419,7 @@ def test_edit_facade_button_targets_selected_record(monkeypatch, tmp_path):
         root.destroy()
 
 
-def test_open_pcb_button_creates_chooser_for_selected_block(monkeypatch, tmp_path):
+def test_open_pcb_button_creates_chooser_for_selected_block(monkeypatch: MonkeyPatch, tmp_path: Path):
     layouts = [{"id": "default-pcb", "name": "Default", "file": "default.kicad_pcb"}]
     root, context, _records, _library, _project = _new_browser(
         monkeypatch, tmp_path, layouts=layouts
@@ -348,19 +434,24 @@ def test_open_pcb_button_creates_chooser_for_selected_block(monkeypatch, tmp_pat
             expected_label="Open PCB",
         ).run(context)
         dialogs = [
-            child
+            cast(Toplevel, child)
             for child in root.winfo_children()
-            if isinstance(child, plugin_actions.tk.Toplevel)
-            and child.title() == "Open PCB layout — USB power block"
+            if child.winfo_class() == "Toplevel"
+            and cast(Toplevel, child).title() == "Open PCB layout — USB power block"
         ]
         assert len(dialogs) == 1
 
-        def walk_widgets(parent):
+        def walk_widgets(parent: Toplevel) -> Iterator[Misc]:
             for child in parent.winfo_children():
                 yield child
-                yield from walk_widgets(child)
+                if child.winfo_class() == "Toplevel":
+                    yield from walk_widgets(cast(Toplevel, child))
 
-        combos = [item for item in walk_widgets(dialogs[0]) if item.winfo_class() == "TCombobox"]
+        combos = [
+            cast(Combobox, item)
+            for item in walk_widgets(dialogs[0])
+            if item.winfo_class() == "TCombobox"
+        ]
         assert len(combos) == 1
         assert combos[0].get() == "Default [default-pcb]"
         assert tuple(combos[0]["values"]) == ("Default [default-pcb]",)
@@ -368,14 +459,14 @@ def test_open_pcb_button_creates_chooser_for_selected_block(monkeypatch, tmp_pat
         root.destroy()
 
 
-def _show_schematic_preview(root, context):
-    notebook = context.require_widget("library-browser.preview.views")
+def _show_schematic_preview(root: Tk, context: UiTestContext) -> None:
+    notebook = context.require_notebook("library-browser.preview.views")
     notebook.select(notebook.tabs()[1])
     root.update_idletasks()
     root.update()
 
 
-def test_implementation_selector_renders_the_selected_variant(monkeypatch, tmp_path):
+def test_implementation_selector_renders_the_selected_variant(monkeypatch: MonkeyPatch, tmp_path: Path):
     root, context, records, _library, _project = _new_browser(monkeypatch, tmp_path)
     records[0].manifest["variants"] = [{"value": "1V8", "file": "implementation_1v8.kicad_sch"}]
     rendered_implementations = []
@@ -389,7 +480,7 @@ def test_implementation_selector_renders_the_selected_variant(monkeypatch, tmp_p
     try:
         _select_first_record(context)
         _show_schematic_preview(root, context)
-        selector = context.require_widget("library-browser.implementation")
+        selector = context.require_combobox("library-browser.implementation")
         assert tuple(selector["values"]) == ("Default", "1V8")
         rendered_implementations.clear()
         selector.bind(
@@ -403,12 +494,12 @@ def test_implementation_selector_renders_the_selected_variant(monkeypatch, tmp_p
             expected_event="implementation:1V8",
         ).run(context)
         assert rendered_implementations[-1] == "1V8"
-        assert context.require_widget("library-browser.sheet").get() == "Main"
+        assert context.require_combobox("library-browser.sheet").get() == "Main"
     finally:
         root.destroy()
 
 
-def test_sheet_selector_draws_the_selected_schematic_page(monkeypatch, tmp_path):
+def test_sheet_selector_draws_the_selected_schematic_page(monkeypatch: MonkeyPatch, tmp_path: Path):
     root, context, _records, _library, _project = _new_browser(monkeypatch, tmp_path)
     drawn_pages = []
     monkeypatch.setattr(
@@ -424,7 +515,7 @@ def test_sheet_selector_draws_the_selected_schematic_page(monkeypatch, tmp_path)
     try:
         _select_first_record(context)
         _show_schematic_preview(root, context)
-        selector = context.require_widget("library-browser.sheet")
+        selector = context.require_combobox("library-browser.sheet")
         assert tuple(selector["values"]) == ("Main", "Power Stage")
         assert selector.winfo_manager() == "pack"
         drawn_pages.clear()
@@ -443,7 +534,7 @@ def test_sheet_selector_draws_the_selected_schematic_page(monkeypatch, tmp_path)
         root.destroy()
 
 
-def test_variants_toolbar_opens_manager_and_refreshes_records(monkeypatch, tmp_path):
+def test_variants_toolbar_opens_manager_and_refreshes_records(monkeypatch: MonkeyPatch, tmp_path: Path):
     root, context, _records, _library, _project = _new_browser(monkeypatch, tmp_path)
     context.action_calls.clear()
     monkeypatch.setattr(
@@ -466,7 +557,7 @@ def test_variants_toolbar_opens_manager_and_refreshes_records(monkeypatch, tmp_p
         root.destroy()
 
 
-def test_pcb_layouts_toolbar_opens_manager_and_refreshes_records(monkeypatch, tmp_path):
+def test_pcb_layouts_toolbar_opens_manager_and_refreshes_records(monkeypatch: MonkeyPatch, tmp_path: Path):
     root, context, _records, _library, _project = _new_browser(monkeypatch, tmp_path)
     context.action_calls.clear()
     monkeypatch.setattr(
@@ -486,7 +577,7 @@ def test_pcb_layouts_toolbar_opens_manager_and_refreshes_records(monkeypatch, tm
         root.destroy()
 
 
-def test_libraries_toolbar_opens_library_roots_manager_and_refreshes(monkeypatch, tmp_path):
+def test_libraries_toolbar_opens_library_roots_manager_and_refreshes(monkeypatch: MonkeyPatch, tmp_path: Path):
     root, context, _records, _library, _project = _new_browser(monkeypatch, tmp_path)
     context.action_calls.clear()
     monkeypatch.setattr(
@@ -521,15 +612,18 @@ PCB_CHOOSER_CONTROLS = {
 }
 
 
-def _find_toplevel(root, title: str):
-    return next(
-        child
-        for child in root.winfo_children()
-        if child.winfo_class() == "Toplevel" and child.title() == title
+def _find_toplevel(root: Tk, title: str) -> Toplevel:
+    from tkinter import Toplevel as TkToplevel
+
+    child = next(
+        item
+        for item in root.winfo_children()
+        if item.winfo_class() == "Toplevel" and cast(TkToplevel, item).title() == title
     )
+    return cast(Toplevel, child)
 
 
-def test_open_implementation_chooser_opens_the_selected_named_variant(monkeypatch, tmp_path):
+def test_open_implementation_chooser_opens_the_selected_named_variant(monkeypatch: MonkeyPatch, tmp_path: Path):
     root, context, records, _library, _project = _new_browser(monkeypatch, tmp_path)
     records[0].manifest["variants"] = [{"value": "1V8", "file": "implementation_1v8.kicad_sch"}]
     monkeypatch.setattr(
@@ -559,7 +653,7 @@ def test_open_implementation_chooser_opens_the_selected_named_variant(monkeypatc
             required_widget_ids=tuple(IMPLEMENTATION_CHOOSER_CONTROLS),
         ).run(UiTestContext(chooser))
         context.refresh_widgets()
-        combo = context.require_widget("open-implementation-chooser.choice")
+        combo = context.require_combobox("open-implementation-chooser.choice")
         assert tuple(combo["values"]) == (
             "Default — implementation.kicad_sch",
             "1V8",
@@ -577,7 +671,7 @@ def test_open_implementation_chooser_opens_the_selected_named_variant(monkeypatc
         root.destroy()
 
 
-def test_open_implementation_chooser_cancel_closes_without_opening(monkeypatch, tmp_path):
+def test_open_implementation_chooser_cancel_closes_without_opening(monkeypatch: MonkeyPatch, tmp_path: Path):
     root, context, records, _library, _project = _new_browser(monkeypatch, tmp_path)
     records[0].manifest["variants"] = [{"value": "1V8", "file": "implementation_1v8.kicad_sch"}]
     effects = []
@@ -615,7 +709,7 @@ def test_open_implementation_chooser_cancel_closes_without_opening(monkeypatch, 
         root.destroy()
 
 
-def test_open_pcb_chooser_opens_the_selected_layout(monkeypatch, tmp_path):
+def test_open_pcb_chooser_opens_the_selected_layout(monkeypatch: MonkeyPatch, tmp_path: Path):
     layouts = [
         {"id": "default-pcb", "name": "Default", "file": "default.kicad_pcb"},
         {"id": "aux-pcb", "name": "Auxiliary", "file": "auxiliary.kicad_pcb"},
@@ -645,7 +739,7 @@ def test_open_pcb_chooser_opens_the_selected_layout(monkeypatch, tmp_path):
             required_widget_ids=tuple(PCB_CHOOSER_CONTROLS),
         ).run(UiTestContext(chooser))
         context.refresh_widgets()
-        combo = context.require_widget("open-pcb-layout-chooser.choice")
+        combo = context.require_combobox("open-pcb-layout-chooser.choice")
         assert tuple(combo["values"]) == (
             "Default [default-pcb]",
             "Auxiliary [aux-pcb]",
@@ -662,7 +756,7 @@ def test_open_pcb_chooser_opens_the_selected_layout(monkeypatch, tmp_path):
         root.destroy()
 
 
-def test_open_pcb_chooser_cancel_closes_without_opening(monkeypatch, tmp_path):
+def test_open_pcb_chooser_cancel_closes_without_opening(monkeypatch: MonkeyPatch, tmp_path: Path):
     layouts = [{"id": "default-pcb", "name": "Default", "file": "default.kicad_pcb"}]
     root, context, _records, _library, _project = _new_browser(
         monkeypatch, tmp_path, layouts=layouts
@@ -697,7 +791,7 @@ def test_open_pcb_chooser_cancel_closes_without_opening(monkeypatch, tmp_path):
         root.destroy()
 
 
-def test_open_pcb_chooser_manage_layouts_opens_manager_and_refreshes(monkeypatch, tmp_path):
+def test_open_pcb_chooser_manage_layouts_opens_manager_and_refreshes(monkeypatch: MonkeyPatch, tmp_path: Path):
     layouts = [{"id": "default-pcb", "name": "Default", "file": "default.kicad_pcb"}]
     root, context, _records, _library, _project = _new_browser(
         monkeypatch, tmp_path, layouts=layouts
