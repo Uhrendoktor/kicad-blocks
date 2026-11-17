@@ -582,6 +582,7 @@ Visual evidence manifest completeness, source-commit provenance, exact asset inv
 | test_rejects_stale_source_commit | Rejects stale source commit. |
 | test_rejects_modified_generated_asset | Rejects modified generated asset. |
 | test_rejects_incomplete_asset_inventory | Rejects incomplete asset inventory. |
+
 ## Standalone acceptance runners
 
 These files intentionally expose main() instead of pytest test functions. CI invokes

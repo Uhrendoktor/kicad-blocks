@@ -660,7 +660,7 @@ def capture_ui_workflows(
                 if not browser_entries:
                     raise RuntimeError("The production library browser search field is missing.")
                 browser_entries[0].delete(0, "end")
-                browser_entries[0].insert(0, "STUSB")
+                browser_entries[0].insert(0, "USB")
                 root.update_idletasks()
                 root.update()
                 _capture_visible_window(
