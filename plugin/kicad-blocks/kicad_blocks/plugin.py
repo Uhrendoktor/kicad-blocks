@@ -1925,6 +1925,8 @@ def _ask_create_block_details(parent, source_sheet: Path) -> tuple[str, str] | N
     """Collect block details in a mapped owner window, not a child of a withdrawn root."""
     reuse_parent = bool(getattr(parent, "_kicad_blocks_reuse_for_create", False))
     dialog = parent if reuse_parent else tk.Toplevel(parent)
+    dialog._kicad_ui_screen_id = "create-block-form"
+    dialog._kicad_ui_contract_id = "create-block-form.window"
     dialog.title("Create Functional Block")
     if not reuse_parent:
         dialog.transient(parent)
@@ -1946,9 +1948,11 @@ def _ask_create_block_details(parent, source_sheet: Path) -> tuple[str, str] | N
         value=source_sheet.stem.replace("_", " ").replace("-", " ").title()
     )
     name_entry = ttk.Entry(frame, textvariable=name)
+    name_entry._kicad_ui_contract_id = "create-block-form.name"
     name_entry.pack(fill="x", pady=(3, 8))
     ttk.Label(frame, text="Description (optional)").pack(anchor="w")
     description = tk.Text(frame, height=3, wrap="word", relief="flat", borderwidth=1)
+    description._kicad_ui_contract_id = "create-block-form.description"
     description.pack(fill="both", expand=True, pady=(3, 10))
     description.configure(
         background=palette.get("field", "#ffffff"),
@@ -1980,8 +1984,15 @@ def _ask_create_block_details(parent, source_sheet: Path) -> tuple[str, str] | N
 
     buttons = ttk.Frame(frame)
     buttons.pack(fill="x")
-    _action_button(buttons, "Cancel", cancel, "cancel", "Cancel block creation").pack(side="right")
-    _action_button(buttons, "Create Block", accept, "create", "Create the reusable block from this sheet").pack(side="right", padx=(0, 8))
+    _action_button(
+        buttons, "Cancel", cancel, "cancel", "Cancel block creation",
+        contract_id="create-block-form.action.cancel",
+    ).pack(side="right")
+    _action_button(
+        buttons, "Create Block", accept, "create",
+        "Create the reusable block from this sheet",
+        contract_id="create-block-form.action.create",
+    ).pack(side="right", padx=(0, 8))
 
     dialog.bind("<Return>", lambda _event: accept())
     dialog.bind("<Escape>", lambda _event: cancel())
