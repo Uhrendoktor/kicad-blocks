@@ -173,34 +173,32 @@ class HierarchicalSheetExtractionTests(unittest.TestCase):
         project_catalog = build_project_symbol_catalog(self.project, [self.root])
         baseline_digest = record.manifest["catalog_symbol_hash"]
 
-        implementation = record.implementation.read_text(encoding="utf-8")
-        gnd_label = '''      (hierarchical_label "GND"
-        (shape passive)
-        (at 40 50 0)
-        (effects (font (size 1.27 1.27)) (justify left bottom))
-        (uuid "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb")
-      )
-'''
-        self.assertIn(gnd_label, implementation)
-        implementation = implementation.replace(gnd_label, "", 1)
-        implementation = implementation.replace(
-            "      (sheet_instances",
-            '''      (hierarchical_label "VREF"
-        (shape input)
-        (at 70 50 0)
-        (effects (font (size 1.27 1.27)) (justify left bottom))
-        (uuid "dddddddd-dddd-4ddd-8ddd-dddddddddddd")
-      )
-      (sheet_instances''',
-            1,
+        implementation_tree = parse_sexpr(
+            record.implementation.read_text(encoding="utf-8")
         )
-        record.implementation.write_text(implementation, encoding="utf-8")
+        implementation_tree[:] = [
+            child
+            for child in implementation_tree
+            if not (
+                _head(child) == "hierarchical_label"
+                and str(child[1]) == "GND"
+            )
+        ]
+        implementation_tree.append(
+            parse_sexpr(
+                '(hierarchical_label "VREF" (shape input) (at 70 50 0) '
+                '(effects (font (size 1.27 1.27)) (justify left bottom)) '
+                '(uuid "dddddddd-dddd-4ddd-8ddd-dddddddddddd"))'
+            )
+        )
+        record.implementation.write_text(
+            _dump(implementation_tree) + "\n",
+            encoding="utf-8",
+        )
 
         refresh_library_block(record)
         updated_manifest = read_manifest(record.path)
-        updated_pins = {
-            pin["name"] for pin in updated_manifest["pins"]
-        }
+        updated_pins = {pin["name"] for pin in updated_manifest["pins"]}
         self.assertEqual(updated_pins, {"VIN", "VOUT", "VREF"})
         self.assertNotIn("GND", updated_pins)
 
