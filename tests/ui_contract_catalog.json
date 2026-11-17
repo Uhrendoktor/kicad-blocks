@@ -336,9 +336,10 @@
       "id": "record-picker",
       "title": "Record picker",
       "purpose": "Choose one block record for an action that operates on a library entry.",
-      "coverage": "inventory-only",
-      "coverage_note": "Selection and empty-library behavior have unit tests, but the full window interaction and every button/key path are not yet covered by UI contracts.",
+      "coverage": "contracted",
+      "coverage_note": "Every actionable control has a stable semantic ID and real-Tk interaction contracts. Tests filter the records and assert the result count/description, disable Select when no records match, invoke Select and Cancel, exercise Down/Return and double-click selection, and verify empty and one-record fast paths do not leave a modal window. These contracts test the production picker widgets; downstream operations that consume the chosen record remain separately covered.",
       "evidence": [
+        "tests/test_record_picker_contracts.py",
         "tests/test_library_browser.py"
       ],
       "functionality": [
@@ -347,7 +348,51 @@
         "Cancel without changing the selected object",
         "Exercise empty and single-record libraries"
       ],
-      "screenshots": []
+      "screenshots": [],
+      "controls": [
+        {
+          "contract_id": "record-picker.window",
+          "type": "window",
+          "label": "Searchable record picker dialog",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "record-picker.search",
+          "type": "entry",
+          "label": "Search block library",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "record-picker.results",
+          "type": "treeview",
+          "label": "Matching library blocks",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "record-picker.description",
+          "type": "status-label",
+          "label": "Selected block description",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "record-picker.count",
+          "type": "status-label",
+          "label": "Filtered result count",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "record-picker.action.select",
+          "type": "button",
+          "label": "Select block",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "record-picker.action.cancel",
+          "type": "button",
+          "label": "Cancel",
+          "assertion": "asserted"
+        }
+      ]
     },
     {
       "id": "create-block-form",
