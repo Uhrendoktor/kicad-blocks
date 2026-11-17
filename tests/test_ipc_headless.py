@@ -120,6 +120,7 @@ def _place_initial_facade(
     nickname: str,
     symbol_name: str,
 ) -> SchematicSymbol:
+    instance = schematic.place_symbol_from_library(
         f"{nickname}:{symbol_name}",
         Vector2.from_xy_mm(100.0, 100.0),
         reference="X1",
