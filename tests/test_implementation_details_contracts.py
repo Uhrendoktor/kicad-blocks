@@ -345,6 +345,18 @@ def test_create_blank_schematic_mode_returns_a_valid_temporary_source(
     record, _first, _second, _default = _fixture(tmp_path)
     root, context = _new_root(monkeypatch)
     created = []
+    create_source = plugin_actions._new_blank_schematic_source
+
+    def capture_blank_source():
+        path = create_source()
+        created.append(path)
+        return path
+
+    monkeypatch.setattr(
+        plugin_actions,
+        "_new_blank_schematic_source",
+        capture_blank_source,
+    )
 
     def choose_blank(dialog):
         _assert_initial_state(context, dialog, allow_create=True)
@@ -354,8 +366,6 @@ def test_create_blank_schematic_mode_returns_a_valid_temporary_source(
         ) == "The new implementation starts as a blank KiCad schematic."
         assert not context.require_widget("implementation-details.source").winfo_viewable()
         assert not context.require_widget("implementation-details.action.browse").winfo_viewable()
-        path = Path(plugin_actions._new_blank_schematic_source())
-        created.append(path)
         _click(
             context,
             "implementation-details.action.use",
@@ -415,8 +425,14 @@ def test_copy_existing_implementation_uses_selected_library_variant(monkeypatch,
             record=record,
             allow_create=True,
         )
-        assert result == ("1V8", str(second.resolve()))
+        selected_variant = next(
+            item for item in record.manifest["variants"] if item["value"] == "1V8"
+        )
+        expected_library_source = Path(record.path) / selected_variant["file"]
+        assert result == ("1V8", str(expected_library_source.resolve()))
+        assert expected_library_source.is_file()
         assert first.is_file()
+        assert second.is_file()
     finally:
         root.destroy()
 
