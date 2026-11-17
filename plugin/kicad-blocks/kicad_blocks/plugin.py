@@ -7292,3 +7292,8 @@ configure_tk_theme = _configure_tk_theme
 update_schematic_item_checked = _update_schematic_item_checked
 show_selected_block_configuration = _show_selected_block_configuration
 SchematicProject = _SchematicProject
+
+
+# Live schematic creation/inspection entry points used by supported integrations.
+create_and_place = _create_and_place
+active_sheet_source = _active_sheet_source

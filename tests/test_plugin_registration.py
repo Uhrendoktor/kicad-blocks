@@ -64,7 +64,7 @@ def _windows(xdotool: str) -> list[tuple[str, str, str]]:
 
 
 def _wait_for_editor(
-    process: subprocess.Popen,
+    process: subprocess.Popen[str],
     schematic: Path,
     xdotool: str,
     log_path: Path,
@@ -222,7 +222,7 @@ def _wait_for_symbol_document(kicad, expected_lib_id: str, timeout_s: float = 8.
     raise AssertionError(f"Symbol Editor did not report {expected_lib_id!r}; observed={observed!r}")
 
 
-def _close_editor(process: subprocess.Popen, window_id: str, xdotool: str) -> None:
+def _close_editor(process: subprocess.Popen[str], window_id: str, xdotool: str) -> None:
     subprocess.run(
         [xdotool, "windowclose", window_id],
         check=False,
@@ -246,7 +246,7 @@ def _launch(
     env: dict[str, str],
     xdotool: str,
     log_path: Path,
-) -> tuple[subprocess.Popen, str]:
+) -> tuple[subprocess.Popen[str], str]:
     with log_path.open("w", encoding="utf-8") as stream:
         process = subprocess.Popen(
             [eeschema, str(schematic)],
@@ -694,3 +694,9 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+
+# Shared Eeschema test utilities for other live-IPC integration checks.
+find_executable = _find_executable
+launch = _launch
+close_editor = _close_editor

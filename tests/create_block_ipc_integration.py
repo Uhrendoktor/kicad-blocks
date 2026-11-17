@@ -14,6 +14,10 @@ import time
 import uuid
 from pathlib import Path
 from types import SimpleNamespace
+from typing import TYPE_CHECKING, Callable, cast
+
+if TYPE_CHECKING:
+    from tkinter import Misc
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -24,14 +28,14 @@ sys.path.insert(0, str(ROOT / "tests"))
 from kicad_blocks import plugin as plugin_actions
 from kicad_blocks.model import parse_pins, render_implementation_schematic
 from kicad_blocks.repository import (
+    BlockRecord,
     LIBRARY_CATALOG_NAME,
     LIBRARY_NICKNAME,
     list_blocks,
 )
 from kipy import KiCad
 from kipy.errors import ApiError
-from pynng.exceptions import NNGException
-from test_plugin_registration import _close_editor, _find_executable, _launch
+from test_plugin_registration import close_editor, find_executable, launch
 
 
 def _find_cli() -> str:
@@ -56,7 +60,7 @@ def _schematic_sheet(
     x: int,
 ) -> str:
     """Return a real KiCad hierarchical sheet symbol with typed interface pins."""
-    pin_lines = []
+    pin_lines: list[str] = []
     for index, (pin_name, electrical_type) in enumerate(pins):
         pin_uuid = str(uuid.uuid4())
         pin_y = 90 + index * 10
@@ -181,10 +185,10 @@ def _write_source_sheets(project_dir: Path) -> tuple[Path, dict[str, Path]]:
 def _open_live_eeschema(
     schematic_path: Path,
     root: Path,
-) -> tuple[KiCad, subprocess.Popen, str, str]:
+) -> tuple[KiCad, subprocess.Popen[str], str, str]:
     """Launch real Eeschema with IPC enabled and return its live schematic client."""
-    eeschema = os.environ.get("KICAD_EESCHEMA") or _find_executable("eeschema-nightly", "eeschema")
-    xdotool = _find_executable("xdotool")
+    eeschema = os.environ.get("KICAD_EESCHEMA") or find_executable("eeschema-nightly", "eeschema")
+    xdotool = find_executable("xdotool")
     if not os.environ.get("DISPLAY"):
         raise RuntimeError("Run the Create Block IPC test under xvfb-run; DISPLAY is not set.")
 
@@ -229,8 +233,8 @@ def _open_live_eeschema(
     # first-run setup dialog. Enable the IPC API in that isolated profile,
     # then launch the actual test project with Eeschema's GUI server.
     first_log = root / "create-block-first-run.log"
-    first_process, first_window = _launch(eeschema, schematic_path, env, xdotool, first_log)
-    _close_editor(first_process, first_window, xdotool)
+    first_process, first_window = launch(eeschema, schematic_path, env, xdotool, first_log)
+    close_editor(first_process, first_window, xdotool)
     config_files = list(home.rglob("kicad_common.json"))
     if not config_files:
         raise FileNotFoundError("Eeschema did not create kicad_common.json during first launch.")
@@ -248,7 +252,7 @@ def _open_live_eeschema(
     )
 
     editor_log = root / "create-block-editor.log"
-    process, window_id = _launch(eeschema, schematic_path, env, xdotool, editor_log)
+    process, window_id = launch(eeschema, schematic_path, env, xdotool, editor_log)
     deadline = time.monotonic() + 30.0
     last_error = None
     while time.monotonic() < deadline:
@@ -261,14 +265,14 @@ def _open_live_eeschema(
         try:
             client = KiCad(timeout_ms=30000)
             schematic = client.get_schematic()
-            if schematic is not None:
-                return client, process, window_id, xdotool
+            del schematic
+            return client, process, window_id, xdotool
         except (ApiError, NNGException, OSError, TimeoutError) as exc:
             last_error = exc
             if client is not None:
                 close_client = getattr(client, "close", None)
                 if callable(close_client):
-                    with contextlib.suppress(ApiError, NNGException, OSError):
+                    with contextlib.suppress(ApiError, OSError):
                         close_client()
         time.sleep(0.25)
     raise TimeoutError(
@@ -278,7 +282,9 @@ def _open_live_eeschema(
     )
 
 
-def _assert_cli_exports(cli: str, record, parent_path: Path, output_root: Path) -> None:
+def _assert_cli_exports(
+    cli: str, record: BlockRecord, parent_path: Path, output_root: Path
+) -> None:
     symbol_output = output_root / (record.path.name + "-symbol")
     schematic_output = output_root / (record.path.name + "-schematic")
     symbol_output.mkdir()
@@ -370,9 +376,6 @@ def main() -> None:
         try:
             kicad, process, window_id, xdotool = _open_live_eeschema(parent_path, root)
             schematic = kicad.get_schematic()
-            if schematic is None:
-                raise RuntimeError("Live Eeschema IPC returned no schematic document.")
-
             hierarchy = schematic.get_hierarchy()
             root_sheet = getattr(hierarchy, "root", None)
             if root_sheet is None:
@@ -405,10 +408,17 @@ def main() -> None:
                     "KiCad did not preserve the selected hierarchical sheet as a typed SheetSymbol."
                 )
 
-            def create_details(name: str, description: str):
-                return lambda _parent, _source: (name, description)
+            def create_details(
+                name: str, description: str
+            ) -> Callable[[Misc, Path], tuple[str, str]]:
+                def details(_parent: Misc, _source: Path) -> tuple[str, str]:
+                    return name, description
 
-            def run_creation(parent_schematic, name: str, description: str):
+                return details
+
+            def run_creation(
+                parent_schematic: plugin_actions.Schematic, name: str, description: str
+            ) -> None:
                 with (
                     patch.object(
                         plugin_actions,
@@ -424,11 +434,15 @@ def main() -> None:
                     patch.object(
                         plugin_actions,
                         "messagebox",
-                        SimpleNamespace(showinfo=lambda *args, **kwargs: None),
+                        SimpleNamespace(showinfo=lambda *_args: None),
                     ),
                 ):
-                    plugin_actions._create_and_place(
-                        library_root, parent_schematic, kicad, project_dir, object()
+                    plugin_actions.create_and_place(
+                        library_root,
+                        parent_schematic,
+                        cast(plugin_actions.KiCadApp, kicad),
+                        project_dir,
+                        cast(Misc, object()),
                     )
 
             run_creation(
@@ -476,7 +490,7 @@ def main() -> None:
                 if str(getattr(item, "name", "")) == "Control Interface"
             )
             open_sheet = schematic.for_sheet(other_instance)
-            active_source, active_sheet_uuid = plugin_actions._active_sheet_source(
+            active_source, active_sheet_uuid = plugin_actions.active_sheet_source(
                 open_sheet, project_dir
             )
             if active_source != child_paths["Control Interface"].resolve():
@@ -525,10 +539,10 @@ def main() -> None:
             )
         finally:
             if kicad is not None:
-                with contextlib.suppress(ApiError, NNGException, OSError):
+                with contextlib.suppress(ApiError, OSError):
                     kicad.close()
             if process is not None and process.poll() is None and window_id and xdotool:
-                _close_editor(process, window_id, xdotool)
+                close_editor(process, window_id, xdotool)
 
 
 if __name__ == "__main__":
