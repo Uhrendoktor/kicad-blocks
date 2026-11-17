@@ -155,7 +155,7 @@ def validate_plugin_package(source: pathlib.Path) -> PluginManifest:
     manifest_data = cast(JSONObject, manifest_value)
     identifier_value = manifest_data.get("identifier")
     if not isinstance(identifier_value, str) or not re.fullmatch(
-        r"[\\w\\d]{2,}\\.[\\w\\d]+\\.[\\w\\d]+",
+        r"\\w{2,}(?:\\.\\w+){2,}",
         identifier_value,
         flags=re.ASCII,
     ):

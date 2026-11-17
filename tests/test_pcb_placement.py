@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import importlib.util
 import json
-from dataclasses import dataclass
 import sys
 import tempfile
 import unittest
 from collections.abc import Sequence
+from dataclasses import dataclass
 from pathlib import Path
-from types import ModuleType
+from types import ModuleType, SimpleNamespace
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]

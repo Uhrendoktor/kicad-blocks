@@ -11,7 +11,7 @@ import unittest
 from collections.abc import Callable, Sequence
 from importlib import import_module
 from pathlib import Path
-from types import SimpleNamespace
+from types import ModuleType, SimpleNamespace
 from typing import Protocol, TypedDict, cast
 from unittest.mock import Mock, patch
 
