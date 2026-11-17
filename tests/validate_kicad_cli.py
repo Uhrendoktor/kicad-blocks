@@ -16,11 +16,14 @@ sys.path.insert(0, str(ROOT / "examples" / "stusb4500"))
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from generate_reference import ROOT_UUID, generate_reference_schematic
+from kicad_blocks.json_types import JSONObject
 from kicad_blocks.model import parse_pins
 from kicad_blocks.operations import export_block_bom, validate_block_tree
 from kicad_blocks.plugin import new_blank_pcb_source
 from kicad_blocks.sexpr import (
     QuotedSExpr as _Quoted,
+    SExpr,
+    SExprList,
     dump_sexpr as _dump,
     parse_sexpr,
     sexpr_all as _all,
@@ -28,6 +31,21 @@ from kicad_blocks.sexpr import (
 )
 from kicad_blocks.repository import add_dependency, create_block
 from validate_schematic_style import validate_schematic_style
+
+
+def _required_node(node: SExprList, tag: str) -> SExprList:
+    """Return a required child node from a parsed KiCad S-expression."""
+    child = _direct(node, tag)
+    if child is None:
+        raise ValueError(f"Expected a {tag!r} child node.")
+    return child
+
+
+def _number(value: SExpr) -> float:
+    """Convert a scalar S-expression atom to a floating-point coordinate."""
+    if not isinstance(value, str):
+        raise ValueError(f"Expected a scalar numeric S-expression atom, got {value!r}.")
+    return float(value)
 
 
 def _find_kicad_cli() -> str:
@@ -71,7 +89,7 @@ def _validate_stusb4500_netlist(cli: str, output_dir: Path) -> None:
         # KiCad CLI reports only "Failed to load schematic" for parser errors.
         # Probe copies with one top-level object class removed to pinpoint the
         # offending construct; keep the real source untouched.
-        tree_for_probe = parse_sexpr(schematic_text)
+        tree_for_probe: SExprList = parse_sexpr(schematic_text)
         probes = {
             "without-graphics": {
                 "rectangle",
@@ -101,7 +119,7 @@ def _validate_stusb4500_netlist(cli: str, output_dir: Path) -> None:
         print("KiCad rejected the generated STUSB4500 sheet. Loader isolation probes:")
         print(f"baseline rc={loaded.returncode}; stderr={loaded.stderr.strip()!r}")
         for probe_name, excluded in probes.items():
-            variant = copy.deepcopy(tree_for_probe)
+            variant: SExprList = copy.deepcopy(tree_for_probe)
             variant[1:] = [
                 child
                 for child in variant[1:]
@@ -127,7 +145,7 @@ def _validate_stusb4500_netlist(cli: str, output_dir: Path) -> None:
             print(f"{probe_name}: rc={result.returncode}; stderr={result.stderr.strip()!r}")
         # A hand-built empty sheet distinguishes invalid root metadata from
         # an invalid embedded symbol library or instance graph.
-        minimal = [
+        minimal: SExprList = [
             "kicad_sch",
             ["version", "20250114"],
             ["generator", _Quoted("kicad-blocks")],
@@ -167,7 +185,7 @@ def _validate_stusb4500_netlist(cli: str, output_dir: Path) -> None:
             "sheet_instances",
             "embedded_fonts",
         }
-        root_only = [
+        root_only: SExprList = [
             "kicad_sch",
             *copy.deepcopy(
                 [
@@ -385,7 +403,7 @@ def _validate_stusb4500_netlist(cli: str, output_dir: Path) -> None:
         ("D11", "1"): "VSNK",
         ("D11", "2"): "GND",
     }
-    mismatches = {
+    mismatches: dict[tuple[str, str], tuple[str, str | list[str] | None]] = {
         pin: (expected_name, actual.get(pin))
         for pin, expected_name in expected.items()
         if expected_name is not None and actual.get(pin) != expected_name
@@ -410,29 +428,29 @@ def _validate_stusb4500_netlist(cli: str, output_dir: Path) -> None:
                 next(iter(names)),
             )
     if mismatches:
-        schematic_tree = parse_sexpr(schematic_text)
-        all_wires = []
+        schematic_tree: SExprList = parse_sexpr(schematic_text)
+        all_wires: list[list[tuple[float, float]]] = []
         for wire in _all(schematic_tree, "wire"):
-            points = _direct(wire, "pts")
+            points = _required_node(wire, "pts")
             coordinates = [
-                (round(float(point[1]), 3), round(float(point[2]), 3))
+                (round(_number(point[1]), 3), round(_number(point[2]), 3))
                 for point in _all(points, "xy")
             ]
             all_wires.append(coordinates)
-        all_labels = []
+        all_labels: list[tuple[str, str, float, float]] = []
         for head in ("label", "hierarchical_label"):
             for label in _all(schematic_tree, head):
-                at = _direct(label, "at")
+                at = _required_node(label, "at")
                 all_labels.append(
-                    (head, str(label[1]), round(float(at[1]), 3), round(float(at[2]), 3))
+                    (head, str(label[1]), round(_number(at[1]), 3), round(_number(at[2]), 3))
                 )
-        raw_nets = []
+        raw_nets: list[tuple[str, list[tuple[str, str]]]] = []
         for net in _all(nets_container, "net"):
             name_node = _direct(net, "name")
             if name_node is None:
                 continue
             name = str(name_node[1]).rsplit("/", 1)[-1]
-            nodes = []
+            nodes: list[tuple[str, str]] = []
             for node in _all(net, "node"):
                 ref_node = _direct(node, "ref")
                 pin_node = _direct(node, "pin")
@@ -452,7 +470,7 @@ def _validate_stusb4500_netlist(cli: str, output_dir: Path) -> None:
     # all internal pin conflicts, dangling wires/labels, and other ERC rules
     # retain KiCad's default severities.
     project_file = output_dir / "stusb4500.kicad_pro"
-    project_settings = {
+    project_settings: JSONObject = {
         "meta": {"filename": project_file.name, "version": 3},
         "erc": {
             "erc_exclusions": [],

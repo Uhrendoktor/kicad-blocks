@@ -695,8 +695,27 @@ def capture_ui_workflows(
                     )
                 ]
                 if not schematic_canvases:
+                    canvas_diagnostics: list[
+                        tuple[str, int, tuple[tuple[str, tuple[str, ...], str], ...]]
+                    ] = []
+                    for widget in walk_widgets(root):
+                        if widget.winfo_class() != "Canvas" or not isinstance(widget, tk.Canvas):
+                            continue
+                        canvas = cast(tk.Canvas, widget)
+                        canvas_items = tuple(
+                            (
+                                str(canvas.type(item)),
+                                canvas.gettags(item),
+                                str(canvas.itemcget(item, "image")),
+                            )
+                            for item in canvas.find_all()
+                        )
+                        canvas_diagnostics.append(
+                            (str(canvas), len(canvas.find_withtag("kicad-schematic-preview")), canvas_items)
+                        )
                     raise RuntimeError(
-                        "The library schematic preview did not render a KiCad image."
+                        "The library schematic preview did not render a KiCad image. "
+                        f"Canvas diagnostics: {canvas_diagnostics!r}"
                     )
                 _capture_modal(
                     root,
