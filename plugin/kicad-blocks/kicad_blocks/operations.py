@@ -268,7 +268,7 @@ def validate_block_library(
                     "Manifest revision does not match the hashes of the current block assets."
                 )
 
-        profile_errors = []
+        profile_errors: list[str] = []
         for profile in manifest.get("profiles", []):
             try:
                 resolve_profile_configuration(manifest, str(profile["id"]))
@@ -308,7 +308,7 @@ def validate_block_library(
 
     failed = [item for item in block_reports if item["status"] == "failed"]
     warning_blocks = [item for item in block_reports if item["status"] == "warnings"]
-    summary = {
+    summary: LibraryValidationReport = {
         "library": str(library_root),
         "report": str(report_path),
         "block_count": len(block_reports),

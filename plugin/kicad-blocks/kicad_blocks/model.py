@@ -11,7 +11,6 @@ import uuid
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import cast
 
 from .manifest_types import (
     BlockLayoutManifest,
@@ -140,8 +139,6 @@ def normalize_parameters(
     normalized: list[BlockParameter] = []
     seen: set[str] = set()
     for item in parameters or ():
-        if not isinstance(item, dict):
-            raise TypeError("Each block parameter must be an object.")
         name = str(item.get("name", "")).strip()
         if not _PARAMETER_NAME.fullmatch(name):
             raise ValueError(f"Invalid block parameter name {name!r}.")
@@ -165,7 +162,7 @@ def normalize_parameters(
         normalized.append(
             {
                 "name": name,
-                "type": cast(ParameterType, kind),
+                "type": kind,
                 "default": default,
                 "description": description,
             }
@@ -198,8 +195,6 @@ def normalize_profiles(
     seen_names: set[str] = set()
 
     for item in profiles or ():
-        if not isinstance(item, dict):
-            raise TypeError("Each block profile must be an object.")
         name = str(item.get("name", "")).strip()
         if not name or len(name) > 80 or "\n" in name or "\r" in name:
             raise ValueError("Profile names must contain 1 to 80 single-line characters.")
@@ -235,8 +230,6 @@ def normalize_profiles(
             )
 
         raw_parameters = item.get("parameters", {})
-        if not isinstance(raw_parameters, dict):
-            raise TypeError(f"Profile {name!r} parameters must be an object.")
         unknown_parameters = sorted(set(raw_parameters) - parameter_names)
         if unknown_parameters:
             raise ValueError(
@@ -310,7 +303,7 @@ def resolve_profile_configuration(
 
 def parse_parameters(spec: str) -> list[BlockParameter]:
     """Parse NAME[:type]=DEFAULT declarations separated by commas."""
-    parameters = []
+    parameters: list[BlockParameterInput] = []
     for token in str(spec).split(","):
         token = token.strip()
         if not token:

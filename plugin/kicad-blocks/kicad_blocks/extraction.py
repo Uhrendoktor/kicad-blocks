@@ -13,7 +13,7 @@ from pathlib import Path
 
 from .model import BlockPin
 from .sexpr import QuotedSExpr as _Quoted
-from .sexpr import SExpr, SExprList, parse_sexpr
+from .sexpr import SExprList, parse_sexpr
 from .sexpr import dump_sexpr as _dump
 from .sexpr import sexpr_all as _all
 from .sexpr import sexpr_direct as _direct
@@ -260,10 +260,12 @@ def _normalize_sheet_instances(
     *,
     is_root: bool,
 ) -> None:
-    instances = _direct(tree, "sheet_instances")
-    if instances is None:
-        instances = ["sheet_instances"]
+    existing_instances = _direct(tree, "sheet_instances")
+    if existing_instances is None:
+        instances: SExprList = ["sheet_instances"]
         tree.append(instances)
+    else:
+        instances = existing_instances
     paths = _path_nodes(instances)
     matching = [
         path for path in paths if len(path) >= 2 and _path_matches(str(path[1]), old_prefix)
@@ -376,12 +378,13 @@ def _prepare_sheet_tree(
     _normalize_sheet_instances(tree, old_prefix, new_prefix, is_root=is_root)
 
     for sheet in [node for node in tree[1:] if isinstance(node, list) and _head(node) == "sheet"]:
-        sheet_uuid_node = _direct(sheet, "uuid")
-        if sheet_uuid_node is None or len(sheet_uuid_node) < 2:
+        existing_sheet_uuid = _direct(sheet, "uuid")
+        if existing_sheet_uuid is None or len(existing_sheet_uuid) < 2:
             original_sheet_uuid = str(uuid.uuid4())
             sheet_uuid_node: SExprList = ["uuid", _Quoted(original_sheet_uuid)]
             sheet.append(sheet_uuid_node)
         else:
+            sheet_uuid_node = existing_sheet_uuid
             original_sheet_uuid = str(sheet_uuid_node[1])
 
         replacement_uuid = str(uuid.uuid4())
