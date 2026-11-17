@@ -5,11 +5,11 @@ This page is generated from the declarative UI catalog. It inventories the curre
 
 | Coverage status | Screens | Meaning |
 |---|---:|---|
-| Contracted | 8 | Widget-level execute/result assertions are registered and run in CI. |
-| Partial | 5 | Targeted GUI, integration, model, or screenshot checks exist; the full control matrix is not contracted. |
+| Contracted | 9 | Widget-level execute/result assertions are registered and run in CI. |
+| Partial | 4 | Targeted GUI, integration, model, or screenshot checks exist; the full control matrix is not contracted. |
 | Inventory only | 2 | Window/workflow is documented here; systematic interaction contracts remain future work. |
 
-Task Hub, both transient block choosers, Add PCB Layout, Create Block form, Record picker, Manage Libraries, and PCB Layout Manager have full registered widget contracts. The Functional Block Library and implementation manager remain partial while every downstream KiCad operation and native OS chooser continues to be verified separately.
+Task Hub, both transient block choosers, Add PCB Layout, Create Block form, Record picker, Instance Configuration, Manage Libraries, and PCB Layout Manager have full registered widget contracts. The Functional Block Library and implementation manager remain partial while every downstream KiCad operation and native OS chooser continues to be verified separately.
 
 ## Screens
 
@@ -181,9 +181,9 @@ A real Tk/X11 GUI test drives the production chooser with keyboard input and ass
 
 Change the selected schematic instance's profile, implementation, typed parameters, and PCB layout.
 
-**Coverage:** Partial — targeted GUI, integration, or visual checks exist.
+**Coverage:** Contracted — widget action and expected UI transition asserted.
 
-A GUI test exercises profile selection and the resulting schematic update. Every control, invalid value, stale instance, and rollback path is not yet covered by component contracts.
+Every application-owned interactive control has a stable semantic ID and real-Tk contracts. Tests select a profile and assert that its implementation, typed parameters, and PCB layout are applied; manually edit a parameter and verify the profile becomes Custom; save the values through one undoable KiCad IPC transaction; reject invalid parameter values without starting an IPC edit and recover; cancel with the button or Escape; and assert rollback after an IPC update failure. Missing required facade fields are rejected before the dialog opens. The existing live Eeschema GUI test separately verifies a real KiCad editor hand-off and save.
 
 **Major functionality**
 
@@ -192,8 +192,19 @@ A GUI test exercises profile selection and the resulting schematic update. Every
 - Edit typed parameter values
 - Save one undoable schematic update or cancel
 
+**Registered semantic controls**
+
+- Configure selected schematic instance (`instance-configuration.window`; window; behavior asserted)
+- Configuration profile (`instance-configuration.profile`; combobox; behavior asserted)
+- Implementation variant (`instance-configuration.variant`; combobox; behavior asserted)
+- Typed parameter value (one semantic ID per parameter) (`instance-configuration.parameter.{name}`; entry-or-combobox; behavior asserted)
+- PCB layout (`instance-configuration.layout`; combobox; behavior asserted)
+- Save instance (`instance-configuration.action.save`; button; behavior asserted)
+- Cancel (`instance-configuration.action.cancel`; button; behavior asserted)
+
 **Current automated evidence**
 
+- `tests/test_instance_configuration_contracts.py`
 - `tests/test_instance_configuration_gui.py`
 
 **Production screenshots**

@@ -909,6 +909,8 @@ def _show_selected_block_configuration(
         )
 
     dialog = tk.Toplevel(parent)
+    dialog._kicad_ui_screen_id = "instance-configuration"
+    dialog._kicad_ui_contract_id = "instance-configuration.window"
     dialog.title(f"Configure {instance.reference} — {block.name}")
     dialog.transient(parent)
 
@@ -946,6 +948,7 @@ def _show_selected_block_configuration(
             values=list(profile_labels),
             state="readonly",
         )
+        profile_combo._kicad_ui_contract_id = "instance-configuration.profile"
         profile_combo.pack(fill="x")
         _add_tooltip(profile_combo, "A profile fills the linked variant, parameters and PCB layout.")
 
@@ -961,6 +964,7 @@ def _show_selected_block_configuration(
             values=[str(item["value"]) for item in variants],
             state="normal",
         )
+        variant_combo._kicad_ui_contract_id = "instance-configuration.variant"
         variant_combo.pack(fill="x")
         _add_tooltip(variant_combo, "Choose a declared variant or enter a KiCad text-variable reference.")
 
@@ -986,6 +990,9 @@ def _show_selected_block_configuration(
                 )
             else:
                 widget = ttk.Entry(section, textvariable=variable)
+            widget._kicad_ui_contract_id = (
+                f"instance-configuration.parameter.{name}"
+            )
             widget.grid(row=row * 2, column=1, sticky="ew", pady=(3, 0))
             description = parameter.get("description") or f"Default: {parameter['default']}"
             _add_tooltip(widget, description)
@@ -1037,6 +1044,7 @@ def _show_selected_block_configuration(
             values=list(layout_ids),
             state="readonly",
         )
+        layout_combo._kicad_ui_contract_id = "instance-configuration.layout"
         layout_combo.pack(fill="x")
         _add_tooltip(layout_combo, "PCB layout used when applying this block to a board.")
 
@@ -1176,8 +1184,15 @@ def _show_selected_block_configuration(
             "The shared library block was not modified.")
         dialog.destroy()
 
-    _action_button(footer, "Cancel", dialog.destroy, "cancel", "Discard instance edits").pack(side="right", padx=(8, 0))
-    _action_button(footer, "Save instance", save_configuration, "save", "Save configuration on the selected instance").pack(side="right")
+    _action_button(
+        footer, "Cancel", dialog.destroy, "cancel", "Discard instance edits",
+        contract_id="instance-configuration.action.cancel",
+    ).pack(side="right", padx=(8, 0))
+    _action_button(
+        footer, "Save instance", save_configuration, "save",
+        "Save configuration on the selected instance",
+        contract_id="instance-configuration.action.save",
+    ).pack(side="right")
     dialog.bind("<Escape>", lambda _event: dialog.destroy())
     dialog.protocol("WM_DELETE_WINDOW", dialog.destroy)
     _set_window_geometry(dialog, 700, 720, 580, 500)

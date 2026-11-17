@@ -316,9 +316,10 @@
       "id": "instance-configuration",
       "title": "Instance configuration",
       "purpose": "Change the selected schematic instance's profile, implementation, typed parameters, and PCB layout.",
-      "coverage": "partial",
-      "coverage_note": "A GUI test exercises profile selection and the resulting schematic update. Every control, invalid value, stale instance, and rollback path is not yet covered by component contracts.",
+      "coverage": "contracted",
+      "coverage_note": "Every application-owned interactive control has a stable semantic ID and real-Tk contracts. Tests select a profile and assert that its implementation, typed parameters, and PCB layout are applied; manually edit a parameter and verify the profile becomes Custom; save the values through one undoable KiCad IPC transaction; reject invalid parameter values without starting an IPC edit and recover; cancel with the button or Escape; and assert rollback after an IPC update failure. Missing required facade fields are rejected before the dialog opens. The existing live Eeschema GUI test separately verifies a real KiCad editor hand-off and save.",
       "evidence": [
+        "tests/test_instance_configuration_contracts.py",
         "tests/test_instance_configuration_gui.py"
       ],
       "functionality": [
@@ -330,6 +331,50 @@
       "screenshots": [
         "instance-configuration-light.png",
         "instance-configuration-dark.png"
+      ],
+      "controls": [
+        {
+          "contract_id": "instance-configuration.window",
+          "type": "window",
+          "label": "Configure selected schematic instance",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "instance-configuration.profile",
+          "type": "combobox",
+          "label": "Configuration profile",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "instance-configuration.variant",
+          "type": "combobox",
+          "label": "Implementation variant",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "instance-configuration.parameter.{name}",
+          "type": "entry-or-combobox",
+          "label": "Typed parameter value (one semantic ID per parameter)",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "instance-configuration.layout",
+          "type": "combobox",
+          "label": "PCB layout",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "instance-configuration.action.save",
+          "type": "button",
+          "label": "Save instance",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "instance-configuration.action.cancel",
+          "type": "button",
+          "label": "Cancel",
+          "assertion": "asserted"
+        }
       ]
     },
     {
