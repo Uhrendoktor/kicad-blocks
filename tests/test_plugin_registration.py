@@ -10,8 +10,9 @@ import subprocess
 import sys
 import tempfile
 import time
-from collections.abc import Callable, Sequence
+from collections.abc import Callable
 from pathlib import Path
+from typing import cast
 
 ROOT = Path(__file__).resolve().parents[1]
 PLUGIN_SOURCE = ROOT / "plugin" / "kicad-blocks"
@@ -20,7 +21,7 @@ INSTALLER = ROOT / "scripts" / "install_plugin.py"
 sys.path.insert(0, str(PLUGIN_SOURCE))
 
 from kicad_blocks import plugin as plugin_actions
-from kicad_blocks.plugin import KiCadApp, Schematic, SchematicSymbol
+from kicad_blocks.plugin import KiCadApp, SchematicSelectionProvider
 from kicad_blocks.model import parse_pins
 from kicad_blocks.repository import (
     LIBRARY_CATALOG_NAME,
@@ -28,6 +29,13 @@ from kicad_blocks.repository import (
     register_project_symbol_library,
 )
 from kipy import KiCad
+
+
+__all__ = [
+    "_select_native_symbol_in_test_harness",
+    "_select_facade_in_test_harness",
+    "_wait_for_symbol_document",
+]
 
 
 def _find_executable(*names: str) -> str:
@@ -592,7 +600,9 @@ def main() -> None:
             _dump_accessibility_tree(process.pid)
             try:
                 live_schematic = facade_editor_client.get_schematic()
-                live_selection = plugin_actions.safe_schematic_selection(live_schematic)
+                live_selection = plugin_actions.safe_schematic_selection(
+                    cast(SchematicSelectionProvider, live_schematic)
+                )
                 if live_selection:
                     raise AssertionError(
                         "Edit Facade capability test requires an empty schematic selection; "
@@ -613,7 +623,7 @@ def main() -> None:
                 try:
                     plugin_actions.edit_facade_symbol(
                         refreshed_record,
-                        facade_editor_client,
+                        cast(KiCadApp, facade_editor_client),
                         project_catalog=project / ".kicad_blocks" / LIBRARY_CATALOG_NAME,
                     )
                 except RuntimeError as exc:

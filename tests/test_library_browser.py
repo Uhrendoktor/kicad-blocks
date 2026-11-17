@@ -37,7 +37,11 @@ from kicad_blocks.repository import (
 )
 
 plugin_actions = import_module("kicad_blocks.plugin")
-from kicad_blocks.plugin import SchematicSymbol as SchematicSymbolType
+from kicad_blocks.plugin import (
+    KiCadApp as KiCadAppType,
+    Schematic as SchematicType,
+    SchematicSymbol as SchematicSymbolType,
+)
 
 
 _native_schematic_preview_pages = cast(
@@ -1255,7 +1259,7 @@ class LibraryBrowserTests(unittest.TestCase):
                 self.placement: tuple[str, tuple[float, float]] | None = None
                 self.saved = False
 
-            def get_page_settings(self):
+            def get_page_settings(self) -> SimpleNamespace:
                 return SimpleNamespace(page_size=2, orientation=1)
 
             def place_symbol_from_library(
@@ -1276,10 +1280,14 @@ class LibraryBrowserTests(unittest.TestCase):
             def save(self) -> None:
                 self.saved = True
 
-        schematic = Schematic()
-        kicad = SimpleNamespace(get_schematic=lambda: schematic)
+        schematic = cast(SchematicType, Schematic())
+        kicad = cast(KiCadAppType, SimpleNamespace(get_schematic=lambda: schematic))
         focus = Mock(return_value=schematic)
-        vector2_module = SimpleNamespace(Vector2=SimpleNamespace(from_xy_mm=lambda x, y: (x, y)))
+
+        def from_xy_mm(x: float, y: float) -> tuple[float, float]:
+            return x, y
+
+        vector2_module = SimpleNamespace(Vector2=SimpleNamespace(from_xy_mm=from_xy_mm))
         with (
             patch.dict(
                 sys.modules,

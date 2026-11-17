@@ -9,7 +9,7 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
-from typing import cast
+from typing import TypedDict, cast
 
 ROOT = Path(__file__).resolve().parents[1]
 PLUGIN = ROOT / "plugin" / "kicad-blocks"
@@ -39,6 +39,14 @@ from kicad_blocks.repository import (
 )
 from kipy import KiCad
 from kipy.geometry import Vector2
+
+
+class _ExpectedNestedInstance(TypedDict):
+    """Expected placement metadata for one nested child block."""
+
+    orientation: int
+    origin: tuple[float, float]
+    pin_map: dict[str, str]
 
 
 def _find_cli() -> str:
@@ -420,8 +428,6 @@ def main() -> None:
         )
         try:
             parent_schematic = parent_kicad.get_schematic()
-            if parent_schematic is None:
-                raise RuntimeError("Could not reopen the composed parent implementation.")
             parent_kicad.load_all_libraries()
             parent_kicad.wait_for_libraries(timeout_s=120.0)
             nested_symbols = list(parent_schematic.get_symbols())
@@ -436,7 +442,7 @@ def main() -> None:
                 raise AssertionError(
                     f"Nested composition created {len(nested_sheets)} hierarchical sheets."
                 )
-            expected_instances = {
+            expected_instances: dict[str, _ExpectedNestedInstance] = {
                 "B1": {
                     "orientation": 90,
                     "origin": (100.0, 100.0),
@@ -590,10 +596,6 @@ def main() -> None:
         )
         try:
             child_schematic = child_kicad.get_schematic()
-            if child_schematic is None:
-                raise RuntimeError(
-                    "Could not reopen the recursively composed child implementation."
-                )
             child_kicad.load_all_libraries()
             child_kicad.wait_for_libraries(timeout_s=120.0)
             leaf_symbols = list(child_schematic.get_symbols())

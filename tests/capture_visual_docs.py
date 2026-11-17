@@ -197,7 +197,7 @@ def window_id(
         )
         if geometry.returncode != 0:
             continue
-        values = {}
+        values: dict[str, int] = {}
         for line in geometry.stdout.splitlines():
             if "=" in line:
                 key, value = line.split("=", 1)
@@ -482,7 +482,7 @@ def _select_default_implementation(dialog: tk.Toplevel) -> None:
     tree = cast(ttk.Treeview, tree_widget) if tree_widget is not None else None
     if tree is None or "0" not in tree.get_children():
         raise RuntimeError("The implementations dialog does not contain its Default row.")
-    default_values = tree.item("0", "values")
+    default_values = cast(tuple[str, ...], tree.item("0", "values"))
     if not default_values or default_values[0] != "Default":
         raise RuntimeError(
             "The implementations table must expose one Default row, not a separate Base row: "
@@ -615,7 +615,7 @@ def capture_ui_workflows(
     roots = [Path(item).resolve() for item in library_roots]
     plugin_actions.configured_library_roots = lambda: roots
     plugin_actions.default_library_root = lambda: roots[0]
-    schematic = SimpleNamespace(get_selection=list)
+    schematic = cast(_SchematicFixture, SimpleNamespace(get_selection=list))
 
     def reload_library(*, type: int, scope: int, nicknames: list[str]) -> None:
         if type != 1 or scope != 2 or not nicknames:
@@ -630,9 +630,12 @@ def capture_ui_workflows(
             )
         return [SimpleNamespace(nickname=nickname, error_message=None) for nickname in ()]
 
-    kicad = SimpleNamespace(
-        reload_library=reload_library,
-        wait_for_libraries=wait_for_libraries,
+    kicad = cast(
+        _KiCadFixture,
+        SimpleNamespace(
+            reload_library=reload_library,
+            wait_for_libraries=wait_for_libraries,
+        ),
     )
 
     try:
@@ -670,7 +673,8 @@ def capture_ui_workflows(
                 ]
                 if not browser_notebooks:
                     raise RuntimeError("The Functional Block Library preview tabs are missing.")
-                browser_notebooks[0].select(browser_notebooks[0].tabs()[1])
+                notebook = cast(_TaskHubNotebook, browser_notebooks[0])
+                notebook.select(notebook.tabs()[1])
                 root.update_idletasks()
                 root.update()
                 _capture_visible_window(
