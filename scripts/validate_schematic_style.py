@@ -87,6 +87,13 @@ class _CommonPinNetGroup(TypedDict, total=False):
     single_label: bool
 
 
+class _ComponentPurpose(TypedDict, total=False):
+    """Documented electrical function and engineering rationale for a component."""
+
+    function: str
+    rationale: str
+
+
 class _SchematicGroup(TypedDict, total=False):
     """Profile group metadata consumed by reusable schematic checks."""
 
@@ -97,6 +104,7 @@ class _SchematicGroup(TypedDict, total=False):
     lane: Required[Literal["main", "secondary"]]
     order: Required[int]
     documentation_members: tuple[str, ...]
+    component_purposes: dict[str, _ComponentPurpose]
 
 
 class _GroupEvidence(TypedDict, total=False):
@@ -117,6 +125,7 @@ class _STUSB4500Profile(Protocol):
     COMPONENT_PROPERTY_LIMITS_MM: dict[str, float]
     DIRECT_DECOUPLERS: tuple[tuple[str, str, str, str], ...]
     FIELD_SYMBOL_MAX_GAP_MM: float
+    FIELD_SYMBOL_MAX_GAP_OVERRIDES_MM: dict[str, float]
     FORBIDDEN_LOCAL_LABELS: tuple[str, ...]
     FRAME_CONTENT_PADDING_MM: float
     GROUND_PINS_DOWN: tuple[str, ...]
@@ -132,6 +141,7 @@ class _STUSB4500Profile(Protocol):
 # The generic linter deliberately has no dependency on the STUSB4500 example.
 # These defaults are used only by the reusable geometry/presentation rules.
 field_symbol_max_gap_mm: float = 9.00
+field_symbol_max_gap_overrides_mm: dict[str, float] = {}
 single_line_text_reserve_mm: float = 10.16
 adjacent_component_pairs: tuple[_AdjacentComponentPair, ...] = ()
 common_pin_net_groups: tuple[_CommonPinNetGroup, ...] = ()
@@ -159,7 +169,8 @@ def _load_stusb4500_profile() -> None:
     """Load project-specific contracts only when the full profile is requested."""
     global adjacent_component_pairs, common_pin_net_groups
     global component_property_limits_mm, direct_decouplers
-    global field_symbol_max_gap_mm, forbidden_local_labels, frame_content_padding_mm
+    global field_symbol_max_gap_mm, field_symbol_max_gap_overrides_mm
+    global forbidden_local_labels, frame_content_padding_mm
     global ground_pins_down, group_evidence, group_gap_mm
     global required_no_connect_pins, schematic_groups, wire_length_budgets_mm
     global reference_uid, zones, flow, frame_gap, profile_loaded
@@ -175,6 +186,7 @@ def _load_stusb4500_profile() -> None:
     component_property_limits_mm = profile.COMPONENT_PROPERTY_LIMITS_MM
     direct_decouplers = profile.DIRECT_DECOUPLERS
     field_symbol_max_gap_mm = profile.FIELD_SYMBOL_MAX_GAP_MM
+    field_symbol_max_gap_overrides_mm = profile.FIELD_SYMBOL_MAX_GAP_OVERRIDES_MM
     forbidden_local_labels = profile.FORBIDDEN_LOCAL_LABELS
     frame_content_padding_mm = profile.FRAME_CONTENT_PADDING_MM
     ground_pins_down = profile.GROUND_PINS_DOWN
@@ -1425,10 +1437,11 @@ def symbol_field_clearance_issues(tree: SExprList) -> list[str]:
                 issues.append(f"{reference} {name} partially straddles its symbol body")
         elif body:
             gap = _symbol_box_gap(bounds, body)
-            if gap > field_symbol_max_gap_mm + TOL:
+            max_gap = field_symbol_max_gap_overrides_mm.get(reference, field_symbol_max_gap_mm)
+            if gap > max_gap + TOL:
                 issues.append(
                     f"{reference} {name} is {gap:.2f} mm from its visible symbol geometry; "
-                    f"maximum is {field_symbol_max_gap_mm:.2f} mm"
+                    f"maximum is {max_gap:.2f} mm"
                 )
         for start, end in segments:
             if _strict_line_hits_box(start, end, bounds):
@@ -1732,6 +1745,42 @@ def circuit_documentation_issues(tree: SExprList) -> list[str]:
             issues.append(
                 f"group {group['id']} must describe circuit members: {', '.join(missing)}"
             )
+    return issues
+
+
+def component_purpose_issues(tree: SExprList) -> list[str]:
+    """Require an explicit function and rationale for each documented component."""
+    _load_stusb4500_profile()
+    issues: list[str] = []
+    text_by_uuid = {
+        str(uid_node[1]): str(node[1])
+        for node in _all(tree, "text_box")
+        if (uid_node := _direct(node, "uuid")) is not None
+    }
+    for group in schematic_groups:
+        description_id = reference_uid(f"graphic:text:group-description:{group['id']}")
+        description = text_by_uuid.get(description_id, "")
+        members = set(group.get("members", ()))
+        documented = set(group.get("documentation_members", ()))
+        for reference, purpose in group.get("component_purposes", {}).items():
+            if reference not in members:
+                issues.append(
+                    f"group {group['id']} documents {reference}, which is not a group member"
+                )
+            if reference not in documented:
+                issues.append(
+                    f"group {group['id']} must list {reference} as a documentation member"
+                )
+            for field in ("function", "rationale"):
+                phrase = purpose.get(field, "").strip()
+                if not phrase:
+                    issues.append(
+                        f"group {group['id']} must provide {reference} {field}"
+                    )
+                elif phrase not in description:
+                    issues.append(
+                        f"group {group['id']} description must include {reference} {field}"
+                    )
     return issues
 
 
