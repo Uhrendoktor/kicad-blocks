@@ -27,6 +27,7 @@ from .manifest_types import (
     BlockLayoutInput,
     BlockLayoutManifest,
     BlockManifest,
+    BlockParameter,
     BlockParameterInput,
     BlockPinManifest,
     BlockProfileInput,
@@ -947,7 +948,7 @@ def create_block(
     layout_file: Path | None = None,
     layout_project_file: Path | None = None,
     layout_files: list[BlockLayoutInput] | None = None,
-    parameters: list[BlockParameterInput] | None = None,
+    parameters: list[BlockParameterInput | BlockParameter] | None = None,
     variant_files: list[BlockVariantInput] | None = None,
     profiles: list[BlockProfileInput] | None = None,
 ) -> BlockRecord:

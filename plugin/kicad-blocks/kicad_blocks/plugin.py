@@ -1383,7 +1383,7 @@ def _write_instance_configuration(
     try:
         for name, value in values.items():
             fields[name].text.value = str(value)
-        _update_schematic_item_checked(schematic, instance)
+        update_schematic_item_checked(schematic, instance)
         schematic.push_commit(commit, "Configure KiCad block instance")
         schematic.save()
     except Exception:
@@ -7285,3 +7285,10 @@ new_blank_pcb_source = _new_blank_pcb_source
 KiCadApp = _KiCadApp
 Schematic = _Schematic
 SchematicSymbol = _SchematicSymbol
+
+
+# Stable public entry points for UI integrations and headless test adapters.
+configure_tk_theme = _configure_tk_theme
+update_schematic_item_checked = _update_schematic_item_checked
+show_selected_block_configuration = _show_selected_block_configuration
+SchematicProject = _SchematicProject
