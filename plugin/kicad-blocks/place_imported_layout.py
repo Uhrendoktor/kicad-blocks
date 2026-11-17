@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol, cast
+
+if TYPE_CHECKING:
+    from tkinter import Event, Misc
 
 from kicad_blocks.pcb_placement import (
     Board,
@@ -31,6 +35,15 @@ class _ActiveBoard(Board, Protocol):
 
     document: _ProjectDocument
     name: str
+
+
+def _after_event(callback: Callable[[], None]) -> Callable[[Event[Misc]], None]:
+    """Adapt a zero-argument action to a typed Tk event callback."""
+
+    def handle(_event: Event[Misc]) -> None:
+        callback()
+
+    return handle
 
 
 def _active_board_path(board: _ActiveBoard) -> Path:
@@ -96,8 +109,8 @@ def _choose_placement(placements: list[PCBPlacementEntry]) -> PCBPlacementEntry 
     ttk.Button(buttons, text="Move at cursor", command=accept).pack(side="right", padx=(8, 0))
     ttk.Button(buttons, text="Cancel", command=cancel).pack(side="right")
     root.protocol("WM_DELETE_WINDOW", cancel)
-    combo.bind("<Return>", lambda _event: accept())
-    root.bind("<Escape>", lambda _event: cancel())
+    combo.bind("<Return>", _after_event(accept))
+    root.bind("<Escape>", _after_event(cancel))
     root.mainloop()
     return selected["placement"]
 
@@ -120,11 +133,8 @@ def main() -> None:
         from kipy import KiCad
 
         kicad = KiCad()
-        board = kicad.get_board()
-        if board is None:
-            raise RuntimeError("No PCB board is open in PCB Editor.")
-
-        board_path = _active_board_path(board)
+        board = cast(Board, kicad.get_board())
+        board_path = _active_board_path(cast(_ActiveBoard, board))
         manifest: PCBPlacementManifest = read_pcb_placement_manifest(board_path)
         placement = _choose_placement(manifest["placements"])
         if placement is None:
@@ -136,7 +146,7 @@ def main() -> None:
         )
         # This is the final IPC request: KiCad keeps its server busy until the
         # user commits or cancels the interactive move with its normal UI.
-        move_placement_at_cursor(board, placement)
+        move_placement_at_cursor(cast(Board, board), placement)
     except Exception as exc:  # noqa: BLE001 - present IPC and data errors to the KiCad user
         _show_error(exc)
 

@@ -233,7 +233,9 @@ def merge_symbol_catalog(library_root: Path, symbol_file: Path) -> Path:
     if not symbol_file.is_file():
         raise FileNotFoundError(symbol_file)
     incoming = parse_sexpr(symbol_file.read_text(encoding="utf-8"))
-    incoming_symbols = [item for item in incoming[1:] if _head(item) == "symbol"]
+    incoming_symbols = [
+        item for item in incoming[1:] if isinstance(item, list) and _head(item) == "symbol"
+    ]
     if _head(incoming) != "kicad_symbol_lib" or len(incoming_symbols) != 1:
         raise ValueError(f"Expected one KiCad facade symbol in {symbol_file}.")
     return _merge_symbol_node(
@@ -313,13 +315,18 @@ def _resolve_project_symbol_source(
     return source_tree, source_symbol, source_digest
 
 
+type _ProjectSyncJson = str | int | float | bool | None | list[_ProjectSyncJson] | dict[str, _ProjectSyncJson]
+
+
 def _load_project_symbol_sync_state(state_file: Path) -> ProjectSymbolSyncState:
     """Read and validate the per-project symbol digest map."""
     synchronized: dict[str, str] = {}
     if not state_file.is_file():
         return {"schema_version": 1, "symbols": synchronized}
     try:
-        loaded_state = json.loads(state_file.read_text(encoding="utf-8"))
+        loaded_state = cast(
+            _ProjectSyncJson, json.loads(state_file.read_text(encoding="utf-8"))
+        )
     except json.JSONDecodeError as exc:
         raise ValueError(_INVALID_PROJECT_SYMBOL_SYNC_STATE) from exc
     if not isinstance(loaded_state, dict):
@@ -2273,9 +2280,9 @@ def add_dependency(
         "revision": child.manifest.get("revision"),
     }
     dependencies.append(dependency)
-    updated = dict(parent.manifest)
+    updated = cast(BlockManifest, dict(parent.manifest))
     updated["dependencies"] = dependencies
-    updated["version"] = int(updated.get("version", 1)) + 1
+    updated["version"] = parent.manifest.get("version", 1) + 1
     atomic_write(
         parent.path / MANIFEST_NAME,
         json.dumps(updated, indent=2, ensure_ascii=False) + "\n",
