@@ -113,7 +113,7 @@ class ReleasePackageTests(unittest.TestCase):
                 text=True,
                 timeout=30,
             )
-            self.assertIn("KiCad Blocks installed at:", result.stdout)
+            assert "KiCad Blocks installed at:" in result.stdout
 
             installed = (
                 documents_home / "kicad" / "10.99" / "plugins" / "org.uhrendoktor.kicadblocks"
