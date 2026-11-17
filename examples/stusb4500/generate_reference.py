@@ -13,6 +13,7 @@ import subprocess
 import sys
 import uuid
 from collections.abc import Iterator
+from typing import cast
 from pathlib import Path
 from typing import Literal, Required, TypedDict
 
@@ -31,6 +32,8 @@ from kicad_blocks.sexpr import (
 )
 
 # Compatibility aliases for the profile geometry checks below.
+__all__ = ["_note_box", "_functional_zone"]
+
 _all = sexpr_all
 _direct = sexpr_direct
 
@@ -1754,7 +1757,9 @@ def generate_reference_schematic(destination: Path) -> Path:
             )
         for _, point in ordered[1:-1]:
             junctions.append(
-                [
+                cast(
+                    SExprList,
+                    [
                     "junction",
                     ["at", f"{point[0]:.3f}", f"{point[1]:.3f}"],
                     ["diameter", "0"],
@@ -1765,7 +1770,8 @@ def generate_reference_schematic(destination: Path) -> Path:
                             reference_uid(f"junction:{net_name}:{point[0]:.3f}:{point[1]:.3f}")
                         ),
                     ],
-                ]
+                    ],
+                )
             )
         for _, point in ordered:
             if point != anchor_point:

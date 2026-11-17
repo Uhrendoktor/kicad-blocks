@@ -263,7 +263,7 @@ def _compose_direct_children(
                 )
                 point = Vector2.from_xy_mm(origin_x + delta_x, origin_y + delta_y)
                 spin_style = rotate_label_spin_style(spin_style, rotation_deg)
-                key = _point_key(point)
+                key = _point_key(cast(_Position2D, point))
                 current = labels_by_position.get(key)
                 if current is not None:
                     current_text = getattr(current.text, "value", "")
@@ -274,7 +274,7 @@ def _compose_direct_children(
                         )
                     continue
                 label = cast(_GlobalLabel, GlobalLabel())
-                label.position = point
+                label.position = cast(_Position2D, point)
                 label.text.value = net_name
                 cast(_LabelWithSpinStyle, label).spin_style = spin_style
                 new_labels.append(label)

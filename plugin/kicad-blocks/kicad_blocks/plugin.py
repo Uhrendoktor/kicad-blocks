@@ -3550,6 +3550,7 @@ def _native_schematic_preview_pages(
                 svg_path=str(normalized_svg),
                 width=int(width),
                 height=int(width),
+                dpi=96.0,
             )
             pages.append((label, bytes(png_data)))
 

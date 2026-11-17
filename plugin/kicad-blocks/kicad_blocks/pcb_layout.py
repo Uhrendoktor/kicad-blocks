@@ -42,9 +42,6 @@ from .sexpr import sexpr_head as _head
 if TYPE_CHECKING:
     from .repository import BlockRecord
 
-type _JSONValue = str | int | float | bool | None | list[_JSONValue] | dict[str, _JSONValue]
-
-
 _T = TypeVar("_T")
 
 
@@ -60,18 +57,17 @@ def _load_project_settings(path: Path, *, context: str) -> KiCadProjectData:
 
     """
     try:
-        data_value = cast(_JSONValue, json.loads(path.read_text(encoding="utf-8")))
+        data_value = json.loads(path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:
         raise ValueError(f"{context}: {path}") from exc
     if not isinstance(data_value, dict):
         raise TypeError(f"{context}: {path}")
-    data: dict[str, _JSONValue] = data_value
     for section_name in ("meta", "net_settings"):
-        section = data.get(section_name)
+        section = data_value.get(section_name)
         if section is not None and not isinstance(section, dict):
             raise TypeError(f"{context}: invalid {section_name} section in {path}")
 
-    net_settings = data.get("net_settings")
+    net_settings = data_value.get("net_settings")
     if isinstance(net_settings, dict):
         classes = net_settings.get("classes", [])
         if not isinstance(classes, list) or any(not isinstance(item, dict) for item in classes):
@@ -101,7 +97,7 @@ def _load_project_settings(path: Path, *, context: str) -> KiCadProjectData:
                 for name, value in chain_map.items()
             ):
                 raise TypeError(f"{context}: invalid {key} mapping in {path}")
-    return cast(KiCadProjectData, data)
+    return cast(KiCadProjectData, data_value)
 
 
 # This helper remains available to existing internal integrations and tests.

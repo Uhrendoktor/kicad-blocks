@@ -452,8 +452,6 @@ class LibraryBrowserTests(unittest.TestCase):
         self.assertEqual(root.attrib["viewBox"], "0 0 2400 1600")
 
     def test_native_schematic_preview_exports_selected_implementation_and_all_sheets(self):
-        calls = []
-
         calls: list[Sequence[str]] = []
 
         def export(
@@ -477,12 +475,12 @@ class LibraryBrowserTests(unittest.TestCase):
                 '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 60"></svg>',
                 encoding="utf-8",
             )
-            return SimpleNamespace(returncode=0, stdout="", stderr="")
+            return subprocess.CompletedProcess(arguments, 0, "", "")
 
         with (
             patch("kicad_blocks.plugin.find_kicad_cli", return_value="/usr/bin/kicad-cli"),
             patch("kicad_blocks.plugin.subprocess.run", side_effect=export),
-            patch("resvg_py.svg_to_bytes", return_value=b"schematic-png"),
+            patch("resvg_py.svg_to_bytes", return_value=b"schematic-png") as render_svg,
             patch("kicad_blocks.plugin._SCHEMATIC_PREVIEW_CACHE", {}),
         ):
             pages = _native_schematic_preview_pages(
@@ -497,6 +495,8 @@ class LibraryBrowserTests(unittest.TestCase):
             )
 
         self.assertEqual(len(calls), 1)
+        assert render_svg.call_args is not None
+        assert math.isclose(render_svg.call_args.kwargs["dpi"], 96.0)
         self.assertEqual(
             calls[0][-1],
             str(
