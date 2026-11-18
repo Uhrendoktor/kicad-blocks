@@ -172,7 +172,10 @@ class BlockProfileTests(unittest.TestCase):
             local_manifest["profiles"][1]["description"],
             "Upstream profile update.",
         )
-        self.assertEqual(local_manifest["base_profiles"], local_manifest["profiles"])
+        base_profiles = local_manifest.get("base_profiles")
+        self.assertIsNotNone(base_profiles)
+        assert base_profiles is not None
+        self.assertEqual(base_profiles, local_manifest["profiles"])
 
         local_manifest["profiles"][1]["parameters"]["OUTPUT_VOLTAGE"] = "1.5"
         (local.path / "manifest.json").write_text(
@@ -185,10 +188,10 @@ class BlockProfileTests(unittest.TestCase):
             read_manifest(source.path)["profiles"][1]["parameters"]["OUTPUT_VOLTAGE"],
             "1.5",
         )
-        self.assertEqual(
-            read_manifest(local.path)["base_profiles"],
-            read_manifest(source.path)["profiles"],
-        )
+        synchronized_profiles = read_manifest(local.path).get("base_profiles")
+        self.assertIsNotNone(synchronized_profiles)
+        assert synchronized_profiles is not None
+        self.assertEqual(synchronized_profiles, read_manifest(source.path)["profiles"])
 
     def test_divergent_profile_changes_are_rejected_without_overwrite(self):
         source = self.create_profile_block()

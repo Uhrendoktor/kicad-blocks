@@ -5,7 +5,6 @@ from __future__ import annotations
 import os
 import sys
 from collections.abc import Callable
-from typing import TypeVar
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
@@ -49,23 +48,15 @@ ADD_LAYOUT_CONTROLS = {
 }
 
 
-_HookResult = TypeVar("_HookResult")
-
-
-def _private_hook(name: str) -> Callable[..., _HookResult]:
-    """Resolve a private plugin hook through a typed test boundary."""
-    return cast(Callable[..., _HookResult], getattr(plugin_actions, name))
-
-
-_load_tkinter = cast(Callable[[], None], _private_hook("_load_tkinter"))
+_load_tkinter = plugin_actions.load_tkinter
 _ask_layout_details = cast(
-    Callable[..., dict[str, str] | None], _private_hook("_ask_layout_details")
+    Callable[..., dict[str, str] | None], getattr(plugin_actions, "_ask_layout_details")
 )
 
 
 def _new_parent_and_record(tmp_path: Path) -> tuple[Tk, BlockRecord]:
     _load_tkinter()
-    root = cast(Tk, plugin_actions.tk.Tk())
+    root = plugin_actions.tk.Tk()
     root.title("UI contract host")
     root.geometry("640x360")
     block_path = tmp_path / "usb-power"

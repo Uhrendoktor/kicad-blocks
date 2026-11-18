@@ -9,6 +9,7 @@ import sys
 from collections.abc import Callable, Iterator, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
+from unittest.mock import Mock
 
 from _pytest.monkeypatch import MonkeyPatch
 
