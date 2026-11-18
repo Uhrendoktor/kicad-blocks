@@ -383,6 +383,7 @@ def test_add_variant_save_failure_can_be_retried_with_save_and_close(
         '(kicad_sch (version 20250114) (generator "retry-test"))\n',
         encoding="utf-8",
     )
+
     def ask_implementation_details(
         _parent: Misc,
         *,
