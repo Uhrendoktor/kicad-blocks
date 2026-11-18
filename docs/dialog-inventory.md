@@ -9,7 +9,7 @@ Source: plugin/kicad-blocks/kicad_blocks/plugin.py — 56 call sites.
 |---|---:|---|
 | Tested | 56 | Direct native-dialog result and downstream behavior are asserted. |
 | Partial | 0 | The owning action is tested; this dialog branch is not directly asserted. |
-| Uncovered | 0 | No direct call-site behavior contract exists yet. |
+| Uncovered | 0 | No direct native-dialog path contract exists yet. |
 
 ## Call sites
 
