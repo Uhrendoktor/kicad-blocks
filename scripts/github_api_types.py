@@ -34,6 +34,6 @@ def decode_github_response(raw: bytes) -> GitHubApiResponse:
     if not raw:
         return cast(GitHubApiResponse, {})
     decoded: JSONValue = cast(JSONValue, json.loads(raw.decode("utf-8")))
-    if not isinstance(decoded, dict) or not all(isinstance(key, str) for key in decoded):
+    if not isinstance(decoded, dict):
         raise RuntimeError("GitHub API returned a JSON response that is not an object.")
     return cast(GitHubApiResponse, decoded)

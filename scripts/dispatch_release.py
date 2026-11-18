@@ -58,11 +58,11 @@ def dispatch_release(repo: str, tag: str, source_sha: str, version: str, token: 
     archive_name = f"kicad-blocks-{version}-linux-x86_64.zip"
     required_assets = {archive_name, archive_name + ".sha256"}
     if release is not None:
-        assets_by_name: dict[str, GitHubApiResponse] = {
-            str(asset["name"]): asset
-            for asset in release.get("assets", [])
-            if asset.get("name") is not None
-        }
+        assets_by_name: dict[str, GitHubApiResponse] = {}
+        for asset in release.get("assets", []):
+            asset_name = asset.get("name")
+            if isinstance(asset_name, str):
+                assets_by_name[asset_name] = asset
         if required_assets.issubset(assets_by_name):
             complete = all(
                 assets_by_name[name].get("size", 0) > 0

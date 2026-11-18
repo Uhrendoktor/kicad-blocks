@@ -198,14 +198,20 @@ def validate_plugin_package(source: pathlib.Path) -> PluginManifest:
             )
         for icon_key in ("icons-light", "icons-dark"):
             icons_value = action.get(icon_key, [])
-            if not isinstance(icons_value, list) or any(
-                not isinstance(icon, str) for icon in icons_value
-            ):
+            if not isinstance(icons_value, list):
                 raise ValueError(
                     f"Plugin action {icon_key} must be a list of strings: "
                     f"{action.get('identifier')!r}"
                 )
-            for icon in icons_value:
+            icons: list[str] = []
+            for icon_value in icons_value:
+                if not isinstance(icon_value, str):
+                    raise ValueError(
+                        f"Plugin action {icon_key} must be a list of strings: "
+                        f"{action.get('identifier')!r}"
+                    )
+                icons.append(icon_value)
+            for icon in icons:
                 icon_path = (source / icon).resolve()
                 if (
                     not icon_path.is_relative_to(source)

@@ -37,7 +37,7 @@ class UIControl(TypedDict):
     label: str
     assertion: str
     type: NotRequired[str]
-    action_id: NotRequired[str | None]
+    action_id: NotRequired[str]
 
 
 class UIAction(UIControl):

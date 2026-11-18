@@ -274,15 +274,18 @@ def architecture_violations(root: Path = ROOT) -> tuple[str, ...]:
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=relative.as_posix())
         for node in ast.walk(tree):
             module = ""
+            line_number = 0
             if isinstance(node, ast.ImportFrom):
                 module = node.module or ""
+                line_number = node.lineno
                 if node.level:
                     module = "." * node.level + module
             elif isinstance(node, ast.Import):
                 module = ",".join(alias.name for alias in node.names)
+                line_number = node.lineno
             if any(module == item or module.startswith(item + ".") for item in forbidden):
                 violations.append(
-                    f"{relative.as_posix()}:{node.lineno}: forbidden inward dependency on {module}"
+                    f"{relative.as_posix()}:{line_number}: forbidden inward dependency on {module}"
                 )
     return tuple(violations)
 
