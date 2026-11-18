@@ -1,7 +1,7 @@
 """Narrow ttk widget contracts consumed by KiCad Blocks."""
 
 from collections.abc import Mapping, Sequence
-from typing import Callable
+from typing import Callable, Literal, overload
 from tkinter import Misc, PhotoImage, TkOption, Variable
 
 class Widget(Misc): ...
@@ -54,6 +54,10 @@ class Entry(Widget):
 class Combobox(Entry):
     def current(self, newindex: int | None = ...) -> int: ...
     def set(self, value: str) -> None: ...
+    @overload
+    def __getitem__(self, key: Literal["values"]) -> tuple[str, ...]: ...
+    @overload
+    def __getitem__(self, key: str) -> TkOption: ...
 
 class Scrollbar(Widget):
     def __init__(
@@ -120,6 +124,11 @@ class Treeview(Widget):
     def insert(
         self, parent: str, index: int | str, iid: str | None = ..., **kwargs: TkOption
     ) -> str: ...
+    @overload
+    def item(
+        self, item: str, option: Literal["values"], **kwargs: TkOption
+    ) -> tuple[str, ...]: ...
+    @overload
     def item(
         self, item: str, option: str | None = ..., **kwargs: TkOption
     ) -> TkOption | dict[str, TkOption]: ...

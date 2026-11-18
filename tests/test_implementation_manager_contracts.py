@@ -6,7 +6,7 @@ import os
 import sys
 from collections.abc import Callable, Sequence
 from pathlib import Path
-from typing import TYPE_CHECKING, TypeVar, cast
+from typing import TYPE_CHECKING, Any, cast
 
 from _pytest.monkeypatch import MonkeyPatch
 
@@ -52,12 +52,9 @@ MANAGER_CONTROLS = {
 STATUS_TEXT = "Empty KB_VARIANT uses the default implementation."
 
 
-_HookResult = TypeVar("_HookResult")
-
-
-def _private_hook(name: str) -> Callable[..., _HookResult]:
+def _private_hook(name: str) -> Callable[..., Any]:
     """Resolve a private plugin hook through a typed test boundary."""
-    return cast(Callable[..., _HookResult], getattr(plugin_actions, name))
+    return cast(Callable[..., Any], getattr(plugin_actions, name))
 
 
 _load_tkinter = cast(Callable[[], None], _private_hook("_load_tkinter"))
@@ -102,7 +99,7 @@ def _new_root(monkeypatch: MonkeyPatch) -> Tk:
         return None
 
     monkeypatch.setattr(plugin_actions, "_create_action_icon", no_icon)
-    root = cast(Tk, plugin_actions.tk.Tk())
+    root = plugin_actions.tk.Tk()
     root.title("UI contract host")
     root.geometry("1280x800")
     root.update()
@@ -133,7 +130,7 @@ def _run_manager(
         dialog: Toplevel | None = None
         try:
             dialog = _manager_dialog(root)
-            assert dialog._kicad_ui_screen_id == "implementations-manager"
+            assert getattr(dialog, "_kicad_ui_screen_id", None) == "implementations-manager"
             assert dialog.title() == f"Implementations — {record.name}"
             context.refresh_widgets()
             assert_control_coverage(dialog, MANAGER_CONTROLS)

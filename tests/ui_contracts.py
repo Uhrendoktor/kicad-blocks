@@ -15,7 +15,10 @@ from typing import TYPE_CHECKING, Generic, TypeVar, TypedDict, cast
 
 if TYPE_CHECKING:
     import tkinter as tk
+    from tkinter import Menu, Toplevel
     from tkinter.ttk import Button, Combobox, Entry, Notebook, Panedwindow, Treeview
+else:
+    Menu = Toplevel = Button = Combobox = Entry = Notebook = Panedwindow = Treeview = object
 
 
 class MenuEntry:
@@ -24,6 +27,18 @@ class MenuEntry:
     def __init__(self, menu: tk.Menu, index: int) -> None:
         self.menu = menu
         self.index = index
+
+
+def _new_string_list() -> list[str]:
+    return []
+
+
+def _new_widget_map() -> dict[str, tk.Misc]:
+    return {}
+
+
+def _new_menu_entry_map() -> dict[str, MenuEntry]:
+    return {}
 
 
 class WindowObservation(TypedDict):
@@ -90,11 +105,11 @@ ObservationT = TypeVar("ObservationT")
 class UiTestContext:
     """Shared state available to component contracts during one test."""
 
-    root: tk.Tk
-    action_calls: list[str] = field(default_factory=list)
-    events: list[str] = field(default_factory=list)
-    widgets: dict[str, tk.Misc] = field(default_factory=dict)
-    menu_entries: dict[str, MenuEntry] = field(default_factory=dict)
+    root: tk.Misc
+    action_calls: list[str] = field(default_factory=_new_string_list)
+    events: list[str] = field(default_factory=_new_string_list)
+    widgets: dict[str, tk.Misc] = field(default_factory=_new_widget_map)
+    menu_entries: dict[str, MenuEntry] = field(default_factory=_new_menu_entry_map)
     window_destroyed: bool = False
 
     def __post_init__(self) -> None:
@@ -136,38 +151,26 @@ class UiTestContext:
 
     def require_treeview(self, contract_id: str) -> Treeview:
         """Return one registered ttk Treeview with its row/selection API."""
-        from tkinter.ttk import Treeview
-
         return cast(Treeview, self.require_widget(contract_id))
 
     def require_combobox(self, contract_id: str) -> Combobox:
         """Return one registered ttk Combobox with its choice API."""
-        from tkinter.ttk import Combobox
-
         return cast(Combobox, self.require_widget(contract_id))
 
     def require_entry(self, contract_id: str) -> Entry:
         """Return one registered ttk Entry with its text-input API."""
-        from tkinter.ttk import Entry
-
         return cast(Entry, self.require_widget(contract_id))
 
     def require_button(self, contract_id: str) -> Button:
         """Return one registered ttk Button with its invocation/state API."""
-        from tkinter.ttk import Button
-
         return cast(Button, self.require_widget(contract_id))
 
     def require_notebook(self, contract_id: str) -> Notebook:
         """Return one registered ttk Notebook with its page-selection API."""
-        from tkinter.ttk import Notebook
-
         return cast(Notebook, self.require_widget(contract_id))
 
     def require_panedwindow(self, contract_id: str) -> Panedwindow:
         """Return one registered ttk Panedwindow with its child-pane API."""
-        from tkinter.ttk import Panedwindow
-
         return cast(Panedwindow, self.require_widget(contract_id))
 
 
@@ -189,8 +192,6 @@ class ComponentContract(ABC, Generic[ObservationT]):
 
 
 def _open_toplevels(root: tk.Tk) -> dict[int, str]:
-    from tkinter import Toplevel
-
     windows: dict[int, str] = {}
     for child in root.winfo_children():
         if child.winfo_class() == "Toplevel":
@@ -243,12 +244,10 @@ class ButtonContract(ComponentContract[ButtonObservation]):
     expected_label: str | None = None
 
     def execute(self, context: UiTestContext) -> ButtonObservation:
-        from tkinter.ttk import Button
-
         button = cast(Button, context.require_widget(self.contract_id))
         label = str(button.cget("text"))
         existing_toplevels = _open_toplevels(context.root)
-        result = cast(str | int | None, button.invoke())
+        result = button.invoke()
         root_exists = not context.window_destroyed
         if root_exists:
             context.root.update_idletasks()
@@ -301,7 +300,7 @@ class MenuItemContract(ComponentContract[MenuItemObservation]):
     def execute(self, context: UiTestContext) -> MenuItemObservation:
         entry = context.require_menu_entry(self.menu_item_id)
         return {
-            "invoke_result": cast(str | int | None, entry.menu.invoke(entry.index)),
+            "invoke_result": entry.menu.invoke(entry.index),
             "events": list(context.events),
         }
 
@@ -321,8 +320,6 @@ class EntryInputContract(ComponentContract[EntryInputObservation]):
     expected_summary: str
 
     def execute(self, context: UiTestContext) -> EntryInputObservation:
-        from tkinter.ttk import Entry, Treeview
-
         entry = cast(Entry, context.require_widget(self.contract_id))
         entry.delete(0, "end")
         entry.insert(0, self.value)
@@ -357,8 +354,6 @@ class TreeSelectionContract(ComponentContract[TreeSelectionObservation]):
     expected_values: tuple[str, ...] | None = None
 
     def execute(self, context: UiTestContext) -> TreeSelectionObservation:
-        from tkinter.ttk import Treeview
-
         tree = cast(Treeview, context.require_widget(self.contract_id))
         tree.selection_set(self.row_id)
         tree.focus(self.row_id)
@@ -370,7 +365,7 @@ class TreeSelectionContract(ComponentContract[TreeSelectionObservation]):
         text_variable = str(summary.cget("textvariable") or "")
         if text_variable:
             summary_text = str(summary.getvar(text_variable))
-        row_values = cast(tuple[str, ...], tuple(tree.item(self.row_id, "values")))
+        row_values = tuple(tree.item(self.row_id, "values"))
         return {
             "selection": tuple(tree.selection()),
             "summary": summary_text,
@@ -393,8 +388,6 @@ class ChoiceViewContract(ComponentContract[ChoiceViewObservation]):
     expected_event: str
 
     def execute(self, context: UiTestContext) -> ChoiceViewObservation:
-        from tkinter.ttk import Combobox
-
         choice = cast(Combobox, context.require_widget(self.contract_id))
         choice.set(self.value)
         choice.event_generate("<<ComboboxSelected>>")
@@ -417,8 +410,6 @@ class NotebookViewContract(ComponentContract[list[NotebookPageObservation]]):
     views: tuple[tuple[str, tuple[str, ...]], ...]
 
     def execute(self, context: UiTestContext) -> list[NotebookPageObservation]:
-        from tkinter.ttk import Notebook
-
         notebook = cast(Notebook, context.require_widget(self.contract_id))
         observations: list[NotebookPageObservation] = []
         for label, control_ids in self.views:
@@ -462,8 +453,6 @@ class PaneGroupContract(ComponentContract[PaneGroupObservation]):
     pane_ids: tuple[str, ...]
 
     def execute(self, context: UiTestContext) -> PaneGroupObservation:
-        from tkinter.ttk import Panedwindow
-
         group = cast(Panedwindow, context.require_widget(self.contract_id))
         context.root.update_idletasks()
         context.root.update()
@@ -540,8 +529,6 @@ def discover_interactive_controls(root: tk.Misc) -> dict[str, tk.Misc | MenuEntr
     The discovery list is intentionally limited to controls with an interaction
     contract. Static labels and decorative frames are not actionable controls.
     """
-    from tkinter import Menu
-
     discovered: dict[str, tk.Misc | MenuEntry] = {}
     for widget in _walk_widgets(root):
         widget_class = widget.winfo_class()
@@ -565,8 +552,6 @@ def assert_control_coverage(
     root: tk.Misc, expected_ids: set[str]
 ) -> dict[str, tk.Misc | MenuEntry]:
     """Fail when an interactive widget is untagged or outside the declared map."""
-    from tkinter import Menu
-
     missing_tags: list[str] = []
     for widget in _walk_widgets(root):
         widget_class = widget.winfo_class()
