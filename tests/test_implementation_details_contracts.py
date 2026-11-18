@@ -348,9 +348,9 @@ def test_create_blank_schematic_mode_returns_a_valid_temporary_source(
     create_source = plugin_actions._new_blank_schematic_source
 
     def capture_blank_source():
-        path = create_source()
+        path = Path(create_source())
         created.append(path)
-        return path
+        return str(path)
 
     monkeypatch.setattr(
         plugin_actions,

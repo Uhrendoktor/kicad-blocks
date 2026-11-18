@@ -7,7 +7,7 @@ This page is generated from the declarative UI catalog. It inventories the curre
 |---|---:|---|
 | Contracted | 13 | Widget-level execute/result assertions are registered and run in CI. |
 | Partial | 1 | Targeted GUI, integration, model, or screenshot checks exist; the full control matrix is not contracted. |
-| Inventory only | 1 | Window/workflow is documented here; systematic UI contracts remain future work. |
+| Inventory only | 1 | Window/workflow is documented here; systematic interaction contracts remain future work. |
 
 Thirteen in-process Tk screens now have full registered widget contracts, including the Functional Block Library and both managers. Native error/confirmation/report dialogs are partially covered by an AST inventory of all 56 messagebox/simpledialog call sites (26 directly tested, 20 partially covered, 10 uncovered); KiCad-native editors and cross-platform file choosers remain inventory-only.
 
@@ -642,7 +642,7 @@ Some Eeschema and PCB hand-offs have real integration coverage. Cross-platform n
 
 - **Contracted** means the listed UI component's actual Tcl/Tk command was executed and its expected callback or visible state transition was asserted. It is not a substitute for verifying a downstream KiCad operation or a native OS file chooser.
 - **Partial** means there are useful targeted checks, but one or more controls, views, failure paths, or side effects are not covered by reusable contracts.
-- **Inventory only** means the screen and its major functions are recorded for discovery and rollout planning; do not treat them as tested.
+- **Inventory only** means the screen and its major functions are recorded for discovery and rollout planning; do not treat it as tested.
 
 Per-control status is explicit: **behavior asserted** means a real interaction is executed and checked; **result observed** means a dependent state (such as a selected row's label or a visible pane) is checked; **discovered; interaction not yet asserted** means the control is present but its action still needs an interaction contract.
 

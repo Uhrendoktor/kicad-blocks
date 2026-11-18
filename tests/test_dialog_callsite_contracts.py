@@ -12,6 +12,9 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "plugin" / "kicad-blocks"))
 
 from kicad_blocks import plugin as plugin_actions
+
+# These call-site tests run without a display and only need the Tk dialog modules.
+plugin_actions._load_tkinter()
 from kicad_blocks.model import parse_parameters
 
 
