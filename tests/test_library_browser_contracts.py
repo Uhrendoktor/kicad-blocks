@@ -7,7 +7,7 @@ import os
 import sys
 from collections.abc import Callable, Iterator, Sequence
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, TypeVar, cast
 
 from _pytest.monkeypatch import MonkeyPatch
 
@@ -69,9 +69,13 @@ PREVIEW_VIEWS = (
 )
 
 
-def _private_hook(name: str) -> Callable[..., Any]:
-    """Resolve a private plugin hook through a typed test boundary."""
-    return cast(Callable[..., Any], getattr(plugin_actions, name))
+
+_HookResult = TypeVar("_HookResult")
+
+
+def _private_hook(name: str) -> Callable[..., _HookResult]:
+    """Resolve a private plugin hook through a generic typed test boundary."""
+    return cast(Callable[..., _HookResult], getattr(plugin_actions, name))
 
 
 _load_tkinter = cast(Callable[[], None], _private_hook("_load_tkinter"))
