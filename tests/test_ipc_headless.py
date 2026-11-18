@@ -608,7 +608,7 @@ def _verify_nested_parent(
         parent_schematic = parent_kicad.get_schematic()
         if parent_schematic is None:
             _fail("KiCad IPC did not open the nested parent schematic.")
-        parent__load_all_libraries(kicad)
+        _load_all_libraries(parent_kicad)
         parent_kicad.wait_for_libraries(timeout_s=120.0)
         _assert_nested_parent_symbols(parent_schematic, expected_instances)
         _assert_nested_parent_labels(parent_schematic, expected_instances)
@@ -689,7 +689,7 @@ def _verify_nested_child(cli: str, child: BlockRecord) -> None:
         child_schematic = child_kicad.get_schematic()
         if child_schematic is None:
             _fail("KiCad IPC did not open the nested child schematic.")
-        child__load_all_libraries(kicad)
+        _load_all_libraries(child_kicad)
         child_kicad.wait_for_libraries(timeout_s=120.0)
         leaf_symbols = list(child_schematic.get_symbols())
         if len(leaf_symbols) != 1:
