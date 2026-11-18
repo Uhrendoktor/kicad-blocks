@@ -32,6 +32,7 @@ from kicad_blocks.plugin import (
 )
 from kicad_blocks.repository import (
     create_block,
+    ensure_stable_block_identity,
     local_copy_for_instance,
     read_manifest,
     refresh_library_block,
@@ -91,6 +92,11 @@ def main() -> None:
                 "layout": "default",
             }],
         )
+        # Match the application's startup registration path before placing
+        # the first instance. A legacy block is migrated to the shared KBlocks
+        # nickname/catalog here, so later publication reloads the same library
+        # identifier rather than leaving X1 on an obsolete per-block nickname.
+        block = ensure_stable_block_identity(block)
         nickname = block.manifest["library_nickname"]
         symbol_name = block.manifest["symbol_name"]
         # One stable facade library row is registered before startup. All
