@@ -238,23 +238,23 @@ class STUSB4500ReferenceTests(unittest.TestCase):
             reference: _required_direct(instances[reference], "at")
             for reference in ("T4", "T1", "R2", "C10", "D11")
         }
-        self.assertLess(float(positions["T4"][1]), float(positions["T1"][1]))
-        self.assertLess(float(positions["T1"][1]), float(positions["R2"][1]))
-        self.assertLess(float(positions["R2"][1]), float(positions["C10"][1]))
+        self.assertLess(_scalar_number(positions["T4"][1]), _scalar_number(positions["T1"][1]))
+        self.assertLess(_scalar_number(positions["T1"][1]), _scalar_number(positions["R2"][1]))
+        self.assertLess(_scalar_number(positions["R2"][1]), _scalar_number(positions["C10"][1]))
         self.assertAlmostEqual(
-            float(positions["R2"][1]) - float(positions["T1"][1]),
+            _scalar_number(positions["R2"][1]) - _scalar_number(positions["T1"][1]),
             17.78,
             places=3,
         )
         self.assertAlmostEqual(
-            float(positions["R2"][2]) - float(positions["T1"][2]),
+            _scalar_number(positions["R2"][2]) - _scalar_number(positions["T1"][2]),
             41.91,
             places=3,
         )
-        output_x = {round(float(positions[reference][1]), 3) for reference in ("C10", "D11")}
+        output_x = {round(_scalar_number(positions[reference][1]), 3) for reference in ("C10", "D11")}
         self.assertEqual(len(output_x), 1)
         self.assertAlmostEqual(
-            float(positions["D11"][2]) - float(positions["C10"][2]),
+            _scalar_number(positions["D11"][2]) - _scalar_number(positions["C10"][2]),
             25.40,
             places=3,
         )
@@ -378,10 +378,9 @@ class STUSB4500ReferenceTests(unittest.TestCase):
             self.assertIn(group["description"], text_by_uuid[description_uuid])
             self.assertIn("ST DS12499 REV. 8 | PAGE 26 | FIGURE 10", text_by_uuid[description_uuid])
         self.assertEqual(str(_property(instances["D4"], "Value")[2]), "")
-        title_block = _direct(tree, "title_block")
-        self.assertIsNotNone(title_block)
+        title_block = _required_direct(tree, "title_block")
         self.assertEqual(
-            str(_direct(title_block, "title")[1]),
+            str(_required_direct(title_block, "title")[1]),
             "STUSB4500 USB Type-C / USB Power Delivery Sink",
         )
         self.assertIn("ST DS12499 Rev. 8, Figure 10", content)
@@ -608,10 +607,9 @@ class STUSB4500ReferenceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="stusb4500-header-") as temporary:
             content, tree, _instances = self._generate(temporary)
 
-        title_block = _direct(tree, "title_block")
-        self.assertIsNotNone(title_block)
+        title_block = _required_direct(tree, "title_block")
         self.assertEqual(
-            str(_direct(title_block, "title")[1]),
+            str(_required_direct(title_block, "title")[1]),
             "STUSB4500 USB Type-C / USB Power Delivery Sink",
         )
         self.assertIn("ST DS12499 Rev. 8, Figure 10", content)
@@ -711,28 +709,28 @@ class STUSB4500ReferenceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="stusb4500-field-clearance-") as temporary:
             _content, _tree, instances = self._generate(temporary)
 
-        d50 = _direct(instances["D50"], "at")
+        d50 = _required_direct(instances["D50"], "at")
         for field_name, dx, dy in (("Reference", 0.0, -3.81), ("Value", 0.0, 5.08)):
-            at = _direct(_property(instances["D50"], field_name), "at")
-            self.assertAlmostEqual(float(at[1]) - float(d50[1]), dx, places=3)
-            self.assertAlmostEqual(float(at[2]) - float(d50[2]), dy, places=3)
+            at = _required_direct(_property(instances["D50"], field_name), "at")
+            self.assertAlmostEqual(_scalar_number(at[1]) - _scalar_number(d50[1]), dx, places=3)
+            self.assertAlmostEqual(_scalar_number(at[2]) - _scalar_number(d50[2]), dy, places=3)
 
         for reference, body_center_x in (("T4", 1.651), ("T1", -1.651)):
-            origin = _direct(instances[reference], "at")
+            origin = _required_direct(instances[reference], "at")
             expected = {
                 "Reference": (body_center_x - 2.75, -6.35),
                 "Value": (body_center_x + 2.00, -6.35),
             }
             for field_name, (dx, dy) in expected.items():
-                at = _direct(_property(instances[reference], field_name), "at")
+                at = _required_direct(_property(instances[reference], field_name), "at")
                 self.assertAlmostEqual(
-                    float(at[1]) - float(origin[1]),
+                    _scalar_number(at[1]) - _scalar_number(origin[1]),
                     dx,
                     places=3,
                     msg=f"{reference} {field_name} x",
                 )
                 self.assertAlmostEqual(
-                    float(at[2]) - float(origin[2]),
+                    _scalar_number(at[2]) - _scalar_number(origin[2]),
                     dy,
                     places=3,
                     msg=f"{reference} {field_name} y",
@@ -742,18 +740,18 @@ class STUSB4500ReferenceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="stusb4500-c1-gnd-clearance-") as temporary:
             _content, tree, instances = self._generate(temporary)
 
-        origin = _direct(instances["C1"], "at")
+        origin = _required_direct(instances["C1"], "at")
         label = next(
             node
             for node in _all(tree, "hierarchical_label")
             if str(node[1]) == "GND"
-            and abs(float(_direct(node, "at")[1]) - (float(origin[1]) - 5.08)) < 0.001
-            and abs(float(_direct(node, "at")[2]) - (float(origin[2]) - 3.81)) < 0.001
+            and abs(_scalar_number(_required_direct(node, "at")[1]) - (_scalar_number(origin[1]) - 5.08)) < 0.001
+            and abs(_scalar_number(_required_direct(node, "at")[2]) - (_scalar_number(origin[2]) - 3.81)) < 0.001
         )
-        at = _direct(label, "at")
-        self.assertAlmostEqual(float(at[1]), float(origin[1]) - 5.08, places=3)
-        self.assertAlmostEqual(float(at[2]), float(origin[2]) - 3.81, places=3)
-        self.assertEqual(float(at[3]), 0.0)
+        at = _required_direct(label, "at")
+        self.assertAlmostEqual(_scalar_number(at[1]), _scalar_number(origin[1]) - 5.08, places=3)
+        self.assertAlmostEqual(_scalar_number(at[2]), _scalar_number(origin[2]) - 3.81, places=3)
+        self.assertEqual(_scalar_number(at[3]), 0.0)
         self.assertEqual(label_wire_overlap_issues(tree), [])
         self.assertEqual(check_schematic_style(tree), [])
 
