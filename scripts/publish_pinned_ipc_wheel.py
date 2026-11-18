@@ -108,7 +108,9 @@ def _get_or_create_release(repo: str, tag: str, source_sha: str, token: str) -> 
                 payload={"body": target_body},
             )
             if updated is None:
-                raise RuntimeError(f"GitHub did not return the updated pinned wheel release {tag!r}.")
+                raise RuntimeError(
+                    f"GitHub did not return the updated pinned wheel release {tag!r}."
+                )
             release = updated
         return release
 
