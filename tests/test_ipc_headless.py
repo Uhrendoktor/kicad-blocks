@@ -36,7 +36,6 @@ from kicad_blocks.repository import (
     local_copy_for_instance,
     read_manifest,
     refresh_library_block,
-    register_project_symbol_library,
 )
 from kipy import KiCad
 from kipy.geometry import Vector2
@@ -99,15 +98,6 @@ def main() -> None:
         block = ensure_stable_block_identity(block)
         nickname = block.manifest["library_nickname"]
         symbol_name = block.manifest["symbol_name"]
-        # One stable facade library row is registered before startup. All
-        # blocks share this catalog, including project-local implementation
-        # copies; local ownership is tracked separately by symbol-instance KIID.
-        register_project_symbol_library(
-            project_dir,
-            nickname,
-            block.symbol_library,
-            description="KiCad Blocks shared facade catalog",
-        )
         kicad = KiCad(
             headless=True,
             kicad_cli_path=cli,
@@ -119,9 +109,14 @@ def main() -> None:
             if schematic is None:
                 raise RuntimeError("KiCad IPC did not load the test schematic.")
 
-            # In headless mode libraries load asynchronously. Initialize the
-            # symbol libraries, then register and reload the test library.
+            # Match the application's registration order: build the unified
+            # project-local catalog, register that catalog, and reload it
+            # before the first placement. Keeping the URI stable is important
+            # when the facade is published again later in this same session.
             kicad.load_all_libraries(types=[1])
+            block = _register_block(project_dir, block, kicad, [library_root])
+            nickname = block.manifest["library_nickname"]
+            symbol_name = block.manifest["symbol_name"]
             kicad.wait_for_libraries(types=[1], timeout_s=120.0)
 
             instance = schematic.place_symbol_from_library(
@@ -359,6 +354,8 @@ def main() -> None:
                 f"project top-level={[str(item[0]) for item in project_tree[1:] if isinstance(item, list) and item]!r}"
             )
             print("KBlocks project catalog before IPC reload:\\n" + project_catalog_text)
+            sym_table_text = (project_dir / "sym-lib-table").read_text(encoding="utf-8")
+            print("Project sym-lib-table after registration:\\n" + sym_table_text)
 
             library_definition = kicad.get_library_symbol(
                 f"{nickname}:{symbol_name}",
