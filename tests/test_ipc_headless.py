@@ -284,9 +284,10 @@ def _create_local_facade_copy(
         or str(symbols_after_local[0].id) != original_instance_id
     ):
         _fail("Local-copy binding changed or duplicated the facade instance.")
-    definition_id = symbols_after_local[0].definition.id
-    if definition_id is None:
-        _fail("Local-copy binding removed the facade library identifier.")
+    definition = symbols_after_local[0].definition
+    if definition is None:
+        _fail("Local-copy binding removed the facade definition.")
+    definition_id = definition.id
     if definition_id.library != nickname or definition_id.name != symbol_name:
         _fail("Local-copy binding unexpectedly changed the facade library ID.")
 

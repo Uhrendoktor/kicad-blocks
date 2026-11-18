@@ -96,7 +96,7 @@ def main() -> None:
         schematic = cast(plugin_actions.Schematic, FakeSchematic())
         kicad = cast(
             plugin_actions.KiCadApp,
-            SimpleNamespace(get_kicad_binary_path=fake_get_kicad_binary_path),
+            SimpleNamespace(get_kicad_binary_path=get_kicad_binary_path),
         )
         parent_window = cast(Misc, object())
 
@@ -532,7 +532,7 @@ def main() -> None:
             raise AssertionError(
                 "The pre-existing local copy did not receive the published GUI edit."
             )
-        if read_manifest(local_copy.path)["source_revision"] != published_manifest["revision"]:
+        if read_manifest(local_copy.path).get("source_revision") != published_manifest["revision"]:
             raise AssertionError(
                 "The local sync baseline was not advanced to the published revision."
             )

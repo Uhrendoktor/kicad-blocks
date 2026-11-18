@@ -381,8 +381,6 @@ class _LibraryLoadStatus(Protocol):
 
 
 # Public names for typed boundaries used by acceptance adapters.
-Schematic = _Schematic
-SchematicProject = _SchematicProject
 LibraryLoadStatus = _LibraryLoadStatus
 
 
@@ -391,9 +389,7 @@ class _KiCadApp(Protocol):
 
     def get_schematic(self) -> _Schematic | None: ...
 
-    def get_open_documents(
-        self, document_type: DocumentSpecifier
-    ) -> Sequence[DocumentSpecifier]: ...
+    def get_open_documents(self, doc_type: int) -> Sequence[DocumentSpecifier]: ...
 
     def reload_library(self, *, type: int, scope: int, nicknames: list[str]) -> None: ...
 

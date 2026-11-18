@@ -206,19 +206,22 @@ def publish_pinned_wheel(wheelhouse: Path, repo: str, source_sha: str, token: st
         (asset for asset in refreshed.get("assets", []) if asset.get("name") == wheel.name),
         None,
     )
+    if uploaded is None:
+        raise RuntimeError(
+            f"Pinned wheel upload could not be verified against {expected_digest}: {uploaded!r}"
+        )
+    download_url = uploaded.get("browser_download_url")
     if (
-        uploaded is None
-        or uploaded.get("digest") != expected_digest
+        uploaded.get("digest") != expected_digest
         or uploaded.get("size") != wheel.stat().st_size
-        or not uploaded.get("browser_download_url")
+        or not isinstance(download_url, str)
+        or not download_url
     ):
         raise RuntimeError(
             f"Pinned wheel upload could not be verified against {expected_digest}: {uploaded!r}"
         )
-    print(
-        f"Verified immutable dependency asset: {uploaded['browser_download_url']} ({expected_digest})"
-    )
-    return str(uploaded["browser_download_url"])
+    print(f"Verified immutable dependency asset: {download_url} ({expected_digest})")
+    return download_url
 
 
 def main() -> int:

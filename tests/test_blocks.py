@@ -904,7 +904,7 @@ class BlockRepositoryTests(unittest.TestCase):
         source_manifest = read_manifest(source.path)
         self.assertEqual(source_manifest["default_layout"], "compact")
         self.assertEqual(source_manifest["layouts"][1]["name"], "Compact Local")
-        self.assertTrue(result["layouts_updated"])
+        self.assertTrue(result.get("layouts_updated"))
         base_layouts = read_manifest(local.path).get("base_layouts")
         self.assertIsNotNone(base_layouts)
         assert base_layouts is not None
@@ -966,10 +966,10 @@ class BlockRepositoryTests(unittest.TestCase):
 
         self.assertEqual(result["published"], ["manifest.parameters"])
         self.assertEqual(read_manifest(source.path)["parameters"][0]["default"], "1.8")
-        self.assertEqual(
-            read_manifest(local.path)["base_parameters"],
-            read_manifest(source.path)["parameters"],
-        )
+        local_base_parameters = read_manifest(local.path).get("base_parameters")
+        self.assertIsNotNone(local_base_parameters)
+        assert local_base_parameters is not None
+        self.assertEqual(local_base_parameters, read_manifest(source.path)["parameters"])
 
         # Both sides now have a common baseline; divergent edits are rejected.
         local_manifest = read_manifest(local.path)

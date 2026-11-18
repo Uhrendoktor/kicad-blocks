@@ -85,7 +85,7 @@ def _capture_dialog(dialog: _TestWindow, destination: Path) -> None:
     image: Image.Image = ImageGrab.grab(bbox=(x, y, x + width, y + height))
     if image.width < 500 or image.height < 260:
         raise AssertionError(f"Captured configuration image is unexpectedly small: {image.size!r}.")
-    sample: Image.Image = image.convert("RGB").resize((48, 32))
+    sample: Image.Image = image.convert("RGB")
     if max(ImageStat.Stat(sample).stddev) < 2.0:
         raise AssertionError("Configuration dialog screenshot appears blank.")
     image.save(destination, format="PNG")

@@ -1516,7 +1516,7 @@ def generate_reference_schematic(destination: Path) -> Path:
         # Vertical resistor fields follow the body; fields on symbol-rotated
         # address resistors are counter-rotated so that their text stays legible.
         field_angle = 90 if reference.startswith("R") else 0
-        instance = [
+        instance: SExprList = [
             "symbol",
             ["lib_id", QuotedSExpr(lib_id)],
             ["at", f"{sx:.3f}", f"{sy:.3f}", str(rotation)],
