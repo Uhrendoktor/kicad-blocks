@@ -15,6 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 PLUGIN = ROOT / "plugin" / "kicad-blocks"
 sys.path.insert(0, str(PLUGIN))
 
+from kicad_blocks.pcb_layout import parse_sexpr
 from kicad_blocks.model import (
     facade_pin_connection_points,
     parse_parameters,
