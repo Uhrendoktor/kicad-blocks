@@ -7,14 +7,18 @@ import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
+from typing import cast
 
 PLUGIN = Path(__file__).resolve().parents[1] / "plugin" / "kicad-blocks"
 sys.path.insert(0, str(PLUGIN))
 
 from kicad_blocks.auto_dependencies import (
+    KiCadNetlist,
+    PlacedSymbol,
     discover_block_dependencies,
     parse_kicad_xml_netlist,
 )
+from kicad_blocks.manifest_types import BlockDependencyOccurrence
 from kicad_blocks.model import parse_pins
 from kicad_blocks.repository import (
     BlockRecord,
@@ -105,7 +109,12 @@ class AutomaticDependencyTests(unittest.TestCase):
             "pin_nets": {"B1": {"1": "VIN_PARENT", "2": "GND_PARENT"}},
         }
 
-        dependencies = discover_block_dependencies(self.parent, [self.child], [symbol], netlist)
+        dependencies = discover_block_dependencies(
+            self.parent,
+            [self.child],
+            [cast(PlacedSymbol, symbol)],
+            cast(KiCadNetlist, netlist),
+        )
 
         self.assertEqual(len(dependencies), 1)
         dependency = dependencies[0]
@@ -125,7 +134,10 @@ class AutomaticDependencyTests(unittest.TestCase):
 
         self.assertEqual(
             discover_block_dependencies(
-                self.parent, [], [ordinary_symbol], {"component_refs": set(), "pin_nets": {}}
+                self.parent,
+                [],
+                [cast(PlacedSymbol, ordinary_symbol)],
+                cast(KiCadNetlist, {"component_refs": set(), "pin_nets": {}}),
             ),
             [],
         )
@@ -141,7 +153,10 @@ class AutomaticDependencyTests(unittest.TestCase):
 
         with self.assertRaisesRegex(FileNotFoundError, "not present"):
             discover_block_dependencies(
-                self.parent, [], [unknown], {"component_refs": {"B1"}, "pin_nets": {}}
+                self.parent,
+                [],
+                [cast(PlacedSymbol, unknown)],
+                cast(KiCadNetlist, {"component_refs": {"B1"}, "pin_nets": {}}),
             )
 
     def test_reconciliation_preserves_generated_kicad_net_names(self):
@@ -157,7 +172,9 @@ class AutomaticDependencyTests(unittest.TestCase):
             },
         }
 
-        result = synchronize_dependencies(self.parent, [occurrence])
+        result = synchronize_dependencies(
+            self.parent, cast(list[BlockDependencyOccurrence], [occurrence])
+        )
 
         self.assertEqual(
             result.manifest["dependencies"][0]["pin_map"]["IN"],
@@ -175,7 +192,9 @@ class AutomaticDependencyTests(unittest.TestCase):
         }
 
         with self.assertRaisesRegex(ValueError, "cycle"):
-            synchronize_dependencies(self.parent, [occurrence])
+            synchronize_dependencies(
+                self.parent, cast(list[BlockDependencyOccurrence], [occurrence])
+            )
 
     def test_reconciliation_preserves_instance_id_and_removes_deleted_facades(self):
         occurrence = {
@@ -186,9 +205,13 @@ class AutomaticDependencyTests(unittest.TestCase):
             "pin_map": {"IN": "VIN_PARENT", "GND": "GND_PARENT", "OUT": None},
         }
 
-        first = synchronize_dependencies(self.parent, [occurrence])
+        first = synchronize_dependencies(
+            self.parent, cast(list[BlockDependencyOccurrence], [occurrence])
+        )
         original_id = first.manifest["dependencies"][0]["instance_id"]
-        second = synchronize_dependencies(first, [occurrence])
+        second = synchronize_dependencies(
+            first, cast(list[BlockDependencyOccurrence], [occurrence])
+        )
         self.assertEqual(second.manifest["dependencies"][0]["instance_id"], original_id)
         self.assertIsNone(second.manifest["dependencies"][0]["pin_map"]["OUT"])
 

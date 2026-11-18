@@ -64,6 +64,10 @@ class _PlacedSymbol(Protocol):
     position: _SymbolPosition | None
 
 
+# Public structural type for test adapters and integrations that build IPC symbol fixtures.
+PlacedSymbol = _PlacedSymbol
+
+
 class BlockDependency(TypedDict):
     """One placed child block and its electrical/placement mapping."""
 

@@ -905,10 +905,10 @@ class BlockRepositoryTests(unittest.TestCase):
         self.assertEqual(source_manifest["default_layout"], "compact")
         self.assertEqual(source_manifest["layouts"][1]["name"], "Compact Local")
         self.assertTrue(result["layouts_updated"])
-        self.assertEqual(
-            read_manifest(local.path).get("base_layouts", {})["layouts"][1]["name"],
-            "Compact Local",
-        )
+        base_layouts = read_manifest(local.path).get("base_layouts")
+        self.assertIsNotNone(base_layouts)
+        assert base_layouts is not None
+        self.assertEqual(base_layouts["layouts"][1]["name"], "Compact Local")
 
         local_manifest = read_manifest(local.path)
         source_manifest = read_manifest(source.path)
@@ -943,7 +943,10 @@ class BlockRepositoryTests(unittest.TestCase):
         self.assertEqual(result["conflicts"], [])
         local_manifest = read_manifest(local.path)
         self.assertEqual(local_manifest["parameters"][0]["default"], "1.8")
-        self.assertEqual(local_manifest.get("base_parameters"), local_manifest["parameters"])
+        base_parameters = local_manifest.get("base_parameters")
+        self.assertIsNotNone(base_parameters)
+        assert base_parameters is not None
+        self.assertEqual(base_parameters, local_manifest["parameters"])
 
     def test_parameter_schema_local_edits_publish_and_divergent_edits_conflict(self):
         source = create_block(
@@ -1056,8 +1059,13 @@ class BlockRepositoryTests(unittest.TestCase):
         self.assertIn("; upstream side", local_symbol_asset.read_text(encoding="utf-8"))
         local_manifest = read_manifest(local.path)
         source_manifest = read_manifest(source.path)
-        self.assertEqual(local_manifest["base_hashes"], source_manifest["hashes"])
-        self.assertEqual(local_manifest["source_revision"], source_manifest["revision"])
+        base_hashes = local_manifest.get("base_hashes")
+        source_revision = local_manifest.get("source_revision")
+        self.assertIsNotNone(base_hashes)
+        self.assertIsNotNone(source_revision)
+        assert base_hashes is not None and source_revision is not None
+        self.assertEqual(base_hashes, source_manifest["hashes"])
+        self.assertEqual(source_revision, source_manifest["revision"])
 
     def test_identical_concurrent_local_and_upstream_edits_converge(self):
         source = create_block(self.root, "Converged Edit", self.pins)
@@ -1073,9 +1081,11 @@ class BlockRepositoryTests(unittest.TestCase):
         self.assertEqual(result["pulled"], [])
         self.assertEqual(result["converged"], ["implementation.kicad_sch"])
         self.assertEqual(result["version"], original_version)
-        self.assertEqual(
-            read_manifest(local.path)["base_hashes"], read_manifest(source.path)["hashes"]
-        )
+        synchronized_manifest = read_manifest(local.path)
+        base_hashes = synchronized_manifest.get("base_hashes")
+        self.assertIsNotNone(base_hashes)
+        assert base_hashes is not None
+        self.assertEqual(base_hashes, read_manifest(source.path)["hashes"])
 
     def test_local_publish_rejects_divergent_library_edit_without_overwrite(self):
         source = create_block(self.root, "Publish Conflict", self.pins)
@@ -1110,10 +1120,10 @@ class BlockRepositoryTests(unittest.TestCase):
             source_manifest["dependencies"][0]["block_id"],
             child.manifest["block_id"],
         )
-        self.assertEqual(
-            local_manifest["base_dependencies"],
-            source_manifest["dependencies"],
-        )
+        base_dependencies = local_manifest.get("base_dependencies")
+        self.assertIsNotNone(base_dependencies)
+        assert base_dependencies is not None
+        self.assertEqual(base_dependencies, source_manifest["dependencies"])
 
     def test_same_child_can_be_instantiated_twice_with_unique_occurrence_metadata(self):
         parent = create_block(self.root, "Dual Power Controller", self.pins)
