@@ -191,7 +191,7 @@ class ComponentContract(ABC, Generic[ObservationT]):
         return observation
 
 
-def _open_toplevels(root: tk.Tk) -> dict[int, str]:
+def _open_toplevels(root: tk.Misc) -> dict[int, str]:
     windows: dict[int, str] = {}
     for child in root.winfo_children():
         if child.winfo_class() == "Toplevel":
