@@ -66,6 +66,14 @@ def main() -> None:
             render_implementation_schematic("Facade-only IPC Test", "ipc-root", []),
             encoding="utf-8",
         )
+        # KiCad resolves project-scoped symbol libraries through the active
+        # project. Opening a standalone schematic without its matching
+        # .kicad_pro leaves LTS_PROJECT unbound, so reload_library cannot see
+        # the project sym-lib-table created below.
+        (project_dir / "facade_only.kicad_pro").write_text(
+            "{}\n",
+            encoding="utf-8",
+        )
         default_layout = root / "default.kicad_pcb"
         default_layout.write_text("(kicad_pcb)\\n", encoding="utf-8")
         block_source = root / "block_source.kicad_sch"
