@@ -278,16 +278,13 @@ def _normalize_sheet_instances(
     kept = matching or paths[:1]
     if paths:
         kept_ids = {id(path) for path in kept}
-        instances[1:] = cast(
-            "list[SExpr]",
-            [
-                child
-                for child in instances[1:]
-                if not (
-                    isinstance(child, list) and _head(child) == "path" and id(child) not in kept_ids
-                )
-            ],
-        )
+        instances[1:] = [
+            child
+            for child in instances[1:]
+            if not (
+                isinstance(child, list) and _head(child) == "path" and id(child) not in kept_ids
+            )
+        ]
     else:
         page_node: SExprList = ["page", _Quoted("1" if is_root else "2")]
         path_node: SExprList = ["path", _Quoted(new_prefix), page_node]
@@ -362,7 +359,10 @@ def _prepare_sheet_tree(
                 (
                     item
                     for item in title_block[1:]
-                    if _head(item) == "comment" and len(item) >= 3 and str(item[1]) == "1"
+                    if isinstance(item, list)
+                    and _head(item) == "comment"
+                    and len(item) >= 3
+                    and str(item[1]) == "1"
                 ),
                 None,
             )

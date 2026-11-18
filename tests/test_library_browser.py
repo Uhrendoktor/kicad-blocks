@@ -41,7 +41,6 @@ plugin_actions = import_module("kicad_blocks.plugin")
 from kicad_blocks.plugin import (
     KiCadApp as KiCadAppType,
     Schematic as SchematicType,
-    SchematicSymbol as SchematicSymbolType,
     native_schematic_preview_pages as _native_schematic_preview_pages,
     normalize_schematic_preview_svg as _normalize_schematic_preview_svg,
     start_native_symbol_placement as _start_native_symbol_placement,
@@ -213,7 +212,10 @@ class LibraryBrowserTests(unittest.TestCase):
                 "kicad_blocks.plugin.tk",
                 SimpleNamespace(PhotoImage=Mock(return_value=object())),
             ),
-            patch("kicad_blocks.plugin._NATIVE_PREVIEW_CACHE", {}),
+            patch(
+                "kicad_blocks.plugin._NATIVE_PREVIEW_CACHE",
+                cast(dict[tuple[str, int, str, int, int], bytes], {}),
+            ),
         ):
             _native_symbol_preview_photo(
                 self.block,
@@ -482,7 +484,16 @@ class LibraryBrowserTests(unittest.TestCase):
             patch("kicad_blocks.plugin.find_kicad_cli", return_value="/usr/bin/kicad-cli"),
             patch("kicad_blocks.plugin.subprocess.run", side_effect=export),
             patch("resvg_py.svg_to_bytes", return_value=b"schematic-png") as render_svg,
-            patch("kicad_blocks.plugin._SCHEMATIC_PREVIEW_CACHE", {}),
+            patch(
+                "kicad_blocks.plugin._SCHEMATIC_PREVIEW_CACHE",
+                cast(
+                    dict[
+                        tuple[str, tuple[tuple[str, int, int], ...], int],
+                        tuple[tuple[str, bytes], ...],
+                    ],
+                    {},
+                ),
+            ),
         ):
             pages = _native_schematic_preview_pages(
                 self.block,
@@ -516,9 +527,17 @@ class LibraryBrowserTests(unittest.TestCase):
 
     def test_native_facade_preview_normalizes_physical_dimensions_before_rasterizing(self):
         symbol_name = self.block.manifest["symbol_name"]
-        rasterized_dimensions = []
+        rasterized_dimensions: list[tuple[str | None, str | None]] = []
 
-        def export(arguments, **kwargs):
+        def export(
+            arguments: Sequence[str],
+            *,
+            capture_output: bool = False,
+            text: bool = False,
+            check: bool = False,
+            timeout: float | None = None,
+        ) -> subprocess.CompletedProcess[str]:
+            del capture_output, text, check, timeout
             output_dir = Path(arguments[arguments.index("--output") + 1])
             output_dir.mkdir(parents=True, exist_ok=True)
             # KiCad symbol exports can declare the intrinsic canvas in mm and
@@ -529,7 +548,9 @@ class LibraryBrowserTests(unittest.TestCase):
                 '<g><path d="M 1 1 L 12 12"/></g></svg>',
                 encoding="utf-8",
             )
-            return SimpleNamespace(returncode=0, stdout="", stderr="")
+            return subprocess.CompletedProcess(arguments, 0, "", "")
+
+        rasterized_dimensions: list[tuple[str | None, str | None]] = []
 
         def rasterize(*, svg_string: str, width: int, height: int) -> bytes:
             from xml.etree import ElementTree as ET
@@ -552,6 +573,8 @@ class LibraryBrowserTests(unittest.TestCase):
 
         self.assertEqual(len(rasterized_dimensions), 1)
         width, height = rasterized_dimensions[0]
+        assert width is not None
+        assert height is not None
         self.assertTrue(width.endswith("px"))
         self.assertTrue(height.endswith("px"))
         self.assertAlmostEqual(
@@ -1019,7 +1042,7 @@ class LibraryBrowserTests(unittest.TestCase):
                 self.bindings[event] = callback
 
         widget = FakeWidget()
-        scrolls = []
+        scrolls: list[int] = []
         _bind_mousewheel(widget, scrolls.append)
         handler = widget.bindings["<MouseWheel>"]
         handler(SimpleNamespace(delta=0.25, num=None))
@@ -1212,6 +1235,10 @@ class LibraryBrowserTests(unittest.TestCase):
                 self.events.append("deiconify")
                 self.current_state = "normal"
 
+            def deiconify(self) -> None:
+                self.events.append("deiconify")
+                self.current_state = "normal"
+
         manager = FakeWindow()
         browser = FakeWindow(master=manager)
         minimized = _minimize_placement_windows(browser)
@@ -1319,7 +1346,8 @@ class LibraryBrowserTests(unittest.TestCase):
             def save(self) -> None:
                 self.saved = True
 
-        schematic = cast("SchematicType", Schematic())
+        schematic_fixture = Schematic()
+        schematic = cast("SchematicType", schematic_fixture)
         kicad = cast("KiCadAppType", SimpleNamespace(get_schematic=lambda: schematic))
         focus = Mock(return_value=schematic)
 
@@ -1338,25 +1366,29 @@ class LibraryBrowserTests(unittest.TestCase):
 
         self.assertIs(result, symbol)
         self.assertEqual(
-            schematic.placement,
+            schematic_fixture.placement,
             (f"{plugin_actions.LIBRARY_NICKNAME}:buck_converter_ab12cd34", (148.59, 105.41)),
         )
         focus.assert_called_once_with(schematic, [symbol])
-        self.assertEqual(schematic.selected, [symbol])
-        self.assertTrue(schematic.saved)
+        self.assertEqual(schematic_fixture.selected, [symbol])
+        self.assertTrue(schematic_fixture.saved)
 
     def test_place_block_rejects_invalid_symbol_id_before_connecting(self) -> None:
         get_schematic = Mock()
         with self.assertRaisesRegex(ValueError, "invalid KiCad symbol name"):
             _start_native_symbol_placement(
-                SimpleNamespace(get_schematic=get_schematic), None, "bad symbol id"
+                cast("KiCadAppType", SimpleNamespace(get_schematic=get_schematic)),
+                None,
+                "bad symbol id"
             )
         get_schematic.assert_not_called()
 
     def test_place_block_requires_an_active_schematic(self) -> None:
         with self.assertRaisesRegex(RuntimeError, "No active schematic"):
             _start_native_symbol_placement(
-                SimpleNamespace(get_schematic=lambda: None), None, "valid_symbol"
+                cast("KiCadAppType", SimpleNamespace(get_schematic=lambda: None)),
+                None,
+                "valid_symbol"
             )
 
 

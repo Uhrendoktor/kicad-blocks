@@ -22,7 +22,6 @@ from .manifest_types import (
     BlockProfileManifest,
     BlockVariantManifest,
     ParameterScalar,
-    ParameterType,
     ResolvedProfileConfiguration,
 )
 

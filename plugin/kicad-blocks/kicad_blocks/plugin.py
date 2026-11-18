@@ -73,7 +73,13 @@ from .operations import (
 )
 from .pcb_layout import BlockLayoutPlacement, merge_block_layout, merge_block_layouts
 from .pcb_placement import placement_manifest_path, write_pcb_placement_manifest
-from .pcb_types import ResolvedBlockLayout
+from .pcb_types import (
+    BatchBlockLayoutMergeResult,
+    BatchBlockLayoutPlacementSource,
+    BlockLayoutMergeResult,
+    BlockLayoutPlacementSource,
+    ResolvedBlockLayout,
+)
 from .report_types import (
     BlockErcReport,
     LibraryValidationReport,
@@ -104,6 +110,25 @@ from .repository import (
 from .repository import library_roots as configured_library_roots
 
 LOG = logging.getLogger("kicad_blocks")
+
+def _placement_source(result: BlockLayoutMergeResult) -> BlockLayoutPlacementSource:
+    """Narrow one full merge result to the sidecar writer's required fields."""
+    source: BlockLayoutPlacementSource = {
+        "instance_reference": result["instance_reference"],
+        "interactive_item_uuids": result["interactive_item_uuids"],
+        "block": result["block"],
+    }
+    if result["layout_name"] is not None:
+        source["layout_name"] = result["layout_name"]
+    return source
+
+
+def _batch_placement_source(
+    result: BatchBlockLayoutMergeResult,
+) -> BatchBlockLayoutPlacementSource:
+    """Narrow a batch merge result to the placements persisted in its sidecar."""
+    return {"placements": [_placement_source(item) for item in result["placements"]]}
+
 
 
 class _KeepDefaultVariant:
@@ -1224,11 +1249,16 @@ def _action_button(
         else None
     )
     image = _create_action_icon(parent, icon, icon_color)
-    options: dict[str, TkOption] = {"text": text, "command": command, "padding": (8, 5)}
+
+    def invoke_action() -> str | None:
+        result = command()
+        return result if isinstance(result, str) else None
+
+    options: dict[str, TkOption] = {"text": text, "padding": (8, 5)}
     options.update(button_options)
     if image is not None:
         options.update({"image": image, "compound": "left"})
-    button = ttk.Button(parent, **options)
+    button = ttk.Button(parent, command=invoke_action, **options)
     if contract_id is not None:
         # Stable IDs let the UI contract suite discover and execute the same
         # controls that production users see, without relying on screen text.
@@ -5081,7 +5111,7 @@ def _show_block_variant_editor(
             "file": str(item.get("file") or item.get("source") or ""),
         }
         if item.get("layout_id"):
-            editable["layout_id"] = str(item["layout_id"]).casefold()
+            editable["layout_id"] = str(item.get("layout_id") or "").casefold()
         variants.append(editable)
     default_variant: list[str] = [str(record.manifest.get("default_variant") or "")]
     dirty: list[bool] = [False]
@@ -5223,7 +5253,7 @@ def _show_block_variant_editor(
             "source": source,
         }
         if current.get("layout_id"):
-            updated["layout_id"] = current["layout_id"]
+            updated["layout_id"] = str(current.get("layout_id") or "")
         if current.get("open_after_save"):
             updated["open_after_save"] = True
         variants[index] = updated
@@ -7138,7 +7168,7 @@ def _apply_block_pcb_layout(
         rotation_deg=rotation,
         layout_id=layout.get("id"),
     )
-    placement_sidecar = write_pcb_placement_manifest(output_board, result)
+    placement_sidecar = write_pcb_placement_manifest(output_board, _placement_source(result))
     opened_in_editor = False
     if messagebox.askyesno(
         "Open merged PCB board",
@@ -7288,7 +7318,7 @@ def _apply_selected_block_pcb_layouts(
             f"PCB placement sidecar already exists and will not be overwritten: {placement_sidecar}"
         )
     result = merge_block_layouts(source_board, placements, output_board)
-    placement_sidecar = write_pcb_placement_manifest(output_board, result)
+    placement_sidecar = write_pcb_placement_manifest(output_board, _batch_placement_source(result))
     if messagebox.askyesno(
         "Open combined PCB board",
         f"Applied {result['block_count']} block layouts to a separate board copy.\n"
