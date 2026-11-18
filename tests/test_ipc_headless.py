@@ -40,6 +40,7 @@ from kicad_blocks.repository import (
 )
 from kipy import KiCad
 from kipy.geometry import Vector2
+from kipy.proto.common.types import DocumentType
 
 
 def _find_cli() -> str:
@@ -70,10 +71,8 @@ def main() -> None:
         # project. Opening a standalone schematic without its matching
         # .kicad_pro leaves LTS_PROJECT unbound, so reload_library cannot see
         # the project sym-lib-table created below.
-        (project_dir / "facade_only.kicad_pro").write_text(
-            "{}\n",
-            encoding="utf-8",
-        )
+        project_path = project_dir / "facade_only.kicad_pro"
+        project_path.write_text("{}\n", encoding="utf-8")
         default_layout = root / "default.kicad_pcb"
         default_layout.write_text("(kicad_pcb)\\n", encoding="utf-8")
         block_source = root / "block_source.kicad_sch"
@@ -107,13 +106,20 @@ def main() -> None:
         block = ensure_stable_block_identity(block)
         nickname = block.manifest["library_nickname"]
         symbol_name = block.manifest["symbol_name"]
+        # Open the project before its schematic. Preloading only a .kicad_sch
+        # starts Eeschema without loading the project and its sym-lib-table;
+        # registering a project-scoped library later then fails with
+        # "Library 'KBlocks' not found", even though both files are present.
         kicad = KiCad(
             headless=True,
             kicad_cli_path=cli,
-            file_path=str(schematic_path),
+            file_path=str(project_path),
             timeout_ms=30000,
         )
         try:
+            kicad.open_document(
+                str(schematic_path), DocumentType.DOCTYPE_SCHEMATIC
+            )
             schematic = kicad.get_schematic()
             if schematic is None:
                 raise RuntimeError("KiCad IPC did not load the test schematic.")
