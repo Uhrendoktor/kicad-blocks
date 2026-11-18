@@ -6,7 +6,7 @@ import json
 import os
 import sys
 from pathlib import Path
-from typing import TYPE_CHECKING, Callable, TypeVar, cast
+from typing import TYPE_CHECKING, Callable, cast
 
 from _pytest.monkeypatch import MonkeyPatch
 
@@ -70,16 +70,8 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-_HookResult = TypeVar("_HookResult")
-
-
-def _private_hook(name: str) -> Callable[..., _HookResult]:
-    """Resolve a private plugin hook through a typed test boundary."""
-    return cast(Callable[..., _HookResult], getattr(plugin_actions, name))
-
-
-_load_tkinter = cast(Callable[[], None], _private_hook("_load_tkinter"))
-_show_action_hub = cast(Callable[..., Notebook], _private_hook("_show_action_hub"))
+_load_tkinter = cast(Callable[[], None], getattr(plugin_actions, "_load_tkinter"))
+_show_action_hub = cast(Callable[..., Notebook], getattr(plugin_actions, "_show_action_hub"))
 
 
 def _new_hub(monkeypatch: MonkeyPatch) -> tuple[Tk, Notebook]:
@@ -89,7 +81,7 @@ def _new_hub(monkeypatch: MonkeyPatch) -> tuple[Tk, Notebook]:
         return None
 
     monkeypatch.setattr(plugin_actions, "_create_action_icon", no_icon)
-    root = cast(Tk, plugin_actions.tk.Tk())
+    root = plugin_actions.tk.Tk()
     notebook = _show_action_hub(root)
     root.update_idletasks()
     root.update()
@@ -282,7 +274,7 @@ def test_menu_item_contract_invokes_real_tk_menu_command() -> None:
             events.append("refresh")
 
         menu.add_command(label="Refresh", command=refresh)
-        menu._kicad_ui_menu_item_ids = {"library.refresh": 0}
+        setattr(menu, "_kicad_ui_menu_item_ids", {"library.refresh": 0})
         root.configure(menu=menu)
         root.update()
 

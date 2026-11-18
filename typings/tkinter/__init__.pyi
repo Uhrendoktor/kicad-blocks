@@ -5,7 +5,7 @@ the plugin. Runtime Tkinter remains lazily imported by the application.
 """
 
 from collections.abc import Mapping, Sequence
-from typing import Callable, Generic, TypeVar
+from typing import Callable, Generic, TypeVar, overload
 
 _W = TypeVar("_W")
 TkOption = (
@@ -22,6 +22,8 @@ TkOption = (
     | Sequence[tuple[str, str]]
     | Callable[..., str | None]
 )
+
+HORIZONTAL: str
 
 class TclError(Exception): ...
 
@@ -108,6 +110,11 @@ class Misc:
     ) -> str | None: ...
     def __getitem__(self, key: str) -> TkOption: ...
     def cget(self, key: str) -> str: ...
+    @overload
+    def configure(
+        self, cnf: Mapping[str, TkOption] | str | None = ..., *, menu: Menu | None
+    ) -> dict[str, TkOption] | None: ...
+    @overload
     def configure(
         self, cnf: Mapping[str, TkOption] | str | None = ..., **kwargs: TkOption
     ) -> dict[str, TkOption] | None: ...

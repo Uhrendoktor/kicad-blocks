@@ -102,7 +102,7 @@ def test_committed_inventory_matches_the_catalog():
     )
 
 
-def test_catalog_rejects_duplicate_screen_ids(tmp_path):
+def test_catalog_rejects_duplicate_screen_ids(tmp_path: Path):
     catalog = json.loads(CATALOG_PATH.read_text(encoding="utf-8"))
     catalog["screens"].append(dict(catalog["screens"][0]))
     path = tmp_path / "catalog.json"
@@ -112,7 +112,7 @@ def test_catalog_rejects_duplicate_screen_ids(tmp_path):
         load_catalog(path)
 
 
-def test_catalog_rejects_unregistered_screenshot_assets(tmp_path):
+def test_catalog_rejects_unregistered_screenshot_assets(tmp_path: Path):
     catalog = json.loads(CATALOG_PATH.read_text(encoding="utf-8"))
     catalog["screens"][0]["screenshots"].append("not-in-the-visual-inventory.png")
     path = tmp_path / "catalog.json"

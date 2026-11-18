@@ -7,6 +7,7 @@ import contextlib
 import sys
 from collections.abc import Iterator
 from typing import Protocol, cast
+from PIL import Image, ImageGrab, ImageStat
 import tempfile
 import time
 from pathlib import Path
@@ -26,6 +27,8 @@ class _TestWidget(Protocol):
     """Minimal widget tree surface used by the GUI smoke test."""
 
     def winfo_children(self) -> list[_TestWidget]: ...
+
+    def destroy(self) -> None: ...
 
 
 class _TestWindow(_TestWidget, Protocol):
@@ -70,7 +73,6 @@ def _walk(widget: _TestWidget) -> Iterator[_TestWidget]:
 
 def _capture_dialog(dialog: _TestWindow, destination: Path) -> None:
     """Save a screenshot of the actual configuration dialog while it is visible."""
-    from PIL import ImageGrab, ImageStat
 
     dialog.update_idletasks()
     dialog.update()
@@ -80,10 +82,10 @@ def _capture_dialog(dialog: _TestWindow, destination: Path) -> None:
     if width < 500 or height < 260:
         raise AssertionError(f"Configuration dialog is unexpectedly small: {width}x{height}.")
     destination.parent.mkdir(parents=True, exist_ok=True)
-    image = ImageGrab.grab(bbox=(x, y, x + width, y + height))
+    image: Image.Image = ImageGrab.grab(bbox=(x, y, x + width, y + height))
     if image.width < 500 or image.height < 260:
         raise AssertionError(f"Captured configuration image is unexpectedly small: {image.size!r}.")
-    sample = image.convert("RGB").resize((48, 32))
+    sample: Image.Image = image.convert("RGB").resize((48, 32))
     if max(ImageStat.Stat(sample).stddev) < 2.0:
         raise AssertionError("Configuration dialog screenshot appears blank.")
     image.save(destination, format="PNG")
@@ -160,7 +162,10 @@ def main(screenshot_path: Path | None = None) -> None:
             user_fields=fields,
         )
         commit = object()
-        project_handle = SimpleNamespace(expand_text_variables=lambda value: str(value))
+        def expand_text_variables(value: str) -> str:
+            return value
+
+        project_handle = SimpleNamespace(expand_text_variables=expand_text_variables)
 
         def get_selection() -> list[plugin_actions.SchematicSymbol]:
             return [cast(plugin_actions.SchematicSymbol, instance)]
@@ -168,15 +173,19 @@ def main(screenshot_path: Path | None = None) -> None:
         def get_project() -> plugin_actions.SchematicProject:
             return cast(plugin_actions.SchematicProject, project_handle)
 
+        begin_commit = Mock(return_value=commit)
+        push_commit = Mock()
+        drop_commit = Mock()
+        save = Mock()
         schematic = cast(
             plugin_actions.Schematic,
             SimpleNamespace(
                 get_selection=get_selection,
                 get_project=get_project,
-                begin_commit=Mock(return_value=commit),
-                push_commit=Mock(),
-                drop_commit=Mock(),
-                save=Mock(),
+                begin_commit=begin_commit,
+                push_commit=push_commit,
+                drop_commit=drop_commit,
+                save=save,
             ),
         )
         parent = plugin_actions.tk.Tk()
@@ -270,9 +279,8 @@ def main(screenshot_path: Path | None = None) -> None:
             ) as exc:
                 interaction_errors.append(str(exc))
                 for child in cast(_TestWidget, parent).winfo_children():
-                    if child is not parent:
-                        with contextlib.suppress(Exception):
-                            child.destroy()
+                    with contextlib.suppress(Exception):
+                        child.destroy()
 
         update_calls: list[str] = []
         original_update = plugin_actions.update_schematic_item_checked
@@ -310,9 +318,9 @@ def main(screenshot_path: Path | None = None) -> None:
             "KB_LAYOUT": "compact",
         }:
             raise AssertionError(f"Configuration form did not save the edited fields: {values!r}")
-        schematic.begin_commit.assert_called_once_with()
-        schematic.push_commit.assert_called_once_with(commit, "Configure KiCad block instance")
-        schematic.save.assert_called_once_with()
+        begin_commit.assert_called_once_with()
+        push_commit.assert_called_once_with(commit, "Configure KiCad block instance")
+        save.assert_called_once_with()
         print(
             "Editable block instance configuration GUI passed: "
             "profile variant, parameter and PCB layout saved through one IPC transaction."
