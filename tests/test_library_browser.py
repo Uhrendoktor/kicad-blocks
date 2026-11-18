@@ -200,7 +200,6 @@ class LibraryBrowserTests(unittest.TestCase):
             )
             return subprocess.CompletedProcess(arguments, 0, "", "")
 
-        native_preview_cache: dict[tuple[str, int, str, int, int], bytes] = {}
         with (
             patch("kicad_blocks.plugin.find_kicad_cli", return_value="/usr/bin/kicad-cli"),
             patch("kicad_blocks.plugin.subprocess.run", side_effect=export),
@@ -558,6 +557,7 @@ class LibraryBrowserTests(unittest.TestCase):
             rasterized_dimensions.append((root.attrib.get("width"), root.attrib.get("height")))
             return b"not-a-png"
 
+        native_preview_cache: dict[tuple[str, int, str, int, int], bytes] = {}
         with (
             patch("kicad_blocks.plugin.find_kicad_cli", return_value="/usr/bin/kicad-cli"),
             patch("kicad_blocks.plugin.subprocess.run", side_effect=export),
