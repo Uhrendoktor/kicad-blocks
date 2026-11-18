@@ -19,12 +19,19 @@ pytestmark = pytest.mark.skipif(
 )
 
 
+class _ParentHandle:
+    """Identity token passed through to the stubbed native chooser callback."""
+
+    def destroy(self):
+        """Keep the test cleanup interface without creating a Tcl interpreter."""
+
+
 def _parent():
+    # The workflow separately creates one real Tk root to verify the platform
+    # runtime. These tests stub the chooser callback and only verify that the
+    # wrapper forwards the caller's parent handle and correct file arguments.
     plugin_actions._load_tkinter()
-    root = plugin_actions.tk.Tk()
-    root.title("Native file dialog contract host")
-    root.withdraw()
-    return root
+    return _ParentHandle()
 
 
 def test_open_kicad_file_uses_existing_file_parent_name_filter_and_parent(
