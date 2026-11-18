@@ -651,6 +651,8 @@ def test_manage_libraries_add_registration_error_keeps_existing_roots(
     monkeypatch, tmp_path
 ):
     _settings, first, second = _library_fixture(monkeypatch, tmp_path)
+    registered_before = set(repository.library_roots())
+    assert {first.resolve(), second.resolve()} <= registered_before
     candidate = tmp_path / "candidate-library"
     candidate.mkdir()
     monkeypatch.setattr(plugin_actions, "_pick_directory", lambda *_a, **_k: str(candidate))
@@ -676,7 +678,8 @@ def test_manage_libraries_add_registration_error_keeps_existing_roots(
         assert errors[0][0] == "Add existing library"
         assert errors[0][1] == "permission denied while registering library"
         assert errors[0][2].title() == "Manage Libraries"
-        assert set(repository.library_roots()) == {first.resolve(), second.resolve()}
+        assert set(repository.library_roots()) == registered_before
+        assert candidate.resolve() not in repository.library_roots()
         _click(context, "manage-libraries.action.close", "Close", closes=True, title="Manage Libraries")
 
     try:
