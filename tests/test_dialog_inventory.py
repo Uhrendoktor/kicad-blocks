@@ -27,7 +27,7 @@ def test_catalog_tracks_every_native_messagebox_and_simpledialog_call_site():
 def test_dialog_inventory_distinguishes_tested_partial_and_uncovered_paths():
     catalog = load_catalog()
     rendered = render_inventory(catalog)
-    assert set(item["coverage"] for item in catalog["call_sites"]) <= set(COVERAGE_LABELS)
+    assert {item["coverage"] for item in catalog["call_sites"]} <= set(COVERAGE_LABELS)
     for status, label in COVERAGE_LABELS.items():
         assert f"| {status.title()} |" in rendered
         assert label in rendered

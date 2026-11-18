@@ -13,6 +13,7 @@ sys.path.insert(0, str(ROOT / "plugin" / "kicad-blocks"))
 
 from kicad_blocks import plugin as plugin_actions
 
+
 # Native dialog call-site contracts patch the functions and do not need Tk installed.
 def _unpatched_native_dialog(*_args, **_kwargs):
     raise AssertionError("A native dialog call was not patched by this test.")

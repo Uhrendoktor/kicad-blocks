@@ -13,6 +13,7 @@ sys.path.insert(0, str(ROOT / "plugin" / "kicad-blocks"))
 
 from kicad_blocks import plugin as plugin_actions
 
+
 # Native dialog call-site contracts patch the functions and do not need Tk installed.
 def _unpatched_native_dialog(*_args, **_kwargs):
     raise AssertionError("A native dialog call was not patched by this test.")
@@ -150,7 +151,7 @@ def test_single_pcb_layout_prompts_map_anchor_rotation_and_confirms_open(
         block,
         board,
         output,
-        sidecar,
+        _sidecar,
         calls,
     ) = _single_layout_context(
         monkeypatch, tmp_path, open_after_merge=open_after_merge
@@ -355,7 +356,7 @@ def _batch_context(monkeypatch, tmp_path: Path, *, open_after_merge: bool):
 def test_batch_pcb_layout_prompts_all_instances_and_confirms_open(
     monkeypatch, tmp_path, open_after_merge
 ):
-    parent, instances, blocks, board, output, sidecar, calls = _batch_context(
+    parent, _instances, blocks, board, output, _sidecar, calls = _batch_context(
         monkeypatch, tmp_path, open_after_merge=open_after_merge
     )
 
