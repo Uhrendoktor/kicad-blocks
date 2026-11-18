@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
-from typing import NotRequired, Required, TypedDict
+from typing import TYPE_CHECKING, NotRequired, Required, TypedDict
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 
 class KiCadNetclassDefinition(TypedDict, total=False):

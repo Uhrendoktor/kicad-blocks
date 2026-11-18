@@ -26,11 +26,14 @@ from kicad_blocks.pcb_placement import (
     resolve_placement_item_ids,
     write_pcb_placement_manifest,
 )
-from kicad_blocks.pcb_types import (
-    BatchBlockLayoutPlacementSource,
-    BlockLayoutPlacementSource,
-    PCBPlacementEntry,
-)
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from kicad_blocks.pcb_types import (
+        BatchBlockLayoutPlacementSource,
+        BlockLayoutPlacementSource,
+        PCBPlacementEntry,
+    )
 
 
 @dataclass
@@ -73,7 +76,6 @@ class FakeBoard(Board):
 
     def interactive_move(self, item_ids: Sequence[BoardItemId]) -> None:
         self.moved = list(item_ids)
-
 
 
 def _placement(item_uuids: list[str], reference: str = "X1") -> PCBPlacementEntry:
