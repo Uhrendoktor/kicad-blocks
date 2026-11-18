@@ -146,7 +146,7 @@ def main() -> None:
         )
         # This is the final IPC request: KiCad keeps its server busy until the
         # user commits or cancels the interactive move with its normal UI.
-        move_placement_at_cursor(cast(Board, board), placement)
+        move_placement_at_cursor(board, placement)
     except Exception as exc:  # noqa: BLE001 - present IPC and data errors to the KiCad user
         _show_error(exc)
 

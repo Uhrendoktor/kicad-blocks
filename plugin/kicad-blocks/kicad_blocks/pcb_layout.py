@@ -15,11 +15,12 @@ import os
 import re
 import tempfile
 import uuid
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, TypeVar, cast
 
+from .json_types import JSONValue, JSONObject
 from .pcb_types import (
     AppliedNetclassPattern,
     BatchBlockLayoutMergeResult,
@@ -57,32 +58,41 @@ def _load_project_settings(path: Path, *, context: str) -> KiCadProjectData:
 
     """
     try:
-        data_value = json.loads(path.read_text(encoding="utf-8"))
+        data_value: JSONValue = cast(
+            JSONValue, json.loads(path.read_text(encoding="utf-8"))
+        )
     except json.JSONDecodeError as exc:
         raise ValueError(f"{context}: {path}") from exc
     if not isinstance(data_value, dict):
         raise TypeError(f"{context}: {path}")
+    project_data = cast(JSONObject, data_value)
     for section_name in ("meta", "net_settings"):
-        section = data_value.get(section_name)
+        section = project_data.get(section_name)
         if section is not None and not isinstance(section, dict):
             raise TypeError(f"{context}: invalid {section_name} section in {path}")
 
-    net_settings = data_value.get("net_settings")
+    net_settings_value = project_data.get("net_settings")
+    net_settings = cast(JSONObject, net_settings_value) if isinstance(net_settings_value, dict) else None
     if isinstance(net_settings, dict):
-        classes = net_settings.get("classes", [])
+        classes_value = net_settings.get("classes", [])
+        classes = cast(list[JSONObject], classes_value) if isinstance(classes_value, list) else []
         if not isinstance(classes, list) or any(not isinstance(item, dict) for item in classes):
             raise TypeError(f"{context}: invalid net_settings.classes section in {path}")
-        patterns = net_settings.get("netclass_patterns", [])
+        patterns_value = net_settings.get("netclass_patterns", [])
+        patterns = cast(list[JSONValue], patterns_value) if isinstance(patterns_value, list) else []
         if not isinstance(patterns, list):
             raise TypeError(f"{context}: invalid net_settings.netclass_patterns section in {path}")
-        for entry in patterns:
+        for entry_value in patterns:
+            if not isinstance(entry_value, dict):
+                raise TypeError(f"{context}: invalid netclass pattern entry in {path}")
+            entry = cast(JSONObject, entry_value)
             if (
-                not isinstance(entry, dict)
-                or not isinstance(entry.get("pattern"), str)
+                not isinstance(entry.get("pattern"), str)
                 or not isinstance(entry.get("netclass"), str)
             ):
                 raise TypeError(f"{context}: invalid netclass pattern entry in {path}")
-        assignments = net_settings.get("netclass_assignments", {})
+        assignments_value = net_settings.get("netclass_assignments", {})
+        assignments = cast(JSONObject, assignments_value) if isinstance(assignments_value, dict) else {}
         if not isinstance(assignments, dict):
             raise TypeError(f"{context}: invalid netclass assignments in {path}")
         for value in assignments.values():
@@ -91,13 +101,14 @@ def _load_project_settings(path: Path, *, context: str) -> KiCadProjectData:
             if not isinstance(value, list):
                 raise TypeError(f"{context}: invalid netclass assignment value in {path}")
         for key in ("net_chain_classes", "net_chain_netclasses"):
-            chain_map = net_settings.get(key, {})
-            if not isinstance(chain_map, dict) or any(
+            chain_map_value = net_settings.get(key, {})
+            chain_map = cast(JSONObject, chain_map_value) if isinstance(chain_map_value, dict) else {}
+            if not isinstance(chain_map_value, dict) or any(
                 not isinstance(name, str) or not isinstance(value, str)
                 for name, value in chain_map.items()
             ):
                 raise TypeError(f"{context}: invalid {key} mapping in {path}")
-    return cast(KiCadProjectData, data_value)
+    return cast(KiCadProjectData, project_data)
 
 
 # This helper remains available to existing internal integrations and tests.

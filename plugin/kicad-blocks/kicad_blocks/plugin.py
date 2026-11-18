@@ -12,6 +12,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+import xml.etree.ElementTree as ET
 from collections.abc import Callable, Iterator, Sequence
 from importlib import import_module
 from pathlib import Path
@@ -117,11 +118,17 @@ class _LayoutDialogChoice(TypedDict):
     linked_implementation: str
 
 
-class _LayoutEditorRow(BlockLayoutEditInput):
+class _LayoutEditorRow(TypedDict, total=False):
     """Layout row after its generated ID and display name have been normalized."""
 
     id: Required[str]
     name: Required[str]
+    source: str | Path
+    file: str
+    project_source: str | Path
+    project_file: str
+    implementations: list[str]
+    ports: dict[str, str]
 
 
 class _TkMinimizableWindow(Protocol):
@@ -1130,7 +1137,11 @@ def _add_tooltip(widget: tkinter_types.Misc, text: str) -> None:
     widget.bind("<ButtonPress>", hide, add="+")
 
 
-def _create_action_icon(parent, name: str, stroke_color: str | None = None):
+def _create_action_icon(
+    parent: tkinter_types.Misc,
+    name: str,
+    stroke_color: str | None = None,
+) -> tkinter_types.PhotoImage | None:
     """Render one semantic 20px toolbar icon using the current KiCad palette."""
     drawings = {
         "place": '<rect x="4" y="4" width="12" height="12" rx="2"/><path d="M16 16l4 4M10 7v6M7 10h6"/>',
@@ -1164,7 +1175,8 @@ def _create_action_icon(parent, name: str, stroke_color: str | None = None):
     path_data = drawings.get(name)
     if not path_data:
         return None
-    palette = getattr(parent.winfo_toplevel(), "kicad_blocks_palette", {})
+    palette_owner = cast(_TkPaletteOwner, parent.winfo_toplevel())
+    palette = palette_owner.kicad_blocks_palette
     accent = stroke_color or palette.get("accent", "#4c789f")
     svg = (
         '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">'
@@ -1197,17 +1209,18 @@ def _action_button(
     tooltip: str,
     *,
     contract_id: str | None = None,
-    **button_options,
-):
+    **button_options: TkOption,
+) -> ttk_types.Button:
     """Create a consistently padded, semantic icon-and-label action button."""
-    palette = getattr(parent.winfo_toplevel(), "_kicad_blocks_palette", {})
+    palette_owner = cast(_TkPaletteOwner, parent.winfo_toplevel())
+    palette = palette_owner.kicad_blocks_palette
     icon_color = (
         palette.get("accent_foreground")
         if button_options.get("style") == "Primary.TButton"
         else None
     )
     image = _create_action_icon(parent, icon, icon_color)
-    options = {"text": text, "command": command, "padding": (8, 5)}
+    options: dict[str, TkOption] = {"text": text, "command": command, "padding": (8, 5)}
     options.update(button_options)
     if image is not None:
         options.update({"image": image, "compound": "left"})
@@ -3288,7 +3301,7 @@ def _svg_dimension_to_pixels(value: str | None) -> float | None:
     return amount * scale[(match.group(2) or "px").lower()]
 
 
-def _normalize_svg_preview_viewport(root) -> None:
+def _normalize_svg_preview_viewport(root: ET.Element) -> None:
     """Give an SVG a positive pixel viewport that resvg can always rasterize."""
     view_box = root.attrib.get("viewBox") or root.attrib.get("viewbox") or ""
     values = re.findall(
@@ -3317,7 +3330,7 @@ def _normalize_svg_preview_viewport(root) -> None:
     root.set("height", f"{height:g}px")
 
 
-def _clean_facade_preview_svg(svg_file: Path, record, output_dir: Path) -> Path:
+def _clean_facade_preview_svg(svg_file: Path, record: BlockRecord, output_dir: Path) -> Path:
     """Remove component-name and reference placeholder artwork from the SVG."""
     import xml.etree.ElementTree as ET
 
@@ -3773,7 +3786,8 @@ def _save_block_variants(
 
         if item.get("file"):
             filename = str(item.get("file") or "")
-            source = Path(item["source"]).expanduser().resolve() if item.get("source") else None
+            source_value = item.get("source")
+            source = Path(source_value).expanduser().resolve() if source_value else None
         else:
             source_value = item.get("source")
             if source_value is None or not str(source_value).strip():
@@ -4324,8 +4338,8 @@ def _ask_layout_details(
         "Add this PCB layout to the block",
         contract_id="add-pcb-layout.add",
     ).pack(side="right", padx=(0, 8))
-    dialog.bind("<Return>", lambda _event: accept())
-    dialog.bind("<Escape>", lambda _event: dialog.destroy())
+    dialog.bind("<Return>", _after_event(accept))
+    dialog.bind("<Escape>", _after_event(dialog.destroy))
     _set_window_geometry(dialog, 760, 500, 640, 430)
     dialog.grab_set()
     name_entry.focus_set()
@@ -4563,12 +4577,12 @@ def _show_block_layout_editor(
         if item is None:
             return
         selected = implementation_value.get()
-        item_id = str(item.get("id") or "")
+        item_id = item["id"]
         links = layout_implementations.setdefault(item_id, [])
         if selected not in links:
             links.append(selected)
-        selected_layout_id = item.get("id")
-        if selected == "Default" and selected_layout_id is not None:
+        selected_layout_id = item["id"]
+        if selected == "Default":
             default_layout_id_holder[0] = selected_layout_id
         else:
             variant_layouts[selected] = item_id
@@ -5059,7 +5073,7 @@ def _show_block_variant_editor(
     variants: list[BlockVariantEditInput] = []
     for item in record.manifest.get("variants", []):
         editable: BlockVariantEditInput = {
-            "value": str(item["value"]),
+            "value": str(item.get("value", "")),
             "file": str(item.get("file") or item.get("source") or ""),
         }
         if item.get("layout_id"):
@@ -5182,7 +5196,9 @@ def _show_block_variant_editor(
         if index is None:
             return
         current = variants[index]
-        current_source = str(current.get("source") or (Path(record.path) / current.get("file", "")))
+        current_source = str(
+            current.get("source") or (Path(record.path) / current.get("file", ""))
+        )
         details = _ask_implementation_details(
             dialog, value=current["value"], source=current_source, record=record
         )
@@ -5199,7 +5215,11 @@ def _show_block_variant_editor(
             return
         # Keep the existing library filename when a selector is renamed. A
         # different source may still replace its contents at the same path.
-        updated = {"value": value, "file": current["file"], "source": source}
+        updated: BlockVariantEditInput = {
+            "value": value,
+            "file": current.get("file", ""),
+            "source": source,
+        }
         if current.get("layout_id"):
             updated["layout_id"] = current["layout_id"]
         if current.get("open_after_save"):
@@ -5269,7 +5289,7 @@ def _show_block_variant_editor(
             saved_variants: list[BlockVariantEditInput] = []
             for item in saved.get("variants", []):
                 editable: BlockVariantEditInput = {
-                    "value": str(item["value"]),
+                    "value": str(item.get("value", "")),
                     "file": str(item.get("file") or item.get("source") or ""),
                 }
                 if item.get("layout_id"):
@@ -5281,7 +5301,7 @@ def _show_block_variant_editor(
                 selected = next(
                     item
                     for item in saved.get("variants", [])
-                    if str(item["value"]).casefold() == open_value.casefold()
+                    if str(item.get("value", "")).casefold() == open_value.casefold()
                 )
                 new_implementation_to_open[0] = Path(record.path) / str(selected.get("file") or "")
         except (OSError, RuntimeError, TypeError, ValueError, KeyError, StopIteration) as exc:

@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Protocol, cast
+from typing import Protocol
 
 from .pcb_types import (
     BatchBlockLayoutMergeResult,
@@ -58,18 +58,14 @@ def placement_manifest_path(board_path: Path) -> Path:
 def _merge_entries(
     result: BlockLayoutMergeResult | BatchBlockLayoutMergeResult,
 ) -> list[PCBPlacementEntry]:
-    entries = (
-        result["placements"] if "placements" in result else [cast(BlockLayoutMergeResult, result)]
-    )
-    if not isinstance(entries, list) or not entries:
+    entries = result["placements"] if "placements" in result else [result]
+    if not entries:
         raise ValueError("PCB merge result does not contain any block placements.")
 
     normalized: list[PCBPlacementEntry] = []
     references: set[str] = set()
     item_ids: set[str] = set()
     for entry in entries:
-        if not isinstance(entry, dict):
-            raise TypeError("PCB merge result contains a malformed placement entry.")
         reference = str(entry.get("instance_reference", "")).strip()
         if not reference:
             raise ValueError("PCB placement is missing its schematic instance reference.")
@@ -78,7 +74,7 @@ def _merge_entries(
         references.add(reference.casefold())
 
         raw_ids = entry.get("interactive_item_uuids")
-        if not isinstance(raw_ids, list) or not raw_ids:
+        if not raw_ids:
             raise ValueError(
                 f"PCB placement {reference!r} has no imported board-item UUIDs to move."
             )
@@ -184,8 +180,8 @@ def read_pcb_placement_manifest(board_path: Path) -> PCBPlacementManifest:
 
 def resolve_placement_item_ids(board: Board, placement: PCBPlacementEntry) -> list[BoardItemId]:
     """Resolve one block's recorded UUIDs to KIID objects on the active board."""
-    requested = placement.get("item_uuids")
-    if not isinstance(requested, list) or not requested:
+    requested = placement["item_uuids"]
+    if not requested:
         raise ValueError("Selected PCB block placement has no board-item UUIDs.")
     requested_ids = [str(value).strip() for value in requested]
     if any(not value for value in requested_ids):
