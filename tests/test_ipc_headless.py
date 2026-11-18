@@ -431,8 +431,8 @@ def _run_facade_ipc_scenario(cli: str, root: Path) -> None:
         KiCadApp,
         KiCad(
             headless=True,
-        kicad_cli_path=cli,
-        file_path=str(schematic_path),
+            kicad_cli_path=cli,
+            file_path=str(schematic_path),
             timeout_ms=30000,
         ),
     )
@@ -597,8 +597,8 @@ def _verify_nested_parent(
         KiCadApp,
         KiCad(
             headless=True,
-        kicad_cli_path=cli,
-        file_path=str(parent.implementation),
+            kicad_cli_path=cli,
+            file_path=str(parent.implementation),
             timeout_ms=30000,
         ),
     )
@@ -678,8 +678,8 @@ def _verify_nested_child(cli: str, child: BlockRecord) -> None:
         KiCadApp,
         KiCad(
             headless=True,
-        kicad_cli_path=cli,
-        file_path=str(child.implementation),
+            kicad_cli_path=cli,
+            file_path=str(child.implementation),
             timeout_ms=30000,
         ),
     )
