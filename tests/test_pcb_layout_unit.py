@@ -288,7 +288,12 @@ class PCBNetRewriteTests(unittest.TestCase):
                     "CLK_P": "U1_CLK_P",
                 },
             )
-            assignments = result["data"]["net_settings"]["netclass_assignments"]
+            net_settings = result["data"].get("net_settings")
+            self.assertIsNotNone(net_settings)
+            assert net_settings is not None
+            assignments = net_settings.get("netclass_assignments")
+            self.assertIsNotNone(assignments)
+            assert assignments is not None
             self.assertEqual(assignments["U1_D0"], ["BusClass"])
             self.assertEqual(assignments["U1_D1"], ["BusClass"])
             self.assertEqual(assignments["U1_D2"], ["BusClass"])
@@ -335,7 +340,10 @@ class PCBNetRewriteTests(unittest.TestCase):
                 result["unmatched_chains"],
                 ["net_chain_classes:STALE_CHAIN"],
             )
-            self.assertEqual(result["data"]["net_settings"]["net_chain_classes"], {})
+            net_settings = result["data"].get("net_settings")
+            self.assertIsNotNone(net_settings)
+            assert net_settings is not None
+            self.assertEqual(net_settings.get("net_chain_classes"), {})
 
     def test_unknown_net_code_is_rejected(self):
         segment = parse_sexpr("(segment (net 99))")

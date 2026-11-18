@@ -796,10 +796,15 @@ def test_open_implementation_chooser_cancel_closes_without_opening(
     root, context, records, _library, _project = _new_browser(monkeypatch, tmp_path)
     records[0].manifest["variants"] = [{"value": "1V8", "file": "implementation_1v8.kicad_sch"}]
     effects: list[str] = []
+    def register_catalog(
+        record: BlockRecord, _library_roots: list[Path]
+    ) -> Path:
+        return record.path / "KBlocks.kicad_sym"
+
     monkeypatch.setattr(
         plugin_actions,
         "_register_implementation_catalog",
-        lambda *_args, **_kwargs: None,
+        register_catalog,
     )
     monkeypatch.setattr(
         plugin_actions,
@@ -848,11 +853,18 @@ def test_open_pcb_chooser_opens_the_selected_layout(monkeypatch: MonkeyPatch, tm
     root, context, _records, _library, _project = _new_browser(
         monkeypatch, tmp_path, layouts=layouts
     )
-    monkeypatch.setattr(
-        plugin_actions,
-        "_launch_block_asset",
-        lambda _kicad, asset, *_args, **_kwargs: context.action_calls.append(Path(asset).name),
-    )
+    def launch_asset(
+        _kicad: plugin_actions.KiCadApp,
+        asset: Path,
+        _description: str,
+        *,
+        editor_window_id: str | None = None,
+    ) -> subprocess.Popen[bytes]:
+        del editor_window_id
+        context.action_calls.append(asset.name)
+        return cast(subprocess.Popen[bytes], Mock())
+
+    monkeypatch.setattr(plugin_actions, "_launch_block_asset", launch_asset)
     try:
         _select_first_record(context)
         ButtonContract(
@@ -899,12 +911,15 @@ def test_open_pcb_chooser_cancel_closes_without_opening(monkeypatch: MonkeyPatch
     root, context, _records, _library, _project = _new_browser(
         monkeypatch, tmp_path, layouts=layouts
     )
-    effects = []
-    monkeypatch.setattr(
-        plugin_actions,
-        "_launch_block_asset",
-        lambda *_args, **_kwargs: effects.append("unexpected-open"),
-    )
+    effects: list[str] = []
+
+    def unexpected_launch(
+        *_args: _RecordedArgument, **_kwargs: _RecordedArgument
+    ) -> subprocess.Popen[bytes]:
+        effects.append("unexpected-open")
+        return cast(subprocess.Popen[bytes], Mock())
+
+    monkeypatch.setattr(plugin_actions, "_launch_block_asset", unexpected_launch)
     try:
         _select_first_record(context)
         ButtonContract(

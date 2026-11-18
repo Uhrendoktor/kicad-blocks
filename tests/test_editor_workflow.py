@@ -9,19 +9,19 @@ from collections.abc import Callable
 from importlib import import_module
 from pathlib import Path
 from types import SimpleNamespace
-from typing import TypedDict, TypeVar, cast
+from typing import TypedDict, cast
 from unittest.mock import Mock, patch
 
 PLUGIN = Path(__file__).resolve().parents[1] / "plugin" / "kicad-blocks"
 sys.path.insert(0, str(PLUGIN))
 
+from kipy.proto.common.types import DocumentType
 from kicad_blocks.model import parse_parameters, parse_pins
 from kicad_blocks.repository import BlockRecord, create_block, read_manifest
 
 plugin_actions = import_module("kicad_blocks.plugin")
 
 
-_T = TypeVar("_T")
 
 
 class _DependencyResult(TypedDict):
@@ -37,29 +37,32 @@ class _LayoutChoice(TypedDict):
     project_file: str | None
 
 
-def _private_hook(name: str) -> _T:
-    return cast(_T, getattr(plugin_actions, name))
-
-
-def _unchanged_dependencies(
-    record: BlockRecord, _library_roots: list[Path], _kicad_cli: str
-) -> _DependencyResult:
-    return {"block": record, "changed": False, "count": 0}
-
-
-_edit_facade_symbol: Callable[..., None] = _private_hook("_edit_facade_symbol")
-_create_and_place: Callable[..., None] = _private_hook("_create_and_place")
-_reload_symbol_library: Callable[..., bool] = _private_hook("_reload_symbol_library")
-_edit_block_implementation: Callable[..., None] = _private_hook("_edit_block_implementation")
-_publish_block: Callable[..., None] = _private_hook("_publish_block")
-_write_instance_configuration: Callable[..., None] = _private_hook("_write_instance_configuration")
-_parameter_values_for_instance: Callable[..., dict[str, str]] = _private_hook(
-    "_parameter_values_for_instance"
+_edit_facade_symbol: Callable[..., None] = cast(
+    Callable[..., None], getattr(plugin_actions, "_edit_facade_symbol")
 )
-_choose_block_layout: Callable[..., _LayoutChoice | None] = _private_hook("_choose_block_layout")
-_open_generated_pcb_copy: Callable[..., subprocess.Popen[bytes]] = _private_hook(
-    "_open_generated_pcb_copy"
+_create_and_place: Callable[..., None] = cast(
+    Callable[..., None], getattr(plugin_actions, "_create_and_place")
 )
+_reload_symbol_library: Callable[..., bool] = cast(
+    Callable[..., bool], getattr(plugin_actions, "_reload_symbol_library")
+)
+_edit_block_implementation: Callable[..., None] = cast(
+    Callable[..., None], getattr(plugin_actions, "_edit_block_implementation")
+)
+_publish_block: Callable[..., None] = cast(Callable[..., None], getattr(plugin_actions, "_publish_block"))
+_write_instance_configuration: Callable[..., None] = cast(
+    Callable[..., None], getattr(plugin_actions, "_write_instance_configuration")
+)
+_parameter_values_for_instance: Callable[..., dict[str, str]] = cast(
+    Callable[..., dict[str, str]], getattr(plugin_actions, "_parameter_values_for_instance")
+)
+_choose_block_layout: Callable[..., _LayoutChoice | None] = cast(
+    Callable[..., _LayoutChoice | None], getattr(plugin_actions, "_choose_block_layout")
+)
+_open_generated_pcb_copy: Callable[..., subprocess.Popen[bytes]] = cast(
+    Callable[..., subprocess.Popen[bytes]], getattr(plugin_actions, "_open_generated_pcb_copy")
+)
+
 
 
 class LibraryEditorWorkflowTests(unittest.TestCase):
@@ -97,7 +100,7 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
         self._dependency_patch.stop()
         self.temp.cleanup()
 
-    def _open_symbol_documents(self, doc_type):
+    def _open_symbol_documents(self, doc_type: DocumentType):
         from kipy.proto.common.types import DocumentType
 
         self.assertEqual(doc_type, DocumentType.DOCTYPE_SYMBOL)
@@ -562,18 +565,27 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
             user_fields=[first, second],
             proto=Empty(),
         )
-        response = editor_commands_pb2.UpdateItemsResponse(status=1)
-        response.updated_items.add().status.code = 1
+        response = cast(
+            editor_commands_pb2.UpdateItemsResponse,
+            SimpleNamespace(
+                status=SimpleNamespace(code=1, error_message=""),
+                updated_items=[SimpleNamespace(status=SimpleNamespace(code=1, error_message=""))],
+            ),
+        )
         commit = object()
         send = Mock(return_value=response)
         document = editor_commands_pb2.UpdateItems().header.document
+        begin_commit = Mock(return_value=commit)
+        push_commit = Mock()
+        save = Mock()
+        drop_commit = Mock()
         schematic = SimpleNamespace(
             document=document,
             client=SimpleNamespace(send=send),
-            begin_commit=Mock(return_value=commit),
-            push_commit=Mock(),
-            save=Mock(),
-            drop_commit=Mock(),
+            begin_commit=begin_commit,
+            push_commit=push_commit,
+            save=save,
+            drop_commit=drop_commit,
         )
 
         _write_instance_configuration(
@@ -584,12 +596,13 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
 
         self.assertEqual(first.text.value, "1.8")
         self.assertEqual(second.text.value, "compact")
-        schematic.begin_commit.assert_called_once_with()
+        begin_commit.assert_called_once_with()
+        assert send.call_args is not None
         self.assertIs(send.call_args.args[0].__class__, editor_commands_pb2.UpdateItems)
         self.assertEqual(len(send.call_args.args[0].items), 1)
-        schematic.push_commit.assert_called_once_with(commit, "Configure KiCad block instance")
-        schematic.save.assert_called_once_with()
-        schematic.drop_commit.assert_not_called()
+        push_commit.assert_called_once_with(commit, "Configure KiCad block instance")
+        save.assert_called_once_with()
+        drop_commit.assert_not_called()
 
     def test_instance_configuration_reports_item_update_status_and_rolls_back(self):
         from google.protobuf.empty_pb2 import Empty
@@ -597,18 +610,29 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
 
         field = SimpleNamespace(name="KB_PARAM_OUTPUT_VOLTAGE", text=SimpleNamespace(value="3.3"))
         instance = SimpleNamespace(reference="X1", user_fields=[field], proto=Empty())
-        response = editor_commands_pb2.UpdateItemsResponse(status=1)
-        rejected = response.updated_items.add()
-        rejected.status.code = 5
-        rejected.status.error_message = "symbol item is immutable"
+        response = cast(
+            editor_commands_pb2.UpdateItemsResponse,
+            SimpleNamespace(
+                status=SimpleNamespace(code=1, error_message=""),
+                updated_items=[
+                    SimpleNamespace(
+                        status=SimpleNamespace(code=5, error_message="symbol item is immutable")
+                    )
+                ],
+            ),
+        )
         commit = object()
+        begin_commit = Mock(return_value=commit)
+        push_commit = Mock()
+        save = Mock()
+        drop_commit = Mock()
         schematic = SimpleNamespace(
             document=editor_commands_pb2.UpdateItems().header.document,
             client=SimpleNamespace(send=Mock(return_value=response)),
-            begin_commit=Mock(return_value=commit),
-            push_commit=Mock(),
-            save=Mock(),
-            drop_commit=Mock(),
+            begin_commit=begin_commit,
+            push_commit=push_commit,
+            save=save,
+            drop_commit=drop_commit,
         )
 
         with self.assertRaisesRegex(RuntimeError, "symbol item is immutable"):
@@ -671,6 +695,8 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
         )
 
         selected = _choose_block_layout(block, self.parent, instance=instance)
+        self.assertIsNotNone(selected)
+        assert selected is not None
 
         self.assertEqual(selected["id"], "low_profile")
         self.assertEqual(selected["file"], "layout_low_profile.kicad_pcb")
@@ -864,7 +890,8 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
         fake_tk = SimpleNamespace(Tk=Mock(return_value=root), TclError=RuntimeError)
         kicad = SimpleNamespace(get_schematic=Mock(return_value=self.schematic))
         kicad_module = types.ModuleType("kipy")
-        kicad_module.KiCad = Mock(return_value=kicad)
+        kicad_constructor = Mock(return_value=kicad)
+        setattr(kicad_module, "KiCad", kicad_constructor)
         project_catalog = self.project / ".kicad_blocks" / "KBlocks.kicad_sym"
         with (
             patch.object(plugin_actions, "tk", fake_tk),
@@ -915,7 +942,7 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
         ):
             plugin_actions.run_action("create-block")
         attach_window.assert_called_once_with(root, None)
-        kicad_module.KiCad.assert_called_once_with()
+        kicad_constructor.assert_called_once_with()
         create_from_sheet.assert_called_once_with(
             self.library, self.schematic, kicad, self.project, root, None
         )
@@ -931,7 +958,8 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
             TclError=Exception,
         )
         fake_kipy = types.ModuleType("kipy")
-        fake_kipy.KiCad = Mock(side_effect=lambda: events.append("kipy.KiCad") or object())
+        kicad_constructor = Mock(side_effect=lambda: events.append("kipy.KiCad") or object())
+        setattr(fake_kipy, "KiCad", kicad_constructor)
         with (
             patch.object(
                 plugin_actions, "_load_tkinter", side_effect=lambda: events.append("load tkinter")
