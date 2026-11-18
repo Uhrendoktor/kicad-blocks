@@ -111,6 +111,7 @@ from .repository import library_roots as configured_library_roots
 
 LOG = logging.getLogger("kicad_blocks")
 
+
 def _placement_source(result: BlockLayoutMergeResult) -> BlockLayoutPlacementSource:
     """Narrow one full merge result to the sidecar writer's required fields."""
     source: BlockLayoutPlacementSource = {
@@ -128,7 +129,6 @@ def _batch_placement_source(
 ) -> BatchBlockLayoutPlacementSource:
     """Narrow a batch merge result to the placements persisted in its sidecar."""
     return {"placements": [_placement_source(item) for item in result["placements"]]}
-
 
 
 class _KeepDefaultVariant:

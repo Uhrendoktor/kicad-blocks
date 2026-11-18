@@ -697,7 +697,9 @@ def _verify_nested_child(cli: str, child: BlockRecord) -> None:
         if leaf_symbols[0].reference != "B9":
             _fail(f"Expected nested leaf reference B9; found {leaf_symbols[0].reference!r}.")
         leaf_transform = leaf_symbols[0].transform
-        if leaf_transform is None or int(leaf_transform.orientation) != schematic_symbol_orientation(270):
+        if leaf_transform is None or int(
+            leaf_transform.orientation
+        ) != schematic_symbol_orientation(270):
             _fail("Nested leaf facade was not placed at 270 degrees.")
         if child_schematic.get_sheet_symbols():
             _fail("Second-level composition created a hierarchical sheet.")

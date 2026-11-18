@@ -90,9 +90,7 @@ def _load_project_settings(path: Path, *, context: str) -> KiCadProjectData:
         if not isinstance(entry_value, dict):
             raise TypeError(f"{context}: invalid netclass pattern entry in {path}")
         entry = cast(JSONObject, entry_value)
-        if not isinstance(entry.get("pattern"), str) or not isinstance(
-            entry.get("netclass"), str
-        ):
+        if not isinstance(entry.get("pattern"), str) or not isinstance(entry.get("netclass"), str):
             raise TypeError(f"{context}: invalid netclass pattern entry in {path}")
 
     assignments_value = net_settings.get("netclass_assignments", {})

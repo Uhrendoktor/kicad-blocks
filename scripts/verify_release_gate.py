@@ -54,9 +54,7 @@ def verify_release_gate(
     last_runs: list[WorkflowRun] = []
     for attempt in range(6):
         with urlopen(Request(url, headers=headers), timeout=30) as response:
-            payload_value: JSONValue = cast(
-                JSONValue, json.loads(response.read().decode("utf-8"))
-            )
+            payload_value: JSONValue = cast(JSONValue, json.loads(response.read().decode("utf-8")))
         if not isinstance(payload_value, dict):
             raise RuntimeError("GitHub Actions API returned a non-object response.")
         payload = cast(JSONObject, payload_value)

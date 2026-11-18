@@ -44,7 +44,6 @@ class VisualDocsProvenance(TypedDict):
     example: str | None
 
 
-
 def run(
     *args: str, cwd: Path | None = None, check: bool = True
 ) -> subprocess.CompletedProcess[str]:
@@ -81,9 +80,7 @@ def verify_bundle(source_dir: Path, source_sha: str) -> VisualDocsManifest:
     manifest_path = source_dir / "manifest.json"
     if not manifest_path.is_file():
         raise FileNotFoundError(f"Visual documentation manifest is missing: {manifest_path}")
-    raw_manifest: JSONValue = cast(
-        JSONValue, json.loads(manifest_path.read_text(encoding="utf-8"))
-    )
+    raw_manifest: JSONValue = cast(JSONValue, json.loads(manifest_path.read_text(encoding="utf-8")))
     if not isinstance(raw_manifest, dict):
         raise ValueError("Visual documentation manifest must be a JSON object.")
     manifest_data = cast(JSONObject, raw_manifest)

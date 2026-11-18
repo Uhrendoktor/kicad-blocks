@@ -1373,7 +1373,7 @@ class LibraryBrowserTests(unittest.TestCase):
             _start_native_symbol_placement(
                 cast("KiCadAppType", SimpleNamespace(get_schematic=get_schematic)),
                 None,
-                "bad symbol id"
+                "bad symbol id",
             )
         get_schematic.assert_not_called()
 
@@ -1382,7 +1382,7 @@ class LibraryBrowserTests(unittest.TestCase):
             _start_native_symbol_placement(
                 cast("KiCadAppType", SimpleNamespace(get_schematic=lambda: None)),
                 None,
-                "valid_symbol"
+                "valid_symbol",
             )
 
 
