@@ -493,7 +493,6 @@ class _TkPaletteOwner(Protocol):
     """Tk window carrying the selected KiCad Blocks palettes."""
 
     kicad_blocks_palette: dict[str, str]
-    _kicad_blocks_palette: dict[str, str]
 
 
 class _TkActionIconOwner(Protocol):
@@ -1176,8 +1175,10 @@ def _create_action_icon(
     path_data = drawings.get(name)
     if not path_data:
         return None
-    palette_owner = cast(_TkPaletteOwner, parent.winfo_toplevel())
-    palette = palette_owner.kicad_blocks_palette
+    palette = cast(
+        dict[str, str],
+        getattr(parent.winfo_toplevel(), "kicad_blocks_palette", {}),
+    )
     accent = stroke_color or palette.get("accent", "#4c789f")
     svg = (
         '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">'
