@@ -58,9 +58,7 @@ def _load_project_settings(path: Path, *, context: str) -> KiCadProjectData:
 
     """
     try:
-        data_value: JSONValue = cast(
-            JSONValue, json.loads(path.read_text(encoding="utf-8"))
-        )
+        data_value: JSONValue = cast(JSONValue, json.loads(path.read_text(encoding="utf-8")))
     except json.JSONDecodeError as exc:
         raise ValueError(f"{context}: {path}") from exc
     if not isinstance(data_value, dict):
@@ -72,7 +70,9 @@ def _load_project_settings(path: Path, *, context: str) -> KiCadProjectData:
             raise TypeError(f"{context}: invalid {section_name} section in {path}")
 
     net_settings_value = project_data.get("net_settings")
-    net_settings = cast(JSONObject, net_settings_value) if isinstance(net_settings_value, dict) else None
+    net_settings = (
+        cast(JSONObject, net_settings_value) if isinstance(net_settings_value, dict) else None
+    )
     if isinstance(net_settings, dict):
         classes_value = net_settings.get("classes", [])
         classes = cast(list[JSONObject], classes_value) if isinstance(classes_value, list) else []
@@ -86,13 +86,14 @@ def _load_project_settings(path: Path, *, context: str) -> KiCadProjectData:
             if not isinstance(entry_value, dict):
                 raise TypeError(f"{context}: invalid netclass pattern entry in {path}")
             entry = cast(JSONObject, entry_value)
-            if (
-                not isinstance(entry.get("pattern"), str)
-                or not isinstance(entry.get("netclass"), str)
+            if not isinstance(entry.get("pattern"), str) or not isinstance(
+                entry.get("netclass"), str
             ):
                 raise TypeError(f"{context}: invalid netclass pattern entry in {path}")
         assignments_value = net_settings.get("netclass_assignments", {})
-        assignments = cast(JSONObject, assignments_value) if isinstance(assignments_value, dict) else {}
+        assignments = (
+            cast(JSONObject, assignments_value) if isinstance(assignments_value, dict) else {}
+        )
         if not isinstance(assignments, dict):
             raise TypeError(f"{context}: invalid netclass assignments in {path}")
         for value in assignments.values():
@@ -102,7 +103,9 @@ def _load_project_settings(path: Path, *, context: str) -> KiCadProjectData:
                 raise TypeError(f"{context}: invalid netclass assignment value in {path}")
         for key in ("net_chain_classes", "net_chain_netclasses"):
             chain_map_value = net_settings.get(key, {})
-            chain_map = cast(JSONObject, chain_map_value) if isinstance(chain_map_value, dict) else {}
+            chain_map = (
+                cast(JSONObject, chain_map_value) if isinstance(chain_map_value, dict) else {}
+            )
             if not isinstance(chain_map_value, dict) or any(
                 not isinstance(name, str) or not isinstance(value, str)
                 for name, value in chain_map.items()

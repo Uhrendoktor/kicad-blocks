@@ -5200,9 +5200,7 @@ def _show_block_variant_editor(
         if index is None:
             return
         current = variants[index]
-        current_source = str(
-            current.get("source") or (Path(record.path) / current.get("file", ""))
-        )
+        current_source = str(current.get("source") or (Path(record.path) / current.get("file", "")))
         details = _ask_implementation_details(
             dialog, value=current["value"], source=current_source, record=record
         )
