@@ -13,8 +13,22 @@ sys.path.insert(0, str(ROOT / "plugin" / "kicad-blocks"))
 
 from kicad_blocks import plugin as plugin_actions
 
-# These call-site tests run without a display and only need the Tk dialog modules.
-plugin_actions._load_tkinter()
+# Native dialog call-site contracts patch the functions and do not need Tk installed.
+def _unpatched_native_dialog(*_args, **_kwargs):
+    raise AssertionError("A native dialog call was not patched by this test.")
+
+
+if plugin_actions.simpledialog is None:
+    plugin_actions.simpledialog = SimpleNamespace(
+        askstring=_unpatched_native_dialog,
+    )
+if plugin_actions.messagebox is None:
+    plugin_actions.messagebox = SimpleNamespace(
+        askyesno=_unpatched_native_dialog,
+        showerror=_unpatched_native_dialog,
+        showwarning=_unpatched_native_dialog,
+        showinfo=_unpatched_native_dialog,
+    )
 from kicad_blocks.model import parse_parameters
 
 
