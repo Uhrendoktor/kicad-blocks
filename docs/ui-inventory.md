@@ -585,7 +585,7 @@ Every application-owned interactive control in this dialog has a semantic ID and
 
 Explain blocked operations, recoverable errors, destructive confirmations, and completed reports.
 
-**Coverage:** Inventory only — systematic UI contracts not implemented yet.
+**Coverage:** Inventory only — systematic UI contracts remain future work.
 
 Dialog behavior is covered selectively by existing operation tests. There is no exhaustive cross-action dialog contract or standard generated dialog inventory yet.
 
@@ -609,7 +609,7 @@ Dialog behavior is covered selectively by existing operation tests. There is no 
 
 Open and focus KiCad-owned schematic, symbol, and PCB documents, or select files using the operating system's native dialogs.
 
-**Coverage:** Inventory only — systematic UI contracts not implemented yet.
+**Coverage:** Inventory only — systematic UI contracts remain future work.
 
 Some Eeschema and PCB hand-offs have real integration coverage. Cross-platform native window ownership, Symbol Editor selection, and every native file chooser outcome are not established by the current Linux/X11 tests.
 
@@ -634,7 +634,7 @@ Some Eeschema and PCB hand-offs have real integration coverage. Cross-platform n
 
 - **Contracted** means the listed UI component's actual Tcl/Tk command was executed and its expected callback or visible state transition was asserted. It is not a substitute for verifying a downstream KiCad operation or a native OS file chooser.
 - **Partial** means there are useful targeted checks, but one or more controls, views, failure paths, or side effects are not covered by reusable contracts.
-- **Inventory only** means the screen and its major functions are recorded for discovery and rollout planning; do not treat it as tested.
+- **Inventory only** means the screen and its major functions are recorded for discovery and rollout planning; do not treat them as tested.
 
 Per-control status is explicit: **behavior asserted** means a real interaction is executed and checked; **result observed** means a dependent state (such as a selected row's label or a visible pane) is checked; **discovered; interaction not yet asserted** means the control is present but its action still needs an interaction contract.
 

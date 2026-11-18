@@ -67,10 +67,17 @@ def test_each_semantic_control_has_an_explicit_assertion_level():
 
 
 def test_inventory_distinguishes_implemented_from_unimplemented_contracts():
-    rendered = render_inventory(load_catalog())
+    catalog = load_catalog()
+    rendered = render_inventory(catalog)
+    counts = {
+        status: sum(screen["coverage"] == status for screen in catalog["screens"])
+        for status in ("contracted", "partial", "inventory-only")
+    }
     assert "Contracted — widget action and expected UI transition asserted" in rendered
-    assert "Partial — targeted GUI, integration, or visual checks exist" in rendered
-    assert "Inventory only — systematic UI contracts not implemented yet" in rendered
+    assert f"| Partial | {counts['partial']} |" in rendered
+    if counts["partial"]:
+        assert "Partial — targeted GUI, integration, or visual checks exist" in rendered
+    assert "Inventory only — systematic UI contracts remain future work" in rendered
     assert "behavior asserted" in rendered
     assert "result observed" in rendered
     assert "discovered; interaction not yet asserted" in rendered
