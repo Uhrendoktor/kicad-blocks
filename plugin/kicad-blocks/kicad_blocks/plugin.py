@@ -1213,8 +1213,10 @@ def _action_button(
     **button_options: TkOption,
 ) -> ttk_types.Button:
     """Create a consistently padded, semantic icon-and-label action button."""
-    palette_owner = cast(_TkPaletteOwner, parent.winfo_toplevel())
-    palette = palette_owner._kicad_blocks_palette
+    palette = cast(
+        dict[str, str],
+        getattr(parent.winfo_toplevel(), "_kicad_blocks_palette", {}),
+    )
     icon_color = (
         palette.get("accent_foreground")
         if button_options.get("style") == "Primary.TButton"
