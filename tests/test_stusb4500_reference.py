@@ -21,7 +21,6 @@ from kicad_blocks.sexpr import (
     sexpr_all,
     sexpr_direct,
     sexpr_all as _all,
-    sexpr_direct as _direct,
 )
 from validate_schematic_style import (
     STYLE_RULES,

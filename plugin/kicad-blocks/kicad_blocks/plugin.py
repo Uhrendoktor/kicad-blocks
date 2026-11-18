@@ -380,6 +380,12 @@ class _LibraryLoadStatus(Protocol):
     error_message: str | None
 
 
+# Public names for typed boundaries used by acceptance adapters.
+Schematic = _Schematic
+SchematicProject = _SchematicProject
+LibraryLoadStatus = _LibraryLoadStatus
+
+
 class _KiCadApp(Protocol):
     """Small KiCad application surface used by interactive plugin actions."""
 

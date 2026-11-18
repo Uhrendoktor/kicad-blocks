@@ -28,6 +28,7 @@ from kicad_blocks.sexpr import (
 from validate_schematic_style import (
     STYLE_RULES,
     pin_world_info,
+    text_box_issues,
     text_visual_bounds,
     wire_networks,
     block_annotation_issues,
@@ -106,8 +107,8 @@ class SchematicStyleRuleTests(unittest.TestCase):
             )
         )
         reference = next(prop for prop in _all(t1, "property") if str(prop[1]) == "Reference")
-        at = _direct(reference, "at")
-        at[1] = str(float(at[1]) + 12.0)
+        at = _required_direct(reference, "at")
+        at[1] = str(_scalar_number(at[1]) + 12.0)
         issues = check_schematic_style(tree)
         self.assertTrue(
             any("T1 Reference" in issue and "maximum is 3.81 mm" in issue for issue in issues),
@@ -126,7 +127,7 @@ class SchematicStyleRuleTests(unittest.TestCase):
         description = next(
             node
             for node in _all(tree, "text_box")
-            if str(_direct(node, "uuid")[1]) == description_id
+            if str(_required_direct(node, "uuid")[1]) == description_id
         )
         description[1] = str(description[1]).replace(purpose["rationale"], "")
         issues = component_purpose_issues(tree)
@@ -174,6 +175,12 @@ assert "generate_reference" not in sys.modules
         title = next(
             node for node in _all(tree, "text_box") if str(node[1]) == "VSNK BULK PROTECTION"
         )
+        bounds = text_visual_bounds(str(title[1]), title)
+        self.assertIsNotNone(bounds)
+        assert bounds is not None
+        self.assertGreater(bounds[2], 0.0)
+        self.assertGreater(bounds[3], 0.0)
+        self.assertEqual(text_box_issues(tree), [])
 
     def test_group_comment_requires_its_own_outline(self) -> None:
         tree = self.fresh_tree()
