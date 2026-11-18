@@ -216,9 +216,7 @@ def _new_browser(
     return root, context, records, library_root, project_dir
 
 
-def _select_first_record(
-    context: UiTestContext, expected_name: str = "USB power block"
-) -> str:
+def _select_first_record(context: UiTestContext, expected_name: str = "USB power block") -> str:
     tree = context.require_treeview("library-browser.results")
     row_id = tree.get_children()[0]
     TreeSelectionContract(
@@ -254,7 +252,9 @@ def test_library_browser_catalog_labels_each_toolbar_action_coverage_level():
     )
 
 
-def test_library_browser_widget_inventory_covers_major_controls(monkeypatch: MonkeyPatch, tmp_path: Path):
+def test_library_browser_widget_inventory_covers_major_controls(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+):
     root, _context, _records, _library, _project = _new_browser(monkeypatch, tmp_path)
     try:
         discovered = assert_control_coverage(root, LIBRARY_CONTROLS)
@@ -263,7 +263,9 @@ def test_library_browser_widget_inventory_covers_major_controls(monkeypatch: Mon
         root.destroy()
 
 
-def test_library_browser_search_filters_records_and_updates_count(monkeypatch: MonkeyPatch, tmp_path: Path):
+def test_library_browser_search_filters_records_and_updates_count(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+):
     root, context, _records, _library, _project = _new_browser(monkeypatch, tmp_path)
     try:
         EntryInputContract(
@@ -282,7 +284,9 @@ def test_library_browser_search_filters_records_and_updates_count(monkeypatch: M
         root.destroy()
 
 
-def test_library_browser_selection_updates_selected_block_details(monkeypatch: MonkeyPatch, tmp_path: Path):
+def test_library_browser_selection_updates_selected_block_details(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+):
     root, context, _records, _library, _project = _new_browser(monkeypatch, tmp_path)
     try:
         tree = context.require_treeview("library-browser.results")
@@ -297,7 +301,9 @@ def test_library_browser_selection_updates_selected_block_details(monkeypatch: M
         root.destroy()
 
 
-def test_library_browser_preview_switches_between_facade_and_schematic(monkeypatch: MonkeyPatch, tmp_path: Path):
+def test_library_browser_preview_switches_between_facade_and_schematic(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+):
     root, context, _records, _library, _project = _new_browser(monkeypatch, tmp_path)
     try:
         _select_first_record(context)
@@ -309,7 +315,9 @@ def test_library_browser_preview_switches_between_facade_and_schematic(monkeypat
         root.destroy()
 
 
-def test_library_browser_split_panes_have_visible_geometry(monkeypatch: MonkeyPatch, tmp_path: Path):
+def test_library_browser_split_panes_have_visible_geometry(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+):
     root, context, _records, _library, _project = _new_browser(monkeypatch, tmp_path)
     try:
         PaneGroupContract(
@@ -324,7 +332,9 @@ def test_library_browser_split_panes_have_visible_geometry(monkeypatch: MonkeyPa
         root.destroy()
 
 
-def test_refresh_button_reloads_records_through_real_ui_callback(monkeypatch: MonkeyPatch, tmp_path: Path):
+def test_refresh_button_reloads_records_through_real_ui_callback(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+):
     root, context, _records, _library, _project = _new_browser(monkeypatch, tmp_path)
     try:
         ButtonContract(
@@ -338,7 +348,9 @@ def test_refresh_button_reloads_records_through_real_ui_callback(monkeypatch: Mo
         root.destroy()
 
 
-def test_place_button_registers_selected_block_and_starts_native_placement(monkeypatch: MonkeyPatch, tmp_path: Path):
+def test_place_button_registers_selected_block_and_starts_native_placement(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+):
     root, context, _records, _library, _project = _new_browser(monkeypatch, tmp_path)
     context.action_calls.clear()
     monkeypatch.setattr(
@@ -373,7 +385,9 @@ def test_place_button_registers_selected_block_and_starts_native_placement(monke
         root.destroy()
 
 
-def test_implementation_button_registers_and_opens_default_document(monkeypatch: MonkeyPatch, tmp_path: Path):
+def test_implementation_button_registers_and_opens_default_document(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+):
     root, context, _records, _library_root, _project = _new_browser(monkeypatch, tmp_path)
     context.action_calls.clear()
     monkeypatch.setattr(
@@ -419,7 +433,9 @@ def test_edit_facade_button_targets_selected_record(monkeypatch: MonkeyPatch, tm
         root.destroy()
 
 
-def test_open_pcb_button_creates_chooser_for_selected_block(monkeypatch: MonkeyPatch, tmp_path: Path):
+def test_open_pcb_button_creates_chooser_for_selected_block(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+):
     layouts = [{"id": "default-pcb", "name": "Default", "file": "default.kicad_pcb"}]
     root, context, _records, _library, _project = _new_browser(
         monkeypatch, tmp_path, layouts=layouts
@@ -465,7 +481,9 @@ def _show_schematic_preview(root: Tk, context: UiTestContext) -> None:
     root.update()
 
 
-def test_implementation_selector_renders_the_selected_variant(monkeypatch: MonkeyPatch, tmp_path: Path):
+def test_implementation_selector_renders_the_selected_variant(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+):
     root, context, records, _library, _project = _new_browser(monkeypatch, tmp_path)
     records[0].manifest["variants"] = [{"value": "1V8", "file": "implementation_1v8.kicad_sch"}]
     rendered_implementations = []
@@ -533,7 +551,9 @@ def test_sheet_selector_draws_the_selected_schematic_page(monkeypatch: MonkeyPat
         root.destroy()
 
 
-def test_variants_toolbar_opens_manager_and_refreshes_records(monkeypatch: MonkeyPatch, tmp_path: Path):
+def test_variants_toolbar_opens_manager_and_refreshes_records(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+):
     root, context, _records, _library, _project = _new_browser(monkeypatch, tmp_path)
     context.action_calls.clear()
     monkeypatch.setattr(
@@ -556,7 +576,9 @@ def test_variants_toolbar_opens_manager_and_refreshes_records(monkeypatch: Monke
         root.destroy()
 
 
-def test_pcb_layouts_toolbar_opens_manager_and_refreshes_records(monkeypatch: MonkeyPatch, tmp_path: Path):
+def test_pcb_layouts_toolbar_opens_manager_and_refreshes_records(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+):
     root, context, _records, _library, _project = _new_browser(monkeypatch, tmp_path)
     context.action_calls.clear()
     monkeypatch.setattr(
@@ -576,7 +598,9 @@ def test_pcb_layouts_toolbar_opens_manager_and_refreshes_records(monkeypatch: Mo
         root.destroy()
 
 
-def test_libraries_toolbar_opens_library_roots_manager_and_refreshes(monkeypatch: MonkeyPatch, tmp_path: Path):
+def test_libraries_toolbar_opens_library_roots_manager_and_refreshes(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+):
     root, context, _records, _library, _project = _new_browser(monkeypatch, tmp_path)
     context.action_calls.clear()
     monkeypatch.setattr(
@@ -622,7 +646,9 @@ def _find_toplevel(root: Tk, title: str) -> Toplevel:
     return cast(Toplevel, child)
 
 
-def test_open_implementation_chooser_opens_the_selected_named_variant(monkeypatch: MonkeyPatch, tmp_path: Path):
+def test_open_implementation_chooser_opens_the_selected_named_variant(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+):
     root, context, records, _library, _project = _new_browser(monkeypatch, tmp_path)
     records[0].manifest["variants"] = [{"value": "1V8", "file": "implementation_1v8.kicad_sch"}]
     monkeypatch.setattr(
@@ -670,7 +696,9 @@ def test_open_implementation_chooser_opens_the_selected_named_variant(monkeypatc
         root.destroy()
 
 
-def test_open_implementation_chooser_cancel_closes_without_opening(monkeypatch: MonkeyPatch, tmp_path: Path):
+def test_open_implementation_chooser_cancel_closes_without_opening(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+):
     root, context, records, _library, _project = _new_browser(monkeypatch, tmp_path)
     records[0].manifest["variants"] = [{"value": "1V8", "file": "implementation_1v8.kicad_sch"}]
     effects = []
@@ -790,7 +818,9 @@ def test_open_pcb_chooser_cancel_closes_without_opening(monkeypatch: MonkeyPatch
         root.destroy()
 
 
-def test_open_pcb_chooser_manage_layouts_opens_manager_and_refreshes(monkeypatch: MonkeyPatch, tmp_path: Path):
+def test_open_pcb_chooser_manage_layouts_opens_manager_and_refreshes(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+):
     layouts = [{"id": "default-pcb", "name": "Default", "file": "default.kicad_pcb"}]
     root, context, _records, _library, _project = _new_browser(
         monkeypatch, tmp_path, layouts=layouts

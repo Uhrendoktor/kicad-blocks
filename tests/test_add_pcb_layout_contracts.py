@@ -251,6 +251,7 @@ def test_add_pcb_layout_rejects_missing_name_and_keeps_dialog_open(
 ) -> None:
     root, record = _new_parent_and_record(tmp_path)
     errors: list[tuple[str, str]] = []
+
     def show_error(title: str, message: str, **_kwargs: str | bool) -> None:
         errors.append((title, message))
 
@@ -282,12 +283,14 @@ def test_add_pcb_layout_cancel_returns_none_without_creating_board(
 ) -> None:
     root, record = _new_parent_and_record(tmp_path)
     created: list[bool] = []
+
     def create_blank_board() -> Path:
         created.append(True)
         return tmp_path / "should-not-exist.kicad_pcb"
 
     monkeypatch.setattr(plugin_actions, "_new_blank_pcb_source", create_blank_board)
     context = UiTestContext(root)
+
     def cancel_dialog(_dialog: Toplevel) -> None:
         _contract_button(context, "add-pcb-layout.cancel", "Cancel", closes=True)
 

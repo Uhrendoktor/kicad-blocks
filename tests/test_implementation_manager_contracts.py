@@ -167,9 +167,7 @@ def _run_manager(
     return result
 
 
-def _select_variant(
-    context: UiTestContext, row_id: str, expected_values: tuple[str, ...]
-) -> None:
+def _select_variant(context: UiTestContext, row_id: str, expected_values: tuple[str, ...]) -> None:
     TreeSelectionContract(
         contract_id="implementations-manager.rows",
         row_id=row_id,
@@ -195,7 +193,9 @@ def _click(
     ).run(context)
 
 
-def test_implementation_manager_window_and_all_buttons_are_discoverable(monkeypatch: MonkeyPatch, tmp_path: Path):
+def test_implementation_manager_window_and_all_buttons_are_discoverable(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+):
     record, _sources = _new_manager_fixture(tmp_path, variants=("1V8",))
     root = _new_root(monkeypatch)
     context = UiTestContext(root)
@@ -256,7 +256,9 @@ def test_set_as_default_promotes_selected_implementation_and_persists_manifest(
         root.destroy()
 
 
-def test_remove_alternative_updates_manifest_and_removes_unreferenced_file(monkeypatch: MonkeyPatch, tmp_path: Path):
+def test_remove_alternative_updates_manifest_and_removes_unreferenced_file(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+):
     record, _sources = _new_manager_fixture(tmp_path, variants=("1V8",))
     variant_file = record.path / record.manifest["variants"][0]["file"]
     root = _new_root(monkeypatch)
@@ -283,7 +285,9 @@ def test_remove_alternative_updates_manifest_and_removes_unreferenced_file(monke
         root.destroy()
 
 
-def test_remove_is_blocked_when_an_implementation_is_referenced_by_a_profile(monkeypatch: MonkeyPatch, tmp_path: Path):
+def test_remove_is_blocked_when_an_implementation_is_referenced_by_a_profile(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+):
     record, _sources = _new_manager_fixture(
         tmp_path,
         variants=("1V8",),
@@ -314,7 +318,9 @@ def test_remove_is_blocked_when_an_implementation_is_referenced_by_a_profile(mon
         root.destroy()
 
 
-def test_edit_variant_renames_selector_and_preserves_implementation_file(monkeypatch: MonkeyPatch, tmp_path: Path):
+def test_edit_variant_renames_selector_and_preserves_implementation_file(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+):
     record, _sources = _new_manager_fixture(tmp_path, variants=("1V8",))
     current_file = record.path / record.manifest["variants"][0]["file"]
     original_bytes = current_file.read_bytes()
@@ -351,7 +357,9 @@ def test_edit_variant_renames_selector_and_preserves_implementation_file(monkeyp
         root.destroy()
 
 
-def test_add_variant_save_failure_can_be_retried_with_save_and_close(monkeypatch: MonkeyPatch, tmp_path: Path):
+def test_add_variant_save_failure_can_be_retried_with_save_and_close(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+):
     record, _sources = _new_manager_fixture(tmp_path)
     source = tmp_path / "new-3v3.kicad_sch"
     source.write_text(

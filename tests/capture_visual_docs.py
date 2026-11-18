@@ -711,7 +711,11 @@ def capture_ui_workflows(
                             for item in canvas.find_all()
                         )
                         canvas_diagnostics.append(
-                            (str(canvas), len(canvas.find_withtag("kicad-schematic-preview")), canvas_items)
+                            (
+                                str(canvas),
+                                len(canvas.find_withtag("kicad-schematic-preview")),
+                                canvas_items,
+                            )
                         )
                     raise RuntimeError(
                         "The library schematic preview did not render a KiCad image. "

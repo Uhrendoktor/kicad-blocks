@@ -134,7 +134,7 @@ def test_task_hub_declares_every_action_and_view_from_the_catalog():
 
 
 def test_task_hub_widget_inventory_has_no_untagged_interactive_controls(
-    monkeypatch: MonkeyPatch
+    monkeypatch: MonkeyPatch,
 ) -> None:
     root, _notebook = _new_hub(monkeypatch)
     try:
@@ -144,9 +144,7 @@ def test_task_hub_widget_inventory_has_no_untagged_interactive_controls(
         root.destroy()
 
 
-def test_task_hub_exposes_all_three_functional_notebook_views(
-    monkeypatch: MonkeyPatch
-) -> None:
+def test_task_hub_exposes_all_three_functional_notebook_views(monkeypatch: MonkeyPatch) -> None:
     root, _notebook = _new_hub(monkeypatch)
     try:
         contract = NotebookViewContract(
@@ -193,9 +191,7 @@ def test_each_task_hub_button_dispatches_exactly_its_action_id(
             pass
 
 
-def test_task_hub_close_button_destroys_window_without_dispatch(
-    monkeypatch: MonkeyPatch
-) -> None:
+def test_task_hub_close_button_destroys_window_without_dispatch(monkeypatch: MonkeyPatch) -> None:
     root, _notebook = _new_hub(monkeypatch)
     context = UiTestContext(root)
 
