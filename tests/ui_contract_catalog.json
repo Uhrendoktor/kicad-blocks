@@ -1045,7 +1045,7 @@
       "title": "Error, confirmation, and report dialogs",
       "purpose": "Explain blocked operations, recoverable errors, destructive confirmations, and completed reports.",
       "coverage": "partial",
-      "coverage_note": "The production plugin contains 56 native messagebox/simpledialog call sites across profile creation, source/layout selection, validation, library and implementation maintenance, the Functional Block Library, and action dispatch. An AST-generated registry maps every call site to its owning operation and classifies direct tests, related-flow coverage, and uncovered branches. Direct contracts exercise profile creation/decline/cancel/validation, layout selection/cancel/invalid choice, library validation failure/ERC-warning/success/cancel reports, plus the existing form/manager confirmation and recovery paths. Ten call sites remain without a direct behavior contract, notably single/batch PCB mapping/anchor/rotation prompts and action-dispatch warning/error paths. These are native OS/Tk dialogs; in-process tests assert prompt arguments and application effects, not platform-specific native-window rendering or focus.",
+      "coverage_note": "The production plugin contains 56 native messagebox/simpledialog call sites across profile creation, source/layout selection, validation, library and implementation maintenance, the Functional Block Library, PCB mapping/anchor/rotation, and action dispatch. An AST-generated registry maps every call site to its owning operation and classifies direct tests, related-flow coverage, and uncovered branches. Direct contracts now exercise all 36 directly tested call sites, including accepted/cancelled single and batch PCB mapping prompts, anchor and rotation input, open-copy confirmations, and action-dispatch warning/error handling. Twenty call sites remain partially covered because their owning UI action is tested but the specific native error branch is not directly exercised. These are native OS/Tk dialogs; in-process tests assert prompt arguments and application effects, not platform-specific native-window rendering or focus.",
       "evidence": [
         "scripts/dialog_callsite_inventory.py",
         "tests/dialog_callsite_catalog.json",
@@ -1056,7 +1056,8 @@
         "tests/test_library_and_pcb_manager_contracts.py",
         "tests/test_implementation_manager_contracts.py",
         "tests/test_implementation_details_contracts.py",
-        "tests/test_instance_configuration_contracts.py"
+        "tests/test_instance_configuration_contracts.py",
+        "tests/test_uncovered_dialog_contracts.py"
       ],
       "functionality": [
         "Assert an error is visible and identifies the failed operation",

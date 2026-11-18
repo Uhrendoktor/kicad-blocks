@@ -9,7 +9,7 @@ This page is generated from the declarative UI catalog. It inventories the curre
 | Partial | 1 | Targeted GUI, integration, model, or screenshot checks exist; the full control matrix is not contracted. |
 | Inventory only | 1 | Window/workflow is documented here; systematic interaction contracts remain future work. |
 
-Thirteen in-process Tk screens now have full registered widget contracts, including the Functional Block Library and both managers. Native error/confirmation/report dialogs are partially covered by an AST inventory of all 56 messagebox/simpledialog call sites (26 directly tested, 20 partially covered, 10 uncovered); KiCad-native editors and cross-platform file choosers remain inventory-only.
+Task Hub, both transient block choosers, Add PCB Layout, Create Block form, Record picker, Functional Block picker, Functional Block Library, Instance Configuration, Implementation details, Implementations Manager, Manage Libraries, and PCB Layout Manager now have full registered widget contracts. The cross-cutting error/confirmation/report dialogs remain partially contracted through direct native-dialog call-site tests; KiCad-native editors and cross-platform file choosers remain inventory-only and require desktop integration coverage.
 
 ## Screens
 
@@ -587,7 +587,7 @@ Explain blocked operations, recoverable errors, destructive confirmations, and c
 
 **Coverage:** Partial — targeted GUI, integration, or visual checks exist.
 
-The production plugin contains 56 native messagebox/simpledialog call sites across profile creation, source/layout selection, validation, library and implementation maintenance, the Functional Block Library, and action dispatch. An AST-generated registry maps every call site to its owning operation and classifies direct tests, related-flow coverage, and uncovered branches. Direct contracts exercise profile creation/decline/cancel/validation, layout selection/cancel/invalid choice, library validation failure/ERC-warning/success/cancel reports, plus the existing form/manager confirmation and recovery paths. Ten call sites remain without a direct behavior contract, notably single/batch PCB mapping/anchor/rotation prompts and action-dispatch warning/error paths. These are native OS/Tk dialogs; in-process tests assert prompt arguments and application effects, not platform-specific native-window rendering or focus.
+The production plugin contains 56 native messagebox/simpledialog call sites across profile creation, source/layout selection, validation, library and implementation maintenance, the Functional Block Library, PCB mapping/anchor/rotation, and action dispatch. An AST-generated registry maps every call site to its owning operation and classifies direct tests, related-flow coverage, and uncovered branches. Direct contracts now exercise all 36 directly tested call sites, including accepted/cancelled single and batch PCB mapping prompts, anchor and rotation input, open-copy confirmations, and action-dispatch warning/error handling. Twenty call sites remain partially covered because their owning UI action is tested but the specific native error branch is not directly exercised. These are native OS/Tk dialogs; in-process tests assert prompt arguments and application effects, not platform-specific native-window rendering or focus.
 
 **Major functionality**
 
@@ -608,6 +608,7 @@ The production plugin contains 56 native messagebox/simpledialog call sites acro
 - `tests/test_implementation_manager_contracts.py`
 - `tests/test_implementation_details_contracts.py`
 - `tests/test_instance_configuration_contracts.py`
+- `tests/test_uncovered_dialog_contracts.py`
 
 **Production screenshots:** Not yet captured for this surface.
 

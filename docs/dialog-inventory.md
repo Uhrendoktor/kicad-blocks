@@ -7,9 +7,9 @@ Source: plugin/kicad-blocks/kicad_blocks/plugin.py — 56 call sites.
 
 | Coverage | Call sites | Meaning |
 |---|---:|---|
-| Tested | 26 | Direct native-dialog result and downstream behavior are asserted. |
+| Tested | 36 | Direct native-dialog result and downstream behavior are asserted. |
 | Partial | 20 | The owning action is tested; this dialog branch is not directly asserted. |
-| Uncovered | 10 | No direct native-dialog path contract exists yet. |
+| Uncovered | 0 | No direct native-dialog path contract exists yet. |
 
 ## Call sites
 
@@ -61,16 +61,16 @@ Source: plugin/kicad-blocks/kicad_blocks/plugin.py — 56 call sites.
 | 5628 | _show_library_browser.open_layout.launch_layout | messagebox.showerror | partial | tests/test_library_browser_contracts.py |
 | 5951 | _validate_shared_library | messagebox.showwarning | tested | tests/test_dialog_callsite_contracts.py |
 | 5953 | _validate_shared_library | messagebox.showwarning | tested | tests/test_dialog_callsite_contracts.py |
-| 6075 | _apply_block_pcb_layout | simpledialog.askstring | uncovered | — |
-| 6091 | _apply_block_pcb_layout | simpledialog.askstring | uncovered | — |
-| 6107 | _apply_block_pcb_layout | simpledialog.askstring | uncovered | — |
-| 6153 | _apply_block_pcb_layout | messagebox.askyesno | uncovered | — |
-| 6214 | _apply_selected_block_pcb_layouts | simpledialog.askstring | uncovered | — |
-| 6229 | _apply_selected_block_pcb_layouts | simpledialog.askstring | uncovered | — |
-| 6245 | _apply_selected_block_pcb_layouts | simpledialog.askstring | uncovered | — |
-| 6299 | _apply_selected_block_pcb_layouts | messagebox.askyesno | uncovered | — |
-| 6597 | run_action | messagebox.showwarning | uncovered | — |
-| 6604 | run_action | messagebox.showerror | uncovered | — |
+| 6075 | _apply_block_pcb_layout | simpledialog.askstring | tested | tests/test_uncovered_dialog_contracts.py |
+| 6091 | _apply_block_pcb_layout | simpledialog.askstring | tested | tests/test_uncovered_dialog_contracts.py |
+| 6107 | _apply_block_pcb_layout | simpledialog.askstring | tested | tests/test_uncovered_dialog_contracts.py |
+| 6153 | _apply_block_pcb_layout | messagebox.askyesno | tested | tests/test_uncovered_dialog_contracts.py |
+| 6214 | _apply_selected_block_pcb_layouts | simpledialog.askstring | tested | tests/test_uncovered_dialog_contracts.py |
+| 6229 | _apply_selected_block_pcb_layouts | simpledialog.askstring | tested | tests/test_uncovered_dialog_contracts.py |
+| 6245 | _apply_selected_block_pcb_layouts | simpledialog.askstring | tested | tests/test_uncovered_dialog_contracts.py |
+| 6299 | _apply_selected_block_pcb_layouts | messagebox.askyesno | tested | tests/test_uncovered_dialog_contracts.py |
+| 6597 | run_action | messagebox.showwarning | tested | tests/test_uncovered_dialog_contracts.py |
+| 6604 | run_action | messagebox.showerror | tested | tests/test_uncovered_dialog_contracts.py |
 
 ## Coverage boundaries
 
@@ -102,6 +102,16 @@ Source: plugin/kicad-blocks/kicad_blocks/plugin.py — 56 call sites.
 - _show_library_roots_dialog.remove_library::messagebox.askyesno#1 — Unregister confirmation cancellation is asserted to preserve the registration and files.
 - _validate_shared_library::messagebox.showwarning#1 — A test invokes this native prompt/notification, asserts its title, choices and parent, and verifies the returned profile/layout or report/cancellation result.
 - _validate_shared_library::messagebox.showwarning#2 — A test invokes this native prompt/notification, asserts its title, choices and parent, and verifies the returned profile/layout or report/cancellation result.
+- _apply_block_pcb_layout::simpledialog.askstring#1 — The direct contract asserts the facade-pin mapping prompt's title, default mapping, parent, accepted mapping, and that the resulting map reaches the merge operation; cancellation before mapping/merge is also tested.
+- _apply_block_pcb_layout::simpledialog.askstring#2 — The direct contract asserts the stored-layout anchor prompt's default, parses numeric X,Y coordinates into the merge call, and verifies cancellation prevents file output and merge.
+- _apply_block_pcb_layout::simpledialog.askstring#3 — The direct contract asserts the rotation prompt's default, parses counter-clockwise degrees into the merge call, and verifies cancellation prevents file output and merge.
+- _apply_block_pcb_layout::messagebox.askyesno#1 — The direct contract asserts the post-merge open-copy confirmation title, consequence, parent, and that only Yes launches the generated PCB copy.
+- _apply_selected_block_pcb_layouts::simpledialog.askstring#1 — The direct contract exercises mapping prompts for two selected instances, verifies each returned pin map is attached to the matching block placement, and tests cancellation during either instance.
+- _apply_selected_block_pcb_layouts::simpledialog.askstring#2 — The direct contract exercises per-instance anchor prompts, verifies numeric coordinates are retained in each placement, and tests cancellation before the batch can merge.
+- _apply_selected_block_pcb_layouts::simpledialog.askstring#3 — The direct contract exercises per-instance rotation prompts, verifies degrees are retained in each placement, and tests cancellation before the batch can merge.
+- _apply_selected_block_pcb_layouts::messagebox.askyesno#1 — The direct contract asserts the batch open-copy confirmation includes the block count and only launches the generated board when accepted.
+- run_action::messagebox.showwarning#1 — The direct dispatcher contract removes the active schematic, asserts the actionable warning title, guidance text and parent, and verifies the temporary root closes.
+- run_action::messagebox.showerror#1 — The direct dispatcher contract injects an unexpected operation failure, asserts the error title/detail and parent, and verifies the temporary root closes.
 
 ### Partial
 
@@ -126,23 +136,10 @@ Source: plugin/kicad-blocks/kicad_blocks/plugin.py — 56 call sites.
 - _show_library_browser.edit_variants::messagebox.showerror#1 — The owning UI action has success-path or integration coverage, but this particular native-dialog error/confirmation branch is not directly asserted.
 - _show_library_browser.open_layout.launch_layout::messagebox.showerror#1 — The owning UI action has success-path or integration coverage, but this particular native-dialog error/confirmation branch is not directly asserted.
 
-### Uncovered
-
-- _apply_block_pcb_layout::simpledialog.askstring#1 — No direct dialog-path contract exists for this prompt/dispatcher branch; the underlying PCB merge or action logic may have separate non-UI tests.
-- _apply_block_pcb_layout::simpledialog.askstring#2 — No direct dialog-path contract exists for this prompt/dispatcher branch; the underlying PCB merge or action logic may have separate non-UI tests.
-- _apply_block_pcb_layout::simpledialog.askstring#3 — No direct dialog-path contract exists for this prompt/dispatcher branch; the underlying PCB merge or action logic may have separate non-UI tests.
-- _apply_block_pcb_layout::messagebox.askyesno#1 — No direct dialog-path contract exists for this prompt/dispatcher branch; the underlying PCB merge or action logic may have separate non-UI tests.
-- _apply_selected_block_pcb_layouts::simpledialog.askstring#1 — No direct dialog-path contract exists for this prompt/dispatcher branch; the underlying PCB merge or action logic may have separate non-UI tests.
-- _apply_selected_block_pcb_layouts::simpledialog.askstring#2 — No direct dialog-path contract exists for this prompt/dispatcher branch; the underlying PCB merge or action logic may have separate non-UI tests.
-- _apply_selected_block_pcb_layouts::simpledialog.askstring#3 — No direct dialog-path contract exists for this prompt/dispatcher branch; the underlying PCB merge or action logic may have separate non-UI tests.
-- _apply_selected_block_pcb_layouts::messagebox.askyesno#1 — No direct dialog-path contract exists for this prompt/dispatcher branch; the underlying PCB merge or action logic may have separate non-UI tests.
-- run_action::messagebox.showwarning#1 — No direct dialog-path contract exists for this prompt/dispatcher branch; the underlying PCB merge or action logic may have separate non-UI tests.
-- run_action::messagebox.showerror#1 — No direct dialog-path contract exists for this prompt/dispatcher branch; the underlying PCB merge or action logic may have separate non-UI tests.
-
 ## Interpretation
 
 - Tested means a test patches the native dialog function, asserts the prompt/choice or resulting branch, and checks the application effect. It does not claim the native OS window was rendered or its platform-specific focus/ownership was verified.
 - Partial means the owning action has tests, but the specific error/confirmation/prompt path is not directly exercised.
 - Uncovered means no direct call-site behavior contract exists yet.
 
-The next highest-risk gaps are the single/batch PCB layout input prompts, action-dispatch warning/error paths, and error branches around the library browser and library-root manager.
+The remaining highest-risk gaps are the 20 partially covered error/confirmation branches around implementation management, library roots, and the library browser; the 10 previously uncovered PCB mapping and action-dispatch prompts now have direct contracts.

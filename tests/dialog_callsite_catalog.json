@@ -513,90 +513,110 @@
       "owner": "_apply_block_pcb_layout",
       "method": "simpledialog.askstring",
       "line": 6075,
-      "coverage": "uncovered",
-      "evidence": [],
-      "rationale": "No direct dialog-path contract exists for this prompt/dispatcher branch; the underlying PCB merge or action logic may have separate non-UI tests."
+      "coverage": "tested",
+      "evidence": [
+        "tests/test_uncovered_dialog_contracts.py"
+      ],
+      "rationale": "The direct contract asserts the facade-pin mapping prompt's title, default mapping, parent, accepted mapping, and that the resulting map reaches the merge operation; cancellation before mapping/merge is also tested."
     },
     {
       "id": "_apply_block_pcb_layout::simpledialog.askstring#2",
       "owner": "_apply_block_pcb_layout",
       "method": "simpledialog.askstring",
       "line": 6091,
-      "coverage": "uncovered",
-      "evidence": [],
-      "rationale": "No direct dialog-path contract exists for this prompt/dispatcher branch; the underlying PCB merge or action logic may have separate non-UI tests."
+      "coverage": "tested",
+      "evidence": [
+        "tests/test_uncovered_dialog_contracts.py"
+      ],
+      "rationale": "The direct contract asserts the stored-layout anchor prompt's default, parses numeric X,Y coordinates into the merge call, and verifies cancellation prevents file output and merge."
     },
     {
       "id": "_apply_block_pcb_layout::simpledialog.askstring#3",
       "owner": "_apply_block_pcb_layout",
       "method": "simpledialog.askstring",
       "line": 6107,
-      "coverage": "uncovered",
-      "evidence": [],
-      "rationale": "No direct dialog-path contract exists for this prompt/dispatcher branch; the underlying PCB merge or action logic may have separate non-UI tests."
+      "coverage": "tested",
+      "evidence": [
+        "tests/test_uncovered_dialog_contracts.py"
+      ],
+      "rationale": "The direct contract asserts the rotation prompt's default, parses counter-clockwise degrees into the merge call, and verifies cancellation prevents file output and merge."
     },
     {
       "id": "_apply_block_pcb_layout::messagebox.askyesno#1",
       "owner": "_apply_block_pcb_layout",
       "method": "messagebox.askyesno",
       "line": 6153,
-      "coverage": "uncovered",
-      "evidence": [],
-      "rationale": "No direct dialog-path contract exists for this prompt/dispatcher branch; the underlying PCB merge or action logic may have separate non-UI tests."
+      "coverage": "tested",
+      "evidence": [
+        "tests/test_uncovered_dialog_contracts.py"
+      ],
+      "rationale": "The direct contract asserts the post-merge open-copy confirmation title, consequence, parent, and that only Yes launches the generated PCB copy."
     },
     {
       "id": "_apply_selected_block_pcb_layouts::simpledialog.askstring#1",
       "owner": "_apply_selected_block_pcb_layouts",
       "method": "simpledialog.askstring",
       "line": 6214,
-      "coverage": "uncovered",
-      "evidence": [],
-      "rationale": "No direct dialog-path contract exists for this prompt/dispatcher branch; the underlying PCB merge or action logic may have separate non-UI tests."
+      "coverage": "tested",
+      "evidence": [
+        "tests/test_uncovered_dialog_contracts.py"
+      ],
+      "rationale": "The direct contract exercises mapping prompts for two selected instances, verifies each returned pin map is attached to the matching block placement, and tests cancellation during either instance."
     },
     {
       "id": "_apply_selected_block_pcb_layouts::simpledialog.askstring#2",
       "owner": "_apply_selected_block_pcb_layouts",
       "method": "simpledialog.askstring",
       "line": 6229,
-      "coverage": "uncovered",
-      "evidence": [],
-      "rationale": "No direct dialog-path contract exists for this prompt/dispatcher branch; the underlying PCB merge or action logic may have separate non-UI tests."
+      "coverage": "tested",
+      "evidence": [
+        "tests/test_uncovered_dialog_contracts.py"
+      ],
+      "rationale": "The direct contract exercises per-instance anchor prompts, verifies numeric coordinates are retained in each placement, and tests cancellation before the batch can merge."
     },
     {
       "id": "_apply_selected_block_pcb_layouts::simpledialog.askstring#3",
       "owner": "_apply_selected_block_pcb_layouts",
       "method": "simpledialog.askstring",
       "line": 6245,
-      "coverage": "uncovered",
-      "evidence": [],
-      "rationale": "No direct dialog-path contract exists for this prompt/dispatcher branch; the underlying PCB merge or action logic may have separate non-UI tests."
+      "coverage": "tested",
+      "evidence": [
+        "tests/test_uncovered_dialog_contracts.py"
+      ],
+      "rationale": "The direct contract exercises per-instance rotation prompts, verifies degrees are retained in each placement, and tests cancellation before the batch can merge."
     },
     {
       "id": "_apply_selected_block_pcb_layouts::messagebox.askyesno#1",
       "owner": "_apply_selected_block_pcb_layouts",
       "method": "messagebox.askyesno",
       "line": 6299,
-      "coverage": "uncovered",
-      "evidence": [],
-      "rationale": "No direct dialog-path contract exists for this prompt/dispatcher branch; the underlying PCB merge or action logic may have separate non-UI tests."
+      "coverage": "tested",
+      "evidence": [
+        "tests/test_uncovered_dialog_contracts.py"
+      ],
+      "rationale": "The direct contract asserts the batch open-copy confirmation includes the block count and only launches the generated board when accepted."
     },
     {
       "id": "run_action::messagebox.showwarning#1",
       "owner": "run_action",
       "method": "messagebox.showwarning",
       "line": 6597,
-      "coverage": "uncovered",
-      "evidence": [],
-      "rationale": "No direct dialog-path contract exists for this prompt/dispatcher branch; the underlying PCB merge or action logic may have separate non-UI tests."
+      "coverage": "tested",
+      "evidence": [
+        "tests/test_uncovered_dialog_contracts.py"
+      ],
+      "rationale": "The direct dispatcher contract removes the active schematic, asserts the actionable warning title, guidance text and parent, and verifies the temporary root closes."
     },
     {
       "id": "run_action::messagebox.showerror#1",
       "owner": "run_action",
       "method": "messagebox.showerror",
       "line": 6604,
-      "coverage": "uncovered",
-      "evidence": [],
-      "rationale": "No direct dialog-path contract exists for this prompt/dispatcher branch; the underlying PCB merge or action logic may have separate non-UI tests."
+      "coverage": "tested",
+      "evidence": [
+        "tests/test_uncovered_dialog_contracts.py"
+      ],
+      "rationale": "The direct dispatcher contract injects an unexpected operation failure, asserts the error title/detail and parent, and verifies the temporary root closes."
     }
   ]
 }

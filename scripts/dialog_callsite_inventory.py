@@ -181,7 +181,7 @@ def render_inventory(catalog: dict[str, Any] | None = None) -> str:
             "- Partial means the owning action has tests, but the specific error/confirmation/prompt path is not directly exercised.",
             "- Uncovered means no direct call-site behavior contract exists yet.",
             "",
-            "The next highest-risk gaps are the single/batch PCB layout input prompts, action-dispatch warning/error paths, and error branches around the library browser and library-root manager.",
+            "The remaining highest-risk gaps are the 20 partially covered error/confirmation branches around implementation management, library roots, and the library browser; the 10 previously uncovered PCB mapping and action-dispatch prompts now have direct contracts.",
             "",
         ]
     )
