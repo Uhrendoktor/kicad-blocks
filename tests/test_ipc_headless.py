@@ -26,21 +26,23 @@ from kicad_blocks.model import (
 )
 from kicad_blocks.pcb_layout import parse_sexpr
 from kicad_blocks.plugin import (
+    LIBRARY_NICKNAME,
     _register_block,
     _write_instance_configuration,
     make_selected_local,
     sync_selected_local,
 )
 from kicad_blocks.repository import (
+    build_project_symbol_catalog,
     create_block,
     ensure_stable_block_identity,
     local_copy_for_instance,
     read_manifest,
     refresh_library_block,
+    register_project_symbol_library,
 )
 from kipy import KiCad
 from kipy.geometry import Vector2
-from kipy.proto.common.types import DocumentType
 
 
 def _find_cli() -> str:
@@ -67,12 +69,6 @@ def main() -> None:
             render_implementation_schematic("Facade-only IPC Test", "ipc-root", []),
             encoding="utf-8",
         )
-        # KiCad resolves project-scoped symbol libraries through the active
-        # project. Opening a standalone schematic without its matching
-        # .kicad_pro leaves LTS_PROJECT unbound, so reload_library cannot see
-        # the project sym-lib-table created below.
-        project_path = project_dir / "facade_only.kicad_pro"
-        project_path.write_text("{}\n", encoding="utf-8")
         default_layout = root / "default.kicad_pcb"
         default_layout.write_text("(kicad_pcb)\\n", encoding="utf-8")
         block_source = root / "block_source.kicad_sch"
@@ -99,36 +95,36 @@ def main() -> None:
                 "layout": "default",
             }],
         )
-        # Match the application's startup registration path before placing
-        # the first instance. A legacy block is migrated to the shared KBlocks
-        # nickname/catalog here, so later publication reloads the same library
-        # identifier rather than leaving X1 on an obsolete per-block nickname.
+        # Register the unified KBlocks nickname before Eeschema starts.
+        # ReloadSymbolLibrary refreshes a known project-table row; it cannot
+        # introduce a nickname that the running Eeschema instance has never
+        # loaded. Startup discovery loads this row, after which _register_block
+        # exercises the production refresh/reload path below.
         block = ensure_stable_block_identity(block)
-        nickname = block.manifest["library_nickname"]
+        nickname = LIBRARY_NICKNAME
         symbol_name = block.manifest["symbol_name"]
-        # Open the project before its schematic. Preloading only a .kicad_sch
-        # starts Eeschema without loading the project and its sym-lib-table;
-        # registering a project-scoped library later then fails with
-        # "Library 'KBlocks' not found", even though both files are present.
+        project_catalog = build_project_symbol_catalog(project_dir, [library_root])
+        register_project_symbol_library(
+            project_dir,
+            nickname,
+            project_catalog,
+            description="KiCad Blocks — all registered functional-block libraries",
+        )
         kicad = KiCad(
             headless=True,
             kicad_cli_path=cli,
-            file_path=str(project_path),
+            file_path=str(schematic_path),
             timeout_ms=30000,
         )
         try:
-            kicad.open_document(
-                str(schematic_path), DocumentType.DOCTYPE_SCHEMATIC
-            )
             schematic = kicad.get_schematic()
             if schematic is None:
                 raise RuntimeError("KiCad IPC did not load the test schematic.")
 
-            # Match the application's registration order: build the unified
-            # project-local catalog, register that catalog, and reload it
-            # before the first placement. Keeping the URI stable is important
-            # when the facade is published again later in this same session.
+            # Load the catalog row registered before startup. Then refresh
+            # the same stable KBlocks nickname through the production path.
             kicad.load_all_libraries(types=[1])
+            kicad.wait_for_libraries(types=[1], timeout_s=120.0)
             block = _register_block(project_dir, block, kicad, [library_root])
             nickname = block.manifest["library_nickname"]
             symbol_name = block.manifest["symbol_name"]
