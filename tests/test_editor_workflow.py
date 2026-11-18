@@ -572,7 +572,7 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
         response = cast(
             editor_commands_pb2.UpdateItemsResponse,
             SimpleNamespace(
-                status=SimpleNamespace(code=1, error_message=""),
+                status=1,
                 updated_items=[SimpleNamespace(status=SimpleNamespace(code=1, error_message=""))],
             ),
         )
@@ -617,7 +617,7 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
         response = cast(
             editor_commands_pb2.UpdateItemsResponse,
             SimpleNamespace(
-                status=SimpleNamespace(code=1, error_message=""),
+                status=1,
                 updated_items=[
                     SimpleNamespace(
                         status=SimpleNamespace(code=5, error_message="symbol item is immutable")
@@ -931,7 +931,8 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
         fake_tk = SimpleNamespace(Tk=Mock(return_value=root), TclError=RuntimeError)
         kicad = SimpleNamespace(get_schematic=Mock(return_value=self.schematic))
         kicad_module = types.ModuleType("kipy")
-        kicad_module.KiCad = Mock(return_value=kicad)
+        kicad_constructor = Mock(return_value=kicad)
+        kicad_module.KiCad = kicad_constructor
         with (
             patch.object(plugin_actions, "tk", fake_tk),
             patch.object(plugin_actions, "messagebox", self.messagebox),
