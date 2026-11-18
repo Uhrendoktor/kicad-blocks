@@ -337,7 +337,7 @@ def _load_project_symbol_sync_state(state_file: Path) -> ProjectSymbolSyncState:
     if not isinstance(loaded_symbols, dict):
         raise ValueError(_INVALID_PROJECT_SYMBOL_SYNC_STATE)
     for name, digest in loaded_symbols.items():
-        if not isinstance(name, str) or not isinstance(digest, str):
+        if not isinstance(digest, str):
             raise ValueError(_INVALID_PROJECT_SYMBOL_SYNC_STATE)
         synchronized[name] = digest
     schema_version = loaded_state.get("schema_version", 1)

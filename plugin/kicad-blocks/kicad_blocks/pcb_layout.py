@@ -55,7 +55,6 @@ def _load_project_settings(path: Path, *, context: str) -> KiCadProjectData:
     Raises:
         ValueError: If the document is not valid JSON.
         TypeError: If the root or a consumed settings section is not an object.
-
     """
     try:
         data_value: JSONValue = cast(JSONValue, json.loads(path.read_text(encoding="utf-8")))
@@ -64,53 +63,56 @@ def _load_project_settings(path: Path, *, context: str) -> KiCadProjectData:
     if not isinstance(data_value, dict):
         raise TypeError(f"{context}: {path}")
     project_data = cast(JSONObject, data_value)
+
     for section_name in ("meta", "net_settings"):
         section = project_data.get(section_name)
         if section is not None and not isinstance(section, dict):
             raise TypeError(f"{context}: invalid {section_name} section in {path}")
 
     net_settings_value = project_data.get("net_settings")
-    net_settings = (
-        cast(JSONObject, net_settings_value) if isinstance(net_settings_value, dict) else None
-    )
-    if isinstance(net_settings, dict):
-        classes_value = net_settings.get("classes", [])
-        classes = cast(list[JSONObject], classes_value) if isinstance(classes_value, list) else []
-        if not isinstance(classes, list) or any(not isinstance(item, dict) for item in classes):
+    if net_settings_value is None:
+        return cast(KiCadProjectData, project_data)
+    if not isinstance(net_settings_value, dict):
+        raise TypeError(f"{context}: invalid net_settings section in {path}")
+    net_settings = cast(JSONObject, net_settings_value)
+
+    classes_value = net_settings.get("classes", [])
+    if not isinstance(classes_value, list):
+        raise TypeError(f"{context}: invalid net_settings.classes section in {path}")
+    for item in classes_value:
+        if not isinstance(item, dict):
             raise TypeError(f"{context}: invalid net_settings.classes section in {path}")
-        patterns_value = net_settings.get("netclass_patterns", [])
-        patterns = cast(list[JSONValue], patterns_value) if isinstance(patterns_value, list) else []
-        if not isinstance(patterns, list):
-            raise TypeError(f"{context}: invalid net_settings.netclass_patterns section in {path}")
-        for entry_value in patterns:
-            if not isinstance(entry_value, dict):
-                raise TypeError(f"{context}: invalid netclass pattern entry in {path}")
-            entry = cast(JSONObject, entry_value)
-            if not isinstance(entry.get("pattern"), str) or not isinstance(
-                entry.get("netclass"), str
-            ):
-                raise TypeError(f"{context}: invalid netclass pattern entry in {path}")
-        assignments_value = net_settings.get("netclass_assignments", {})
-        assignments = (
-            cast(JSONObject, assignments_value) if isinstance(assignments_value, dict) else {}
-        )
-        if not isinstance(assignments, dict):
-            raise TypeError(f"{context}: invalid netclass assignments in {path}")
-        for value in assignments.values():
-            if isinstance(value, str):
-                continue
-            if not isinstance(value, list):
-                raise TypeError(f"{context}: invalid netclass assignment value in {path}")
-        for key in ("net_chain_classes", "net_chain_netclasses"):
-            chain_map_value = net_settings.get(key, {})
-            chain_map = (
-                cast(JSONObject, chain_map_value) if isinstance(chain_map_value, dict) else {}
-            )
-            if not isinstance(chain_map_value, dict) or any(
-                not isinstance(name, str) or not isinstance(value, str)
-                for name, value in chain_map.items()
-            ):
-                raise TypeError(f"{context}: invalid {key} mapping in {path}")
+
+    patterns_value = net_settings.get("netclass_patterns", [])
+    if not isinstance(patterns_value, list):
+        raise TypeError(f"{context}: invalid net_settings.netclass_patterns section in {path}")
+    for entry_value in patterns_value:
+        if not isinstance(entry_value, dict):
+            raise TypeError(f"{context}: invalid netclass pattern entry in {path}")
+        entry = cast(JSONObject, entry_value)
+        if not isinstance(entry.get("pattern"), str) or not isinstance(
+            entry.get("netclass"), str
+        ):
+            raise TypeError(f"{context}: invalid netclass pattern entry in {path}")
+
+    assignments_value = net_settings.get("netclass_assignments", {})
+    if not isinstance(assignments_value, dict):
+        raise TypeError(f"{context}: invalid netclass assignments in {path}")
+    assignments = cast(JSONObject, assignments_value)
+    for value in assignments.values():
+        if isinstance(value, str):
+            continue
+        if not isinstance(value, list) or any(not isinstance(name, str) for name in value):
+            raise TypeError(f"{context}: invalid netclass assignment value in {path}")
+
+    for key in ("net_chain_classes", "net_chain_netclasses"):
+        chain_map_value = net_settings.get(key, {})
+        if not isinstance(chain_map_value, dict):
+            raise TypeError(f"{context}: invalid {key} mapping in {path}")
+        chain_map = cast(JSONObject, chain_map_value)
+        if any(not isinstance(value, str) for value in chain_map.values()):
+            raise TypeError(f"{context}: invalid {key} mapping in {path}")
+
     return cast(KiCadProjectData, project_data)
 
 

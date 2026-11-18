@@ -7,6 +7,7 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Protocol, cast
 
+from .json_types import JSONValue, JSONObject
 from .pcb_types import (
     BatchBlockLayoutPlacementSource,
     BlockLayoutPlacementSource,
@@ -138,17 +139,17 @@ def read_pcb_placement_manifest(board_path: Path) -> PCBPlacementManifest:
             f"No KiCad Blocks placement manifest was found next to this board: {sidecar}"
         )
     try:
-        raw_payload = json.loads(sidecar.read_text(encoding="utf-8"))
+        decoded: JSONValue = cast(JSONValue, json.loads(sidecar.read_text(encoding="utf-8")))
     except (OSError, json.JSONDecodeError) as exc:
         raise ValueError(f"Could not read PCB placement manifest {sidecar}: {exc}") from exc
-    if not isinstance(raw_payload, dict):
+    if not isinstance(decoded, dict):
         raise TypeError("PCB placement manifest must be a JSON object.")
-    payload = cast(PCBPlacementManifest, raw_payload)
-    if payload.get("schema_version") != PLACEMENT_SCHEMA_VERSION:
-        raise ValueError(
-            f"Unsupported PCB placement manifest schema: {payload.get('schema_version')!r}."
-        )
-    recorded_path = payload.get("board_path")
+    raw_payload = cast(JSONObject, decoded)
+
+    schema_version = raw_payload.get("schema_version")
+    if schema_version != PLACEMENT_SCHEMA_VERSION:
+        raise ValueError(f"Unsupported PCB placement manifest schema: {schema_version!r}.")
+    recorded_path = raw_payload.get("board_path")
     if (
         not isinstance(recorded_path, str)
         or Path(recorded_path).expanduser().resolve() != board_path
@@ -156,28 +157,34 @@ def read_pcb_placement_manifest(board_path: Path) -> PCBPlacementManifest:
         raise ValueError(
             "PCB placement manifest belongs to a different board path; refusing to move items."
         )
-    placements = payload.get("placements")
-    if not isinstance(placements, list) or not placements:
+    placements_value = raw_payload.get("placements")
+    if not isinstance(placements_value, list) or not placements_value:
         raise ValueError("PCB placement manifest contains no block placements.")
 
     seen_references: set[str] = set()
     seen_items: set[str] = set()
-    for placement in placements:
-        if not isinstance(placement, dict):
+    for placement_value in placements_value:
+        if not isinstance(placement_value, dict):
             raise TypeError("PCB placement manifest contains a malformed placement.")
-        reference = str(placement.get("instance_reference", "")).strip()
+        placement = cast(JSONObject, placement_value)
+        reference_value = placement.get("instance_reference", "")
+        if not isinstance(reference_value, str):
+            raise TypeError("PCB placement instance reference must be a string.")
+        reference = reference_value.strip()
         if not reference or reference.casefold() in seen_references:
             raise ValueError(f"PCB placement reference is missing or duplicated: {reference!r}.")
         seen_references.add(reference.casefold())
-        item_ids = placement.get("item_uuids")
-        if not isinstance(item_ids, list) or not item_ids:
+        item_ids_value = placement.get("item_uuids")
+        if not isinstance(item_ids_value, list) or not item_ids_value:
             raise ValueError(f"PCB placement {reference!r} has no board-item UUIDs.")
-        for value in item_ids:
-            item_id = str(value).strip()
+        for value in item_ids_value:
+            if not isinstance(value, str):
+                raise TypeError(f"PCB placement {reference!r} contains a non-string UUID.")
+            item_id = value.strip()
             if not item_id or item_id.casefold() in seen_items:
                 raise ValueError(f"PCB board-item UUID is empty or duplicated: {item_id!r}.")
             seen_items.add(item_id.casefold())
-    return payload
+    return cast(PCBPlacementManifest, raw_payload)
 
 
 def resolve_placement_item_ids(board: Board, placement: PCBPlacementEntry) -> list[BoardItemId]:
