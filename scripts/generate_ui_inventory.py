@@ -24,7 +24,7 @@ TICK = chr(96)
 COVERAGE_LABELS = {
     "contracted": "Contracted — widget action and expected UI transition asserted",
     "partial": "Partial — targeted GUI, integration, or visual checks exist",
-    "inventory-only": "Inventory only — systematic UI contracts not implemented yet",
+    "inventory-only": "Inventory only — systematic UI contracts remain future work",
 }
 ASSERTION_LABELS = {
     "asserted": "behavior asserted",

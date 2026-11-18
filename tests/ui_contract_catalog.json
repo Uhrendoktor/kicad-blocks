@@ -1044,11 +1044,19 @@
       "id": "error-confirmation-reports",
       "title": "Error, confirmation, and report dialogs",
       "purpose": "Explain blocked operations, recoverable errors, destructive confirmations, and completed reports.",
-      "coverage": "inventory-only",
-      "coverage_note": "Dialog behavior is covered selectively by existing operation tests. There is no exhaustive cross-action dialog contract or standard generated dialog inventory yet.",
+      "coverage": "partial",
+      "coverage_note": "The production plugin contains 56 native messagebox/simpledialog call sites across profile creation, source/layout selection, validation, library and implementation maintenance, the Functional Block Library, and action dispatch. An AST-generated registry maps every call site to its owning operation and classifies direct tests, related-flow coverage, and uncovered branches. Direct contracts exercise profile creation/decline/cancel/validation, layout selection/cancel/invalid choice, library validation failure/ERC-warning/success/cancel reports, plus the existing form/manager confirmation and recovery paths. Ten call sites remain without a direct behavior contract, notably single/batch PCB mapping/anchor/rotation prompts and action-dispatch warning/error paths. These are native OS/Tk dialogs; in-process tests assert prompt arguments and application effects, not platform-specific native-window rendering or focus.",
       "evidence": [
-        "tests/test_library_browser.py",
-        "tests/test_editor_workflow.py"
+        "scripts/dialog_callsite_inventory.py",
+        "tests/dialog_callsite_catalog.json",
+        "tests/test_dialog_inventory.py",
+        "tests/test_dialog_callsite_contracts.py",
+        "tests/test_create_block_form_contracts.py",
+        "tests/test_add_pcb_layout_contracts.py",
+        "tests/test_library_and_pcb_manager_contracts.py",
+        "tests/test_implementation_manager_contracts.py",
+        "tests/test_implementation_details_contracts.py",
+        "tests/test_instance_configuration_contracts.py"
       ],
       "functionality": [
         "Assert an error is visible and identifies the failed operation",

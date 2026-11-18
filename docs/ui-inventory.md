@@ -6,10 +6,10 @@ This page is generated from the declarative UI catalog. It inventories the curre
 | Coverage status | Screens | Meaning |
 |---|---:|---|
 | Contracted | 13 | Widget-level execute/result assertions are registered and run in CI. |
-| Partial | 0 | Targeted GUI, integration, model, or screenshot checks exist; the full control matrix is not contracted. |
-| Inventory only | 2 | Window/workflow is documented here; systematic UI contracts remain future work. |
+| Partial | 1 | Targeted GUI, integration, model, or screenshot checks exist; the full control matrix is not contracted. |
+| Inventory only | 1 | Window/workflow is documented here; systematic UI contracts remain future work. |
 
-Task Hub, both transient block choosers, Add PCB Layout, Create Block form, Record picker, Functional Block picker, Functional Block Library, Instance Configuration, Implementation details, Implementations Manager, Manage Libraries, and PCB Layout Manager now have full registered widget contracts. The remaining inventory-only surfaces are the cross-cutting error/confirmation/report dialogs and KiCad-native editors/file choosers; those require separate dialog-call-site and desktop integration coverage.
+Thirteen in-process Tk screens now have full registered widget contracts, including the Functional Block Library and both managers. Native error/confirmation/report dialogs are partially covered by an AST inventory of all 56 messagebox/simpledialog call sites (26 directly tested, 20 partially covered, 10 uncovered); KiCad-native editors and cross-platform file choosers remain inventory-only.
 
 ## Screens
 
@@ -585,9 +585,9 @@ Every application-owned interactive control in this dialog has a semantic ID and
 
 Explain blocked operations, recoverable errors, destructive confirmations, and completed reports.
 
-**Coverage:** Inventory only — systematic UI contracts remain future work.
+**Coverage:** Partial — targeted GUI, integration, or visual checks exist.
 
-Dialog behavior is covered selectively by existing operation tests. There is no exhaustive cross-action dialog contract or standard generated dialog inventory yet.
+The production plugin contains 56 native messagebox/simpledialog call sites across profile creation, source/layout selection, validation, library and implementation maintenance, the Functional Block Library, and action dispatch. An AST-generated registry maps every call site to its owning operation and classifies direct tests, related-flow coverage, and uncovered branches. Direct contracts exercise profile creation/decline/cancel/validation, layout selection/cancel/invalid choice, library validation failure/ERC-warning/success/cancel reports, plus the existing form/manager confirmation and recovery paths. Ten call sites remain without a direct behavior contract, notably single/batch PCB mapping/anchor/rotation prompts and action-dispatch warning/error paths. These are native OS/Tk dialogs; in-process tests assert prompt arguments and application effects, not platform-specific native-window rendering or focus.
 
 **Major functionality**
 
@@ -598,8 +598,16 @@ Dialog behavior is covered selectively by existing operation tests. There is no 
 
 **Current automated evidence**
 
-- `tests/test_library_browser.py`
-- `tests/test_editor_workflow.py`
+- `scripts/dialog_callsite_inventory.py`
+- `tests/dialog_callsite_catalog.json`
+- `tests/test_dialog_inventory.py`
+- `tests/test_dialog_callsite_contracts.py`
+- `tests/test_create_block_form_contracts.py`
+- `tests/test_add_pcb_layout_contracts.py`
+- `tests/test_library_and_pcb_manager_contracts.py`
+- `tests/test_implementation_manager_contracts.py`
+- `tests/test_implementation_details_contracts.py`
+- `tests/test_instance_configuration_contracts.py`
 
 **Production screenshots:** Not yet captured for this surface.
 
