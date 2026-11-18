@@ -343,6 +343,23 @@ def main() -> None:
                 )
             _register_block(project_dir, block, kicad, [library_root])
 
+            # Capture the exact serialized catalog shape before KiCad reloads it.
+            # This distinguishes a malformed source-library catalog from a bad
+            # project-catalog aggregation or a KiCad IPC cache issue.
+            shared_catalog_text = block.symbol_library.read_text(encoding="utf-8")
+            project_catalog_path = (
+                project_dir / ".kicad_blocks" / "KBlocks.kicad_sym"
+            )
+            project_catalog_text = project_catalog_path.read_text(encoding="utf-8")
+            shared_tree = parse_sexpr(shared_catalog_text)
+            project_tree = parse_sexpr(project_catalog_text)
+            print(
+                "KBlocks catalog structural diagnostics: "
+                f"shared top-level={[str(item[0]) for item in shared_tree[1:] if isinstance(item, list) and item]!r}; "
+                f"project top-level={[str(item[0]) for item in project_tree[1:] if isinstance(item, list) and item]!r}"
+            )
+            print("KBlocks project catalog before IPC reload:\\n" + project_catalog_text)
+
             library_definition = kicad.get_library_symbol(
                 f"{nickname}:{symbol_name}",
                 document=schematic.document,
