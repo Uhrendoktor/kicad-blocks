@@ -52,7 +52,6 @@ MANAGER_CONTROLS = {
 STATUS_TEXT = "Empty KB_VARIANT uses the default implementation."
 
 
-
 _HookResult = TypeVar("_HookResult")
 
 

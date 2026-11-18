@@ -125,9 +125,7 @@ class Treeview(Widget):
         self, parent: str, index: int | str, iid: str | None = ..., **kwargs: TkOption
     ) -> str: ...
     @overload
-    def item(
-        self, item: str, option: Literal["values"], **kwargs: TkOption
-    ) -> tuple[str, ...]: ...
+    def item(self, item: str, option: Literal["values"], **kwargs: TkOption) -> tuple[str, ...]: ...
     @overload
     def item(
         self, item: str, option: str | None = ..., **kwargs: TkOption

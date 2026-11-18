@@ -260,9 +260,7 @@ def _create_local_facade_copy(
 ) -> tuple[_SelectionFixture, BlockRecord, str]:
     original_instance_id = str(instance.id)
     selection = _SelectionFixture(instance)
-    local_path = make_selected_local(
-        cast("Schematic", selection), kicad, project_dir, library_root
-    )
+    local_path = make_selected_local(cast("Schematic", selection), kicad, project_dir, library_root)
     linked_local = local_copy_for_instance(project_dir, original_instance_id)
     link_file = project_dir / ".kicad_blocks" / "instances.json"
     link_data = json.loads(link_file.read_text(encoding="utf-8"))
@@ -339,9 +337,7 @@ def _validate_local_sync(
         local_text + "\n; local IPC publish test\n",
         encoding="utf-8",
     )
-    published = sync_selected_local(
-        cast("Schematic", selection), kicad, project_dir
-    )
+    published = sync_selected_local(cast("Schematic", selection), kicad, project_dir)
     if "implementation.kicad_sch" not in published["published"]:
         _fail(f"Local implementation edit was not published: {published!r}")
     if "; local IPC publish test" not in block.implementation.read_text(encoding="utf-8"):

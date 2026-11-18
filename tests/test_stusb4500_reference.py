@@ -251,7 +251,9 @@ class STUSB4500ReferenceTests(unittest.TestCase):
             41.91,
             places=3,
         )
-        output_x = {round(_scalar_number(positions[reference][1]), 3) for reference in ("C10", "D11")}
+        output_x = {
+            round(_scalar_number(positions[reference][1]), 3) for reference in ("C10", "D11")
+        }
         self.assertEqual(len(output_x), 1)
         self.assertAlmostEqual(
             _scalar_number(positions["D11"][2]) - _scalar_number(positions["C10"][2]),
@@ -744,9 +746,17 @@ class STUSB4500ReferenceTests(unittest.TestCase):
         label = next(
             node
             for node in _all(tree, "hierarchical_label")
-            if str(node[1]) == "GND"
-            and abs(_scalar_number(_required_direct(node, "at")[1]) - (_scalar_number(origin[1]) - 5.08)) < 0.001
-            and abs(_scalar_number(_required_direct(node, "at")[2]) - (_scalar_number(origin[2]) - 3.81)) < 0.001
+            if (
+                str(node[1]) == "GND"
+                and abs(
+                    _scalar_number(_required_direct(node, "at")[1]) - (_scalar_number(origin[1]) - 5.08)
+                )
+                < 0.001
+                and abs(
+                    _scalar_number(_required_direct(node, "at")[2]) - (_scalar_number(origin[2]) - 3.81)
+                )
+                < 0.001
+            )
         )
         at = _required_direct(label, "at")
         self.assertAlmostEqual(_scalar_number(at[1]), _scalar_number(origin[1]) - 5.08, places=3)
