@@ -70,7 +70,6 @@ def _unchanged_dependencies(
     return {"block": record, "changed": False, "count": 0}
 
 
-
 class LibraryEditorWorkflowTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
