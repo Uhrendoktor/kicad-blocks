@@ -14,8 +14,8 @@ sys.path.insert(0, str(ROOT / "plugin" / "kicad-blocks"))
 from kicad_blocks import plugin as plugin_actions
 
 pytestmark = pytest.mark.skipif(
-    not os.environ.get("DISPLAY"),
-    reason="Tk file-dialog wrapper contracts require an X display (run under xvfb-run).",
+    sys.platform == "linux" and not os.environ.get("DISPLAY"),
+    reason="Linux Tk file-dialog wrapper contracts require an X display (run under xvfb-run).",
 )
 
 
