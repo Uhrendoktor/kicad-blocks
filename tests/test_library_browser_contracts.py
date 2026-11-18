@@ -367,6 +367,7 @@ def test_place_button_registers_selected_block_and_starts_native_placement(
 ):
     root, context, _records, _library, _project = _new_browser(monkeypatch, tmp_path)
     context.action_calls.clear()
+
     def register_block(
         _project_dir: Path,
         record: BlockRecord,
@@ -379,10 +380,12 @@ def test_place_button_registers_selected_block_and_starts_native_placement(
 
     monkeypatch.setattr(plugin_actions, "_register_block", register_block)
     monkeypatch.setattr(plugin_actions, "_last_library_reload_ok", True)
+
     def minimize_placement_windows(_window: Misc) -> list[Misc]:
         return []
 
     monkeypatch.setattr(plugin_actions, "_minimize_placement_windows", minimize_placement_windows)
+
     def start_placement(
         _kicad: plugin_actions.KiCadApp,
         _editor_window_id: str | None,
@@ -392,6 +395,7 @@ def test_place_button_registers_selected_block_and_starts_native_placement(
         return cast(plugin_actions.SchematicSymbol, None)
 
     monkeypatch.setattr(plugin_actions, "_start_native_symbol_placement", start_placement)
+
     def unexpected_error(title: str, message: str, *, parent: Misc | None = None) -> str:
         del parent
         context.events.append(f"unexpected error dialog: {title}: {message}")
@@ -416,6 +420,7 @@ def test_implementation_button_registers_and_opens_default_document(
 ):
     root, context, _records, _library_root, _project = _new_browser(monkeypatch, tmp_path)
     context.action_calls.clear()
+
     def register_implementation_catalog(record: BlockRecord, library_roots: list[Path]) -> Path:
         del library_roots
         context.action_calls.append("register-implementation")
@@ -424,6 +429,7 @@ def test_implementation_button_registers_and_opens_default_document(
     monkeypatch.setattr(
         plugin_actions, "_register_implementation_catalog", register_implementation_catalog
     )
+
     def launch_implementation(
         _kicad: plugin_actions.KiCadApp,
         path: Path,
@@ -536,9 +542,7 @@ def test_implementation_selector_renders_the_selected_variant(
     monkeypatch: MonkeyPatch, tmp_path: Path
 ):
     root, context, records, _library, _project = _new_browser(monkeypatch, tmp_path)
-    records[0].manifest["variants"] = [
-        {"value": "1V8", "file": "implementation_1v8.kicad_sch"}
-    ]
+    records[0].manifest["variants"] = [{"value": "1V8", "file": "implementation_1v8.kicad_sch"}]
     rendered_implementations: list[str] = []
 
     def render_pages(
@@ -559,6 +563,7 @@ def test_implementation_selector_renders_the_selected_variant(
         selector = context.require_combobox("library-browser.implementation")
         assert tuple(selector["values"]) == ("Default", "1V8")
         rendered_implementations.clear()
+
         def implementation_selected(_event: TkEvent[Misc]) -> str | None:
             context.events.append("implementation:1V8")
             return None
@@ -604,6 +609,7 @@ def test_sheet_selector_draws_the_selected_schematic_page(monkeypatch: MonkeyPat
         assert tuple(selector["values"]) == ("Main", "Power Stage")
         assert selector.winfo_manager() == "pack"
         drawn_pages.clear()
+
         def sheet_selected(_event: TkEvent[Misc]) -> str | None:
             context.events.append("sheet:Power Stage")
             return None
@@ -746,7 +752,9 @@ def test_open_implementation_chooser_opens_the_selected_named_variant(
         "_register_implementation_catalog",
         _record_action(context.action_calls, "registered"),
     )
-    monkeypatch.setattr(plugin_actions, "_launch_block_asset", _record_asset_open(context.action_calls))
+    monkeypatch.setattr(
+        plugin_actions, "_launch_block_asset", _record_asset_open(context.action_calls)
+    )
     try:
         _select_first_record(context)
         ButtonContract(

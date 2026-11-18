@@ -255,6 +255,7 @@ def test_remove_alternative_updates_manifest_and_removes_unreferenced_file(
     variant_file = record.path / record.manifest["variants"][0]["file"]
     root = _new_root(monkeypatch)
     context = UiTestContext(root)
+
     def confirm_remove(
         _title: str,
         _message: str,
@@ -332,6 +333,7 @@ def test_edit_variant_renames_selector_and_preserves_implementation_file(
     record, _sources = _new_manager_fixture(tmp_path, variants=("1V8",))
     current_file = record.path / record.manifest["variants"][0]["file"]
     original_bytes = current_file.read_bytes()
+
     def ask_implementation_details(
         _parent: Misc,
         *,
@@ -343,9 +345,7 @@ def test_edit_variant_renames_selector_and_preserves_implementation_file(
         del value, source, record, allow_create
         return "1V8 low-noise", str(current_file)
 
-    monkeypatch.setattr(
-        plugin_actions, "_ask_implementation_details", ask_implementation_details
-    )
+    monkeypatch.setattr(plugin_actions, "_ask_implementation_details", ask_implementation_details)
     root = _new_root(monkeypatch)
     context = UiTestContext(root)
 
@@ -395,9 +395,7 @@ def test_add_variant_save_failure_can_be_retried_with_save_and_close(
         return "3V3", str(source_path)
 
     source_path = source
-    monkeypatch.setattr(
-        plugin_actions, "_ask_implementation_details", ask_implementation_details
-    )
+    monkeypatch.setattr(plugin_actions, "_ask_implementation_details", ask_implementation_details)
     original_save = _save_block_variants
     attempts: list[str] = []
     errors: list[tuple[str, str]] = []
@@ -412,6 +410,7 @@ def test_add_variant_save_failure_can_be_retried_with_save_and_close(
         original_save(*args, **kwargs)
 
     monkeypatch.setattr(plugin_actions, "_save_block_variants", fail_once)
+
     def show_error(
         title: str,
         message: str,
