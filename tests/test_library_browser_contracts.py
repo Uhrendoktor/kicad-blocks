@@ -993,6 +993,7 @@ def test_open_named_implementation_launch_failure_shows_error_after_chooser(
             if widget.winfo_class() == "TCombobox"
         )
         combo.set("1V8")
+        context.refresh_widgets()
         ButtonContract(
             contract_id="open-implementation-chooser.action.open",
             expected_action="launch-named-failed",
@@ -1156,6 +1157,7 @@ def test_open_pcb_layout_launch_failure_shows_error_after_chooser(
             if widget.winfo_class() == "TCombobox"
         )
         combo.set("Default [default-pcb]")
+        context.refresh_widgets()
         ButtonContract(
             contract_id="open-pcb-layout-chooser.action.open",
             expected_action="open-layout-failed",
