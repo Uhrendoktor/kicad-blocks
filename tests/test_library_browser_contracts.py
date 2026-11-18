@@ -993,6 +993,7 @@ def test_open_named_implementation_launch_failure_shows_error_after_chooser(
             if widget.winfo_class() == "TCombobox"
         )
         combo.set("1V8")
+        context.action_calls.clear()
         context.refresh_widgets()
         ButtonContract(
             contract_id="open-implementation-chooser.action.open",
