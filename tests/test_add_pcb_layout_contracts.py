@@ -215,3 +215,53 @@ def test_add_pcb_layout_cancel_returns_none_without_creating_board(
         assert created == []
     finally:
         root.destroy()
+
+
+def test_add_pcb_layout_rejects_invalid_existing_file_then_recovers(monkeypatch, tmp_path):
+    root, record = _new_parent_and_record(tmp_path)
+    invalid = tmp_path / "notes.txt"
+    invalid.write_text("not a KiCad board", encoding="utf-8")
+    valid = tmp_path / "board.kicad_pcb"
+    valid.write_text("(kicad_pcb (version 20250114))\\n", encoding="utf-8")
+    errors = []
+    monkeypatch.setattr(
+        plugin_actions.messagebox,
+        "showerror",
+        lambda title, message, **kwargs: errors.append(
+            (title, str(message), kwargs.get("parent"))
+        ),
+    )
+    context = UiTestContext(root)
+
+    def interact(dialog):
+        mode = context.require_widget("add-pcb-layout.mode")
+        mode.set("Choose an existing PCB file")
+        mode.event_generate("<<ComboboxSelected>>")
+        root.update_idletasks()
+        root.update()
+        source = context.require_widget("add-pcb-layout.source")
+        source.insert(0, str(invalid))
+        _contract_button(context, "add-pcb-layout.add", "Add layout")
+        assert errors == [
+            (
+                "Add PCB layout",
+                "Choose an existing KiCad .kicad_pcb file.",
+                dialog,
+            )
+        ]
+        assert dialog.winfo_exists()
+        source.delete(0, "end")
+        source.insert(0, str(valid))
+        _contract_button(context, "add-pcb-layout.add", "Add layout", closes=True)
+
+    _schedule_dialog_action(root, context, interact)
+    try:
+        result = plugin_actions._ask_layout_details(root, record)
+        assert result == {
+            "name": "New layout",
+            "source": str(valid.resolve()),
+            "linked_implementation": "Default",
+        }
+        assert len(errors) == 1
+    finally:
+        root.destroy()

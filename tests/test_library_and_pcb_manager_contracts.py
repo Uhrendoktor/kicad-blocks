@@ -596,3 +596,285 @@ def test_pcb_layout_manager_disables_selection_actions_when_empty(
         _run_pcb_manager(root, context, record, inspect)
     finally:
         root.destroy()
+
+
+def test_pcb_layout_manager_duplicate_name_reports_error_without_mutating_manifest(
+    monkeypatch, tmp_path
+):
+    record, _sources = _pcb_fixture(tmp_path, layout_count=2)
+    original = read_manifest(record.path)
+    duplicate = original["layouts"][0]["name"]
+    board = tmp_path / "duplicate-source.kicad_pcb"
+    board.write_text("(kicad_pcb)\\n", encoding="utf-8")
+    monkeypatch.setattr(
+        plugin_actions,
+        "_ask_layout_details",
+        lambda *_args, **_kwargs: {
+            "name": duplicate,
+            "source": str(board),
+            "linked_implementation": "Default",
+        },
+    )
+    errors = []
+    monkeypatch.setattr(
+        plugin_actions.messagebox,
+        "showerror",
+        lambda title, message, **kwargs: errors.append(
+            (title, str(message), kwargs.get("parent"))
+        ),
+    )
+    root = _new_root(monkeypatch)
+    context = UiTestContext(root)
+
+    def add_duplicate(_dialog):
+        _click(context, "pcb-layout-manager.action.add", "Add layout")
+        assert len(errors) == 1
+        assert errors[0][0] == "Add PCB layout"
+        assert f"layout named {duplicate!r} already exists" in errors[0][1]
+        assert errors[0][2].title() == f"PCB layouts — {record.name}"
+        assert read_manifest(record.path) == original
+        _click(
+            context,
+            "pcb-layout-manager.action.close",
+            "Close",
+            closes=True,
+            title=f"PCB layouts — {record.name}",
+        )
+
+    try:
+        _run_pcb_manager(root, context, record, add_duplicate)
+    finally:
+        root.destroy()
+
+
+def test_manage_libraries_add_registration_error_keeps_existing_roots(
+    monkeypatch, tmp_path
+):
+    _settings, first, second = _library_fixture(monkeypatch, tmp_path)
+    candidate = tmp_path / "candidate-library"
+    candidate.mkdir()
+    monkeypatch.setattr(plugin_actions, "_pick_directory", lambda *_a, **_k: str(candidate))
+
+    def fail_add(_path):
+        raise OSError("permission denied while registering library")
+
+    monkeypatch.setattr(plugin_actions, "add_library_root", fail_add)
+    errors = []
+    monkeypatch.setattr(
+        plugin_actions.messagebox,
+        "showerror",
+        lambda title, message, **kwargs: errors.append(
+            (title, str(message), kwargs.get("parent"))
+        ),
+    )
+    root = _new_root(monkeypatch)
+    context = UiTestContext(root)
+
+    def add(_dialog):
+        _click(context, "manage-libraries.action.add", "Add library")
+        assert len(errors) == 1
+        assert errors[0][0] == "Add existing library"
+        assert errors[0][1] == "permission denied while registering library"
+        assert errors[0][2].title() == "Manage Libraries"
+        assert set(repository.library_roots()) == {first.resolve(), second.resolve()}
+        _click(context, "manage-libraries.action.close", "Close", closes=True, title="Manage Libraries")
+
+    try:
+        _run_library_manager(root, context, add)
+    finally:
+        root.destroy()
+
+
+def test_manage_libraries_create_rejects_path_like_folder_name(monkeypatch, tmp_path):
+    _settings, _first, _second = _library_fixture(monkeypatch, tmp_path)
+    destination = tmp_path / "created"
+    destination.mkdir()
+    monkeypatch.setattr(plugin_actions, "_pick_directory", lambda *_a, **_k: str(destination))
+    monkeypatch.setattr(
+        plugin_actions.simpledialog,
+        "askstring",
+        lambda *_a, **_k: "../outside",
+    )
+    errors = []
+    monkeypatch.setattr(
+        plugin_actions.messagebox,
+        "showerror",
+        lambda title, message, **kwargs: errors.append(
+            (title, str(message), kwargs.get("parent"))
+        ),
+    )
+    root = _new_root(monkeypatch)
+    context = UiTestContext(root)
+
+    def create(_dialog):
+        _click(context, "manage-libraries.action.create", "Create library")
+        assert len(errors) == 1
+        assert errors[0][0] == "Create block library"
+        assert errors[0][1] == "Enter a single folder name without a path."
+        assert errors[0][2].title() == "Manage Libraries"
+        assert not (tmp_path / "outside").exists()
+        _click(context, "manage-libraries.action.close", "Close", closes=True, title="Manage Libraries")
+
+    try:
+        _run_library_manager(root, context, create)
+    finally:
+        root.destroy()
+
+
+def test_manage_libraries_create_filesystem_error_keeps_existing_folder(
+    monkeypatch, tmp_path
+):
+    _settings, _first, _second = _library_fixture(monkeypatch, tmp_path)
+    destination = tmp_path / "created"
+    existing = destination / "already-there"
+    destination.mkdir()
+    existing.mkdir()
+    marker = existing / "preserve.txt"
+    marker.write_text("keep", encoding="utf-8")
+    monkeypatch.setattr(plugin_actions, "_pick_directory", lambda *_a, **_k: str(destination))
+    monkeypatch.setattr(
+        plugin_actions.simpledialog,
+        "askstring",
+        lambda *_a, **_k: "already-there",
+    )
+    errors = []
+    monkeypatch.setattr(
+        plugin_actions.messagebox,
+        "showerror",
+        lambda title, message, **kwargs: errors.append(
+            (title, str(message), kwargs.get("parent"))
+        ),
+    )
+    root = _new_root(monkeypatch)
+    context = UiTestContext(root)
+
+    def create(_dialog):
+        _click(context, "manage-libraries.action.create", "Create library")
+        assert len(errors) == 1
+        assert errors[0][0] == "Create block library"
+        assert "exists" in errors[0][1].lower()
+        assert errors[0][2].title() == "Manage Libraries"
+        assert marker.read_text(encoding="utf-8") == "keep"
+        assert existing.resolve() not in repository.library_roots()
+        _click(context, "manage-libraries.action.close", "Close", closes=True, title="Manage Libraries")
+
+    try:
+        _run_library_manager(root, context, create)
+    finally:
+        root.destroy()
+
+
+def test_manage_libraries_change_folder_rolls_back_after_old_root_removal_fails(
+    monkeypatch, tmp_path
+):
+    _settings, first, second = _library_fixture(monkeypatch, tmp_path)
+    replacement = tmp_path / "replacement"
+    replacement.mkdir()
+    monkeypatch.setattr(plugin_actions, "_pick_directory", lambda *_a, **_k: str(replacement))
+    original_remove = plugin_actions.remove_library_root
+
+    def fail_old_root(path):
+        resolved = Path(path).expanduser().resolve()
+        if resolved == first.resolve():
+            raise OSError("simulated old-root unregister failure")
+        return original_remove(path)
+
+    monkeypatch.setattr(plugin_actions, "remove_library_root", fail_old_root)
+    errors = []
+    monkeypatch.setattr(
+        plugin_actions.messagebox,
+        "showerror",
+        lambda title, message, **kwargs: errors.append(
+            (title, str(message), kwargs.get("parent"))
+        ),
+    )
+    root = _new_root(monkeypatch)
+    context = UiTestContext(root)
+
+    def change(_dialog):
+        _select_path(context, "manage-libraries.rows", first, path_column="path")
+        _click(context, "manage-libraries.action.change", "Change folder")
+        assert len(errors) == 1
+        assert errors[0][0] == "Change registered folder"
+        assert errors[0][1] == "simulated old-root unregister failure"
+        assert errors[0][2].title() == "Manage Libraries"
+        assert first.resolve() in repository.library_roots()
+        assert second.resolve() in repository.library_roots()
+        assert replacement.resolve() not in repository.library_roots()
+        assert repository.default_library_root() == first.resolve()
+        _click(context, "manage-libraries.action.close", "Close", closes=True, title="Manage Libraries")
+
+    try:
+        _run_library_manager(root, context, change)
+    finally:
+        root.destroy()
+
+
+def test_manage_libraries_unregister_error_keeps_root_registered(monkeypatch, tmp_path):
+    _settings, first, second = _library_fixture(monkeypatch, tmp_path)
+    monkeypatch.setattr(plugin_actions.messagebox, "askyesno", lambda *_a, **_k: True)
+    monkeypatch.setattr(
+        plugin_actions,
+        "remove_library_root",
+        lambda _path: (_ for _ in ()).throw(OSError("settings file is read-only")),
+    )
+    errors = []
+    monkeypatch.setattr(
+        plugin_actions.messagebox,
+        "showerror",
+        lambda title, message, **kwargs: errors.append(
+            (title, str(message), kwargs.get("parent"))
+        ),
+    )
+    root = _new_root(monkeypatch)
+    context = UiTestContext(root)
+
+    def unregister(_dialog):
+        _select_path(context, "manage-libraries.rows", second, path_column="path")
+        _click(context, "manage-libraries.action.unregister", "Unregister")
+        assert len(errors) == 1
+        assert errors[0][0] == "Unregister library"
+        assert errors[0][1] == "settings file is read-only"
+        assert errors[0][2].title() == "Manage Libraries"
+        assert second.resolve() in repository.library_roots()
+        assert first.resolve() in repository.library_roots()
+        _click(context, "manage-libraries.action.close", "Close", closes=True, title="Manage Libraries")
+
+    try:
+        _run_library_manager(root, context, unregister)
+    finally:
+        root.destroy()
+
+
+def test_manage_libraries_set_default_error_preserves_previous_default(monkeypatch, tmp_path):
+    _settings, first, second = _library_fixture(monkeypatch, tmp_path)
+    monkeypatch.setattr(
+        plugin_actions,
+        "set_library_root",
+        lambda _path: (_ for _ in ()).throw(OSError("could not write default setting")),
+    )
+    errors = []
+    monkeypatch.setattr(
+        plugin_actions.messagebox,
+        "showerror",
+        lambda title, message, **kwargs: errors.append(
+            (title, str(message), kwargs.get("parent"))
+        ),
+    )
+    root = _new_root(monkeypatch)
+    context = UiTestContext(root)
+
+    def set_default(_dialog):
+        _select_path(context, "manage-libraries.rows", second, path_column="path")
+        _click(context, "manage-libraries.action.default", "Set default")
+        assert len(errors) == 1
+        assert errors[0][0] == "Set default library"
+        assert errors[0][1] == "could not write default setting"
+        assert errors[0][2].title() == "Manage Libraries"
+        assert repository.default_library_root() == first.resolve()
+        _click(context, "manage-libraries.action.close", "Close", closes=True, title="Manage Libraries")
+
+    try:
+        _run_library_manager(root, context, set_default)
+    finally:
+        root.destroy()

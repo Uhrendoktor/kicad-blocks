@@ -139,22 +139,22 @@
       "owner": "_ask_layout_details.accept",
       "method": "messagebox.showerror",
       "line": 3569,
-      "coverage": "partial",
+      "coverage": "tested",
       "evidence": [
         "tests/test_add_pcb_layout_contracts.py"
       ],
-      "rationale": "The owning UI action has success-path or integration coverage, but this particular native-dialog error/confirmation branch is not directly asserted."
+      "rationale": "An invalid existing board path or extension is rejected, the Add PCB Layout form remains open, and the user can select a valid .kicad_pcb file and complete the action."
     },
     {
       "id": "_show_block_layout_editor.add_layout::messagebox.showerror#1",
       "owner": "_show_block_layout_editor.add_layout",
       "method": "messagebox.showerror",
       "line": 3723,
-      "coverage": "partial",
+      "coverage": "tested",
       "evidence": [
         "tests/test_library_and_pcb_manager_contracts.py"
       ],
-      "rationale": "The owning UI action has success-path or integration coverage, but this particular native-dialog error/confirmation branch is not directly asserted."
+      "rationale": "A duplicate layout name is rejected by the real Add layout button; the error is parented to PCB Layout Manager and the saved manifest remains unchanged."
     },
     {
       "id": "_show_block_layout_editor.remove_layout::messagebox.askyesno#1",
@@ -227,22 +227,22 @@
       "owner": "_show_block_variant_editor.add_variant",
       "method": "messagebox.showerror",
       "line": 4364,
-      "coverage": "partial",
+      "coverage": "tested",
       "evidence": [
         "tests/test_implementation_manager_contracts.py"
       ],
-      "rationale": "The owning UI action has success-path or integration coverage, but this particular native-dialog error/confirmation branch is not directly asserted."
+      "rationale": "Adding a variant with an existing selector value displays the duplicate-value error and leaves the manifest unchanged."
     },
     {
       "id": "_show_block_variant_editor.edit_variant::messagebox.showerror#1",
       "owner": "_show_block_variant_editor.edit_variant",
       "method": "messagebox.showerror",
       "line": 4395,
-      "coverage": "partial",
+      "coverage": "tested",
       "evidence": [
         "tests/test_implementation_manager_contracts.py"
       ],
-      "rationale": "The owning UI action has success-path or integration coverage, but this particular native-dialog error/confirmation branch is not directly asserted."
+      "rationale": "Renaming an implementation to another variant's selector is rejected; the original manifest and files remain unchanged."
     },
     {
       "id": "_show_block_variant_editor.remove_variant::messagebox.showinfo#1",
@@ -293,11 +293,11 @@
       "owner": "_show_library_roots_dialog.add_library",
       "method": "messagebox.showerror",
       "line": 4680,
-      "coverage": "partial",
+      "coverage": "tested",
       "evidence": [
         "tests/test_library_and_pcb_manager_contracts.py"
       ],
-      "rationale": "The owning UI action has success-path or integration coverage, but this particular native-dialog error/confirmation branch is not directly asserted."
+      "rationale": "A simulated settings-registration failure is reached through Add library; the exact error is shown and the prior registered-root set is preserved."
     },
     {
       "id": "_show_library_roots_dialog.create_library::simpledialog.askstring#1",
@@ -315,33 +315,33 @@
       "owner": "_show_library_roots_dialog.create_library",
       "method": "messagebox.showerror",
       "line": 4703,
-      "coverage": "partial",
+      "coverage": "tested",
       "evidence": [
         "tests/test_library_and_pcb_manager_contracts.py"
       ],
-      "rationale": "The owning UI action has success-path or integration coverage, but this particular native-dialog error/confirmation branch is not directly asserted."
+      "rationale": "Path-like folder names are rejected by the real Create library action before filesystem creation or library registration."
     },
     {
       "id": "_show_library_roots_dialog.create_library::messagebox.showerror#2",
       "owner": "_show_library_roots_dialog.create_library",
       "method": "messagebox.showerror",
       "line": 4720,
-      "coverage": "partial",
+      "coverage": "tested",
       "evidence": [
         "tests/test_library_and_pcb_manager_contracts.py"
       ],
-      "rationale": "The owning UI action has success-path or integration coverage, but this particular native-dialog error/confirmation branch is not directly asserted."
+      "rationale": "A filesystem collision while creating a library is reported and the pre-existing directory contents are preserved."
     },
     {
       "id": "_show_library_roots_dialog.change_library_folder::messagebox.showerror#1",
       "owner": "_show_library_roots_dialog.change_library_folder",
       "method": "messagebox.showerror",
       "line": 4756,
-      "coverage": "partial",
+      "coverage": "tested",
       "evidence": [
         "tests/test_library_and_pcb_manager_contracts.py"
       ],
-      "rationale": "The owning UI action has success-path or integration coverage, but this particular native-dialog error/confirmation branch is not directly asserted."
+      "rationale": "A simulated failure unregistering the old root after replacement registration triggers rollback of both the default root and the newly registered path."
     },
     {
       "id": "_show_library_roots_dialog.remove_library::messagebox.askyesno#1",
@@ -359,132 +359,132 @@
       "owner": "_show_library_roots_dialog.remove_library",
       "method": "messagebox.showerror",
       "line": 4773,
-      "coverage": "partial",
+      "coverage": "tested",
       "evidence": [
         "tests/test_library_and_pcb_manager_contracts.py"
       ],
-      "rationale": "The owning UI action has success-path or integration coverage, but this particular native-dialog error/confirmation branch is not directly asserted."
+      "rationale": "A confirmed Unregister that fails to persist is reported and the original root remains registered."
     },
     {
       "id": "_show_library_roots_dialog.make_default::messagebox.showerror#1",
       "owner": "_show_library_roots_dialog.make_default",
       "method": "messagebox.showerror",
       "line": 4784,
-      "coverage": "partial",
+      "coverage": "tested",
       "evidence": [
         "tests/test_library_and_pcb_manager_contracts.py"
       ],
-      "rationale": "The owning UI action has success-path or integration coverage, but this particular native-dialog error/confirmation branch is not directly asserted."
+      "rationale": "A Set default persistence failure is reported and the previous default library remains the default."
     },
     {
       "id": "_show_library_browser.refresh_records::messagebox.showerror#1",
       "owner": "_show_library_browser.refresh_records",
       "method": "messagebox.showerror",
       "line": 5367,
-      "coverage": "partial",
+      "coverage": "tested",
       "evidence": [
         "tests/test_library_browser_contracts.py"
       ],
-      "rationale": "The owning UI action has success-path or integration coverage, but this particular native-dialog error/confirmation branch is not directly asserted."
+      "rationale": "A failure reading registered libraries is triggered by Refresh; the error is shown while the existing result rows and count remain available."
     },
     {
       "id": "_show_library_browser.place_selected::messagebox.showwarning#1",
       "owner": "_show_library_browser.place_selected",
       "method": "messagebox.showwarning",
       "line": 5405,
-      "coverage": "partial",
+      "coverage": "tested",
       "evidence": [
         "tests/test_library_browser_contracts.py"
       ],
-      "rationale": "The owning UI action has success-path or integration coverage, but this particular native-dialog error/confirmation branch is not directly asserted."
+      "rationale": "A project-library reload warning is shown after registration, and native symbol placement is not started until the user restarts/reloads KiCad."
     },
     {
       "id": "_show_library_browser.place_selected::messagebox.showerror#1",
       "owner": "_show_library_browser.place_selected",
       "method": "messagebox.showerror",
       "line": 5421,
-      "coverage": "partial",
+      "coverage": "tested",
       "evidence": [
         "tests/test_library_browser_contracts.py"
       ],
-      "rationale": "The owning UI action has success-path or integration coverage, but this particular native-dialog error/confirmation branch is not directly asserted."
+      "rationale": "A failure registering the selected block for native placement is shown as Place Block error and the browser remains open."
     },
     {
       "id": "_show_library_browser.open_implementation::messagebox.showerror#1",
       "owner": "_show_library_browser.open_implementation",
       "method": "messagebox.showerror",
       "line": 5430,
-      "coverage": "partial",
+      "coverage": "tested",
       "evidence": [
         "tests/test_library_browser_contracts.py"
       ],
-      "rationale": "The owning UI action has success-path or integration coverage, but this particular native-dialog error/confirmation branch is not directly asserted."
+      "rationale": "A failure registering the implementation catalog is shown before an implementation chooser is opened."
     },
     {
       "id": "_show_library_browser.open_implementation::messagebox.showerror#2",
       "owner": "_show_library_browser.open_implementation",
       "method": "messagebox.showerror",
       "line": 5451,
-      "coverage": "partial",
+      "coverage": "tested",
       "evidence": [
         "tests/test_library_browser_contracts.py"
       ],
-      "rationale": "The owning UI action has success-path or integration coverage, but this particular native-dialog error/confirmation branch is not directly asserted."
+      "rationale": "A failure launching the default implementation is reported after registration; the browser remains available."
     },
     {
       "id": "_show_library_browser.open_implementation.launch_variant::messagebox.showerror#1",
       "owner": "_show_library_browser.open_implementation.launch_variant",
       "method": "messagebox.showerror",
       "line": 5489,
-      "coverage": "partial",
+      "coverage": "tested",
       "evidence": [
         "tests/test_library_browser_contracts.py"
       ],
-      "rationale": "The owning UI action has success-path or integration coverage, but this particular native-dialog error/confirmation branch is not directly asserted."
+      "rationale": "A failure launching the explicitly selected named implementation is reported after the chooser closes, without closing the parent library browser."
     },
     {
       "id": "_show_library_browser.edit_facade::messagebox.showerror#1",
       "owner": "_show_library_browser.edit_facade",
       "method": "messagebox.showerror",
       "line": 5525,
-      "coverage": "partial",
+      "coverage": "tested",
       "evidence": [
         "tests/test_library_browser_contracts.py"
       ],
-      "rationale": "The owning UI action has success-path or integration coverage, but this particular native-dialog error/confirmation branch is not directly asserted."
+      "rationale": "An Edit facade launch/IPC failure is reported and the Functional Block Library remains available."
     },
     {
       "id": "_show_library_browser.manage_layouts::messagebox.showerror#1",
       "owner": "_show_library_browser.manage_layouts",
       "method": "messagebox.showerror",
       "line": 5543,
-      "coverage": "partial",
+      "coverage": "tested",
       "evidence": [
         "tests/test_library_browser_contracts.py"
       ],
-      "rationale": "The owning UI action has success-path or integration coverage, but this particular native-dialog error/confirmation branch is not directly asserted."
+      "rationale": "A PCB layout manager failure is reported and leaves the Functional Block Library open."
     },
     {
       "id": "_show_library_browser.edit_variants::messagebox.showerror#1",
       "owner": "_show_library_browser.edit_variants",
       "method": "messagebox.showerror",
       "line": 5566,
-      "coverage": "partial",
+      "coverage": "tested",
       "evidence": [
         "tests/test_library_browser_contracts.py"
       ],
-      "rationale": "The owning UI action has success-path or integration coverage, but this particular native-dialog error/confirmation branch is not directly asserted."
+      "rationale": "An implementation manager failure is reported and leaves the Functional Block Library open."
     },
     {
       "id": "_show_library_browser.open_layout.launch_layout::messagebox.showerror#1",
       "owner": "_show_library_browser.open_layout.launch_layout",
       "method": "messagebox.showerror",
       "line": 5628,
-      "coverage": "partial",
+      "coverage": "tested",
       "evidence": [
         "tests/test_library_browser_contracts.py"
       ],
-      "rationale": "The owning UI action has success-path or integration coverage, but this particular native-dialog error/confirmation branch is not directly asserted."
+      "rationale": "A PCB editor launch failure for the selected board is reported after the chooser closes, while the parent browser remains usable."
     },
     {
       "id": "_validate_shared_library::messagebox.showwarning#1",

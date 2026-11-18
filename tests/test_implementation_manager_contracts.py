@@ -651,3 +651,87 @@ def test_add_button_routes_to_create_mode_details_and_persists_source(
         assert result.is_file()
     finally:
         root.destroy()
+
+
+def test_add_variant_duplicate_value_reports_error_and_preserves_manifest(
+    monkeypatch, tmp_path
+):
+    record, sources = _new_manager_fixture(tmp_path, variants=("1V8",))
+    original = read_manifest(record.path)
+    monkeypatch.setattr(
+        plugin_actions,
+        "_ask_implementation_details",
+        lambda *_args, **_kwargs: ("1V8", str(sources["1V8"])),
+    )
+    errors = []
+    monkeypatch.setattr(
+        plugin_actions.messagebox,
+        "showerror",
+        lambda title, message, **kwargs: errors.append(
+            (title, str(message), kwargs.get("parent"))
+        ),
+    )
+    root = _new_root(monkeypatch)
+    context = UiTestContext(root)
+
+    def add_duplicate(_dialog):
+        _click(context, "implementations-manager.action.add", "Add variant")
+        assert len(errors) == 1
+        assert errors[0][0] == "Add implementation"
+        assert errors[0][1] == "The value '1V8' already exists."
+        assert errors[0][2] is _manager_dialog(root)
+        assert read_manifest(record.path) == original
+        _click(
+            context,
+            "implementations-manager.action.close",
+            "Close",
+            closes=True,
+        )
+
+    try:
+        _run_manager(root, record, context, add_duplicate)
+    finally:
+        root.destroy()
+
+
+def test_edit_variant_duplicate_value_reports_error_and_preserves_manifest(
+    monkeypatch, tmp_path
+):
+    record, sources = _new_manager_fixture(tmp_path, variants=("1V8", "3V3"))
+    original = read_manifest(record.path)
+    monkeypatch.setattr(
+        plugin_actions,
+        "_ask_implementation_details",
+        lambda *_args, **_kwargs: ("3V3", str(sources["3V3"])),
+    )
+    errors = []
+    monkeypatch.setattr(
+        plugin_actions.messagebox,
+        "showerror",
+        lambda title, message, **kwargs: errors.append(
+            (title, str(message), kwargs.get("parent"))
+        ),
+    )
+    root = _new_root(monkeypatch)
+    context = UiTestContext(root)
+
+    def edit_duplicate(_dialog):
+        tree = context.require_widget("implementations-manager.rows")
+        _select_variant(context, "1", tuple(tree.item("1", "values")))
+        _click(context, "implementations-manager.action.edit", "Edit implementation")
+        assert len(errors) == 1
+        assert errors[0][0] == "Edit implementation"
+        assert errors[0][1] == "The value '3V3' already exists."
+        assert errors[0][2] is _manager_dialog(root)
+        assert read_manifest(record.path) == original
+        _click(
+            context,
+            "implementations-manager.action.close",
+            "Close",
+            closes=True,
+        )
+
+    try:
+        _run_manager(root, record, context, edit_duplicate)
+    finally:
+        root.destroy()
