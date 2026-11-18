@@ -490,9 +490,10 @@ class _ResvgPy(Protocol):
 
 
 class _TkPaletteOwner(Protocol):
-    """Tk window carrying the selected KiCad Blocks palette."""
+    """Tk window carrying the selected KiCad Blocks palettes."""
 
     kicad_blocks_palette: dict[str, str]
+    _kicad_blocks_palette: dict[str, str]
 
 
 class _TkActionIconOwner(Protocol):
@@ -1213,7 +1214,7 @@ def _action_button(
 ) -> ttk_types.Button:
     """Create a consistently padded, semantic icon-and-label action button."""
     palette_owner = cast(_TkPaletteOwner, parent.winfo_toplevel())
-    palette = palette_owner.kicad_blocks_palette
+    palette = palette_owner._kicad_blocks_palette
     icon_color = (
         palette.get("accent_foreground")
         if button_options.get("style") == "Primary.TButton"
