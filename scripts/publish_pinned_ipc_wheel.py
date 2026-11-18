@@ -101,12 +101,15 @@ def _get_or_create_release(repo: str, tag: str, source_sha: str, token: str) -> 
             + "Targets: CPython 3.12, 3.13 and 3.14, Linux x86_64."
         )
         if release.get("body") != target_body:
-            release = _request(
+            updated = _request(
                 "PATCH",
                 f"{root}/repos/{repo}/releases/{release.get('id')}",
                 token,
                 payload={"body": target_body},
             )
+            if updated is None:
+                raise RuntimeError(f"GitHub did not return the updated pinned wheel release {tag!r}.")
+            release = updated
         return release
 
     payload: JSONObject = {
@@ -174,7 +177,10 @@ def publish_pinned_wheel(wheelhouse: Path, repo: str, source_sha: str, token: st
                 f"the immutable release asset. Expected {expected_digest}, "
                 f"found {existing.get('digest')!r}."
             )
-        return str(existing["browser_download_url"])
+        download_url = existing.get("browser_download_url")
+        if not isinstance(download_url, str) or not download_url:
+            raise RuntimeError("Existing pinned wheel asset is missing browser_download_url.")
+        return download_url
 
     upload_url = release.get("upload_url", "").split("{", 1)[0]
     if not upload_url:

@@ -40,8 +40,12 @@ class UIControl(TypedDict):
     action_id: NotRequired[str]
 
 
-class UIAction(UIControl):
+class UIAction(TypedDict):
+    contract_id: str
+    label: str
+    assertion: str
     action_id: str
+    type: NotRequired[str]
 
 
 class UIView(TypedDict):
@@ -87,8 +91,10 @@ def load_catalog(path: Path = CATALOG_PATH) -> UICatalog:
         raise ValueError(f"Unknown UI coverage status: {unknown_statuses!r}")
 
     for screen in screens:
-        control_records: list[UIControl] = list(screen.get("controls", []))
-        control_records.extend(screen.get("footer_controls", []))
+        control_records: list[UIControl | UIAction] = [
+            *screen.get("controls", []),
+            *screen.get("footer_controls", []),
+        ]
         for view in screen.get("views", []):
             control_records.extend(view.get("actions", []))
         control_ids = [item["contract_id"] for item in control_records]
@@ -96,11 +102,10 @@ def load_catalog(path: Path = CATALOG_PATH) -> UICatalog:
             raise ValueError(f"Duplicate semantic control ID in screen {screen['id']!r}.")
         invalid_assertions = sorted(
             {
-                item.get("assertion")
+                item["assertion"]
                 for item in control_records
-                if item.get("assertion") not in ASSERTION_LABELS
+                if item["assertion"] not in ASSERTION_LABELS
             },
-            key=lambda value: "" if value is None else value,
         )
         if invalid_assertions:
             raise ValueError(

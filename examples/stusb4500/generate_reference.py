@@ -58,7 +58,7 @@ FRAME_CONTENT_PADDING_MM = 2.54
 FIELD_SYMBOL_MAX_GAP_MM = 9.00
 FIELD_SYMBOL_MAX_GAP_OVERRIDES_MM = {"D50": 2.54, "T1": 3.81, "T4": 3.81}
 WIRE_LENGTH_BUDGETS_MM = {"power-switch": 95.00}
-COMMON_PIN_NET_GROUPS = (
+COMMON_PIN_NET_GROUPS: tuple[_CommonPinNetGroup, ...] = (
     {
         "name": "GND",
         "pins": (("C2", "2"), ("C3", "2")),
@@ -69,6 +69,7 @@ COMMON_PIN_NET_GROUPS = (
 REQUIRED_NO_CONNECT_PINS = ("U1.11", "U1.14", "U1.15", "U1.17", "U1.20")
 GROUP_DESCRIPTION_FONT_MM = 0.65
 GROUP_EVIDENCE: _GroupEvidence = {
+    "datasheet": DATASHEET,
     "document": "ST DS12499 Rev. 8",
     "page": 26,
     "figure": "Figure 10",
@@ -317,6 +318,13 @@ class _PinOffsetRule(TypedDict):
 type _LayoutRule = _OffsetRule | _MidpointOffsetRule | _PinOffsetRule
 
 
+class _ComponentPurpose(TypedDict):
+    """Circuit role and electrical rationale for one documented component."""
+
+    function: str
+    rationale: str
+
+
 class _GroupLayout(TypedDict):
     """Anchor and relative constraints for one schematic group."""
 
@@ -349,6 +357,7 @@ class _SchematicGroup(TypedDict, total=False):
     align_to: str
     y_offset_mm: float
     evidence: _GroupEvidenceOverride
+    component_purposes: dict[str, _ComponentPurpose]
     layout: Required[_GroupLayout]
 
 
@@ -1698,7 +1707,8 @@ def generate_reference_schematic(destination: Path) -> Path:
                 ],
             ],
         ]
-        instance.append(project_instance)
+        project_instance_node: SExprList = project_instance
+        instance.append(project_instance_node)
         instances.append(instance)
 
     # Generate label glyphs after wiring so consumed endpoints do not retain
@@ -2008,7 +2018,7 @@ def generate_reference_schematic(destination: Path) -> Path:
 
     # Use the native KiCad title block for page metadata. The canvas itself
     # is reserved for functional circuit groups and their local descriptions.
-    rules = []
+    rules: list[SExprList] = []
 
     # Every local label must be intentionally reused; use a short physical
     # wire for one-off connections and reserve single-use ports for hierarchy.

@@ -5324,8 +5324,9 @@ def _show_block_variant_editor(
                     "value": str(item.get("value", "")),
                     "file": str(item.get("file") or item.get("source") or ""),
                 }
-                if item.get("layout_id"):
-                    editable["layout_id"] = str(item["layout_id"]).casefold()
+                layout_id = item.get("layout_id")
+                if layout_id is not None:
+                    editable["layout_id"] = layout_id.casefold()
                 saved_variants.append(editable)
             variants[:] = saved_variants
             default_variant[0] = str(saved.get("default_variant") or "")

@@ -94,9 +94,13 @@ def verify_bundle(source_dir: Path, source_sha: str) -> VisualDocsManifest:
             f"Visual assets represent {recorded_sha!r}, not checked-out source {source_sha!r}."
         )
     assets_value = manifest_data.get("assets")
-    if not isinstance(assets_value, dict) or set(assets_value) != ASSET_NAMES:
+    if not isinstance(assets_value, dict):
+        raise ValueError("Visual documentation assets must be a JSON object.")
+    asset_names = set(assets_value)
+    if asset_names != set(ASSET_NAMES):
         raise ValueError(
-            f"Visual asset inventory mismatch; expected={sorted(ASSET_NAMES)}, actual={sorted(assets_value or {})}."
+            "Visual asset inventory mismatch; "
+            f"expected={sorted(ASSET_NAMES)}, actual={sorted(asset_names)}."
         )
     assets: dict[str, str] = {}
     for name, expected_hash in assets_value.items():
