@@ -684,16 +684,24 @@ def capture_ui_workflows(
                     output_dir / f"library-browser-schematic-{theme}.png",
                     minimum_size=(1000, 650),
                 )
-                schematic_canvases = [
-                    cast(tk.Canvas, widget)
-                    for widget in walk_widgets(root)
-                    if widget.winfo_class() == "Canvas"
-                    and isinstance(widget, tk.Canvas)
-                    and any(
-                        widget.type(item) == "image" and bool(widget.itemcget(item, "image"))
-                        for item in widget.find_withtag("kicad-schematic-preview")
-                    )
-                ]
+                schematic_canvases: list[tk.Canvas] = []
+                for widget in walk_widgets(root):
+                    if widget.winfo_class() != "Canvas" or not isinstance(widget, tk.Canvas):
+                        continue
+                    canvas = cast(tk.Canvas, widget)
+                    for item in canvas.find_all():
+                        if canvas.type(item) != "image" or not canvas.itemcget(item, "image"):
+                            continue
+                        bounds = canvas.bbox(item)
+                        if bounds is None:
+                            continue
+                        rendered_width = bounds[2] - bounds[0]
+                        rendered_height = bounds[3] - bounds[1]
+                        # The schematic page is a full-sheet KiCad render. Its image
+                        # is substantially larger than the small facade-symbol preview.
+                        if rendered_width >= 700 and rendered_height >= 500:
+                            schematic_canvases.append(canvas)
+                            break
                 if not schematic_canvases:
                     canvas_diagnostics: list[
                         tuple[str, int, tuple[tuple[str, tuple[str, ...], str], ...]]
