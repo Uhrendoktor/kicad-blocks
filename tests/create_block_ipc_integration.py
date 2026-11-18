@@ -512,7 +512,7 @@ def main() -> None:
                     )
 
             run_creation(
-                schematic,
+                cast(plugin_actions.Schematic, schematic),
                 "Power Stage Block",
                 "Created from selected SheetSymbol",
             )
@@ -557,7 +557,7 @@ def main() -> None:
             )
             open_sheet = schematic.for_sheet(other_instance)
             active_source, active_sheet_uuid = plugin_actions.active_sheet_source(
-                open_sheet, project_dir
+                cast(plugin_actions.Schematic, open_sheet), project_dir
             )
             if active_source != child_paths["Control Interface"].resolve():
                 raise AssertionError(
@@ -575,7 +575,7 @@ def main() -> None:
                 )
 
             run_creation(
-                open_sheet,
+                cast(plugin_actions.Schematic, open_sheet),
                 "Control Interface Block",
                 "Created from active sheet view",
             )

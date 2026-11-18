@@ -96,7 +96,7 @@ def main() -> None:
         schematic = cast(plugin_actions.Schematic, FakeSchematic())
         kicad = cast(
             plugin_actions.KiCadApp,
-            SimpleNamespace(get_kicad_binary_path=get_kicad_binary_path),
+            SimpleNamespace(get_kicad_binary_path=fake_get_kicad_binary_path),
         )
         parent_window = cast(Misc, object())
 
@@ -452,11 +452,11 @@ def main() -> None:
             types: list[int],
             scope: int,
             timeout_s: float,
-        ) -> Sequence[plugin_actions._LibraryLoadStatus]:
+        ) -> Sequence[plugin_actions.LibraryLoadStatus]:
             del types, scope, timeout_s
             return []
 
-        def get_kicad_binary_path(_name: str) -> str:
+        def fake_get_kicad_binary_path(_name: str) -> str:
             return eeschema
 
         def show_publish_info(*_args: str, **_kwargs: str) -> None:

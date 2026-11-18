@@ -483,7 +483,7 @@ def _select_default_implementation(dialog: tk.Toplevel) -> None:
     tree = cast(ttk.Treeview, tree_widget) if tree_widget is not None else None
     if tree is None or "0" not in tree.get_children():
         raise RuntimeError("The implementations dialog does not contain its Default row.")
-    default_values = cast(tuple[str, ...], tree.item("0", "values"))
+    default_values = tree.item("0", "values")
     if not default_values or default_values[0] != "Default":
         raise RuntimeError(
             "The implementations table must expose one Default row, not a separate Base row: "
@@ -688,7 +688,7 @@ def capture_ui_workflows(
                 for widget in walk_widgets(root):
                     if widget.winfo_class() != "Canvas" or not isinstance(widget, tk.Canvas):
                         continue
-                    canvas = cast(tk.Canvas, widget)
+                    canvas = widget
                     for item in canvas.find_all():
                         if canvas.type(item) != "image" or not canvas.itemcget(item, "image"):
                             continue
@@ -709,7 +709,7 @@ def capture_ui_workflows(
                     for widget in walk_widgets(root):
                         if widget.winfo_class() != "Canvas" or not isinstance(widget, tk.Canvas):
                             continue
-                        canvas = cast(tk.Canvas, widget)
+                        canvas = widget
                         canvas_items = tuple(
                             (
                                 str(canvas.type(item)),
