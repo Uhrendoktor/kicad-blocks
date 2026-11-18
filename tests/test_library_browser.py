@@ -200,6 +200,7 @@ class LibraryBrowserTests(unittest.TestCase):
             )
             return subprocess.CompletedProcess(arguments, 0, "", "")
 
+        native_preview_cache: dict[tuple[str, int, str, int, int], bytes] = {}
         with (
             patch("kicad_blocks.plugin.find_kicad_cli", return_value="/usr/bin/kicad-cli"),
             patch("kicad_blocks.plugin.subprocess.run", side_effect=export),
@@ -565,7 +566,7 @@ class LibraryBrowserTests(unittest.TestCase):
                 "kicad_blocks.plugin.tk",
                 SimpleNamespace(PhotoImage=Mock(return_value=object())),
             ),
-            patch("kicad_blocks.plugin._NATIVE_PREVIEW_CACHE", {}),
+            patch("kicad_blocks.plugin._NATIVE_PREVIEW_CACHE", native_preview_cache),
         ):
             _native_symbol_preview_photo(self.block)
 
@@ -1064,7 +1065,7 @@ class LibraryBrowserTests(unittest.TestCase):
 
         child = FakeWidget()
         widget = FakeWidget([child])
-        scrolls = []
+        scrolls: list[int] = []
         _bind_mousewheel(widget, scrolls.append, include_children=True)
         child.bindings["<MouseWheel>"](SimpleNamespace(delta=120, num=None))
         self.assertEqual(scrolls, [-1])
@@ -1261,6 +1262,10 @@ class LibraryBrowserTests(unittest.TestCase):
             def iconify(self) -> None:
                 self.events.append("iconify")
                 self.current_state = "iconic"
+
+            def deiconify(self) -> None:
+                self.events.append("deiconify")
+                self.current_state = "normal"
 
         manager = FakeWindow()
         browser = FakeWindow(master=manager, initial_state="iconic")

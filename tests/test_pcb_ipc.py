@@ -42,8 +42,6 @@ def main() -> None:
         )
         try:
             board = kicad.get_board()
-            if board is None:
-                raise RuntimeError("KiCad IPC did not load the test board.")
 
             existing_nets = {item.name for item in board.get_nets()}
             if "" not in existing_nets:

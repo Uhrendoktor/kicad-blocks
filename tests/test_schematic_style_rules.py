@@ -23,7 +23,6 @@ from kicad_blocks.sexpr import (
     sexpr_all,
     sexpr_direct,
     sexpr_all as _all,
-    sexpr_direct as _direct,
 )
 from validate_schematic_style import (
     STYLE_RULES,
@@ -40,7 +39,6 @@ from validate_schematic_style import (
     label_kind_consistency_issues,
     required_no_connect_issues,
     symbol_field_clearance_issues,
-    text_box_issues,
     wire_compactness_issues,
     wire_obstacle_issues,
 )

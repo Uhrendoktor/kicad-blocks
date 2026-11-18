@@ -86,7 +86,7 @@ class VerifyReleaseGateTests(unittest.TestCase):
             ]
         }
         with (
-            patch.object(gate, "urlopen", return_value=_Response(payload)),
+            patch.object(gate, "urlopen", return_value=_Response(cast(JSONObject, payload))),
             patch.object(gate.time, "sleep"),
             self.assertRaisesRegex(RuntimeError, "No successful main push CI"),
         ):

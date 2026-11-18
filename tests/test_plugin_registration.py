@@ -222,7 +222,7 @@ def _wait_for_symbol_document(
     observed: list[str] = []
     while time.monotonic() < deadline:
         observed = []
-        for document in kicad.get_open_documents(DocumentType.DOCTYPE_SYMBOL):
+        for document in kicad.get_open_documents(int(DocumentType.DOCTYPE_SYMBOL)):
             identifier = getattr(document, "lib_id", None)
             if identifier is None:
                 continue

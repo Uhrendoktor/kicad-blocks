@@ -203,8 +203,6 @@ class PCBNetRewriteTests(unittest.TestCase):
 
             self.assertIsNotNone(result)
             assert result is not None
-            self.assertIsNotNone(result)
-            assert result is not None
             self.assertEqual(result["merged_classes"], ["X1_Fast"])
             self.assertEqual(result["assigned_nets"], ["VIN_BOARD", "X1_SW"])
             self.assertTrue(result["ignored_patterns"])
@@ -291,6 +289,8 @@ class PCBNetRewriteTests(unittest.TestCase):
                     "CLK_P": "U1_CLK_P",
                 },
             )
+            self.assertIsNotNone(result)
+            assert result is not None
             net_settings = result["data"].get("net_settings")
             self.assertIsNotNone(net_settings)
             assert net_settings is not None
@@ -303,8 +303,6 @@ class PCBNetRewriteTests(unittest.TestCase):
             self.assertEqual(assignments["CLK_BOARD"], ["BusClass"])
             self.assertEqual(assignments["U1_CLK_N"], ["BusClass"])
             self.assertNotIn("U1_CLK_P", assignments)
-            self.assertIsNotNone(result)
-            assert result is not None
             self.assertEqual(result["unmatched_patterns"], [])
 
     def test_unmatched_project_chain_overrides_are_reported(self):

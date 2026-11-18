@@ -11,7 +11,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from scripts.generate_ui_inventory import load_catalog, render_inventory
+from scripts.generate_ui_inventory import UIAction, UIControl, load_catalog, render_inventory
 
 CATALOG_PATH = ROOT / "tests" / "ui_contract_catalog.json"
 INVENTORY_PATH = ROOT / "docs" / "ui-inventory.md"
@@ -54,8 +54,10 @@ def test_every_known_top_level_screen_is_in_catalog():
 def test_each_semantic_control_has_an_explicit_assertion_level():
     catalog = load_catalog()
     for screen in catalog["screens"]:
-        controls = list(screen.get("controls", []))
-        controls.extend(screen.get("footer_controls", []))
+        controls: list[UIControl | UIAction] = [
+            *screen.get("controls", []),
+            *screen.get("footer_controls", []),
+        ]
         for view in screen.get("views", []):
             controls.extend(view.get("actions", []))
         ids = [item["contract_id"] for item in controls if item.get("contract_id")]
