@@ -103,13 +103,13 @@ def _get_or_create_release(repo: str, tag: str, source_sha: str, token: str) -> 
         if release.get("body") != target_body:
             release = _request(
                 "PATCH",
-                f"{root}/repos/{repo}/releases/{release['id']}",
+                f"{root}/repos/{repo}/releases/{release.get('id')}",
                 token,
                 payload={"body": target_body},
             )
         return release
 
-    payload = {
+    payload: JSONObject = {
         "tag_name": tag,
         "target_commitish": "main",
         "name": f"KiCad Python IPC bindings ({source_sha[:8]})",
@@ -129,8 +129,10 @@ def _get_or_create_release(repo: str, tag: str, source_sha: str, token: str) -> 
         created = _request("GET", url, token)
         if created is None:
             raise
-    if created is None or not created.get("id"):
+    if created is None:
         raise RuntimeError(f"Could not create or retrieve pinned wheel release {tag!r}.")
+    if created.get("id") is None:
+        raise RuntimeError(f"GitHub did not return a release ID for {tag!r}.")
     return created
 
 

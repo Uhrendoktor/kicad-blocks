@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import argparse
 import hashlib
-import json
 import os
 from pathlib import Path
 from urllib.error import HTTPError
@@ -94,10 +93,12 @@ def publish_release(
                 "make_latest": "true",
             },
         )
-    if release is None or not release.get("id") or release.get("tag_name") != tag:
+    if release is None or release.get("id") is None or release.get("tag_name") != tag:
         raise RuntimeError("Could not create or retrieve the expected versioned release.")
 
-    release_id = release["id"]
+    release_id = release.get("id")
+    if release_id is None:
+        raise RuntimeError("GitHub release is missing its ID.")
     upload_url = release.get("upload_url", "").split("{", 1)[0]
     if not upload_url:
         raise RuntimeError("GitHub release is missing upload_url.")

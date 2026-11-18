@@ -30,7 +30,7 @@ def _retry_delay(attempt: int, error: BaseException) -> float:
     """Return a bounded backoff, respecting a numeric Retry-After header."""
     retry_after = (
         error.headers.get("Retry-After")
-        if isinstance(error, HTTPError) and error.headers is not None
+        if isinstance(error, HTTPError)
         else None
     )
     if retry_after:
@@ -118,7 +118,7 @@ def _get_or_create_release(repo: str, token: str) -> GitHubApiResponse:
         return release
 
     api = os.environ.get("GITHUB_API_URL", "https://api.github.com").rstrip("/")
-    payload = {
+    payload: JSONObject = {
         "tag_name": RELEASE_TAG,
         "target_commitish": "main",
         "name": "KiCad Python IPC wheel (nightly)",
@@ -184,9 +184,12 @@ def publish_wheel(wheelhouse: Path, repo: str, token: str) -> str:
 
     for asset in release.get("assets", []):
         if asset.get("name") == wheel.name:
+            asset_id = asset.get("id")
+            if asset_id is None:
+                continue
             _api_request(
                 "DELETE",
-                f"{api}/repos/{repo}/releases/assets/{asset['id']}",
+                f"{api}/repos/{repo}/releases/assets/{asset_id}",
                 token,
                 allow_not_found=True,
             )
