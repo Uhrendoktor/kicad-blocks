@@ -796,9 +796,8 @@ def test_open_implementation_chooser_cancel_closes_without_opening(
     root, context, records, _library, _project = _new_browser(monkeypatch, tmp_path)
     records[0].manifest["variants"] = [{"value": "1V8", "file": "implementation_1v8.kicad_sch"}]
     effects: list[str] = []
-    def register_catalog(
-        record: BlockRecord, _library_roots: list[Path]
-    ) -> Path:
+
+    def register_catalog(record: BlockRecord, _library_roots: list[Path]) -> Path:
         return record.path / "KBlocks.kicad_sym"
 
     monkeypatch.setattr(
@@ -853,6 +852,7 @@ def test_open_pcb_chooser_opens_the_selected_layout(monkeypatch: MonkeyPatch, tm
     root, context, _records, _library, _project = _new_browser(
         monkeypatch, tmp_path, layouts=layouts
     )
+
     def launch_asset(
         _kicad: plugin_actions.KiCadApp,
         asset: Path,

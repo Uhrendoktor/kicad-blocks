@@ -162,6 +162,7 @@ def main(screenshot_path: Path | None = None) -> None:
             user_fields=fields,
         )
         commit = object()
+
         def expand_text_variables(value: str) -> str:
             return value
 

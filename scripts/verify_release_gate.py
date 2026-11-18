@@ -31,8 +31,6 @@ class WorkflowRun(TypedDict, total=False):
     html_url: str
 
 
-
-
 def verify_release_gate(
     repo: str, tag: str, version_file: Path, source_sha: str, token: str
 ) -> WorkflowRun:

@@ -47,7 +47,9 @@ _reload_symbol_library: Callable[..., bool] = cast(
 _edit_block_implementation: Callable[..., None] = cast(
     Callable[..., None], getattr(plugin_actions, "_edit_block_implementation")
 )
-_publish_block: Callable[..., None] = cast(Callable[..., None], getattr(plugin_actions, "_publish_block"))
+_publish_block: Callable[..., None] = cast(
+    Callable[..., None], getattr(plugin_actions, "_publish_block")
+)
 _write_instance_configuration: Callable[..., None] = cast(
     Callable[..., None], getattr(plugin_actions, "_write_instance_configuration")
 )
