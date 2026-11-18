@@ -7,6 +7,7 @@ import os
 import shutil
 import sys
 import tempfile
+from collections.abc import Callable
 from pathlib import Path
 from typing import NoReturn, TypedDict, cast
 
@@ -84,6 +85,25 @@ class _SelectionFixture:
         return [self.instance]
 
 
+def _place_symbol_with_reference(
+    schematic: Schematic,
+    symbol_id: str,
+    position: Vector2,
+    reference: str,
+) -> SchematicSymbol:
+    """Use Kipy's documented reference argument at the generated-stub boundary."""
+    place = cast(Callable[..., SchematicSymbol], schematic.place_symbol_from_library)
+    return place(symbol_id, position, reference=reference)
+
+
+def _symbol_library_identity(instance: SchematicSymbol) -> tuple[str, str]:
+    """Read a placed symbol's non-optional library identifier."""
+    definition = instance.definition
+    if definition is None or definition.id is None:
+        _fail(f"Symbol {instance.reference!r} has no library definition identifier.")
+    return definition.id.library, definition.id.name
+
+
 def _create_facade_fixture(
     root: Path,
 ) -> tuple[Path, Path, Path, BlockRecord, str, str]:
@@ -128,10 +148,11 @@ def _place_initial_facade(
     nickname: str,
     symbol_name: str,
 ) -> SchematicSymbol:
-    instance = schematic.place_symbol_from_library(
+    instance = _place_symbol_with_reference(
+        schematic,
         f"{nickname}:{symbol_name}",
         Vector2.from_xy_mm(100.0, 100.0),
-        reference="X1",
+        "X1",
     )
     schematic.save()
 
@@ -177,7 +198,7 @@ def _place_initial_facade(
     instance = symbols[0]
     if instance.reference != "X1":
         _fail(f"Unexpected reference designator: {instance.reference!r}.")
-    if instance.definition.id.library != nickname or instance.definition.id.name != symbol_name:
+    if _symbol_library_identity(instance) != (nickname, symbol_name):
         _fail("Placed facade has the wrong KiCad library identifier.")
     return symbols[0]
 
@@ -192,8 +213,8 @@ def _configure_facade_instance(
     # library identity must remain stable.
     original_configured_id = str(instance.id)
     write_instance_configuration(
-        cast("Schematic", schematic),
-        cast("SchematicSymbol", instance),
+        schematic,
+        instance,
         {
             "KB_PARAM_OUTPUT_VOLTAGE": "1.8",
             "KB_PARAM_ENABLE": "false",
@@ -223,7 +244,7 @@ def _configure_facade_instance(
         _fail(f"KiCad IPC did not persist the edited instance fields: {configured_values!r}")
     if str(instance.id) != original_configured_id or instance.reference != "X1":
         _fail("Configuration changed the facade KIID or reference.")
-    if instance.definition.id.library != nickname or instance.definition.id.name != symbol_name:
+    if _symbol_library_identity(instance) != (nickname, symbol_name):
         _fail("Configuration changed the facade library identifier.")
     return instance
 
@@ -240,7 +261,7 @@ def _create_local_facade_copy(
     original_instance_id = str(instance.id)
     selection = _SelectionFixture(instance)
     local_path = make_selected_local(
-        cast("Schematic", selection), cast("KiCadApp", kicad), project_dir, library_root
+        cast("Schematic", selection), kicad, project_dir, library_root
     )
     linked_local = local_copy_for_instance(project_dir, original_instance_id)
     link_file = project_dir / ".kicad_blocks" / "instances.json"
@@ -292,7 +313,7 @@ def _assert_local_sync_conflict(
         encoding="utf-8",
     )
     try:
-        sync_selected_local(cast("Schematic", selection), cast("KiCadApp", kicad), project_dir)
+        sync_selected_local(cast("Schematic", selection), kicad, project_dir)
     except RuntimeError as conflict_error:
         if "Synchronization conflict" not in str(conflict_error):
             raise
@@ -319,7 +340,7 @@ def _validate_local_sync(
         encoding="utf-8",
     )
     published = sync_selected_local(
-        cast("Schematic", selection), cast("KiCadApp", kicad), project_dir
+        cast("Schematic", selection), kicad, project_dir
     )
     if "implementation.kicad_sch" not in published["published"]:
         _fail(f"Local implementation edit was not published: {published!r}")
@@ -331,7 +352,7 @@ def _validate_local_sync(
         source_text + "\n; upstream IPC pull test\n",
         encoding="utf-8",
     )
-    pulled = sync_selected_local(cast("Schematic", selection), cast("KiCadApp", kicad), project_dir)
+    pulled = sync_selected_local(cast("Schematic", selection), kicad, project_dir)
     if "implementation.kicad_sch" not in pulled["pulled"]:
         _fail(f"Upstream implementation edit was not pulled: {pulled!r}")
     if "; upstream IPC pull test" not in local.implementation.read_text(encoding="utf-8"):
@@ -361,14 +382,15 @@ def _register_runtime_facade(
         "Runtime-Registered Block",
         parse_pins("A:input, B:output"),
     )
-    late_block = register_block(project_dir, late_block, cast("KiCadApp", kicad))
-    late_instance = schematic.place_symbol_from_library(
+    late_block = register_block(project_dir, late_block, kicad)
+    late_instance = _place_symbol_with_reference(
+        schematic,
         f"{late_block.manifest['library_nickname']}:{late_block.manifest['symbol_name']}",
         Vector2.from_xy_mm(140.0, 100.0),
-        reference="X2",
+        "X2",
     )
     schematic.save()
-    if late_instance.definition.id.library != nickname:
+    if _symbol_library_identity(late_instance)[0] != nickname:
         _fail("A newly added facade did not reload through the stable KBlocks nickname.")
     return late_block
 
@@ -405,14 +427,19 @@ def _run_facade_ipc_scenario(cli: str, root: Path) -> None:
     project_dir, library_root, schematic_path, block, nickname, symbol_name = (
         _create_facade_fixture(root)
     )
-    kicad = KiCad(
-        headless=True,
+    kicad = cast(
+        KiCadApp,
+        KiCad(
+            headless=True,
         kicad_cli_path=cli,
         file_path=str(schematic_path),
-        timeout_ms=30000,
+            timeout_ms=30000,
+        ),
     )
     try:
         schematic = kicad.get_schematic()
+        if schematic is None:
+            _fail("KiCad IPC did not open the facade test schematic.")
         kicad.load_all_libraries()
         kicad.wait_for_libraries(timeout_s=120.0)
         instance = _place_initial_facade(schematic, nickname, symbol_name)
@@ -520,7 +547,10 @@ def _assert_nested_parent_symbols(
     for reference, expected in expected_instances.items():
         symbol = symbols_by_reference[reference]
         rotation = expected["orientation"]
-        if int(symbol.transform.orientation) != schematic_symbol_orientation(rotation):
+        transform = symbol.transform
+        if transform is None:
+            _fail(f"Nested facade {reference} has no placement transform.")
+        if int(transform.orientation) != schematic_symbol_orientation(rotation):
             _fail(f"Nested facade {reference} was not placed at {rotation} degrees.")
 
 
@@ -563,14 +593,19 @@ def _verify_nested_parent(
     parent: BlockRecord,
     expected_instances: dict[str, _ExpectedNestedInstance],
 ) -> None:
-    parent_kicad = KiCad(
-        headless=True,
+    parent_kicad = cast(
+        KiCadApp,
+        KiCad(
+            headless=True,
         kicad_cli_path=cli,
         file_path=str(parent.implementation),
-        timeout_ms=30000,
+            timeout_ms=30000,
+        ),
     )
     try:
         parent_schematic = parent_kicad.get_schematic()
+        if parent_schematic is None:
+            _fail("KiCad IPC did not open the nested parent schematic.")
         parent_kicad.load_all_libraries()
         parent_kicad.wait_for_libraries(timeout_s=120.0)
         _assert_nested_parent_symbols(parent_schematic, expected_instances)
@@ -639,14 +674,19 @@ def _verify_parent_dependency_discovery(
 
 
 def _verify_nested_child(cli: str, child: BlockRecord) -> None:
-    child_kicad = KiCad(
-        headless=True,
+    child_kicad = cast(
+        KiCadApp,
+        KiCad(
+            headless=True,
         kicad_cli_path=cli,
         file_path=str(child.implementation),
-        timeout_ms=30000,
+            timeout_ms=30000,
+        ),
     )
     try:
         child_schematic = child_kicad.get_schematic()
+        if child_schematic is None:
+            _fail("KiCad IPC did not open the nested child schematic.")
         child_kicad.load_all_libraries()
         child_kicad.wait_for_libraries(timeout_s=120.0)
         leaf_symbols = list(child_schematic.get_symbols())
