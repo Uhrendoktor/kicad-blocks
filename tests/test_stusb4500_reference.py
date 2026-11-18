@@ -749,11 +749,13 @@ class STUSB4500ReferenceTests(unittest.TestCase):
             if (
                 str(node[1]) == "GND"
                 and abs(
-                    _scalar_number(_required_direct(node, "at")[1]) - (_scalar_number(origin[1]) - 5.08)
+                    _scalar_number(_required_direct(node, "at")[1])
+                    - (_scalar_number(origin[1]) - 5.08)
                 )
                 < 0.001
                 and abs(
-                    _scalar_number(_required_direct(node, "at")[2]) - (_scalar_number(origin[2]) - 3.81)
+                    _scalar_number(_required_direct(node, "at")[2])
+                    - (_scalar_number(origin[2]) - 3.81)
                 )
                 < 0.001
             )
