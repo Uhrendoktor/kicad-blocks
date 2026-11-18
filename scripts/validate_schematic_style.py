@@ -1571,7 +1571,7 @@ def wire_obstacle_issues(tree: SExprList) -> list[str]:
     bodies = _symbol_primitives(tree)
     pin_info = pin_world_info(tree)
     pins_by_reference: dict[str, set[Point]] = {}
-    for (reference, pin_number), info in pin_info.items():
+    for (reference, _pin_number), info in pin_info.items():
         pins_by_reference.setdefault(reference, set()).add(info["point"])
     annotation_boxes: list[tuple[int, Rect]] = []
     for annotation_index, node in enumerate(_all(tree, "text_box")):
