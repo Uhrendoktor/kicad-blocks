@@ -22,8 +22,6 @@ from kicad_blocks.repository import BlockRecord, create_block, read_manifest
 plugin_actions = import_module("kicad_blocks.plugin")
 
 
-
-
 class _DependencyResult(TypedDict):
     block: BlockRecord
     changed: bool
