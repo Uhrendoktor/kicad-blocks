@@ -5,11 +5,11 @@ This page is generated from the declarative UI catalog. It inventories the curre
 
 | Coverage status | Screens | Meaning |
 |---|---:|---|
-| Contracted | 11 | Widget-level execute/result assertions are registered and run in CI. |
-| Partial | 2 | Targeted GUI, integration, model, or screenshot checks exist; the full control matrix is not contracted. |
-| Inventory only | 2 | Window/workflow is documented here; systematic interaction contracts remain future work. |
+| Contracted | 13 | Widget-level execute/result assertions are registered and run in CI. |
+| Partial | 0 | Targeted GUI, integration, model, or screenshot checks exist; the full control matrix is not contracted. |
+| Inventory only | 2 | Window/workflow is documented here; systematic UI contracts remain future work. |
 
-Task Hub, both transient block choosers, Add PCB Layout, Create Block form, Record picker, Functional Block picker, Instance Configuration, Implementation details, Manage Libraries, and PCB Layout Manager have full registered widget contracts. The Functional Block Library and Implementations Manager remain partial while every downstream KiCad operation and native OS chooser continues to be verified separately.
+Task Hub, both transient block choosers, Add PCB Layout, Create Block form, Record picker, Functional Block picker, Functional Block Library, Instance Configuration, Implementation details, Implementations Manager, Manage Libraries, and PCB Layout Manager now have full registered widget contracts. The remaining inventory-only surfaces are the cross-cutting error/confirmation/report dialogs and KiCad-native editors/file choosers; those require separate dialog-call-site and desktop integration coverage.
 
 ## Screens
 
@@ -78,9 +78,9 @@ All thirteen action-button routes, the Close action, the three notebook views, w
 
 Search registered block libraries, inspect facade and schematic previews, choose implementations, configure a block, and start placement.
 
-**Coverage:** Partial — targeted GUI, integration, or visual checks exist.
+**Coverage:** Contracted — widget action and expected UI transition asserted.
 
-The production browser is captured in both themes. Real-widget contracts assert the results/pane inventory, search filtering and count, selection and selected details, Facade/Schematic navigation, implementation and sheet selector callbacks, split-pane geometry, and Refresh, Place, Implementation, Edit Facade, Variants, PCB layouts and Libraries toolbar callback routes. The Open PCB chooser is created with its default choice asserted. Confirm/cancel behavior in both transient choosers and end-to-end KiCad editor hand-off remain to be contracted.
+Every application-owned browser control and chooser route has a real-widget interaction contract. Tests assert search/count, selection/details, Facade/Schematic navigation, implementation/sheet selector callbacks, pane geometry, and every toolbar action (Place, Implementation, Edit Facade, Variants, Open PCB, PCB layouts, Refresh, Libraries). The implementation chooser and PCB chooser are each tested for selected-file open, cancellation without side effects, and the Manage layouts route. Native placement and document/editor behavior are separately exercised by KiCad CLI/IPC/editor integration tests; unsupported Symbol Editor targeting and cursor-anchored placement remain explicit product/API limitations, not untested browser buttons.
 
 **Major functionality**
 
@@ -116,6 +116,7 @@ The production browser is captured in both themes. Real-widget contracts assert 
 **Current automated evidence**
 
 - `tests/test_library_browser_contracts.py`
+- `tests/test_library_picker_gui.py`
 - `tests/test_library_browser.py`
 - `tests/capture_visual_docs.py`
 
@@ -411,9 +412,9 @@ Real Tk contracts assert the transient window identity, available layouts, openi
 
 Review the single Default implementation row and maintain named alternatives.
 
-**Coverage:** Partial — targeted GUI, integration, or visual checks exist.
+**Coverage:** Contracted — widget action and expected UI transition asserted.
 
-The current slice adds real-widget contracts for the manager's Treeview, Add, Edit, Set as default, Remove, Close, and Save & close controls. Tests exercise default promotion, manifest/file updates, renaming without recopying source data, profile-reference protection, and retry after a simulated save failure. The nested Implementation details form and every validation branch remain separately covered by its own screen.
+Every application-owned manager control has a real-Tk action or state contract. Tests verify the Default row and selection-dependent Edit/Set as default/Remove states, Add routing into create mode, Edit routing for Default and named alternatives, Set as default persistence, Remove file cleanup and profile-reference protection, confirmation cancellation, Keep/Discard choices on close with pending edits, and retry after a save failure. The nested Implementation details form is independently contracted across existing-file, browse, blank-schematic, copy-source, validation/recovery, and cancel paths.
 
 **Major functionality**
 
@@ -437,7 +438,7 @@ The current slice adds real-widget contracts for the manager's Treeview, Add, Ed
 **Current automated evidence**
 
 - `tests/test_implementation_manager_contracts.py`
-- `tests/test_library_browser.py`
+- `tests/test_implementation_details_contracts.py`
 - `tests/capture_visual_docs.py`
 
 **Production screenshots**
