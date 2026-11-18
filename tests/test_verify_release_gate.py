@@ -6,7 +6,10 @@ import importlib.util
 import json
 import unittest
 from pathlib import Path
+from types import TracebackType
 from unittest.mock import patch
+
+from scripts.github_api_types import JSONObject
 
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "verify_release_gate.py"
 SPEC = importlib.util.spec_from_file_location("verify_release_gate", SCRIPT)
@@ -17,16 +20,22 @@ SPEC.loader.exec_module(gate)
 
 
 class _Response:
-    def __init__(self, payload: dict):
+    def __init__(self, payload: JSONObject) -> None:
         self.payload = json.dumps(payload).encode("utf-8")
 
-    def __enter__(self):
+    def __enter__(self) -> _Response:
         return self
 
-    def __exit__(self, *_args):
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> bool:
+        del exc_type, exc_value, traceback
         return False
 
-    def read(self):
+    def read(self) -> bytes:
         return self.payload
 
 

@@ -25,6 +25,7 @@ from kicad_blocks.repository import (
 class _Project:
     def __init__(self, values: dict[str, str]) -> None:
         self.values = values
+        self.path = Path(".")
 
     def expand_text_variables(self, text: str) -> str:
         for name, value in self.values.items():

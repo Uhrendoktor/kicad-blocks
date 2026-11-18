@@ -14,7 +14,7 @@ PLUGIN = ROOT / "plugin" / "kicad-blocks"
 sys.path.insert(0, str(PLUGIN))
 
 from kicad_blocks.model import parse_parameters, sexpr_quote, substitute_parameter_templates
-from kicad_blocks.pcb_layout import _dump, parse_sexpr
+from kicad_blocks.sexpr import dump_sexpr, parse_sexpr
 
 from scripts.check_python_quality import python_policy_violations
 from scripts.check_test_quality import scan_tests
@@ -132,7 +132,7 @@ def test_ruff_policy_uses_full_selection_and_exact_compatibility_exceptions() ->
 def test_quoted_sexpr_values_round_trip(values: list[str]) -> None:
     """Preserves arbitrary quoted Unicode/text values through KiCad S-expression parsing."""
     source = "(root" + "".join(" " + sexpr_quote(value) for value in values) + ")"
-    assert parse_sexpr(_dump(parse_sexpr(source))) == ["root", *values]
+    assert parse_sexpr(dump_sexpr(parse_sexpr(source))) == ["root", *values]
 
 
 @settings(max_examples=80, deadline=None)

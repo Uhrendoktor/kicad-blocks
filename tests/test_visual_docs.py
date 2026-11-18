@@ -6,9 +6,17 @@ import hashlib
 import json
 import tempfile
 import unittest
+from collections.abc import Callable
 from pathlib import Path
+from typing import cast
 
-from scripts.publish_visual_docs import ASSET_NAMES, verify_bundle
+from scripts.publish_visual_docs import (
+    ASSET_NAMES,
+    VisualDocsManifest,
+    verify_bundle as _verify_bundle,
+)
+
+verify_bundle = cast(Callable[[Path, str], VisualDocsManifest], _verify_bundle)
 
 
 class VerifyVisualBundleTests(unittest.TestCase):
@@ -17,7 +25,7 @@ class VerifyVisualBundleTests(unittest.TestCase):
         self.addCleanup(self.temporary.cleanup)
         self.root = Path(self.temporary.name)
         self.source_sha = "a" * 40
-        assets = {}
+        assets: dict[str, str] = {}
         for name in sorted(ASSET_NAMES):
             content = f"generated-fixture:{name}".encode()
             (self.root / name).write_bytes(content)

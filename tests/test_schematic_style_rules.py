@@ -8,6 +8,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from typing import cast
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "plugin" / "kicad-blocks"))
@@ -188,11 +189,14 @@ assert "generate_reference" not in sys.modules
         )
 
     def test_label_names_cannot_mix_local_and_hierarchical_kinds(self) -> None:
-        tree: SExprList = [
-            "kicad_sch",
-            ["label", "VSNK", ["at", "10", "10", "0"]],
-            ["hierarchical_label", "VSNK", ["shape", "output"], ["at", "20", "10", "0"]],
-        ]
+        tree = cast(
+            SExprList,
+            [
+                "kicad_sch",
+                ["label", "VSNK", ["at", "10", "10", "0"]],
+                ["hierarchical_label", "VSNK", ["shape", "output"], ["at", "20", "10", "0"]],
+            ],
+        )
         issues = label_kind_consistency_issues(tree)
         self.assertEqual(len(issues), 1)
         self.assertIn("VSNK", issues[0])
@@ -200,10 +204,12 @@ assert "generate_reference" not in sys.modules
         self.assertIn("hierarchical", issues[0])
 
     def test_symbol_obstacles_use_real_outlines_not_rectangular_bounds(self) -> None:
-        tree = [
-            "kicad_sch",
+        tree = cast(
+            SExprList,
             [
-                "lib_symbols",
+                "kicad_sch",
+                [
+                    "lib_symbols",
                 [
                     "symbol",
                     "Test:Triangle",
@@ -237,8 +243,9 @@ assert "generate_reference" not in sys.modules
                     ["effects", ["font", ["size", "1", "1"]]],
                 ],
             ],
-            ["wire", ["pts", ["xy", "3", "-3"], ["xy", "4", "-4"]]],
-        ]
+                ["wire", ["pts", ["xy", "3", "-3"], ["xy", "4", "-4"]]],
+            ],
+        )
         # This is inside the triangle AABB but outside its actual polygon.
         self.assertFalse(any("symbol body Q1" in issue for issue in wire_obstacle_issues(tree)))
         tree[-1] = ["wire", ["pts", ["xy", "1", "-1"], ["xy", "3", "-1"]]]
