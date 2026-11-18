@@ -41,8 +41,21 @@ jobs:
               echo "::error::KiCad CLI installation failed on the GitHub-hosted runner."
               exit 1
             fi
-            "${SUDO[@]}" apt-get -o Acquire::Languages=none update
-            "${SUDO[@]}" apt-get install -y --no-install-recommends software-properties-common
+            apt_retry() {
+              local attempt
+              for attempt in 1 2 3; do
+                if "${SUDO[@]}" apt-get -o Acquire::Retries=3 -o Acquire::https::Timeout=30 -o Acquire::http::Timeout=30 "$@"; then
+                  return 0
+                fi
+                if [[ "$attempt" -lt 3 ]]; then
+                  echo "::warning::APT request failed (attempt $attempt/3); retrying after a short delay."
+                  sleep "$((attempt * 10))"
+                fi
+              done
+              return 1
+            }
+            apt_retry update -o Acquire::Languages=none -o APT::Update::Error-Mode=any
+            apt_retry install -y --no-install-recommends software-properties-common
             for attempt in 1 2 3; do
             if "${SUDO[@]}" add-apt-repository --yes ppa:kicad/kicad-dev-nightly; then
               break
@@ -53,8 +66,8 @@ jobs:
             fi
             sleep "$((attempt * 5))"
           done
-            "${SUDO[@]}" apt-get -o Acquire::Languages=none update
-            "${SUDO[@]}" apt-get install -y --no-install-recommends kicad-nightly
+            apt_retry update -o Acquire::Languages=none -o APT::Update::Error-Mode=any
+            apt_retry install -y --no-install-recommends kicad-nightly
             CLI="$(command -v kicad-cli-nightly || command -v kicad-cli || true)"
           fi
           if [[ -z "$CLI" ]]; then
@@ -592,11 +605,24 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          sudo apt-get -o Acquire::Languages=none update
-          sudo apt-get install -y --no-install-recommends software-properties-common xvfb xdotool python3-tk
+          apt_retry() {
+            local attempt
+            for attempt in 1 2 3; do
+              if sudo apt-get -o Acquire::Retries=3 -o Acquire::https::Timeout=30 -o Acquire::http::Timeout=30 "$@"; then
+                return 0
+              fi
+              if [[ "$attempt" -lt 3 ]]; then
+                echo "::warning::APT request failed (attempt $attempt/3); retrying after a short delay."
+                sleep "$((attempt * 10))"
+              fi
+            done
+            return 1
+          }
+          apt_retry update -o Acquire::Languages=none -o APT::Update::Error-Mode=any
+          apt_retry install -y --no-install-recommends software-properties-common xvfb xdotool python3-tk
           sudo add-apt-repository --yes ppa:kicad/kicad-dev-nightly
-          sudo apt-get -o Acquire::Languages=none update
-          sudo apt-get install -y --no-install-recommends kicad-nightly
+          apt_retry update -o Acquire::Languages=none -o APT::Update::Error-Mode=any
+          apt_retry install -y --no-install-recommends kicad-nightly
           CLI="$(command -v kicad-cli-nightly || command -v kicad-cli || true)"
           if [[ -z "$CLI" ]]; then
             echo "::error::KiCad CLI was not installed."

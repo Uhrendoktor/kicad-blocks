@@ -19,7 +19,7 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-def _parent(monkeypatch):
+def _parent():
     plugin_actions._load_tkinter()
     root = plugin_actions.tk.Tk()
     root.title("Native file dialog contract host")
@@ -35,7 +35,7 @@ def test_open_kicad_file_uses_existing_file_parent_name_filter_and_parent(
     initial = source_dir / "implementation.kicad_sch"
     initial.write_text("(kicad_sch)\n", encoding="utf-8")
     selected = source_dir / "selected.kicad_sch"
-    parent = _parent(monkeypatch)
+    parent = _parent()
     calls = []
 
     def choose(**kwargs):
@@ -71,7 +71,7 @@ def test_open_kicad_file_falls_back_to_cwd_for_missing_initial_path(
     monkeypatch, tmp_path
 ):
     monkeypatch.chdir(tmp_path)
-    parent = _parent(monkeypatch)
+    parent = _parent()
     calls = []
     selected = tmp_path / "board.kicad_pcb"
     monkeypatch.setattr(
@@ -100,7 +100,7 @@ def test_open_kicad_file_falls_back_to_cwd_for_missing_initial_path(
 
 def test_open_kicad_file_cancel_returns_none(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
-    parent = _parent(monkeypatch)
+    parent = _parent()
     calls = []
     monkeypatch.setattr(
         plugin_actions.filedialog,
@@ -125,7 +125,7 @@ def test_save_file_uses_suggested_name_extension_filter_and_parent(
 ):
     suggested = tmp_path / "release" / "functional_block.kicad_sch"
     suggested.parent.mkdir(parents=True, exist_ok=True)
-    parent = _parent(monkeypatch)
+    parent = _parent()
     calls = []
     selected = tmp_path / "release" / "renamed.kicad_sch"
 
@@ -165,7 +165,7 @@ def test_save_file_without_suffix_uses_directory_and_cancel_returns_none(
     monkeypatch, tmp_path
 ):
     monkeypatch.chdir(tmp_path)
-    parent = _parent(monkeypatch)
+    parent = _parent()
     calls = []
     monkeypatch.setattr(
         plugin_actions.filedialog,
@@ -196,7 +196,7 @@ def test_directory_picker_uses_existing_file_parent_and_requires_existing_direct
     initial_file = initial_dir / "example.kicad_sch"
     initial_file.write_text("(kicad_sch)\n", encoding="utf-8")
     selected = tmp_path / "selected-library"
-    parent = _parent(monkeypatch)
+    parent = _parent()
     calls = []
     monkeypatch.setattr(
         plugin_actions.filedialog,
@@ -226,7 +226,7 @@ def test_directory_picker_falls_back_to_cwd_and_cancel_returns_none(
     monkeypatch, tmp_path
 ):
     monkeypatch.chdir(tmp_path)
-    parent = _parent(monkeypatch)
+    parent = _parent()
     calls = []
     monkeypatch.setattr(
         plugin_actions.filedialog,

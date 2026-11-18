@@ -114,7 +114,7 @@ def render_inventory(catalog: dict[str, Any]) -> str:
         f"| Partial | {counts['partial']} | Targeted GUI, integration, model, or screenshot checks exist; the full control matrix is not contracted. |",
         f"| Inventory only | {counts['inventory-only']} | {COVERAGE_LABELS['inventory-only']}; window/workflow is documented here for discovery and rollout planning. |",
         "",
-        "Task Hub, both transient block choosers, Add PCB Layout, Create Block form, Record picker, Functional Block picker, Functional Block Library, Instance Configuration, Implementation details, Implementations Manager, Manage Libraries, and PCB Layout Manager now have full registered widget contracts. The shared open/save/directory chooser wrappers also have direct argument, fallback, and cancellation contracts; actual OS-native dialog rendering and cross-platform KiCad window ownership remain unverified. The cross-cutting error/confirmation/report dialogs remain partially contracted through direct native-dialog call-site tests.",
+        "Task Hub, both transient block choosers, Add PCB Layout, Create Block form, Record picker, Functional Block picker, Functional Block Library, Instance Configuration, Implementation details, Implementations Manager, Manage Libraries, and PCB Layout Manager now have full registered widget contracts. All 56 native messagebox/simpledialog call sites have direct result/effect contracts. The shared open/save/directory chooser wrappers have direct argument, fallback, and cancellation contracts; actual OS-native dialog rendering and cross-platform KiCad window ownership remain unverified, so the cross-cutting native-dialog screen remains partial.",
         "",
         "## Screens",
         "",
