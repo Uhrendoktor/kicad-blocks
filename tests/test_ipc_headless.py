@@ -284,13 +284,19 @@ def _create_local_facade_copy(
         or str(symbols_after_local[0].id) != original_instance_id
     ):
         _fail("Local-copy binding changed or duplicated the facade instance.")
-    if (
-        symbols_after_local[0].definition.id.library != nickname
-        or symbols_after_local[0].definition.id.name != symbol_name
-    ):
+    definition_id = symbols_after_local[0].definition.id
+    if definition_id is None:
+        _fail("Local-copy binding removed the facade library identifier.")
+    if definition_id.library != nickname or definition_id.name != symbol_name:
         _fail("Local-copy binding unexpectedly changed the facade library ID.")
 
     return selection, local, original_instance_id
+
+
+def _load_all_libraries(kicad: KiCadApp) -> None:
+    """Call the KiCad runtime convenience API absent from generated app stubs."""
+    loader = cast(Callable[..., None], getattr(kicad, "load_all_libraries"))
+    loader()
 
 
 def _assert_local_sync_conflict(
@@ -436,7 +442,7 @@ def _run_facade_ipc_scenario(cli: str, root: Path) -> None:
         schematic = kicad.get_schematic()
         if schematic is None:
             _fail("KiCad IPC did not open the facade test schematic.")
-        kicad.load_all_libraries()
+        _load_all_libraries(kicad)
         kicad.wait_for_libraries(timeout_s=120.0)
         instance = _place_initial_facade(schematic, nickname, symbol_name)
         instance = _configure_facade_instance(schematic, instance, nickname, symbol_name)
@@ -602,7 +608,7 @@ def _verify_nested_parent(
         parent_schematic = parent_kicad.get_schematic()
         if parent_schematic is None:
             _fail("KiCad IPC did not open the nested parent schematic.")
-        parent_kicad.load_all_libraries()
+        parent__load_all_libraries(kicad)
         parent_kicad.wait_for_libraries(timeout_s=120.0)
         _assert_nested_parent_symbols(parent_schematic, expected_instances)
         _assert_nested_parent_labels(parent_schematic, expected_instances)
@@ -683,14 +689,15 @@ def _verify_nested_child(cli: str, child: BlockRecord) -> None:
         child_schematic = child_kicad.get_schematic()
         if child_schematic is None:
             _fail("KiCad IPC did not open the nested child schematic.")
-        child_kicad.load_all_libraries()
+        child__load_all_libraries(kicad)
         child_kicad.wait_for_libraries(timeout_s=120.0)
         leaf_symbols = list(child_schematic.get_symbols())
         if len(leaf_symbols) != 1:
             _fail(f"Expected one leaf facade in child implementation; found {len(leaf_symbols)}.")
         if leaf_symbols[0].reference != "B9":
             _fail(f"Expected nested leaf reference B9; found {leaf_symbols[0].reference!r}.")
-        if int(leaf_symbols[0].transform.orientation) != schematic_symbol_orientation(270):
+        leaf_transform = leaf_symbols[0].transform
+        if leaf_transform is None or int(leaf_transform.orientation) != schematic_symbol_orientation(270):
             _fail("Nested leaf facade was not placed at 270 degrees.")
         if child_schematic.get_sheet_symbols():
             _fail("Second-level composition created a hierarchical sheet.")

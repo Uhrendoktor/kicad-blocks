@@ -550,8 +550,6 @@ class LibraryBrowserTests(unittest.TestCase):
             )
             return subprocess.CompletedProcess(arguments, 0, "", "")
 
-        rasterized_dimensions: list[tuple[str | None, str | None]] = []
-
         def rasterize(*, svg_string: str, width: int, height: int) -> bytes:
             from xml.etree import ElementTree as ET
 
@@ -1230,10 +1228,6 @@ class LibraryBrowserTests(unittest.TestCase):
             def iconify(self) -> None:
                 self.events.append("iconify")
                 self.current_state = "iconic"
-
-            def deiconify(self) -> None:
-                self.events.append("deiconify")
-                self.current_state = "normal"
 
             def deiconify(self) -> None:
                 self.events.append("deiconify")
