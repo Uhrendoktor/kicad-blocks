@@ -32,9 +32,10 @@ from kicad_blocks.sexpr import parse_sexpr
 
 def _sexpr_number(node: SExprList, index: int) -> float:
     """Read one numeric atom from a recursive KiCad S-expression node."""
-    if index >= len(node) or not isinstance(node[index], str):
+    value = node[index] if index < len(node) else None
+    if not isinstance(value, str):
         raise AssertionError(f"Expected numeric atom at index {index}: {node!r}")
-    return float(node[index])
+    return float(value)
 
 
 def _required_child(node: SExprList, tag: str) -> SExprList:

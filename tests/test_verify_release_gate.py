@@ -6,6 +6,7 @@ import importlib.util
 import json
 import unittest
 from pathlib import Path
+from typing import cast
 from types import TracebackType
 from unittest.mock import patch
 
@@ -59,7 +60,7 @@ class VerifyReleaseGateTests(unittest.TestCase):
                 run,
             ]
         }
-        with patch.object(gate, "urlopen", return_value=_Response(payload)):
+        with patch.object(gate, "urlopen", return_value=_Response(cast(JSONObject, payload))):
             result = gate.verify_release_gate(
                 "owner/repo",
                 "v1.1.0",

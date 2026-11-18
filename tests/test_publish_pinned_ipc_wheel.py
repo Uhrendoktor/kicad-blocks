@@ -7,6 +7,7 @@ import importlib.util
 import tempfile
 import unittest
 from pathlib import Path
+from typing import cast
 from unittest.mock import patch
 
 from scripts.github_api_types import GitHubApiResponse, GitHubRequestArgument
@@ -34,12 +35,15 @@ class PinnedWheelPublisherTests(unittest.TestCase):
         self.wheel = self.wheelhouse / WHEEL_NAME
         self.wheel.write_bytes(b"verified-wheel-bytes")
         self.digest = "sha256:" + hashlib.sha256(self.wheel.read_bytes()).hexdigest()
-        self.release = {
-            "id": 18,
-            "tag_name": "kicad-python-76b47d25",
-            "upload_url": "https://uploads.github.com/repos/owner/repo/releases/18/assets{?name,label}",
-            "assets": [],
-        }
+        self.release = cast(
+            GitHubApiResponse,
+            {
+                "id": 18,
+                "tag_name": "kicad-python-76b47d25",
+                "upload_url": "https://uploads.github.com/repos/owner/repo/releases/18/assets{?name,label}",
+                "assets": [],
+            },
+        )
 
     def tearDown(self) -> None:
         self.temp.cleanup()
@@ -106,7 +110,7 @@ class PinnedWheelPublisherTests(unittest.TestCase):
             if method == "POST" and url.startswith("https://uploads.github.com/"):
                 return {}
             if method == "GET" and url.endswith("/releases/18"):
-                response: GitHubApiResponse = {**self.release, "assets": [asset]}
+                response = cast(GitHubApiResponse, {**self.release, "assets": [asset]})
                 return response
             raise AssertionError((method, url))
 

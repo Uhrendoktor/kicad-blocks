@@ -933,7 +933,7 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
         kicad = SimpleNamespace(get_schematic=Mock(return_value=self.schematic))
         kicad_module = types.ModuleType("kipy")
         kicad_constructor = Mock(return_value=kicad)
-        kicad_module.KiCad = kicad_constructor
+        setattr(kicad_module, "KiCad", kicad_constructor)
         with (
             patch.object(plugin_actions, "tk", fake_tk),
             patch.object(plugin_actions, "messagebox", self.messagebox),

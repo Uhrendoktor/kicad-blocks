@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.util
 import io
 import tempfile
+from email.message import Message
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -63,7 +64,7 @@ class PublishIpcWheelTests(unittest.TestCase):
             "https://api.github.com/test",
             403,
             "Forbidden",
-            {},
+            Message(),
             io.BytesIO(b'{"message":"forbidden"}'),
         )
         with (
