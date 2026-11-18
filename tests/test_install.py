@@ -21,8 +21,8 @@ class PluginInstallerTests(unittest.TestCase):
         from importlib.util import module_from_spec, spec_from_file_location
 
         spec = spec_from_file_location("kicad_blocks_installer", INSTALLER)
+        assert spec is not None and spec.loader is not None
         installer = module_from_spec(spec)
-        assert spec and spec.loader
         spec.loader.exec_module(installer)
 
         for minor in (12, 13, 14):
@@ -151,8 +151,8 @@ class PluginInstallerTests(unittest.TestCase):
         from importlib.util import module_from_spec, spec_from_file_location
 
         spec = spec_from_file_location("kicad_blocks_installer", INSTALLER)
+        assert spec is not None and spec.loader is not None
         installer = module_from_spec(spec)
-        assert spec and spec.loader
         spec.loader.exec_module(installer)
         with self.assertRaisesRegex(ValueError, "PCB Editor"):
             installer.validate_install_target("10.0", platform_name="linux", machine="x86_64")
@@ -163,8 +163,8 @@ class PluginInstallerTests(unittest.TestCase):
         from importlib.util import module_from_spec, spec_from_file_location
 
         spec = spec_from_file_location("kicad_blocks_installer", INSTALLER)
+        assert spec is not None and spec.loader is not None
         installer = module_from_spec(spec)
-        assert spec and spec.loader
         spec.loader.exec_module(installer)
         for version in ("10.99", "11.0", "11.1", "12.0"):
             with self.subTest(version=version):
@@ -174,8 +174,8 @@ class PluginInstallerTests(unittest.TestCase):
         from importlib.util import module_from_spec, spec_from_file_location
 
         spec = spec_from_file_location("kicad_blocks_installer", INSTALLER)
+        assert spec is not None and spec.loader is not None
         installer = module_from_spec(spec)
-        assert spec and spec.loader
         spec.loader.exec_module(installer)
         with self.assertRaisesRegex(ValueError, "Linux x86_64"):
             installer.validate_install_target("10.99", platform_name="win32", machine="AMD64")

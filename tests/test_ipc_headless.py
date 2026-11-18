@@ -443,7 +443,7 @@ def _run_facade_ipc_scenario(cli: str, root: Path) -> None:
         if schematic is None:
             _fail("KiCad IPC did not open the facade test schematic.")
         _load_all_libraries(kicad)
-        kicad.wait_for_libraries(timeout_s=120.0)
+        kicad.wait_for_libraries(types=[1], scope=2, timeout_s=120.0)
         instance = _place_initial_facade(schematic, nickname, symbol_name)
         instance = _configure_facade_instance(schematic, instance, nickname, symbol_name)
         selection, local, instance_id = _create_local_facade_copy(
@@ -609,7 +609,7 @@ def _verify_nested_parent(
         if parent_schematic is None:
             _fail("KiCad IPC did not open the nested parent schematic.")
         _load_all_libraries(parent_kicad)
-        parent_kicad.wait_for_libraries(timeout_s=120.0)
+        parent_kicad.wait_for_libraries(types=[1], scope=2, timeout_s=120.0)
         _assert_nested_parent_symbols(parent_schematic, expected_instances)
         _assert_nested_parent_labels(parent_schematic, expected_instances)
     finally:
@@ -690,7 +690,7 @@ def _verify_nested_child(cli: str, child: BlockRecord) -> None:
         if child_schematic is None:
             _fail("KiCad IPC did not open the nested child schematic.")
         _load_all_libraries(child_kicad)
-        child_kicad.wait_for_libraries(timeout_s=120.0)
+        child_kicad.wait_for_libraries(types=[1], scope=2, timeout_s=120.0)
         leaf_symbols = list(child_schematic.get_symbols())
         if len(leaf_symbols) != 1:
             _fail(f"Expected one leaf facade in child implementation; found {len(leaf_symbols)}.")
