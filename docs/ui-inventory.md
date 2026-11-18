@@ -6,10 +6,10 @@ This page is generated from the declarative UI catalog. It inventories the curre
 | Coverage status | Screens | Meaning |
 |---|---:|---|
 | Contracted | 13 | Widget-level execute/result assertions are registered and run in CI. |
-| Partial | 1 | Targeted GUI, integration, model, or screenshot checks exist; the full control matrix is not contracted. |
-| Inventory only | 1 | Window/workflow is documented here; systematic interaction contracts remain future work. |
+| Partial | 2 | Targeted GUI, integration, model, or screenshot checks exist; the full control matrix is not contracted. |
+| Inventory only | undefined | Window/workflow is documented here; systematic interaction contracts remain future work. |
 
-Task Hub, both transient block choosers, Add PCB Layout, Create Block form, Record picker, Functional Block picker, Functional Block Library, Instance Configuration, Implementation details, Implementations Manager, Manage Libraries, and PCB Layout Manager now have full registered widget contracts. The cross-cutting error/confirmation/report dialogs remain partially contracted through direct native-dialog call-site tests; KiCad-native editors and cross-platform file choosers remain inventory-only and require desktop integration coverage.
+Task Hub, both transient block choosers, Add PCB Layout, Create Block form, Record picker, Functional Block picker, Functional Block Library, Instance Configuration, Implementation details, Implementations Manager, Manage Libraries, and PCB Layout Manager now have full registered widget contracts. The shared open/save/directory chooser wrappers also have direct argument, fallback, and cancellation contracts; actual OS-native dialog rendering and cross-platform KiCad window ownership remain unverified. The cross-cutting error/confirmation/report dialogs remain partially contracted through direct native-dialog call-site tests.
 
 ## Screens
 
@@ -585,7 +585,7 @@ Every application-owned interactive control in this dialog has a semantic ID and
 
 Explain blocked operations, recoverable errors, destructive confirmations, and completed reports.
 
-**Coverage:** Partial — targeted GUI, integration, or visual checks exist.
+**Coverage:** Partial — targeted GUI, integration, model, or visual checks exist.
 
 The production plugin contains 56 native messagebox/simpledialog call sites across profile creation, source/layout selection, validation, library and implementation maintenance, the Functional Block Library, PCB mapping/anchor/rotation, and action dispatch. An AST-generated registry maps every call site to its owning operation and classifies direct tests, related-flow coverage, and uncovered branches. Direct contracts now exercise all 36 directly tested call sites, including accepted/cancelled single and batch PCB mapping prompts, anchor and rotation input, open-copy confirmations, and action-dispatch warning/error handling. Twenty call sites remain partially covered because their owning UI action is tested but the specific native error branch is not directly exercised. These are native OS/Tk dialogs; in-process tests assert prompt arguments and application effects, not platform-specific native-window rendering or focus.
 
@@ -618,9 +618,9 @@ The production plugin contains 56 native messagebox/simpledialog call sites acro
 
 Open and focus KiCad-owned schematic, symbol, and PCB documents, or select files using the operating system's native dialogs.
 
-**Coverage:** Inventory only — systematic UI contracts remain future work.
+**Coverage:** Partial — targeted GUI, integration, model, or visual checks exist.
 
-Some Eeschema and PCB hand-offs have real integration coverage. Cross-platform native window ownership, Symbol Editor selection, and every native file chooser outcome are not established by the current Linux/X11 tests.
+The shared Tk native-dialog wrappers now have direct execute/result contracts for existing/missing initial paths, extension filters, suggested save names/extensions, parent-window ownership arguments, must-exist directory selection, fallback-to-current-directory behavior, and user cancellation. Real KiCad GUI/IPC tests separately cover schematic editor launch/edit/save, symbol facade placement, and PCB document load/save. Actual OS-native chooser rendering, window-manager focus/ownership, and the complete editor hand-off matrix on Windows and macOS remain unverified; this is not cross-platform sign-off.
 
 **Major functionality**
 
@@ -629,8 +629,17 @@ Some Eeschema and PCB hand-offs have real integration coverage. Cross-platform n
 - Test native file/directory chooser filters, initial paths, and cancellation
 - Separate proven IPC behavior from platform-specific window-manager behavior
 
+**Registered semantic controls**
+
+- Open KiCad schematic/PCB file chooser wrapper (`kicad-native-documents.open-file`; native-file-dialog; behavior asserted)
+- Save KiCad document/report chooser wrapper (`kicad-native-documents.save-file`; native-file-dialog; behavior asserted)
+- Choose library folder wrapper (`kicad-native-documents.choose-directory`; native-directory-dialog; behavior asserted)
+
 **Current automated evidence**
 
+- `tests/test_native_file_dialog_contracts.py`
+- `tests/test_implementation_details_contracts.py`
+- `tests/test_add_pcb_layout_contracts.py`
 - `tests/test_eeschema_gui.py`
 - `tests/test_pcb_ipc.py`
 - `docs/explanation/compatibility.md`
@@ -642,7 +651,7 @@ Some Eeschema and PCB hand-offs have real integration coverage. Cross-platform n
 ## Coverage interpretation
 
 - **Contracted** means the listed UI component's actual Tcl/Tk command was executed and its expected callback or visible state transition was asserted. It is not a substitute for verifying a downstream KiCad operation or a native OS file chooser.
-- **Partial** means there are useful targeted checks, but one or more controls, views, failure paths, or side effects are not covered by reusable contracts.
+- **Partial** means there are useful targeted checks, but one or more controls, views, failure paths, platform-specific windows, or side effects are not covered by reusable contracts.
 - **Inventory only** means the screen and its major functions are recorded for discovery and rollout planning; do not treat it as tested.
 
 Per-control status is explicit: **behavior asserted** means a real interaction is executed and checked; **result observed** means a dependent state (such as a selected row's label or a visible pane) is checked; **discovered; interaction not yet asserted** means the control is present but its action still needs an interaction contract.

@@ -1071,9 +1071,12 @@
       "id": "kicad-native-documents",
       "title": "KiCad editors and native file choosers",
       "purpose": "Open and focus KiCad-owned schematic, symbol, and PCB documents, or select files using the operating system's native dialogs.",
-      "coverage": "inventory-only",
-      "coverage_note": "Some Eeschema and PCB hand-offs have real integration coverage. Cross-platform native window ownership, Symbol Editor selection, and every native file chooser outcome are not established by the current Linux/X11 tests.",
+      "coverage": "partial",
+      "coverage_note": "The shared Tk native-dialog wrappers now have direct execute/result contracts for existing/missing initial paths, extension filters, suggested save names/extensions, parent-window ownership arguments, must-exist directory selection, fallback-to-current-directory behavior, and user cancellation. Real KiCad GUI/IPC tests separately cover schematic editor launch/edit/save, symbol facade placement, and PCB document load/save. Actual OS-native chooser rendering, window-manager focus/ownership, and the complete editor hand-off matrix on Windows and macOS remain unverified; this is not cross-platform sign-off.",
       "evidence": [
+        "tests/test_native_file_dialog_contracts.py",
+        "tests/test_implementation_details_contracts.py",
+        "tests/test_add_pcb_layout_contracts.py",
         "tests/test_eeschema_gui.py",
         "tests/test_pcb_ipc.py",
         "docs/explanation/compatibility.md"
@@ -1084,7 +1087,27 @@
         "Test native file/directory chooser filters, initial paths, and cancellation",
         "Separate proven IPC behavior from platform-specific window-manager behavior"
       ],
-      "screenshots": []
+      "screenshots": [],
+      "controls": [
+        {
+          "contract_id": "kicad-native-documents.open-file",
+          "type": "native-file-dialog",
+          "label": "Open KiCad schematic/PCB file chooser wrapper",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "kicad-native-documents.save-file",
+          "type": "native-file-dialog",
+          "label": "Save KiCad document/report chooser wrapper",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "kicad-native-documents.choose-directory",
+          "type": "native-directory-dialog",
+          "label": "Choose library folder wrapper",
+          "assertion": "asserted"
+        }
+      ]
     }
   ]
 }
