@@ -4,15 +4,17 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
 import sys
 from collections.abc import Callable, Iterator, Sequence
 from pathlib import Path
-from typing import TYPE_CHECKING, TypeVar, cast
+from typing import TYPE_CHECKING, cast
 
 from _pytest.monkeypatch import MonkeyPatch
 
 if TYPE_CHECKING:
     from tkinter import Canvas as TkCanvas
+    from tkinter import Event as TkEvent
     from tkinter import Misc, Tk, Toplevel
     from tkinter.ttk import Combobox
 else:
@@ -69,16 +71,26 @@ PREVIEW_VIEWS = (
 )
 
 
-_HookResult = TypeVar("_HookResult")
+_RecordedArgument = (
+    str | Path | Misc | TkCanvas | plugin_actions.KiCadApp | BlockRecord | list[Path] | bool | None
+)
 
 
-def _private_hook(name: str) -> Callable[..., _HookResult]:
-    """Resolve a private plugin hook through a generic typed test boundary."""
-    return cast(Callable[..., _HookResult], getattr(plugin_actions, name))
+def _record_action(calls: list[str], action: str) -> Callable[..., None]:
+    """Create a typed, side-effect-only adapter for an external UI action."""
+
+    def record(*_args: _RecordedArgument, **_kwargs: _RecordedArgument) -> None:
+        calls.append(action)
+
+    return record
 
 
-_load_tkinter = cast(Callable[[], None], _private_hook("_load_tkinter"))
-_show_library_browser = cast(Callable[..., None], _private_hook("_show_library_browser"))
+def _record_noop(*_args: _RecordedArgument, **_kwargs: _RecordedArgument) -> None:
+    return None
+
+
+_load_tkinter = cast(Callable[[], None], getattr(plugin_actions, "_load_tkinter"))
+_show_library_browser = cast(Callable[..., None], getattr(plugin_actions, "_show_library_browser"))
 
 
 def _record(library_root: Path, block_id: str, name: str, description: str) -> BlockRecord:
@@ -198,7 +210,7 @@ def _new_browser(
     monkeypatch.setattr(plugin_actions, "_block_overview_text", overview_text)
     monkeypatch.setattr(plugin_actions, "_create_action_icon", no_icon)
 
-    root = cast(Tk, plugin_actions.tk.Tk())
+    root = plugin_actions.tk.Tk()
     _show_library_browser(
         root,
         schematic=cast(plugin_actions.Schematic, None),
@@ -343,7 +355,9 @@ def test_refresh_button_reloads_records_through_real_ui_callback(
             destroys_window=False,
             expected_label="Refresh",
         ).run(context)
-        assert "2 of 2 blocks" in context.require_widget("library-browser.summary").cget("text")
+        assert "2 of 2 blocks" in str(
+            context.require_widget("library-browser.summary").cget("text")
+        )
     finally:
         root.destroy()
 
@@ -353,25 +367,37 @@ def test_place_button_registers_selected_block_and_starts_native_placement(
 ):
     root, context, _records, _library, _project = _new_browser(monkeypatch, tmp_path)
     context.action_calls.clear()
-    monkeypatch.setattr(
-        plugin_actions,
-        "_register_block",
-        lambda *_args, **_kwargs: context.action_calls.append("register-block"),
-    )
+    def register_block(
+        _project_dir: Path,
+        record: BlockRecord,
+        _kicad: plugin_actions.KiCadApp,
+        library_paths: list[Path] | None = None,
+    ) -> BlockRecord:
+        del library_paths
+        context.action_calls.append("register-block")
+        return record
+
+    monkeypatch.setattr(plugin_actions, "_register_block", register_block)
     monkeypatch.setattr(plugin_actions, "_last_library_reload_ok", True)
-    monkeypatch.setattr(plugin_actions, "_minimize_placement_windows", lambda _window: [])
-    monkeypatch.setattr(
-        plugin_actions,
-        "_start_native_symbol_placement",
-        lambda *_args, **_kwargs: context.action_calls.append("start-placement"),
-    )
-    monkeypatch.setattr(
-        plugin_actions.messagebox,
-        "showerror",
-        lambda title, message, **_kwargs: context.events.append(
-            f"unexpected error dialog: {title}: {message}"
-        ),
-    )
+    def minimize_placement_windows(_window: Misc) -> list[Misc]:
+        return []
+
+    monkeypatch.setattr(plugin_actions, "_minimize_placement_windows", minimize_placement_windows)
+    def start_placement(
+        _kicad: plugin_actions.KiCadApp,
+        _editor_window_id: str | None,
+        _symbol_name: str,
+    ) -> plugin_actions.SchematicSymbol:
+        context.action_calls.append("start-placement")
+        return cast(plugin_actions.SchematicSymbol, None)
+
+    monkeypatch.setattr(plugin_actions, "_start_native_symbol_placement", start_placement)
+    def unexpected_error(title: str, message: str, *, parent: Misc | None = None) -> str:
+        del parent
+        context.events.append(f"unexpected error dialog: {title}: {message}")
+        return "ok"
+
+    monkeypatch.setattr(plugin_actions.messagebox, "showerror", unexpected_error)
     try:
         _select_first_record(context)
         ButtonContract(
@@ -390,16 +416,26 @@ def test_implementation_button_registers_and_opens_default_document(
 ):
     root, context, _records, _library_root, _project = _new_browser(monkeypatch, tmp_path)
     context.action_calls.clear()
+    def register_implementation_catalog(record: BlockRecord, library_roots: list[Path]) -> Path:
+        del library_roots
+        context.action_calls.append("register-implementation")
+        return record.path / "KBlocks.kicad_sym"
+
     monkeypatch.setattr(
-        plugin_actions,
-        "_register_implementation_catalog",
-        lambda *_args, **_kwargs: context.action_calls.append("register-implementation"),
+        plugin_actions, "_register_implementation_catalog", register_implementation_catalog
     )
-    monkeypatch.setattr(
-        plugin_actions,
-        "_launch_block_asset",
-        lambda *_args, **_kwargs: context.action_calls.append("open-implementation"),
-    )
+    def launch_implementation(
+        _kicad: plugin_actions.KiCadApp,
+        path: Path,
+        _description: str,
+        *,
+        editor_window_id: str | None = None,
+    ) -> subprocess.Popen[bytes]:
+        del editor_window_id
+        context.action_calls.append("open-implementation")
+        return cast(subprocess.Popen[bytes], None)
+
+    monkeypatch.setattr(plugin_actions, "_launch_block_asset", launch_implementation)
     try:
         _select_first_record(context)
         ButtonContract(
@@ -416,7 +452,15 @@ def test_edit_facade_button_targets_selected_record(monkeypatch: MonkeyPatch, tm
     root, context, _records, _library, _project = _new_browser(monkeypatch, tmp_path)
     context.action_calls.clear()
 
-    def edit_facade(record, *_args, **_kwargs) -> bool:
+    def edit_facade(
+        record: BlockRecord,
+        _kicad: plugin_actions.KiCadApp,
+        _editor_window_id: str | None = None,
+        *,
+        project_catalog: Path | None = None,
+        close_browser: Callable[[], None] | None = None,
+    ) -> bool:
+        del project_catalog, close_browser
         context.action_calls.append(record.manifest["block_id"])
         return True
 
@@ -436,7 +480,14 @@ def test_edit_facade_button_targets_selected_record(monkeypatch: MonkeyPatch, tm
 def test_open_pcb_button_creates_chooser_for_selected_block(
     monkeypatch: MonkeyPatch, tmp_path: Path
 ):
-    layouts = [{"id": "default-pcb", "name": "Default", "file": "default.kicad_pcb"}]
+    layouts: list[ResolvedBlockLayout] = [
+        {
+            "id": "default-pcb",
+            "name": "Default",
+            "file": "default.kicad_pcb",
+            "project_file": None,
+        }
+    ]
     root, context, _records, _library, _project = _new_browser(
         monkeypatch, tmp_path, layouts=layouts
     )
@@ -485,26 +536,34 @@ def test_implementation_selector_renders_the_selected_variant(
     monkeypatch: MonkeyPatch, tmp_path: Path
 ):
     root, context, records, _library, _project = _new_browser(monkeypatch, tmp_path)
-    records[0].manifest["variants"] = [{"value": "1V8", "file": "implementation_1v8.kicad_sch"}]
-    rendered_implementations = []
+    records[0].manifest["variants"] = [
+        {"value": "1V8", "file": "implementation_1v8.kicad_sch"}
+    ]
+    rendered_implementations: list[str] = []
 
-    def render_pages(_record, selector, **_kwargs):
+    def render_pages(
+        _record: BlockRecord,
+        selector: str = "",
+        *,
+        width: int = 900,
+    ) -> list[tuple[str, bytes]]:
+        del width
         rendered_implementations.append(selector)
-        return [("Main", None), ("Power Stage", None)]
+        return [("Main", b""), ("Power Stage", b"")]
 
     monkeypatch.setattr(plugin_actions, "_native_schematic_preview_pages", render_pages)
-    monkeypatch.setattr(plugin_actions, "_draw_schematic_preview", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(plugin_actions, "_draw_schematic_preview", _record_noop)
     try:
         _select_first_record(context)
         _show_schematic_preview(root, context)
         selector = context.require_combobox("library-browser.implementation")
         assert tuple(selector["values"]) == ("Default", "1V8")
         rendered_implementations.clear()
-        selector.bind(
-            "<<ComboboxSelected>>",
-            lambda _event: context.events.append("implementation:1V8"),
-            add="+",
-        )
+        def implementation_selected(_event: TkEvent[Misc]) -> str | None:
+            context.events.append("implementation:1V8")
+            return None
+
+        selector.bind("<<ComboboxSelected>>", implementation_selected, add="+")
         ChoiceViewContract(
             contract_id="library-browser.implementation",
             value="1V8",
@@ -518,17 +577,26 @@ def test_implementation_selector_renders_the_selected_variant(
 
 def test_sheet_selector_draws_the_selected_schematic_page(monkeypatch: MonkeyPatch, tmp_path: Path):
     root, context, _records, _library, _project = _new_browser(monkeypatch, tmp_path)
-    drawn_pages = []
-    monkeypatch.setattr(
-        plugin_actions,
-        "_native_schematic_preview_pages",
-        lambda *_args, **_kwargs: [("Main", None), ("Power Stage", None)],
-    )
-    monkeypatch.setattr(
-        plugin_actions,
-        "_draw_schematic_preview",
-        lambda _canvas, _pages, selected: drawn_pages.append(selected),
-    )
+    drawn_pages: list[str | None] = []
+
+    def schematic_pages(
+        _record: BlockRecord,
+        _implementation: str = "",
+        *,
+        width: int = 900,
+    ) -> list[tuple[str, bytes]]:
+        del width
+        return [("Main", b""), ("Power Stage", b"")]
+
+    def draw_schematic(
+        _canvas: TkCanvas,
+        _pages: list[tuple[str, bytes]],
+        selected: str | None = None,
+    ) -> None:
+        drawn_pages.append(selected)
+
+    monkeypatch.setattr(plugin_actions, "_native_schematic_preview_pages", schematic_pages)
+    monkeypatch.setattr(plugin_actions, "_draw_schematic_preview", draw_schematic)
     try:
         _select_first_record(context)
         _show_schematic_preview(root, context)
@@ -536,11 +604,11 @@ def test_sheet_selector_draws_the_selected_schematic_page(monkeypatch: MonkeyPat
         assert tuple(selector["values"]) == ("Main", "Power Stage")
         assert selector.winfo_manager() == "pack"
         drawn_pages.clear()
-        selector.bind(
-            "<<ComboboxSelected>>",
-            lambda _event: context.events.append("sheet:Power Stage"),
-            add="+",
-        )
+        def sheet_selected(_event: TkEvent[Misc]) -> str | None:
+            context.events.append("sheet:Power Stage")
+            return None
+
+        selector.bind("<<ComboboxSelected>>", sheet_selected, add="+")
         ChoiceViewContract(
             contract_id="library-browser.sheet",
             value="Power Stage",
@@ -559,7 +627,7 @@ def test_variants_toolbar_opens_manager_and_refreshes_records(
     monkeypatch.setattr(
         plugin_actions,
         "_show_block_variant_editor",
-        lambda *_args, **_kwargs: context.action_calls.append("open-variants"),
+        _record_action(context.action_calls, "open-variants"),
     )
     try:
         _select_first_record(context)
@@ -569,8 +637,10 @@ def test_variants_toolbar_opens_manager_and_refreshes_records(
             destroys_window=False,
             expected_label="Variants",
         ).run(context)
-        assert "2 of 2 blocks" in context.require_widget("library-browser.summary").getvar(
-            context.require_widget("library-browser.summary").cget("textvariable")
+        assert "2 of 2 blocks" in str(
+            context.require_widget("library-browser.summary").getvar(
+                context.require_widget("library-browser.summary").cget("textvariable")
+            )
         )
     finally:
         root.destroy()
@@ -584,7 +654,7 @@ def test_pcb_layouts_toolbar_opens_manager_and_refreshes_records(
     monkeypatch.setattr(
         plugin_actions,
         "_show_block_layout_editor",
-        lambda *_args, **_kwargs: context.action_calls.append("open-pcb-layouts"),
+        _record_action(context.action_calls, "open-pcb-layouts"),
     )
     try:
         _select_first_record(context)
@@ -606,7 +676,7 @@ def test_libraries_toolbar_opens_library_roots_manager_and_refreshes(
     monkeypatch.setattr(
         plugin_actions,
         "_show_library_roots_dialog",
-        lambda *_args, **_kwargs: context.action_calls.append("open-libraries"),
+        _record_action(context.action_calls, "open-libraries"),
     )
     try:
         ButtonContract(
@@ -635,6 +705,26 @@ PCB_CHOOSER_CONTROLS = {
 }
 
 
+def _record_asset_open(
+    calls: list[str],
+) -> Callable[
+    [plugin_actions.KiCadApp, Path, str],
+    subprocess.Popen[bytes],
+]:
+    def open_asset(
+        _kicad: plugin_actions.KiCadApp,
+        asset: Path,
+        _description: str,
+        *,
+        editor_window_id: str | None = None,
+    ) -> subprocess.Popen[bytes]:
+        del editor_window_id
+        calls.append(asset.name)
+        return cast(subprocess.Popen[bytes], None)
+
+    return open_asset
+
+
 def _find_toplevel(root: Tk, title: str) -> Toplevel:
     from tkinter import Toplevel as TkToplevel
 
@@ -654,13 +744,9 @@ def test_open_implementation_chooser_opens_the_selected_named_variant(
     monkeypatch.setattr(
         plugin_actions,
         "_register_implementation_catalog",
-        lambda *_args, **_kwargs: context.action_calls.append("registered"),
+        _record_action(context.action_calls, "registered"),
     )
-    monkeypatch.setattr(
-        plugin_actions,
-        "_launch_block_asset",
-        lambda _kicad, asset, *_args, **_kwargs: context.action_calls.append(Path(asset).name),
-    )
+    monkeypatch.setattr(plugin_actions, "_launch_block_asset", _record_asset_open(context.action_calls))
     try:
         _select_first_record(context)
         ButtonContract(
@@ -701,7 +787,7 @@ def test_open_implementation_chooser_cancel_closes_without_opening(
 ):
     root, context, records, _library, _project = _new_browser(monkeypatch, tmp_path)
     records[0].manifest["variants"] = [{"value": "1V8", "file": "implementation_1v8.kicad_sch"}]
-    effects = []
+    effects: list[str] = []
     monkeypatch.setattr(
         plugin_actions,
         "_register_implementation_catalog",
@@ -710,7 +796,7 @@ def test_open_implementation_chooser_cancel_closes_without_opening(
     monkeypatch.setattr(
         plugin_actions,
         "_launch_block_asset",
-        lambda *_args, **_kwargs: effects.append("unexpected-open"),
+        _record_action(effects, "unexpected-open"),
     )
     try:
         _select_first_record(context)
@@ -737,9 +823,19 @@ def test_open_implementation_chooser_cancel_closes_without_opening(
 
 
 def test_open_pcb_chooser_opens_the_selected_layout(monkeypatch: MonkeyPatch, tmp_path: Path):
-    layouts = [
-        {"id": "default-pcb", "name": "Default", "file": "default.kicad_pcb"},
-        {"id": "aux-pcb", "name": "Auxiliary", "file": "auxiliary.kicad_pcb"},
+    layouts: list[ResolvedBlockLayout] = [
+        {
+            "id": "default-pcb",
+            "name": "Default",
+            "file": "default.kicad_pcb",
+            "project_file": None,
+        },
+        {
+            "id": "aux-pcb",
+            "name": "Auxiliary",
+            "file": "auxiliary.kicad_pcb",
+            "project_file": None,
+        },
     ]
     root, context, _records, _library, _project = _new_browser(
         monkeypatch, tmp_path, layouts=layouts
@@ -784,7 +880,14 @@ def test_open_pcb_chooser_opens_the_selected_layout(monkeypatch: MonkeyPatch, tm
 
 
 def test_open_pcb_chooser_cancel_closes_without_opening(monkeypatch: MonkeyPatch, tmp_path: Path):
-    layouts = [{"id": "default-pcb", "name": "Default", "file": "default.kicad_pcb"}]
+    layouts: list[ResolvedBlockLayout] = [
+        {
+            "id": "default-pcb",
+            "name": "Default",
+            "file": "default.kicad_pcb",
+            "project_file": None,
+        }
+    ]
     root, context, _records, _library, _project = _new_browser(
         monkeypatch, tmp_path, layouts=layouts
     )
@@ -821,7 +924,14 @@ def test_open_pcb_chooser_cancel_closes_without_opening(monkeypatch: MonkeyPatch
 def test_open_pcb_chooser_manage_layouts_opens_manager_and_refreshes(
     monkeypatch: MonkeyPatch, tmp_path: Path
 ):
-    layouts = [{"id": "default-pcb", "name": "Default", "file": "default.kicad_pcb"}]
+    layouts: list[ResolvedBlockLayout] = [
+        {
+            "id": "default-pcb",
+            "name": "Default",
+            "file": "default.kicad_pcb",
+            "project_file": None,
+        }
+    ]
     root, context, _records, _library, _project = _new_browser(
         monkeypatch, tmp_path, layouts=layouts
     )
@@ -840,7 +950,7 @@ def test_open_pcb_chooser_manage_layouts_opens_manager_and_refreshes(
         monkeypatch.setattr(
             plugin_actions,
             "_show_block_layout_editor",
-            lambda *_args, **_kwargs: context.action_calls.append("manage-layouts"),
+            _record_action(context.action_calls, "manage-layouts"),
         )
         context.refresh_widgets()
         ButtonContract(
