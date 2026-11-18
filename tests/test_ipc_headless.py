@@ -33,6 +33,8 @@ from kicad_blocks.plugin import (
 from kicad_blocks.repository import (
     create_block,
     local_copy_for_instance,
+    read_manifest,
+    refresh_library_block,
     register_project_symbol_library,
 )
 from kipy import KiCad
@@ -65,10 +67,21 @@ def main() -> None:
         )
         default_layout = root / "default.kicad_pcb"
         default_layout.write_text("(kicad_pcb)\\n", encoding="utf-8")
+        block_source = root / "block_source.kicad_sch"
+        initial_interface = parse_pins("VIN:input, GND:passive, VOUT:output")
+        block_source.write_text(
+            render_implementation_schematic(
+                "Headless IPC Smoke Block",
+                "headless-ipc-source",
+                initial_interface,
+            ),
+            encoding="utf-8",
+        )
         block = create_block(
             library_root,
             "Headless IPC Smoke Block",
-            parse_pins("VIN:input, GND:passive, VOUT:output"),
+            source_schematic=block_source,
+            source_project_name=project_dir.name,
             parameters=parse_parameters("OUTPUT_VOLTAGE:number=3.3, ENABLE:boolean=true"),
             layout_files=[{"id": "default", "name": "Default", "path": default_layout}],
             profiles=[{
@@ -292,6 +305,84 @@ def main() -> None:
                 or symbols_after_sync[0].reference != "X1"
             ):
                 raise AssertionError("Local synchronization changed the facade KIID/reference.")
+
+            # Update the implementation interface after X1 is already
+            # placed in the parent schematic. Publishing the regenerated
+            # facade and reloading the project library must not be confused
+            # with refreshing the embedded copy stored in that existing
+            # schematic instance.
+            original_parent_pin_names = {
+                pin.name for pin in instance.definition.pins
+            }
+            if original_parent_pin_names != {"VIN", "GND", "VOUT"}:
+                raise AssertionError(
+                    f"Unexpected original parent facade pins: {original_parent_pin_names!r}"
+                )
+            changed_interface = parse_pins("VIN:input, VOUT:output, ENABLE:input")
+            block.implementation.write_text(
+                render_implementation_schematic(
+                    "Headless IPC Smoke Block",
+                    block.manifest["block_id"],
+                    changed_interface,
+                ),
+                encoding="utf-8",
+            )
+            refresh_library_block(block)
+            changed_manifest = read_manifest(block.path)
+            if {pin["name"] for pin in changed_manifest["pins"]} != {
+                "VIN", "VOUT", "ENABLE"
+            }:
+                raise AssertionError(
+                    "Publishing the changed implementation did not regenerate the block facade pins."
+                )
+            _register_block(project_dir, block, kicad, [library_root])
+
+            library_definition = kicad.get_library_symbol(
+                f"{nickname}:{symbol_name}",
+                document=schematic.document,
+            )
+            library_pin_names = {pin.name for pin in library_definition.pins}
+            if library_pin_names != {"VIN", "VOUT", "ENABLE"}:
+                raise AssertionError(
+                    "The reloaded project library does not expose the regenerated facade pins: "
+                    f"{library_pin_names!r}"
+                )
+
+            # The existing parent instance is an embedded snapshot. Reloading
+            # its library row refreshes future library lookups but does not
+            # silently mutate the already-placed symbol's pin geometry.
+            parent_symbols_after_library_reload = list(schematic.get_symbols())
+            parent_x1 = next(
+                item for item in parent_symbols_after_library_reload
+                if item.reference == "X1"
+            )
+            parent_pin_names_after_reload = {
+                pin.name for pin in parent_x1.definition.pins
+            }
+            if parent_pin_names_after_reload != original_parent_pin_names:
+                raise AssertionError(
+                    "KiCad unexpectedly changed the existing parent facade when the library "
+                    "was reloaded; inspect whether an implicit symbol update occurred: "
+                    f"{parent_pin_names_after_reload!r}"
+                )
+            if str(parent_x1.id) != original_instance_id:
+                raise AssertionError("The parent X1 KIID changed during library reload.")
+
+            # New placements use the updated library facade, while the old
+            # parent instance remains unchanged until the user explicitly runs
+            # KiCad's Update Symbols from Library command.
+            new_instance = schematic.place_symbol_from_library(
+                f"{nickname}:{symbol_name}",
+                Vector2.from_xy_mm(180.0, 100.0),
+                reference="X3",
+            )
+            if {pin.name for pin in new_instance.definition.pins} != library_pin_names:
+                raise AssertionError("A new parent placement did not use the updated facade pins.")
+            schematic.save()
+            print(
+                "KiCad IPC confirmed: library facade updated to VIN/VOUT/ENABLE; "
+                "existing parent X1 remains VIN/GND/VOUT; new X3 uses updated pins."
+            )
 
             # Test the plugin's actual dynamic registration path: this library
             # did not exist in sym-lib-table when KiCad was started.
