@@ -64,6 +64,12 @@ _open_generated_pcb_copy: Callable[..., subprocess.Popen[bytes]] = cast(
 )
 
 
+def _unchanged_dependencies(
+    record: BlockRecord, _library_roots: list[Path], _kicad_cli: str
+) -> _DependencyResult:
+    return {"block": record, "changed": False, "count": 0}
+
+
 
 class LibraryEditorWorkflowTests(unittest.TestCase):
     def setUp(self):
