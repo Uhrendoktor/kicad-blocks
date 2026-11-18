@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import NotRequired, TypedDict
+from collections.abc import Sequence
+from typing import NotRequired, Required, TypedDict
 
 
 class KiCadNetclassDefinition(TypedDict, total=False):
@@ -140,6 +141,21 @@ class BatchBlockLayoutMergeResult(TypedDict):
     skipped_top_level_items: list[str]
     ignored_project_patterns: bool
     ignored_project_chain_classes: bool
+
+
+class BlockLayoutPlacementSource(TypedDict, total=False):
+    """Minimal one-block merge fields required to persist a movable placement."""
+
+    instance_reference: Required[str]
+    interactive_item_uuids: Required[list[str]]
+    block: str
+    layout_name: str
+
+
+class BatchBlockLayoutPlacementSource(TypedDict):
+    """Minimal batch merge view consumed by placement-sidecar creation."""
+
+    placements: Sequence[BlockLayoutPlacementSource]
 
 
 class PCBPlacementEntry(TypedDict):

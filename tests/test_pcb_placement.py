@@ -10,7 +10,7 @@ import unittest
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from types import ModuleType, SimpleNamespace
+from types import ModuleType
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -18,11 +18,18 @@ PLUGIN = ROOT / "plugin" / "kicad-blocks"
 sys.path.insert(0, str(PLUGIN))
 
 from kicad_blocks.pcb_placement import (
+    Board,
+    BoardItemId,
     move_placement_at_cursor,
     placement_manifest_path,
     read_pcb_placement_manifest,
     resolve_placement_item_ids,
     write_pcb_placement_manifest,
+)
+from kicad_blocks.pcb_types import (
+    BatchBlockLayoutPlacementSource,
+    BlockLayoutPlacementSource,
+    PCBPlacementEntry,
 )
 
 
@@ -36,18 +43,47 @@ class _FakeBoardItem:
     id: _FakeBoardItemId
 
 
-class FakeBoard:
-    def __init__(self, values: Sequence[str]) -> None:
+@dataclass
+class _FakeProject:
+    path: str
+
+
+@dataclass
+class _FakeDocument:
+    board_filename: str
+    project: _FakeProject
+
+
+class FakeBoard(Board):
+    def __init__(
+        self,
+        values: Sequence[str],
+        document: _FakeDocument | None = None,
+        name: str = "output.kicad_pcb",
+    ) -> None:
         self.items: list[_FakeBoardItem] = [
             _FakeBoardItem(_FakeBoardItemId(value)) for value in values
         ]
-        self.moved: list[_FakeBoardItemId] | None = None
+        self.moved: list[BoardItemId] | None = None
+        self.document = document
+        self.name = name
 
     def get_items(self) -> list[_FakeBoardItem]:
         return self.items
 
-    def interactive_move(self, item_ids: Sequence[_FakeBoardItemId]) -> None:
+    def interactive_move(self, item_ids: Sequence[BoardItemId]) -> None:
         self.moved = list(item_ids)
+
+
+
+def _placement(item_uuids: list[str], reference: str = "X1") -> PCBPlacementEntry:
+    return {
+        "id": reference,
+        "instance_reference": reference,
+        "block": "Power Stage",
+        "layout_name": "Compact",
+        "item_uuids": item_uuids,
+    }
 
 
 class PcbPlacementManifestTests(unittest.TestCase):
@@ -62,7 +98,7 @@ class PcbPlacementManifestTests(unittest.TestCase):
         self.temp.cleanup()
 
     def test_single_merge_manifest_round_trip_and_native_move_uses_only_recorded_items(self):
-        result = {
+        result: BlockLayoutPlacementSource = {
             "instance_reference": "X1",
             "block": "Power Stage",
             "layout_name": "Compact",
@@ -82,7 +118,7 @@ class PcbPlacementManifestTests(unittest.TestCase):
         self.assertEqual([item.value for item in board.moved], [self.first, self.second])
 
     def test_pcb_editor_entrypoint_uses_active_board_file_and_native_move(self):
-        result = {
+        result: BlockLayoutPlacementSource = {
             "instance_reference": "X1",
             "block": "Power Stage",
             "layout_name": "Compact",
@@ -90,13 +126,16 @@ class PcbPlacementManifestTests(unittest.TestCase):
         }
         write_pcb_placement_manifest(self.board_path, result)
         board = FakeBoard([self.first, self.second])
-        board.document = SimpleNamespace(
-            board_filename=self.board_path.name,
-            project=SimpleNamespace(path=str(self.board_path.parent)),
+        board = FakeBoard(
+            [self.first, self.second],
+            document=_FakeDocument(
+                board_filename=self.board_path.name,
+                project=_FakeProject(path=str(self.board_path.parent)),
+            ),
         )
 
         class FakeKiCad:
-            def get_board(self):
+            def get_board(self) -> FakeBoard:
                 return board
 
         kipy = ModuleType("kipy")
@@ -118,7 +157,7 @@ class PcbPlacementManifestTests(unittest.TestCase):
         )
 
     def test_batch_merge_keeps_instance_groups_separate(self):
-        result = {
+        result: BatchBlockLayoutPlacementSource = {
             "placements": [
                 {
                     "instance_reference": "X1",
@@ -143,7 +182,7 @@ class PcbPlacementManifestTests(unittest.TestCase):
         self.assertEqual([item.value for item in second_ids], [self.second])
 
     def test_manifest_cannot_be_overwritten(self):
-        result = {
+        result: BlockLayoutPlacementSource = {
             "instance_reference": "X1",
             "interactive_item_uuids": [self.first],
         }
@@ -155,7 +194,10 @@ class PcbPlacementManifestTests(unittest.TestCase):
         self.assertEqual(sidecar.read_bytes(), original)
 
     def test_manifest_rejects_different_active_board_path(self):
-        result = {"instance_reference": "X1", "interactive_item_uuids": [self.first]}
+        result: BlockLayoutPlacementSource = {
+            "instance_reference": "X1",
+            "interactive_item_uuids": [self.first],
+        }
         write_pcb_placement_manifest(self.board_path, result)
         other = Path(self.temp.name) / "other.kicad_pcb"
         other.write_text("(kicad_pcb)\n", encoding="utf-8")
@@ -165,7 +207,10 @@ class PcbPlacementManifestTests(unittest.TestCase):
             read_pcb_placement_manifest(other)
 
     def test_manifest_rejects_unknown_schema_and_duplicate_item_ids(self):
-        result = {"instance_reference": "X1", "interactive_item_uuids": [self.first]}
+        result: BlockLayoutPlacementSource = {
+            "instance_reference": "X1",
+            "interactive_item_uuids": [self.first],
+        }
         sidecar = write_pcb_placement_manifest(self.board_path, result)
         payload = json.loads(sidecar.read_text(encoding="utf-8"))
         payload["schema_version"] = 999
@@ -181,7 +226,7 @@ class PcbPlacementManifestTests(unittest.TestCase):
 
     def test_missing_board_item_refuses_partial_move(self):
         board = FakeBoard([self.first])
-        placement = {"item_uuids": [self.first, self.second]}
+        placement = _placement([self.first, self.second])
         with self.assertRaisesRegex(ValueError, "could not all be found"):
             resolve_placement_item_ids(board, placement)
         self.assertIsNone(board.moved)

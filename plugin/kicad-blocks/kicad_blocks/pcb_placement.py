@@ -8,8 +8,8 @@ from pathlib import Path
 from typing import Protocol, cast
 
 from .pcb_types import (
-    BatchBlockLayoutMergeResult,
-    BlockLayoutMergeResult,
+    BatchBlockLayoutPlacementSource,
+    BlockLayoutPlacementSource,
     PCBPlacementEntry,
     PCBPlacementManifest,
 )
@@ -56,9 +56,11 @@ def placement_manifest_path(board_path: Path) -> Path:
 
 
 def _merge_entries(
-    result: BlockLayoutMergeResult | BatchBlockLayoutMergeResult,
+    result: BlockLayoutPlacementSource | BatchBlockLayoutPlacementSource,
 ) -> list[PCBPlacementEntry]:
-    entries = result["placements"] if "placements" in result else [result]
+    entries: Sequence[BlockLayoutPlacementSource] = (
+        result["placements"] if "placements" in result else [result]
+    )
     if not entries:
         raise ValueError("PCB merge result does not contain any block placements.")
 
@@ -66,14 +68,14 @@ def _merge_entries(
     references: set[str] = set()
     item_ids: set[str] = set()
     for entry in entries:
-        reference = str(entry.get("instance_reference", "")).strip()
+        reference = entry["instance_reference"].strip()
         if not reference:
             raise ValueError("PCB placement is missing its schematic instance reference.")
         if reference.casefold() in references:
             raise ValueError(f"PCB placement reference {reference!r} occurs more than once.")
         references.add(reference.casefold())
 
-        raw_ids = entry.get("interactive_item_uuids")
+        raw_ids = entry["interactive_item_uuids"]
         if not raw_ids:
             raise ValueError(
                 f"PCB placement {reference!r} has no imported board-item UUIDs to move."
@@ -103,7 +105,7 @@ def _merge_entries(
 
 def write_pcb_placement_manifest(
     board_path: Path,
-    merge_result: BlockLayoutMergeResult | BatchBlockLayoutMergeResult,
+    merge_result: BlockLayoutPlacementSource | BatchBlockLayoutPlacementSource,
 ) -> Path:
     """Write an exclusive sidecar binding each imported block to its root item IDs."""
     board_path = Path(board_path).expanduser().resolve()
