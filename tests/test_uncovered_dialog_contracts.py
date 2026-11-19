@@ -5,7 +5,9 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypedDict, cast
+
+from _pytest.monkeypatch import MonkeyPatch
 
 if TYPE_CHECKING:
     from kicad_blocks.pcb_types import (
@@ -15,18 +17,46 @@ if TYPE_CHECKING:
         BlockLayoutPlacementSource,
     )
 
-from _pytest.monkeypatch import MonkeyPatch
-
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "plugin" / "kicad-blocks"))
 
 from kicad_blocks import plugin as plugin_actions
+from kicad_blocks.repository import BlockRecord
+from ui_contracts import Misc
+
+
+type _RecordedValue = (
+    str | int | float | bool | None | Path | Misc | SimpleNamespace | dict[str, str] | tuple[float, float]
+)
+type _RecordedKwargs = dict[str, _RecordedValue]
+
+
+class _SingleLayoutCalls(TypedDict):
+    prompts: list[tuple[str, str, _RecordedKwargs]]
+    merge: list[tuple[Path, BlockRecord, Path, _RecordedKwargs]]
+    sidecar: list[tuple[Path, BlockLayoutPlacementSource]]
+    open: list[Path]
+    confirm: list[tuple[str, str, _RecordedKwargs]]
+    board_picker: list[_RecordedKwargs]
+    save_picker: list[_RecordedKwargs]
+
+
+class _BatchLayoutCalls(TypedDict):
+    prompts: list[tuple[str, str, _RecordedKwargs]]
+    merge: list[tuple[Path, list[plugin_actions.BlockLayoutPlacement], Path]]
+    sidecar: list[tuple[Path, BatchBlockLayoutPlacementSource]]
+    open: list[Path]
+    confirm: list[tuple[str, str, _RecordedKwargs]]
+    board_picker: list[_RecordedKwargs]
+    save_picker: list[_RecordedKwargs]
 
 
 # Native dialog call-site contracts patch the functions and do not need Tk installed.
-def _unpatched_native_dialog(*_args, **_kwargs):
+def _unpatched_native_dialog(
+    *_args: _RecordedValue, **_kwargs: _RecordedValue
+) -> None:
     raise AssertionError("A native dialog call was not patched by this test.")
 
 
@@ -43,14 +73,17 @@ if plugin_actions.messagebox is None:
     )
 
 
-def _instance(reference: str):
-    return SimpleNamespace(reference=reference)
+def _instance(reference: str) -> plugin_actions.SchematicSymbol:
+    return cast(plugin_actions.SchematicSymbol, SimpleNamespace(reference=reference))
 
 
-def _block(name: str):
-    return SimpleNamespace(
-        name=name,
-        manifest={"pins": [{"name": "VIN"}, {"name": "GND"}]},
+def _block(name: str) -> BlockRecord:
+    return cast(
+        BlockRecord,
+        SimpleNamespace(
+            name=name,
+            manifest={"pins": [{"name": "VIN"}, {"name": "GND"}]},
+        ),
     )
 
 
@@ -149,8 +182,10 @@ def _pcb_batch_placement_source(
     return {"placements": [_pcb_placement_source(item) for item in result["placements"]]}
 
 
-def _single_layout_context(monkeypatch: MonkeyPatch, tmp_path: Path, *, open_after_merge: bool):
-    parent = object()
+def _single_layout_context(
+    monkeypatch: MonkeyPatch, tmp_path: Path, *, open_after_merge: bool
+) -> tuple[Misc, plugin_actions.SchematicSymbol, BlockRecord, Path, Path, Path, _SingleLayoutCalls]:
+    parent = cast(Misc, object())
     instance = _instance("U1")
     block = _block("Power stage")
     board = tmp_path / "project.kicad_pcb"
@@ -158,10 +193,18 @@ def _single_layout_context(monkeypatch: MonkeyPatch, tmp_path: Path, *, open_aft
     sidecar = tmp_path / "project_U1_blocks.placement.json"
     board.write_text("(kicad_pcb)\n", encoding="utf-8")
 
-    calls = {"prompts": [], "merge": [], "sidecar": [], "open": [], "confirm": []}
+    calls: _SingleLayoutCalls = {
+        "prompts": [],
+        "merge": [],
+        "sidecar": [],
+        "open": [],
+        "confirm": [],
+        "board_picker": [],
+        "save_picker": [],
+    }
     answers = iter(["VIN:VBUS, GND:GND", "1.5,2.5", "90"])
 
-    def askstring(title, prompt, **kwargs):
+    def askstring(title: str, prompt: str, **kwargs: _RecordedValue) -> str | None:
         calls["prompts"].append((title, prompt, kwargs))
         return next(answers)
 
@@ -184,12 +227,12 @@ def _single_layout_context(monkeypatch: MonkeyPatch, tmp_path: Path, *, open_aft
     monkeypatch.setattr(
         plugin_actions,
         "_pick_kicad_file",
-        lambda _parent, **kwargs: calls.setdefault("board_picker", []).append(kwargs) or board,
+        lambda _parent, **kwargs: calls["board_picker"].append(kwargs) or board,
     )
     monkeypatch.setattr(
         plugin_actions,
         "_pick_save_file",
-        lambda _parent, **kwargs: calls.setdefault("save_picker", []).append(kwargs) or output,
+        lambda _parent, **kwargs: calls["save_picker"].append(kwargs) or output,
     )
     monkeypatch.setattr(
         plugin_actions,
@@ -197,15 +240,23 @@ def _single_layout_context(monkeypatch: MonkeyPatch, tmp_path: Path, *, open_aft
         lambda _path: sidecar,
     )
 
-    def merge(source, selected_block, target, **kwargs):
+    def merge(
+        source: Path,
+        selected_block: BlockRecord,
+        target: Path,
+        **kwargs: _RecordedValue,
+    ) -> BlockLayoutMergeResult:
         calls["merge"].append((source, selected_block, target, kwargs))
-        return _pcb_merge_result(output, rotation=kwargs["rotation_deg"])
+        return cast(BlockLayoutMergeResult, _pcb_merge_result(output, rotation=float(cast(float, kwargs["rotation_deg"]))))
 
     monkeypatch.setattr(plugin_actions, "merge_block_layout", merge)
     monkeypatch.setattr(
         plugin_actions,
         "write_pcb_placement_manifest",
-        lambda target, result: calls["sidecar"].append((target, result)) or sidecar,
+        lambda target, result: calls["sidecar"].append(
+            (target, _pcb_placement_source(cast(BlockLayoutMergeResult, result)))
+        )
+        or sidecar,
     )
     monkeypatch.setattr(
         plugin_actions.messagebox,
@@ -224,7 +275,7 @@ def _single_layout_context(monkeypatch: MonkeyPatch, tmp_path: Path, *, open_aft
 
 @pytest.mark.parametrize("open_after_merge", [False, True])
 def test_single_pcb_layout_prompts_map_anchor_rotation_and_confirms_open(
-    monkeypatch: MonkeyPatch, tmp_path: Path, open_after_merge
+    monkeypatch: MonkeyPatch, tmp_path: Path, open_after_merge: bool
 ):
     (
         parent,
@@ -236,8 +287,12 @@ def test_single_pcb_layout_prompts_map_anchor_rotation_and_confirms_open(
         calls,
     ) = _single_layout_context(monkeypatch, tmp_path, open_after_merge=open_after_merge)
 
-    plugin_actions._apply_block_pcb_layout(
-        object(), object(), tmp_path, tmp_path / "library", parent
+    plugin_actions.apply_block_pcb_layout(
+        cast(plugin_actions.Schematic, object()),
+        cast(plugin_actions.KiCadApp, object()),
+        tmp_path,
+        tmp_path / "library",
+        parent
     )
 
     assert [item[0] for item in calls["prompts"]] == [
@@ -280,17 +335,17 @@ def test_single_pcb_layout_prompts_map_anchor_rotation_and_confirms_open(
 
 @pytest.mark.parametrize("cancel_at", [0, 1, 2])
 def test_single_pcb_layout_cancelling_any_mapping_prompt_stops_before_merge(
-    monkeypatch: MonkeyPatch, tmp_path: Path, cancel_at
+    monkeypatch: MonkeyPatch, tmp_path: Path, cancel_at: int
 ):
-    parent = object()
+    parent = cast(Misc, object())
     board = tmp_path / "project.kicad_pcb"
     board.write_text("(kicad_pcb)\n", encoding="utf-8")
-    prompts = []
-    responses = ["VIN:VBUS,GND:GND", "1,2", "90"]
+    prompts: list[tuple[str, _RecordedKwargs]] = []
+    responses: list[str | None] = ["VIN:VBUS,GND:GND", "1,2", "90"]
     responses[cancel_at] = None
     response_iter = iter(responses)
-    merge_calls = []
-    save_calls = []
+    merge_calls: list[bool] = []
+    save_calls: list[bool] = []
 
     monkeypatch.setattr(
         plugin_actions,
@@ -335,8 +390,12 @@ def test_single_pcb_layout_cancelling_any_mapping_prompt_stops_before_merge(
     )
 
     assert (
-        plugin_actions._apply_block_pcb_layout(
-            object(), object(), tmp_path, tmp_path / "library", parent
+        plugin_actions.apply_block_pcb_layout(
+            cast(plugin_actions.Schematic, object()),
+            cast(plugin_actions.KiCadApp, object()),
+            tmp_path,
+            tmp_path / "library",
+            parent
         )
         is None
     )
@@ -347,8 +406,18 @@ def test_single_pcb_layout_cancelling_any_mapping_prompt_stops_before_merge(
     assert confirm_calls == []
 
 
-def _batch_context(monkeypatch: MonkeyPatch, tmp_path: Path, *, open_after_merge: bool):
-    parent = object()
+def _batch_context(
+    monkeypatch: MonkeyPatch, tmp_path: Path, *, open_after_merge: bool
+) -> tuple[
+    Misc,
+    list[plugin_actions.SchematicSymbol],
+    dict[str, BlockRecord],
+    Path,
+    Path,
+    Path,
+    _BatchLayoutCalls,
+]:
+    parent = cast(Misc, object())
     instances = [_instance("U1"), _instance("U2")]
     blocks = {item.reference: _block(f"Power stage {item.reference}") for item in instances}
     board = tmp_path / "project.kicad_pcb"
@@ -365,9 +434,17 @@ def _batch_context(monkeypatch: MonkeyPatch, tmp_path: Path, *, open_after_merge
             "90",
         ]
     )
-    calls = {"prompts": [], "merge": [], "confirm": [], "open": [], "sidecar": []}
+    calls: _BatchLayoutCalls = {
+        "prompts": [],
+        "merge": [],
+        "confirm": [],
+        "open": [],
+        "sidecar": [],
+        "board_picker": [],
+        "save_picker": [],
+    }
 
-    def askstring(title, prompt, **kwargs):
+    def askstring(title: str, prompt: str, **kwargs: _RecordedValue) -> str | None:
         calls["prompts"].append((title, prompt, kwargs))
         return next(responses)
 
@@ -390,24 +467,34 @@ def _batch_context(monkeypatch: MonkeyPatch, tmp_path: Path, *, open_after_merge
     monkeypatch.setattr(
         plugin_actions,
         "_pick_kicad_file",
-        lambda _parent, **kwargs: calls.setdefault("board_picker", []).append(kwargs) or board,
+        lambda _parent, **kwargs: calls["board_picker"].append(kwargs) or board,
     )
     monkeypatch.setattr(
         plugin_actions,
         "_pick_save_file",
-        lambda _parent, **kwargs: calls.setdefault("save_picker", []).append(kwargs) or output,
+        lambda _parent, **kwargs: calls["save_picker"].append(kwargs) or output,
     )
     monkeypatch.setattr(plugin_actions, "placement_manifest_path", lambda _path: sidecar)
 
-    def merge(source, placements, target):
+    def merge(
+        source: Path,
+        placements: list[plugin_actions.BlockLayoutPlacement],
+        target: Path,
+    ) -> BatchBlockLayoutMergeResult:
         calls["merge"].append((source, placements, target))
-        return _pcb_merge_result(output, rotation=90.0, block_count=2)
+        return cast(
+            BatchBlockLayoutMergeResult,
+            _pcb_merge_result(output, rotation=90.0, block_count=2),
+        )
 
     monkeypatch.setattr(plugin_actions, "merge_block_layouts", merge)
     monkeypatch.setattr(
         plugin_actions,
         "write_pcb_placement_manifest",
-        lambda target, result: calls["sidecar"].append((target, result)) or sidecar,
+        lambda target, result: calls["sidecar"].append(
+            (target, _pcb_batch_placement_source(cast(BatchBlockLayoutMergeResult, result)))
+        )
+        or sidecar,
     )
     monkeypatch.setattr(
         plugin_actions.messagebox,
@@ -426,14 +513,18 @@ def _batch_context(monkeypatch: MonkeyPatch, tmp_path: Path, *, open_after_merge
 
 @pytest.mark.parametrize("open_after_merge", [False, True])
 def test_batch_pcb_layout_prompts_all_instances_and_confirms_open(
-    monkeypatch: MonkeyPatch, tmp_path: Path, open_after_merge
+    monkeypatch: MonkeyPatch, tmp_path: Path, open_after_merge: bool
 ):
     parent, _instances, blocks, board, output, _sidecar, calls = _batch_context(
         monkeypatch, tmp_path, open_after_merge=open_after_merge
     )
 
     plugin_actions._apply_selected_block_pcb_layouts(
-        object(), object(), tmp_path, tmp_path / "library", parent
+        cast(plugin_actions.Schematic, object()),
+        cast(plugin_actions.KiCadApp, object()),
+        tmp_path,
+        tmp_path / "library",
+        parent
     )
 
     assert [item[0] for item in calls["prompts"]] == [
@@ -490,13 +581,13 @@ def test_batch_pcb_layout_prompts_all_instances_and_confirms_open(
 
 @pytest.mark.parametrize("cancel_at", [0, 1, 2, 3, 4, 5])
 def test_batch_pcb_layout_cancelling_any_mapping_prompt_prevents_merge(
-    monkeypatch: MonkeyPatch, tmp_path: Path, cancel_at
+    monkeypatch: MonkeyPatch, tmp_path: Path, cancel_at: int
 ):
-    parent = object()
+    parent = cast(Misc, object())
     instances = [_instance("U1"), _instance("U2")]
     blocks = {item.reference: _block(f"Power stage {item.reference}") for item in instances}
-    prompts = []
-    responses = [
+    prompts: list[tuple[str, _RecordedKwargs]] = []
+    responses: list[str | None] = [
         "VIN:VBUS,GND:GND",
         "1,2",
         "45",
@@ -506,8 +597,8 @@ def test_batch_pcb_layout_cancelling_any_mapping_prompt_prevents_merge(
     ]
     responses[cancel_at] = None
     response_iter = iter(responses)
-    merge_calls = []
-    board_picks = []
+    merge_calls: list[bool] = []
+    board_picks: list[bool] = []
 
     monkeypatch.setattr(plugin_actions, "_selected_symbols", lambda _s: instances)
     monkeypatch.setattr(
@@ -538,7 +629,11 @@ def test_batch_pcb_layout_cancelling_any_mapping_prompt_prevents_merge(
 
     assert (
         plugin_actions._apply_selected_block_pcb_layouts(
-            object(), object(), tmp_path, tmp_path / "library", parent
+            cast(plugin_actions.Schematic, object()),
+            cast(plugin_actions.KiCadApp, object()),
+            tmp_path,
+            tmp_path / "library",
+            parent
         )
         is None
     )
@@ -549,45 +644,56 @@ def test_batch_pcb_layout_cancelling_any_mapping_prompt_prevents_merge(
 
 
 class _ActionRoot:
-    def __init__(self):
+    def __init__(self) -> None:
         self.window_title = ""
         self.withdrawn = False
         self.destroyed = False
 
-    def title(self, value):
+    def title(self, value: str) -> None:
         self.window_title = value
 
-    def withdraw(self):
+    def withdraw(self) -> None:
         self.withdrawn = True
 
-    def destroy(self):
+    def destroy(self) -> None:
         self.destroyed = True
 
 
-def _patch_action_environment(monkeypatch: MonkeyPatch, *, schematic):
+def _patch_action_environment(
+    monkeypatch: MonkeyPatch, *, schematic: plugin_actions.Schematic | None
+) -> tuple[_ActionRoot, plugin_actions.KiCadApp]:
     root = _ActionRoot()
-    kicad = SimpleNamespace(get_schematic=lambda: schematic)
+    def get_schematic() -> plugin_actions.Schematic | None:
+        return schematic
+
+    kicad = cast(plugin_actions.KiCadApp, SimpleNamespace(get_schematic=get_schematic))
     monkeypatch.setattr(plugin_actions, "_load_tkinter", lambda: None)
     monkeypatch.setattr(
         plugin_actions,
         "tk",
         SimpleNamespace(Tk=lambda: root, TclError=RuntimeError),
     )
-    monkeypatch.setattr(plugin_actions, "_configure_tk_theme", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(
-        plugin_actions,
-        "_attach_tk_window_to_editor",
-        lambda *_args, **_kwargs: None,
-    )
+    def no_theme(_root: Misc) -> None:
+        return None
+
+    def no_attach(_root: Misc, _kicad: plugin_actions.KiCadApp) -> None:
+        return None
+
+    monkeypatch.setattr(plugin_actions, "_configure_tk_theme", no_theme)
+    monkeypatch.setattr(plugin_actions, "_attach_tk_window_to_editor", no_attach)
     kipy_module = ModuleType("kipy")
-    kipy_module.KiCad = lambda: kicad
+
+    def create_kicad() -> plugin_actions.KiCadApp:
+        return kicad
+
+    setattr(kipy_module, "KiCad", create_kicad)
     monkeypatch.setitem(sys.modules, "kipy", kipy_module)
     return root, kicad
 
 
 def test_run_action_missing_schematic_shows_attention_warning_and_closes_root(monkeypatch: MonkeyPatch):
     root, _kicad = _patch_action_environment(monkeypatch, schematic=None)
-    warnings = []
+    warnings: list[tuple[str, str, _RecordedKwargs]] = []
     monkeypatch.setattr(
         plugin_actions.messagebox,
         "showwarning",
@@ -606,15 +712,15 @@ def test_run_action_missing_schematic_shows_attention_warning_and_closes_root(mo
 
 
 def test_run_action_unexpected_failure_shows_error_and_closes_root(monkeypatch: MonkeyPatch, tmp_path: Path):
-    schematic = object()
+    schematic = cast(plugin_actions.Schematic, object())
     root, _kicad = _patch_action_environment(monkeypatch, schematic=schematic)
     library = tmp_path / "library"
-    errors = []
+    errors: list[tuple[str, str, _RecordedKwargs]] = []
     monkeypatch.setattr(plugin_actions, "project_directory", lambda _s: tmp_path)
     monkeypatch.setattr(plugin_actions, "configured_library_roots", lambda: [library])
     monkeypatch.setattr(plugin_actions, "default_library_root", lambda: library)
 
-    def fail_publish(*_args, **_kwargs):
+    def fail_publish(*_args: _RecordedValue, **_kwargs: _RecordedValue) -> None:
         raise RuntimeError("simulated publish failure")
 
     monkeypatch.setattr(plugin_actions, "_publish_block", fail_publish)
