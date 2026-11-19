@@ -1918,15 +1918,17 @@ def _show_selected_block_configuration(
         )
         dialog.destroy()
 
-    _action_button(footer, "Cancel", dialog.destroy, "cancel", "Discard instance edits").pack(
-        side="right", padx=(8, 0)
-    )
+    _action_button(
+        footer, "Cancel", dialog.destroy, "cancel", "Discard instance edits",
+        contract_id="instance-configuration.action.cancel",
+    ).pack(side="right", padx=(8, 0))
     _action_button(
         footer,
         "Save instance",
         save_configuration,
         "save",
         "Save configuration on the selected instance",
+        contract_id="instance-configuration.action.save",
     ).pack(side="right")
     dialog.bind("<Escape>", _after_event(dialog.destroy))
     dialog.protocol("WM_DELETE_WINDOW", dialog.destroy)
@@ -2209,10 +2211,12 @@ def _pick_block_for_placement(
     buttons = ttk.Frame(outer)
     buttons.pack(fill="x", pady=(10, 0))
     _action_button(
-        buttons, "Cancel", dialog.destroy, "cancel", "Cancel and close this dialog"
+        buttons, "Cancel", dialog.destroy, "cancel", "Cancel and close this dialog",
+        contract_id="functional-block-picker.action.cancel",
     ).pack(side="right")
     _action_button(
-        buttons, "Place Block", choose, "place", "Start native symbol placement with this block"
+        buttons, "Place Block", choose, "place", "Start native symbol placement with this block",
+        contract_id="functional-block-picker.action.place",
     ).pack(side="right", padx=(0, 8))
     render_results()
     _set_window_geometry(dialog, 1080, 720, 900, 580)
@@ -2313,6 +2317,7 @@ def _pick_record(
         "select",
         "Use the highlighted block",
         state="disabled",
+        contract_id="record-picker.action.select",
     )
     select_button.pack(side="right", pady=(10, 0))
     _action_button(
@@ -2321,6 +2326,7 @@ def _pick_record(
         dialog.destroy,
         "cancel",
         "Close without selecting a block",
+        contract_id="record-picker.action.cancel",
     ).pack(side="right", padx=(0, 8), pady=(10, 0))
 
     def render_results(*_args: str) -> None:
@@ -2821,9 +2827,13 @@ def _ask_create_block_details(
 
     buttons = ttk.Frame(frame)
     buttons.pack(fill="x")
-    _action_button(buttons, "Cancel", finish, "cancel", "Cancel block creation").pack(side="right")
     _action_button(
-        buttons, "Create Block", accept, "create", "Create the reusable block from this sheet"
+        buttons, "Cancel", finish, "cancel", "Cancel block creation",
+        contract_id="create-block-form.action.cancel",
+    ).pack(side="right")
+    _action_button(
+        buttons, "Create Block", accept, "create", "Create the reusable block from this sheet",
+        contract_id="create-block-form.action.create",
     ).pack(side="right", padx=(0, 8))
 
     def cancel() -> None:
@@ -4513,9 +4523,11 @@ def _show_block_layout_editor(
                 "end",
                 iid=iid,
                 values=(
-                    item["name"],
-                    assigned_to(str(item.get("id") or "")),
-                    item.get("file", ""),
+                    item.get("name", item["id"]),
+                    assigned_to(item["id"]),
+                    item.get("file")
+                    or Path(str(item.get("source") or "")).name
+                    or "Pending save",
                 ),
                 tags=("even" if index % 2 == 0 else "odd",),
             )
@@ -4673,7 +4685,7 @@ def _show_block_layout_editor(
         save_button.configure(state="normal")
 
     palette = cast(dict[str, str], getattr(parent, "_kicad_blocks_palette", {}))
-    ttk.Label(
+    status_label = ttk.Label(
         frame,
         textvariable=status_value,
         foreground=palette.get("muted", "#5f6871"),
@@ -4685,7 +4697,10 @@ def _show_block_layout_editor(
     status_label.grid(row=2, column=0, sticky="ew", pady=(2, 4))
     actions = ttk.Frame(frame)
     actions.grid(row=3, column=0, sticky="ew", pady=(8, 0))
-    _action_button(actions, "Add layout", add_layout, "add", "Add a PCB layout").pack(side="left")
+    _action_button(
+        actions, "Add layout", add_layout, "add", "Add a PCB layout",
+        contract_id="pcb-layout-manager.action.add",
+    ).pack(side="left")
     remove_button = _action_button(
         actions,
         "Remove",
@@ -4693,6 +4708,7 @@ def _show_block_layout_editor(
         "remove",
         "Remove the selected PCB layout",
         state="disabled",
+        contract_id="pcb-layout-manager.action.remove",
     )
     remove_button.pack(side="left", padx=(8, 0))
     default_button = _action_button(
@@ -4702,6 +4718,7 @@ def _show_block_layout_editor(
         "default",
         "Use this layout as the default",
         state="disabled",
+        contract_id="pcb-layout-manager.action.default",
     )
     default_button.pack(side="left", padx=(8, 0))
 
@@ -4724,6 +4741,7 @@ def _show_block_layout_editor(
         "select",
         "Associate the selected layout with this implementation",
         state="disabled",
+        contract_id="pcb-layout-manager.action.assign",
     )
     link_button.pack(side="left", padx=(8, 0))
 
@@ -4942,6 +4960,7 @@ def _ask_implementation_details(
             "Copy an existing implementation",
         ]
         mode_combo = ttk.Combobox(frame, textvariable=mode_value, values=modes, state="readonly")
+        mode_combo._kicad_ui_contract_id = "implementation-details.mode"
         mode_combo.grid(row=4, column=0, columnspan=3, sticky="ew", pady=(3, 8))
     else:
         modes = ["Choose a schematic file"]
@@ -4966,6 +4985,7 @@ def _ask_implementation_details(
         values=(),
         state="readonly",
     )
+    copy_combo._kicad_ui_contract_id = "implementation-details.copy"
     copy_combo.grid(row=source_row + 1, column=0, columnspan=3, sticky="ew", pady=(3, 10))
     copy_combo.grid_remove()
 
@@ -5066,15 +5086,17 @@ def _ask_implementation_details(
 
     buttons = ttk.Frame(frame)
     buttons.grid(row=source_row + 2, column=0, columnspan=3, sticky="ew", pady=(8, 2))
-    _action_button(buttons, "Cancel", dialog.destroy, "cancel", "Cancel implementation setup").pack(
-        side="right"
-    )
+    _action_button(
+        buttons, "Cancel", dialog.destroy, "cancel", "Cancel implementation setup",
+        contract_id="implementation-details.action.cancel",
+    ).pack(side="right")
     _action_button(
         buttons,
         "Use implementation",
         accept,
         "select",
         "Use the selected implementation",
+        contract_id="implementation-details.action.use",
     ).pack(side="right", padx=(0, 8))
     dialog.bind("<Return>", _after_event(accept))
     dialog.bind("<Escape>", _after_event(dialog.destroy))
