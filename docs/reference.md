@@ -40,9 +40,8 @@ The common Eeschema entry points are separate toolbar actions:
 | Eeschema toolbar | **Browse and Place Functional Blocks** | Browse all registered shared libraries. |
 | Eeschema toolbar | **Create Block from Sheet** | Select a hierarchical sheet symbol in its parent, or run with no selection from the open sheet. |
 | Eeschema toolbar | **Open Block Implementation** | Select one placed block instance. |
-| Eeschema task hub | **KiCad Blocks Tasks** | Open the grouped task hub. |
 
-The task hub groups these operations by tab:
+The less frequent maintenance and analysis operations remain available as direct KiCad plugin actions; the grouped Task Hub is retained only for compatibility and is not the intended workflow.
 
 | Tab | Actions |
 | --- | --- |
@@ -64,9 +63,9 @@ The Functional Block Library browser presents these primary actions:
 - **Manage PCB layouts** — edits stored boards, implementation links, and the default layout.
 - **Refresh** — reloads the registered library list.
 
-The Implementations dialog contains exactly one **Default** row for the active default schematic and the remaining named alternatives. Selecting **Default** enables **Edit default**, which opens the current default schematic. Selecting an alternative enables **Edit implementation** and **Set as default**; promoting it replaces the single Default row rather than adding a separate Base state. Named alternatives can be added from an existing schematic, a new blank schematic, or a copy of another library implementation. Accepted changes are persisted immediately; **Save & close** retries failed writes.
+The Implementations dialog contains exactly one **Default** row for the active default schematic and the remaining named alternatives. Selecting **Default** enables **Edit default**, which opens the current default schematic. Selecting an alternative enables **Edit implementation** and **Set as default**; promoting it replaces the single Default row rather than adding a separate Base state. Named alternatives can be added from an existing schematic, a new blank schematic, or a copy of another library implementation. Add, Edit, Set as default, and Remove persist immediately. If a write fails, the manager remains open and Close retries the pending write.
 
-The PCB layout manager separates the layout table and assignment controls. The **Assign selected layout to** selector can choose **Default** or a named variant. Every layout remains linked to at least one implementation. Accepted Add, Remove, Assign, and Set default operations persist immediately and refresh the table. **Save & close** retries failed writes; **Close** exits the manager.
+The PCB layout manager separates the layout table and assignment controls. The **Assign selected layout to** selector can choose **Default** or a named variant. Every layout remains linked to at least one implementation. Accepted Add, Remove, Assign, and Set default operations persist immediately and refresh the table. If a write fails, the manager remains open; Close retries the pending write.
 
 The **Add PCB layout** dialog supports two starting modes: **Create a new empty board** and **Choose an existing PCB file**. The file entry and **Choose file** button are visible only in the existing-file mode. **Use for implementation** associates the new board with **Default** or a named variant.
 
