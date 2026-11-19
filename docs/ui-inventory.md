@@ -566,7 +566,7 @@ Explain blocked operations, recoverable errors, destructive confirmations, and c
 
 **Coverage:** Partial — targeted GUI, integration, or visual checks exist.
 
-The production plugin contains 56 native messagebox/simpledialog call sites across profile creation, source/layout selection, validation, library and implementation maintenance, the Functional Block Library, PCB mapping/anchor/rotation, and action dispatch. The AST-generated registry links all 50 call sites to direct result/effect tests (56 tested, 0 partial, 0 uncovered). This screen remains partial only because those tests stub the OS dialogs: actual native-window rendering, focus/ownership, and platform-specific button layout are not covered by the in-process contracts.
+The production plugin contains 50 native messagebox/simpledialog call sites across profile creation, source/layout selection, validation, library and implementation maintenance, the Functional Block Library, PCB mapping/anchor/rotation, and action dispatch. The AST-generated registry links all 50 call sites to direct result/effect tests (50 tested, 0 partial, 0 uncovered). This screen remains partial only because those tests stub the OS dialogs: actual native-window rendering, focus/ownership, and platform-specific button layout are not covered by the in-process contracts.
 
 **Major functionality**
 
