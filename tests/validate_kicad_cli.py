@@ -8,6 +8,7 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
+from typing import TypedDict
 
 ROOT = Path(__file__).resolve().parents[1]
 PLUGIN = ROOT / "plugin" / "kicad-blocks"
@@ -16,7 +17,6 @@ sys.path.insert(0, str(ROOT / "examples" / "stusb4500"))
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from generate_reference import ROOT_UUID, generate_reference_schematic
-from kicad_blocks.json_types import JSONObject
 from kicad_blocks.model import parse_pins
 from kicad_blocks.operations import export_block_bom, validate_block_tree
 from kicad_blocks.plugin import new_blank_pcb_source
@@ -31,6 +31,39 @@ from kicad_blocks.sexpr import (
 )
 from kicad_blocks.repository import add_dependency, create_block
 from validate_schematic_style import validate_schematic_style
+
+
+class _ProjectMetadata(TypedDict):
+    filename: str
+    version: int
+
+
+class _ERCMetadata(TypedDict):
+    version: int
+
+
+class _ERCSettings(TypedDict):
+    erc_exclusions: list[str]
+    meta: _ERCMetadata
+    rule_severities: dict[str, str]
+
+
+class _TopLevelSheet(TypedDict):
+    filename: str
+    name: str
+    uuid: str
+
+
+class _SchematicSettings(TypedDict):
+    meta: _ERCMetadata
+    top_level_sheets: list[_TopLevelSheet]
+
+
+class _ERCTestProject(TypedDict):
+    meta: _ProjectMetadata
+    erc: _ERCSettings
+    schematic: _SchematicSettings
+    sheets: list[list[str]]
 
 
 def _required_node(node: SExprList, tag: str) -> SExprList:
@@ -470,7 +503,7 @@ def _validate_stusb4500_netlist(cli: str, output_dir: Path) -> None:
     # all internal pin conflicts, dangling wires/labels, and other ERC rules
     # retain KiCad's default severities.
     project_file = output_dir / "stusb4500.kicad_pro"
-    project_settings: JSONObject = {
+    project_settings: _ERCTestProject = {
         "meta": {"filename": project_file.name, "version": 3},
         "erc": {
             "erc_exclusions": [],
