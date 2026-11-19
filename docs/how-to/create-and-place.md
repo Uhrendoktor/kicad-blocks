@@ -4,12 +4,12 @@ Use this guide to turn a hierarchical sheet into a library block or place an exi
 
 ## Create a block from a sheet
 
-1. Open the parent schematic in Eeschema and select the hierarchical sheet symbol to package. Alternatively, open the target sheet itself and run the command with no selection.
-2. Choose **Create Block from Sheet**.
-3. Enter the name and optional description.
-4. Choose the shared library destination.
+1. Open the parent schematic in Eeschema and select exactly one hierarchical sheet symbol. Alternatively, open the sheet to package and leave the selection empty.
+2. Click **Create Block from Sheet** once.
 
-KiCad Blocks copies the selected sheet and its child schematic files into a new `.kicad_block` directory. It leaves the source project unchanged. The root sheet's hierarchical labels become the facade pins; child-sheet labels remain internal.
+There is no naming or confirmation dialog. KiCad Blocks derives the block name from the source schematic filename. If that name already exists in the default library, it adds a numeric suffix rather than overwriting the existing block. The configured default library is the destination; change it beforehand through **Manage Libraries → Set default**.
+
+A normal component, wire, or multi-selection is not treated as a sheet. Clear the selection to package the sheet currently open in Eeschema. KiCad Blocks copies that sheet and all child schematic files into a new `.kicad_block` directory, leaves the source project unchanged, and derives facade pins from the packaged root sheet's hierarchical labels. Child-sheet labels remain internal.
 
 Open the generated block in the browser and review the pin list and implementation before sharing it. See [facade pin rules](../reference.md#facade-pins).
 
