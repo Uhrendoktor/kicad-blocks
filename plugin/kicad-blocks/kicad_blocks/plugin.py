@@ -1958,18 +1958,47 @@ def _capture_eeschema_window_id() -> str | None:
     return None
 
 
-def _process_image_name(pid: str | int | None) -> str:
-    """Return an editor process image name on platforms with a process listing."""
-    if pid is None:
-        return ""
+def _process_image_name(pid: str | int | None = None) -> str:
+    """Return the KiCad editor image name from a target or the invoking process."""
+    target = pid
+    if target is None:
+        # The plugin entrypoint is a child process of the KiCad frame that
+        # invoked it on Linux; this also works when the desktop is Wayland and
+        # does not expose foreign window handles to the plugin.
+        target = os.getppid()
     try:
-        image_path = os.readlink(f"/proc/{int(pid)}/exe")
-        return Path(image_path).name.casefold()
+        image_path = os.readlink(f"/proc/{int(target)}/exe")
+        name = Path(image_path).name.casefold()
+        if "eeschema" in name or name.startswith("kicad"):
+            return name
     except (OSError, ValueError, TypeError):
         pass
+    if os.name == "nt":
+        try:
+            import ctypes
+            from ctypes import wintypes
+
+            user32 = ctypes.windll.user32
+            kernel32 = ctypes.windll.kernel32
+            hwnd = user32.GetForegroundWindow()
+            process_id = wintypes.DWORD()
+            user32.GetWindowThreadProcessId(hwnd, ctypes.byref(process_id))
+            handle = kernel32.OpenProcess(0x1000, False, process_id.value)
+            if handle:
+                try:
+                    buffer = ctypes.create_unicode_buffer(1024)
+                    length = wintypes.DWORD(len(buffer))
+                    if kernel32.QueryFullProcessImageNameW(
+                        handle, 0, buffer, ctypes.byref(length)
+                    ):
+                        return Path(buffer.value).name.casefold()
+                finally:
+                    kernel32.CloseHandle(handle)
+        except Exception:
+            LOG.debug("Could not resolve the foreground KiCad process.", exc_info=True)
     try:
         result = subprocess.run(
-            ["ps", "-o", "comm=", "-p", str(pid)],
+            ["ps", "-o", "comm=", "-p", str(target)],
             capture_output=True, text=True, check=False, timeout=3,
         )
         return Path(result.stdout.strip()).name.casefold()
@@ -1988,22 +2017,6 @@ def _symbol_editor_menu_down_count(editor_pid: str | None = None) -> int:
     # The IPC verification after the menu action prevents a wrong menu path
     # from being reported as a successful hand-off.
     return 2
-
-
-def _native_run_action_status(response) -> int | None:
-    """Read KiCad's RunActionStatus without assuming a truthy response succeeded."""
-    status = getattr(response, "status", None)
-    if status is None:
-        return None
-    try:
-        return int(status)
-    except (TypeError, ValueError):
-        name = str(getattr(status, "name", status)).strip().upper()
-        return {
-            "RAS_OK": 1, "OK": 1,
-            "RAS_INVALID": 2, "INVALID": 2,
-            "RAS_FRAME_NOT_OPEN": 3, "FRAME_NOT_OPEN": 3,
-        }.get(name)
 
 
 def _desktop_keyboard_backend() -> str:
@@ -2608,22 +2621,11 @@ def _edit_facade_symbol(
     except Exception:
         LOG.debug("Symbol Editor IPC handler is not ready; opening the native editor.", exc_info=True)
 
-    # Try KiCad's registered global action before requiring any OS input
-    # bridge. This is the preferred path on every platform.
-    action_started = False
-    run_action = getattr(kicad, "run_action", None)
-    if callable(run_action):
-        try:
-            action_started = (
-                _native_run_action_status(
-                    run_action("common.Control.showSymbolEditor")
-                ) == 1
-            )
-        except Exception:
-            action_started = False
-
+    # Eeschema does not register the RunAction IPC handler (KiCad currently
+    # registers it for PCB Editor only). Open the native Tools-menu command
+    # through the platform input backend, then use exact-item IPC for selection.
     backend = _desktop_keyboard_backend()
-    if not action_started and not backend:
+    if not backend:
         raise RuntimeError(
             "KiCad did not expose the Symbol Editor action and no native input "
             "bridge is available. Install xdotool (X11), wtype (Wayland), or "
@@ -2665,32 +2667,19 @@ def _edit_facade_symbol(
             send("windowfocus", "--sync", str(editor_window_id))
             if send("getwindowfocus", check=False) != str(editor_window_id):
                 raise RuntimeError("Could not focus Eeschema to open Symbol Editor.")
-            # KiCad's global action is preferred; only fall back to the native
-            # menu path when this API build does not support RunAction.
-            for _ in range(20):
+            send("key", "--clearmodifiers", "alt+t")
+            pause(0.12)
+            send("key", "--clearmodifiers", "Home")
+            for _ in range(_symbol_editor_menu_down_count(editor_pid)):
+                send("key", "--clearmodifiers", "Down")
+            send("key", "--clearmodifiers", "Return")
+            for _ in range(50):
                 found = send("search", "--onlyvisible", "--name", "Symbol Editor", check=False)
                 candidates = [item.strip() for item in found.splitlines() if item.strip()]
                 if candidates:
                     symbol_editor_id = candidates[-1]
                     break
-                if action_started:
-                    pause(0.1)
-                else:
-                    break
-            if symbol_editor_id is None:
-                send("key", "--clearmodifiers", "alt+t")
-                pause(0.12)
-                send("key", "--clearmodifiers", "Home")
-                for _ in range(_symbol_editor_menu_down_count(editor_pid)):
-                    send("key", "--clearmodifiers", "Down")
-                send("key", "--clearmodifiers", "Return")
-                for _ in range(50):
-                    found = send("search", "--onlyvisible", "--name", "Symbol Editor", check=False)
-                    candidates = [item.strip() for item in found.splitlines() if item.strip()]
-                    if candidates:
-                        symbol_editor_id = candidates[-1]
-                        break
-                    pause(0.1)
+                pause(0.1)
             if symbol_editor_id is None:
                 raise RuntimeError("Eeschema did not open its native Symbol Editor window.")
         send("windowraise", str(symbol_editor_id), check=False)
@@ -2705,29 +2694,28 @@ def _edit_facade_symbol(
         # it returns focus to the invoking editor before native menu input.
         if close_browser is not None:
             close_browser()
-        if not action_started:
-            if sys.platform == "darwin":
-                # AppleScript talks to the native menu, not a guessed screen
-                # coordinate. macOS may require Accessibility permission.
-                script = (
-                    'tell application "System Events" to tell '
-                    '(first process whose frontmost is true) to click '
-                    'menu item "Symbol Editor" of menu "Tools" of menu bar 1'
-                )
-                subprocess.run(
-                    ["osascript", "-e", script],
-                    capture_output=True,
-                    text=True,
-                    check=True,
-                    timeout=8,
-                )
-            else:
-                _send_native_key("alt+t", backend=backend)
-                pause(0.12)
-                _send_native_key("Home", backend=backend)
-                for _ in range(_symbol_editor_menu_down_count()):
-                    _send_native_key("Down", backend=backend)
-                _send_native_key("Return", backend=backend)
+        if sys.platform == "darwin":
+            # AppleScript selects the named native menu item rather than relying
+            # on a menu index. macOS may require Accessibility permission.
+            script = (
+                'tell application "System Events" to tell '
+                '(first process whose frontmost is true) to click '
+                'menu item "Symbol Editor" of menu "Tools" of menu bar 1'
+            )
+            subprocess.run(
+                ["osascript", "-e", script],
+                capture_output=True,
+                text=True,
+                check=True,
+                timeout=8,
+            )
+        else:
+            _send_native_key("alt+t", backend=backend)
+            pause(0.12)
+            _send_native_key("Home", backend=backend)
+            for _ in range(_symbol_editor_menu_down_count()):
+                _send_native_key("Down", backend=backend)
+            _send_native_key("Return", backend=backend)
 
     return _open_symbol_library_item(
         kicad, LIBRARY_NICKNAME, symbol_name, pause=pause, timeout=7.0
@@ -2901,19 +2889,9 @@ def _start_native_symbol_placement(
         send("windowraise", str(editor_window_id), check=False)
         send("windowactivate", "--sync", str(editor_window_id), check=False)
         send("windowfocus", "--sync", str(editor_window_id))
-        action_started = False
-        run_action = getattr(kicad, "run_action", None)
-        if callable(run_action):
-            try:
-                action_started = (
-                    _native_run_action_status(
-                        run_action("eeschema.InteractiveDrawing.placeSymbol")
-                    ) == 1
-                )
-            except Exception:
-                action_started = False
-        if not action_started:
-            send("key", "--clearmodifiers", "a")
+        # Eeschema's RunAction handler is not registered on the schematic
+        # server. Use its native Add Symbol hotkey, then verify the chooser.
+        send("key", "--clearmodifiers", "a")
         chooser_id = ""
         for _ in range(50):
             focused = send("getwindowfocus", check=False)
@@ -2945,21 +2923,9 @@ def _start_native_symbol_placement(
             f"KiCad did not start cursor placement for {symbol_id}. Check the native chooser."
         )
 
-    # Prefer KiCad's own action; keyboard input is only the bridge into the
-    # native chooser so the exact library identifier can be selected.
-    action_started = False
-    run_action = getattr(kicad, "run_action", None)
-    if callable(run_action):
-        try:
-            action_started = (
-                _native_run_action_status(
-                    run_action("eeschema.InteractiveDrawing.placeSymbol")
-                ) == 1
-            )
-        except Exception:
-            action_started = False
-    if not action_started:
-        _send_native_key("a", backend=backend)
+    # Eeschema has no RunAction IPC handler; invoke the native Add Symbol tool
+    # with its documented hotkey, then choose the fully qualified library ID.
+    _send_native_key("a", backend=backend)
     pause(0.25)
     _type_native_text(symbol_id, backend=backend)
     pause(0.2)
