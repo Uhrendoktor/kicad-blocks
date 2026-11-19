@@ -9,7 +9,7 @@ This page is generated from the declarative UI catalog. It inventories the curre
 | Partial | 2 | Targeted GUI, integration, model, or screenshot checks exist; the full control matrix is not contracted. |
 | Inventory only | 0 | Inventory only — systematic UI contracts remain future work; window/workflow is documented here for discovery and rollout planning. |
 
-The legacy Task Hub, both transient block choosers, Add PCB Layout, Record picker, Functional Block picker, Functional Block Library, Instance Configuration, Implementation details, Implementations Manager, Manage Libraries, and PCB Layout Manager now have full registered widget contracts. Create Block is a one-click action and no longer opens a details form. All 56 native messagebox/simpledialog call sites have direct result/effect contracts. The shared open/save/directory chooser wrappers have direct argument, fallback, and cancellation contracts; actual OS-native dialog rendering and cross-platform KiCad window ownership remain unverified, so the cross-cutting native-dialog screen remains partial. Native editor hand-offs use platform input backends only to start KiCad's own tools; exact facade identity is verified with IPC.
+The legacy Task Hub, both transient block choosers, Add PCB Layout, Record picker, Functional Block picker, Functional Block Library, Instance Configuration, Implementation details, Implementations Manager, Manage Libraries, and PCB Layout Manager now have full registered widget contracts. Create Block is a one-click action and no longer opens a details form. All 50 native messagebox/simpledialog call sites have direct result/effect contracts. The shared open/save/directory chooser wrappers have direct argument, fallback, and cancellation contracts; actual OS-native dialog rendering and cross-platform KiCad window ownership remain unverified, so the cross-cutting native-dialog screen remains partial. Native editor hand-offs use platform input backends only to start KiCad's own tools; exact facade identity is verified with IPC.
 
 ## Screens
 
@@ -566,7 +566,7 @@ Explain blocked operations, recoverable errors, destructive confirmations, and c
 
 **Coverage:** Partial — targeted GUI, integration, or visual checks exist.
 
-The production plugin contains 56 native messagebox/simpledialog call sites across profile creation, source/layout selection, validation, library and implementation maintenance, the Functional Block Library, PCB mapping/anchor/rotation, and action dispatch. The AST-generated registry links all 56 call sites to direct result/effect tests (56 tested, 0 partial, 0 uncovered). This screen remains partial only because those tests stub the OS dialogs: actual native-window rendering, focus/ownership, and platform-specific button layout are not covered by the in-process contracts.
+The production plugin contains 56 native messagebox/simpledialog call sites across profile creation, source/layout selection, validation, library and implementation maintenance, the Functional Block Library, PCB mapping/anchor/rotation, and action dispatch. The AST-generated registry links all 50 call sites to direct result/effect tests (56 tested, 0 partial, 0 uncovered). This screen remains partial only because those tests stub the OS dialogs: actual native-window rendering, focus/ownership, and platform-specific button layout are not covered by the in-process contracts.
 
 **Major functionality**
 

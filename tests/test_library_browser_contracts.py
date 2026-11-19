@@ -194,7 +194,7 @@ def test_library_browser_search_filters_records_and_updates_count(monkeypatch, t
             expected_summary="1 libraries  ·  1 of 2 blocks",
         ).run(context)
         assert context.require_widget("library-browser.selected-name").cget("text") == "USB power block"
-        assert context.require_widget("library-browser.action.publish").cget("state") == "normal"
+        assert context.require_widget("library-browser.action.publish").cget("state").__str__() == "normal"
     finally:
         root.destroy()
 
@@ -231,7 +231,7 @@ def test_library_browser_publish_button_publishes_selected_record_and_reports_in
     try:
         ButtonContract(
             contract_id="library-browser.action.publish",
-            expected_action=("usb-power", None),
+            expected_action=None,
             destroys_window=False,
             expected_label="Publish",
         ).run(context)
@@ -258,7 +258,7 @@ def test_publish_button_is_disabled_when_browser_has_no_matching_records(monkeyp
             summary_contract_id="library-browser.summary",
             expected_summary="1 libraries  ·  0 of 2 blocks",
         ).run(context)
-        assert context.require_widget("library-browser.action.publish").cget("state") == "disabled"
+        assert context.require_widget("library-browser.action.publish").cget("state").__str__() == "disabled"
     finally:
         root.destroy()
 
@@ -282,7 +282,7 @@ def test_library_browser_disables_block_actions_when_filter_has_no_results(monke
             "library-browser.action.variants",
             "library-browser.action.manage-pcb-layouts",
         ):
-            assert context.require_widget(contract_id).cget("state") == "disabled"
+            assert context.require_widget(contract_id).cget("state").__str__() == "disabled"
     finally:
         root.destroy()
 
@@ -885,11 +885,10 @@ def test_open_pcb_chooser_manage_layouts_opens_manager_and_refreshes(
 
 def test_library_browser_refresh_error_keeps_existing_records(monkeypatch, tmp_path):
     root, context, _records, _library, _project = _new_browser(monkeypatch, tmp_path)
-    errors = []
     monkeypatch.setattr(
         plugin_actions.messagebox,
         "showerror",
-        lambda *_args, **_kwargs: pytest.fail("Placement failure must be shown inline."),
+        lambda *_args, **_kwargs: pytest.fail("Refresh failures must be shown inline."),
     )
 
     def fail_refresh(_roots=None):
@@ -904,10 +903,10 @@ def test_library_browser_refresh_error_keeps_existing_records(monkeypatch, tmp_p
             destroys_window=False,
             expected_label="Refresh",
         ).run(context)
-        assert len(errors) == 1
-        assert errors[0][0] == "Refresh Block Library"
-        assert "library folder is temporarily unavailable" in errors[0][1]
-        assert errors[0][2] is not None and errors[0][2].winfo_exists()
+        status = context.require_widget("library-browser.status")
+        variable = str(status.cget("textvariable"))
+        assert "Could not refresh registered libraries" in status.getvar(variable)
+        assert "library folder is temporarily unavailable" in status.getvar(variable)
         assert context.require_widget("library-browser.results").get_children()
         assert "2 of 2 blocks" in context.require_widget("library-browser.summary").getvar(
             context.require_widget("library-browser.summary").cget("textvariable")

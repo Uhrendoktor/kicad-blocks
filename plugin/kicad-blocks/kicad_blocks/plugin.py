@@ -5824,11 +5824,7 @@ def _show_library_browser(
             refreshed = _list_library_records(current_roots[0])
         except Exception as exc:
             LOG.exception("Could not refresh registered block libraries")
-            messagebox.showerror(
-                "Refresh Block Library",
-                f"Could not read registered libraries.\n\n{exc}",
-                parent=window,
-            )
+            notice_value.set(f"Could not refresh registered libraries: {exc}")
             return False
         records[:] = refreshed
         render_records()

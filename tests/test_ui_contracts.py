@@ -222,8 +222,8 @@ def test_task_hub_selection_actions_update_when_selection_changes(monkeypatch):
     schematic.get_selection = lambda: list(state["selection"])
     context = UiTestContext(root)
     try:
-        assert context.require_widget("task-hub.action.open-implementation").cget("state") == "disabled"
-        assert context.require_widget("task-hub.action.create-block").cget("state") == "normal"
+        assert context.require_widget("task-hub.action.open-implementation").cget("state").__str__() == "disabled"
+        assert context.require_widget("task-hub.action.create-block").cget("state").__str__() == "normal"
         state["selection"] = [_symbol()]
         ButtonContract(
             contract_id="task-hub.action.refresh-selection",
@@ -231,12 +231,12 @@ def test_task_hub_selection_actions_update_when_selection_changes(monkeypatch):
             destroys_window=False,
             expected_label="Refresh selection",
         ).run(context)
-        assert context.require_widget("task-hub.action.open-implementation").cget("state") == "normal"
-        assert context.require_widget("task-hub.action.configure-instance").cget("state") == "normal"
-        assert context.require_widget("task-hub.action.make-local-copy").cget("state") == "normal"
-        assert context.require_widget("task-hub.action.synchronize-local-copy").cget("state") == "disabled"
-        assert context.require_widget("task-hub.action.apply-pcb-layout").cget("state") == "normal"
-        assert context.require_widget("task-hub.action.apply-multiple-pcb-layouts").cget("state") == "disabled"
+        assert context.require_widget("task-hub.action.open-implementation").cget("state").__str__() == "normal"
+        assert context.require_widget("task-hub.action.configure-instance").cget("state").__str__() == "normal"
+        assert context.require_widget("task-hub.action.make-local-copy").cget("state").__str__() == "normal"
+        assert context.require_widget("task-hub.action.synchronize-local-copy").cget("state").__str__() == "disabled"
+        assert context.require_widget("task-hub.action.apply-pcb-layout").cget("state").__str__() == "normal"
+        assert context.require_widget("task-hub.action.apply-multiple-pcb-layouts").cget("state").__str__() == "disabled"
         state["selection"] = [_symbol("X1"), _symbol("X2")]
         ButtonContract(
             contract_id="task-hub.action.refresh-selection",
@@ -244,8 +244,8 @@ def test_task_hub_selection_actions_update_when_selection_changes(monkeypatch):
             destroys_window=False,
             expected_label="Refresh selection",
         ).run(context)
-        assert context.require_widget("task-hub.action.open-implementation").cget("state") == "disabled"
-        assert context.require_widget("task-hub.action.apply-multiple-pcb-layouts").cget("state") == "normal"
+        assert context.require_widget("task-hub.action.open-implementation").cget("state").__str__() == "disabled"
+        assert context.require_widget("task-hub.action.apply-multiple-pcb-layouts").cget("state").__str__() == "normal"
     finally:
         root.destroy()
 
