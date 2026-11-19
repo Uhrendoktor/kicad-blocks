@@ -56,3 +56,12 @@ The method above is proposed API, not currently available in KiCad. Until it exi
 The plugin now capability-detects `Schematic.interactive_move`. If the method is present and the connected Eeschema server accepts the request, the plugin creates the symbol inside an API commit and returns control to the native move tool. If the binding or server does not yet expose the method, the same commit is pushed and the existing page-center/focus/select path completes normally. This makes the plugin ready for the upstream method without making current installations lose a working Place action.
 
 The current official schematic API reference lists `place_symbol_from_library` but not `interactive_move`; the Board reference documents the latter for PCB only. The required server-side request is therefore still an upstream KiCad change, not something a client can emulate safely over the current IPC surface.
+
+
+## Related upstream work checked
+
+KiCad merge request [!2332](https://gitlab.com/kicad/code/kicad/-/merge_requests/2332) is closed, but it is not an implementation of this proposal. Its `InteractivePlaceSymbol` request loads a symbol resource and starts the symbol-placement pipeline. This proposal instead operates on existing schematic item KIIDs and hands an already-created symbol to the native move tool. The two operations have different payloads, lifecycle semantics, and commit ownership; !2332 should not be treated as satisfying `Schematic.interactive_move(items)`.
+
+The PCB reference implementation is in `API_HANDLER_BOARD::handleInteractiveMoveItems` (current Doxygen source, lines 920–962). It rejects headless/busy contexts, validates the document, resolves item IDs, sets the selection reference point, clears and sets selection, then transfers the API commit to `PCB_ACTIONS::move` using `PostAPIAction`. The schematic port must additionally account for hierarchical sheet paths: resolve each KIID to an item and its `SCH_SHEET_PATH`, and reject a mixed-sheet or stale selection rather than silently moving only the subset that resolved. The active-sheet rule should be explicit in the request contract and tests.
+
+A minimal acceptance test should create a symbol in an explicit API commit, invoke the interactive move, verify Eeschema enters its native move state, then test both confirm (one undoable commit) and Escape (rollback of the created symbol). Also cover empty IDs, duplicate IDs, stale IDs, items from another sheet, headless mode, and a second request while the editor is busy.
