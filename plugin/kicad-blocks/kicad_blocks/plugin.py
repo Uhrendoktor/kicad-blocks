@@ -7803,6 +7803,23 @@ parse_profile_parameter_overrides = _parse_profile_parameter_overrides
 resolve_variant_text = _resolve_variant_text
 
 
+
+# Stable public UI and dialog operations used by supported integrations.
+load_tkinter = _load_tkinter
+show_library_roots_dialog = _show_library_roots_dialog
+show_block_layout_editor = _show_block_layout_editor
+save_block_layouts = _save_block_layouts
+apply_block_pcb_layout = _apply_block_pcb_layout
+apply_selected_block_pcb_layouts = _apply_selected_block_pcb_layouts
+show_block_variant_editor = _show_block_variant_editor
+ask_create_block_details = _ask_create_block_details
+ask_implementation_details = _ask_implementation_details
+ask_layout_details = _ask_layout_details
+collect_block_profiles = _collect_block_profiles
+choose_block_layout = _choose_block_layout
+validate_shared_library = _validate_shared_library
+pick_block_for_placement = _pick_block_for_placement
+
 def library_reload_status() -> tuple[bool, str | None]:
     """Return the result of the most recent project symbol-library reload."""
     return _last_library_reload_ok, _last_library_reload_warning
