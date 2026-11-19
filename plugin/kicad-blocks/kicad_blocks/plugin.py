@@ -7235,7 +7235,6 @@ def run_action(action: str, *, editor_window_id: str | None = None) -> None:
     editor_window_id = None
     _load_tkinter()
     root = tk.Tk()
-    root._kicad_blocks_editor_window_id = editor_window_id
     _configure_tk_theme(root)
     root.title("KiCad Blocks — Tasks" if action == "open-hub" else "KiCad Blocks")
     _attach_tk_window_to_editor(root, editor_window_id)

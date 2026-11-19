@@ -1072,7 +1072,7 @@ def test_place_button_reports_ready_state_without_success_popup(monkeypatch, tmp
     monkeypatch.setattr(plugin_actions, "_minimize_placement_windows", lambda _window: [])
     monkeypatch.setattr(
         plugin_actions, "_start_native_symbol_placement",
-        lambda *_args, **_kwargs: context.action_calls.append("placement-started"),
+        lambda *_args, **_kwargs: (context.action_calls.append("placement-started") or object(), False),
     )
     monkeypatch.setattr(
         plugin_actions.messagebox,

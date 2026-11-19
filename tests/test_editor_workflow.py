@@ -161,7 +161,9 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
                 kicad, None, self.block.manifest["symbol_name"]
             )
 
-        self.assertIs(placed, instance)
+        placed_instance, cursor_attached = placed
+        self.assertIs(placed_instance, instance)
+        self.assertFalse(cursor_attached)
         schematic.interactive_move.assert_called_once_with(instance.id)
         schematic.push_commit.assert_called_once_with(
             commit, f"Place functional block {self.block.manifest['symbol_name']}"
