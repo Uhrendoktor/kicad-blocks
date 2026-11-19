@@ -7774,6 +7774,7 @@ new_blank_pcb_source = _new_blank_pcb_source
 KiCadApp: TypeAlias = _KiCadApp
 Schematic: TypeAlias = _Schematic
 SchematicSymbol: TypeAlias = _SchematicSymbol
+BlockPlacementSelection: TypeAlias = _BlockPlacementSelection
 
 
 # Stable public entry points for UI integrations and headless test adapters.

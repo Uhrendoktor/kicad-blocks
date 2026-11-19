@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import sys
+from collections.abc import Callable
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
@@ -16,8 +17,17 @@ sys.path.insert(0, str(ROOT / "tests"))
 
 from kicad_blocks import plugin as plugin_actions
 from kicad_blocks.model import parameter_field_name, parse_parameters, parse_pins
-from kicad_blocks.repository import create_block
-from ui_contracts import ButtonContract, UiTestContext, assert_control_coverage
+from kicad_blocks.repository import BlockRecord, create_block
+from ui_contracts import (
+    ButtonContract,
+    Combobox,
+    Entry,
+    MonkeyPatch,
+    Tk,
+    Toplevel,
+    UiTestContext,
+    assert_control_coverage,
+)
 
 pytestmark = pytest.mark.skipif(
     not os.environ.get("DISPLAY"),
@@ -40,7 +50,7 @@ LAYOUT_STANDARD = "Standard  [standard]"
 LAYOUT_COMPACT = "Compact  [compact]"
 
 
-def _fixture(tmp_path: Path):
+def _fixture(tmp_path: Path) -> tuple[Path, Path, BlockRecord, plugin_actions.SchematicSymbol, plugin_actions.Schematic, SimpleNamespace]:
     library = tmp_path / "library"
     project = tmp_path / "project"
     project.mkdir()
@@ -106,7 +116,7 @@ def _fixture(tmp_path: Path):
             text=SimpleNamespace(value="standard"),
         ),
     ]
-    instance = SimpleNamespace(
+    instance = plugin_actions.SchematicSymbol(
         id="00000000-0000-0000-0000-000000000777",
         reference="X1",
         definition=SimpleNamespace(
@@ -118,7 +128,7 @@ def _fixture(tmp_path: Path):
         user_fields=fields,
     )
     commit = object()
-    schematic = SimpleNamespace(
+    schematic = plugin_actions.Schematic(
         get_selection=lambda: [instance],
         get_project=lambda: SimpleNamespace(expand_text_variables=lambda value: value),
         begin_commit=Mock(return_value=commit),
@@ -129,8 +139,8 @@ def _fixture(tmp_path: Path):
     return library, project, block, instance, schematic, commit
 
 
-def _new_root(monkeypatch):
-    plugin_actions._load_tkinter()
+def _new_root(monkeypatch: MonkeyPatch) -> tuple[Tk, UiTestContext]:
+    plugin_actions.load_tkinter()
     monkeypatch.setattr(plugin_actions, "_create_action_icon", lambda *_args: None)
     root = plugin_actions.tk.Tk()
     root.title("Instance configuration contract host")
@@ -139,7 +149,7 @@ def _new_root(monkeypatch):
     return root, UiTestContext(root)
 
 
-def _find_dialog(root):
+def _find_dialog(root: Tk) -> Toplevel:
     return next(
         child
         for child in root.winfo_children()
@@ -153,7 +163,7 @@ def _click(
     label: str,
     *,
     closes: bool = False,
-):
+) -> None:
     ButtonContract(
         contract_id=contract_id,
         expected_action=None,
@@ -164,11 +174,18 @@ def _click(
     context.refresh_widgets()
 
 
-def _run_dialog(root, context, library, project, schematic, action):
-    callback_errors = []
+def _run_dialog(
+    root: Tk,
+    context: UiTestContext,
+    library: Path,
+    project: Path,
+    schematic: plugin_actions.Schematic,
+    action: Callable[[Toplevel], None],
+) -> None:
+    callback_errors: list[Exception] = []
 
-    def drive():
-        dialog = None
+    def drive() -> None:
+        dialog: Toplevel | None = None
         try:
             dialog = _find_dialog(root)
             assert dialog.winfo_viewable()
@@ -191,12 +208,12 @@ def _run_dialog(root, context, library, project, schematic, action):
                 dialog.destroy()
 
     root.after(100, drive)
-    plugin_actions._show_selected_block_configuration(schematic, project, library, root)
+    plugin_actions.show_selected_block_configuration(schematic, project, library, root)
     if callback_errors:
         raise callback_errors[0]
 
 
-def _assert_initial_state(context: UiTestContext, dialog):
+def _assert_initial_state(context: UiTestContext, dialog: Toplevel) -> None:
     widgets = context.refresh_widgets()
     assert dialog.title() == WINDOW_TITLE
     assert dialog.winfo_width() >= 580
@@ -204,21 +221,20 @@ def _assert_initial_state(context: UiTestContext, dialog):
     for contract_id in INSTANCE_CONTROLS - {"instance-configuration.window"}:
         widget = widgets[contract_id]
         assert widget.winfo_viewable()
-    assert widgets["instance-configuration.profile"].get() == "Custom (manual settings)"
-    assert widgets["instance-configuration.variant"].get() == "3V3"
-    assert widgets["instance-configuration.parameter.OUTPUT_VOLTAGE"].get() == "3.3"
-    assert widgets["instance-configuration.layout"].get() == LAYOUT_STANDARD
-    assert widgets["instance-configuration.action.cancel"].instate(["!disabled"])
-    assert widgets["instance-configuration.action.save"].instate(["!disabled"])
+    assert context.require_combobox("instance-configuration.profile").get() == "Custom (manual settings)"
+    assert context.require_combobox("instance-configuration.variant").get() == "3V3"
+    assert context.require_entry("instance-configuration.parameter.OUTPUT_VOLTAGE").get() == "3.3"
+    assert context.require_combobox("instance-configuration.layout").get() == LAYOUT_STANDARD
+    assert context.require_button("instance-configuration.action.cancel").instate(["!disabled"])
+    assert context.require_button("instance-configuration.action.save").instate(["!disabled"])
 
 
-def _install_update_spy(monkeypatch):
-    updates = []
-    monkeypatch.setattr(
-        plugin_actions,
-        "_update_schematic_item_checked",
-        lambda _schematic, target: updates.append(target.reference),
-    )
+def _install_update_spy(monkeypatch: MonkeyPatch) -> list[str]:
+    updates: list[str] = []
+    def capture_update(_schematic: plugin_actions.Schematic, target: plugin_actions.SchematicSymbol) -> None:
+        updates.append(target.reference)
+
+    monkeypatch.setattr(plugin_actions, "_update_schematic_item_checked", capture_update)
     return updates
 
 
@@ -229,7 +245,7 @@ def test_profile_selection_updates_variant_parameter_and_layout_then_saves_one_i
     root, context = _new_root(monkeypatch)
     updates = _install_update_spy(monkeypatch)
 
-    def select_profile_and_save(dialog):
+    def select_profile_and_save(dialog: Toplevel) -> None:
         _assert_initial_state(context, dialog)
         profile = context.require_widget("instance-configuration.profile")
         profile.set(PROFILE_1V8)
@@ -268,12 +284,12 @@ def test_profile_selection_updates_variant_parameter_and_layout_then_saves_one_i
         root.destroy()
 
 
-def test_manual_parameter_edit_changes_profile_to_custom_and_saves(monkeypatch, tmp_path):
+def test_manual_parameter_edit_changes_profile_to_custom_and_saves(monkeypatch: MonkeyPatch, tmp_path: Path):
     library, project, _block, instance, schematic, commit = _fixture(tmp_path)
     root, context = _new_root(monkeypatch)
     updates = _install_update_spy(monkeypatch)
 
-    def edit_and_save(dialog):
+    def edit_and_save(dialog: Toplevel) -> None:
         _assert_initial_state(context, dialog)
         parameter = context.require_widget("instance-configuration.parameter.OUTPUT_VOLTAGE")
         parameter.delete(0, "end")
@@ -306,7 +322,7 @@ def test_manual_parameter_edit_changes_profile_to_custom_and_saves(monkeypatch, 
         root.destroy()
 
 
-def test_invalid_parameter_shows_error_without_ipc_edit_then_recovers(monkeypatch, tmp_path):
+def test_invalid_parameter_shows_error_without_ipc_edit_then_recovers(monkeypatch: MonkeyPatch, tmp_path: Path):
     library, project, _block, instance, schematic, _commit = _fixture(tmp_path)
     root, context = _new_root(monkeypatch)
     updates = _install_update_spy(monkeypatch)
@@ -317,7 +333,7 @@ def test_invalid_parameter_shows_error_without_ipc_edit_then_recovers(monkeypatc
         lambda title, message, **_kwargs: errors.append((title, str(message))),
     )
 
-    def recover_from_invalid_parameter(dialog):
+    def recover_from_invalid_parameter(dialog: Toplevel) -> None:
         _assert_initial_state(context, dialog)
         parameter = context.require_widget("instance-configuration.parameter.OUTPUT_VOLTAGE")
         parameter.delete(0, "end")
@@ -349,13 +365,13 @@ def test_invalid_parameter_shows_error_without_ipc_edit_then_recovers(monkeypatc
         root.destroy()
 
 
-def test_cancel_and_escape_discard_pending_instance_changes(monkeypatch, tmp_path):
+def test_cancel_and_escape_discard_pending_instance_changes(monkeypatch: MonkeyPatch, tmp_path: Path):
     library, project, _block, instance, schematic, _commit = _fixture(tmp_path)
     root, context = _new_root(monkeypatch)
     updates = _install_update_spy(monkeypatch)
     original_values = {field.name: field.text.value for field in instance.user_fields}
 
-    def cancel_after_edit(dialog):
+    def cancel_after_edit(dialog: Toplevel) -> None:
         _assert_initial_state(context, dialog)
         parameter = context.require_widget("instance-configuration.parameter.OUTPUT_VOLTAGE")
         parameter.delete(0, "end")
@@ -379,7 +395,7 @@ def test_cancel_and_escape_discard_pending_instance_changes(monkeypatch, tmp_pat
     # Escape uses the same discard path without invoking either footer action.
     root, context = _new_root(monkeypatch)
 
-    def escape(dialog):
+    def escape(dialog: Toplevel) -> None:
         _assert_initial_state(context, dialog)
         target = context.require_widget("instance-configuration.profile")
         target.focus_force()
@@ -400,7 +416,7 @@ def test_cancel_and_escape_discard_pending_instance_changes(monkeypatch, tmp_pat
         root.destroy()
 
 
-def test_failed_instance_update_rolls_back_field_values_and_keeps_form_open(monkeypatch, tmp_path):
+def test_failed_instance_update_rolls_back_field_values_and_keeps_form_open(monkeypatch: MonkeyPatch, tmp_path: Path):
     library, project, _block, instance, schematic, commit = _fixture(tmp_path)
     root, context = _new_root(monkeypatch)
     errors = []
@@ -420,7 +436,7 @@ def test_failed_instance_update_rolls_back_field_values_and_keeps_form_open(monk
         fail_update,
     )
 
-    def retry_after_failure(dialog):
+    def retry_after_failure(dialog: Toplevel) -> None:
         _assert_initial_state(context, dialog)
         parameter = context.require_widget("instance-configuration.parameter.OUTPUT_VOLTAGE")
         parameter.delete(0, "end")
@@ -446,7 +462,7 @@ def test_failed_instance_update_rolls_back_field_values_and_keeps_form_open(monk
         root.destroy()
 
 
-def test_missing_required_configuration_field_fails_before_opening_dialog(monkeypatch, tmp_path):
+def test_missing_required_configuration_field_fails_before_opening_dialog(monkeypatch: MonkeyPatch, tmp_path: Path):
     library, project, _block, instance, schematic, _commit = _fixture(tmp_path)
     root, _context = _new_root(monkeypatch)
     instance.user_fields = [field for field in instance.user_fields if field.name != "KB_LAYOUT"]

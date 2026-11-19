@@ -16,10 +16,10 @@ from typing import TYPE_CHECKING, Generic, TypeVar, TypedDict, cast
 if TYPE_CHECKING:
     import tkinter as tk
     from _pytest.monkeypatch import MonkeyPatch
-    from tkinter import Event as TkEvent, Menu, Misc, Tk, Toplevel
+    from tkinter import Canvas, Event as TkEvent, Menu, Misc, Tk, Toplevel
     from tkinter.ttk import Button, Combobox, Entry, Notebook, Panedwindow, Treeview
 else:
-    MonkeyPatch = TkEvent = Menu = Misc = Tk = Toplevel = Button = Combobox = Entry = Notebook = Panedwindow = Treeview = object
+    MonkeyPatch = TkEvent = Canvas = Menu = Misc = Tk = Toplevel = Button = Combobox = Entry = Notebook = Panedwindow = Treeview = object
 
 
 class MenuEntry:
