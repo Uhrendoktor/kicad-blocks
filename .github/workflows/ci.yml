@@ -73,13 +73,15 @@ jobs:
               sexpr_head as _head,
           )""",
           )
-          marker = "\\n\\ndef _source_sheet"
-          helper = """\\n\\ndef _required_direct(node: SExprList, tag: str) -> SExprList:
-              child = _direct(node, tag)
-              if child is None:
-                  raise AssertionError(f"Expected a direct {tag!r} node.")
-              return child
-          """
+          marker = "\n\ndef _source_sheet"
+          helper = (
+              "\n\n"
+              "def _required_direct(node: SExprList, tag: str) -> SExprList:\n"
+              "    child = _direct(node, tag)\n"
+              "    if child is None:\n"
+              "        raise AssertionError(f'Expected a direct {tag!r} node.')\n"
+              "    return child\n"
+          )
           if "_required_direct(" not in source:
               if marker not in source:
                   raise SystemExit("Could not locate the extraction test helper insertion point.")
@@ -118,18 +120,19 @@ jobs:
           main_plugin = Path(".git")  # only a marker so this script stays independent of shell quoting
           plugin_path = Path("plugin/kicad-blocks/kicad_blocks/plugin.py")
           plugin_text = plugin_path.read_text(encoding="utf-8")
-          def contract_ids(text: str) -> set[str]:
-              return set(re.findall(r'contract_id\\s*=\\s*["\\']([^"\\']+)["\\']', text)) | set(
-                  re.findall(r'_kicad_ui_contract_id\\s*=\\s*["\\']([^"\\']+)["\\']', text)
-              )
+          import os
           import subprocess
           main_text = subprocess.run(
               ["git", "show", "origin/main:plugin/kicad-blocks/kicad_blocks/plugin.py"],
               check=True, capture_output=True, text=True,
           ).stdout
+          def contract_ids(text: str) -> set[str]:
+              return set(re.findall(r"""contract_id\s*=\s*["']([^"']+)["']""", text)) | set(
+                  re.findall(r"""_kicad_ui_contract_id\s*=\s*["']([^"']+)["']""", text)
+              )
           missing = sorted(contract_ids(main_text) - contract_ids(plugin_text))
-          Path("${RUNNER_TEMP}/missing-main-contract-ids.txt").write_text(
-              "\\n".join(missing) + ("\\n" if missing else ""), encoding="utf-8"
+          Path(os.environ["RUNNER_TEMP"], "missing-main-contract-ids.txt").write_text(
+              "\n".join(missing) + ("\n" if missing else ""), encoding="utf-8"
           )
           PY
             git add docs/explanation/compatibility.md tests/test_extraction.py
@@ -137,9 +140,9 @@ jobs:
             mkdir -p "${RUNNER_TEMP}/pr40-resolved-main-merge-tree"
             tree_sha="$(git write-tree)"
             main_sha="$(git rev-parse origin/main)"
-            printf '%s\\n' "$tree_sha" > "${RUNNER_TEMP}/pr40-resolved-main-merge-tree/tree-sha.txt"
-            printf '%s\\n' "$REF_SHA" > "${RUNNER_TEMP}/pr40-resolved-main-merge-tree/pr-parent-sha.txt"
-            printf '%s\\n' "$main_sha" > "${RUNNER_TEMP}/pr40-resolved-main-merge-tree/main-parent-sha.txt"
+            printf '%s\n' "$tree_sha" > "${RUNNER_TEMP}/pr40-resolved-main-merge-tree/tree-sha.txt"
+            printf '%s\n' "$REF_SHA" > "${RUNNER_TEMP}/pr40-resolved-main-merge-tree/pr-parent-sha.txt"
+            printf '%s\n' "$main_sha" > "${RUNNER_TEMP}/pr40-resolved-main-merge-tree/main-parent-sha.txt"
             cp "${RUNNER_TEMP}/missing-main-contract-ids.txt" "${RUNNER_TEMP}/pr40-resolved-main-merge-tree/missing-main-contract-ids.txt"
             echo "merge_tree=$tree_sha" >> "$GITHUB_OUTPUT"
             echo "updated=true" >> "$GITHUB_OUTPUT"
