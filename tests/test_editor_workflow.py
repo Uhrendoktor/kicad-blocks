@@ -54,26 +54,25 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
         self.temp.cleanup()
 
     def test_place_block_uses_page_center_ipc_focus_selection_and_save(self):
-        from google.protobuf.empty_pb2 import Empty
-
-        sheet_path = SimpleNamespace(proto=Empty())
         instance_id = SimpleNamespace(value="block-instance-id")
-        instance = SimpleNamespace(id=instance_id, path=sheet_path)
+        instance = SimpleNamespace(id=instance_id)
         target = SimpleNamespace(
-            document=Empty(),
-            client=SimpleNamespace(send=Mock()),
             clear_selection=Mock(),
             add_to_selection=Mock(),
             get_selection=Mock(return_value=[instance]),
             save=Mock(),
         )
         schematic = SimpleNamespace(
-            for_sheet=Mock(return_value=target),
             place_symbol_from_library=Mock(return_value=instance),
         )
         kicad = SimpleNamespace(get_schematic=Mock(return_value=schematic))
-        with patch.object(
-            plugin_actions, "_schematic_page_center_mm", return_value=(100.0, 75.0)
+        with (
+            patch.object(
+                plugin_actions, "_schematic_page_center_mm", return_value=(100.0, 75.0)
+            ),
+            patch.object(
+                plugin_actions, "_focus_schematic_items_in_editor", return_value=target
+            ) as focus_items,
         ):
             placed = plugin_actions._start_native_symbol_placement(
                 kicad, None, self.block.manifest["symbol_name"]
@@ -88,7 +87,7 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
         self.assertAlmostEqual(args[1].x, 100_000_000)
         self.assertAlmostEqual(args[1].y, 75_000_000)
         self.assertFalse(kwargs)
-        target.client.send.assert_called_once()
+        focus_items.assert_called_once_with(schematic, [instance])
         target.clear_selection.assert_called_once_with()
         target.add_to_selection.assert_called_once_with([instance])
         target.save.assert_called_once_with()
