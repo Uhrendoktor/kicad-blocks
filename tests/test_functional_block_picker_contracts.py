@@ -111,6 +111,7 @@ def _fixture(tmp_path: Path) -> tuple[BlockRecord, BlockRecord]:
 
 def _new_root(monkeypatch: MonkeyPatch) -> tuple[Tk, UiTestContext]:
     plugin_actions.load_tkinter()
+
     def no_icon(_parent: Misc, _name: str, _stroke_color: str | None = None) -> None:
         return None
 
