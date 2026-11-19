@@ -6370,6 +6370,71 @@ def _facade_pin_geometry_signature(definition):
     return tuple(sorted(signature))
 
 
+def _preserve_instance_pin_ids(existing_definition, updated_definition) -> int:
+    """Carry existing schematic pin KIIDs into a replacement library definition.
+
+    Library pin KIIDs are not a safe replacement for per-instance pin KIIDs.
+    KiCad's UpdateItems handler rebuilds the embedded definition from the
+    incoming protobuf, so the existing pin identifiers must be transferred
+    explicitly before the update request is sent. Matching is by stable
+    electrical identity (number, unit, body style and connection point), not
+    by pin name, because a hierarchical-label rename must retain its wire.
+    """
+    from collections import defaultdict, deque
+    from kipy.proto.schematic import schematic_types_pb2
+
+    def pin_key(child, pin):
+        unit = child.unit.unit if child.HasField("unit") else None
+        body_style = child.body_style.style if child.HasField("body_style") else None
+        return (
+            str(pin.number),
+            unit,
+            body_style,
+            int(pin.position.x),
+            int(pin.position.y),
+        )
+
+    existing_ids = defaultdict(deque)
+    for child in existing_definition.items:
+        pin = schematic_types_pb2.SchematicPin()
+        if not child.item.Unpack(pin):
+            continue
+        if not pin.id.value:
+            raise RuntimeError(
+                f"Placed pin {pin.number!r} has no instance KIID; refusing to replace it."
+            )
+        saved_id = pin.id.__class__()
+        saved_id.CopyFrom(pin.id)
+        existing_ids[pin_key(child, pin)].append(saved_id)
+
+    preserved = 0
+    for child in updated_definition.items:
+        pin = schematic_types_pb2.SchematicPin()
+        if not child.item.Unpack(pin):
+            continue
+        key = pin_key(child, pin)
+        candidates = existing_ids.get(key)
+        if not candidates:
+            raise RuntimeError(
+                "Could not match an incoming facade pin to its existing instance KIID "
+                f"(number={pin.number!r}, unit={key[1]!r}, body_style={key[2]!r}, "
+                f"position=({key[3]}, {key[4]})); refusing to risk disconnecting a wire."
+            )
+        pin.id.CopyFrom(candidates.popleft())
+        child.item.Pack(pin)
+        preserved += 1
+
+    remaining = sum(len(values) for values in existing_ids.values())
+    if remaining:
+        raise RuntimeError(
+            f"Could not preserve {remaining} existing schematic pin KIID(s); "
+            "refusing to replace the placed facade."
+        )
+    if preserved == 0:
+        raise RuntimeError("The updated facade definition contains no schematic pins.")
+    return preserved
+
+
 def _refresh_placed_facade_instances(kicad, schematic, record) -> dict[str, list[str]]:
     """Refresh embedded symbol definitions when pin topology has not changed."""
     nickname = str(record.manifest.get("library_nickname") or LIBRARY_NICKNAME)
@@ -6420,6 +6485,14 @@ def _refresh_placed_facade_instances(kicad, schematic, record) -> dict[str, list
             original = instance.proto.__class__()
             original.CopyFrom(instance.proto)
             instance.proto.definition.CopyFrom(definition_proto)
+            try:
+                _preserve_instance_pin_ids(
+                    original.definition,
+                    instance.proto.definition,
+                )
+            except Exception:
+                instance.proto.CopyFrom(original)
+                raise
             pending.append((instance, original))
 
         if not pending:
