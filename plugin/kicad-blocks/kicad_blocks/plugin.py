@@ -1990,6 +1990,22 @@ def _symbol_editor_menu_down_count(editor_pid: str | None = None) -> int:
     return 2
 
 
+def _native_run_action_status(response) -> int | None:
+    """Read KiCad's RunActionStatus without assuming a truthy response succeeded."""
+    status = getattr(response, "status", None)
+    if status is None:
+        return None
+    try:
+        return int(status)
+    except (TypeError, ValueError):
+        name = str(getattr(status, "name", status)).strip().upper()
+        return {
+            "RAS_OK": 1, "OK": 1,
+            "RAS_INVALID": 2, "INVALID": 2,
+            "RAS_FRAME_NOT_OPEN": 3, "FRAME_NOT_OPEN": 3,
+        }.get(name)
+
+
 def _desktop_keyboard_backend() -> str:
     """Choose a native keyboard backend for the current desktop session."""
     wayland = bool(os.environ.get("WAYLAND_DISPLAY")) or (
@@ -5541,6 +5557,7 @@ def _show_library_browser(
     implementation_button = [None]
     variants_button = [None]
     manage_layout_button = [None]
+    publish_button = [None]
     notice_value = tk.StringVar(
         master=window,
         value="Select a block, then place it with one click.",
@@ -5553,6 +5570,7 @@ def _show_library_browser(
             implementation_button[0],
             variants_button[0],
             manage_layout_button[0],
+            publish_button[0],
         ):
             if button is not None:
                 button.configure(state="normal" if available else "disabled")
@@ -5975,6 +5993,33 @@ def _show_library_browser(
             LOG.exception("Could not open generated library facade")
             messagebox.showerror("Edit facade", str(exc), parent=window)
 
+    def publish_selected(_event=None):
+        record = selected_record[0]
+        if record is None:
+            return
+        notice_value.set(f"Publishing {record.name} and refreshing compatible placed instances…")
+        window.update_idletasks()
+        try:
+            outcome = _publish_record(current_roots[0], record, kicad, project_dir, schematic)
+            refreshed = outcome["instances"]
+            details = (
+                f"Published {record.name} · revision {outcome['refresh']['version']}. "
+                f"Updated {len(refreshed['updated'])} placed instance(s)."
+            )
+            if refreshed["topology_skipped"]:
+                details += (
+                    " Pin topology changed for "
+                    + ", ".join(refreshed["topology_skipped"])
+                    + "; those instances were left intact and need explicit pin migration."
+                )
+            if outcome["sync_error"]:
+                details += " Placed-instance refresh failed: " + outcome["sync_error"]
+            notice_value.set(details)
+            refresh_records()
+        except Exception as exc:
+            LOG.exception("Could not publish selected library block")
+            notice_value.set(f"Publish failed: {exc}")
+
     def manage_layouts(_event=None):
         record = selected_record[0]
         if record is None:
@@ -6185,6 +6230,13 @@ def _show_library_browser(
         contract_id="library-browser.action.facade",
     )
     facade_button[0].pack(side="left", padx=(4, 0))
+    publish_button[0] = _action_button(
+        action_toolbar, "Publish", publish_selected, "publish",
+        "Publish the selected block's saved implementation and facade changes",
+        state="disabled",
+        contract_id="library-browser.action.publish",
+    )
+    publish_button[0].pack(side="left", padx=(4, 0))
     variants_button[0] = _action_button(
         action_toolbar, "Variants", edit_variants, "variants",
         "Add, edit, remove, or set the default circuit implementation",
@@ -6457,25 +6509,153 @@ def _validate_recursive_erc(root: Path | list[Path], parent, schematic=None, pro
         f"{len(failed)} reported violations.\n\n{details}\n\nReports: {output}")
 
 
-def _publish_block(root, kicad, project_dir, parent) -> None:
+def _facade_pin_geometry_signature(definition):
+    """Return stable pin numbers/units/connection points for migration-safe refresh."""
+    signature = []
+    for pin in getattr(definition, "pins", ()):
+        position = getattr(pin, "position", None)
+        if position is None or not hasattr(position, "x") or not hasattr(position, "y"):
+            return None
+        unit = getattr(pin, "unit", 1)
+        unit = getattr(unit, "unit", unit)
+        body = getattr(pin, "body_style", "")
+        body = getattr(body, "style", body)
+        signature.append((
+            str(getattr(pin, "number", "")),
+            str(unit),
+            str(body),
+            int(position.x),
+            int(position.y),
+        ))
+    return tuple(sorted(signature))
+
+
+def _refresh_placed_facade_instances(kicad, schematic, record) -> dict[str, list[str]]:
+    """Refresh embedded symbol definitions when pin topology has not changed."""
+    nickname = str(record.manifest.get("library_nickname") or LIBRARY_NICKNAME)
+    symbol_name = str(record.manifest.get("symbol_name") or "")
+    target_id = f"{nickname}:{symbol_name}"
+    result = {"updated": [], "topology_skipped": []}
+    if schematic is None:
+        return result
+
+    library_definition = kicad.get_library_symbol(
+        target_id, document=schematic.document
+    )
+    new_signature = _facade_pin_geometry_signature(library_definition)
+    definition_proto = getattr(library_definition, "proto", None)
+    if new_signature is None or definition_proto is None:
+        raise RuntimeError(
+            f"KiCad did not return a complete IPC pin definition for {target_id}; "
+            "placed instances were left unchanged."
+        )
+
+    try:
+        sheets = list(schematic.iter_sheets())
+    except (AttributeError, NotImplementedError):
+        sheets = [None]
+    if not sheets:
+        sheets = [None]
+
+    seen_ids: set[str] = set()
+    for sheet in sheets:
+        sheet_schematic = schematic.for_sheet(sheet) if sheet is not None else schematic
+        pending = []
+        for instance in sheet_schematic.get_symbols():
+            identifier = getattr(getattr(instance, "definition", None), "id", None)
+            instance_library = str(getattr(identifier, "library", "") or "")
+            instance_name = str(getattr(identifier, "name", "") or "")
+            if (instance_library, instance_name) != (nickname, symbol_name):
+                continue
+            instance_id = str(getattr(instance, "id", "") or "")
+            if not instance_id or instance_id in seen_ids:
+                continue
+            seen_ids.add(instance_id)
+            if _facade_pin_geometry_signature(instance.definition) != new_signature:
+                result["topology_skipped"].append(
+                    str(getattr(instance, "reference", "") or instance_id)
+                )
+                continue
+
+            original = instance.proto.__class__()
+            original.CopyFrom(instance.proto)
+            instance.proto.definition.CopyFrom(definition_proto)
+            pending.append((instance, original))
+
+        if not pending:
+            continue
+
+        commit = sheet_schematic.begin_commit()
+        try:
+            for instance, _original in pending:
+                _update_schematic_item_checked(sheet_schematic, instance)
+            sheet_schematic.push_commit(
+                commit, f"Refresh {record.name} facade from library"
+            )
+            sheet_schematic.save()
+            result["updated"].extend(
+                str(getattr(instance, "reference", "") or getattr(instance, "id", ""))
+                for instance, _original in pending
+            )
+        except Exception:
+            with contextlib.suppress(Exception):
+                sheet_schematic.drop_commit(commit)
+            for instance, original in pending:
+                with contextlib.suppress(Exception):
+                    instance.proto.CopyFrom(original)
+            raise
+
+    return result
+
+
+def _publish_record(root, record, kicad, project_dir, schematic=None) -> dict:
+    """Publish one selected block and refresh compatible placed facade instances."""
     library_paths = _library_roots_for(root)
-    record = _pick_record(_list_library_records(library_paths), parent, "Publish Library Block")
-    if record is None:
-        return
     project_catalog = Path(project_dir).expanduser().resolve() / ".kicad_blocks" / LIBRARY_CATALOG_NAME
     import_project_catalog_facade_edit(record, project_catalog)
     dependency_result = synchronize_block_dependencies(
         record, library_paths, find_kicad_cli()
     )
     record = dependency_result["block"]
-    result = refresh_library_block(record)
-    if result["changed"]:
-        _register_block(project_dir, record, kicad, library_paths)
-    LOG.info("%s: %s", "Library Block Published", f"Version: {result['version']}\n"
-        f"Changed files: {', '.join(result['changed']) or 'none'}\n"
-        f"Automatically detected {dependency_result['count']} child block(s)"
-        + ("; dependency manifest updated.\n" if dependency_result["changed"] else ".\n")
-        + "Local copies can now synchronize from this revision.")
+    refresh_result = refresh_library_block(record)
+    if refresh_result["changed"]:
+        record = _register_block(project_dir, record, kicad, library_paths)
+
+    instance_result = {"updated": [], "topology_skipped": []}
+    sync_error = None
+    if refresh_result["changed"] and schematic is not None:
+        try:
+            instance_result = _refresh_placed_facade_instances(kicad, schematic, record)
+        except Exception as exc:
+            sync_error = str(exc)
+            LOG.exception("Block published, but placed-instance refresh failed for %s", record.name)
+
+    LOG.info(
+        "%s: %s",
+        "Library Block Published",
+        f"Version: {refresh_result['version']}\n"
+        f"Changed files: {', '.join(refresh_result['changed']) or 'none'}\n"
+        f"Child blocks: {dependency_result['count']}\n"
+        f"Placed instances refreshed: {len(instance_result['updated'])}\n"
+        f"Pin topology migration required: {', '.join(instance_result['topology_skipped']) or 'none'}\n"
+        + (f"Placed-instance refresh error: {sync_error}\n" if sync_error else "")
+        + "Local copies can now synchronize from this revision.",
+    )
+    return {
+        "record": record,
+        "refresh": refresh_result,
+        "instances": instance_result,
+        "sync_error": sync_error,
+    }
+
+
+def _publish_block(root, kicad, project_dir, parent, schematic=None) -> dict | None:
+    """Compatibility picker route; the browser publishes its selected row directly."""
+    library_paths = _library_roots_for(root)
+    record = _pick_record(_list_library_records(library_paths), parent, "Publish Library Block")
+    if record is None:
+        return None
+    return _publish_record(root, record, kicad, project_dir, schematic)
 
 
 def _block_record_for_instance(library_root: Path | list[Path], project_dir: Path, instance):
@@ -7045,7 +7225,7 @@ def run_action(action: str, *, editor_window_id: str | None = None) -> None:
                         f"{LIBRARY_NICKNAME}:{record.manifest['symbol_name']}",
                     )
         elif action == "publish-block":
-            _publish_block(library_paths, kicad, project_dir, root)
+            _publish_block(library_paths, kicad, project_dir, root, schematic)
         elif action == "recursive-bom":
             _export_recursive_bom(library_paths, root, schematic, project_dir)
         elif action == "recursive-erc":
