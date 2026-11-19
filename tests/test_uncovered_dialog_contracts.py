@@ -7,9 +7,8 @@ from pathlib import Path
 from types import ModuleType, SimpleNamespace
 from typing import TypedDict, cast
 
-from _pytest.monkeypatch import MonkeyPatch
-
 import pytest
+from _pytest.monkeypatch import MonkeyPatch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "plugin" / "kicad-blocks"))

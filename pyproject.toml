@@ -74,6 +74,7 @@ ignore = [
 "tests/test_pcb_layout.py" = ["E402"]
 "tests/test_pcb_layout_unit.py" = ["E402"]
 "tests/test_eeschema_gui.py" = ["E402"]
+"tests/test_uncovered_dialog_contracts.py" = ["E402"]
 "tests/test_ipc_headless.py" = ["E402"]
 "tests/test_stusb4500_reference.py" = ["E402"]
 "tests/test_editor_workflow.py" = ["E402"]
