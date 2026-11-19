@@ -263,6 +263,30 @@ def test_publish_button_is_disabled_when_browser_has_no_matching_records(monkeyp
         root.destroy()
 
 
+def test_library_browser_disables_block_actions_when_filter_has_no_results(monkeypatch, tmp_path):
+    root, context, _records, _library, _project = _new_browser(monkeypatch, tmp_path)
+    try:
+        EntryInputContract(
+            contract_id="library-browser.search",
+            value="no-such-block",
+            results_contract_id="library-browser.results",
+            expected_result_count=0,
+            summary_contract_id="library-browser.summary",
+            expected_summary="1 libraries  ·  0 of 2 blocks",
+        ).run(context)
+        for contract_id in (
+            "library-browser.action.place",
+            "library-browser.action.implementation",
+            "library-browser.action.facade",
+            "library-browser.action.publish",
+            "library-browser.action.variants",
+            "library-browser.action.manage-pcb-layouts",
+        ):
+            assert context.require_widget(contract_id).cget("state") == "disabled"
+    finally:
+        root.destroy()
+
+
 def test_library_browser_selection_updates_selected_block_details(monkeypatch, tmp_path):
     root, context, _records, _library, _project = _new_browser(monkeypatch, tmp_path)
     try:
@@ -350,6 +374,40 @@ def test_place_button_registers_selected_block_and_starts_native_placement(monke
             expected_label="Place block",
         ).run(context)
         assert context.events == []
+    finally:
+        root.destroy()
+
+
+def test_publish_button_publishes_the_selected_record_without_a_picker(monkeypatch, tmp_path):
+    root, context, records, _library, _project = _new_browser(monkeypatch, tmp_path)
+    outcome = {
+        "record": records[0],
+        "refresh": {"version": 4, "changed": ["implementation.kicad_sch"]},
+        "instances": {"updated": ["X1"], "topology_skipped": []},
+        "sync_error": None,
+    }
+    monkeypatch.setattr(
+        plugin_actions,
+        "_publish_record",
+        lambda *args: (context.action_calls.append(("publish", args[1].manifest["block_id"])) or outcome),
+    )
+    monkeypatch.setattr(
+        plugin_actions.messagebox,
+        "showinfo",
+        lambda *_args, **_kwargs: pytest.fail("Publish success must not use a popup."),
+    )
+    try:
+        _select_first_record(context)
+        ButtonContract(
+            contract_id="library-browser.action.publish",
+            expected_action=("publish", "usb-power"),
+            destroys_window=False,
+            expected_label="Publish",
+        ).run(context)
+        status = context.require_widget("library-browser.status")
+        variable = str(status.cget("textvariable"))
+        assert "Published USB power block" in status.getvar(variable)
+        assert "Updated 1 placed instance" in status.getvar(variable)
     finally:
         root.destroy()
 
@@ -858,12 +916,11 @@ def test_library_browser_refresh_error_keeps_existing_records(monkeypatch, tmp_p
         root.destroy()
 
 
-def test_place_block_reload_warning_does_not_start_native_placement(monkeypatch, tmp_path):
+def test_place_block_reload_failure_uses_inline_status_without_popup(monkeypatch, tmp_path):
     root, context, _records, _library, _project = _new_browser(monkeypatch, tmp_path)
     placements = []
     monkeypatch.setattr(
-        plugin_actions,
-        "_register_block",
+        plugin_actions, "_register_block",
         lambda *_args, **_kwargs: context.action_calls.append("registered"),
     )
     monkeypatch.setattr(plugin_actions, "_LAST_LIBRARY_RELOAD_OK", False)
@@ -875,11 +932,15 @@ def test_place_block_reload_warning_does_not_start_native_placement(monkeypatch,
     monkeypatch.setattr(
         plugin_actions.messagebox,
         "showwarning",
-        lambda *_args, **_kwargs: pytest.fail("Recoverable status must be inline, not modal."),
+        lambda *_args, **_kwargs: pytest.fail("Placement feedback must not use a popup."),
     )
     monkeypatch.setattr(
-        plugin_actions,
-        "_start_native_symbol_placement",
+        plugin_actions.messagebox,
+        "showinfo",
+        lambda *_args, **_kwargs: pytest.fail("Placement success must not use a popup."),
+    )
+    monkeypatch.setattr(
+        plugin_actions, "_start_native_symbol_placement",
         lambda *_args, **_kwargs: placements.append(True),
     )
     try:
@@ -892,17 +953,48 @@ def test_place_block_reload_warning_does_not_start_native_placement(monkeypatch,
         ).run(context)
         status = context.require_widget("library-browser.status")
         variable = str(status.cget("textvariable"))
-        assert "Restart Eeschema to reload the project symbol table." in status.getvar(variable)
+        assert status.getvar(variable) == "Restart Eeschema to reload the project symbol table."
         assert placements == []
     finally:
         root.destroy()
 
 
-def test_place_block_registration_failure_shows_error_and_keeps_browser_open(
+def test_place_button_reports_ready_state_without_success_popup(monkeypatch, tmp_path):
+    root, context, _records, _library, _project = _new_browser(monkeypatch, tmp_path)
+    monkeypatch.setattr(
+        plugin_actions, "_register_block",
+        lambda *_args, **_kwargs: context.action_calls.append("registered"),
+    )
+    monkeypatch.setattr(plugin_actions, "_LAST_LIBRARY_RELOAD_OK", True)
+    monkeypatch.setattr(plugin_actions, "_minimize_placement_windows", lambda _window: [])
+    monkeypatch.setattr(
+        plugin_actions, "_start_native_symbol_placement",
+        lambda *_args, **_kwargs: context.action_calls.append("placement-started"),
+    )
+    monkeypatch.setattr(
+        plugin_actions.messagebox,
+        "showinfo",
+        lambda *_args, **_kwargs: pytest.fail("Placement success must not use a popup."),
+    )
+    try:
+        _select_first_record(context)
+        ButtonContract(
+            contract_id="library-browser.action.place",
+            expected_action=("registered", "placement-started"),
+            destroys_window=False,
+            expected_label="Place block",
+        ).run(context)
+        status = context.require_widget("library-browser.status")
+        variable = str(status.cget("textvariable"))
+        assert "move it to the desired location" in status.getvar(variable)
+    finally:
+        root.destroy()
+
+
+def test_place_block_registration_failure_uses_inline_status_and_keeps_browser_open(
     monkeypatch, tmp_path
 ):
     root, context, _records, _library, _project = _new_browser(monkeypatch, tmp_path)
-    errors = []
 
     def fail_register(*_args, **_kwargs):
         context.action_calls.append("registration-failed")
@@ -912,9 +1004,7 @@ def test_place_block_registration_failure_shows_error_and_keeps_browser_open(
     monkeypatch.setattr(
         plugin_actions.messagebox,
         "showerror",
-        lambda title, message, **kwargs: errors.append(
-            (title, str(message), kwargs.get("parent"))
-        ),
+        lambda *_args, **_kwargs: pytest.fail("Recoverable placement failures must be inline."),
     )
     try:
         _select_first_record(context)
@@ -926,6 +1016,7 @@ def test_place_block_registration_failure_shows_error_and_keeps_browser_open(
         ).run(context)
         status = context.require_widget("library-browser.status")
         variable = str(status.cget("textvariable"))
+        assert "Placement could not start" in status.getvar(variable)
         assert "project library table could not be written" in status.getvar(variable)
         assert _select_first_record(context) is not None
     finally:
