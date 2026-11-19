@@ -2608,11 +2608,26 @@ def _edit_facade_symbol(
     except Exception:
         LOG.debug("Symbol Editor IPC handler is not ready; opening the native editor.", exc_info=True)
 
+    # Try KiCad's registered global action before requiring any OS input
+    # bridge. This is the preferred path on every platform.
+    action_started = False
+    run_action = getattr(kicad, "run_action", None)
+    if callable(run_action):
+        try:
+            action_started = (
+                _native_run_action_status(
+                    run_action("common.Control.showSymbolEditor")
+                ) == 1
+            )
+        except Exception:
+            action_started = False
+
     backend = _desktop_keyboard_backend()
-    if not backend:
+    if not action_started and not backend:
         raise RuntimeError(
-            "No desktop keyboard backend is available. Install xdotool for X11, "
-            "wtype for Wayland, or pynput for Windows/macOS."
+            "KiCad did not expose the Symbol Editor action and no native input "
+            "bridge is available. Install xdotool (X11), wtype (Wayland), or "
+            "pynput (Windows/macOS)."
         )
     xdotool = shutil.which("xdotool") if backend == "xdotool" else None
     editor_pid = ""
@@ -2650,16 +2665,8 @@ def _edit_facade_symbol(
             send("windowfocus", "--sync", str(editor_window_id))
             if send("getwindowfocus", check=False) != str(editor_window_id):
                 raise RuntimeError("Could not focus Eeschema to open Symbol Editor.")
-            # This global action is documented but not implemented by all KiCad
-            # IPC builds; try it, then use the native Tools-menu path if needed.
-            action_started = False
-            run_action = getattr(kicad, "run_action", None)
-            if callable(run_action):
-                try:
-                    response = run_action("common.Control.showSymbolEditor")
-                    action_started = _native_run_action_status(response) == 1
-                except Exception:
-                    action_started = False
+            # KiCad's global action is preferred; only fall back to the native
+            # menu path when this API build does not support RunAction.
             for _ in range(20):
                 found = send("search", "--onlyvisible", "--name", "Symbol Editor", check=False)
                 candidates = [item.strip() for item in found.splitlines() if item.strip()]
@@ -2698,15 +2705,6 @@ def _edit_facade_symbol(
         # it returns focus to the invoking editor before native menu input.
         if close_browser is not None:
             close_browser()
-        run_action = getattr(kicad, "run_action", None)
-        action_started = False
-        if callable(run_action):
-            try:
-                action_started = _native_run_action_status(
-                    run_action("common.Control.showSymbolEditor")
-                ) == 1
-            except Exception:
-                action_started = False
         if not action_started:
             if sys.platform == "darwin":
                 # AppleScript talks to the native menu, not a guessed screen
