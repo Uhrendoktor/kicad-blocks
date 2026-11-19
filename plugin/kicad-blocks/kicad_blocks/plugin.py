@@ -2787,12 +2787,17 @@ def _start_native_symbol_placement(
     _editor_window_id: str | None,
     symbol_name: str,
 ):
-    """Place a generated facade at the active page center and select it.
+    """Create a facade and use Eeschema's native move tool when its IPC API exists.
 
-    The schematic IPC API currently exposes fixed-coordinate placement,
-    FocusOnItems, and selection but no interactive move/placement command.
-    This is the cross-platform supported path until Eeschema exposes the
-    schematic counterpart of Board.interactive_move().
+    Newer KiCad builds can expose Schematic.interactive_move(), the schematic
+    counterpart of Board.interactive_move(). When present, the same API commit
+    that creates the symbol is transferred to that native tool, so confirm and
+    cancel remain one undoable operation.
+
+    Current KiCad builds do not yet register that schematic IPC handler. In
+    that case, the still-functional fallback commits the new facade at the
+    active page center, focuses it in the viewport, selects it, and saves.
+    No keyboard or platform-specific window automation is used.
     """
     if not symbol_name or any(char.isspace() for char in symbol_name):
         raise ValueError("The selected block has an invalid KiCad symbol name.")
@@ -2804,9 +2809,41 @@ def _start_native_symbol_placement(
 
     x_mm, y_mm = _schematic_page_center_mm(schematic)
     symbol_id = f"{LIBRARY_NICKNAME}:{symbol_name}"
-    instance = schematic.place_symbol_from_library(
-        symbol_id, Vector2.from_xy_mm(x_mm, y_mm)
-    )
+    position = Vector2.from_xy_mm(x_mm, y_mm)
+
+    # Start the transaction before inserting the symbol. If the interactive
+    # API is available, it takes ownership; otherwise we push the same commit
+    # before using the documented page-center fallback.
+    commit = schematic.begin_commit()
+    try:
+        instance = schematic.place_symbol_from_library(symbol_id, position)
+    except Exception:
+        with contextlib.suppress(Exception):
+            schematic.drop_commit(commit)
+        raise
+
+    interactive_move = getattr(schematic, "interactive_move", None)
+    if callable(interactive_move):
+        try:
+            interactive_move(instance.id)
+            LOG.info("Started native Eeschema cursor placement for %s.", symbol_id)
+            return instance
+        except Exception as exc:
+            # A new kipy wrapper may be installed before the running KiCad
+            # build has the matching server handler. The transaction is still
+            # client-owned in that case, and can be committed at page center.
+            LOG.info(
+                "Schematic interactive move IPC is unavailable; using page-center placement: %s",
+                exc,
+            )
+
+    try:
+        schematic.push_commit(commit, f"Place functional block {symbol_name}")
+    except Exception:
+        with contextlib.suppress(Exception):
+            schematic.drop_commit(commit)
+        raise
+
     target_schematic = _focus_schematic_items_in_editor(schematic, [instance])
     target_schematic.clear_selection()
     target_schematic.add_to_selection([instance])

@@ -56,6 +56,7 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
     def test_place_block_uses_page_center_ipc_focus_selection_and_save(self):
         instance_id = SimpleNamespace(value="block-instance-id")
         instance = SimpleNamespace(id=instance_id)
+        commit = object()
         target = SimpleNamespace(
             clear_selection=Mock(),
             add_to_selection=Mock(),
@@ -63,7 +64,10 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
             save=Mock(),
         )
         schematic = SimpleNamespace(
+            begin_commit=Mock(return_value=commit),
             place_symbol_from_library=Mock(return_value=instance),
+            push_commit=Mock(),
+            drop_commit=Mock(),
         )
         kicad = SimpleNamespace(get_schematic=Mock(return_value=schematic))
         with (
@@ -87,10 +91,101 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
         self.assertAlmostEqual(args[1].x, 100_000_000)
         self.assertAlmostEqual(args[1].y, 75_000_000)
         self.assertFalse(kwargs)
+        schematic.begin_commit.assert_called_once_with()
+        schematic.push_commit.assert_called_once_with(
+            commit, f"Place functional block {self.block.manifest['symbol_name']}"
+        )
+        schematic.drop_commit.assert_not_called()
         focus_items.assert_called_once_with(schematic, [instance])
         target.clear_selection.assert_called_once_with()
         target.add_to_selection.assert_called_once_with([instance])
         target.save.assert_called_once_with()
+
+    def test_place_block_starts_native_cursor_move_when_schematic_api_exists(self):
+        instance = SimpleNamespace(id=SimpleNamespace(value="block-instance-id"))
+        commit = object()
+        move = Mock()
+        schematic = SimpleNamespace(
+            begin_commit=Mock(return_value=commit),
+            place_symbol_from_library=Mock(return_value=instance),
+            interactive_move=move,
+            push_commit=Mock(),
+            drop_commit=Mock(),
+            save=Mock(),
+        )
+        kicad = SimpleNamespace(get_schematic=Mock(return_value=schematic))
+        with patch.object(
+            plugin_actions, "_schematic_page_center_mm", return_value=(100.0, 75.0)
+        ):
+            placed = plugin_actions._start_native_symbol_placement(
+                kicad, None, self.block.manifest["symbol_name"]
+            )
+
+        self.assertIs(placed, instance)
+        move.assert_called_once_with(instance.id)
+        schematic.begin_commit.assert_called_once_with()
+        schematic.push_commit.assert_not_called()
+        schematic.drop_commit.assert_not_called()
+        schematic.save.assert_not_called()
+
+    def test_place_block_falls_back_when_schematic_move_handler_is_unavailable(self):
+        instance = SimpleNamespace(id=SimpleNamespace(value="block-instance-id"))
+        commit = object()
+        target = SimpleNamespace(
+            clear_selection=Mock(),
+            add_to_selection=Mock(),
+            get_selection=Mock(return_value=[instance]),
+            save=Mock(),
+        )
+        schematic = SimpleNamespace(
+            begin_commit=Mock(return_value=commit),
+            place_symbol_from_library=Mock(return_value=instance),
+            interactive_move=Mock(side_effect=RuntimeError("unhandled InteractiveMoveItems")),
+            push_commit=Mock(),
+            drop_commit=Mock(),
+        )
+        kicad = SimpleNamespace(get_schematic=Mock(return_value=schematic))
+        with (
+            patch.object(
+                plugin_actions, "_schematic_page_center_mm", return_value=(100.0, 75.0)
+            ),
+            patch.object(
+                plugin_actions, "_focus_schematic_items_in_editor", return_value=target
+            ) as focus_items,
+        ):
+            placed = plugin_actions._start_native_symbol_placement(
+                kicad, None, self.block.manifest["symbol_name"]
+            )
+
+        self.assertIs(placed, instance)
+        schematic.interactive_move.assert_called_once_with(instance.id)
+        schematic.push_commit.assert_called_once_with(
+            commit, f"Place functional block {self.block.manifest['symbol_name']}"
+        )
+        schematic.drop_commit.assert_not_called()
+        focus_items.assert_called_once_with(schematic, [instance])
+        target.clear_selection.assert_called_once_with()
+        target.add_to_selection.assert_called_once_with([instance])
+        target.save.assert_called_once_with()
+
+    def test_place_block_drops_transaction_when_symbol_creation_fails(self):
+        commit = object()
+        schematic = SimpleNamespace(
+            begin_commit=Mock(return_value=commit),
+            place_symbol_from_library=Mock(side_effect=RuntimeError("library is stale")),
+            drop_commit=Mock(),
+        )
+        kicad = SimpleNamespace(get_schematic=Mock(return_value=schematic))
+        with (
+            patch.object(
+                plugin_actions, "_schematic_page_center_mm", return_value=(100.0, 75.0)
+            ),
+            self.assertRaisesRegex(RuntimeError, "library is stale"),
+        ):
+            plugin_actions._start_native_symbol_placement(
+                kicad, None, self.block.manifest["symbol_name"]
+            )
+        schematic.drop_commit.assert_called_once_with(commit)
 
     def test_facade_geometry_edit_changes_only_selected_pin_in_project_catalog(self):
         import copy
