@@ -182,6 +182,10 @@ class UiTestContext:
         """Return one registered ttk Checkbutton with its state API."""
         return cast(Checkbutton, self.require_widget(contract_id))
 
+    def require_canvas(self, contract_id: str) -> tk.Canvas:
+        """Return one registered Tk Canvas with its drawing and scrolling API."""
+        return cast(tk.Canvas, self.require_widget(contract_id))
+
     def require_text(self, contract_id: str) -> Text:
         """Return one registered Tk Text widget with its text-buffer API."""
         return cast(Text, self.require_widget(contract_id))
