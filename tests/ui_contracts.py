@@ -9,19 +9,16 @@ remain real.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Generic, TypeVar, TypedDict, cast
 
 if TYPE_CHECKING:
     import tkinter as tk
-    from _pytest.monkeypatch import MonkeyPatch
-    from tkinter import Canvas, Event as TkEvent, Menu, Misc, Tk, Toplevel
+    from tkinter import Menu, Toplevel
     from tkinter.ttk import Button, Combobox, Entry, Notebook, Panedwindow, Treeview
 else:
-    MonkeyPatch = TkEvent = Canvas = Menu = Misc = Tk = Toplevel = Button = Combobox = Entry = (
-        Notebook
-    ) = Panedwindow = Treeview = object
+    Menu = Toplevel = Button = Combobox = Entry = Notebook = Panedwindow = Treeview = object
 
 
 class MenuEntry:
