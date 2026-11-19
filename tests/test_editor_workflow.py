@@ -66,20 +66,61 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
             )
         ]
 
-    def test_edit_facade_reports_missing_supported_editor_selection_api(self):
+    def test_open_symbol_library_item_sends_exact_kicad_proto_and_verifies_document(self):
+        from google.protobuf.empty_pb2 import Empty
+        from kipy.proto.common.commands import editor_commands_pb2
+        from kipy.proto.common.types import DocumentType
+
+        sent = []
+
+        def send(request, response_type):
+            sent.append((request, response_type))
+            return Empty()
+
+        kicad = SimpleNamespace(
+            client=SimpleNamespace(send=send),
+            get_open_documents=self._open_symbol_documents,
+        )
+        self.assertTrue(
+            plugin_actions._open_symbol_library_item(
+                kicad,
+                plugin_actions.LIBRARY_NICKNAME,
+                self.block.manifest["symbol_name"],
+                pause=lambda _seconds: None,
+            )
+        )
+        self.assertEqual(len(sent), 1)
+        request, response_type = sent[0]
+        self.assertIsInstance(request, editor_commands_pb2.OpenLibraryItem)
+        self.assertEqual(response_type, Empty)
+        self.assertEqual(request.type, DocumentType.DOCTYPE_SYMBOL)
+        self.assertEqual(
+            request.identifier.library_nickname, plugin_actions.LIBRARY_NICKNAME
+        )
+        self.assertEqual(
+            request.identifier.entry_name, self.block.manifest["symbol_name"]
+        )
+
+    def test_edit_facade_loads_exact_selected_library_item_through_ipc(self):
         from kicad_blocks.repository import build_project_symbol_catalog
 
         project_catalog = build_project_symbol_catalog(self.project, [self.library])
-        run_action = Mock()
-        with self.assertRaisesRegex(RuntimeError, "supported KiCad IPC API yet"):
-            plugin_actions._edit_facade_symbol(
+        with patch.object(
+            plugin_actions, "_open_symbol_library_item", return_value=True
+        ) as open_item:
+            opened = plugin_actions._edit_facade_symbol(
                 self.block,
-                SimpleNamespace(run_action=run_action),
+                self.kicad,
                 project_catalog=project_catalog,
             )
-        run_action.assert_not_called()
+        self.assertTrue(opened)
+        args, kwargs = open_item.call_args
+        self.assertIs(args[0], self.kicad)
+        self.assertEqual(args[1], plugin_actions.LIBRARY_NICKNAME)
+        self.assertEqual(args[2], self.block.manifest["symbol_name"])
+        self.assertEqual(kwargs["timeout"], 0.25)
 
-    def test_edit_facade_validates_exact_catalog_entry_before_reporting_capability_gap(self):
+    def test_edit_facade_validates_catalog_entry_before_ipc_request(self):
         from kicad_blocks.repository import build_project_symbol_catalog
 
         project_catalog = build_project_symbol_catalog(self.project, [self.library])
@@ -88,12 +129,14 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
             path=self.block.path,
             symbol_library=self.block.symbol_library,
         )
-        run_action = Mock()
-        with self.assertRaisesRegex(ValueError, "Expected exactly one"):
+        with (
+            patch.object(plugin_actions, "_open_symbol_library_item") as open_item,
+            self.assertRaisesRegex(ValueError, "Expected exactly one"),
+        ):
             plugin_actions._edit_facade_symbol(
-                broken, SimpleNamespace(run_action=run_action), project_catalog=project_catalog
+                broken, self.kicad, project_catalog=project_catalog
             )
-        run_action.assert_not_called()
+        open_item.assert_not_called()
 
     def test_ensure_project_facade_catalog_preserves_existing_unsaved_edits(self):
         from kicad_blocks.repository import (
