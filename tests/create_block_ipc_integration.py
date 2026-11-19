@@ -414,13 +414,10 @@ def main() -> None:
                     patch.object(
                         plugin_actions, "_reload_symbol_library", return_value=True
                     ),
-                    patch.object(plugin_actions, "_ask_create_block_details") as details,
                 ):
                     plugin_actions._create_and_place(
                         library_root, parent_schematic, kicad, project_dir, object()
                     )
-                    if details.called:
-                        raise AssertionError("One-click Create Block unexpectedly opened a details dialog.")
 
             run_creation(schematic)
 

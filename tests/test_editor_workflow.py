@@ -432,7 +432,6 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
             get_selection_as_string=Mock(return_value=selection)
         )
         with (
-            patch.object(plugin_actions, "_ask_create_block_details") as details,
             patch.object(plugin_actions, "create_block", return_value=self.block) as create,
             patch.object(plugin_actions, "_register_block", return_value=self.block) as register,
         ):
@@ -440,7 +439,6 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
                 self.library, schematic, self.kicad, self.project, self.parent, "0x100"
             )
 
-        details.assert_not_called()
         create.assert_called_once_with(
             self.library,
             "Power Stage",
@@ -465,14 +463,12 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
         existing = [SimpleNamespace(name="Power Stage"), SimpleNamespace(name="Power Stage (2)")]
         with (
             patch.object(plugin_actions, "_list_library_records", return_value=existing),
-            patch.object(plugin_actions, "_ask_create_block_details") as details,
             patch.object(plugin_actions, "create_block", return_value=self.block) as create,
             patch.object(plugin_actions, "_register_block", return_value=self.block),
         ):
             plugin_actions._create_and_place(
                 self.library, schematic, self.kicad, self.project, self.parent
             )
-        details.assert_not_called()
         self.assertEqual(create.call_args.args[:2], (self.library, "Power Stage (3)"))
 
 
@@ -500,7 +496,6 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
         symbol_table.write_text("original table", encoding="utf-8")
 
         with (
-            patch.object(plugin_actions, "_ask_create_block_details") as details,
             patch.object(plugin_actions, "_list_library_records", return_value=[]),
             patch.object(plugin_actions, "create_block", return_value=created),
             patch.object(
@@ -514,7 +509,6 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
                 self.library, schematic, self.kicad, self.project, self.parent
             )
 
-        details.assert_not_called()
         self.assertFalse(created.path.exists())
         self.assertTrue(self.block.path.is_dir())
         self.assertEqual(catalog.read_text(encoding="utf-8"), "original catalog")
@@ -540,7 +534,6 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
             ),
         )
         with (
-            patch.object(plugin_actions, "_ask_create_block_details") as details,
             patch.object(plugin_actions, "_list_library_records", return_value=[]),
             patch.object(plugin_actions, "create_block", return_value=self.block) as create,
             patch.object(plugin_actions, "_register_block", return_value=self.block),
@@ -549,7 +542,6 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
                 self.library, schematic, self.kicad, self.project, self.parent
             )
 
-        details.assert_not_called()
         create.assert_called_once_with(
             self.library,
             "Power Stage",
@@ -567,14 +559,12 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
             get_hierarchy=Mock(),
         )
         with (
-            patch.object(plugin_actions, "_ask_create_block_details") as details,
             patch.object(plugin_actions, "create_block") as create,
             self.assertRaisesRegex(ValueError, "exactly one hierarchical sheet symbol"),
         ):
             plugin_actions._create_and_place(
                 self.library, schematic, self.kicad, self.project, self.parent
             )
-        details.assert_not_called()
         create.assert_not_called()
         schematic.get_hierarchy.assert_not_called()
 
@@ -587,14 +577,12 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
             get_hierarchy=Mock(),
         )
         with (
-            patch.object(plugin_actions, "_ask_create_block_details") as details,
             patch.object(plugin_actions, "create_block") as create,
             self.assertRaisesRegex(ValueError, "current selection is not a hierarchical sheet symbol"),
         ):
             plugin_actions._create_and_place(
                 self.library, schematic, self.kicad, self.project, self.parent
             )
-        details.assert_not_called()
         create.assert_not_called()
         schematic.get_hierarchy.assert_not_called()
 
@@ -629,7 +617,6 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
             ),
         )
         with (
-            patch.object(plugin_actions, "_ask_create_block_details") as details,
             patch.object(plugin_actions, "_list_library_records", return_value=[]),
             patch.object(plugin_actions, "create_block", return_value=self.block) as create,
             patch.object(plugin_actions, "_register_block", return_value=self.block),
@@ -637,7 +624,6 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
             plugin_actions._create_and_place(
                 self.library, schematic, self.kicad, self.project, self.parent
             )
-        details.assert_not_called()
         create.assert_called_once_with(
             self.library,
             "Power Stage",
@@ -654,14 +640,12 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
         )
         schematic = SimpleNamespace(get_selection=Mock(return_value=[selected_sheet]))
         with (
-            patch.object(plugin_actions, "_ask_create_block_details") as details,
             patch.object(plugin_actions, "create_block") as create,
             self.assertRaisesRegex(ValueError, "no Sheetfile property"),
         ):
             plugin_actions._create_and_place(
                 self.library, schematic, self.kicad, self.project, self.parent
             )
-        details.assert_not_called()
         create.assert_not_called()
 
     def test_create_block_rejects_selected_sheet_without_uuid(self):
@@ -675,14 +659,12 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
         )
         schematic = SimpleNamespace(get_selection=Mock(return_value=[selected_sheet]))
         with (
-            patch.object(plugin_actions, "_ask_create_block_details") as details,
             patch.object(plugin_actions, "create_block") as create,
             self.assertRaisesRegex(ValueError, "no UUID"),
         ):
             plugin_actions._create_and_place(
                 self.library, schematic, self.kicad, self.project, self.parent
             )
-        details.assert_not_called()
         create.assert_not_called()
 
     def test_create_block_does_not_fallback_when_typed_selection_ipc_fails(self):
@@ -696,14 +678,12 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
             get_hierarchy=Mock(),
         )
         with (
-            patch.object(plugin_actions, "_ask_create_block_details") as details,
             patch.object(plugin_actions, "create_block") as create,
             self.assertRaisesRegex(RuntimeError, "selection API is unavailable"),
         ):
             plugin_actions._create_and_place(
                 self.library, schematic, self.kicad, self.project, self.parent
             )
-        details.assert_not_called()
         create.assert_not_called()
         schematic.get_selection_as_string.assert_not_called()
         schematic.get_hierarchy.assert_not_called()
@@ -715,14 +695,12 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
         )
         schematic = SimpleNamespace(get_selection=Mock(return_value=[selected_sheet]))
         with (
-            patch.object(plugin_actions, "_ask_create_block_details") as details,
             patch.object(plugin_actions, "create_block") as create,
             self.assertRaisesRegex(FileNotFoundError, "active parent sheet"),
         ):
             plugin_actions._create_and_place(
                 self.library, schematic, self.kicad, self.project, self.parent
             )
-        details.assert_not_called()
         create.assert_not_called()
 
     def test_create_block_without_selection_uses_the_current_hierarchical_sheet(self):
@@ -753,7 +731,6 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
             ),
         )
         with (
-            patch.object(plugin_actions, "_ask_create_block_details") as details,
             patch.object(plugin_actions, "create_block", return_value=self.block) as create,
             patch.object(plugin_actions, "_register_block", return_value=self.block),
         ):
@@ -761,7 +738,6 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
                 self.library, schematic, self.kicad, self.project, self.parent
             )
 
-        details.assert_not_called()
         create.assert_called_once_with(
             self.library,
             "Power Stage",
@@ -1077,7 +1053,6 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
             ),
         )
         with (
-            patch.object(plugin_actions, "_ask_create_block_details") as details,
             patch.object(plugin_actions, "create_block", return_value=self.block) as create,
             patch.object(plugin_actions, "_register_block", return_value=self.block),
         ):
@@ -1085,7 +1060,6 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
                 self.library, schematic, self.kicad, self.project, self.parent
             )
 
-        details.assert_not_called()
         create.assert_called_once_with(
             self.library,
             "Power Stage",
@@ -1137,7 +1111,6 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
             ),
         )
         with (
-            patch.object(plugin_actions, "_ask_create_block_details") as details,
             patch.object(plugin_actions, "_list_library_records", return_value=[]),
             patch.object(plugin_actions, "create_block", return_value=self.block) as create,
             patch.object(plugin_actions, "_register_block", return_value=self.block),
@@ -1146,7 +1119,6 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
                 self.library, schematic, self.kicad, self.project, self.parent
             )
 
-        details.assert_not_called()
         create.assert_called_once_with(
             self.library,
             "Uart",
