@@ -290,10 +290,7 @@ def test_library_browser_search_filters_records_and_updates_count(
             summary_contract_id="library-browser.summary",
             expected_summary="1 libraries  ·  1 of 2 blocks",
         ).run(context)
-        assert (
-            context.require_label("library-browser.selected-name").cget("text")
-            == "USB power block"
-        )
+        assert context.require_label("library-browser.selected-name").cget("text") == "USB power block"
     finally:
         root.destroy()
 
@@ -357,9 +354,7 @@ def test_refresh_button_reloads_records_through_real_ui_callback(
             destroys_window=False,
             expected_label="Refresh",
         ).run(context)
-        assert "2 of 2 blocks" in str(
-            context.require_label("library-browser.summary").cget("text")
-        )
+        assert "2 of 2 blocks" in str(context.require_label("library-browser.summary").cget("text"))
     finally:
         root.destroy()
 
