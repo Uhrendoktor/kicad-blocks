@@ -23,7 +23,6 @@ jobs:
     timeout-minutes: 5
     outputs:
       updated: ${{ steps.sync.outputs.updated }}
-      merge_tree: ${{ steps.sync.outputs.merge_tree }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -34,7 +33,6 @@ jobs:
         shell: bash
         env:
           REF_NAME: ${{ github.ref_name }}
-          REF_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
           echo "updated=false" >> "$GITHUB_OUTPUT"
@@ -135,18 +133,15 @@ jobs:
               "\n".join(missing) + ("\n" if missing else ""), encoding="utf-8"
           )
           PY
+            # Keep the workflow file identical to the checked-out PR head so
+            # GITHUB_TOKEN only needs contents:write to push the merge commit.
+            git checkout HEAD -- .github/workflows/ci.yml
             git add docs/explanation/compatibility.md tests/test_extraction.py
             git add -u
-            mkdir -p "${RUNNER_TEMP}/pr40-resolved-main-merge-tree"
-            tree_sha="$(git write-tree)"
-            main_sha="$(git rev-parse origin/main)"
-            printf '%s\n' "$tree_sha" > "${RUNNER_TEMP}/pr40-resolved-main-merge-tree/tree-sha.txt"
-            printf '%s\n' "$REF_SHA" > "${RUNNER_TEMP}/pr40-resolved-main-merge-tree/pr-parent-sha.txt"
-            printf '%s\n' "$main_sha" > "${RUNNER_TEMP}/pr40-resolved-main-merge-tree/main-parent-sha.txt"
-            cp "${RUNNER_TEMP}/missing-main-contract-ids.txt" "${RUNNER_TEMP}/pr40-resolved-main-merge-tree/missing-main-contract-ids.txt"
-            echo "merge_tree=$tree_sha" >> "$GITHUB_OUTPUT"
+            git commit -m "merge: synchronize strict quality PR with current main"
+            git push origin "HEAD:refs/heads/$REF_NAME"
             echo "updated=true" >> "$GITHUB_OUTPUT"
-            echo "::notice::The merge tree is resolved and ready for a two-parent commit through the GitHub API."
+            echo "::notice::The PR branch now includes current main; CI will rerun on the merge commit."
             exit 0
           fi
 
@@ -174,15 +169,6 @@ jobs:
           done < <(git diff --name-only "$merge_base" origin/main)
           echo "::error::Git reported merge conflicts with current main. The full merge worktree and conflict stages were saved as an artifact."
           exit 1
-
-      - name: Upload resolved current-main merge tree
-        if: steps.sync.outputs.merge_tree != ''
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        with:
-          name: pr40-resolved-main-merge-tree
-          path: ${{ runner.temp }}/pr40-resolved-main-merge-tree
-          if-no-files-found: error
-          compression-level: 1
 
       - name: Upload exact main merge conflict inputs
         if: failure()
