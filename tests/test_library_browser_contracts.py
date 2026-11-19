@@ -231,7 +231,7 @@ def test_library_browser_publish_button_publishes_selected_record_and_reports_in
     try:
         ButtonContract(
             contract_id="library-browser.action.publish",
-            expected_action=None,
+            expected_action="refresh",
             destroys_window=False,
             expected_label="Publish",
         ).run(context)
