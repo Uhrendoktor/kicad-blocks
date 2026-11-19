@@ -7820,6 +7820,9 @@ collect_block_profiles = _collect_block_profiles
 choose_block_layout = _choose_block_layout
 validate_shared_library = _validate_shared_library
 pick_block_for_placement = _pick_block_for_placement
+pick_kicad_file = _pick_kicad_file
+pick_save_file = _pick_save_file
+pick_directory = _pick_directory
 
 
 def library_reload_status() -> tuple[bool, str | None]:

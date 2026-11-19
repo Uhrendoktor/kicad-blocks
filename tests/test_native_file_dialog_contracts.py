@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import sys
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -18,6 +19,19 @@ pytestmark = pytest.mark.skipif(
     sys.platform == "linux" and not os.environ.get("DISPLAY"),
     reason="Linux Tk file-dialog wrapper contracts require an X display (run under xvfb-run).",
 )
+
+
+def _record_dialog_result(
+    calls: list[dict[str, TkOption]],
+    result: str,
+) -> Callable[..., str]:
+    """Record the keyword contract passed to a native file chooser."""
+
+    def choose(**kwargs: TkOption) -> str:
+        calls.append(kwargs)
+        return result
+
+    return choose
 
 
 class _ParentHandle(Misc):
@@ -80,12 +94,12 @@ def test_open_kicad_file_falls_back_to_cwd_for_missing_initial_path(
 ):
     monkeypatch.chdir(tmp_path)
     parent = _parent()
-    calls = []
+    calls: list[dict[str, TkOption]] = []
     selected = tmp_path / "board.kicad_pcb"
     monkeypatch.setattr(
         plugin_actions.filedialog,
         "askopenfilename",
-        lambda **kwargs: calls.append(kwargs) or str(selected),
+        _record_dialog_result(calls, str(selected)),
     )
     try:
         result = plugin_actions.pick_kicad_file(
@@ -109,11 +123,11 @@ def test_open_kicad_file_falls_back_to_cwd_for_missing_initial_path(
 def test_open_kicad_file_cancel_returns_none(monkeypatch: MonkeyPatch, tmp_path: Path):
     monkeypatch.chdir(tmp_path)
     parent = _parent()
-    calls = []
+    calls: list[dict[str, TkOption]] = []
     monkeypatch.setattr(
         plugin_actions.filedialog,
         "askopenfilename",
-        lambda **kwargs: calls.append(kwargs) or "",
+        _record_dialog_result(calls, ""),
     )
     try:
         assert (
@@ -137,7 +151,7 @@ def test_save_file_uses_suggested_name_extension_filter_and_parent(
     suggested = tmp_path / "release" / "functional_block.kicad_sch"
     suggested.parent.mkdir(parents=True, exist_ok=True)
     parent = _parent()
-    calls = []
+    calls: list[dict[str, TkOption]] = []
     selected = tmp_path / "release" / "renamed.kicad_sch"
 
     def save(**kwargs: TkOption) -> str:
@@ -177,7 +191,7 @@ def test_save_file_without_suffix_uses_directory_and_cancel_returns_none(
 ):
     monkeypatch.chdir(tmp_path)
     parent = _parent()
-    calls = []
+    calls: list[dict[str, TkOption]] = []
     monkeypatch.setattr(
         plugin_actions.filedialog,
         "asksaveasfilename",
@@ -203,7 +217,7 @@ def test_save_file_without_suffix_uses_directory_and_cancel_returns_none(
 
 
 def test_directory_picker_uses_existing_file_parent_and_requires_existing_directory(
-    monkeypatch, tmp_path
+    monkeypatch: MonkeyPatch, tmp_path: Path
 ):
     initial_dir = tmp_path / "libraries"
     initial_dir.mkdir()
@@ -211,7 +225,7 @@ def test_directory_picker_uses_existing_file_parent_and_requires_existing_direct
     initial_file.write_text("(kicad_sch)\n", encoding="utf-8")
     selected = tmp_path / "selected-library"
     parent = _parent()
-    calls = []
+    calls: list[dict[str, TkOption]] = []
     monkeypatch.setattr(
         plugin_actions.filedialog,
         "askdirectory",
@@ -241,7 +255,7 @@ def test_directory_picker_falls_back_to_cwd_and_cancel_returns_none(
 ):
     monkeypatch.chdir(tmp_path)
     parent = _parent()
-    calls = []
+    calls: list[dict[str, TkOption]] = []
     monkeypatch.setattr(
         plugin_actions.filedialog,
         "askdirectory",
