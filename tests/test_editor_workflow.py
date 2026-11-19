@@ -53,162 +53,182 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
         self._dependency_patch.stop()
         self.temp.cleanup()
 
-    def _open_symbol_documents(self, doc_type):
-        from kipy.proto.common.types import DocumentType
-
-        self.assertEqual(doc_type, DocumentType.DOCTYPE_SYMBOL)
-        return [
-            SimpleNamespace(
-                lib_id=SimpleNamespace(
-                    library_nickname=plugin_actions.LIBRARY_NICKNAME,
-                    entry_name=self.block.manifest["symbol_name"],
-                )
-            )
-        ]
-
-    def test_native_symbol_placement_uses_verified_eeschema_chooser(self):
-        calls = []
-        focuses = ["0x200", "0x100"]
-
-        def command_runner(arguments, **_kwargs):
-            calls.append(arguments)
-            if arguments[1:3] == ["getwindowname", "0x100"]:
-                return SimpleNamespace(stdout="project — Schematic Editor")
-            if arguments[1:3] == ["getwindowclassname", "0x100"]:
-                return SimpleNamespace(stdout="eeschema")
-            if arguments[1:3] == ["getwindowpid", "0x100"]:
-                return SimpleNamespace(stdout="4242")
-            if arguments[1:2] == ["getwindowfocus"]:
-                return SimpleNamespace(stdout=focuses.pop(0) if focuses else "0x100")
-            if arguments[1:3] == ["getwindowpid", "0x200"]:
-                return SimpleNamespace(stdout="4242")
-            if arguments[1:3] == ["getwindowname", "0x200"]:
-                return SimpleNamespace(stdout="Choose Symbol")
-            return SimpleNamespace(stdout="")
-
-        plugin_actions._start_native_symbol_placement(
-            self.kicad,
-            "0x100",
-            self.block.manifest["symbol_name"],
-            backend="xdotool",
-            executable="/usr/bin/xdotool",
-            command_runner=command_runner,
-            pause=lambda _seconds: None,
-        )
-
-        self.assertIn(
-            ["/usr/bin/xdotool", "key", "--clearmodifiers", "a"],
-            calls,
-        )
-        self.assertIn(
-            [
-                "/usr/bin/xdotool", "type", "--clearmodifiers", "--delay", "12",
-                f"{plugin_actions.LIBRARY_NICKNAME}:{self.block.manifest['symbol_name']}",
-            ],
-            calls,
-        )
-        self.assertIn(
-            ["/usr/bin/xdotool", "key", "--clearmodifiers", "Return"],
-            calls,
-        )
-        self.assertTrue(
-            any(call[1:3] == ["windowfocus", "--sync"] for call in calls)
-        )
-        self.assertFalse(any("run_action" in str(call) for call in calls))
-
-    def test_native_symbol_placement_wayland_backend_types_exact_library_id(self):
-        calls = []
-        plugin_actions._start_native_symbol_placement(
-            self.kicad,
-            None,
-            self.block.manifest["symbol_name"],
-            backend="wtype",
-            executable="/usr/bin/wtype",
-            command_runner=lambda arguments, **_kwargs: (
-                calls.append(arguments) or SimpleNamespace(stdout="", returncode=0)
-            ),
-            pause=lambda _seconds: None,
-        )
-        self.assertEqual(
-            calls,
-            [
-                ["/usr/bin/wtype", "-k", "a"],
-                ["/usr/bin/wtype", f"{plugin_actions.LIBRARY_NICKNAME}:{self.block.manifest['symbol_name']}"],
-                ["/usr/bin/wtype", "-k", "Return"],
-            ],
-        )
-
-    def test_open_symbol_library_item_sends_exact_kicad_proto_and_verifies_document(self):
+    def test_place_block_uses_page_center_ipc_focus_selection_and_save(self):
         from google.protobuf.empty_pb2 import Empty
-        from kipy.proto.common.commands import editor_commands_pb2
-        from kipy.proto.common.types import DocumentType
 
-        sent = []
-
-        def send(request, response_type):
-            sent.append((request, response_type))
-            return Empty()
-
-        kicad = SimpleNamespace(
-            client=SimpleNamespace(send=send),
-            get_open_documents=self._open_symbol_documents,
+        sheet_path = SimpleNamespace(proto=Empty())
+        instance_id = SimpleNamespace(value="block-instance-id")
+        instance = SimpleNamespace(id=instance_id, path=sheet_path)
+        target = SimpleNamespace(
+            document=Empty(),
+            client=SimpleNamespace(send=Mock()),
+            clear_selection=Mock(),
+            add_to_selection=Mock(),
+            get_selection=Mock(return_value=[instance]),
+            save=Mock(),
         )
-        self.assertTrue(
-            plugin_actions._open_symbol_library_item(
-                kicad,
-                plugin_actions.LIBRARY_NICKNAME,
-                self.block.manifest["symbol_name"],
-                pause=lambda _seconds: None,
-            )
+        schematic = SimpleNamespace(
+            for_sheet=Mock(return_value=target),
+            place_symbol_from_library=Mock(return_value=instance),
         )
-        self.assertEqual(len(sent), 1)
-        request, response_type = sent[0]
-        self.assertIsInstance(request, editor_commands_pb2.OpenLibraryItem)
-        self.assertEqual(response_type, Empty)
-        self.assertEqual(request.type, DocumentType.DOCTYPE_SYMBOL)
-        self.assertEqual(
-            request.identifier.library_nickname, plugin_actions.LIBRARY_NICKNAME
-        )
-        self.assertEqual(
-            request.identifier.entry_name, self.block.manifest["symbol_name"]
-        )
-
-    def test_edit_facade_loads_exact_selected_library_item_through_ipc(self):
-        from kicad_blocks.repository import build_project_symbol_catalog
-
-        project_catalog = build_project_symbol_catalog(self.project, [self.library])
+        kicad = SimpleNamespace(get_schematic=Mock(return_value=schematic))
         with patch.object(
-            plugin_actions, "_open_symbol_library_item", return_value=True
-        ) as open_item:
-            opened = plugin_actions._edit_facade_symbol(
-                self.block,
-                self.kicad,
-                project_catalog=project_catalog,
-            )
-        self.assertTrue(opened)
-        args, kwargs = open_item.call_args
-        self.assertIs(args[0], self.kicad)
-        self.assertEqual(args[1], plugin_actions.LIBRARY_NICKNAME)
-        self.assertEqual(args[2], self.block.manifest["symbol_name"])
-        self.assertEqual(kwargs["timeout"], 0.25)
-
-    def test_edit_facade_validates_catalog_entry_before_ipc_request(self):
-        from kicad_blocks.repository import build_project_symbol_catalog
-
-        project_catalog = build_project_symbol_catalog(self.project, [self.library])
-        broken = SimpleNamespace(
-            manifest={**self.block.manifest, "symbol_name": "missing_generated_facade"},
-            path=self.block.path,
-            symbol_library=self.block.symbol_library,
-        )
-        with (
-            patch.object(plugin_actions, "_open_symbol_library_item") as open_item,
-            self.assertRaisesRegex(ValueError, "Expected exactly one"),
+            plugin_actions, "_schematic_page_center_mm", return_value=(100.0, 75.0)
         ):
-            plugin_actions._edit_facade_symbol(
-                broken, self.kicad, project_catalog=project_catalog
+            placed = plugin_actions._start_native_symbol_placement(
+                kicad, None, self.block.manifest["symbol_name"]
             )
-        open_item.assert_not_called()
+
+        self.assertIs(placed, instance)
+        args, kwargs = schematic.place_symbol_from_library.call_args
+        self.assertEqual(
+            args[0],
+            f"{plugin_actions.LIBRARY_NICKNAME}:{self.block.manifest['symbol_name']}",
+        )
+        self.assertAlmostEqual(args[1].x, 100_000_000)
+        self.assertAlmostEqual(args[1].y, 75_000_000)
+        self.assertFalse(kwargs)
+        target.client.send.assert_called_once()
+        target.clear_selection.assert_called_once_with()
+        target.add_to_selection.assert_called_once_with([instance])
+        target.save.assert_called_once_with()
+
+    def test_facade_geometry_edit_changes_only_selected_pin_in_project_catalog(self):
+        import copy
+
+        from kicad_blocks.pcb_layout import _all, _direct, _head, _dump, parse_sexpr
+        from kicad_blocks.repository import (
+            _named_symbol_node,
+            build_project_symbol_catalog,
+            sha256_file,
+        )
+
+        catalog_path = build_project_symbol_catalog(self.project, [self.library])
+        original_asset = self.block.symbol_library.read_bytes()
+        original_shared_catalog = (
+            self.library / plugin_actions.LIBRARY_CATALOG_NAME
+        ).read_bytes()
+        tree_before = parse_sexpr(catalog_path.read_text(encoding="utf-8"))
+        symbol_name = self.block.manifest["symbol_name"]
+        symbol_before = _named_symbol_node(tree_before, symbol_name, catalog_path)
+        pin_unit = next(
+            child for child in symbol_before[1:]
+            if _head(child) == "symbol"
+            and str(child[1]).startswith(symbol_name + "_")
+            and _all(child, "pin")
+        )
+        pin = _all(pin_unit, "pin")[0]
+        pin_name = str(_direct(pin, "name")[1])
+        pin_number = str(_direct(pin, "number")[1])
+        old_at = copy.deepcopy(_direct(pin, "at"))
+        old_length = copy.deepcopy(_direct(pin, "length"))
+        expected_document = copy.deepcopy(tree_before)
+        expected_symbol = _named_symbol_node(expected_document, symbol_name, catalog_path)
+        expected_unit = next(
+            child for child in expected_symbol[1:]
+            if _head(child) == "symbol" and str(child[1]) == str(pin_unit[1])
+        )
+        expected_pin = next(
+            item for item in _all(expected_unit, "pin")
+            if str(_direct(item, "name")[1]) == pin_name
+            and str(_direct(item, "number")[1]) == pin_number
+        )
+        _direct(expected_pin, "at")[1:4] = ["22.86", "17.78", "180"]
+        _direct(expected_pin, "length")[1] = "5.08"
+
+        updated = plugin_actions._apply_facade_pin_geometry(
+            catalog_path,
+            symbol_name,
+            str(pin_unit[1]),
+            pin_name,
+            pin_number,
+            x_mm=22.86,
+            y_mm=17.78,
+            angle_degrees=180,
+            length_mm=5.08,
+            expected_sha256=sha256_file(catalog_path),
+        )
+
+        self.assertEqual(
+            parse_sexpr(catalog_path.read_text(encoding="utf-8")),
+            expected_document,
+        )
+        self.assertEqual(updated["x"], "22.86")
+        self.assertEqual(updated["y"], "17.78")
+        self.assertEqual(updated["angle"], "180")
+        self.assertEqual(updated["length"], "5.08")
+        self.assertEqual(self.block.symbol_library.read_bytes(), original_asset)
+        self.assertEqual(
+            (self.library / plugin_actions.LIBRARY_CATALOG_NAME).read_bytes(),
+            original_shared_catalog,
+        )
+        self.assertEqual(str(_direct(pin, "at")[1]), str(old_at[1]))
+        self.assertEqual(str(_direct(pin, "length")[1]), str(old_length[1]))
+
+    def test_facade_geometry_edit_rejects_concurrent_catalog_change(self):
+        from kicad_blocks.repository import build_project_symbol_catalog, sha256_file
+
+        catalog_path = build_project_symbol_catalog(self.project, [self.library])
+        symbol_name = self.block.manifest["symbol_name"]
+        symbol_tree = parse_sexpr(catalog_path.read_text(encoding="utf-8"))
+        symbol = _named_symbol_node(symbol_tree, symbol_name, catalog_path)
+        unit = next(
+            child for child in symbol[1:]
+            if _head(child) == "symbol" and _all(child, "pin")
+        )
+        pin = _all(unit, "pin")[0]
+        pin_name = str(_direct(pin, "name")[1])
+        pin_number = str(_direct(pin, "number")[1])
+        previous_hash = sha256_file(catalog_path)
+        original = catalog_path.read_text(encoding="utf-8")
+        catalog_path.write_text(original + "\n", encoding="utf-8")
+        externally_changed = catalog_path.read_text(encoding="utf-8")
+
+        with self.assertRaisesRegex(RuntimeError, "changed outside the facade editor"):
+            plugin_actions._apply_facade_pin_geometry(
+                catalog_path,
+                symbol_name,
+                str(unit[1]),
+                pin_name,
+                pin_number,
+                x_mm=25.4,
+                y_mm=25.4,
+                angle_degrees=0,
+                length_mm=2.54,
+                expected_sha256=previous_hash,
+            )
+        self.assertEqual(
+            catalog_path.read_text(encoding="utf-8"),
+            externally_changed,
+        )
+
+    def test_facade_geometry_edit_rejects_invalid_geometry_without_writing(self):
+        from kicad_blocks.repository import build_project_symbol_catalog, sha256_file
+
+        catalog_path = build_project_symbol_catalog(self.project, [self.library])
+        symbol_name = self.block.manifest["symbol_name"]
+        tree = parse_sexpr(catalog_path.read_text(encoding="utf-8"))
+        symbol = _named_symbol_node(tree, symbol_name, catalog_path)
+        unit = next(
+            child for child in symbol[1:]
+            if _head(child) == "symbol" and _all(child, "pin")
+        )
+        pin = _all(unit, "pin")[0]
+        before = catalog_path.read_bytes()
+        with self.assertRaisesRegex(ValueError, "angles must be"):
+            plugin_actions._apply_facade_pin_geometry(
+                catalog_path,
+                symbol_name,
+                str(unit[1]),
+                str(_direct(pin, "name")[1]),
+                str(_direct(pin, "number")[1]),
+                x_mm=25.4,
+                y_mm=25.4,
+                angle_degrees=45,
+                length_mm=2.54,
+                expected_sha256=sha256_file(catalog_path),
+            )
+        self.assertEqual(catalog_path.read_bytes(), before)
 
     def test_ensure_project_facade_catalog_preserves_existing_unsaved_edits(self):
         from kicad_blocks.repository import (
