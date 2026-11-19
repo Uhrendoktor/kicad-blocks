@@ -3,7 +3,6 @@ name: CI
 permissions:
   contents: write
   pull-requests: write
-  workflows: write
 
 on:
   push:
@@ -24,6 +23,7 @@ jobs:
     timeout-minutes: 5
     outputs:
       updated: ${{ steps.sync.outputs.updated }}
+      merge_tree: ${{ steps.sync.outputs.merge_tree }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -34,6 +34,7 @@ jobs:
         shell: bash
         env:
           REF_NAME: ${{ github.ref_name }}
+          REF_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
           echo "updated=false" >> "$GITHUB_OUTPUT"
@@ -52,10 +53,97 @@ jobs:
           # Current-main additions are still merged normally everywhere else;
           # follow up by restoring any additive UI contract/test coverage from main.
           if git merge -X ours --no-commit --no-ff origin/main; then
-            git commit -m "merge: synchronize strict quality PR with current main"
-            git push origin "HEAD:refs/heads/$REF_NAME"
+            # Retain current-main compatibility evidence and catalog regressions,
+            # while using the PR's typed public S-expression accessors.
+            git checkout origin/main -- docs/explanation/compatibility.md tests/test_extraction.py
+            python - <<'PY'
+          from pathlib import Path
+          import re
+
+          extraction = Path("tests/test_extraction.py")
+          source = extraction.read_text(encoding="utf-8")
+          source = source.replace(
+              "from kicad_blocks.pcb_layout import _all, _direct, _dump, _head, parse_sexpr",
+              """from kicad_blocks.sexpr import (
+              SExprList,
+              dump_sexpr as _dump,
+              parse_sexpr,
+              sexpr_all as _all,
+              sexpr_direct as _direct,
+              sexpr_head as _head,
+          )""",
+          )
+          marker = "\\n\\ndef _source_sheet"
+          helper = """\\n\\ndef _required_direct(node: SExprList, tag: str) -> SExprList:
+              child = _direct(node, tag)
+              if child is None:
+                  raise AssertionError(f"Expected a direct {tag!r} node.")
+              return child
+          """
+          if "_required_direct(" not in source:
+              if marker not in source:
+                  raise SystemExit("Could not locate the extraction test helper insertion point.")
+              source = source.replace(marker, helper + marker, 1)
+
+          replacements = {
+              'str(_direct(_direct(implementation, "sheet_instances"), "path")[1])':
+                  'str(_required_direct(_required_direct(implementation, "sheet_instances"), "path")[1])',
+              'instances = _direct(resistor, "instances")':
+                  'instances = _required_direct(resistor, "instances")',
+              'str(_direct(path, "reference")[1])':
+                  'str(_required_direct(path, "reference")[1])',
+              'stroke = _direct(rectangle, "stroke")':
+                  'stroke = _required_direct(rectangle, "stroke")',
+              'width = _direct(stroke, "width")':
+                  'width = _required_direct(stroke, "width")',
+              '_direct(_direct(rectangle, "stroke"), "width")[1]':
+                  '_required_direct(_required_direct(rectangle, "stroke"), "width")[1]',
+              'root_child_uuid = str(_direct(root_sheet, "uuid")[1])':
+                  'root_child_uuid = str(_required_direct(root_sheet, "uuid")[1])',
+              'str(_direct(_direct(root_tree, "sheet_instances"), "path")[1])':
+                  'str(_required_direct(_required_direct(root_tree, "sheet_instances"), "path")[1])',
+              'leaf_uuid = str(_direct(child_sheet, "uuid")[1])':
+                  'leaf_uuid = str(_required_direct(child_sheet, "uuid")[1])',
+              'str(_direct(_direct(child_tree, "sheet_instances"), "path")[1])':
+                  'str(_required_direct(_required_direct(child_tree, "sheet_instances"), "path")[1])',
+              'str(_direct(_direct(leaf_tree, "sheet_instances"), "path")[1])':
+                  'str(_required_direct(_required_direct(leaf_tree, "sheet_instances"), "path")[1])',
+          }
+          for old, new in replacements.items():
+              source = source.replace(old, new)
+          if "_required_direct(" not in source or "build_project_symbol_catalog" not in source:
+              raise SystemExit("The merged extraction test lost typed access or main catalog coverage.")
+          extraction.write_text(source, encoding="utf-8")
+
+          main_plugin = Path(".git")  # only a marker so this script stays independent of shell quoting
+          plugin_path = Path("plugin/kicad-blocks/kicad_blocks/plugin.py")
+          plugin_text = plugin_path.read_text(encoding="utf-8")
+          def contract_ids(text: str) -> set[str]:
+              return set(re.findall(r'contract_id\\s*=\\s*["\\']([^"\\']+)["\\']', text)) | set(
+                  re.findall(r'_kicad_ui_contract_id\\s*=\\s*["\\']([^"\\']+)["\\']', text)
+              )
+          import subprocess
+          main_text = subprocess.run(
+              ["git", "show", "origin/main:plugin/kicad-blocks/kicad_blocks/plugin.py"],
+              check=True, capture_output=True, text=True,
+          ).stdout
+          missing = sorted(contract_ids(main_text) - contract_ids(plugin_text))
+          Path("${RUNNER_TEMP}/missing-main-contract-ids.txt").write_text(
+              "\\n".join(missing) + ("\\n" if missing else ""), encoding="utf-8"
+          )
+          PY
+            git add docs/explanation/compatibility.md tests/test_extraction.py
+            git add -u
+            mkdir -p "${RUNNER_TEMP}/pr40-resolved-main-merge-tree"
+            tree_sha="$(git write-tree)"
+            main_sha="$(git rev-parse origin/main)"
+            printf '%s\\n' "$tree_sha" > "${RUNNER_TEMP}/pr40-resolved-main-merge-tree/tree-sha.txt"
+            printf '%s\\n' "$REF_SHA" > "${RUNNER_TEMP}/pr40-resolved-main-merge-tree/pr-parent-sha.txt"
+            printf '%s\\n' "$main_sha" > "${RUNNER_TEMP}/pr40-resolved-main-merge-tree/main-parent-sha.txt"
+            cp "${RUNNER_TEMP}/missing-main-contract-ids.txt" "${RUNNER_TEMP}/pr40-resolved-main-merge-tree/missing-main-contract-ids.txt"
+            echo "merge_tree=$tree_sha" >> "$GITHUB_OUTPUT"
             echo "updated=true" >> "$GITHUB_OUTPUT"
-            echo "::notice::The PR branch now includes current main; CI will rerun on the merge commit."
+            echo "::notice::The merge tree is resolved and ready for a two-parent commit through the GitHub API."
             exit 0
           fi
 
@@ -83,6 +171,15 @@ jobs:
           done < <(git diff --name-only "$merge_base" origin/main)
           echo "::error::Git reported merge conflicts with current main. The full merge worktree and conflict stages were saved as an artifact."
           exit 1
+
+      - name: Upload resolved current-main merge tree
+        if: steps.sync.outputs.merge_tree != ''
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: pr40-resolved-main-merge-tree
+          path: ${{ runner.temp }}/pr40-resolved-main-merge-tree
+          if-no-files-found: error
+          compression-level: 1
 
       - name: Upload exact main merge conflict inputs
         if: failure()
