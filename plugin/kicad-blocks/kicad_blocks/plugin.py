@@ -7152,8 +7152,9 @@ def _show_action_hub(
                 selected_record = None
                 selected_local = None
 
-        create_valid = not selection
-        if len(selection) == 1 and not symbols and project_dir is not None:
+        has_schematic = schematic is not None
+        create_valid = has_schematic and not selection
+        if has_schematic and len(selection) == 1 and not symbols and project_dir is not None:
             try:
                 create_valid = _selected_sheet_symbol_source(
                     schematic, project_dir, selection=selection
@@ -7184,24 +7185,26 @@ def _show_action_hub(
         )
 
         enabled = {
-            "manage-library": True,
+            "manage-library": has_schematic,
             "create-block": create_valid,
-            "open-implementation": one_block,
-            "configure-instance": one_block,
-            "edit-facade": True,
-            "publish-block": True,
-            "make-local-copy": one_block and selected_local is None,
-            "synchronize-local-copy": one_block and selected_local is not None,
-            "validate-libraries": True,
-            "recursive-bom": True,
-            "recursive-erc": True,
-            "apply-pcb-layout": one_has_layout,
-            "apply-multiple-pcb-layouts": multiple_have_layouts,
+            "open-implementation": has_schematic and one_block,
+            "configure-instance": has_schematic and one_block,
+            "edit-facade": has_schematic,
+            "publish-block": has_schematic,
+            "make-local-copy": has_schematic and one_block and selected_local is None,
+            "synchronize-local-copy": has_schematic and one_block and selected_local is not None,
+            "validate-libraries": has_schematic,
+            "recursive-bom": has_schematic,
+            "recursive-erc": has_schematic,
+            "apply-pcb-layout": has_schematic and one_has_layout,
+            "apply-multiple-pcb-layouts": has_schematic and multiple_have_layouts,
         }
         for action_id, button in buttons.items():
             button.configure(state="normal" if enabled.get(action_id, True) else "disabled")
 
-        if selection_error:
+        if not has_schematic:
+            status_value.set("Open a schematic in Eeschema to enable KiCad Blocks actions.")
+        elif selection_error:
             status_value.set(f"Could not read the active selection: {selection_error}")
         elif not selection:
             status_value.set(
