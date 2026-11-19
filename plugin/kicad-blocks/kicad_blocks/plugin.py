@@ -2149,10 +2149,22 @@ def _create_and_place(
                 schematic, project_dir
             )
 
-    details = _ask_create_block_details(parent, source_sheet)
-    if details is None:
-        return
-    name, description = details
+    # The source sheet is already a complete specification. Generate a
+    # readable name from its filename and add a suffix when this library already
+    # contains a block with that name; no second dialog is needed.
+    base_name = " ".join(
+        source_sheet.stem.replace("_", " ").replace("-", " ").split()
+    ).title() or "Functional Block"
+    existing_names = {
+        str(item.name).casefold()
+        for item in _list_library_records([Path(root)])
+    }
+    name = base_name
+    suffix = 2
+    while name.casefold() in existing_names:
+        name = f"{base_name} ({suffix})"
+        suffix += 1
+    description = ""
 
     # Registration can fail after the block has been written (for example, if
     # the existing project's sym-lib-table is malformed). Snapshot the two
@@ -3827,7 +3839,6 @@ def _show_block_layout_editor(
         remove_button.configure(state="normal" if has_selection else "disabled")
         default_button.configure(state="normal" if has_selection else "disabled")
         link_button.configure(state="normal" if has_selection else "disabled")
-        save_button.configure(state="normal")
 
     palette = getattr(parent, "_kicad_blocks_palette", {})
     status_label = ttk.Label(
@@ -3874,28 +3885,20 @@ def _show_block_layout_editor(
     link_button.pack(side="left", padx=(8, 0))
 
 
-    def cancel_layout_edits():
-        if changed[0] and not messagebox.askyesno(
-            "Discard layout changes",
-            "Discard the unsaved PCB layout changes?",
-            parent=dialog,
-        ):
+    def close_layout_manager():
+        # Mutations save immediately. If a previous write failed, retry here
+        # and keep the manager open while that pending change remains unsaved.
+        if changed[0] and not persist_layout_changes():
             return
         dialog.destroy()
 
     footer = ttk.Frame(frame)
     footer.grid(row=5, column=0, sticky="ew", pady=(12, 0))
     _action_button(
-        footer, "Close", cancel_layout_edits, "cancel",
-        "Close the PCB layout manager",
+        footer, "Close", close_layout_manager, "close",
+        "Close the PCB layout manager; changes are saved as you make them",
         contract_id="pcb-layout-manager.action.close",
     ).pack(side="right")
-    save_button = _action_button(
-        footer, "Save & close", lambda: None, "save",
-        "Save any pending changes and close the PCB layout manager",
-        contract_id="pcb-layout-manager.action.save-close",
-    )
-    save_button.pack(side="right", padx=(0, 8))
 
     def persist_layout_changes() -> bool:
         if not changed[0]:
@@ -3917,7 +3920,7 @@ def _show_block_layout_editor(
             else:
                 created_layout_to_open[0] = None
         except (OSError, RuntimeError, TypeError, ValueError, KeyError, StopIteration) as exc:
-            status_value.set("Save failed; use Save & close to retry.")
+            status_value.set("Automatic save failed. Close will retry; the pending change is retained.")
             messagebox.showerror("Save PCB layouts", str(exc), parent=dialog)
             update_actions()
             return False
@@ -3926,16 +3929,10 @@ def _show_block_layout_editor(
         update_actions()
         return True
 
-    def save_and_close():
-        if not persist_layout_changes():
-            return
-        dialog.destroy()
-
-    save_button.configure(command=save_and_close)
     tree.bind("<<TreeviewSelect>>", update_actions)
-    dialog.bind("<Escape>", lambda _event: cancel_layout_edits())
+    dialog.bind("<Escape>", lambda _event: close_layout_manager())
     render(layouts[0]["id"] if layouts else None)
-    dialog.protocol("WM_DELETE_WINDOW", cancel_layout_edits)
+    dialog.protocol("WM_DELETE_WINDOW", close_layout_manager)
     _set_window_geometry(dialog, 1120, 800, 980, 650)
     dialog.grab_set()
     dialog.wait_window()
@@ -4353,7 +4350,6 @@ def _show_block_variant_editor(
             default_button.configure(text="Set as default", state="normal")
         else:
             default_button.configure(text="Set as default", state="disabled")
-        save_button.configure(state="normal")
 
     def add_variant():
         details = _ask_implementation_details(dialog, record=record, allow_create=True)
@@ -4375,7 +4371,7 @@ def _show_block_variant_editor(
         if row_index is None:
             return
         if row_index == 0:
-            save_and_close(default_implementation_path())
+            finish_manager(default_implementation_path())
             return
         index = variant_index_for_row(row_index)
         if index is None:
@@ -4421,12 +4417,9 @@ def _show_block_variant_editor(
             == candidate["value"].casefold()
         ]
         if referenced_profiles:
-            messagebox.showinfo(
-                "Implementation is in use",
-                f"{candidate['value']} is referenced by: "
+            status_value.set(
+                f"Cannot remove {candidate['value']}: update these profiles first — "
                 + ", ".join(referenced_profiles)
-                + ". Change those profiles before removing this implementation.",
-                parent=dialog,
             )
             return
         if not messagebox.askyesno(
@@ -4486,7 +4479,7 @@ def _show_block_variant_editor(
                 )
                 new_implementation_to_open[0] = Path(record.path) / selected["file"]
         except (OSError, RuntimeError, TypeError, ValueError, KeyError, StopIteration) as exc:
-            status_value.set("Save failed; use Save & close to retry.")
+            status_value.set("Automatic save failed. Close will retry; the pending change is retained.")
             messagebox.showerror("Save implementations", str(exc), parent=dialog)
             update_actions()
             return False
@@ -4495,8 +4488,8 @@ def _show_block_variant_editor(
         update_actions()
         return True
 
-    def save_and_close(open_path: Path | None = None):
-        if not persist_variant_changes():
+    def finish_manager(open_path: Path | None = None):
+        if dirty[0] and not persist_variant_changes():
             return
         if open_path is not None:
             new_implementation_to_open[0] = open_path
@@ -4528,25 +4521,15 @@ def _show_block_variant_editor(
     )
     remove_button.pack(side="left", padx=(8, 0))
     def cancel_variant_edits():
-        if dirty[0] and not messagebox.askyesno(
-            "Discard implementation changes",
-            "Discard the unsaved implementation changes?",
-            parent=dialog,
-        ):
-            return
-        dialog.destroy()
+        # Variant mutations save immediately. Retry a failed write on close,
+        # and leave the dialog open if persistence still fails.
+        finish_manager()
 
     _action_button(
         actions, "Close", cancel_variant_edits, "cancel",
         "Close the implementation manager",
         contract_id="implementations-manager.action.close",
     ).pack(side="right")
-    save_button = _action_button(
-        actions, "Save & close", save_and_close, "save",
-        "Save any pending changes and close the implementation manager",
-        contract_id="implementations-manager.action.save-close",
-    )
-    save_button.pack(side="right", padx=(0, 8))
 
     tree.bind("<<TreeviewSelect>>", update_actions)
     tree.bind("<Double-1>", lambda _event: edit_variant())
@@ -5108,6 +5091,31 @@ def _show_library_browser(
     implementation_choices = [{}]
     facade_button = [None]
     open_layout_button = [None]
+    place_button = [None]
+    implementation_button = [None]
+    variants_button = [None]
+    manage_layout_button = [None]
+
+    def update_toolbar_state(record) -> None:
+        available = record is not None
+        for button in (
+            place_button[0],
+            implementation_button[0],
+            variants_button[0],
+            manage_layout_button[0],
+        ):
+            if button is not None:
+                button.configure(state="normal" if available else "disabled")
+        if open_layout_button[0] is not None:
+            open_layout_button[0].configure(
+                state="normal" if available and _layout_choices(record) else "disabled"
+            )
+        if facade_button[0] is not None:
+            facade_button[0].configure(
+                state="normal"
+                if available and selected_project_catalog[0] is not None
+                else "disabled"
+            )
 
     def draw_facade_for_selection():
         record = selected_record[0]
@@ -5355,6 +5363,7 @@ def _show_library_browser(
                 tree.selection_set(preferred_id)
                 tree.focus(preferred_id)
         set_details(preferred)
+        update_toolbar_state(preferred)
 
     def refresh_records():
         try:
@@ -5382,18 +5391,7 @@ def _show_library_browser(
         selection = tree.selection()
         record = records_by_id.get(selection[0]) if selection else None
         set_details(record)
-        if open_layout_button[0] is not None:
-            open_layout_button[0].configure(
-                state="normal" if record is not None and _layout_choices(record) else "disabled"
-            )
-        if facade_button[0] is not None:
-            facade_button[0].configure(
-                state=(
-                    "normal"
-                    if record is not None and selected_project_catalog[0] is not None
-                    else "disabled"
-                )
-            )
+        update_toolbar_state(record)
 
     def place_selected(_event=None):
         record = selected_record[0]
@@ -5703,46 +5701,51 @@ def _show_library_browser(
 
     action_toolbar = ttk.Frame(outer, padding=(0, 7, 0, 0))
     action_toolbar.pack(fill="x")
-    place_button = _action_button(
+    place_button[0] = _action_button(
         action_toolbar, "Place block", place_selected, "place",
+        state="disabled",
         "Create the selected facade at the active sheet centre and select it",
         contract_id="library-browser.action.place",
         style="Primary.TButton",
     )
-    place_button.pack(side="left")
-    implementation_button = _action_button(
+    place_button[0].pack(side="left")
+    implementation_button[0] = _action_button(
         action_toolbar, "Implementation", open_implementation, "implementation",
+        state="disabled",
         "Open the base or a named circuit implementation",
         contract_id="library-browser.action.implementation",
     )
-    implementation_button.pack(side="left", padx=(4, 0))
+    implementation_button[0].pack(side="left", padx=(4, 0))
     facade_button[0] = _action_button(
         action_toolbar, "Edit facade", edit_facade, "facade",
         "Open the generated library facade in KiCad Symbol Editor",
         contract_id="library-browser.action.facade",
     )
     facade_button[0].pack(side="left", padx=(4, 0))
-    variants_button = _action_button(
+    variants_button[0] = _action_button(
         action_toolbar, "Variants", edit_variants, "variants",
+        state="disabled",
         "Add, edit, remove, or set the default circuit implementation",
         contract_id="library-browser.action.variants",
     )
-    variants_button.pack(side="left", padx=(4, 0))
+    variants_button[0].pack(side="left", padx=(4, 0))
     ttk.Separator(action_toolbar, orient="vertical").pack(
         side="left", fill="y", padx=7, pady=4
     )
     open_layout_button[0] = _action_button(
         action_toolbar, "Open PCB", open_layout, "pcb",
+        state="disabled",
         "Open one of the block's stored PCB layouts",
         contract_id="library-browser.action.open-pcb",
     )
     open_layout_button[0].pack(side="left", padx=(4, 0))
-    manage_layout_button = _action_button(
+    manage_layout_button[0] = _action_button(
         action_toolbar, "PCB layouts", manage_layouts, "layouts",
+        state="disabled",
         "Add and associate PCB layouts with implementations",
         contract_id="library-browser.action.manage-pcb-layouts",
     )
-    manage_layout_button.pack(side="left", padx=(4, 0))
+    manage_layout_button[0].pack(side="left", padx=(4, 0))
     ttk.Separator(action_toolbar, orient="vertical").pack(
         side="left", fill="y", padx=7, pady=4
     )
