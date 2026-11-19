@@ -78,6 +78,7 @@ jobs:
           name: pr40-main-merge-conflicts
           path: ${{ runner.temp }}/main-merge-conflicts
           if-no-files-found: ignore
+          include-hidden-files: true
           compression-level: 1
 
   python-and-kicad:
