@@ -49,9 +49,7 @@ ADD_LAYOUT_CONTROLS = {
 
 
 _load_tkinter = plugin_actions.load_tkinter
-_ask_layout_details = cast(
-    Callable[..., dict[str, str] | None], plugin_actions.ask_layout_details
-)
+_ask_layout_details = cast(Callable[..., dict[str, str] | None], plugin_actions.ask_layout_details)
 
 
 def _new_parent_and_record(tmp_path: Path) -> tuple[Tk, BlockRecord]:

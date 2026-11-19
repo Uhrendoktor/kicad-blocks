@@ -39,13 +39,28 @@ from kicad_blocks.repository import BlockRecord
 from ui_contracts import Misc, MonkeyPatch, TkOption
 
 
-def _profile_inputs() -> tuple[list[BlockParameter], list[BlockVariantManifest], list[ResolvedBlockLayout]]:
+def _profile_inputs() -> tuple[
+    list[BlockParameter], list[BlockVariantManifest], list[ResolvedBlockLayout]
+]:
     return (
         parse_parameters("OUTPUT_VOLTAGE:number=3.3"),
-        [{"value": "3V3", "file": "3v3.kicad_sch"}, {"value": "1V8", "file": "1v8.kicad_sch"}],
         [
-            {"id": "standard", "name": "Standard", "file": "standard.kicad_pcb", "project_file": None},
-            {"id": "compact", "name": "Compact", "file": "compact.kicad_pcb", "project_file": None},
+            {"value": "3V3", "file": "3v3.kicad_sch"},
+            {"value": "1V8", "file": "1v8.kicad_sch"},
+        ],
+        [
+            {
+                "id": "standard",
+                "name": "Standard",
+                "file": "standard.kicad_pcb",
+                "project_file": None,
+            },
+            {
+                "id": "compact",
+                "name": "Compact",
+                "file": "compact.kicad_pcb",
+                "project_file": None,
+            },
         ],
     )
 

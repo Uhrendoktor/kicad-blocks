@@ -14,7 +14,14 @@ sys.path.insert(0, str(ROOT / "plugin" / "kicad-blocks"))
 sys.path.insert(0, str(ROOT / "tests"))
 
 from kicad_blocks import plugin as plugin_actions
-from ui_contracts import ButtonContract, MonkeyPatch, Tk, Toplevel, UiTestContext, assert_control_coverage
+from ui_contracts import (
+    ButtonContract,
+    MonkeyPatch,
+    Tk,
+    Toplevel,
+    UiTestContext,
+    assert_control_coverage,
+)
 
 pytestmark = pytest.mark.skipif(
     not os.environ.get("DISPLAY"),
