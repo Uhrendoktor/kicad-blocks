@@ -216,6 +216,10 @@ class HierarchicalSheetExtractionTests(unittest.TestCase):
         self.assertNotIn('(name "GND"', project_symbol_text)
         self.assertIn('(name "VIN"', project_symbol_text)
         self.assertIn('(name "VOUT"', project_symbol_text)
+        # KiCad requires pin electrical types to remain bare atoms after the
+        # edited shared facade is copied into the combined project catalog.
+        self.assertIn("(pin input line", project_symbol_text)
+        self.assertNotIn('(pin "input" line', project_symbol_text)
 
         # The project's combined library is updated. Existing symbols already
         # embedded in a placed schematic are a separate KiCad document cache;
