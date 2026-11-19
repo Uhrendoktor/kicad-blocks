@@ -2520,6 +2520,12 @@ def _edit_facade_symbol(
     for label, variable, column in fields:
         ttk.Label(editor, text=label).grid(row=0, column=column, sticky="w", padx=(0, 5))
         entry = ttk.Entry(editor, textvariable=variable, width=12)
+        entry._kicad_ui_contract_id = {
+            "X (mm)": "facade-editor.x",
+            "Y (mm)": "facade-editor.y",
+            "Angle": "facade-editor.angle",
+            "Length (mm)": "facade-editor.length",
+        }[label]
         entry.grid(row=0, column=column + 1, sticky="ew", padx=(0, 10))
         entries[label] = entry
 
@@ -7237,7 +7243,7 @@ def run_action(action: str, *, editor_window_id: str | None = None) -> None:
             _create_and_place(
                 library_root, schematic, kicad, project_dir, root, editor_window_id
             )
-        else:
+        elif action != "edit-facade":
             root.withdraw()
         if action == "open-implementation":
             _open_selected_block_implementation(
@@ -7269,13 +7275,16 @@ def run_action(action: str, *, editor_window_id: str | None = None) -> None:
                     record,
                     kicad,
                     project_catalog=project_catalog,
-                    close_browser=root.destroy,
+                    parent=root,
                 )
                 if opened:
-                    LOG.info(
-                        "Edit facade: opened %s in Symbol Editor.",
-                        f"{LIBRARY_NICKNAME}:{record.manifest['symbol_name']}",
-                    )
+                    root.title(f"KiCad Blocks — Facade layout: {record.name}")
+                    ttk.Label(
+                        root,
+                        text="Edit the selected block's facade pin geometry. Changes are saved as you apply them.",
+                        padding=12,
+                    ).pack(fill="x")
+                    root.mainloop()
         elif action == "publish-block":
             _publish_block(library_paths, kicad, project_dir, root, schematic)
         elif action == "recursive-bom":
