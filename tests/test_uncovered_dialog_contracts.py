@@ -15,6 +15,8 @@ if TYPE_CHECKING:
         BlockLayoutPlacementSource,
     )
 
+from _pytest.monkeypatch import MonkeyPatch
+
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -147,7 +149,7 @@ def _pcb_batch_placement_source(
     return {"placements": [_pcb_placement_source(item) for item in result["placements"]]}
 
 
-def _single_layout_context(monkeypatch, tmp_path: Path, *, open_after_merge: bool):
+def _single_layout_context(monkeypatch: MonkeyPatch, tmp_path: Path, *, open_after_merge: bool):
     parent = object()
     instance = _instance("U1")
     block = _block("Power stage")
@@ -222,7 +224,7 @@ def _single_layout_context(monkeypatch, tmp_path: Path, *, open_after_merge: boo
 
 @pytest.mark.parametrize("open_after_merge", [False, True])
 def test_single_pcb_layout_prompts_map_anchor_rotation_and_confirms_open(
-    monkeypatch, tmp_path, open_after_merge
+    monkeypatch: MonkeyPatch, tmp_path: Path, open_after_merge
 ):
     (
         parent,
@@ -278,7 +280,7 @@ def test_single_pcb_layout_prompts_map_anchor_rotation_and_confirms_open(
 
 @pytest.mark.parametrize("cancel_at", [0, 1, 2])
 def test_single_pcb_layout_cancelling_any_mapping_prompt_stops_before_merge(
-    monkeypatch, tmp_path, cancel_at
+    monkeypatch: MonkeyPatch, tmp_path: Path, cancel_at
 ):
     parent = object()
     board = tmp_path / "project.kicad_pcb"
@@ -345,7 +347,7 @@ def test_single_pcb_layout_cancelling_any_mapping_prompt_stops_before_merge(
     assert confirm_calls == []
 
 
-def _batch_context(monkeypatch, tmp_path: Path, *, open_after_merge: bool):
+def _batch_context(monkeypatch: MonkeyPatch, tmp_path: Path, *, open_after_merge: bool):
     parent = object()
     instances = [_instance("U1"), _instance("U2")]
     blocks = {item.reference: _block(f"Power stage {item.reference}") for item in instances}
@@ -424,7 +426,7 @@ def _batch_context(monkeypatch, tmp_path: Path, *, open_after_merge: bool):
 
 @pytest.mark.parametrize("open_after_merge", [False, True])
 def test_batch_pcb_layout_prompts_all_instances_and_confirms_open(
-    monkeypatch, tmp_path, open_after_merge
+    monkeypatch: MonkeyPatch, tmp_path: Path, open_after_merge
 ):
     parent, _instances, blocks, board, output, _sidecar, calls = _batch_context(
         monkeypatch, tmp_path, open_after_merge=open_after_merge
@@ -488,7 +490,7 @@ def test_batch_pcb_layout_prompts_all_instances_and_confirms_open(
 
 @pytest.mark.parametrize("cancel_at", [0, 1, 2, 3, 4, 5])
 def test_batch_pcb_layout_cancelling_any_mapping_prompt_prevents_merge(
-    monkeypatch, tmp_path, cancel_at
+    monkeypatch: MonkeyPatch, tmp_path: Path, cancel_at
 ):
     parent = object()
     instances = [_instance("U1"), _instance("U2")]
@@ -562,7 +564,7 @@ class _ActionRoot:
         self.destroyed = True
 
 
-def _patch_action_environment(monkeypatch, *, schematic):
+def _patch_action_environment(monkeypatch: MonkeyPatch, *, schematic):
     root = _ActionRoot()
     kicad = SimpleNamespace(get_schematic=lambda: schematic)
     monkeypatch.setattr(plugin_actions, "_load_tkinter", lambda: None)
@@ -583,7 +585,7 @@ def _patch_action_environment(monkeypatch, *, schematic):
     return root, kicad
 
 
-def test_run_action_missing_schematic_shows_attention_warning_and_closes_root(monkeypatch):
+def test_run_action_missing_schematic_shows_attention_warning_and_closes_root(monkeypatch: MonkeyPatch):
     root, _kicad = _patch_action_environment(monkeypatch, schematic=None)
     warnings = []
     monkeypatch.setattr(
@@ -603,7 +605,7 @@ def test_run_action_missing_schematic_shows_attention_warning_and_closes_root(mo
     assert root.destroyed
 
 
-def test_run_action_unexpected_failure_shows_error_and_closes_root(monkeypatch, tmp_path):
+def test_run_action_unexpected_failure_shows_error_and_closes_root(monkeypatch: MonkeyPatch, tmp_path: Path):
     schematic = object()
     root, _kicad = _patch_action_environment(monkeypatch, schematic=schematic)
     library = tmp_path / "library"

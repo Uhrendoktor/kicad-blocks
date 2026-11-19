@@ -988,7 +988,7 @@ def test_open_pcb_chooser_manage_layouts_opens_manager_and_refreshes(
         root.destroy()
 
 
-def test_library_browser_refresh_error_keeps_existing_records(monkeypatch, tmp_path):
+def test_library_browser_refresh_error_keeps_existing_records(monkeypatch: MonkeyPatch, tmp_path: Path):
     root, context, _records, _library, _project = _new_browser(monkeypatch, tmp_path)
     errors = []
     monkeypatch.setattr(
@@ -1021,7 +1021,7 @@ def test_library_browser_refresh_error_keeps_existing_records(monkeypatch, tmp_p
         root.destroy()
 
 
-def test_place_block_reload_warning_does_not_start_native_placement(monkeypatch, tmp_path):
+def test_place_block_reload_warning_does_not_start_native_placement(monkeypatch: MonkeyPatch, tmp_path: Path):
     root, context, _records, _library, _project = _new_browser(monkeypatch, tmp_path)
     warnings = []
     placements = []
@@ -1065,7 +1065,7 @@ def test_place_block_reload_warning_does_not_start_native_placement(monkeypatch,
         root.destroy()
 
 
-def test_place_block_registration_failure_shows_error_and_keeps_browser_open(monkeypatch, tmp_path):
+def test_place_block_registration_failure_shows_error_and_keeps_browser_open(monkeypatch: MonkeyPatch, tmp_path: Path):
     root, context, _records, _library, _project = _new_browser(monkeypatch, tmp_path)
     errors = []
 
@@ -1096,7 +1096,7 @@ def test_place_block_registration_failure_shows_error_and_keeps_browser_open(mon
         root.destroy()
 
 
-def test_open_implementation_registration_failure_shows_error(monkeypatch, tmp_path):
+def test_open_implementation_registration_failure_shows_error(monkeypatch: MonkeyPatch, tmp_path: Path):
     root, context, _records, _library, _project = _new_browser(monkeypatch, tmp_path)
     errors = []
 
@@ -1130,7 +1130,7 @@ def test_open_implementation_registration_failure_shows_error(monkeypatch, tmp_p
         root.destroy()
 
 
-def test_open_default_implementation_launch_failure_shows_error(monkeypatch, tmp_path):
+def test_open_default_implementation_launch_failure_shows_error(monkeypatch: MonkeyPatch, tmp_path: Path):
     root, context, records, _library, _project = _new_browser(monkeypatch, tmp_path)
     errors = []
     records[0].manifest["variants"] = []
@@ -1166,7 +1166,7 @@ def test_open_default_implementation_launch_failure_shows_error(monkeypatch, tmp
         root.destroy()
 
 
-def test_open_named_implementation_launch_failure_shows_error_after_chooser(monkeypatch, tmp_path):
+def test_open_named_implementation_launch_failure_shows_error_after_chooser(monkeypatch: MonkeyPatch, tmp_path: Path):
     root, context, records, _library, _project = _new_browser(monkeypatch, tmp_path)
     records[0].manifest["variants"] = [{"value": "1V8", "file": "implementation_1v8.kicad_sch"}]
     errors = []
@@ -1228,7 +1228,7 @@ def _find_dialog_exists(root, title: str) -> bool:
     )
 
 
-def test_edit_facade_failure_shows_recoverable_error(monkeypatch, tmp_path):
+def test_edit_facade_failure_shows_recoverable_error(monkeypatch: MonkeyPatch, tmp_path: Path):
     root, context, _records, _library, _project = _new_browser(monkeypatch, tmp_path)
     errors = []
 
@@ -1258,7 +1258,7 @@ def test_edit_facade_failure_shows_recoverable_error(monkeypatch, tmp_path):
         root.destroy()
 
 
-def test_edit_facade_without_native_handoff_shows_guidance(monkeypatch, tmp_path):
+def test_edit_facade_without_native_handoff_shows_guidance(monkeypatch: MonkeyPatch, tmp_path: Path):
     root, context, _records, _library, _project = _new_browser(monkeypatch, tmp_path)
     notices: list[tuple[str, str, Misc | None]] = []
 
@@ -1286,7 +1286,7 @@ def test_edit_facade_without_native_handoff_shows_guidance(monkeypatch, tmp_path
         root.destroy()
 
 
-def test_manage_pcb_layouts_failure_shows_error_and_preserves_browser(monkeypatch, tmp_path):
+def test_manage_pcb_layouts_failure_shows_error_and_preserves_browser(monkeypatch: MonkeyPatch, tmp_path: Path):
     root, context, _records, _library, _project = _new_browser(monkeypatch, tmp_path)
     errors = []
 
@@ -1316,7 +1316,7 @@ def test_manage_pcb_layouts_failure_shows_error_and_preserves_browser(monkeypatc
         root.destroy()
 
 
-def test_manage_implementations_failure_shows_error_and_preserves_browser(monkeypatch, tmp_path):
+def test_manage_implementations_failure_shows_error_and_preserves_browser(monkeypatch: MonkeyPatch, tmp_path: Path):
     root, context, _records, _library, _project = _new_browser(monkeypatch, tmp_path)
     errors = []
 
@@ -1346,7 +1346,7 @@ def test_manage_implementations_failure_shows_error_and_preserves_browser(monkey
         root.destroy()
 
 
-def test_open_pcb_layout_launch_failure_shows_error_after_chooser(monkeypatch, tmp_path):
+def test_open_pcb_layout_launch_failure_shows_error_after_chooser(monkeypatch: MonkeyPatch, tmp_path: Path):
     layouts = [{"id": "default-pcb", "name": "Default", "file": "default.kicad_pcb"}]
     root, context, _records, _library, _project = _new_browser(
         monkeypatch, tmp_path, layouts=layouts

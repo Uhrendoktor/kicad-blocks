@@ -205,7 +205,7 @@ def _select_mode(root, context, mode: str):
 
 
 def test_existing_schematic_source_is_returned_and_non_create_mode_has_no_mode_selector(
-    monkeypatch, tmp_path
+    monkeypatch: MonkeyPatch, tmp_path
 ):
     source = tmp_path / "existing.kicad_sch"
     source.write_text("(kicad_sch (version 20250114))\n", encoding="utf-8")
