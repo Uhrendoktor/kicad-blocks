@@ -46,7 +46,7 @@ class VerifyVisualBundleTests(unittest.TestCase):
             "library-browser-light.png",
             "library-folders-light.png",
             "implementation-variants-light.png",
-            "create-block-form-light.png",
+            "facade-editor-light.png",
         }
         self.assertTrue(expected.issubset(ASSET_NAMES))
 
