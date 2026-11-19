@@ -45,6 +45,7 @@ LIBRARY_ASSERTED_BUTTONS = {
     "library-browser.action.place",
     "library-browser.action.implementation",
     "library-browser.action.facade",
+    "library-browser.action.publish",
     "library-browser.action.variants",
     "library-browser.action.open-pcb",
     "library-browser.action.manage-pcb-layouts",
@@ -193,6 +194,95 @@ def test_library_browser_search_filters_records_and_updates_count(monkeypatch, t
             expected_summary="1 libraries  ·  1 of 2 blocks",
         ).run(context)
         assert context.require_widget("library-browser.selected-name").cget("text") == "USB power block"
+        assert context.require_widget("library-browser.action.publish").cget("state").__str__() == "normal"
+    finally:
+        root.destroy()
+
+
+def test_library_browser_publish_button_publishes_selected_record_and_reports_inline(
+    monkeypatch, tmp_path
+):
+    root, context, _records, _library, _project = _new_browser(monkeypatch, tmp_path)
+    _select_first_record(context)
+    calls = []
+    monkeypatch.setattr(
+        plugin_actions,
+        "_publish_record",
+        lambda _roots, record, _kicad, _project, schematic: (
+            calls.append((record.manifest["block_id"], schematic))
+            or {
+                "record": record,
+                "refresh": {"version": 7},
+                "instances": {"updated": ["X1"], "topology_skipped": ["X2"]},
+                "sync_error": None,
+            }
+        ),
+    )
+    monkeypatch.setattr(
+        plugin_actions.messagebox,
+        "showinfo",
+        lambda *_args, **_kwargs: pytest.fail("Success must not be a popup."),
+    )
+    monkeypatch.setattr(
+        plugin_actions.messagebox,
+        "showwarning",
+        lambda *_args, **_kwargs: pytest.fail("Publish status must not be a popup."),
+    )
+    try:
+        ButtonContract(
+            contract_id="library-browser.action.publish",
+            expected_action="refresh",
+            destroys_window=False,
+            expected_label="Publish",
+        ).run(context)
+        status = context.require_widget("library-browser.status")
+        variable = str(status.cget("textvariable"))
+        message = status.getvar(variable)
+        assert "Published USB power block" in message
+        assert "revision 7" in message
+        assert "Updated 1 placed instance" in message
+        assert "X2" in message and "explicit pin migration" in message
+        assert calls == [("usb-power", None)]
+    finally:
+        root.destroy()
+
+
+def test_publish_button_is_disabled_when_browser_has_no_matching_records(monkeypatch, tmp_path):
+    root, context, _records, _library, _project = _new_browser(monkeypatch, tmp_path)
+    try:
+        EntryInputContract(
+            contract_id="library-browser.search",
+            value="no-such-block",
+            results_contract_id="library-browser.results",
+            expected_result_count=0,
+            summary_contract_id="library-browser.summary",
+            expected_summary="1 libraries  ·  0 of 2 blocks",
+        ).run(context)
+        assert context.require_widget("library-browser.action.publish").cget("state").__str__() == "disabled"
+    finally:
+        root.destroy()
+
+
+def test_library_browser_disables_block_actions_when_filter_has_no_results(monkeypatch, tmp_path):
+    root, context, _records, _library, _project = _new_browser(monkeypatch, tmp_path)
+    try:
+        EntryInputContract(
+            contract_id="library-browser.search",
+            value="no-such-block",
+            results_contract_id="library-browser.results",
+            expected_result_count=0,
+            summary_contract_id="library-browser.summary",
+            expected_summary="1 libraries  ·  0 of 2 blocks",
+        ).run(context)
+        for contract_id in (
+            "library-browser.action.place",
+            "library-browser.action.implementation",
+            "library-browser.action.facade",
+            "library-browser.action.publish",
+            "library-browser.action.variants",
+            "library-browser.action.manage-pcb-layouts",
+        ):
+            assert context.require_widget(contract_id).cget("state").__str__() == "disabled"
     finally:
         root.destroy()
 
@@ -288,6 +378,40 @@ def test_place_button_registers_selected_block_and_starts_native_placement(monke
         root.destroy()
 
 
+def test_publish_button_publishes_the_selected_record_without_a_picker(monkeypatch, tmp_path):
+    root, context, records, _library, _project = _new_browser(monkeypatch, tmp_path)
+    outcome = {
+        "record": records[0],
+        "refresh": {"version": 4, "changed": ["implementation.kicad_sch"]},
+        "instances": {"updated": ["X1"], "topology_skipped": []},
+        "sync_error": None,
+    }
+    monkeypatch.setattr(
+        plugin_actions,
+        "_publish_record",
+        lambda *args: (context.action_calls.append(("publish", args[1].manifest["block_id"])) or outcome),
+    )
+    monkeypatch.setattr(
+        plugin_actions.messagebox,
+        "showinfo",
+        lambda *_args, **_kwargs: pytest.fail("Publish success must not use a popup."),
+    )
+    try:
+        _select_first_record(context)
+        ButtonContract(
+            contract_id="library-browser.action.publish",
+            expected_action=(("publish", "usb-power"), "refresh"),
+            destroys_window=False,
+            expected_label="Publish",
+        ).run(context)
+        status = context.require_widget("library-browser.status")
+        variable = str(status.cget("textvariable"))
+        assert "Published USB power block" in status.getvar(variable)
+        assert "Updated 1 placed instance" in status.getvar(variable)
+    finally:
+        root.destroy()
+
+
 def test_implementation_button_registers_and_opens_default_document(monkeypatch, tmp_path):
     root, context, _records, _library_root, _project = _new_browser(monkeypatch, tmp_path)
     context.action_calls.clear()
@@ -328,6 +452,110 @@ def test_edit_facade_button_targets_selected_record(monkeypatch, tmp_path):
         ).run(context)
     finally:
         root.destroy()
+
+
+def test_facade_editor_exposes_geometry_fields_and_saves_immediately(monkeypatch, tmp_path):
+    from kicad_blocks.model import parse_pins
+    from kicad_blocks.repository import (
+        build_project_symbol_catalog,
+        create_block,
+    )
+
+    plugin_actions._load_tkinter()
+    monkeypatch.setattr(plugin_actions, "_create_action_icon", lambda *_args: None)
+    library_root = tmp_path / "facade-library"
+    project_dir = tmp_path / "facade-project"
+    library_root.mkdir()
+    project_dir.mkdir()
+    record = create_block(
+        library_root,
+        "Facade layout test",
+        parse_pins("VIN:input, GND:passive, VOUT:output"),
+    )
+    project_catalog = build_project_symbol_catalog(project_dir, [library_root])
+    kicad = SimpleNamespace()
+    reload_library = []
+    monkeypatch.setattr(
+        plugin_actions,
+        "_reload_symbol_library",
+        lambda actual_kicad, nickname: reload_library.append((actual_kicad, nickname)) or True,
+    )
+
+    owner = plugin_actions.tk.Tk()
+    try:
+        assert plugin_actions._edit_facade_symbol(
+            record,
+            kicad,
+            project_catalog=project_catalog,
+            parent=owner,
+        )
+        owner.update_idletasks()
+        owner.update()
+        dialog = next(
+            child for child in owner.winfo_children()
+            if child.winfo_class() == "Toplevel"
+            and child.title() == f"Facade pin layout — {record.name}"
+        )
+        context = UiTestContext(dialog)
+        WindowContract(
+            title=f"Facade pin layout — {record.name}",
+            screen_id="facade-editor",
+            required_widget_ids=(
+                "facade-editor.pins",
+                "facade-editor.x",
+                "facade-editor.y",
+                "facade-editor.angle",
+                "facade-editor.length",
+                "facade-editor.status",
+                "facade-editor.action.apply",
+                "facade-editor.action.close",
+            ),
+        ).run(context)
+
+        table = context.require_widget("facade-editor.pins")
+        selected = table.get_children()[0]
+        table.selection_set(selected)
+        table.event_generate("<<TreeviewSelect>>")
+        dialog.update()
+        x_entry = context.require_widget("facade-editor.x")
+        y_entry = context.require_widget("facade-editor.y")
+        angle_entry = context.require_widget("facade-editor.angle")
+        length_entry = context.require_widget("facade-editor.length")
+        for entry, value in (
+            (x_entry, "25.4"),
+            (y_entry, "17.78"),
+            (angle_entry, "180"),
+            (length_entry, "5.08"),
+        ):
+            entry.delete(0, "end")
+            entry.insert(0, value)
+
+        ButtonContract(
+            contract_id="facade-editor.action.apply",
+            expected_action=None,
+            destroys_window=False,
+            expected_label="Apply pin geometry",
+        ).run(context)
+
+        status = context.require_widget("facade-editor.status")
+        status_var = str(status.cget("textvariable"))
+        assert "Saved" in status.getvar(status_var)
+        assert reload_library == [(kicad, plugin_actions.LIBRARY_NICKNAME)]
+        catalog_text = project_catalog.read_text(encoding="utf-8")
+        assert "(at 25.4 17.78 180)" in catalog_text
+        assert "(length 5.08)" in catalog_text
+        assert record.symbol_library.read_bytes() != project_catalog.read_bytes() or (
+            record.symbol_library.read_text(encoding="utf-8")
+            != catalog_text
+        )
+        ButtonContract(
+            contract_id="facade-editor.action.close",
+            expected_action=None,
+            destroys_window=True,
+            expected_label="Close",
+        ).run(context)
+    finally:
+        owner.destroy()
 
 
 def test_open_pcb_button_creates_chooser_for_selected_block(monkeypatch, tmp_path):
@@ -761,13 +989,10 @@ def test_open_pcb_chooser_manage_layouts_opens_manager_and_refreshes(
 
 def test_library_browser_refresh_error_keeps_existing_records(monkeypatch, tmp_path):
     root, context, _records, _library, _project = _new_browser(monkeypatch, tmp_path)
-    errors = []
     monkeypatch.setattr(
         plugin_actions.messagebox,
         "showerror",
-        lambda title, message, **kwargs: errors.append(
-            (title, str(message), kwargs.get("parent"))
-        ),
+        lambda *_args, **_kwargs: pytest.fail("Refresh failures must be shown inline."),
     )
 
     def fail_refresh(_roots=None):
@@ -782,10 +1007,10 @@ def test_library_browser_refresh_error_keeps_existing_records(monkeypatch, tmp_p
             destroys_window=False,
             expected_label="Refresh",
         ).run(context)
-        assert len(errors) == 1
-        assert errors[0][0] == "Refresh Block Library"
-        assert "library folder is temporarily unavailable" in errors[0][1]
-        assert errors[0][2] is not None and errors[0][2].winfo_exists()
+        status = context.require_widget("library-browser.status")
+        variable = str(status.cget("textvariable"))
+        assert "Could not refresh registered libraries" in status.getvar(variable)
+        assert "library folder is temporarily unavailable" in status.getvar(variable)
         assert context.require_widget("library-browser.results").get_children()
         assert "2 of 2 blocks" in context.require_widget("library-browser.summary").getvar(
             context.require_widget("library-browser.summary").cget("textvariable")
@@ -794,13 +1019,11 @@ def test_library_browser_refresh_error_keeps_existing_records(monkeypatch, tmp_p
         root.destroy()
 
 
-def test_place_block_reload_warning_does_not_start_native_placement(monkeypatch, tmp_path):
+def test_place_block_reload_failure_uses_inline_status_without_popup(monkeypatch, tmp_path):
     root, context, _records, _library, _project = _new_browser(monkeypatch, tmp_path)
-    warnings = []
     placements = []
     monkeypatch.setattr(
-        plugin_actions,
-        "_register_block",
+        plugin_actions, "_register_block",
         lambda *_args, **_kwargs: context.action_calls.append("registered"),
     )
     monkeypatch.setattr(plugin_actions, "_LAST_LIBRARY_RELOAD_OK", False)
@@ -812,13 +1035,15 @@ def test_place_block_reload_warning_does_not_start_native_placement(monkeypatch,
     monkeypatch.setattr(
         plugin_actions.messagebox,
         "showwarning",
-        lambda title, message, **kwargs: warnings.append(
-            (title, str(message), kwargs.get("parent"))
-        ),
+        lambda *_args, **_kwargs: pytest.fail("Placement feedback must not use a popup."),
     )
     monkeypatch.setattr(
-        plugin_actions,
-        "_start_native_symbol_placement",
+        plugin_actions.messagebox,
+        "showinfo",
+        lambda *_args, **_kwargs: pytest.fail("Placement success must not use a popup."),
+    )
+    monkeypatch.setattr(
+        plugin_actions, "_start_native_symbol_placement",
         lambda *_args, **_kwargs: placements.append(True),
     )
     try:
@@ -829,20 +1054,51 @@ def test_place_block_reload_warning_does_not_start_native_placement(monkeypatch,
             destroys_window=False,
             expected_label="Place block",
         ).run(context)
-        assert len(warnings) == 1
-        assert warnings[0][0] == "Block library saved"
-        assert warnings[0][1] == "Restart Eeschema to reload the project symbol table."
-        assert warnings[0][2] is not None and warnings[0][2].winfo_exists()
+        status = context.require_widget("library-browser.status")
+        variable = str(status.cget("textvariable"))
+        assert status.getvar(variable) == "Restart Eeschema to reload the project symbol table."
         assert placements == []
     finally:
         root.destroy()
 
 
-def test_place_block_registration_failure_shows_error_and_keeps_browser_open(
+def test_place_button_reports_ready_state_without_success_popup(monkeypatch, tmp_path):
+    root, context, _records, _library, _project = _new_browser(monkeypatch, tmp_path)
+    monkeypatch.setattr(
+        plugin_actions, "_register_block",
+        lambda *_args, **_kwargs: context.action_calls.append("registered"),
+    )
+    monkeypatch.setattr(plugin_actions, "_LAST_LIBRARY_RELOAD_OK", True)
+    monkeypatch.setattr(plugin_actions, "_minimize_placement_windows", lambda _window: [])
+    monkeypatch.setattr(
+        plugin_actions, "_start_native_symbol_placement",
+        lambda *_args, **_kwargs: (context.action_calls.append("placement-started") or object(), False),
+    )
+    monkeypatch.setattr(
+        plugin_actions.messagebox,
+        "showinfo",
+        lambda *_args, **_kwargs: pytest.fail("Placement success must not use a popup."),
+    )
+    try:
+        _select_first_record(context)
+        ButtonContract(
+            contract_id="library-browser.action.place",
+            expected_action=("registered", "placement-started"),
+            destroys_window=False,
+            expected_label="Place block",
+        ).run(context)
+        status = context.require_widget("library-browser.status")
+        variable = str(status.cget("textvariable"))
+        assert "active sheet center" in status.getvar(variable)
+        assert "selected it in Eeschema" in status.getvar(variable)
+    finally:
+        root.destroy()
+
+
+def test_place_block_registration_failure_uses_inline_status_and_keeps_browser_open(
     monkeypatch, tmp_path
 ):
     root, context, _records, _library, _project = _new_browser(monkeypatch, tmp_path)
-    errors = []
 
     def fail_register(*_args, **_kwargs):
         context.action_calls.append("registration-failed")
@@ -852,9 +1108,7 @@ def test_place_block_registration_failure_shows_error_and_keeps_browser_open(
     monkeypatch.setattr(
         plugin_actions.messagebox,
         "showerror",
-        lambda title, message, **kwargs: errors.append(
-            (title, str(message), kwargs.get("parent"))
-        ),
+        lambda *_args, **_kwargs: pytest.fail("Recoverable placement failures must be inline."),
     )
     try:
         _select_first_record(context)
@@ -864,10 +1118,10 @@ def test_place_block_registration_failure_shows_error_and_keeps_browser_open(
             destroys_window=False,
             expected_label="Place block",
         ).run(context)
-        assert len(errors) == 1
-        assert errors[0][0] == "Place Block"
-        assert errors[0][1] == "project library table could not be written"
-        assert errors[0][2] is not None and errors[0][2].winfo_exists()
+        status = context.require_widget("library-browser.status")
+        variable = str(status.cget("textvariable"))
+        assert "Placement could not complete" in status.getvar(variable)
+        assert "project library table could not be written" in status.getvar(variable)
         assert _select_first_record(context) is not None
     finally:
         root.destroy()

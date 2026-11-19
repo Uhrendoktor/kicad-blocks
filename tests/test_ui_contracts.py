@@ -6,6 +6,7 @@ import json
 import os
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -64,14 +65,57 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-def _new_hub(monkeypatch):
+def _symbol(reference="X1"):
+    return SimpleNamespace(
+        id=f"kiid-{reference}",
+        reference=reference,
+        definition=SimpleNamespace(
+            id=SimpleNamespace(library="KBlocks", name="test_block")
+        ),
+    )
+
+
+def _selection_for_action(action_id):
+    if action_id == "create-block":
+        return []
+    if action_id == "apply-multiple-pcb-layouts":
+        return [_symbol("X1"), _symbol("X2")]
+    if action_id in {
+        "open-implementation", "configure-instance", "make-local-copy",
+        "synchronize-local-copy", "apply-pcb-layout",
+    }:
+        return [_symbol()]
+    return []
+
+
+def _new_hub(monkeypatch, selection=None, *, local_copy=None, schematic=True):
     plugin_actions._load_tkinter()
     monkeypatch.setattr(plugin_actions, "_create_action_icon", lambda *_args: None)
+    monkeypatch.setattr(plugin_actions, "_configure_tk_theme", lambda *_args, **_kwargs: None)
+    record = SimpleNamespace(name="Selected test block")
+    monkeypatch.setattr(
+        plugin_actions, "_block_record_for_instance",
+        lambda *_args, **_kwargs: record,
+    )
+    monkeypatch.setattr(plugin_actions, "_layout_choices", lambda _record: [object()])
+    monkeypatch.setattr(
+        plugin_actions, "local_copy_for_instance",
+        lambda *_args, **_kwargs: local_copy,
+    )
+    active_schematic = (
+        SimpleNamespace(get_selection=lambda: list(selection or []))
+        if schematic else None
+    )
     root = plugin_actions.tk.Tk()
-    notebook = plugin_actions._show_action_hub(root)
+    notebook = plugin_actions._show_action_hub(
+        root,
+        schematic=active_schematic,
+        project_dir=Path("/tmp/kicad-blocks-test-project"),
+        library_paths=[Path("/tmp/kicad-blocks-test-library")],
+    )
     root.update_idletasks()
     root.update()
-    return root, notebook
+    return root, notebook, active_schematic
 
 
 def _button_contract_id(action_id: str) -> str:
@@ -79,10 +123,10 @@ def _button_contract_id(action_id: str) -> str:
 
 
 def test_task_hub_window_is_registered_and_visible(monkeypatch):
-    root, _notebook = _new_hub(monkeypatch)
+    root, _notebook, _schematic = _new_hub(monkeypatch)
     try:
         WindowContract(
-            title="KiCad Blocks — Tasks",
+            title="KiCad Blocks — Legacy Tasks",
             screen_id="task-hub",
             required_widget_ids=tuple(sorted(TASK_HUB_CONTROL_IDS)),
         ).run(UiTestContext(root))
@@ -114,7 +158,7 @@ def test_task_hub_declares_every_action_and_view_from_the_catalog():
 
 
 def test_task_hub_widget_inventory_has_no_untagged_interactive_controls(monkeypatch):
-    root, _notebook = _new_hub(monkeypatch)
+    root, _notebook, _schematic = _new_hub(monkeypatch)
     try:
         discovered = assert_control_coverage(root, TASK_HUB_CONTROL_IDS)
         assert set(discovered) == TASK_HUB_CONTROL_IDS
@@ -123,7 +167,7 @@ def test_task_hub_widget_inventory_has_no_untagged_interactive_controls(monkeypa
 
 
 def test_task_hub_exposes_all_three_functional_notebook_views(monkeypatch):
-    root, _notebook = _new_hub(monkeypatch)
+    root, _notebook, _schematic = _new_hub(monkeypatch)
     try:
         contract = NotebookViewContract(
             contract_id="task-hub.views",
@@ -147,7 +191,11 @@ def test_task_hub_exposes_all_three_functional_notebook_views(monkeypatch):
 def test_each_task_hub_button_dispatches_exactly_its_action_id(
     monkeypatch, action_id, expected_label, _view
 ):
-    root, _notebook = _new_hub(monkeypatch)
+    selection = _selection_for_action(action_id)
+    local_copy = object() if action_id == "synchronize-local-copy" else None
+    root, _notebook, _schematic = _new_hub(
+        monkeypatch, selection=selection, local_copy=local_copy
+    )
     context = UiTestContext(root)
     monkeypatch.setattr(
         plugin_actions,
@@ -168,8 +216,42 @@ def test_each_task_hub_button_dispatches_exactly_its_action_id(
             pass
 
 
+def test_task_hub_selection_actions_update_when_selection_changes(monkeypatch):
+    state = {"selection": []}
+    root, _notebook, schematic = _new_hub(monkeypatch, selection=[])
+    schematic.get_selection = lambda: list(state["selection"])
+    context = UiTestContext(root)
+    try:
+        assert context.require_widget("task-hub.action.open-implementation").cget("state").__str__() == "disabled"
+        assert context.require_widget("task-hub.action.create-block").cget("state").__str__() == "normal"
+        state["selection"] = [_symbol()]
+        ButtonContract(
+            contract_id="task-hub.action.refresh-selection",
+            expected_action=None,
+            destroys_window=False,
+            expected_label="Refresh selection",
+        ).run(context)
+        assert context.require_widget("task-hub.action.open-implementation").cget("state").__str__() == "normal"
+        assert context.require_widget("task-hub.action.configure-instance").cget("state").__str__() == "normal"
+        assert context.require_widget("task-hub.action.make-local-copy").cget("state").__str__() == "normal"
+        assert context.require_widget("task-hub.action.synchronize-local-copy").cget("state").__str__() == "disabled"
+        assert context.require_widget("task-hub.action.apply-pcb-layout").cget("state").__str__() == "normal"
+        assert context.require_widget("task-hub.action.apply-multiple-pcb-layouts").cget("state").__str__() == "disabled"
+        state["selection"] = [_symbol("X1"), _symbol("X2")]
+        ButtonContract(
+            contract_id="task-hub.action.refresh-selection",
+            expected_action=None,
+            destroys_window=False,
+            expected_label="Refresh selection",
+        ).run(context)
+        assert context.require_widget("task-hub.action.open-implementation").cget("state").__str__() == "disabled"
+        assert context.require_widget("task-hub.action.apply-multiple-pcb-layouts").cget("state").__str__() == "normal"
+    finally:
+        root.destroy()
+
+
 def test_task_hub_close_button_destroys_window_without_dispatch(monkeypatch):
-    root, _notebook = _new_hub(monkeypatch)
+    root, _notebook, _schematic = _new_hub(monkeypatch)
     context = UiTestContext(root)
     monkeypatch.setattr(
         plugin_actions,
@@ -191,7 +273,7 @@ def test_task_hub_close_button_destroys_window_without_dispatch(monkeypatch):
 
 
 def test_task_hub_actions_use_a_compact_two_column_grid(monkeypatch):
-    root, notebook = _new_hub(monkeypatch)
+    root, notebook, _schematic = _new_hub(monkeypatch)
     try:
         assert root.winfo_width() >= 700
         assert root.winfo_height() >= 500

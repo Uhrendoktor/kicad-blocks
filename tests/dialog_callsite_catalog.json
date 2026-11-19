@@ -113,17 +113,6 @@
       "rationale": "A test invokes this native prompt/notification, asserts its title, choices and parent, and verifies the returned profile/layout or report/cancellation result."
     },
     {
-      "id": "_ask_create_block_details.accept::messagebox.showerror#1",
-      "owner": "_ask_create_block_details.accept",
-      "method": "messagebox.showerror",
-      "line": 2020,
-      "coverage": "tested",
-      "evidence": [
-        "tests/test_create_block_form_contracts.py"
-      ],
-      "rationale": "Blank-name validation is asserted through the production Create Block command; the dialog remains open and the user can recover."
-    },
-    {
       "id": "_ask_layout_details.accept::messagebox.showerror#1",
       "owner": "_ask_layout_details.accept",
       "method": "messagebox.showerror",
@@ -161,17 +150,6 @@
       "owner": "_show_block_layout_editor.remove_layout",
       "method": "messagebox.askyesno",
       "line": 3760,
-      "coverage": "tested",
-      "evidence": [
-        "tests/test_library_and_pcb_manager_contracts.py"
-      ],
-      "rationale": "The confirmation or save-error response is exercised, with manifest/file preservation or save retry asserted."
-    },
-    {
-      "id": "_show_block_layout_editor.cancel_layout_edits::messagebox.askyesno#1",
-      "owner": "_show_block_layout_editor.cancel_layout_edits",
-      "method": "messagebox.askyesno",
-      "line": 3878,
       "coverage": "tested",
       "evidence": [
         "tests/test_library_and_pcb_manager_contracts.py"
@@ -245,17 +223,6 @@
       "rationale": "Renaming an implementation to another variant's selector is rejected; the original manifest and files remain unchanged."
     },
     {
-      "id": "_show_block_variant_editor.remove_variant::messagebox.showinfo#1",
-      "owner": "_show_block_variant_editor.remove_variant",
-      "method": "messagebox.showinfo",
-      "line": 4424,
-      "coverage": "tested",
-      "evidence": [
-        "tests/test_implementation_manager_contracts.py"
-      ],
-      "rationale": "The profile-reference notice, removal confirmation, save-failure path, and pending-change discard confirmation are asserted."
-    },
-    {
       "id": "_show_block_variant_editor.remove_variant::messagebox.askyesno#1",
       "owner": "_show_block_variant_editor.remove_variant",
       "method": "messagebox.askyesno",
@@ -271,17 +238,6 @@
       "owner": "_show_block_variant_editor.persist_variant_changes",
       "method": "messagebox.showerror",
       "line": 4490,
-      "coverage": "tested",
-      "evidence": [
-        "tests/test_implementation_manager_contracts.py"
-      ],
-      "rationale": "The profile-reference notice, removal confirmation, save-failure path, and pending-change discard confirmation are asserted."
-    },
-    {
-      "id": "_show_block_variant_editor.cancel_variant_edits::messagebox.askyesno#1",
-      "owner": "_show_block_variant_editor.cancel_variant_edits",
-      "method": "messagebox.askyesno",
-      "line": 4531,
       "coverage": "tested",
       "evidence": [
         "tests/test_implementation_manager_contracts.py"
@@ -375,39 +331,6 @@
         "tests/test_library_and_pcb_manager_contracts.py"
       ],
       "rationale": "A Set default persistence failure is reported and the previous default library remains the default."
-    },
-    {
-      "id": "_show_library_browser.refresh_records::messagebox.showerror#1",
-      "owner": "_show_library_browser.refresh_records",
-      "method": "messagebox.showerror",
-      "line": 5367,
-      "coverage": "tested",
-      "evidence": [
-        "tests/test_library_browser_contracts.py"
-      ],
-      "rationale": "A failure reading registered libraries is triggered by Refresh; the error is shown while the existing result rows and count remain available."
-    },
-    {
-      "id": "_show_library_browser.place_selected::messagebox.showwarning#1",
-      "owner": "_show_library_browser.place_selected",
-      "method": "messagebox.showwarning",
-      "line": 5405,
-      "coverage": "tested",
-      "evidence": [
-        "tests/test_library_browser_contracts.py"
-      ],
-      "rationale": "A project-library reload warning is shown after registration, and native symbol placement is not started until the user restarts/reloads KiCad."
-    },
-    {
-      "id": "_show_library_browser.place_selected::messagebox.showerror#1",
-      "owner": "_show_library_browser.place_selected",
-      "method": "messagebox.showerror",
-      "line": 5421,
-      "coverage": "tested",
-      "evidence": [
-        "tests/test_library_browser_contracts.py"
-      ],
-      "rationale": "A failure registering the selected block for native placement is shown as Place Block error and the browser remains open."
     },
     {
       "id": "_show_library_browser.open_implementation::messagebox.showerror#1",

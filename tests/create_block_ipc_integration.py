@@ -13,7 +13,6 @@ import tempfile
 import time
 import uuid
 from pathlib import Path
-from types import SimpleNamespace
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -405,10 +404,7 @@ def main() -> None:
                     "KiCad did not preserve the selected hierarchical sheet as a typed SheetSymbol."
                 )
 
-            def create_details(name: str, description: str):
-                return lambda _parent, _source: (name, description)
-
-            def run_creation(parent_schematic, name: str, description: str):
+            def run_creation(parent_schematic):
                 with (
                     patch.object(
                         plugin_actions,
@@ -418,33 +414,19 @@ def main() -> None:
                     patch.object(
                         plugin_actions, "_reload_symbol_library", return_value=True
                     ),
-                    patch.object(
-                        plugin_actions,
-                        "_ask_create_block_details",
-                        side_effect=create_details(name, description),
-                    ),
-                    patch.object(
-                        plugin_actions,
-                        "messagebox",
-                        SimpleNamespace(showinfo=lambda *args, **kwargs: None),
-                    ),
                 ):
                     plugin_actions._create_and_place(
                         library_root, parent_schematic, kicad, project_dir, object()
                     )
 
-            run_creation(
-                schematic,
-                "Power Stage Block",
-                "Created from selected SheetSymbol",
-            )
+            run_creation(schematic)
 
             records = list_blocks(library_root)
             if len(records) != 1:
                 raise AssertionError(
                     f"Expected exactly one new block from the selected sheet, found {len(records)}."
                 )
-            selected_record = records[0]
+            selected_record = next(item for item in records if item.name == "Power Stage")
             selected_manifest = selected_record.manifest
             if selected_manifest["interface_source"] != "hierarchical_labels":
                 raise AssertionError("The selected-sheet block did not retain its extraction provenance.")
@@ -487,18 +469,14 @@ def main() -> None:
             if open_selection:
                 raise AssertionError("Subsheet IPC view unexpectedly retained the previous sheet selection.")
 
-            run_creation(
-                open_sheet,
-                "Control Interface Block",
-                "Created from active sheet view",
-            )
+            run_creation(open_sheet)
 
             records = list_blocks(library_root)
             if len(records) != 2:
                 raise AssertionError(
                     f"Expected one additional block from the active subsheet, found {len(records)} total."
                 )
-            active_record = next(item for item in records if item.name == "Control Interface Block")
+            active_record = next(item for item in records if item.name == "Control Interface")
             if [item["name"] for item in active_record.manifest["pins"]] != ["SCL", "SDA", "ALERT"]:
                 raise AssertionError(
                     f"Active-sheet facade pins came from the wrong sheet: {active_record.manifest['pins']!r}"

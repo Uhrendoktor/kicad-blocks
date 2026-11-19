@@ -24,9 +24,9 @@ from kicad_blocks.model import (
     schematic_symbol_orientation,
     transform_symbol_point_to_schematic,
 )
-from kicad_blocks.pcb_layout import parse_sexpr
 from kicad_blocks.plugin import (
     LIBRARY_NICKNAME,
+    _refresh_placed_facade_instances,
     _register_block,
     _write_instance_configuration,
     make_selected_local,
@@ -318,24 +318,71 @@ def main() -> None:
             ):
                 raise AssertionError("Local synchronization changed the facade KIID/reference.")
 
-            # Update the implementation interface after X1 is already
-            # placed in the parent schematic. Publishing the regenerated
-            # facade and reloading the project library must not be confused
-            # with refreshing the embedded copy stored in that existing
-            # schematic instance.
+            # A same-topology electrical edit is safe to refresh on already
+            # placed facades: change GND's electrical type while preserving
+            # its name, number, unit, body style, and connection coordinate.
+            current_x1 = next(
+                item for item in schematic.get_symbols() if item.reference == "X1"
+            )
             original_parent_pin_names = {
-                pin.name for pin in instance.definition.pins
+                pin.name for pin in current_x1.definition.pins
             }
-            if original_parent_pin_names != {"VIN", "GND", "VOUT"}:
+            original_parent_pin_ids = {
+                str(pin.number): str(
+                    getattr(getattr(pin, "id", None), "value", None)
+                    or getattr(pin, "id", "")
+                )
+                for pin in current_x1.definition.pins
+            }
+            if (
+                original_parent_pin_names != {"VIN", "GND", "VOUT"}
+                or not all(original_parent_pin_ids.values())
+                or len(set(original_parent_pin_ids.values())) != 3
+            ):
                 raise AssertionError(
                     f"Unexpected original parent facade pins: {original_parent_pin_names!r}"
                 )
+            safe_interface = parse_pins("VIN:input, GND:passive, VOUT:output")
+            block.implementation.write_text(
+                render_implementation_schematic(
+                    "Headless IPC Smoke Block", block.manifest["block_id"], safe_interface
+                ),
+                encoding="utf-8",
+            )
+            refresh_library_block(block)
+            block = _register_block(project_dir, block, kicad, [library_root])
+            safe_refresh = _refresh_placed_facade_instances(kicad, schematic, block)
+            if "X1" not in safe_refresh["updated"] or safe_refresh["topology_skipped"]:
+                raise AssertionError(
+                    f"A pin-name-only change did not refresh X1 safely: {safe_refresh!r}"
+                )
+            parent_x1 = next(item for item in schematic.get_symbols() if item.reference == "X1")
+            safe_pin_names = {pin.name for pin in parent_x1.definition.pins}
+            if safe_pin_names != original_parent_pin_names:
+                raise AssertionError(
+                    f"Existing X1 did not receive the compatible facade update: {safe_pin_names!r}"
+                )
+            if str(parent_x1.id) != original_instance_id or parent_x1.reference != "X1":
+                raise AssertionError("Safe facade refresh changed the existing KIID/reference.")
+            safe_pin_ids = {
+                str(pin.number): str(
+                    getattr(getattr(pin, "id", None), "value", None)
+                    or getattr(pin, "id", "")
+                )
+                for pin in parent_x1.definition.pins
+            }
+            if safe_pin_ids != original_parent_pin_ids:
+                raise AssertionError(
+                    "Safe facade refresh changed the placed pin KIIDs and may have detached "
+                    f"existing wires: before={original_parent_pin_ids!r}, after={safe_pin_ids!r}"
+                )
+
+            # A pin-topology change (remove GND, add ENABLE) is deliberately
+            # not applied to existing instances; the UI must report migration.
             changed_interface = parse_pins("VIN:input, VOUT:output, ENABLE:input")
             block.implementation.write_text(
                 render_implementation_schematic(
-                    "Headless IPC Smoke Block",
-                    block.manifest["block_id"],
-                    changed_interface,
+                    "Headless IPC Smoke Block", block.manifest["block_id"], changed_interface
                 ),
                 encoding="utf-8",
             )
@@ -347,30 +394,34 @@ def main() -> None:
                 raise AssertionError(
                     "Publishing the changed implementation did not regenerate the block facade pins."
                 )
-            _register_block(project_dir, block, kicad, [library_root])
+            block = _register_block(project_dir, block, kicad, [library_root])
+            topology_refresh = _refresh_placed_facade_instances(kicad, schematic, block)
+            if "X1" not in topology_refresh["topology_skipped"]:
+                raise AssertionError(
+                    f"Topology-changing facade update was not held for migration: {topology_refresh!r}"
+                )
+            parent_x1 = next(item for item in schematic.get_symbols() if item.reference == "X1")
+            if {pin.name for pin in parent_x1.definition.pins} != safe_pin_names:
+                raise AssertionError("A topology-changing publish altered X1 without migration.")
+            if str(parent_x1.id) != original_instance_id:
+                raise AssertionError("A topology-changing publish changed the existing KIID.")
+            topology_pin_ids = {
+                str(pin.number): str(
+                    getattr(getattr(pin, "id", None), "value", None)
+                    or getattr(pin, "id", "")
+                )
+                for pin in parent_x1.definition.pins
+            }
+            if topology_pin_ids != original_parent_pin_ids:
+                raise AssertionError(
+                    "A topology-changing publish altered the existing pin identities; "
+                    "the instance must be left intact for explicit migration."
+                )
 
-            # Capture the exact serialized catalog shape before KiCad reloads it.
-            # This distinguishes a malformed source-library catalog from a bad
-            # project-catalog aggregation or a KiCad IPC cache issue.
-            shared_catalog_text = block.symbol_library.read_text(encoding="utf-8")
-            project_catalog_path = (
-                project_dir / ".kicad_blocks" / "KBlocks.kicad_sym"
-            )
-            project_catalog_text = project_catalog_path.read_text(encoding="utf-8")
-            shared_tree = parse_sexpr(shared_catalog_text)
-            project_tree = parse_sexpr(project_catalog_text)
-            print(
-                "KBlocks catalog structural diagnostics: "
-                f"shared top-level={[str(item[0]) for item in shared_tree[1:] if isinstance(item, list) and item]!r}; "
-                f"project top-level={[str(item[0]) for item in project_tree[1:] if isinstance(item, list) and item]!r}"
-            )
-            print("KBlocks project catalog before IPC reload:\\n" + project_catalog_text)
-            sym_table_text = (project_dir / "sym-lib-table").read_text(encoding="utf-8")
-            print("Project sym-lib-table after registration:\\n" + sym_table_text)
-
+            # Verify the project library is current and new placements receive
+            # its regenerated pins while the old placed instance stays intact.
             library_definition = kicad.get_library_symbol(
-                f"{nickname}:{symbol_name}",
-                document=schematic.document,
+                f"{nickname}:{symbol_name}", document=schematic.document
             )
             library_pin_names = {pin.name for pin in library_definition.pins}
             if library_pin_names != {"VIN", "VOUT", "ENABLE"}:
@@ -378,30 +429,6 @@ def main() -> None:
                     "The reloaded project library does not expose the regenerated facade pins: "
                     f"{library_pin_names!r}"
                 )
-
-            # The existing parent instance is an embedded snapshot. Reloading
-            # its library row refreshes future library lookups but does not
-            # silently mutate the already-placed symbol's pin geometry.
-            parent_symbols_after_library_reload = list(schematic.get_symbols())
-            parent_x1 = next(
-                item for item in parent_symbols_after_library_reload
-                if item.reference == "X1"
-            )
-            parent_pin_names_after_reload = {
-                pin.name for pin in parent_x1.definition.pins
-            }
-            if parent_pin_names_after_reload != original_parent_pin_names:
-                raise AssertionError(
-                    "KiCad unexpectedly changed the existing parent facade when the library "
-                    "was reloaded; inspect whether an implicit symbol update occurred: "
-                    f"{parent_pin_names_after_reload!r}"
-                )
-            if str(parent_x1.id) != original_instance_id:
-                raise AssertionError("The parent X1 KIID changed during library reload.")
-
-            # New placements use the updated library facade, while the old
-            # parent instance remains unchanged until the user explicitly runs
-            # KiCad's Update Symbols from Library command.
             new_instance = schematic.place_symbol_from_library(
                 f"{nickname}:{symbol_name}",
                 Vector2.from_xy_mm(180.0, 100.0),
@@ -411,8 +438,8 @@ def main() -> None:
                 raise AssertionError("A new parent placement did not use the updated facade pins.")
             schematic.save()
             print(
-                "KiCad IPC confirmed: library facade updated to VIN/VOUT/ENABLE; "
-                "existing parent X1 remains VIN/GND/VOUT; new X3 uses updated pins."
+                "KiCad IPC confirmed: compatible pin rename refreshed X1; "
+                "topology change was flagged for migration; new X3 uses the changed facade."
             )
 
             # Test the plugin's actual dynamic registration path: this library

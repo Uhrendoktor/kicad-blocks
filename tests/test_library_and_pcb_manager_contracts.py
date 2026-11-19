@@ -45,7 +45,6 @@ PCB_CONTROLS = {
     "pcb-layout-manager.action.default",
     "pcb-layout-manager.action.assign",
     "pcb-layout-manager.action.close",
-    "pcb-layout-manager.action.save-close",
 }
 
 
@@ -480,7 +479,7 @@ def test_pcb_layout_manager_updates_default_and_variant_associations_then_remove
         root.destroy()
 
 
-def test_pcb_layout_manager_add_and_save_failure_can_be_retried(monkeypatch, tmp_path):
+def test_pcb_layout_manager_add_failure_is_retried_by_close(monkeypatch, tmp_path):
     record, _sources = _pcb_fixture(tmp_path, layout_count=1)
     new_board = tmp_path / "new-boost.kicad_pcb"
     new_board.write_text(
@@ -521,11 +520,11 @@ def test_pcb_layout_manager_add_and_save_failure_can_be_retried(monkeypatch, tmp
         assert tree.item("1", "values")[2] == "new-boost.kicad_pcb"
         status = context.require_widget("pcb-layout-manager.status")
         variable = str(status.cget("textvariable"))
-        assert "Save failed; use Save & close to retry." in status.getvar(variable)
+        assert "Automatic save failed. Close will retry; the pending change is retained." in status.getvar(variable)
         assert errors and errors[0][0] == "Save PCB layouts"
         assert len(read_manifest(record.path)["layouts"]) == 1
         _click(
-            context, "pcb-layout-manager.action.save-close", "Save & close",
+            context, "pcb-layout-manager.action.close", "Close",
             closes=True, title=f"PCB layouts — {record.name}",
         )
 

@@ -70,20 +70,33 @@ The production plugin uses Tkinter and its standard file-selection dialogs. It d
 
 ### KiCad editor-action API boundary
 
-The current supported KiCad schematic API does not provide the editor operations needed for full Place Block and Edit Facade workflows:
+The current stable Eeschema IPC surface supports exact library-backed insertion, viewport focus, selection, and project-catalog editing. It does not expose the two operations needed for full native-interaction parity: attach a newly inserted schematic symbol to the cursor, or launch the GUI Symbol Editor for a specific library item.
 
-| API | Documented behavior | Why it is insufficient |
+| API | Supported behavior | Current product use / limitation |
 | --- | --- | --- |
-| `Schematic.place_symbol_from_library(lib_id, position, ...)` | Creates a symbol at explicit schematic coordinates | Does not start the interactive placement cursor. |
-| `EditorCommandsHandler.add_to_selection(items)` | Adds the specified items to the active editor selection; Eeschema implements this request | Selects the symbol but does not initiate movement or attach it to the pointer. |
-| `Board.interactive_move(items)` | Selects board items and starts the native interactive move tool | This API exists for PCB only; there is no corresponding `Schematic.interactive_move(items)` API or Eeschema `InteractiveMoveItems` handler. |
-| `KiCad.open_document(path, type)` | Opens a document in headless mode | Explicitly unsupported in GUI mode. |
-| `KiCad.open_library_item(library, name, type)` | Loads a library item into its editor | Currently supports footprints only, not symbols. |
-| `KiCad.run_action(action)` | Runs an arbitrary KiCad tool action | Explicitly unstable and not guaranteed; the tested Eeschema returns `no handler available for request of type kiapi.common.commands.RunAction`. It is not used by the production plugin. |
+| `Schematic.place_symbol_from_library(lib_id, position, ...)` | Inserts the exact generated facade at an explicit coordinate | Place Block uses the active page center, snapped to KiCad's schematic grid. |
+| `FocusOnItems` | Navigates to the owning sheet and centers specified KIIDs in Eeschema | Used immediately after insertion so the new block is visible. |
+| `EditorCommandsHandler.add_to_selection(items)` | Adds specified items to the active Eeschema selection | Used to select the newly inserted block after it has been focused. |
+| `Board.interactive_move(items)` | Selects board items and starts the native interactive move tool | PCB-only API. Eeschema has no `Schematic.interactive_move(items)` counterpart in the current server. |
+| Eeschema `SCH_ACTIONS::placeSymbol` and `SCH_ACTIONS::move` | Native Add Symbol and Move tools | The tools exist, but Eeschema does not register the generic `RunAction` IPC handler. |
+| `API_HANDLER_SYMBOL::OpenLibraryItem` | Loads a specified `LIB_ID` in an already-running Symbol Editor context | Does not create the GUI Symbol Editor frame. |
+| `OpenDocument` / `open_document()` | Opens a document in a headless context | The Python API documents this as headless-only; it is not a visible Symbol Editor launch path. |
 
-The supported API is documented in the [KiCad Python KiCad class](https://docs.kicad.org/kicad-python/kicad.html) and [Schematic class](https://docs.kicad.org/kicad-python/schematic.html). KiCad's API docs describe IPC as cross-platform, but that transport guarantee does not imply every editor operation exists on the server. An upstream feature proposal for interactive symbol placement ([KiCad MR !2332](https://gitlab.com/kicad/code/kicad/-/merge_requests/2332)) is closed without merge and is not available as an upstream contract.
+#### Current Place Block behavior
 
-Accordingly, Place Block currently performs supported fixed-coordinate placement at the active sheet center, focuses the new symbol in the viewport, and selects it. It does not attach the symbol to the mouse cursor; that still requires a schematic equivalent of `Board.interactive_move(items)`. Edit Facade reports an explicit capability error because KiCad exposes no supported Symbol Editor open/select API. Neither workflow uses platform-specific input injection or a manual-only fallback. Full feature acceptance remains open pending the missing upstream APIs and their GUI validation.
+Place Block registers/refreshes the project's combined `KBlocks.kicad_sym` catalog, inserts the exact `KBlocks:<symbol>` facade at the active sheet's page center (including custom and portrait page dimensions), focuses it with `FocusOnItems`, selects the returned KIID, verifies that selection, and saves. This is the strongest supported cross-platform Eeschema IPC path currently available. The user can then adjust the selected symbol using Eeschema's normal Move command.
+
+Cursor-attached placement still requires an upstream schematic equivalent of `Board.interactive_move(items)`. The expected API should resolve the supplied KIID, establish the reference point, select it, and transfer an active API commit to Eeschema's native move tool. Confirm should commit placement; Escape should roll it back. That keeps the pointer, snapping, grid, undo, and cancel behavior inside KiCad and avoids platform-specific input automation.
+
+#### Current Edit Facade behavior
+
+Edit Facade opens the portable Facade Pin Layout editor. It lists the generated symbol's pins and allows the user to adjust X/Y position, orientation, and length. Each accepted operation writes only the selected pin geometry to the project-local `KBlocks.kicad_sym` catalog, uses a SHA-256 optimistic concurrency check to reject stale edits, and reloads the project library. Pin names, numbers, and electrical types remain derived from the implementation's hierarchical labels. The normal **Publish** action imports the project edit with the repository's three-way conflict checks and writes a new shared-library revision.
+
+This is not presented as the full KiCad Symbol Editor. Native artwork and other Symbol Editor operations still require a stable cross-platform Eeschema IPC request that creates/opens a GUI Symbol Editor document and loads an exact `LIB_ID`. The existing `OpenLibraryItem` request can load an item only after that editor context is open. The plugin does not disable Edit Facade, fake a Symbol Editor window, or use OS-specific keyboard/window automation.
+
+The IPC transport is cross-platform, but the missing editor operations are API gaps in the Eeschema server rather than Linux/Wayland or Windows/macOS differences.
+
+The Place Block implementation probes the connected schematic object for an `interactive_move` method at runtime. When the Python binding and Eeschema server both provide the schematic counterpart, it begins an API commit, inserts the facade at a temporary page-center coordinate, and transfers that same commit to the native move tool. Confirm/cancel then remain one undoable operation. If the method is absent or Eeschema returns an unsupported-handler error, the plugin pushes the same commit and completes the existing page-center/focus/select/save workflow. This fallback is intentional and cross-platform; the Place action is never disabled and no OS-specific input automation is used. The current tested KiCad nightly does not yet expose the method, so its actual placement remains page-center based.
 
 ### Cross-process window ownership
 

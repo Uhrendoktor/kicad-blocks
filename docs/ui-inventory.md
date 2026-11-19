@@ -6,20 +6,20 @@ This page is generated from the declarative UI catalog. It inventories the curre
 | Coverage status | Screens | Meaning |
 |---|---:|---|
 | Contracted | 13 | Widget-level execute/result assertions are registered and run in CI. |
-| Partial | 2 | Targeted GUI, integration, model, or screenshot checks exist; the full control matrix is not contracted. |
+| Partial | 3 | Targeted GUI, integration, model, or screenshot checks exist; the full control matrix is not contracted. |
 | Inventory only | 0 | Inventory only — systematic UI contracts remain future work; window/workflow is documented here for discovery and rollout planning. |
 
-Task Hub, both transient block choosers, Add PCB Layout, Create Block form, Record picker, Functional Block picker, Functional Block Library, Instance Configuration, Implementation details, Implementations Manager, Manage Libraries, and PCB Layout Manager now have full registered widget contracts. All 56 native messagebox/simpledialog call sites have direct result/effect contracts. The shared open/save/directory chooser wrappers have direct argument, fallback, and cancellation contracts; actual OS-native dialog rendering and cross-platform KiCad window ownership remain unverified, so the cross-cutting native-dialog screen remains partial.
+The Functional Block Library, legacy Task Hub, transient choosers, Add PCB Layout, Record picker, Instance Configuration, Implementation details, Implementations Manager, Manage Libraries, PCB Layout Manager, and Facade Pin Layout editor have registered widget contracts. Create Block from Sheet is a one-click Eeschema action rather than a details form. All 49 native messagebox/simpledialog call sites have direct result/effect contracts. Place Block uses supported page-aware schematic IPC placement, focus and selection while the schematic interactive-move API is pending; Edit Facade provides a project-local pin-layout editor with immediate persistence and safe publishing. Native Symbol Editor launch and cursor-attached placement remain upstream API gaps, not disabled features or OS-specific automation paths. The shared file chooser wrappers have argument/cancellation contracts; native OS rendering and cross-process KiCad window ownership remain unverified.
 
 ## Screens
 
-### Task hub
+### Legacy Task Hub
 
-Launch the plugin's main workflows from three grouped tabs.
+Compatibility-only grouped command panel; direct Eeschema plugin actions and the Functional Block Library are the intended workflow.
 
 **Coverage:** Contracted — widget action and expected UI transition asserted.
 
-All thirteen action-button routes, the Close action, the three notebook views, window creation, and interactive-control inventory are exercised against the real Tk widgets. Downstream KiCad operations have separate integration tests and are not implied by this component-level coverage.
+Legacy compatibility screen. Action buttons track the live Eeschema selection and required prerequisites, poll while open, and recheck before dispatch. Disabled actions do not close the panel. This panel is not the intended create/place/publish workflow.
 
 **Views and actions**
 
@@ -42,11 +42,13 @@ All thirteen action-button routes, the Close action, the three notebook views, w
 
 **Registered semantic controls**
 
-- Workflow tabs (`task-hub.views`; notebook; behavior asserted)
+- Legacy compatibility workflow tabs (`task-hub.views`; notebook; behavior asserted)
+- Live selection and action availability status (`task-hub.status`; status-label; behavior asserted)
 
 **Other controls**
 
 - Close (`task-hub.close`; behavior asserted)
+- Refresh selection (`task-hub.action.refresh-selection`; behavior asserted)
 
 **Current automated evidence**
 
@@ -54,22 +56,22 @@ All thirteen action-button routes, the Close action, the three notebook views, w
 
 **Production screenshots**
 
-![Task hub: task hub light.png](https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/task-hub-light.png)
+![Legacy Task Hub: task hub light.png](https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/task-hub-light.png)
 [Open task-hub-light.png](https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/task-hub-light.png)
 
-![Task hub: task hub dark.png](https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/task-hub-dark.png)
+![Legacy Task Hub: task hub dark.png](https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/task-hub-dark.png)
 [Open task-hub-dark.png](https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/task-hub-dark.png)
 
-![Task hub: task hub edit maintain light.png](https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/task-hub-edit-maintain-light.png)
+![Legacy Task Hub: task hub edit maintain light.png](https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/task-hub-edit-maintain-light.png)
 [Open task-hub-edit-maintain-light.png](https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/task-hub-edit-maintain-light.png)
 
-![Task hub: task hub edit maintain dark.png](https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/task-hub-edit-maintain-dark.png)
+![Legacy Task Hub: task hub edit maintain dark.png](https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/task-hub-edit-maintain-dark.png)
 [Open task-hub-edit-maintain-dark.png](https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/task-hub-edit-maintain-dark.png)
 
-![Task hub: task hub checks pcb light.png](https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/task-hub-checks-pcb-light.png)
+![Legacy Task Hub: task hub checks pcb light.png](https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/task-hub-checks-pcb-light.png)
 [Open task-hub-checks-pcb-light.png](https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/task-hub-checks-pcb-light.png)
 
-![Task hub: task hub checks pcb dark.png](https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/task-hub-checks-pcb-dark.png)
+![Legacy Task Hub: task hub checks pcb dark.png](https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/task-hub-checks-pcb-dark.png)
 [Open task-hub-checks-pcb-dark.png](https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/task-hub-checks-pcb-dark.png)
 
 ---
@@ -80,15 +82,17 @@ Search registered block libraries, inspect facade and schematic previews, choose
 
 **Coverage:** Contracted — widget action and expected UI transition asserted.
 
-Every application-owned browser control and chooser route has a real-widget interaction contract. Tests assert search/count, selection/details, Facade/Schematic navigation, implementation/sheet selector callbacks, pane geometry, and every toolbar action (Place, Implementation, Edit Facade, Variants, Open PCB, PCB layouts, Refresh, Libraries). The implementation chooser and PCB chooser are each tested for selected-file open, cancellation without side effects, and the Manage layouts route. Native placement and document/editor behavior are separately exercised by KiCad CLI/IPC/editor integration tests; unsupported Symbol Editor targeting and cursor-anchored placement remain explicit product/API limitations, not untested browser buttons.
+Every browser control and chooser route has a real-widget contract. Direct Publish is tested, selection-dependent actions disable when no row is selected, and placement/publish feedback is inline. The facade pin-layout editor is separately tested for immediate project-catalog persistence and concurrent-edit protection.
 
 **Major functionality**
 
-- Search and filter the registered block list
-- Switch between facade and schematic previews
-- Select an implementation and sheet
-- Refresh records and manage library roots
-- Place a facade or open implementation, facade, and PCB layout managers
+- Search and filter registered block libraries
+- Inspect facade and implementation schematic previews
+- Place a selected facade with KiCad's native cursor tool
+- Open the selected block's implementation
+- Edit the exact selected facade in Symbol Editor
+- Publish implementation/facade edits and refresh compatible instances
+- Manage variants, PCB layouts, and libraries
 
 **Registered semantic controls**
 
@@ -112,6 +116,8 @@ Every application-owned browser control and chooser route has a real-widget inte
 - PCB layouts (`library-browser.action.manage-pcb-layouts`; button; behavior asserted)
 - Refresh (`library-browser.action.refresh`; button; behavior asserted)
 - Libraries (`library-browser.action.libraries`; button; behavior asserted)
+- Non-modal action status and recovery feedback (`library-browser.status`; status-label; result observed)
+- Publish selected block (`library-browser.action.publish`; button; behavior asserted)
 
 **Current automated evidence**
 
@@ -139,6 +145,48 @@ Every application-owned browser control and chooser route has a real-widget inte
 
 ![Functional Block Library: library browser schematic dark.png](https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/library-browser-schematic-dark.png)
 [Open library-browser-schematic-dark.png](https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/library-browser-schematic-dark.png)
+
+---
+
+### Facade pin layout editor
+
+Adjust the external pin positions, angles, and lengths of a selected block facade. Pin names, numbers, and electrical types remain derived from the implementation's hierarchical-label interface.
+
+**Coverage:** Contracted — widget action and expected UI transition asserted.
+
+The real Tk editor, selected-pin table, geometry fields, immediate catalog write, project-library reload, optimistic concurrency guard, invalid-value recovery, and Close action are covered by interaction and file-format contracts. The capture uses the production editor widget tree in light and dark themes.
+
+**Major functionality**
+
+- View every facade pin with its current number and electrical type
+- Edit the selected pin's X/Y position, orientation, and length
+- Persist each accepted geometry change immediately to the project catalog
+- Reload the project KBlocks library and publish the facade through the normal revision/conflict workflow
+
+**Registered semantic controls**
+
+- Facade pin layout editor (`facade-editor.window`; window; behavior asserted)
+- Facade pin list (`facade-editor.pins`; treeview; behavior asserted)
+- Pin X coordinate (`facade-editor.x`; entry; behavior asserted)
+- Pin Y coordinate (`facade-editor.y`; entry; behavior asserted)
+- Pin orientation (`facade-editor.angle`; entry; behavior asserted)
+- Pin length (`facade-editor.length`; entry; behavior asserted)
+- Apply pin geometry (`facade-editor.action.apply`; button; behavior asserted)
+- Close (`facade-editor.action.close`; button; behavior asserted)
+- Immediate save/reload and conflict status (`facade-editor.status`; status-label; result observed)
+
+**Current automated evidence**
+
+- `tests/test_library_browser_contracts.py`
+- `tests/test_editor_workflow.py`
+
+**Production screenshots**
+
+![Facade pin layout editor: facade editor light.png](https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/facade-editor-light.png)
+[Open facade-editor-light.png](https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/facade-editor-light.png)
+
+![Facade pin layout editor: facade editor dark.png](https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/facade-editor-dark.png)
+[Open facade-editor-dark.png](https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/facade-editor-dark.png)
 
 ---
 
@@ -268,41 +316,28 @@ Every actionable control has a stable semantic ID and real-Tk interaction contra
 
 ---
 
-### Create Functional Block
+### Create Block from Sheet
 
-Name a block extracted from a selected hierarchical sheet and provide its description.
+Package one selected hierarchical sheet, or the sheet currently open in Eeschema when nothing is selected, as a reusable functional block.
 
-**Coverage:** Contracted — widget action and expected UI transition asserted.
+**Coverage:** Partial — targeted GUI, integration, or visual checks exist.
 
-Every actionable form control has a stable semantic ID and a real-Tk interaction contract. Tests execute Create Block and Cancel, assert the returned name/description or cancellation result, reject a blank name without closing the dialog, verify recovery after validation, exercise Escape cancellation, and check that the initial form geometry exposes both primary actions. The full live Eeschema selection/extraction/registration workflow remains separately covered by the real KiCad IPC integration test.
+This is a native Eeschema action rather than a Tk window. The real Eeschema IPC integration test verifies typed SheetSymbol selection, active-subsheet creation with an empty selection, derived facade pins, catalog/library registration, collision-safe naming, rollback on failure, and unchanged source files. The action does not open a naming form or success popup.
 
 **Major functionality**
 
-- Display the selected source sheet
-- Enter the required block name and optional description
-- Create or cancel without leaving partial library files
-
-**Registered semantic controls**
-
-- Create Functional Block dialog (`create-block-form.window`; window; behavior asserted)
-- Block name (`create-block-form.name`; entry; behavior asserted)
-- Optional block description (`create-block-form.description`; text; behavior asserted)
-- Create Block (`create-block-form.action.create`; button; behavior asserted)
-- Cancel (`create-block-form.action.cancel`; button; behavior asserted)
+- Select exactly one hierarchical sheet symbol in its parent schematic
+- With no selection, use the sheet currently open in Eeschema
+- Derive a collision-safe block name from the source filename and create it in the configured default library
+- Copy the complete child-sheet hierarchy, derive facade pins from root hierarchical labels, and register the project catalog
 
 **Current automated evidence**
 
-- `tests/test_create_block_form_contracts.py`
+- `tests/test_editor_workflow.py`
 - `tests/create_block_ipc_integration.py`
-- `tests/capture_visual_docs.py`
+- `tests/test_plugin_registration.py`
 
-**Production screenshots**
-
-![Create Functional Block: create block form light.png](https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/create-block-form-light.png)
-[Open create-block-form-light.png](https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/create-block-form-light.png)
-
-![Create Functional Block: create block form dark.png](https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/create-block-form-dark.png)
-[Open create-block-form-dark.png](https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/create-block-form-dark.png)
+**Production screenshots:** Not yet captured for this surface.
 
 ---
 
@@ -414,7 +449,7 @@ Review the single Default implementation row and maintain named alternatives.
 
 **Coverage:** Contracted — widget action and expected UI transition asserted.
 
-Every application-owned manager control has a real-Tk action or state contract. Tests verify the Default row and selection-dependent Edit/Set as default/Remove states, Add routing into create mode, Edit routing for Default and named alternatives, Set as default persistence, Remove file cleanup and profile-reference protection, confirmation cancellation, Keep/Discard choices on close with pending edits, and retry after a save failure. The nested Implementation details form is independently contracted across existing-file, browse, blank-schematic, copy-source, validation/recovery, and cancel paths.
+All registered manager controls are exercised with real Tk interactions. Every Add, Edit, Remove, and Set as default operation persists immediately; a failed write is retried by Close, which keeps the manager open until the change is safely stored.
 
 **Major functionality**
 
@@ -427,13 +462,12 @@ Every application-owned manager control has a real-Tk action or state contract. 
 
 - Implementations manager dialog (`implementations-manager.window`; window; behavior asserted)
 - Default and named implementations (`implementations-manager.rows`; treeview; behavior asserted)
-- Persistence and usage status (`implementations-manager.status`; status-label; behavior asserted)
+- Immediate persistence and recovery status (`implementations-manager.status`; status-label; behavior asserted)
 - Add variant (`implementations-manager.action.add`; button; behavior asserted)
 - Edit variant (`implementations-manager.action.edit`; button; behavior asserted)
 - Set as default (`implementations-manager.action.default`; button; behavior asserted)
 - Remove (`implementations-manager.action.remove`; button; behavior asserted)
 - Close (`implementations-manager.action.close`; button; behavior asserted)
-- Save & close (`implementations-manager.action.save-close`; button; behavior asserted)
 
 **Current automated evidence**
 
@@ -499,7 +533,7 @@ Maintain stored PCB layouts, default selection, and implementation associations.
 
 **Coverage:** Contracted — widget action and expected UI transition asserted.
 
-All registered controls are discovered on the production dialog. Real Tk invocations verify default-layout persistence, variant association, remove and asset cleanup, confirmation cancellation, add/copy into the block, save-failure retry, no-selection disabled states, and close/save behavior.
+All registered manager controls are exercised with real Tk interactions. Every Add, Remove, Assign, and Set default operation persists immediately; a failed write is retried by Close, which keeps the manager open until the change is safely stored.
 
 **Major functionality**
 
@@ -512,14 +546,13 @@ All registered controls are discovered on the production dialog. Real Tk invocat
 
 - PCB Layout Manager dialog (`pcb-layout-manager.window`; window; behavior asserted)
 - Stored PCB layouts (`pcb-layout-manager.rows`; treeview; behavior asserted)
-- Save and recovery status (`pcb-layout-manager.status`; status-label; result observed)
+- Immediate persistence and recovery status (`pcb-layout-manager.status`; status-label; result observed)
 - Implementation association selector (`pcb-layout-manager.implementation`; combobox; behavior asserted)
 - Add layout (`pcb-layout-manager.action.add`; button; behavior asserted)
 - Remove layout (`pcb-layout-manager.action.remove`; button; behavior asserted)
 - Set default (`pcb-layout-manager.action.default`; button; behavior asserted)
 - Assign implementation (`pcb-layout-manager.action.assign`; button; behavior asserted)
 - Close (`pcb-layout-manager.action.close`; button; behavior asserted)
-- Save and close (`pcb-layout-manager.action.save-close`; button; behavior asserted)
 
 **Current automated evidence**
 

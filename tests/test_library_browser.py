@@ -1184,6 +1184,16 @@ class LibraryBrowserTests(unittest.TestCase):
                 self.selected = []
                 self.placement = None
                 self.saved = False
+                self.commit = object()
+
+            def begin_commit(self):
+                return self.commit
+
+            def push_commit(self, _commit, _message):
+                self.committed = True
+
+            def drop_commit(self, _commit):
+                self.dropped = True
 
             def get_page_settings(self):
                 return SimpleNamespace(page_size=2, orientation=1)
@@ -1221,7 +1231,8 @@ class LibraryBrowserTests(unittest.TestCase):
                 kicad, None, "buck_converter_ab12cd34"
             )
 
-        self.assertIs(result, symbol)
+        self.assertIs(result[0], symbol)
+        self.assertFalse(result[1])
         self.assertEqual(
             schematic.placement,
             (f"{LIBRARY_NICKNAME}:buck_converter_ab12cd34", (148.59, 105.41)),

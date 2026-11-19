@@ -3,11 +3,11 @@
 
 This inventory is generated from the production plugin's Python AST. It records every messagebox and simpledialog call site, its owning operation, the available automated evidence, and the remaining gap. These are native OS/Tk dialogs rather than controls inside the reusable in-process window contract.
 
-Source: plugin/kicad-blocks/kicad_blocks/plugin.py — 56 call sites.
+Source: plugin/kicad-blocks/kicad_blocks/plugin.py — 49 call sites.
 
 | Coverage | Call sites | Meaning |
 |---|---:|---|
-| Tested | 56 | Direct native-dialog result and downstream behavior are asserted. |
+| Tested | 49 | Direct native-dialog result and downstream behavior are asserted. |
 | Partial | 0 | The owning action is tested; this dialog branch is not directly asserted. |
 | Uncovered | 0 | No direct native-dialog path contract exists yet. |
 
@@ -25,52 +25,45 @@ Source: plugin/kicad-blocks/kicad_blocks/plugin.py — 56 call sites.
 | 1818 | _collect_block_profiles | simpledialog.askstring | tested | tests/test_dialog_callsite_contracts.py |
 | 1838 | _collect_block_profiles | simpledialog.askstring | tested | tests/test_dialog_callsite_contracts.py |
 | 1866 | _collect_block_profiles | messagebox.askyesno | tested | tests/test_dialog_callsite_contracts.py |
-| 2020 | _ask_create_block_details.accept | messagebox.showerror | tested | tests/test_create_block_form_contracts.py |
-| 3561 | _ask_layout_details.accept | messagebox.showerror | tested | tests/test_add_pcb_layout_contracts.py |
-| 3569 | _ask_layout_details.accept | messagebox.showerror | tested | tests/test_add_pcb_layout_contracts.py |
-| 3723 | _show_block_layout_editor.add_layout | messagebox.showerror | tested | tests/test_library_and_pcb_manager_contracts.py |
-| 3760 | _show_block_layout_editor.remove_layout | messagebox.askyesno | tested | tests/test_library_and_pcb_manager_contracts.py |
-| 3878 | _show_block_layout_editor.cancel_layout_edits | messagebox.askyesno | tested | tests/test_library_and_pcb_manager_contracts.py |
-| 3921 | _show_block_layout_editor.persist_layout_changes | messagebox.showerror | tested | tests/test_library_and_pcb_manager_contracts.py |
-| 4158 | _ask_implementation_details.accept | messagebox.showerror | tested | tests/test_implementation_details_contracts.py |
-| 4171 | _ask_implementation_details.accept | messagebox.showerror | tested | tests/test_implementation_details_contracts.py |
-| 4184 | _ask_implementation_details.accept | messagebox.showerror | tested | tests/test_implementation_details_contracts.py |
-| 4364 | _show_block_variant_editor.add_variant | messagebox.showerror | tested | tests/test_implementation_manager_contracts.py |
-| 4395 | _show_block_variant_editor.edit_variant | messagebox.showerror | tested | tests/test_implementation_manager_contracts.py |
-| 4424 | _show_block_variant_editor.remove_variant | messagebox.showinfo | tested | tests/test_implementation_manager_contracts.py |
-| 4432 | _show_block_variant_editor.remove_variant | messagebox.askyesno | tested | tests/test_implementation_manager_contracts.py |
-| 4490 | _show_block_variant_editor.persist_variant_changes | messagebox.showerror | tested | tests/test_implementation_manager_contracts.py |
-| 4531 | _show_block_variant_editor.cancel_variant_edits | messagebox.askyesno | tested | tests/test_implementation_manager_contracts.py |
-| 4680 | _show_library_roots_dialog.add_library | messagebox.showerror | tested | tests/test_library_and_pcb_manager_contracts.py |
-| 4688 | _show_library_roots_dialog.create_library | simpledialog.askstring | tested | tests/test_library_and_pcb_manager_contracts.py |
-| 4703 | _show_library_roots_dialog.create_library | messagebox.showerror | tested | tests/test_library_and_pcb_manager_contracts.py |
-| 4720 | _show_library_roots_dialog.create_library | messagebox.showerror | tested | tests/test_library_and_pcb_manager_contracts.py |
-| 4756 | _show_library_roots_dialog.change_library_folder | messagebox.showerror | tested | tests/test_library_and_pcb_manager_contracts.py |
-| 4762 | _show_library_roots_dialog.remove_library | messagebox.askyesno | tested | tests/test_library_and_pcb_manager_contracts.py |
-| 4773 | _show_library_roots_dialog.remove_library | messagebox.showerror | tested | tests/test_library_and_pcb_manager_contracts.py |
-| 4784 | _show_library_roots_dialog.make_default | messagebox.showerror | tested | tests/test_library_and_pcb_manager_contracts.py |
-| 5367 | _show_library_browser.refresh_records | messagebox.showerror | tested | tests/test_library_browser_contracts.py |
-| 5405 | _show_library_browser.place_selected | messagebox.showwarning | tested | tests/test_library_browser_contracts.py |
-| 5421 | _show_library_browser.place_selected | messagebox.showerror | tested | tests/test_library_browser_contracts.py |
-| 5430 | _show_library_browser.open_implementation | messagebox.showerror | tested | tests/test_library_browser_contracts.py |
-| 5451 | _show_library_browser.open_implementation | messagebox.showerror | tested | tests/test_library_browser_contracts.py |
-| 5489 | _show_library_browser.open_implementation.launch_variant | messagebox.showerror | tested | tests/test_library_browser_contracts.py |
-| 5525 | _show_library_browser.edit_facade | messagebox.showerror | tested | tests/test_library_browser_contracts.py |
-| 5543 | _show_library_browser.manage_layouts | messagebox.showerror | tested | tests/test_library_browser_contracts.py |
-| 5566 | _show_library_browser.edit_variants | messagebox.showerror | tested | tests/test_library_browser_contracts.py |
-| 5628 | _show_library_browser.open_layout.launch_layout | messagebox.showerror | tested | tests/test_library_browser_contracts.py |
-| 5951 | _validate_shared_library | messagebox.showwarning | tested | tests/test_dialog_callsite_contracts.py |
-| 5953 | _validate_shared_library | messagebox.showwarning | tested | tests/test_dialog_callsite_contracts.py |
-| 6075 | _apply_block_pcb_layout | simpledialog.askstring | tested | tests/test_uncovered_dialog_contracts.py |
-| 6091 | _apply_block_pcb_layout | simpledialog.askstring | tested | tests/test_uncovered_dialog_contracts.py |
-| 6107 | _apply_block_pcb_layout | simpledialog.askstring | tested | tests/test_uncovered_dialog_contracts.py |
-| 6153 | _apply_block_pcb_layout | messagebox.askyesno | tested | tests/test_uncovered_dialog_contracts.py |
-| 6214 | _apply_selected_block_pcb_layouts | simpledialog.askstring | tested | tests/test_uncovered_dialog_contracts.py |
-| 6229 | _apply_selected_block_pcb_layouts | simpledialog.askstring | tested | tests/test_uncovered_dialog_contracts.py |
-| 6245 | _apply_selected_block_pcb_layouts | simpledialog.askstring | tested | tests/test_uncovered_dialog_contracts.py |
-| 6299 | _apply_selected_block_pcb_layouts | messagebox.askyesno | tested | tests/test_uncovered_dialog_contracts.py |
-| 6597 | run_action | messagebox.showwarning | tested | tests/test_uncovered_dialog_contracts.py |
-| 6604 | run_action | messagebox.showerror | tested | tests/test_uncovered_dialog_contracts.py |
+| 3880 | _ask_layout_details.accept | messagebox.showerror | tested | tests/test_add_pcb_layout_contracts.py |
+| 3888 | _ask_layout_details.accept | messagebox.showerror | tested | tests/test_add_pcb_layout_contracts.py |
+| 4042 | _show_block_layout_editor.add_layout | messagebox.showerror | tested | tests/test_library_and_pcb_manager_contracts.py |
+| 4079 | _show_block_layout_editor.remove_layout | messagebox.askyesno | tested | tests/test_library_and_pcb_manager_contracts.py |
+| 4231 | _show_block_layout_editor.persist_layout_changes | messagebox.showerror | tested | tests/test_library_and_pcb_manager_contracts.py |
+| 4462 | _ask_implementation_details.accept | messagebox.showerror | tested | tests/test_implementation_details_contracts.py |
+| 4475 | _ask_implementation_details.accept | messagebox.showerror | tested | tests/test_implementation_details_contracts.py |
+| 4488 | _ask_implementation_details.accept | messagebox.showerror | tested | tests/test_implementation_details_contracts.py |
+| 4667 | _show_block_variant_editor.add_variant | messagebox.showerror | tested | tests/test_implementation_manager_contracts.py |
+| 4698 | _show_block_variant_editor.edit_variant | messagebox.showerror | tested | tests/test_implementation_manager_contracts.py |
+| 4732 | _show_block_variant_editor.remove_variant | messagebox.askyesno | tested | tests/test_implementation_manager_contracts.py |
+| 4790 | _show_block_variant_editor.persist_variant_changes | messagebox.showerror | tested | tests/test_implementation_manager_contracts.py |
+| 4970 | _show_library_roots_dialog.add_library | messagebox.showerror | tested | tests/test_library_and_pcb_manager_contracts.py |
+| 4978 | _show_library_roots_dialog.create_library | simpledialog.askstring | tested | tests/test_library_and_pcb_manager_contracts.py |
+| 4993 | _show_library_roots_dialog.create_library | messagebox.showerror | tested | tests/test_library_and_pcb_manager_contracts.py |
+| 5010 | _show_library_roots_dialog.create_library | messagebox.showerror | tested | tests/test_library_and_pcb_manager_contracts.py |
+| 5046 | _show_library_roots_dialog.change_library_folder | messagebox.showerror | tested | tests/test_library_and_pcb_manager_contracts.py |
+| 5052 | _show_library_roots_dialog.remove_library | messagebox.askyesno | tested | tests/test_library_and_pcb_manager_contracts.py |
+| 5063 | _show_library_roots_dialog.remove_library | messagebox.showerror | tested | tests/test_library_and_pcb_manager_contracts.py |
+| 5074 | _show_library_roots_dialog.make_default | messagebox.showerror | tested | tests/test_library_and_pcb_manager_contracts.py |
+| 5740 | _show_library_browser.open_implementation | messagebox.showerror | tested | tests/test_library_browser_contracts.py |
+| 5761 | _show_library_browser.open_implementation | messagebox.showerror | tested | tests/test_library_browser_contracts.py |
+| 5799 | _show_library_browser.open_implementation.launch_variant | messagebox.showerror | tested | tests/test_library_browser_contracts.py |
+| 5834 | _show_library_browser.edit_facade | messagebox.showerror | tested | tests/test_library_browser_contracts.py |
+| 5879 | _show_library_browser.manage_layouts | messagebox.showerror | tested | tests/test_library_browser_contracts.py |
+| 5902 | _show_library_browser.edit_variants | messagebox.showerror | tested | tests/test_library_browser_contracts.py |
+| 5964 | _show_library_browser.open_layout.launch_layout | messagebox.showerror | tested | tests/test_library_browser_contracts.py |
+| 6309 | _validate_shared_library | messagebox.showwarning | tested | tests/test_dialog_callsite_contracts.py |
+| 6311 | _validate_shared_library | messagebox.showwarning | tested | tests/test_dialog_callsite_contracts.py |
+| 6635 | _apply_block_pcb_layout | simpledialog.askstring | tested | tests/test_uncovered_dialog_contracts.py |
+| 6651 | _apply_block_pcb_layout | simpledialog.askstring | tested | tests/test_uncovered_dialog_contracts.py |
+| 6667 | _apply_block_pcb_layout | simpledialog.askstring | tested | tests/test_uncovered_dialog_contracts.py |
+| 6713 | _apply_block_pcb_layout | messagebox.askyesno | tested | tests/test_uncovered_dialog_contracts.py |
+| 6774 | _apply_selected_block_pcb_layouts | simpledialog.askstring | tested | tests/test_uncovered_dialog_contracts.py |
+| 6789 | _apply_selected_block_pcb_layouts | simpledialog.askstring | tested | tests/test_uncovered_dialog_contracts.py |
+| 6805 | _apply_selected_block_pcb_layouts | simpledialog.askstring | tested | tests/test_uncovered_dialog_contracts.py |
+| 6859 | _apply_selected_block_pcb_layouts | messagebox.askyesno | tested | tests/test_uncovered_dialog_contracts.py |
+| 7359 | run_action | messagebox.showwarning | tested | tests/test_uncovered_dialog_contracts.py |
+| 7366 | run_action | messagebox.showerror | tested | tests/test_uncovered_dialog_contracts.py |
 
 ## Coverage boundaries
 
@@ -86,22 +79,18 @@ Source: plugin/kicad-blocks/kicad_blocks/plugin.py — 56 call sites.
 - _collect_block_profiles::simpledialog.askstring#4 — A test invokes this native prompt/notification, asserts its title, choices and parent, and verifies the returned profile/layout or report/cancellation result.
 - _collect_block_profiles::simpledialog.askstring#5 — A test invokes this native prompt/notification, asserts its title, choices and parent, and verifies the returned profile/layout or report/cancellation result.
 - _collect_block_profiles::messagebox.askyesno#2 — A test invokes this native prompt/notification, asserts its title, choices and parent, and verifies the returned profile/layout or report/cancellation result.
-- _ask_create_block_details.accept::messagebox.showerror#1 — Blank-name validation is asserted through the production Create Block command; the dialog remains open and the user can recover.
 - _ask_layout_details.accept::messagebox.showerror#1 — The required-layout-name error is asserted and the Add PCB Layout form remains available for correction.
 - _ask_layout_details.accept::messagebox.showerror#2 — An invalid existing board path or extension is rejected, the Add PCB Layout form remains open, and the user can select a valid .kicad_pcb file and complete the action.
 - _show_block_layout_editor.add_layout::messagebox.showerror#1 — A duplicate layout name is rejected by the real Add layout button; the error is parented to PCB Layout Manager and the saved manifest remains unchanged.
 - _show_block_layout_editor.remove_layout::messagebox.askyesno#1 — The confirmation or save-error response is exercised, with manifest/file preservation or save retry asserted.
-- _show_block_layout_editor.cancel_layout_edits::messagebox.askyesno#1 — The confirmation or save-error response is exercised, with manifest/file preservation or save retry asserted.
 - _show_block_layout_editor.persist_layout_changes::messagebox.showerror#1 — The confirmation or save-error response is exercised, with manifest/file preservation or save retry asserted.
 - _ask_implementation_details.accept::messagebox.showerror#1 — Blank-selector, invalid-extension, and missing-copy-source errors are asserted; each path remains recoverable.
 - _ask_implementation_details.accept::messagebox.showerror#2 — Blank-selector, invalid-extension, and missing-copy-source errors are asserted; each path remains recoverable.
 - _ask_implementation_details.accept::messagebox.showerror#3 — Blank-selector, invalid-extension, and missing-copy-source errors are asserted; each path remains recoverable.
 - _show_block_variant_editor.add_variant::messagebox.showerror#1 — Adding a variant with an existing selector value displays the duplicate-value error and leaves the manifest unchanged.
 - _show_block_variant_editor.edit_variant::messagebox.showerror#1 — Renaming an implementation to another variant's selector is rejected; the original manifest and files remain unchanged.
-- _show_block_variant_editor.remove_variant::messagebox.showinfo#1 — The profile-reference notice, removal confirmation, save-failure path, and pending-change discard confirmation are asserted.
 - _show_block_variant_editor.remove_variant::messagebox.askyesno#1 — The profile-reference notice, removal confirmation, save-failure path, and pending-change discard confirmation are asserted.
 - _show_block_variant_editor.persist_variant_changes::messagebox.showerror#1 — The profile-reference notice, removal confirmation, save-failure path, and pending-change discard confirmation are asserted.
-- _show_block_variant_editor.cancel_variant_edits::messagebox.askyesno#1 — The profile-reference notice, removal confirmation, save-failure path, and pending-change discard confirmation are asserted.
 - _show_library_roots_dialog.add_library::messagebox.showerror#1 — A simulated settings-registration failure is reached through Add library; the exact error is shown and the prior registered-root set is preserved.
 - _show_library_roots_dialog.create_library::simpledialog.askstring#1 — The library-name prompt is answered and the created folder is registered in persistent settings.
 - _show_library_roots_dialog.create_library::messagebox.showerror#1 — Path-like folder names are rejected by the real Create library action before filesystem creation or library registration.
@@ -110,9 +99,6 @@ Source: plugin/kicad-blocks/kicad_blocks/plugin.py — 56 call sites.
 - _show_library_roots_dialog.remove_library::messagebox.askyesno#1 — Unregister confirmation cancellation is asserted to preserve the registration and files.
 - _show_library_roots_dialog.remove_library::messagebox.showerror#1 — A confirmed Unregister that fails to persist is reported and the original root remains registered.
 - _show_library_roots_dialog.make_default::messagebox.showerror#1 — A Set default persistence failure is reported and the previous default library remains the default.
-- _show_library_browser.refresh_records::messagebox.showerror#1 — A failure reading registered libraries is triggered by Refresh; the error is shown while the existing result rows and count remain available.
-- _show_library_browser.place_selected::messagebox.showwarning#1 — A project-library reload warning is shown after registration, and native symbol placement is not started until the user restarts/reloads KiCad.
-- _show_library_browser.place_selected::messagebox.showerror#1 — A failure registering the selected block for native placement is shown as Place Block error and the browser remains open.
 - _show_library_browser.open_implementation::messagebox.showerror#1 — A failure registering the implementation catalog is shown before an implementation chooser is opened.
 - _show_library_browser.open_implementation::messagebox.showerror#2 — A failure launching the default implementation is reported after registration; the browser remains available.
 - _show_library_browser.open_implementation.launch_variant::messagebox.showerror#1 — A failure launching the explicitly selected named implementation is reported after the chooser closes, without closing the parent library browser.
@@ -139,4 +125,4 @@ Source: plugin/kicad-blocks/kicad_blocks/plugin.py — 56 call sites.
 - Partial means the owning action has tests, but the specific error/confirmation/prompt path is not directly exercised.
 - Uncovered means no direct call-site behavior contract exists yet.
 
-All 56 native message-dialog call sites now have direct result/effect assertions. These in-process tests do not replace native desktop accessibility, OS-specific dialog ownership, or cross-platform rendering checks.
+All 49 native message-dialog call sites now have direct result/effect assertions. These in-process tests do not replace native desktop accessibility, OS-specific dialog ownership, or cross-platform rendering checks.
