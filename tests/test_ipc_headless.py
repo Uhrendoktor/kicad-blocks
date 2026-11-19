@@ -318,9 +318,9 @@ def main() -> None:
             ):
                 raise AssertionError("Local synchronization changed the facade KIID/reference.")
 
-            # A same-topology interface edit is safe to refresh on already
-            # placed facades: rename GND to COM while keeping pin numbers,
-            # units, body styles, and connection coordinates unchanged.
+            # A same-topology electrical edit is safe to refresh on already
+            # placed facades: change GND's electrical type while preserving
+            # its name, number, unit, body style, and connection coordinate.
             original_parent_pin_names = {
                 pin.name for pin in instance.definition.pins
             }
@@ -328,7 +328,7 @@ def main() -> None:
                 raise AssertionError(
                     f"Unexpected original parent facade pins: {original_parent_pin_names!r}"
                 )
-            safe_interface = parse_pins("VIN:input, COM:passive, VOUT:output")
+            safe_interface = parse_pins("VIN:input, GND:passive, VOUT:output")
             block.implementation.write_text(
                 render_implementation_schematic(
                     "Headless IPC Smoke Block", block.manifest["block_id"], safe_interface
@@ -344,14 +344,14 @@ def main() -> None:
                 )
             parent_x1 = next(item for item in schematic.get_symbols() if item.reference == "X1")
             safe_pin_names = {pin.name for pin in parent_x1.definition.pins}
-            if safe_pin_names != {"VIN", "COM", "VOUT"}:
+            if safe_pin_names != original_parent_pin_names:
                 raise AssertionError(
                     f"Existing X1 did not receive the compatible facade update: {safe_pin_names!r}"
                 )
             if str(parent_x1.id) != original_instance_id or parent_x1.reference != "X1":
                 raise AssertionError("Safe facade refresh changed the existing KIID/reference.")
 
-            # A pin-topology change (remove COM, add ENABLE) is deliberately
+            # A pin-topology change (remove GND, add ENABLE) is deliberately
             # not applied to existing instances; the UI must report migration.
             changed_interface = parse_pins("VIN:input, VOUT:output, ENABLE:input")
             block.implementation.write_text(
