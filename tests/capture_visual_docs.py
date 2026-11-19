@@ -439,7 +439,8 @@ def _select_existing_pcb_file(dialog) -> None:
 
 
 def _assert_layout_manager_footer(dialog) -> None:
-    labels = {"Save & close", "Close"}
+    # Layout mutations persist immediately; the only footer action is Close.
+    labels = {"Close"}
     visible = {
         widget.cget("text")
         for widget in walk_widgets(dialog)
