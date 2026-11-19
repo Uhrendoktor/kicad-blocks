@@ -56,18 +56,16 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
     def test_place_block_uses_page_center_ipc_focus_selection_and_save(self):
         instance_id = SimpleNamespace(value="block-instance-id")
         instance = SimpleNamespace(id=instance_id)
-        commit = object()
         target = SimpleNamespace(
             clear_selection=Mock(),
             add_to_selection=Mock(),
             get_selection=Mock(return_value=[instance]),
             save=Mock(),
         )
+        # This test models the current documented Schematic API: direct
+        # page-centre placement, without the proposed transaction/move methods.
         schematic = SimpleNamespace(
-            begin_commit=Mock(return_value=commit),
             place_symbol_from_library=Mock(return_value=instance),
-            push_commit=Mock(),
-            drop_commit=Mock(),
         )
         kicad = SimpleNamespace(get_schematic=Mock(return_value=schematic))
         with (
@@ -93,11 +91,8 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
         self.assertAlmostEqual(args[1].x, 100_000_000)
         self.assertAlmostEqual(args[1].y, 75_000_000)
         self.assertFalse(kwargs)
-        schematic.begin_commit.assert_called_once_with()
-        schematic.push_commit.assert_called_once_with(
-            commit, f"Place functional block {self.block.manifest['symbol_name']}"
-        )
-        schematic.drop_commit.assert_not_called()
+        self.assertFalse(hasattr(schematic, "begin_commit"))
+        self.assertFalse(hasattr(schematic, "interactive_move"))
         focus_items.assert_called_once_with(schematic, [instance])
         target.clear_selection.assert_called_once_with()
         target.add_to_selection.assert_called_once_with([instance])
