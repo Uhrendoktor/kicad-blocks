@@ -2124,10 +2124,19 @@ def _open_symbol_library_item(kicad, library: str, symbol_name: str,
     last_error = None
     sent = False
     while time.monotonic() < deadline:
-        try:
-            if not sent:
+        # Only retry the command if KiCad rejected the transport because the
+        # Symbol Editor handler is not registered yet. A successfully accepted
+        # request is never repeated while polling, so an in-progress edit is
+        # never reopened or reset.
+        if not sent:
+            try:
                 client.send(request, Empty)
                 sent = True
+            except Exception as exc:
+                last_error = exc
+                pause(0.1)
+                continue
+        try:
             documents = kicad.get_open_documents(DocumentType.DOCTYPE_SYMBOL)
             observed = []
             for document in documents:
@@ -2142,9 +2151,6 @@ def _open_symbol_library_item(kicad, library: str, symbol_name: str,
                 return True
         except Exception as exc:
             last_error = exc
-            # When the Symbol Editor frame is still opening, its API handler may
-            # not yet be registered. Retry the exact request after a short pause.
-            sent = False
         pause(0.1)
     detail = f" Last IPC error: {last_error}" if last_error else ""
     raise RuntimeError(
@@ -2869,7 +2875,19 @@ def _start_native_symbol_placement(
         send("windowraise", str(editor_window_id), check=False)
         send("windowactivate", "--sync", str(editor_window_id), check=False)
         send("windowfocus", "--sync", str(editor_window_id))
-        send("key", "--clearmodifiers", "a")
+        action_started = False
+        run_action = getattr(kicad, "run_action", None)
+        if callable(run_action):
+            try:
+                action_started = (
+                    _native_run_action_status(
+                        run_action("eeschema.InteractiveDrawing.placeSymbol")
+                    ) == 1
+                )
+            except Exception:
+                action_started = False
+        if not action_started:
+            send("key", "--clearmodifiers", "a")
         chooser_id = ""
         for _ in range(50):
             focused = send("getwindowfocus", check=False)
@@ -2901,10 +2919,21 @@ def _start_native_symbol_placement(
             f"KiCad did not start cursor placement for {symbol_id}. Check the native chooser."
         )
 
-    # Wayland and other desktop platforms use a native global keyboard bridge.
-    # The invocation comes from an Eeschema-owned transient, so once the browser
-    # has been minimized, Eeschema is the foreground application.
-    _send_native_key("a", backend=backend)
+    # Prefer KiCad's own action; keyboard input is only the bridge into the
+    # native chooser so the exact library identifier can be selected.
+    action_started = False
+    run_action = getattr(kicad, "run_action", None)
+    if callable(run_action):
+        try:
+            action_started = (
+                _native_run_action_status(
+                    run_action("eeschema.InteractiveDrawing.placeSymbol")
+                ) == 1
+            )
+        except Exception:
+            action_started = False
+    if not action_started:
+        _send_native_key("a", backend=backend)
     pause(0.25)
     _type_native_text(symbol_id, backend=backend)
     pause(0.2)
@@ -5512,6 +5541,10 @@ def _show_library_browser(
     implementation_button = [None]
     variants_button = [None]
     manage_layout_button = [None]
+    notice_value = tk.StringVar(
+        master=window,
+        value="Select a block, then place it with one click.",
+    )
 
     def update_toolbar_state(record) -> None:
         available = record is not None
@@ -5817,23 +5850,26 @@ def _show_library_browser(
         try:
             _register_block(project_dir, record, kicad, current_roots[0])
             if not _LAST_LIBRARY_RELOAD_OK:
-                messagebox.showwarning(
-                    "Block library saved",
-                    _LAST_LIBRARY_RELOAD_WARNING or "Restart Eeschema to refresh the project library table.",
-                    parent=window,
+                notice_value.set(
+                    _LAST_LIBRARY_RELOAD_WARNING
+                    or "The project library is saved, but Eeschema has not reloaded it. Restart Eeschema before placing."
                 )
                 return
             minimized_windows = _minimize_placement_windows(window)
             try:
                 _start_native_symbol_placement(
-                    kicad, None, str(record.manifest["symbol_name"])
+                    kicad, editor_window_id, str(record.manifest["symbol_name"])
                 )
             except Exception:
                 _restore_placement_windows(minimized_windows)
                 raise
         except Exception as exc:
             LOG.exception("Native block placement handoff failed")
-            messagebox.showerror("Place Block", str(exc), parent=window)
+            notice_value.set(f"Placement could not start: {exc}")
+        else:
+            notice_value.set(
+                f"{record.name}: choose the highlighted facade, move it to the desired location, then click to place. Esc cancels."
+            )
 
     def open_implementation(_event=None):
         record = selected_record[0]
@@ -6116,20 +6152,30 @@ def _show_library_browser(
         ),
     )
 
+    notice_label = ttk.Label(
+        outer,
+        textvariable=notice_value,
+        style="Muted.TLabel",
+        wraplength=1100,
+        justify="left",
+    )
+    notice_label._kicad_ui_contract_id = "library-browser.status"
+    notice_label.pack(fill="x", pady=(5, 0))
+
     action_toolbar = ttk.Frame(outer, padding=(0, 7, 0, 0))
     action_toolbar.pack(fill="x")
     place_button[0] = _action_button(
         action_toolbar, "Place block", place_selected, "place",
+        "Start KiCad's native cursor placement for the selected facade",
         state="disabled",
-        "Create the selected facade at the active sheet centre and select it",
         contract_id="library-browser.action.place",
         style="Primary.TButton",
     )
     place_button[0].pack(side="left")
     implementation_button[0] = _action_button(
         action_toolbar, "Implementation", open_implementation, "implementation",
-        state="disabled",
         "Open the base or a named circuit implementation",
+        state="disabled",
         contract_id="library-browser.action.implementation",
     )
     implementation_button[0].pack(side="left", padx=(4, 0))
@@ -6141,8 +6187,8 @@ def _show_library_browser(
     facade_button[0].pack(side="left", padx=(4, 0))
     variants_button[0] = _action_button(
         action_toolbar, "Variants", edit_variants, "variants",
-        state="disabled",
         "Add, edit, remove, or set the default circuit implementation",
+        state="disabled",
         contract_id="library-browser.action.variants",
     )
     variants_button[0].pack(side="left", padx=(4, 0))
@@ -6151,15 +6197,15 @@ def _show_library_browser(
     )
     open_layout_button[0] = _action_button(
         action_toolbar, "Open PCB", open_layout, "pcb",
-        state="disabled",
         "Open one of the block's stored PCB layouts",
+        state="disabled",
         contract_id="library-browser.action.open-pcb",
     )
     open_layout_button[0].pack(side="left", padx=(4, 0))
     manage_layout_button[0] = _action_button(
         action_toolbar, "PCB layouts", manage_layouts, "layouts",
-        state="disabled",
         "Add and associate PCB layouts with implementations",
+        state="disabled",
         contract_id="library-browser.action.manage-pcb-layouts",
     )
     manage_layout_button[0].pack(side="left", padx=(4, 0))
@@ -6916,11 +6962,13 @@ def run_action(action: str, *, editor_window_id: str | None = None) -> None:
     if action not in valid_actions:
         raise ValueError(f"Unknown KiCad Blocks action: {action!r}")
 
-    # KiCad IPC is bound to the editor instance that launched this action.
-    # No native cross-process window handle is needed for these operations.
-    editor_window_id = None
+    # Capture Eeschema before creating Tk UI so subsequent native hand-offs
+    # can target the correct editor rather than the plugin's own window.
+    if editor_window_id is None:
+        editor_window_id = _capture_eeschema_window_id()
     _load_tkinter()
     root = tk.Tk()
+    root._kicad_blocks_editor_window_id = editor_window_id
     _configure_tk_theme(root)
     root.title("KiCad Blocks — Tasks" if action == "open-hub" else "KiCad Blocks")
     _attach_tk_window_to_editor(root, editor_window_id)
