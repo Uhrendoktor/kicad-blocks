@@ -2597,20 +2597,16 @@ def _edit_facade_symbol(
     catalog = parse_sexpr(catalog_path.read_text(encoding="utf-8"))
     _named_symbol_node(catalog, symbol_name, catalog_path)
 
-    # If the correct symbol is already open, there is nothing to do. Otherwise,
-    # explicitly request the exact catalog entry; this is safe with KiCad's
-    # symbol-editor tab model and avoids typing into an unknown search widget.
+    # The direct API path also switches an already-open Symbol Editor tab to
+    # this exact library item. Only open the editor frame when that handler is
+    # not available yet.
     try:
-        from kipy.proto.common.types import DocumentType
-        for document in kicad.get_open_documents(DocumentType.DOCTYPE_SYMBOL):
-            identifier = getattr(document, "lib_id", None)
-            if identifier is not None and (
-                str(getattr(identifier, "library_nickname", "")) == LIBRARY_NICKNAME
-                and str(getattr(identifier, "entry_name", "")) == symbol_name
-            ):
-                return True
+        if _open_symbol_library_item(
+            kicad, LIBRARY_NICKNAME, symbol_name, pause=pause, timeout=0.25
+        ):
+            return True
     except Exception:
-        pass
+        LOG.debug("Symbol Editor IPC handler is not ready; opening the native editor.", exc_info=True)
 
     backend = _desktop_keyboard_backend()
     if not backend:
@@ -2712,12 +2708,28 @@ def _edit_facade_symbol(
             except Exception:
                 action_started = False
         if not action_started:
-            _send_native_key("alt+t", backend=backend)
-            pause(0.12)
-            _send_native_key("Home", backend=backend)
-            for _ in range(_symbol_editor_menu_down_count()):
-                _send_native_key("Down", backend=backend)
-            _send_native_key("Return", backend=backend)
+            if sys.platform == "darwin":
+                # AppleScript talks to the native menu, not a guessed screen
+                # coordinate. macOS may require Accessibility permission.
+                script = (
+                    'tell application "System Events" to tell '
+                    '(first process whose frontmost is true) to click '
+                    'menu item "Symbol Editor" of menu "Tools" of menu bar 1'
+                )
+                subprocess.run(
+                    ["osascript", "-e", script],
+                    capture_output=True,
+                    text=True,
+                    check=True,
+                    timeout=8,
+                )
+            else:
+                _send_native_key("alt+t", backend=backend)
+                pause(0.12)
+                _send_native_key("Home", backend=backend)
+                for _ in range(_symbol_editor_menu_down_count()):
+                    _send_native_key("Down", backend=backend)
+                _send_native_key("Return", backend=backend)
 
     return _open_symbol_library_item(
         kicad, LIBRARY_NICKNAME, symbol_name, pause=pause, timeout=7.0
