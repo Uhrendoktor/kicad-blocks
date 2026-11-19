@@ -41,6 +41,7 @@ from ui_contracts import (
     UiTestContext,
     WindowContract,
     assert_control_coverage,
+    messagebox_recorder,
 )
 
 pytestmark = pytest.mark.skipif(
@@ -290,7 +291,7 @@ def test_library_browser_search_filters_records_and_updates_count(
             expected_summary="1 libraries  ·  1 of 2 blocks",
         ).run(context)
         assert (
-            context.require_widget("library-browser.selected-name").cget("text")
+            context.require_label("library-browser.selected-name").cget("text")
             == "USB power block"
         )
     finally:
@@ -357,7 +358,7 @@ def test_refresh_button_reloads_records_through_real_ui_callback(
             expected_label="Refresh",
         ).run(context)
         assert "2 of 2 blocks" in str(
-            context.require_widget("library-browser.summary").cget("text")
+            context.require_label("library-browser.summary").cget("text")
         )
     finally:
         root.destroy()
@@ -645,8 +646,8 @@ def test_variants_toolbar_opens_manager_and_refreshes_records(
             expected_label="Variants",
         ).run(context)
         assert "2 of 2 blocks" in str(
-            context.require_widget("library-browser.summary").getvar(
-                context.require_widget("library-browser.summary").cget("textvariable")
+            context.require_label("library-browser.summary").getvar(
+                context.require_label("library-browser.summary").cget("textvariable")
             )
         )
     finally:
@@ -992,14 +993,14 @@ def test_library_browser_refresh_error_keeps_existing_records(
     monkeypatch: MonkeyPatch, tmp_path: Path
 ):
     root, context, _records, _library, _project = _new_browser(monkeypatch, tmp_path)
-    errors = []
+    errors: list[tuple[str, str, Misc | None]] = []
     monkeypatch.setattr(
         plugin_actions.messagebox,
         "showerror",
-        lambda title, message, **kwargs: errors.append((title, str(message), kwargs.get("parent"))),
+        messagebox_recorder(errors),
     )
 
-    def fail_refresh(_roots=None):
+    def fail_refresh(_roots: list[Path] | None = None) -> None:
         context.action_calls.append("refresh-error")
         raise OSError("library folder is temporarily unavailable")
 
@@ -1015,9 +1016,9 @@ def test_library_browser_refresh_error_keeps_existing_records(
         assert errors[0][0] == "Refresh Block Library"
         assert "library folder is temporarily unavailable" in errors[0][1]
         assert errors[0][2] is not None and errors[0][2].winfo_exists()
-        assert context.require_widget("library-browser.results").get_children()
-        assert "2 of 2 blocks" in context.require_widget("library-browser.summary").getvar(
-            context.require_widget("library-browser.summary").cget("textvariable")
+        assert context.require_treeview("library-browser.results").get_children()
+        assert "2 of 2 blocks" in context.require_label("library-browser.summary").getvar(
+            context.require_label("library-browser.summary").cget("textvariable")
         )
     finally:
         root.destroy()
@@ -1027,12 +1028,12 @@ def test_place_block_reload_warning_does_not_start_native_placement(
     monkeypatch: MonkeyPatch, tmp_path: Path
 ):
     root, context, _records, _library, _project = _new_browser(monkeypatch, tmp_path)
-    warnings = []
-    placements = []
+    warnings: list[tuple[str, str, Misc | None]] = []
+    placements: list[bool] = []
     monkeypatch.setattr(
         plugin_actions,
         "_register_block",
-        lambda *_args, **_kwargs: context.action_calls.append("registered"),
+        _record_action(context.action_calls, "registered"),
     )
     monkeypatch.setattr(plugin_actions, "_last_library_reload_ok", False)
     monkeypatch.setattr(
@@ -1043,14 +1044,12 @@ def test_place_block_reload_warning_does_not_start_native_placement(
     monkeypatch.setattr(
         plugin_actions.messagebox,
         "showwarning",
-        lambda title, message, **kwargs: warnings.append(
-            (title, str(message), kwargs.get("parent"))
-        ),
+        messagebox_recorder(warnings),
     )
     monkeypatch.setattr(
         plugin_actions,
         "_start_native_symbol_placement",
-        lambda *_args, **_kwargs: placements.append(True),
+        record_placement,
     )
     try:
         _select_first_record(context)
@@ -1073,9 +1072,9 @@ def test_place_block_registration_failure_shows_error_and_keeps_browser_open(
     monkeypatch: MonkeyPatch, tmp_path: Path
 ):
     root, context, _records, _library, _project = _new_browser(monkeypatch, tmp_path)
-    errors = []
+    errors: list[tuple[str, str, Misc | None]] = []
 
-    def fail_register(*_args, **_kwargs):
+    def fail_register(*_args: _RecordedArgument, **_kwargs: _RecordedArgument) -> None:
         context.action_calls.append("registration-failed")
         raise RuntimeError("project library table could not be written")
 
@@ -1083,7 +1082,7 @@ def test_place_block_registration_failure_shows_error_and_keeps_browser_open(
     monkeypatch.setattr(
         plugin_actions.messagebox,
         "showerror",
-        lambda title, message, **kwargs: errors.append((title, str(message), kwargs.get("parent"))),
+        messagebox_recorder(errors),
     )
     try:
         _select_first_record(context)
@@ -1106,9 +1105,9 @@ def test_open_implementation_registration_failure_shows_error(
     monkeypatch: MonkeyPatch, tmp_path: Path
 ):
     root, context, _records, _library, _project = _new_browser(monkeypatch, tmp_path)
-    errors = []
+    errors: list[tuple[str, str, Misc | None]] = []
 
-    def fail_register(*_args, **_kwargs):
+    def fail_register(*_args: _RecordedArgument, **_kwargs: _RecordedArgument) -> None:
         context.action_calls.append("implementation-registration-failed")
         raise RuntimeError("implementation catalog write failed")
 
@@ -1116,7 +1115,7 @@ def test_open_implementation_registration_failure_shows_error(
     monkeypatch.setattr(
         plugin_actions.messagebox,
         "showerror",
-        lambda title, message, **kwargs: errors.append((title, str(message), kwargs.get("parent"))),
+        messagebox_recorder(errors),
     )
     try:
         _select_first_record(context)
@@ -1142,15 +1141,15 @@ def test_open_default_implementation_launch_failure_shows_error(
     monkeypatch: MonkeyPatch, tmp_path: Path
 ):
     root, context, records, _library, _project = _new_browser(monkeypatch, tmp_path)
-    errors = []
+    errors: list[tuple[str, str, Misc | None]] = []
     records[0].manifest["variants"] = []
     monkeypatch.setattr(
         plugin_actions,
         "_register_implementation_catalog",
-        lambda *_args, **_kwargs: context.action_calls.append("registered"),
+        _record_action(context.action_calls, "registered"),
     )
 
-    def fail_launch(*_args, **_kwargs):
+    def fail_launch(*_args: _RecordedArgument, **_kwargs: _RecordedArgument) -> None:
         context.action_calls.append("launch-default-failed")
         raise OSError("Eeschema executable is unavailable")
 
@@ -1158,7 +1157,7 @@ def test_open_default_implementation_launch_failure_shows_error(
     monkeypatch.setattr(
         plugin_actions.messagebox,
         "showerror",
-        lambda title, message, **kwargs: errors.append((title, str(message), kwargs.get("parent"))),
+        messagebox_recorder(errors),
     )
     try:
         _select_first_record(context)
@@ -1181,14 +1180,14 @@ def test_open_named_implementation_launch_failure_shows_error_after_chooser(
 ):
     root, context, records, _library, _project = _new_browser(monkeypatch, tmp_path)
     records[0].manifest["variants"] = [{"value": "1V8", "file": "implementation_1v8.kicad_sch"}]
-    errors = []
+    errors: list[tuple[str, str, Misc | None]] = []
     monkeypatch.setattr(
         plugin_actions,
         "_register_implementation_catalog",
-        lambda *_args, **_kwargs: context.action_calls.append("registered"),
+        _record_action(context.action_calls, "registered"),
     )
 
-    def fail_launch(*_args, **_kwargs):
+    def fail_launch(*_args: _RecordedArgument, **_kwargs: _RecordedArgument) -> None:
         context.action_calls.append("launch-named-failed")
         raise OSError("named implementation file is missing")
 
@@ -1196,7 +1195,7 @@ def test_open_named_implementation_launch_failure_shows_error_after_chooser(
     monkeypatch.setattr(
         plugin_actions.messagebox,
         "showerror",
-        lambda title, message, **kwargs: errors.append((title, str(message), kwargs.get("parent"))),
+        messagebox_recorder(errors),
     )
     chooser_title = "Open implementation — USB power block"
     try:
@@ -1233,7 +1232,7 @@ def test_open_named_implementation_launch_failure_shows_error_after_chooser(
         root.destroy()
 
 
-def _find_dialog_exists(root, title: str) -> bool:
+def _find_dialog_exists(root: Tk, title: str) -> bool:
     return any(
         child.winfo_class() == "Toplevel" and child.title() == title
         for child in root.winfo_children()
@@ -1242,9 +1241,9 @@ def _find_dialog_exists(root, title: str) -> bool:
 
 def test_edit_facade_failure_shows_recoverable_error(monkeypatch: MonkeyPatch, tmp_path: Path):
     root, context, _records, _library, _project = _new_browser(monkeypatch, tmp_path)
-    errors = []
+    errors: list[tuple[str, str, Misc | None]] = []
 
-    def fail_edit(*_args, **_kwargs):
+    def fail_edit(*_args: _RecordedArgument, **_kwargs: _RecordedArgument) -> None:
         context.action_calls.append("facade-edit-failed")
         raise RuntimeError("KiCad Symbol Editor IPC cannot select this library entry")
 
@@ -1252,7 +1251,7 @@ def test_edit_facade_failure_shows_recoverable_error(monkeypatch: MonkeyPatch, t
     monkeypatch.setattr(
         plugin_actions.messagebox,
         "showerror",
-        lambda title, message, **kwargs: errors.append((title, str(message), kwargs.get("parent"))),
+        messagebox_recorder(errors),
     )
     try:
         _select_first_record(context)
@@ -1276,13 +1275,14 @@ def test_edit_facade_without_native_handoff_shows_guidance(
     root, context, _records, _library, _project = _new_browser(monkeypatch, tmp_path)
     notices: list[tuple[str, str, Misc | None]] = []
 
-    monkeypatch.setattr(plugin_actions, "_edit_facade_symbol", lambda *_args, **_kwargs: False)
+    def no_native_handoff(*_args: _RecordedArgument, **_kwargs: _RecordedArgument) -> bool:
+        return False
+
+    monkeypatch.setattr(plugin_actions, "_edit_facade_symbol", no_native_handoff)
     monkeypatch.setattr(
         plugin_actions.messagebox,
         "showinfo",
-        lambda title, message, **kwargs: notices.append(
-            (title, str(message), kwargs.get("parent"))
-        ),
+        messagebox_recorder(notices),
     )
     try:
         _select_first_record(context)
@@ -1304,9 +1304,9 @@ def test_manage_pcb_layouts_failure_shows_error_and_preserves_browser(
     monkeypatch: MonkeyPatch, tmp_path: Path
 ):
     root, context, _records, _library, _project = _new_browser(monkeypatch, tmp_path)
-    errors = []
+    errors: list[tuple[str, str, Misc | None]] = []
 
-    def fail_manage(*_args, **_kwargs):
+    def fail_manage(*_args: _RecordedArgument, **_kwargs: _RecordedArgument) -> None:
         context.action_calls.append("manage-layouts-failed")
         raise RuntimeError("PCB layout manifest is invalid")
 
@@ -1314,7 +1314,7 @@ def test_manage_pcb_layouts_failure_shows_error_and_preserves_browser(
     monkeypatch.setattr(
         plugin_actions.messagebox,
         "showerror",
-        lambda title, message, **kwargs: errors.append((title, str(message), kwargs.get("parent"))),
+        messagebox_recorder(errors),
     )
     try:
         _select_first_record(context)
@@ -1336,9 +1336,9 @@ def test_manage_implementations_failure_shows_error_and_preserves_browser(
     monkeypatch: MonkeyPatch, tmp_path: Path
 ):
     root, context, _records, _library, _project = _new_browser(monkeypatch, tmp_path)
-    errors = []
+    errors: list[tuple[str, str, Misc | None]] = []
 
-    def fail_manage(*_args, **_kwargs):
+    def fail_manage(*_args: _RecordedArgument, **_kwargs: _RecordedArgument) -> None:
         context.action_calls.append("manage-implementations-failed")
         raise RuntimeError("implementation manifest cannot be opened")
 
@@ -1346,7 +1346,7 @@ def test_manage_implementations_failure_shows_error_and_preserves_browser(
     monkeypatch.setattr(
         plugin_actions.messagebox,
         "showerror",
-        lambda title, message, **kwargs: errors.append((title, str(message), kwargs.get("parent"))),
+        messagebox_recorder(errors),
     )
     try:
         _select_first_record(context)
@@ -1371,9 +1371,9 @@ def test_open_pcb_layout_launch_failure_shows_error_after_chooser(
     root, context, _records, _library, _project = _new_browser(
         monkeypatch, tmp_path, layouts=layouts
     )
-    errors = []
+    errors: list[tuple[str, str, Misc | None]] = []
 
-    def fail_launch(*_args, **_kwargs):
+    def fail_launch(*_args: _RecordedArgument, **_kwargs: _RecordedArgument) -> None:
         context.action_calls.append("open-layout-failed")
         raise OSError("PCB Editor could not open the selected layout")
 
@@ -1381,7 +1381,7 @@ def test_open_pcb_layout_launch_failure_shows_error_after_chooser(
     monkeypatch.setattr(
         plugin_actions.messagebox,
         "showerror",
-        lambda title, message, **kwargs: errors.append((title, str(message), kwargs.get("parent"))),
+        messagebox_recorder(errors),
     )
     chooser_title = "Open PCB layout — USB power block"
     try:

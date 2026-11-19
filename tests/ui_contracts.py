@@ -21,6 +21,7 @@ if TYPE_CHECKING:
         Button,
         Checkbutton,
         Combobox,
+        Label,
         Entry,
         Notebook,
         Panedwindow,
@@ -29,7 +30,7 @@ if TYPE_CHECKING:
 else:
     MonkeyPatch = Canvas = TkEvent = Menu = Misc = Tk = Toplevel = Button = Checkbutton = (
         Combobox
-    ) = Entry = Notebook = Panedwindow = Text = Treeview = object
+    ) = Label = Entry = Notebook = Panedwindow = Text = Treeview = object
 
 
 __all__ = [
@@ -43,12 +44,15 @@ __all__ = [
     "Button",
     "Checkbutton",
     "Combobox",
+    "Label",
     "Entry",
     "Notebook",
     "Panedwindow",
     "Text",
     "Treeview",
     "TkOption",
+    "TkCallbackOption",
+    "messagebox_recorder",
     "MenuEntry",
     "UiTestContext",
     "WindowContract",
@@ -82,6 +86,18 @@ def _new_widget_map() -> dict[str, tk.Misc]:
 
 def _new_menu_entry_map() -> dict[str, MenuEntry]:
     return {}
+
+
+def messagebox_recorder(
+    calls: list[tuple[str, str, Misc | None]],
+) -> Callable[..., None]:
+    """Return a typed message-box callback that records its visible arguments."""
+
+    def record(title: str, message: str, **kwargs: TkCallbackOption) -> None:
+        parent = cast(Misc | None, kwargs.get("parent"))
+        calls.append((title, message, parent))
+
+    return record
 
 
 class WindowObservation(TypedDict):
@@ -153,6 +169,8 @@ type TkOption = (
     | Callable[..., str | None]
 )
 
+type TkCallbackOption = TkOption | Misc
+
 
 ObservationT = TypeVar("ObservationT")
 
@@ -220,6 +238,10 @@ class UiTestContext:
     def require_button(self, contract_id: str) -> Button:
         """Return one registered ttk Button with its invocation/state API."""
         return cast(Button, self.require_widget(contract_id))
+
+    def require_label(self, contract_id: str) -> Label:
+        """Return one registered ttk Label with its display/text-variable API."""
+        return cast(Label, self.require_widget(contract_id))
 
     def require_checkbutton(self, contract_id: str) -> Checkbutton:
         """Return one registered ttk Checkbutton with its state API."""
