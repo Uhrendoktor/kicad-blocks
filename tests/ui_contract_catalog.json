@@ -144,10 +144,11 @@
       "id": "functional-block-library",
       "title": "Functional Block Library",
       "purpose": "Search registered block libraries, inspect facade and schematic previews, choose implementations, configure a block, and start placement.",
-      "coverage": "partial",
-      "coverage_note": "The production browser is captured in both themes. Real-widget contracts assert the results/pane inventory, search filtering and count, selection and selected details, Facade/Schematic navigation, implementation and sheet selector callbacks, split-pane geometry, and Refresh, Place, Implementation, Edit Facade, Variants, PCB layouts and Libraries toolbar callback routes. The Open PCB chooser is created with its default choice asserted. Confirm/cancel behavior in both transient choosers and end-to-end KiCad editor hand-off remain to be contracted.",
+      "coverage": "contracted",
+      "coverage_note": "Every application-owned browser control and chooser route has a real-widget interaction contract. Tests assert search/count, selection/details, Facade/Schematic navigation, implementation/sheet selector callbacks, pane geometry, and every toolbar action (Place, Implementation, Edit Facade, Variants, Open PCB, PCB layouts, Refresh, Libraries). The implementation chooser and PCB chooser are each tested for selected-file open, cancellation without side effects, and the Manage layouts route. Native placement and document/editor behavior are separately exercised by KiCad CLI/IPC/editor integration tests; unsupported Symbol Editor targeting and cursor-anchored placement remain explicit product/API limitations, not untested browser buttons.",
       "evidence": [
         "tests/test_library_browser_contracts.py",
+        "tests/test_library_picker_gui.py",
         "tests/test_library_browser.py",
         "tests/capture_visual_docs.py"
       ],
@@ -293,9 +294,10 @@
       "id": "functional-block-picker",
       "title": "Place Functional Block chooser",
       "purpose": "Search for a block, choose profile and variant settings, and return a fully specified placement selection.",
-      "coverage": "partial",
-      "coverage_note": "A real Tk/X11 GUI test drives the production chooser with keyboard input and asserts the selected block. Full contracts for every selector, cancel path, and error state remain to be added.",
+      "coverage": "contracted",
+      "coverage_note": "Every application-owned picker action and view selector has a stable semantic ID and real-Tk interaction contract. Tests search/filter the real Treeview, assert selected-block name/description/metadata and preview callback output, choose an implementation profile and verify its linked variant/typed parameters/PCB layout, change the variant and assert a switch to Custom, verify empty-result selector/preview state and Place Block no-op, and exercise Cancel, Escape, and the empty-library guard. Native SVG generation and final placement are separately verified by the live KiCad picker/placement integration tests.",
       "evidence": [
+        "tests/test_functional_block_picker_contracts.py",
         "tests/test_library_picker_gui.py",
         "tests/capture_visual_docs.py"
       ],
@@ -310,15 +312,90 @@
         "block-picker-filtered.png",
         "block-picker-profile.png",
         "block-picker-workflow.gif"
+      ],
+      "controls": [
+        {
+          "contract_id": "functional-block-picker.window",
+          "type": "window",
+          "label": "Place Functional Block dialog",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "functional-block-picker.search",
+          "type": "entry",
+          "label": "Search blocks",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "functional-block-picker.panes",
+          "type": "panedwindow",
+          "label": "Search/results and configuration/preview panes",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "functional-block-picker.results",
+          "type": "treeview",
+          "label": "Matching functional blocks",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "functional-block-picker.name",
+          "type": "status-label",
+          "label": "Selected block name",
+          "assertion": "observed"
+        },
+        {
+          "contract_id": "functional-block-picker.description",
+          "type": "status-label",
+          "label": "Selected block description",
+          "assertion": "observed"
+        },
+        {
+          "contract_id": "functional-block-picker.variant",
+          "type": "combobox",
+          "label": "Implementation variant",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "functional-block-picker.profile",
+          "type": "combobox",
+          "label": "Configuration profile",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "functional-block-picker.preview",
+          "type": "canvas",
+          "label": "KiCad facade preview",
+          "assertion": "observed"
+        },
+        {
+          "contract_id": "functional-block-picker.metadata",
+          "type": "status-label",
+          "label": "Pin/parameter/layout metadata",
+          "assertion": "observed"
+        },
+        {
+          "contract_id": "functional-block-picker.action.cancel",
+          "type": "button",
+          "label": "Cancel",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "functional-block-picker.action.place",
+          "type": "button",
+          "label": "Place Block",
+          "assertion": "asserted"
+        }
       ]
     },
     {
       "id": "instance-configuration",
       "title": "Instance configuration",
       "purpose": "Change the selected schematic instance's profile, implementation, typed parameters, and PCB layout.",
-      "coverage": "partial",
-      "coverage_note": "A GUI test exercises profile selection and the resulting schematic update. Every control, invalid value, stale instance, and rollback path is not yet covered by component contracts.",
+      "coverage": "contracted",
+      "coverage_note": "Every application-owned interactive control has a stable semantic ID and real-Tk contracts. Tests select a profile and assert that its implementation, typed parameters, and PCB layout are applied; manually edit a parameter and verify the profile becomes Custom; save the values through one undoable KiCad IPC transaction; reject invalid parameter values without starting an IPC edit and recover; cancel with the button or Escape; and assert rollback after an IPC update failure. Missing required facade fields are rejected before the dialog opens. The existing live Eeschema GUI test separately verifies a real KiCad editor hand-off and save.",
       "evidence": [
+        "tests/test_instance_configuration_contracts.py",
         "tests/test_instance_configuration_gui.py"
       ],
       "functionality": [
@@ -330,15 +407,60 @@
       "screenshots": [
         "instance-configuration-light.png",
         "instance-configuration-dark.png"
+      ],
+      "controls": [
+        {
+          "contract_id": "instance-configuration.window",
+          "type": "window",
+          "label": "Configure selected schematic instance",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "instance-configuration.profile",
+          "type": "combobox",
+          "label": "Configuration profile",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "instance-configuration.variant",
+          "type": "combobox",
+          "label": "Implementation variant",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "instance-configuration.parameter.{name}",
+          "type": "entry-or-combobox",
+          "label": "Typed parameter value (one semantic ID per parameter)",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "instance-configuration.layout",
+          "type": "combobox",
+          "label": "PCB layout",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "instance-configuration.action.save",
+          "type": "button",
+          "label": "Save instance",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "instance-configuration.action.cancel",
+          "type": "button",
+          "label": "Cancel",
+          "assertion": "asserted"
+        }
       ]
     },
     {
       "id": "record-picker",
       "title": "Record picker",
       "purpose": "Choose one block record for an action that operates on a library entry.",
-      "coverage": "inventory-only",
-      "coverage_note": "Selection and empty-library behavior have unit tests, but the full window interaction and every button/key path are not yet covered by UI contracts.",
+      "coverage": "contracted",
+      "coverage_note": "Every actionable control has a stable semantic ID and real-Tk interaction contracts. Tests filter the records and assert the result count/description, disable Select when no records match, invoke Select and Cancel, exercise Down/Return and double-click selection, and verify empty and one-record fast paths do not leave a modal window. These contracts test the production picker widgets; downstream operations that consume the chosen record remain separately covered.",
       "evidence": [
+        "tests/test_record_picker_contracts.py",
         "tests/test_library_browser.py"
       ],
       "functionality": [
@@ -347,15 +469,60 @@
         "Cancel without changing the selected object",
         "Exercise empty and single-record libraries"
       ],
-      "screenshots": []
+      "screenshots": [],
+      "controls": [
+        {
+          "contract_id": "record-picker.window",
+          "type": "window",
+          "label": "Searchable record picker dialog",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "record-picker.search",
+          "type": "entry",
+          "label": "Search block library",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "record-picker.results",
+          "type": "treeview",
+          "label": "Matching library blocks",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "record-picker.description",
+          "type": "status-label",
+          "label": "Selected block description",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "record-picker.count",
+          "type": "status-label",
+          "label": "Filtered result count",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "record-picker.action.select",
+          "type": "button",
+          "label": "Select block",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "record-picker.action.cancel",
+          "type": "button",
+          "label": "Cancel",
+          "assertion": "asserted"
+        }
+      ]
     },
     {
       "id": "create-block-form",
       "title": "Create Functional Block",
       "purpose": "Name a block extracted from a selected hierarchical sheet and provide its description.",
-      "coverage": "partial",
-      "coverage_note": "The production form is captured in both themes and the extraction/IPC flow has end-to-end tests. Form validation, cancellation, and every control are not yet registered as UI contracts.",
+      "coverage": "contracted",
+      "coverage_note": "Every actionable form control has a stable semantic ID and a real-Tk interaction contract. Tests execute Create Block and Cancel, assert the returned name/description or cancellation result, reject a blank name without closing the dialog, verify recovery after validation, exercise Escape cancellation, and check that the initial form geometry exposes both primary actions. The full live Eeschema selection/extraction/registration workflow remains separately covered by the real KiCad IPC integration test.",
       "evidence": [
+        "tests/test_create_block_form_contracts.py",
         "tests/create_block_ipc_integration.py",
         "tests/capture_visual_docs.py"
       ],
@@ -367,17 +534,48 @@
       "screenshots": [
         "create-block-form-light.png",
         "create-block-form-dark.png"
+      ],
+      "controls": [
+        {
+          "contract_id": "create-block-form.window",
+          "type": "window",
+          "label": "Create Functional Block dialog",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "create-block-form.name",
+          "type": "entry",
+          "label": "Block name",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "create-block-form.description",
+          "type": "text",
+          "label": "Optional block description",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "create-block-form.action.create",
+          "type": "button",
+          "label": "Create Block",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "create-block-form.action.cancel",
+          "type": "button",
+          "label": "Cancel",
+          "assertion": "asserted"
+        }
       ]
     },
     {
       "id": "manage-libraries",
       "title": "Manage Libraries",
       "purpose": "Register, create, change, and remove shared library roots.",
-      "coverage": "partial",
-      "coverage_note": "The library-root manager is captured and has domain-level coverage for root configuration. Native chooser cancellation and all UI action outcomes are not yet contract-tested.",
+      "coverage": "contracted",
+      "coverage_note": "All registered controls are discovered on the production dialog. Real Tk button invocations verify add-existing, create, change-folder, unregister, set-default and close; selection-dependent enabled states; chooser and confirmation cancellation; persistent registration changes; default fallback; and preservation of unregistered folders.",
       "evidence": [
-        "tests/test_library_browser.py",
-        "tests/capture_visual_docs.py"
+        "tests/test_library_and_pcb_manager_contracts.py"
       ],
       "functionality": [
         "Add or create a library root",
@@ -388,6 +586,62 @@
       "screenshots": [
         "library-folders-light.png",
         "library-folders-dark.png"
+      ],
+      "controls": [
+        {
+          "contract_id": "manage-libraries.window",
+          "type": "window",
+          "label": "Manage Libraries dialog",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "manage-libraries.rows",
+          "type": "treeview",
+          "label": "Registered library rows",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "manage-libraries.status",
+          "type": "status-label",
+          "label": "Registered-library count",
+          "assertion": "observed"
+        },
+        {
+          "contract_id": "manage-libraries.action.add",
+          "type": "button",
+          "label": "Add existing library",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "manage-libraries.action.create",
+          "type": "button",
+          "label": "Create library",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "manage-libraries.action.change",
+          "type": "button",
+          "label": "Change folder",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "manage-libraries.action.unregister",
+          "type": "button",
+          "label": "Unregister library",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "manage-libraries.action.default",
+          "type": "button",
+          "label": "Set default library",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "manage-libraries.action.close",
+          "type": "button",
+          "label": "Close",
+          "assertion": "asserted"
+        }
       ]
     },
     {
@@ -486,11 +740,11 @@
       "id": "implementations-manager",
       "title": "Implementations manager",
       "purpose": "Review the single Default implementation row and maintain named alternatives.",
-      "coverage": "partial",
-      "coverage_note": "The current slice adds real-widget contracts for the manager's Treeview, Add, Edit, Set as default, Remove, Close, and Save & close controls. Tests exercise default promotion, manifest/file updates, renaming without recopying source data, profile-reference protection, and retry after a simulated save failure. The nested Implementation details form and every validation branch remain separately covered by its own screen.",
+      "coverage": "contracted",
+      "coverage_note": "Every application-owned manager control has a real-Tk action or state contract. Tests verify the Default row and selection-dependent Edit/Set as default/Remove states, Add routing into create mode, Edit routing for Default and named alternatives, Set as default persistence, Remove file cleanup and profile-reference protection, confirmation cancellation, Keep/Discard choices on close with pending edits, and retry after a save failure. The nested Implementation details form is independently contracted across existing-file, browse, blank-schematic, copy-source, validation/recovery, and cancel paths.",
       "evidence": [
         "tests/test_implementation_manager_contracts.py",
-        "tests/test_library_browser.py",
+        "tests/test_implementation_details_contracts.py",
         "tests/capture_visual_docs.py"
       ],
       "functionality": [
@@ -564,9 +818,11 @@
       "id": "implementation-details",
       "title": "Implementation details",
       "purpose": "Define a named implementation and choose how its schematic source is created.",
-      "coverage": "partial",
-      "coverage_note": "The real dialog is captured in both themes. Its source mode, file chooser, validation, and cancel behavior still need contracts.",
+      "coverage": "contracted",
+      "coverage_note": "Every application-owned control in the nested form has a stable semantic ID and real-Tk interaction contract. Tests exercise existing-schematic path submission, browse callback and selected-file persistence, blank-selector validation/recovery, invalid-extension rejection and browse recovery, blank temporary schematic creation, copy-from-Default/named-variant selection, missing-copy-source rejection/recovery, and Cancel/Escape without library mutation. Native Eeschema launch/save remains separately verified by the full KiCad GUI integration.",
       "evidence": [
+        "tests/test_implementation_details_contracts.py",
+        "tests/test_implementation_manager_contracts.py",
         "tests/capture_visual_docs.py"
       ],
       "functionality": [
@@ -577,17 +833,73 @@
       "screenshots": [
         "implementation-details-light.png",
         "implementation-details-dark.png"
+      ],
+      "controls": [
+        {
+          "contract_id": "implementation-details.window",
+          "type": "window",
+          "label": "Implementation details dialog",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "implementation-details.variant",
+          "type": "entry",
+          "label": "Implementation selector value",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "implementation-details.mode",
+          "type": "combobox",
+          "label": "Starting-point mode (create flow only)",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "implementation-details.source-label",
+          "type": "status-label",
+          "label": "Source-mode instructions",
+          "assertion": "observed"
+        },
+        {
+          "contract_id": "implementation-details.source",
+          "type": "entry",
+          "label": "Source schematic path (file mode)",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "implementation-details.copy",
+          "type": "combobox",
+          "label": "Library implementation to copy (copy mode)",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "implementation-details.action.browse",
+          "type": "button",
+          "label": "Choose file",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "implementation-details.action.use",
+          "type": "button",
+          "label": "Use implementation",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "implementation-details.action.cancel",
+          "type": "button",
+          "label": "Cancel",
+          "assertion": "asserted"
+        }
       ]
     },
     {
       "id": "pcb-layout-manager",
       "title": "PCB Layout Manager",
       "purpose": "Maintain stored PCB layouts, default selection, and implementation associations.",
-      "coverage": "partial",
-      "coverage_note": "The manager is captured in both themes and layout/model changes have substantial unit coverage. The full UI state matrix and persistence failure paths do not yet have component contracts.",
+      "coverage": "contracted",
+      "coverage_note": "All registered controls are discovered on the production dialog. Real Tk invocations verify default-layout persistence, variant association, remove and asset cleanup, confirmation cancellation, add/copy into the block, save-failure retry, no-selection disabled states, and close/save behavior.",
       "evidence": [
-        "tests/test_library_browser.py",
-        "tests/capture_visual_docs.py"
+        "tests/test_library_and_pcb_manager_contracts.py",
+        "tests/test_add_pcb_layout_contracts.py"
       ],
       "functionality": [
         "Add, remove, or set a layout as Default",
@@ -598,6 +910,68 @@
       "screenshots": [
         "pcb-layout-manager-light.png",
         "pcb-layout-manager-dark.png"
+      ],
+      "controls": [
+        {
+          "contract_id": "pcb-layout-manager.window",
+          "type": "window",
+          "label": "PCB Layout Manager dialog",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "pcb-layout-manager.rows",
+          "type": "treeview",
+          "label": "Stored PCB layouts",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "pcb-layout-manager.status",
+          "type": "status-label",
+          "label": "Save and recovery status",
+          "assertion": "observed"
+        },
+        {
+          "contract_id": "pcb-layout-manager.implementation",
+          "type": "combobox",
+          "label": "Implementation association selector",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "pcb-layout-manager.action.add",
+          "type": "button",
+          "label": "Add layout",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "pcb-layout-manager.action.remove",
+          "type": "button",
+          "label": "Remove layout",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "pcb-layout-manager.action.default",
+          "type": "button",
+          "label": "Set default",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "pcb-layout-manager.action.assign",
+          "type": "button",
+          "label": "Assign implementation",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "pcb-layout-manager.action.close",
+          "type": "button",
+          "label": "Close",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "pcb-layout-manager.action.save-close",
+          "type": "button",
+          "label": "Save and close",
+          "assertion": "asserted"
+        }
       ]
     },
     {
@@ -670,11 +1044,20 @@
       "id": "error-confirmation-reports",
       "title": "Error, confirmation, and report dialogs",
       "purpose": "Explain blocked operations, recoverable errors, destructive confirmations, and completed reports.",
-      "coverage": "inventory-only",
-      "coverage_note": "Dialog behavior is covered selectively by existing operation tests. There is no exhaustive cross-action dialog contract or standard generated dialog inventory yet.",
+      "coverage": "partial",
+      "coverage_note": "The production plugin contains 56 native messagebox/simpledialog call sites across profile creation, source/layout selection, validation, library and implementation maintenance, the Functional Block Library, PCB mapping/anchor/rotation, and action dispatch. The AST-generated registry links all 56 call sites to direct result/effect tests (56 tested, 0 partial, 0 uncovered). This screen remains partial only because those tests stub the OS dialogs: actual native-window rendering, focus/ownership, and platform-specific button layout are not covered by the in-process contracts.",
       "evidence": [
-        "tests/test_library_browser.py",
-        "tests/test_editor_workflow.py"
+        "scripts/dialog_callsite_inventory.py",
+        "tests/dialog_callsite_catalog.json",
+        "tests/test_dialog_inventory.py",
+        "tests/test_dialog_callsite_contracts.py",
+        "tests/test_create_block_form_contracts.py",
+        "tests/test_add_pcb_layout_contracts.py",
+        "tests/test_library_and_pcb_manager_contracts.py",
+        "tests/test_implementation_manager_contracts.py",
+        "tests/test_implementation_details_contracts.py",
+        "tests/test_instance_configuration_contracts.py",
+        "tests/test_uncovered_dialog_contracts.py"
       ],
       "functionality": [
         "Assert an error is visible and identifies the failed operation",
@@ -688,9 +1071,12 @@
       "id": "kicad-native-documents",
       "title": "KiCad editors and native file choosers",
       "purpose": "Open and focus KiCad-owned schematic, symbol, and PCB documents, or select files using the operating system's native dialogs.",
-      "coverage": "inventory-only",
-      "coverage_note": "Some Eeschema and PCB hand-offs have real integration coverage. Cross-platform native window ownership, Symbol Editor selection, and every native file chooser outcome are not established by the current Linux/X11 tests.",
+      "coverage": "partial",
+      "coverage_note": "The shared Tk native-dialog wrappers now have direct execute/result contracts for existing/missing initial paths, extension filters, suggested save names/extensions, parent-window ownership arguments, must-exist directory selection, fallback-to-current-directory behavior, and user cancellation. Real KiCad GUI/IPC tests separately cover schematic editor launch/edit/save, symbol facade placement, and PCB document load/save. Actual OS-native chooser rendering, window-manager focus/ownership, and the complete editor hand-off matrix on Windows and macOS remain unverified; this is not cross-platform sign-off.",
       "evidence": [
+        "tests/test_native_file_dialog_contracts.py",
+        "tests/test_implementation_details_contracts.py",
+        "tests/test_add_pcb_layout_contracts.py",
         "tests/test_eeschema_gui.py",
         "tests/test_pcb_ipc.py",
         "docs/explanation/compatibility.md"
@@ -701,7 +1087,27 @@
         "Test native file/directory chooser filters, initial paths, and cancellation",
         "Separate proven IPC behavior from platform-specific window-manager behavior"
       ],
-      "screenshots": []
+      "screenshots": [],
+      "controls": [
+        {
+          "contract_id": "kicad-native-documents.open-file",
+          "type": "native-file-dialog",
+          "label": "Open KiCad schematic/PCB file chooser wrapper",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "kicad-native-documents.save-file",
+          "type": "native-file-dialog",
+          "label": "Save KiCad document/report chooser wrapper",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "kicad-native-documents.choose-directory",
+          "type": "native-directory-dialog",
+          "label": "Choose library folder wrapper",
+          "assertion": "asserted"
+        }
+      ]
     }
   ]
 }

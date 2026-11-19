@@ -1585,8 +1585,9 @@ def synchronize_facade_pins_from_implementation(block: BlockRecord) -> list[str]
         existing = current_by_name.get(key)
         if existing is not None:
             node = copy.deepcopy(existing)
-            # The hierarchical-label shape is authoritative for electrical type.
-            node[1] = _Quoted(
+            # KiCad's pin electrical type is a bare S-expression atom, not
+            # a quoted string. Quoting it makes the republished library invalid.
+            node[1] = (
                 "tri_state" if pin.electrical_type == "tristate" else pin.electrical_type
             )
             name_node = _direct(node, "name")

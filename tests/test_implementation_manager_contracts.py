@@ -380,3 +380,358 @@ def test_add_variant_save_failure_can_be_retried_with_save_and_close(
         assert opened.is_file()
     finally:
         root.destroy()
+
+
+def test_implementation_manager_selection_controls_follow_row_state(
+    monkeypatch, tmp_path
+):
+    record, _sources = _new_manager_fixture(tmp_path, variants=("1V8",))
+    root = _new_root(monkeypatch)
+    context = UiTestContext(root)
+
+    def assert_state(widget, state: str):
+        assert widget.instate([state])
+
+    def inspect_states(_dialog):
+        widgets = context.refresh_widgets()
+        tree = widgets["implementations-manager.rows"]
+        edit = widgets["implementations-manager.action.edit"]
+        default = widgets["implementations-manager.action.default"]
+        remove = widgets["implementations-manager.action.remove"]
+
+        # Initial selection is the Default row: edit is enabled, but promote
+        # and remove are disabled.
+        assert tree.selection() == ("0",)
+        assert_state(edit, "!disabled")
+        assert edit.cget("text") == "Edit default"
+        assert_state(default, "disabled")
+        assert default.cget("text") == "Default selected"
+        assert_state(remove, "disabled")
+
+        # No selected row disables each selection-dependent action.
+        tree.selection_remove(*tree.selection())
+        tree.event_generate("<<TreeviewSelect>>")
+        root.update_idletasks()
+        root.update()
+        assert tree.selection() == ()
+        for widget in (edit, default, remove):
+            assert_state(widget, "disabled")
+        assert default.cget("text") == "Set as default"
+
+        # Selecting an alternative enables Edit, promotion, and removal.
+        tree.selection_set("1")
+        tree.event_generate("<<TreeviewSelect>>")
+        root.update_idletasks()
+        root.update()
+        assert_state(edit, "!disabled")
+        assert edit.cget("text") == "Edit implementation"
+        assert_state(default, "!disabled")
+        assert default.cget("text") == "Set as default"
+        assert_state(remove, "!disabled")
+
+        # Returning to Default restores its distinct state.
+        tree.selection_set("0")
+        tree.event_generate("<<TreeviewSelect>>")
+        root.update_idletasks()
+        root.update()
+        assert_state(edit, "!disabled")
+        assert_state(default, "disabled")
+        assert_state(remove, "disabled")
+        for contract_id in (
+            "implementations-manager.action.add",
+            "implementations-manager.action.close",
+            "implementations-manager.action.save-close",
+        ):
+            assert_state(widgets[contract_id], "!disabled")
+        _click(context, "implementations-manager.action.close", "Close", closes=True)
+
+    try:
+        result = _run_manager(root, record, context, inspect_states)
+        assert result is None
+    finally:
+        root.destroy()
+
+
+def test_edit_default_row_returns_default_schematic_and_closes_manager(
+    monkeypatch, tmp_path
+):
+    record, _sources = _new_manager_fixture(tmp_path, variants=("1V8",))
+    default_path = record.path / record.manifest["implementation_file"]
+    root = _new_root(monkeypatch)
+    context = UiTestContext(root)
+
+    def open_default(_dialog):
+        assert context.require_widget("implementations-manager.rows").selection() == ("0",)
+        _click(
+            context,
+            "implementations-manager.action.edit",
+            "Edit default",
+            closes=True,
+        )
+
+    try:
+        result = _run_manager(root, record, context, open_default)
+        assert result == default_path
+        assert result.is_file()
+    finally:
+        root.destroy()
+
+
+def test_remove_confirmation_cancel_preserves_manifest_row_and_source_file(
+    monkeypatch, tmp_path
+):
+    record, _sources = _new_manager_fixture(tmp_path, variants=("1V8",))
+    variant_file = record.path / record.manifest["variants"][0]["file"]
+    original_manifest = read_manifest(record.path)
+    original_bytes = variant_file.read_bytes()
+    prompts = []
+
+    def cancel_confirmation(title, message, **_kwargs):
+        prompts.append((title, message))
+        return False
+
+    monkeypatch.setattr(
+        plugin_actions.messagebox,
+        "askyesno",
+        cancel_confirmation,
+    )
+    root = _new_root(monkeypatch)
+    context = UiTestContext(root)
+
+    def cancel_remove(_dialog):
+        tree = context.require_widget("implementations-manager.rows")
+        _select_variant(context, "1", tuple(tree.item("1", "values")))
+        _click(context, "implementations-manager.action.remove", "Remove")
+        assert prompts == [("Remove implementation", "Remove 1V8?")]
+        assert tree.get_children() == ("0", "1")
+        assert read_manifest(record.path) == original_manifest
+        assert variant_file.read_bytes() == original_bytes
+        _click(context, "implementations-manager.action.close", "Close", closes=True)
+
+    try:
+        _run_manager(root, record, context, cancel_remove)
+    finally:
+        root.destroy()
+
+
+def test_close_confirmation_can_keep_pending_changes_or_discard_them(
+    monkeypatch, tmp_path
+):
+    record, _sources = _new_manager_fixture(tmp_path)
+    source = tmp_path / "pending-implementation.kicad_sch"
+    source.write_text(
+        '(kicad_sch (version 20250114) (generator "discard-contract"))\n',
+        encoding="utf-8",
+    )
+    original_manifest = read_manifest(record.path)
+    monkeypatch.setattr(
+        plugin_actions,
+        "_ask_implementation_details",
+        lambda *_args, **_kwargs: ("3V3", str(source)),
+    )
+    save_attempts = []
+
+    def fail_save(*_args, **_kwargs):
+        save_attempts.append("attempt")
+        raise OSError("simulated library write failure")
+
+    monkeypatch.setattr(plugin_actions, "_save_block_variants", fail_save)
+    errors = []
+    monkeypatch.setattr(
+        plugin_actions.messagebox,
+        "showerror",
+        lambda title, message, **_kwargs: errors.append((title, str(message))),
+    )
+    confirmations = []
+    answers = iter((False, True))
+
+    def confirm_discard(title, message, **_kwargs):
+        confirmations.append((title, message))
+        return next(answers)
+
+    monkeypatch.setattr(plugin_actions.messagebox, "askyesno", confirm_discard)
+    root = _new_root(monkeypatch)
+    context = UiTestContext(root)
+
+    def stage_then_discard(_dialog):
+        _click(context, "implementations-manager.action.add", "Add variant")
+        status = context.require_widget("implementations-manager.status")
+        variable = str(status.cget("textvariable"))
+        assert "Save failed; use Save & close to retry." in status.getvar(variable)
+        assert save_attempts == ["attempt"]
+        assert len(errors) == 1
+        assert read_manifest(record.path) == original_manifest
+
+        _click(context, "implementations-manager.action.close", "Close")
+        assert confirmations == [
+            (
+                "Discard implementation changes",
+                "Discard the unsaved implementation changes?",
+            )
+        ]
+        assert _manager_dialog(root).winfo_exists()
+        assert read_manifest(record.path) == original_manifest
+
+        _click(
+            context,
+            "implementations-manager.action.close",
+            "Close",
+            closes=True,
+        )
+        assert len(confirmations) == 2
+
+    try:
+        result = _run_manager(root, record, context, stage_then_discard)
+        assert result is None
+        assert read_manifest(record.path) == original_manifest
+        assert not (Path(record.path) / "implementation_3v3.kicad_sch").exists()
+    finally:
+        root.destroy()
+
+
+def test_add_button_routes_to_create_mode_details_and_persists_source(
+    monkeypatch, tmp_path
+):
+    record, _sources = _new_manager_fixture(tmp_path)
+    source_file = tmp_path / "add-dialog-source.kicad_sch"
+    source_file.write_text(
+        '(kicad_sch (version 20250114) (generator "nested-dialog-contract"))\n',
+        encoding="utf-8",
+    )
+    requests = []
+
+    def ask_details(
+        parent,
+        *,
+        value="",
+        source="",
+        record=None,
+        allow_create=False,
+    ):
+        requests.append((parent.title(), value, source, record, allow_create))
+        return "5V", str(source_file)
+
+    monkeypatch.setattr(
+        plugin_actions,
+        "_ask_implementation_details",
+        ask_details,
+    )
+    root = _new_root(monkeypatch)
+    context = UiTestContext(root)
+
+    def add_from_details(_dialog):
+        _click(context, "implementations-manager.action.add", "Add variant")
+        assert requests == [
+            (
+                "Implementations — USB power block",
+                "",
+                "",
+                record,
+                True,
+            )
+        ]
+        tree = context.require_widget("implementations-manager.rows")
+        assert tree.get_children() == ("0", "1")
+        assert tree.item("1", "values")[0] == "5V"
+        saved_variant = read_manifest(record.path)["variants"][0]
+        library_source = Path(record.path) / saved_variant["file"]
+        assert library_source.is_file()
+        assert library_source.read_bytes() == source_file.read_bytes()
+        _click(
+            context,
+            "implementations-manager.action.save-close",
+            "Save & close",
+            closes=True,
+        )
+
+    try:
+        result = _run_manager(root, record, context, add_from_details)
+        saved_variant = read_manifest(record.path)["variants"][0]
+        assert result == Path(record.path) / saved_variant["file"]
+        assert result.is_file()
+    finally:
+        root.destroy()
+
+
+def test_add_variant_duplicate_value_reports_error_and_preserves_manifest(
+    monkeypatch, tmp_path
+):
+    record, sources = _new_manager_fixture(tmp_path, variants=("1V8",))
+    original = read_manifest(record.path)
+    monkeypatch.setattr(
+        plugin_actions,
+        "_ask_implementation_details",
+        lambda *_args, **_kwargs: ("1V8", str(sources["1V8"])),
+    )
+    errors = []
+    monkeypatch.setattr(
+        plugin_actions.messagebox,
+        "showerror",
+        lambda title, message, **kwargs: errors.append(
+            (title, str(message), kwargs.get("parent"))
+        ),
+    )
+    root = _new_root(monkeypatch)
+    context = UiTestContext(root)
+
+    def add_duplicate(_dialog):
+        _click(context, "implementations-manager.action.add", "Add variant")
+        assert len(errors) == 1
+        assert errors[0][0] == "Add implementation"
+        assert errors[0][1] == "The value '1V8' already exists."
+        assert errors[0][2] is _manager_dialog(root)
+        assert read_manifest(record.path) == original
+        _click(
+            context,
+            "implementations-manager.action.close",
+            "Close",
+            closes=True,
+        )
+
+    try:
+        _run_manager(root, record, context, add_duplicate)
+    finally:
+        root.destroy()
+
+
+def test_edit_variant_duplicate_value_reports_error_and_preserves_manifest(
+    monkeypatch, tmp_path
+):
+    record, sources = _new_manager_fixture(tmp_path, variants=("1V8", "3V3"))
+    original = read_manifest(record.path)
+    monkeypatch.setattr(
+        plugin_actions,
+        "_ask_implementation_details",
+        lambda *_args, **_kwargs: ("3V3", str(sources["3V3"])),
+    )
+    errors = []
+    monkeypatch.setattr(
+        plugin_actions.messagebox,
+        "showerror",
+        lambda title, message, **kwargs: errors.append(
+            (title, str(message), kwargs.get("parent"))
+        ),
+    )
+    root = _new_root(monkeypatch)
+    context = UiTestContext(root)
+
+    def edit_duplicate(_dialog):
+        tree = context.require_widget("implementations-manager.rows")
+        _select_variant(context, "1", tuple(tree.item("1", "values")))
+        _click(context, "implementations-manager.action.edit", "Edit implementation")
+        assert len(errors) == 1
+        assert errors[0][0] == "Edit implementation"
+        assert errors[0][1] == "The value '3V3' already exists."
+        assert errors[0][2] is _manager_dialog(root)
+        assert read_manifest(record.path) == original
+        _click(
+            context,
+            "implementations-manager.action.close",
+            "Close",
+            closes=True,
+        )
+
+    try:
+        _run_manager(root, record, context, edit_duplicate)
+    finally:
+        root.destroy()

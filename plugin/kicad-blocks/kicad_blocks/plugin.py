@@ -909,6 +909,8 @@ def _show_selected_block_configuration(
         )
 
     dialog = tk.Toplevel(parent)
+    dialog._kicad_ui_screen_id = "instance-configuration"
+    dialog._kicad_ui_contract_id = "instance-configuration.window"
     dialog.title(f"Configure {instance.reference} — {block.name}")
     dialog.transient(parent)
 
@@ -946,6 +948,7 @@ def _show_selected_block_configuration(
             values=list(profile_labels),
             state="readonly",
         )
+        profile_combo._kicad_ui_contract_id = "instance-configuration.profile"
         profile_combo.pack(fill="x")
         _add_tooltip(profile_combo, "A profile fills the linked variant, parameters and PCB layout.")
 
@@ -961,6 +964,7 @@ def _show_selected_block_configuration(
             values=[str(item["value"]) for item in variants],
             state="normal",
         )
+        variant_combo._kicad_ui_contract_id = "instance-configuration.variant"
         variant_combo.pack(fill="x")
         _add_tooltip(variant_combo, "Choose a declared variant or enter a KiCad text-variable reference.")
 
@@ -986,6 +990,9 @@ def _show_selected_block_configuration(
                 )
             else:
                 widget = ttk.Entry(section, textvariable=variable)
+            widget._kicad_ui_contract_id = (
+                f"instance-configuration.parameter.{name}"
+            )
             widget.grid(row=row * 2, column=1, sticky="ew", pady=(3, 0))
             description = parameter.get("description") or f"Default: {parameter['default']}"
             _add_tooltip(widget, description)
@@ -1037,6 +1044,7 @@ def _show_selected_block_configuration(
             values=list(layout_ids),
             state="readonly",
         )
+        layout_combo._kicad_ui_contract_id = "instance-configuration.layout"
         layout_combo.pack(fill="x")
         _add_tooltip(layout_combo, "PCB layout used when applying this block to a board.")
 
@@ -1176,8 +1184,15 @@ def _show_selected_block_configuration(
             "The shared library block was not modified.")
         dialog.destroy()
 
-    _action_button(footer, "Cancel", dialog.destroy, "cancel", "Discard instance edits").pack(side="right", padx=(8, 0))
-    _action_button(footer, "Save instance", save_configuration, "save", "Save configuration on the selected instance").pack(side="right")
+    _action_button(
+        footer, "Cancel", dialog.destroy, "cancel", "Discard instance edits",
+        contract_id="instance-configuration.action.cancel",
+    ).pack(side="right", padx=(8, 0))
+    _action_button(
+        footer, "Save instance", save_configuration, "save",
+        "Save configuration on the selected instance",
+        contract_id="instance-configuration.action.save",
+    ).pack(side="right")
     dialog.bind("<Escape>", lambda _event: dialog.destroy())
     dialog.protocol("WM_DELETE_WINDOW", dialog.destroy)
     _set_window_geometry(dialog, 700, 720, 580, 500)
@@ -1208,6 +1223,8 @@ def _pick_block_for_placement(records, parent):
         raise ValueError("No blocks were found in the registered functional-block libraries.")
 
     dialog = tk.Toplevel(parent)
+    dialog._kicad_ui_screen_id = "functional-block-picker"
+    dialog._kicad_ui_contract_id = "functional-block-picker.window"
     dialog.title("Place Functional Block")
     dialog.transient(parent)
 
@@ -1216,9 +1233,11 @@ def _pick_block_for_placement(records, parent):
     ttk.Label(outer, text="Search").pack(anchor="w")
     search = tk.StringVar()
     search_entry = ttk.Entry(outer, textvariable=search)
+    search_entry._kicad_ui_contract_id = "functional-block-picker.search"
     search_entry.pack(fill="x", pady=(3, 6))
 
     panes = ttk.Panedwindow(outer, orient="horizontal")
+    panes._kicad_ui_contract_id = "functional-block-picker.panes"
     panes.pack(fill="both", expand=True)
     left = ttk.Frame(panes, padding=(0, 0, 8, 0))
     right = ttk.Frame(panes, padding=(8, 0, 0, 0))
@@ -1228,6 +1247,7 @@ def _pick_block_for_placement(records, parent):
     left.columnconfigure(0, weight=1)
 
     tree = ttk.Treeview(left, columns=("block", "library"), show="headings", selectmode="browse")
+    tree._kicad_ui_contract_id = "functional-block-picker.results"
     tree.heading("block", text="Functional block")
     tree.heading("library", text="Library")
     tree.column("block", width=220, minwidth=160, stretch=True)
@@ -1242,8 +1262,10 @@ def _pick_block_for_placement(records, parent):
     _bind_mousewheel(tree, lambda amount: tree.yview_scroll(amount, "units"))
 
     name = ttk.Label(right, text="Select a functional block")
+    name._kicad_ui_contract_id = "functional-block-picker.name"
     name.pack(anchor="w")
     description = ttk.Label(right, text="", wraplength=620, justify="left")
+    description._kicad_ui_contract_id = "functional-block-picker.description"
     description.pack(fill="x", anchor="w", pady=(4, 10))
 
     config = ttk.Frame(right)
@@ -1252,19 +1274,23 @@ def _pick_block_for_placement(records, parent):
     ttk.Label(config, text="Implementation variant").grid(row=0, column=0, sticky="w", padx=(0, 10))
     variant_value = tk.StringVar()
     variant_combo = ttk.Combobox(config, textvariable=variant_value, state="readonly", width=32)
+    variant_combo._kicad_ui_contract_id = "functional-block-picker.variant"
     variant_combo.grid(row=0, column=1, sticky="ew", pady=2)
     ttk.Label(config, text="Configuration profile").grid(row=1, column=0, sticky="w", padx=(0, 10))
     profile_value = tk.StringVar()
     profile_combo = ttk.Combobox(config, textvariable=profile_value, state="readonly", width=32)
+    profile_combo._kicad_ui_contract_id = "functional-block-picker.profile"
     profile_combo.grid(row=1, column=1, sticky="ew", pady=2)
 
     preview_box = ttk.LabelFrame(right, text="KiCad facade preview", padding=5)
     preview_box.pack(fill="both", expand=True)
     preview = tk.Canvas(preview_box, height=270, highlightthickness=0, borderwidth=0)
+    preview._kicad_ui_contract_id = "functional-block-picker.preview"
     preview.pack(fill="both", expand=True)
     _bind_mousewheel(preview, lambda amount: preview.yview_scroll(amount, "units"))
 
     metadata = ttk.Label(right, text="", wraplength=620, justify="left")
+    metadata._kicad_ui_contract_id = "functional-block-picker.metadata"
     metadata.pack(fill="x", anchor="w", pady=(6, 0))
 
     records_by_id = {}
@@ -1415,8 +1441,16 @@ def _pick_block_for_placement(records, parent):
 
     buttons = ttk.Frame(outer)
     buttons.pack(fill="x", pady=(10, 0))
-    _action_button(buttons, "Cancel", dialog.destroy, "cancel", "Cancel and close this dialog").pack(side="right")
-    _action_button(buttons, "Place Block", choose, "place", "Start native symbol placement with this block").pack(side="right", padx=(0, 8))
+    _action_button(
+        buttons, "Cancel", dialog.destroy, "cancel",
+        "Cancel and close this dialog",
+        contract_id="functional-block-picker.action.cancel",
+    ).pack(side="right")
+    _action_button(
+        buttons, "Place Block", choose, "place",
+        "Start native symbol placement with this block",
+        contract_id="functional-block-picker.action.place",
+    ).pack(side="right", padx=(0, 8))
     render_results()
     _set_window_geometry(dialog, 1080, 720, 900, 580)
     dialog.grab_set()
@@ -1433,6 +1467,8 @@ def _pick_record(records, parent, title: str):
         return records[0]
 
     dialog = tk.Toplevel(parent)
+    dialog._kicad_ui_screen_id = "record-picker"
+    dialog._kicad_ui_contract_id = "record-picker.window"
     dialog.title(title)
     dialog.transient(parent)
 
@@ -1441,6 +1477,7 @@ def _pick_record(records, parent, title: str):
     ttk.Label(outer, text="Search the block library").pack(anchor="w")
     search = tk.StringVar()
     search_entry = ttk.Entry(outer, textvariable=search)
+    search_entry._kicad_ui_contract_id = "record-picker.search"
     search_entry.pack(fill="x", pady=(4, 3))
     results_frame = ttk.Frame(outer)
     results_frame.pack(fill="both", expand=True)
@@ -1452,6 +1489,7 @@ def _pick_record(records, parent, title: str):
         show="headings",
         selectmode="browse",
     )
+    tree._kicad_ui_contract_id = "record-picker.results"
     tree.heading("block", text="Block")
     tree.heading("library", text="Library")
     tree.heading("pins", text="Pins")
@@ -1476,6 +1514,7 @@ def _pick_record(records, parent, title: str):
         wraplength=700,
         justify="left",
     )
+    description._kicad_ui_contract_id = "record-picker.description"
     description.pack(fill="x", anchor="w", pady=(8, 0))
     palette = getattr(parent, "_kicad_blocks_palette", {})
     count_label = ttk.Label(
@@ -1483,6 +1522,7 @@ def _pick_record(records, parent, title: str):
         foreground=palette.get("muted", "#5f6871"),
         font=("TkDefaultFont", 8),
     )
+    count_label._kicad_ui_contract_id = "record-picker.count"
     count_label.pack(anchor="w", pady=(3, 0))
 
     def short_description(record) -> str:
@@ -1495,10 +1535,12 @@ def _pick_record(records, parent, title: str):
     select_button = _action_button(
         outer, "Select block", lambda: None, "select",
         "Use the highlighted block", state="disabled",
+        contract_id="record-picker.action.select",
     )
     select_button.pack(side="right", pady=(10, 0))
     _action_button(
         outer, "Cancel", dialog.destroy, "cancel", "Close without selecting a block",
+        contract_id="record-picker.action.cancel",
     ).pack(side="right", padx=(0, 8), pady=(10, 0))
 
     def render_results(*_args):
@@ -1542,7 +1584,9 @@ def _pick_record(records, parent, title: str):
         record = records_by_id.get(selection[0]) if selection else None
         selected_record[0] = record
         if record is None:
-            description.configure(text="")
+            description.configure(
+                text="No matching blocks." if not tree.get_children() else ""
+            )
             select_button.configure(state="disabled")
         else:
             description.configure(text=short_description(record))
@@ -1925,6 +1969,8 @@ def _ask_create_block_details(parent, source_sheet: Path) -> tuple[str, str] | N
     """Collect block details in a mapped owner window, not a child of a withdrawn root."""
     reuse_parent = bool(getattr(parent, "_kicad_blocks_reuse_for_create", False))
     dialog = parent if reuse_parent else tk.Toplevel(parent)
+    dialog._kicad_ui_screen_id = "create-block-form"
+    dialog._kicad_ui_contract_id = "create-block-form.window"
     dialog.title("Create Functional Block")
     if not reuse_parent:
         dialog.transient(parent)
@@ -1946,9 +1992,11 @@ def _ask_create_block_details(parent, source_sheet: Path) -> tuple[str, str] | N
         value=source_sheet.stem.replace("_", " ").replace("-", " ").title()
     )
     name_entry = ttk.Entry(frame, textvariable=name)
+    name_entry._kicad_ui_contract_id = "create-block-form.name"
     name_entry.pack(fill="x", pady=(3, 8))
     ttk.Label(frame, text="Description (optional)").pack(anchor="w")
     description = tk.Text(frame, height=3, wrap="word", relief="flat", borderwidth=1)
+    description._kicad_ui_contract_id = "create-block-form.description"
     description.pack(fill="both", expand=True, pady=(3, 10))
     description.configure(
         background=palette.get("field", "#ffffff"),
@@ -1980,8 +2028,15 @@ def _ask_create_block_details(parent, source_sheet: Path) -> tuple[str, str] | N
 
     buttons = ttk.Frame(frame)
     buttons.pack(fill="x")
-    _action_button(buttons, "Cancel", cancel, "cancel", "Cancel block creation").pack(side="right")
-    _action_button(buttons, "Create Block", accept, "create", "Create the reusable block from this sheet").pack(side="right", padx=(0, 8))
+    _action_button(
+        buttons, "Cancel", cancel, "cancel", "Cancel block creation",
+        contract_id="create-block-form.action.cancel",
+    ).pack(side="right")
+    _action_button(
+        buttons, "Create Block", accept, "create",
+        "Create the reusable block from this sheet",
+        contract_id="create-block-form.action.create",
+    ).pack(side="right", padx=(0, 8))
 
     dialog.bind("<Return>", lambda _event: accept())
     dialog.bind("<Escape>", lambda _event: cancel())
@@ -3550,6 +3605,8 @@ def _show_block_layout_editor(
     from .repository import read_manifest
 
     dialog = tk.Toplevel(parent)
+    dialog._kicad_ui_screen_id = "pcb-layout-manager"
+    dialog._kicad_ui_contract_id = "pcb-layout-manager.window"
     dialog.title(f"PCB layouts — {record.name}")
     dialog.transient(parent)
     frame = ttk.Frame(dialog, padding=14)
@@ -3569,6 +3626,7 @@ def _show_block_layout_editor(
         show="headings",
         selectmode="browse",
     )
+    tree._kicad_ui_contract_id = "pcb-layout-manager.rows"
     tree.heading("name", text="Layout")
     tree.heading("assigned", text="Available to")
     tree.heading("file", text="PCB file")
@@ -3628,7 +3686,13 @@ def _show_block_layout_editor(
             iid = str(index)
             tree.insert(
                 "", "end", iid=iid,
-                values=(item.get("name", item["id"]), assigned_to(item["id"]), item["file"]),
+                values=(
+                    item.get("name", item["id"]),
+                    assigned_to(item["id"]),
+                    item.get("file")
+                    or Path(str(item.get("source") or "")).name
+                    or "Pending save",
+                ),
                 tags=("even" if index % 2 == 0 else "odd",),
             )
             if item["id"] == selected_id:
@@ -3766,21 +3830,30 @@ def _show_block_layout_editor(
         save_button.configure(state="normal")
 
     palette = getattr(parent, "_kicad_blocks_palette", {})
-    ttk.Label(
+    status_label = ttk.Label(
         frame,
         textvariable=status_value,
         foreground=palette.get("muted", "#5f6871"),
         font=("TkDefaultFont", 8),
         wraplength=900,
         justify="left",
-    ).grid(row=2, column=0, sticky="ew", pady=(2, 4))
+    )
+    status_label._kicad_ui_contract_id = "pcb-layout-manager.status"
+    status_label.grid(row=2, column=0, sticky="ew", pady=(2, 4))
     actions = ttk.Frame(frame)
     actions.grid(row=3, column=0, sticky="ew", pady=(8, 0))
-    _action_button(actions, "Add layout", add_layout, "add", "Add a PCB layout").pack(side="left")
-    remove_button = _action_button(actions, "Remove", remove_layout, "remove", "Remove the selected PCB layout", state="disabled")
+    _action_button(
+        actions, "Add layout", add_layout, "add", "Add a PCB layout",
+        contract_id="pcb-layout-manager.action.add",
+    ).pack(side="left")
+    remove_button = _action_button(
+        actions, "Remove", remove_layout, "remove", "Remove the selected PCB layout",
+        state="disabled", contract_id="pcb-layout-manager.action.remove",
+    )
     remove_button.pack(side="left", padx=(8, 0))
     default_button = _action_button(
-        actions, "Set default", make_default, "default", "Use this layout as the default", state="disabled"
+        actions, "Set default", make_default, "default", "Use this layout as the default",
+        state="disabled", contract_id="pcb-layout-manager.action.default",
     )
     default_button.pack(side="left", padx=(8, 0))
 
@@ -3791,10 +3864,12 @@ def _show_block_layout_editor(
         link_actions, textvariable=implementation_value,
         values=implementation_values, state="readonly", width=22,
     )
+    implementation_combo._kicad_ui_contract_id = "pcb-layout-manager.implementation"
     implementation_combo.pack(side="left", padx=(8, 0))
     link_button = _action_button(
         link_actions, "Assign", link_selected, "select",
-        "Associate the selected layout with this implementation", state="disabled"
+        "Associate the selected layout with this implementation", state="disabled",
+        contract_id="pcb-layout-manager.action.assign",
     )
     link_button.pack(side="left", padx=(8, 0))
 
@@ -3813,10 +3888,12 @@ def _show_block_layout_editor(
     _action_button(
         footer, "Close", cancel_layout_edits, "cancel",
         "Close the PCB layout manager",
+        contract_id="pcb-layout-manager.action.close",
     ).pack(side="right")
     save_button = _action_button(
         footer, "Save & close", lambda: None, "save",
         "Save any pending changes and close the PCB layout manager",
+        contract_id="pcb-layout-manager.action.save-close",
     )
     save_button.pack(side="right", padx=(0, 8))
 
@@ -3960,6 +4037,8 @@ def _ask_implementation_details(
 ) -> tuple[str, str] | None:
     """Collect an implementation selector and its starting schematic."""
     dialog = tk.Toplevel(parent)
+    dialog._kicad_ui_screen_id = "implementation-details"
+    dialog._kicad_ui_contract_id = "implementation-details.window"
     dialog.title("Implementation details")
     dialog.transient(parent)
     frame = ttk.Frame(dialog, padding=12)
@@ -3975,6 +4054,7 @@ def _ask_implementation_details(
     )
     selector_value = tk.StringVar(value=value)
     selector_entry = ttk.Entry(frame, textvariable=selector_value)
+    selector_entry._kicad_ui_contract_id = "implementation-details.variant"
     selector_entry.grid(row=2, column=0, columnspan=3, sticky="ew", pady=(2, 8))
     _add_tooltip(selector_entry, "Stored in KB_VARIANT on the placed facade.")
 
@@ -3994,6 +4074,7 @@ def _ask_implementation_details(
         mode_combo = ttk.Combobox(
             frame, textvariable=mode_value, values=modes, state="readonly"
         )
+        mode_combo._kicad_ui_contract_id = "implementation-details.mode"
         mode_combo.grid(row=4, column=0, columnspan=3, sticky="ew", pady=(3, 8))
     else:
         modes = ["Choose a schematic file"]
@@ -4001,11 +4082,15 @@ def _ask_implementation_details(
 
     source_row = 5 if allow_create else 3
     source_label = ttk.Label(frame, text="Source schematic (.kicad_sch)")
+    source_label._kicad_ui_contract_id = "implementation-details.source-label"
     source_label.grid(row=source_row, column=0, columnspan=3, sticky="w")
     source_entry = ttk.Entry(frame, textvariable=source_value)
+    source_entry._kicad_ui_contract_id = "implementation-details.source"
     source_entry.grid(row=source_row + 1, column=0, columnspan=2, sticky="ew", pady=(3, 10))
     browse_button = _action_button(
-        frame, "Choose file…", lambda: None, "file", "Choose an implementation schematic"
+        frame, "Choose file…", lambda: None, "file",
+        "Choose an implementation schematic",
+        contract_id="implementation-details.action.browse",
     )
     browse_button.grid(row=source_row + 1, column=2, sticky="ew", padx=(8, 0), pady=(4, 14))
     copy_combo = ttk.Combobox(
@@ -4014,6 +4099,7 @@ def _ask_implementation_details(
         values=(),
         state="readonly",
     )
+    copy_combo._kicad_ui_contract_id = "implementation-details.copy"
     copy_combo.grid(
         row=source_row + 1, column=0, columnspan=3, sticky="ew", pady=(3, 10)
     )
@@ -4107,9 +4193,15 @@ def _ask_implementation_details(
 
     buttons = ttk.Frame(frame)
     buttons.grid(row=source_row + 2, column=0, columnspan=3, sticky="ew", pady=(8, 2))
-    _action_button(buttons, "Cancel", dialog.destroy, "cancel", "Cancel implementation setup").pack(side="right")
     _action_button(
-        buttons, "Use implementation", accept, "select", "Use the selected implementation",
+        buttons, "Cancel", dialog.destroy, "cancel",
+        "Cancel implementation setup",
+        contract_id="implementation-details.action.cancel",
+    ).pack(side="right")
+    _action_button(
+        buttons, "Use implementation", accept, "select",
+        "Use the selected implementation",
+        contract_id="implementation-details.action.use",
     ).pack(side="right", padx=(0, 8))
     dialog.bind("<Return>", lambda _event: accept())
     dialog.bind("<Escape>", lambda _event: dialog.destroy())
@@ -4471,6 +4563,8 @@ def _show_block_variant_editor(
 def _show_library_roots_dialog(parent) -> bool:
     """Manage registered library folders with explicit add/create/edit actions."""
     dialog = tk.Toplevel(parent)
+    dialog._kicad_ui_screen_id = "manage-libraries"
+    dialog._kicad_ui_contract_id = "manage-libraries.window"
     dialog.title("Manage Libraries")
     dialog.transient(parent)
 
@@ -4494,6 +4588,7 @@ def _show_library_roots_dialog(parent) -> bool:
         show="headings",
         selectmode="browse",
     )
+    tree._kicad_ui_contract_id = "manage-libraries.rows"
     tree.heading("library", text="Library")
     tree.heading("blocks", text="Blocks")
     tree.heading("role", text="Use")
@@ -4517,11 +4612,13 @@ def _show_library_roots_dialog(parent) -> bool:
     _bind_mousewheel(tree, lambda amount: tree.yview_scroll(amount, "units"))
 
     status = tk.StringVar()
-    ttk.Label(
+    status_label = ttk.Label(
         outer,
         textvariable=status,
         foreground=getattr(parent, "_kicad_blocks_palette", {}).get("muted", "#5f6871"),
-    ).grid(row=2, column=0, sticky="w", pady=(6, 0))
+    )
+    status_label._kicad_ui_contract_id = "manage-libraries.status"
+    status_label.grid(row=2, column=0, sticky="w", pady=(6, 0))
 
     changed = [False]
     environment_value = os.environ.get("KICAD_BLOCKS_LIBRARY")
@@ -4691,10 +4788,12 @@ def _show_library_roots_dialog(parent) -> bool:
     _action_button(
         library_actions, "Add library", add_library, "add",
         "Register an existing block-library folder",
+        contract_id="manage-libraries.action.add",
     ).pack(side="left")
     _action_button(
         library_actions, "Create library", create_library, "create",
         "Create and register a new block-library folder",
+        contract_id="manage-libraries.action.create",
     ).pack(side="left", padx=(8, 0))
 
     ttk.Separator(outer, orient="horizontal").grid(
@@ -4705,28 +4804,41 @@ def _show_library_roots_dialog(parent) -> bool:
     change_button = _action_button(
         selected_actions, "Change folder", change_library_folder, "change",
         "Replace the selected registered folder without moving its files",
+        contract_id="manage-libraries.action.change",
     )
     change_button.pack(side="left")
     remove_button = _action_button(
         selected_actions, "Unregister", remove_library, "remove",
         "Remove the selected folder from the registered list; files remain on disk",
+        contract_id="manage-libraries.action.unregister",
     )
     remove_button.pack(side="left", padx=(8, 0))
     default_button = _action_button(
         selected_actions, "Set default", make_default, "default",
         "Use the selected library for newly created blocks",
+        contract_id="manage-libraries.action.default",
     )
     default_button.pack(side="left", padx=(8, 0))
     _action_button(
         selected_actions, "Close", dialog.destroy, "close",
         "Close Manage Libraries",
+        contract_id="manage-libraries.action.close",
     ).pack(side="right")
 
     def update_selection_actions(_event=None) -> None:
         path = selected_path()
         fixed = path is None or path == environment_root
         change_button.configure(state="disabled" if fixed else "normal")
-        remove_button.configure(state="disabled" if fixed else "normal")
+        other_roots_remain = any(
+            candidate != path for candidate in configured_library_roots()
+        )
+        remove_button.configure(
+            state=(
+                "normal"
+                if path is not None and path != environment_root and other_roots_remain
+                else "disabled"
+            )
+        )
         already_default = path is not None and path == default_library_root()
         default_button.configure(
             state=(

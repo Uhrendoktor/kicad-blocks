@@ -10,7 +10,13 @@ sys.path.insert(0, str(PLUGIN))
 
 from kicad_blocks.extraction import selected_sheet_file, selected_sheet_instance_uuid
 from kicad_blocks.pcb_layout import _all, _direct, _dump, _head, parse_sexpr
-from kicad_blocks.repository import create_block, read_manifest, refresh_library_block
+from kicad_blocks.repository import (
+    build_project_symbol_catalog,
+    create_block,
+    read_manifest,
+    refresh_library_block,
+    synchronize_project_symbol_catalog,
+)
 
 
 def _source_sheet(path: Path) -> Path:
@@ -155,6 +161,96 @@ class HierarchicalSheetExtractionTests(unittest.TestCase):
         self.assertIn("(pin bidirectional line", facade)
         self.assertIn("block.kicad_sym", result["changed"])
         self.assertGreater(result["version"], 1)
+
+
+    def test_publish_keeps_existing_pin_electrical_type_as_bare_atom(self):
+        record = create_block(
+            self.root,
+            "Power Stage",
+            source_schematic=self.source,
+            source_project_name="TestProject",
+        )
+        implementation = record.implementation.read_text(encoding="utf-8")
+        implementation = implementation.replace(
+            '(hierarchical_label "VIN"',
+            '(hierarchical_label "VIN"',
+            1,
+        ).replace("(shape input)", "(shape bidirectional)", 1)
+        record.implementation.write_text(implementation, encoding="utf-8")
+
+        result = refresh_library_block(record)
+        self.assertIn("block.kicad_sym", result["changed"])
+        shared_text = record.symbol_library.read_text(encoding="utf-8")
+        self.assertIn("(pin bidirectional line", shared_text)
+        self.assertNotIn('(pin "bidirectional" line', shared_text)
+
+        project_catalog = build_project_symbol_catalog(self.project, [self.root])
+        project_text = project_catalog.read_text(encoding="utf-8")
+        self.assertIn("(pin bidirectional line", project_text)
+        self.assertNotIn('(pin "bidirectional" line', project_text)
+
+    def test_publish_updates_project_facade_catalog_when_implementation_pins_are_added_and_removed(self):
+        record = create_block(
+            self.root,
+            "Power Stage",
+            source_schematic=self.source,
+            source_project_name="TestProject",
+        )
+        project_catalog = build_project_symbol_catalog(self.project, [self.root])
+        baseline_digest = record.manifest["catalog_symbol_hash"]
+
+        implementation_tree = parse_sexpr(
+            record.implementation.read_text(encoding="utf-8")
+        )
+        implementation_tree[:] = [
+            child
+            for child in implementation_tree
+            if not (
+                _head(child) == "hierarchical_label"
+                and str(child[1]) == "GND"
+            )
+        ]
+        implementation_tree.append(
+            parse_sexpr(
+                '(hierarchical_label "VREF" (shape input) (at 70 50 0) '
+                '(effects (font (size 1.27 1.27)) (justify left bottom)) '
+                '(uuid "dddddddd-dddd-4ddd-8ddd-dddddddddddd"))'
+            )
+        )
+        record.implementation.write_text(
+            _dump(implementation_tree) + "\n",
+            encoding="utf-8",
+        )
+
+        refresh_library_block(record)
+        updated_manifest = read_manifest(record.path)
+        updated_pins = {pin["name"] for pin in updated_manifest["pins"]}
+        self.assertEqual(updated_pins, {"VIN", "VOUT", "VREF"})
+        self.assertNotIn("GND", updated_pins)
+
+        changed = synchronize_project_symbol_catalog(
+            project_catalog,
+            record.path / updated_manifest["symbol_file"],
+            updated_manifest["symbol_name"],
+            shared_catalog_file=record.symbol_library,
+            baseline_digest=baseline_digest,
+        )
+        self.assertTrue(changed)
+
+        project_symbol_text = project_catalog.read_text(encoding="utf-8")
+        self.assertIn('(name "VREF"', project_symbol_text)
+        self.assertNotIn('(name "GND"', project_symbol_text)
+        self.assertIn('(name "VIN"', project_symbol_text)
+        self.assertIn('(name "VOUT"', project_symbol_text)
+        # KiCad requires pin electrical types to remain bare atoms after the
+        # edited shared facade is copied into the combined project catalog.
+        self.assertIn("(pin input line", project_symbol_text)
+        self.assertNotIn('(pin "input" line', project_symbol_text)
+
+        # The project's combined library is updated. Existing symbols already
+        # embedded in a placed schematic are a separate KiCad document cache;
+        # this test does not claim they are automatically updated from the
+        # external library table.
 
     def test_publish_preserves_symbol_editor_body_artwork_while_syncing_pins(self):
         record = create_block(

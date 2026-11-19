@@ -29,7 +29,7 @@ The production runtime now uses cross-platform libraries and APIs for these shar
 
 Upstream references: [Python Tkinter](https://docs.python.org/3/library/tkinter.html), [platformdirs supported platforms](https://platformdirs.readthedocs.io/en/latest/index.html), [resvg_py supported OS/architecture and Python wheel matrix](https://resvg-py.readthedocs.io/en/latest/installation.html), [Pillow platform support](https://pillow.readthedocs.io/en/stable/), and [KiCad IPC API](https://dev-docs.kicad.org/en/apis-and-binding/ipc-api/).
 
-This table documents upstream library capability, not validated KiCad Blocks compatibility. Windows/macOS integration remains untested. The Linux-only IPC wheel packaging limitation is separate from the current KiCad editor-action API gap.
+This table documents upstream library capability, not full validated KiCad Blocks compatibility. A lightweight CI matrix now creates a real Tk root and runs the seven shared file/directory chooser-wrapper contracts on Windows and macOS. Those tests stub the OS chooser callbacks and verify initial paths, file filters, parent arguments, fallback behavior, and cancellation; they do not display or automate the native OS windows. Full KiCad editor/IPC integration remains Linux-only because this project currently publishes KiCad Python IPC wheels only for Linux x86_64. The IPC wheel packaging limitation is separate from the current KiCad editor-action API gap.
 
 ## Interpreter coverage
 
@@ -61,8 +61,8 @@ Primary references:
 | Target | Status |
 | --- | --- |
 | Linux x86_64 | Full integration target |
-| Windows | Not validated; no matching published KiCad Python IPC wheel in this project |
-| macOS | Not validated; no matching published KiCad Python IPC wheel in this project |
+| Windows | Tk/file-dialog wrapper contracts run in CI; full KiCad integration not validated (no matching published IPC wheel) |
+| macOS | Tk/file-dialog wrapper contracts run in CI; full KiCad integration not validated (no matching published IPC wheel) |
 | Linux ARM or other architectures | Not validated; no matching published wheel |
 | Non-CPython interpreters or other Python minor versions | Rejected by the installer |
 
