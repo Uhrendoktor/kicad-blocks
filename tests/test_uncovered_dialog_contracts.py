@@ -25,7 +25,16 @@ from ui_contracts import Misc
 
 
 type _RecordedValue = (
-    str | int | float | bool | None | Path | Misc | SimpleNamespace | dict[str, str] | tuple[float, float]
+    str
+    | int
+    | float
+    | bool
+    | None
+    | Path
+    | Misc
+    | SimpleNamespace
+    | dict[str, str]
+    | tuple[float, float]
 )
 type _RecordedKwargs = dict[str, _RecordedValue]
 
@@ -51,9 +60,7 @@ class _BatchLayoutCalls(TypedDict):
 
 
 # Native dialog call-site contracts patch the functions and do not need Tk installed.
-def _unpatched_native_dialog(
-    *_args: _RecordedValue, **_kwargs: _RecordedValue
-) -> None:
+def _unpatched_native_dialog(*_args: _RecordedValue, **_kwargs: _RecordedValue) -> None:
     raise AssertionError("A native dialog call was not patched by this test.")
 
 
@@ -244,16 +251,21 @@ def _single_layout_context(
         **kwargs: _RecordedValue,
     ) -> BlockLayoutMergeResult:
         calls["merge"].append((source, selected_block, target, kwargs))
-        return cast(BlockLayoutMergeResult, _pcb_merge_result(output, rotation=float(cast(float, kwargs["rotation_deg"]))))
+        return cast(
+            BlockLayoutMergeResult,
+            _pcb_merge_result(output, rotation=float(cast(float, kwargs["rotation_deg"]))),
+        )
 
     monkeypatch.setattr(plugin_actions, "merge_block_layout", merge)
     monkeypatch.setattr(
         plugin_actions,
         "write_pcb_placement_manifest",
-        lambda target, result: calls["sidecar"].append(
-            (target, _pcb_placement_source(cast(BlockLayoutMergeResult, result)))
-        )
-        or sidecar,
+        lambda target, result: (
+            calls["sidecar"].append(
+                (target, _pcb_placement_source(cast(BlockLayoutMergeResult, result)))
+            )
+            or sidecar
+        ),
     )
     monkeypatch.setattr(
         plugin_actions.messagebox,
@@ -289,7 +301,7 @@ def test_single_pcb_layout_prompts_map_anchor_rotation_and_confirms_open(
         cast(plugin_actions.KiCadApp, object()),
         tmp_path,
         tmp_path / "library",
-        parent
+        parent,
     )
 
     assert [item[0] for item in calls["prompts"]] == [
@@ -392,7 +404,7 @@ def test_single_pcb_layout_cancelling_any_mapping_prompt_stops_before_merge(
             cast(plugin_actions.KiCadApp, object()),
             tmp_path,
             tmp_path / "library",
-            parent
+            parent,
         )
         is None
     )
@@ -488,10 +500,12 @@ def _batch_context(
     monkeypatch.setattr(
         plugin_actions,
         "write_pcb_placement_manifest",
-        lambda target, result: calls["sidecar"].append(
-            (target, _pcb_batch_placement_source(cast(BatchBlockLayoutMergeResult, result)))
-        )
-        or sidecar,
+        lambda target, result: (
+            calls["sidecar"].append(
+                (target, _pcb_batch_placement_source(cast(BatchBlockLayoutMergeResult, result)))
+            )
+            or sidecar
+        ),
     )
     monkeypatch.setattr(
         plugin_actions.messagebox,
@@ -521,7 +535,7 @@ def test_batch_pcb_layout_prompts_all_instances_and_confirms_open(
         cast(plugin_actions.KiCadApp, object()),
         tmp_path,
         tmp_path / "library",
-        parent
+        parent,
     )
 
     assert [item[0] for item in calls["prompts"]] == [
@@ -630,7 +644,7 @@ def test_batch_pcb_layout_cancelling_any_mapping_prompt_prevents_merge(
             cast(plugin_actions.KiCadApp, object()),
             tmp_path,
             tmp_path / "library",
-            parent
+            parent,
         )
         is None
     )
@@ -660,6 +674,7 @@ def _patch_action_environment(
     monkeypatch: MonkeyPatch, *, schematic: plugin_actions.Schematic | None
 ) -> tuple[_ActionRoot, plugin_actions.KiCadApp]:
     root = _ActionRoot()
+
     def get_schematic() -> plugin_actions.Schematic | None:
         return schematic
 
@@ -670,6 +685,7 @@ def _patch_action_environment(
         "tk",
         SimpleNamespace(Tk=lambda: root, TclError=RuntimeError),
     )
+
     def no_theme(
         _root: Misc,
         _kicad: plugin_actions.KiCadApp | None = None,
@@ -691,7 +707,9 @@ def _patch_action_environment(
     return root, kicad
 
 
-def test_run_action_missing_schematic_shows_attention_warning_and_closes_root(monkeypatch: MonkeyPatch):
+def test_run_action_missing_schematic_shows_attention_warning_and_closes_root(
+    monkeypatch: MonkeyPatch,
+):
     root, _kicad = _patch_action_environment(monkeypatch, schematic=None)
     warnings: list[tuple[str, str, _RecordedKwargs]] = []
     monkeypatch.setattr(
@@ -711,7 +729,9 @@ def test_run_action_missing_schematic_shows_attention_warning_and_closes_root(mo
     assert root.destroyed
 
 
-def test_run_action_unexpected_failure_shows_error_and_closes_root(monkeypatch: MonkeyPatch, tmp_path: Path):
+def test_run_action_unexpected_failure_shows_error_and_closes_root(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+):
     schematic = cast(plugin_actions.Schematic, object())
     root, _kicad = _patch_action_environment(monkeypatch, schematic=schematic)
     library = tmp_path / "library"

@@ -17,11 +17,20 @@ if TYPE_CHECKING:
     import tkinter as tk
     from _pytest.monkeypatch import MonkeyPatch
     from tkinter import Canvas, Event as TkEvent, Menu, Misc, Tk, Toplevel
-    from tkinter.ttk import Button, Checkbutton, Combobox, Entry, Notebook, Panedwindow, Text, Treeview
+    from tkinter.ttk import (
+        Button,
+        Checkbutton,
+        Combobox,
+        Entry,
+        Notebook,
+        Panedwindow,
+        Text,
+        Treeview,
+    )
 else:
-    MonkeyPatch = Canvas = TkEvent = Menu = Misc = Tk = Toplevel = (
-        Button
-    ) = Checkbutton = Combobox = Entry = Notebook = Panedwindow = Text = Treeview = object
+    MonkeyPatch = Canvas = TkEvent = Menu = Misc = Tk = Toplevel = Button = Checkbutton = (
+        Combobox
+    ) = Entry = Notebook = Panedwindow = Text = Treeview = object
 
 
 __all__ = [
@@ -224,7 +233,6 @@ class UiTestContext:
     def require_text(self, contract_id: str) -> Text:
         """Return one registered Tk Text widget with its text-buffer API."""
         return cast(Text, self.require_widget(contract_id))
-
 
     def require_notebook(self, contract_id: str) -> Notebook:
         """Return one registered ttk Notebook with its page-selection API."""
