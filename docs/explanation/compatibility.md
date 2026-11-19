@@ -96,6 +96,8 @@ This is not presented as the full KiCad Symbol Editor. Native artwork and other 
 
 The IPC transport is cross-platform, but the missing editor operations are API gaps in the Eeschema server rather than Linux/Wayland or Windows/macOS differences.
 
+The Place Block implementation probes the connected schematic object for an `interactive_move` method at runtime. When the Python binding and Eeschema server both provide the schematic counterpart, it begins an API commit, inserts the facade at a temporary page-center coordinate, and transfers that same commit to the native move tool. Confirm/cancel then remain one undoable operation. If the method is absent or Eeschema returns an unsupported-handler error, the plugin pushes the same commit and completes the existing page-center/focus/select/save workflow. This fallback is intentional and cross-platform; the Place action is never disabled and no OS-specific input automation is used. The current tested KiCad nightly does not yet expose the method, so its actual placement remains page-center based.
+
 ### Cross-process window ownership
 
 Tk's portable transient relationship is used only between windows created by the same plugin process. KiCad IPC does not currently expose a portable native window handle or foreign-window ownership API, so the plugin does not attempt to force its separate top-level window into KiCad's taskbar/dock group. Cross-process ownership, stacking, and parent activation remain unverified requirements; X11-specific parenting is not an acceptable substitute.
