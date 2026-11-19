@@ -16,25 +16,29 @@ To add a named implementation, choose **Add variant** in the Implementations dia
 
 ## Edit the facade symbol
 
-Direct facade editing from KiCad Blocks is currently unavailable. The tested Eeschema IPC API does not expose a supported operation to open Symbol Editor and select the exact library symbol. The current action reports this capability gap rather than claiming an editor handoff succeeded.
+1. Open **Browse and Place Functional Blocks** and select the block.
+2. Choose **Edit facade**.
+3. KiCad's native Symbol Editor opens with the exact `KBlocks:<symbol>` item loaded. Edit the symbol and save it.
 
-Until KiCad exposes that operation, open Symbol Editor manually from Eeschema or the project manager, open/select the project's `KBlocks:<symbol>` library entry, edit and save it, then use **Publish implementation** to reconcile the facade pins with the block's root hierarchical labels. This manual path is a workaround, not a completed plugin feature.
+The editor hand-off uses KiCad's native Symbol Editor frame action, then sends the exact library identifier through its `OpenLibraryItem` IPC handler. The plugin checks the active symbol document before treating the action as complete.
 
-## Publish a shared implementation
+## Publish a shared implementation and facade
 
-1. Edit and save the desired implementation in Eeschema.
-2. Choose **KiCad Blocks Tasks → Edit & maintain → Publish implementation**.
-3. Select the shared library block when prompted.
-4. Review any interface or validation warnings before distributing the updated library.
+1. Open the block's implementation from the browser, or select the **Default** or named implementation in **Implementations**.
+2. Edit the schematic in Eeschema and save it.
+3. Return to **Functional Block Library**. The block remains selected; click **Publish**.
+4. The browser reports the new revision, how many placed instances were refreshed, and whether any pin migrations are required.
 
-Publishing updates the shared library revision and synchronizes the facade's external pins with root-sheet hierarchical labels. Existing pins whose names remain unchanged retain their number and graphics; new labels receive generated initial positions. Renaming or removing an external pin can require migration in projects that already use the block.
+The same **Publish** action incorporates facade edits saved from Symbol Editor. Publishing updates the shared library revision, synchronizes facade pins from the implementation's root hierarchical labels, rebuilds child dependencies, and updates the project catalog.
 
-Publishing a shared library update does not silently overwrite a project's independent local implementation.
+When existing pin numbers, units, body styles, and connection coordinates remain unchanged, already-placed instances are refreshed in place. Pin names, electrical types, and artwork can update without changing connectivity. When pins are added, removed, renumbered, or moved, affected instances are left untouched and identified for explicit migration. The plugin does not silently detach or remap nets.
+
+Publishing a shared library update does not overwrite a project's independent local implementation.
 
 ## Create a project-local copy
 
 1. Select exactly one placed, library-linked facade.
-2. Choose **KiCad Blocks Tasks → Edit & maintain → Make selected instance local**.
+2. Run **Make selected instance local** from the instance's KiCad Blocks action.
 3. Open the implementation for that instance and edit the local schematic.
 
 The local implementation is stored under the project's `.kicad_blocks/local/` directory. The facade, symbol KIID, reference, position, and wiring remain associated with the placed instance.
@@ -42,8 +46,8 @@ The local implementation is stored under the project's `.kicad_blocks/local/` di
 ## Synchronize a local copy
 
 1. Select the instance that is linked to a local copy.
-2. Choose **KiCad Blocks Tasks → Edit & maintain → Synchronize local copy**.
-3. Review the result message to see what was published, pulled, or found to have converged.
+2. Run **Synchronize local copy** from the selected instance's KiCad Blocks action.
+3. Review the non-modal status line/log summary for what was published, pulled, or found to have converged.
 
 Synchronization compares tracked assets with the common baseline:
 

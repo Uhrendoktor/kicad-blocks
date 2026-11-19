@@ -41,13 +41,7 @@ The common Eeschema entry points are separate toolbar actions:
 | Eeschema toolbar | **Create Block from Sheet** | Select a hierarchical sheet symbol in its parent, or run with no selection from the open sheet. |
 | Eeschema toolbar | **Open Block Implementation** | Select one placed block instance. |
 
-The less frequent maintenance and analysis operations remain available as direct KiCad plugin actions; the grouped Task Hub is retained only for compatibility and is not the intended workflow.
-
-| Tab | Actions |
-| --- | --- |
-| **Use & build** | Browse and place blocks; create block from sheet; open block implementation. |
-| **Edit & maintain** | Configure selected instance; edit facade symbol; publish implementation; make selected instance local; synchronize local copy; publishing rebuilds the automatic child-dependency graph. |
-| **Checks & PCB** | Validate registered libraries; export recursive BOM; run recursive ERC; apply selected PCB layout; apply multiple PCB layouts. |
+The grouped Task Hub remains available as a legacy compatibility entry point, but it is not the intended workflow. The primary create/place/publish path is available directly from the Eeschema toolbar and the Functional Block Library browser. Other context-sensitive maintenance actions remain available through their existing KiCad action entry points.
 
 The PCB Editor provides a separate **Place Imported Block Layout** action for a merged board copy that contains imported block groups and a placement sidecar.
 
@@ -55,13 +49,16 @@ The PCB Editor provides a separate **Place Imported Block Layout** action for a 
 
 The Functional Block Library browser presents these primary actions:
 
-- **Place block** — starts KiCad's native symbol chooser and placement tool. Select the displayed `KBlocks:<symbol>` entry in KiCad's chooser, then place it on the schematic.
-- **Open implementation** — opens the default or selected implementation schematic.
-- **Edit facade** — currently reports an unsupported-operation error. The tested Eeschema IPC API has no supported operation to open Symbol Editor and select a particular library symbol. Do not treat the action as a working editor handoff. Until KiCad exposes that API, open Symbol Editor manually and select the project's `KBlocks:<symbol>` library entry.
-- **Implementations** — opens the default and named implementation list.
+- **Place block** — starts KiCad's native Add Symbol tool and supplies the exact `KBlocks:<symbol>` identifier through the native chooser. The symbol is attached to the cursor; move it to the desired location and click to place, or press Escape to cancel.
+- **Open implementation** — opens the default or selected implementation schematic in Eeschema.
+- **Edit facade** — opens KiCad's Symbol Editor and loads the exact selected `KBlocks:<symbol>` library item through `OpenLibraryItem` IPC. The hand-off is verified against the active Symbol Editor document rather than inferred from the window title.
+- **Publish** — publishes the selected block without reopening a separate task panel. It incorporates saved facade edits, synchronizes the implementation-derived pin interface, rebuilds child dependencies, and updates project catalog registration.
+- **Implementations** — opens the default and named implementation list. Mutations persist immediately; Close is not a save action.
 - **Open PCB layout** — opens a stored board file for inspection.
-- **Manage PCB layouts** — edits stored boards, implementation links, and the default layout.
+- **Manage PCB layouts** — edits stored boards, implementation links, and the default layout. Mutations persist immediately.
 - **Refresh** — reloads the registered library list.
+ 
+Publishing refreshes already-placed schematic instances when pin numbers, units, body styles, and connection coordinates are unchanged. Pin names, electrical types, and artwork can therefore update without replacing the instance or changing its net connections. Instances whose pin topology changed are left untouched and reported as requiring explicit migration; they are never silently given new pin geometry.
 
 The Implementations dialog contains exactly one **Default** row for the active default schematic and the remaining named alternatives. Selecting **Default** enables **Edit default**, which opens the current default schematic. Selecting an alternative enables **Edit implementation** and **Set as default**; promoting it replaces the single Default row rather than adding a separate Base state. Named alternatives can be added from an existing schematic, a new blank schematic, or a copy of another library implementation. Add, Edit, Set as default, and Remove persist immediately. If a write fails, the manager remains open and Close retries the pending write.
 
