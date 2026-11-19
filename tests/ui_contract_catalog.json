@@ -7,7 +7,7 @@
       "title": "Task hub",
       "purpose": "Legacy grouped command panel retained for compatibility; direct Eeschema actions and the Functional Block Library are the intended workflows.",
       "coverage": "contracted",
-      "coverage_note": "Legacy compatibility screen. Widget contracts still verify all three views and action routes; context-dependent actions must reflect live schematic selection and prerequisites. This panel is not the intended user workflow.",
+      "coverage_note": "Legacy compatibility screen. Widget contracts verify its views and action routes; context-dependent actions must reflect live schematic selection and prerequisites. This panel is not the intended user workflow.",
       "evidence": [
         "tests/test_ui_contracts.py"
       ],
