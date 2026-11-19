@@ -465,7 +465,7 @@ def main() -> None:
         kicad_runtime = cast(
             plugin_actions.KiCadApp,
             SimpleNamespace(
-                get_kicad_binary_path=get_kicad_binary_path,
+                get_kicad_binary_path=fake_get_kicad_binary_path,
                 reload_library=reload_library,
                 wait_for_libraries=wait_for_libraries,
             ),
