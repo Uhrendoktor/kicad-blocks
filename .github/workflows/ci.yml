@@ -68,7 +68,16 @@ jobs:
             git diff --cc -- "$path" > "$target.combined.diff" || true
           done < "$conflict_dir/conflicts.txt"
           git status --short > "$conflict_dir/git-status.txt"
-          echo "::error::Git reported merge conflicts with current main. Conflict stages were saved as an artifact."
+          merge_base="$(git merge-base origin/main HEAD)"
+          while IFS= read -r changed_path; do
+            [[ -n "$changed_path" ]] || continue
+            source_path="$PWD/$changed_path"
+            [[ -f "$source_path" ]] || continue
+            target_path="$conflict_dir/worktree/$changed_path"
+            mkdir -p "$(dirname "$target_path")"
+            cp "$source_path" "$target_path"
+          done < <(git diff --name-only "$merge_base" origin/main)
+          echo "::error::Git reported merge conflicts with current main. The full merge worktree and conflict stages were saved as an artifact."
           exit 1
 
       - name: Upload exact main merge conflict inputs
