@@ -273,41 +273,17 @@ Every actionable control has a stable semantic ID and real-Tk interaction contra
 
 ---
 
-### Create Functional Block
+### Create Block from Sheet
 
-Name a block extracted from a selected hierarchical sheet and provide its description.
-
-**Coverage:** Contracted — widget action and expected UI transition asserted.
-
-Every actionable form control has a stable semantic ID and a real-Tk interaction contract. Tests execute Create Block and Cancel, assert the returned name/description or cancellation result, reject a blank name without closing the dialog, verify recovery after validation, exercise Escape cancellation, and check that the initial form geometry exposes both primary actions. The full live Eeschema selection/extraction/registration workflow remains separately covered by the real KiCad IPC integration test.
-
-**Major functionality**
-
-- Display the selected source sheet
-- Enter the required block name and optional description
-- Create or cancel without leaving partial library files
-
-**Registered semantic controls**
-
-- Create Functional Block dialog (`create-block-form.window`; window; behavior asserted)
-- Block name (`create-block-form.name`; entry; behavior asserted)
-- Optional block description (`create-block-form.description`; text; behavior asserted)
-- Create Block (`create-block-form.action.create`; button; behavior asserted)
-- Cancel (`create-block-form.action.cancel`; button; behavior asserted)
+This is a one-click Eeschema action, not a plugin dialog. Select exactly one hierarchical sheet symbol and run **Create Block from Sheet**, or clear the selection to use the sheet currently open in Eeschema. The destination is the configured default library. The name is derived from the source filename with a numeric suffix on collision.
 
 **Current automated evidence**
 
-- `tests/test_create_block_form_contracts.py`
+- `tests/test_editor_workflow.py`
 - `tests/create_block_ipc_integration.py`
-- `tests/capture_visual_docs.py`
+- `tests/test_ipc_headless.py`
 
-**Production screenshots**
-
-![Create Functional Block: create block form light.png](https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/create-block-form-light.png)
-[Open create-block-form-light.png](https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/create-block-form-light.png)
-
-![Create Functional Block: create block form dark.png](https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/create-block-form-dark.png)
-[Open create-block-form-dark.png](https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/create-block-form-dark.png)
+No naming form, confirmation form, or success popup is part of this workflow.
 
 ---
 
@@ -419,7 +395,7 @@ Review the single Default implementation row and maintain named alternatives.
 
 **Coverage:** Contracted — widget action and expected UI transition asserted.
 
-Every application-owned manager control has a real-Tk action or state contract. Tests verify the Default row and selection-dependent Edit/Set as default/Remove states, Add routing into create mode, Edit routing for Default and named alternatives, Set as default persistence, Remove file cleanup and profile-reference protection, and retry-after-failure behavior. Every accepted mutation is persisted immediately; no separate Save & close action exists. The nested Implementation details form remains independently contracted across existing-file, browse, blank-schematic, copy-source, validation/recovery, and cancel paths.
+Every application-owned manager control has a real-Tk action or state contract. Tests verify the Default row and selection-dependent Edit/Set as default/Remove states, Add routing into create mode, Edit routing for Default and named alternatives, Set as default persistence, Remove file cleanup and profile-reference protection, and retry-after-failure behavior. Every accepted mutation is persisted immediately; no separate Save & close action exists. The nested Implementation details form remains independently contracted across existing-file, browse, blank-schematic, copy-source, validation/recovery, and cancel paths. Each accepted mutation is written immediately; there is no Save & close action.
 
 **Major functionality**
 
