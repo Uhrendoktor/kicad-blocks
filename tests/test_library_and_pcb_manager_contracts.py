@@ -149,7 +149,7 @@ def _select_path(
     return row_id
 
 
-def _library_fixture(monkeypatch: MonkeyPatch, tmp_path: Path) -> tuple[Path, Path, Path]:
+def _library_fixture(monkeypatch, tmp_path) -> tuple[Path, Path, Path]:
     settings = tmp_path / "settings.json"
     monkeypatch.setattr(repository, "settings_file", lambda: settings)
     monkeypatch.setenv("KICAD_BLOCKS_LIBRARY", "")
@@ -217,7 +217,7 @@ def test_manage_libraries_add_existing_registers_and_refreshes_the_real_tree(mon
 
 
 def test_manage_libraries_create_makes_and_registers_new_folder(monkeypatch: MonkeyPatch, tmp_path: Path):
-    _settings, _first, _second = _library_fixture(monkeypatch: MonkeyPatch, tmp_path: Path)
+    _settings, _first, _second = _library_fixture(monkeypatch, tmp_path)
     destination = tmp_path / "created-libraries"
     destination.mkdir()
     monkeypatch.setattr(
@@ -258,7 +258,7 @@ def test_manage_libraries_create_makes_and_registers_new_folder(monkeypatch: Mon
 def test_manage_libraries_unregister_removes_registration_but_preserves_files(
     monkeypatch, tmp_path
 ):
-    _settings, first, second = _library_fixture(monkeypatch: MonkeyPatch, tmp_path: Path)
+    _settings, first, second = _library_fixture(monkeypatch, tmp_path)
     monkeypatch.setattr(plugin_actions.messagebox, "askyesno", lambda *_a, **_k: True)
     root = _new_root(monkeypatch)
     context = UiTestContext(root)
@@ -286,7 +286,7 @@ def test_manage_libraries_unregister_removes_registration_but_preserves_files(
 
 
 def test_manage_libraries_confirmation_cancel_keeps_registration(monkeypatch: MonkeyPatch, tmp_path: Path):
-    _settings, _first, second = _library_fixture(monkeypatch: MonkeyPatch, tmp_path: Path)
+    _settings, _first, second = _library_fixture(monkeypatch, tmp_path)
     prompts = []
     monkeypatch.setattr(
         plugin_actions.messagebox,
@@ -316,7 +316,7 @@ def test_manage_libraries_confirmation_cancel_keeps_registration(monkeypatch: Mo
 
 
 def test_manage_libraries_set_default_persists_selected_library(monkeypatch: MonkeyPatch, tmp_path: Path):
-    _settings, first, second = _library_fixture(monkeypatch: MonkeyPatch, tmp_path: Path)
+    _settings, first, second = _library_fixture(monkeypatch, tmp_path)
     root = _new_root(monkeypatch)
     context = UiTestContext(root)
 
@@ -347,7 +347,7 @@ def test_manage_libraries_set_default_persists_selected_library(monkeypatch: Mon
 
 
 def test_manage_libraries_change_folder_is_transactional_and_keeps_old_data(monkeypatch: MonkeyPatch, tmp_path: Path):
-    _settings, first, second = _library_fixture(monkeypatch: MonkeyPatch, tmp_path: Path)
+    _settings, first, second = _library_fixture(monkeypatch, tmp_path)
     replacement = tmp_path / "replacement-library"
     replacement.mkdir()
     monkeypatch.setattr(
@@ -382,7 +382,7 @@ def test_manage_libraries_change_folder_is_transactional_and_keeps_old_data(monk
 
 
 def test_manage_libraries_environment_override_and_empty_selection_states(monkeypatch: MonkeyPatch, tmp_path: Path):
-    _settings, first, _second = _library_fixture(monkeypatch: MonkeyPatch, tmp_path: Path)
+    _settings, first, _second = _library_fixture(monkeypatch, tmp_path)
     monkeypatch.setenv("KICAD_BLOCKS_LIBRARY", str(first))
     root = _new_root(monkeypatch)
     context = UiTestContext(root)
@@ -712,7 +712,7 @@ def test_pcb_layout_manager_duplicate_name_reports_error_without_mutating_manife
 
 
 def test_manage_libraries_add_registration_error_keeps_existing_roots(monkeypatch: MonkeyPatch, tmp_path: Path):
-    _settings, first, second = _library_fixture(monkeypatch: MonkeyPatch, tmp_path: Path)
+    _settings, first, second = _library_fixture(monkeypatch, tmp_path)
     registered_before = set(repository.library_roots())
     assert {first.resolve(), second.resolve()} <= registered_before
     candidate = tmp_path / "candidate-library"
@@ -751,7 +751,7 @@ def test_manage_libraries_add_registration_error_keeps_existing_roots(monkeypatc
 
 
 def test_manage_libraries_create_rejects_path_like_folder_name(monkeypatch: MonkeyPatch, tmp_path: Path):
-    _settings, _first, _second = _library_fixture(monkeypatch: MonkeyPatch, tmp_path: Path)
+    _settings, _first, _second = _library_fixture(monkeypatch, tmp_path)
     destination = tmp_path / "created"
     destination.mkdir()
     monkeypatch.setattr(plugin_actions, "_pick_directory", lambda *_a, **_k: str(destination))
@@ -787,7 +787,7 @@ def test_manage_libraries_create_rejects_path_like_folder_name(monkeypatch: Monk
 
 
 def test_manage_libraries_create_filesystem_error_keeps_existing_folder(monkeypatch: MonkeyPatch, tmp_path: Path):
-    _settings, _first, _second = _library_fixture(monkeypatch: MonkeyPatch, tmp_path: Path)
+    _settings, _first, _second = _library_fixture(monkeypatch, tmp_path)
     destination = tmp_path / "created"
     existing = destination / "already-there"
     destination.mkdir()
@@ -830,7 +830,7 @@ def test_manage_libraries_create_filesystem_error_keeps_existing_folder(monkeypa
 def test_manage_libraries_change_folder_rolls_back_after_old_root_removal_fails(
     monkeypatch, tmp_path
 ):
-    _settings, first, second = _library_fixture(monkeypatch: MonkeyPatch, tmp_path: Path)
+    _settings, first, second = _library_fixture(monkeypatch, tmp_path)
     replacement = tmp_path / "replacement"
     replacement.mkdir()
     monkeypatch.setattr(plugin_actions, "_pick_directory", lambda *_a, **_k: str(replacement))
@@ -874,7 +874,7 @@ def test_manage_libraries_change_folder_rolls_back_after_old_root_removal_fails(
 
 
 def test_manage_libraries_unregister_error_keeps_root_registered(monkeypatch: MonkeyPatch, tmp_path: Path):
-    _settings, first, second = _library_fixture(monkeypatch: MonkeyPatch, tmp_path: Path)
+    _settings, first, second = _library_fixture(monkeypatch, tmp_path)
     monkeypatch.setattr(plugin_actions.messagebox, "askyesno", lambda *_a, **_k: True)
     monkeypatch.setattr(
         plugin_actions,
@@ -910,7 +910,7 @@ def test_manage_libraries_unregister_error_keeps_root_registered(monkeypatch: Mo
 
 
 def test_manage_libraries_set_default_error_preserves_previous_default(monkeypatch: MonkeyPatch, tmp_path: Path):
-    _settings, first, second = _library_fixture(monkeypatch: MonkeyPatch, tmp_path: Path)
+    _settings, first, second = _library_fixture(monkeypatch, tmp_path)
     monkeypatch.setattr(
         plugin_actions,
         "set_library_root",
