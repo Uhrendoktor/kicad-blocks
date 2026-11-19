@@ -9,17 +9,17 @@ This page is generated from the declarative UI catalog. It inventories the curre
 | Partial | 2 | Targeted GUI, integration, model, or screenshot checks exist; the full control matrix is not contracted. |
 | Inventory only | 0 | Inventory only — systematic UI contracts remain future work; window/workflow is documented here for discovery and rollout planning. |
 
-Task Hub, both transient block choosers, Add PCB Layout, Create Block form, Record picker, Functional Block picker, Functional Block Library, Instance Configuration, Implementation details, Implementations Manager, Manage Libraries, and PCB Layout Manager now have full registered widget contracts. All 56 native messagebox/simpledialog call sites have direct result/effect contracts. The shared open/save/directory chooser wrappers have direct argument, fallback, and cancellation contracts; actual OS-native dialog rendering and cross-platform KiCad window ownership remain unverified, so the cross-cutting native-dialog screen remains partial.
+The legacy Task Hub, both transient block choosers, Add PCB Layout, Record picker, Functional Block picker, Functional Block Library, Instance Configuration, Implementation details, Implementations Manager, Manage Libraries, and PCB Layout Manager now have full registered widget contracts. Create Block is a one-click action and no longer opens a details form. All 56 native messagebox/simpledialog call sites have direct result/effect contracts. The shared open/save/directory chooser wrappers have direct argument, fallback, and cancellation contracts; actual OS-native dialog rendering and cross-platform KiCad window ownership remain unverified, so the cross-cutting native-dialog screen remains partial. Native editor hand-offs use platform input backends only to start KiCad's own tools; exact facade identity is verified with IPC.
 
 ## Screens
 
-### Task hub
+### Legacy Task Hub (compatibility only)
 
-Launch the plugin's main workflows from three grouped tabs.
+This grouped command panel remains available for compatibility with older workflows, but it is not the intended entry point for creating, placing, editing, or publishing blocks. The preferred path is direct Eeschema actions and the Functional Block Library browser.
 
-**Coverage:** Contracted — widget action and expected UI transition asserted.
+**Coverage:** Contracted — legacy widget actions and expected UI state are asserted.
 
-All thirteen action-button routes, the Close action, the three notebook views, window creation, and interactive-control inventory are exercised against the real Tk widgets. Downstream KiCad operations have separate integration tests and are not implied by this component-level coverage.
+All thirteen action-button routes, the Close action, the three notebook views, window creation, and interactive-control inventory are exercised against the real Tk widgets. Context-dependent actions must reflect current schematic selection and prerequisites; they are not presented as the primary workflow.
 
 **Views and actions**
 
@@ -80,7 +80,7 @@ Search registered block libraries, inspect facade and schematic previews, choose
 
 **Coverage:** Contracted — widget action and expected UI transition asserted.
 
-Every application-owned browser control and chooser route has a real-widget interaction contract. Tests assert search/count, selection/details, Facade/Schematic navigation, implementation/sheet selector callbacks, pane geometry, and every toolbar action (Place, Implementation, Edit Facade, Variants, Open PCB, PCB layouts, Refresh, Libraries). The implementation chooser and PCB chooser are each tested for selected-file open, cancellation without side effects, and the Manage layouts route. Native placement and document/editor behavior are separately exercised by KiCad CLI/IPC/editor integration tests; unsupported Symbol Editor targeting and cursor-anchored placement remain explicit product/API limitations, not untested browser buttons.
+Every application-owned browser control and chooser route has a real-widget interaction contract. Tests assert search/count, selection/details, Facade/Schematic navigation, implementation/sheet selector callbacks, pane geometry, and the Place, Implementation, Edit Facade, Publish, Variants, Open PCB, PCB layouts, Refresh, and Libraries actions. Publish reports revision and placed-instance refresh state inline. Native Add Symbol placement and exact-item Symbol Editor IPC are separately verified by KiCad integration tests; topology-changing pin updates are deliberately held for migration.
 
 **Major functionality**
 
@@ -88,7 +88,10 @@ Every application-owned browser control and chooser route has a real-widget inte
 - Switch between facade and schematic previews
 - Select an implementation and sheet
 - Refresh records and manage library roots
-- Place a facade or open implementation, facade, and PCB layout managers
+- Place a facade with the native cursor tool
+- Open or edit the selected block's implementation and facade
+- Publish saved changes and refresh compatible placed instances
+- Manage variants, PCB layouts, and registered libraries
 
 **Registered semantic controls**
 
@@ -98,6 +101,7 @@ Every application-owned browser control and chooser route has a real-widget inte
 - Search blocks (`library-browser.search`; entry; behavior asserted)
 - Block list (`library-browser.results`; treeview; behavior asserted)
 - Library and filtered-result count (`library-browser.summary`; status-label; result observed)
+- Non-modal action feedback (`library-browser.status`; status-label; result observed)
 - Selected block name (`library-browser.selected-name`; selection-label; result observed)
 - Facade and Schematic tabs (`library-browser.preview.views`; notebook; behavior asserted)
 - Facade preview (`library-browser.preview.facade`; view; result observed)
@@ -107,6 +111,7 @@ Every application-owned browser control and chooser route has a real-widget inte
 - Place block (`library-browser.action.place`; button; behavior asserted)
 - Implementation (`library-browser.action.implementation`; button; behavior asserted)
 - Edit facade (`library-browser.action.facade`; button; behavior asserted)
+- Publish selected block (`library-browser.action.publish`; button; behavior asserted)
 - Variants (`library-browser.action.variants`; button; behavior asserted)
 - Open PCB (`library-browser.action.open-pcb`; button; behavior asserted)
 - PCB layouts (`library-browser.action.manage-pcb-layouts`; button; behavior asserted)
@@ -414,7 +419,7 @@ Review the single Default implementation row and maintain named alternatives.
 
 **Coverage:** Contracted — widget action and expected UI transition asserted.
 
-Every application-owned manager control has a real-Tk action or state contract. Tests verify the Default row and selection-dependent Edit/Set as default/Remove states, Add routing into create mode, Edit routing for Default and named alternatives, Set as default persistence, Remove file cleanup and profile-reference protection, confirmation cancellation, Keep/Discard choices on close with pending edits, and retry after a save failure. The nested Implementation details form is independently contracted across existing-file, browse, blank-schematic, copy-source, validation/recovery, and cancel paths.
+Every application-owned manager control has a real-Tk action or state contract. Tests verify the Default row and selection-dependent Edit/Set as default/Remove states, Add routing into create mode, Edit routing for Default and named alternatives, Set as default persistence, Remove file cleanup and profile-reference protection, and retry-after-failure behavior. Every accepted mutation is persisted immediately; no separate Save & close action exists. The nested Implementation details form remains independently contracted across existing-file, browse, blank-schematic, copy-source, validation/recovery, and cancel paths.
 
 **Major functionality**
 
@@ -433,7 +438,6 @@ Every application-owned manager control has a real-Tk action or state contract. 
 - Set as default (`implementations-manager.action.default`; button; behavior asserted)
 - Remove (`implementations-manager.action.remove`; button; behavior asserted)
 - Close (`implementations-manager.action.close`; button; behavior asserted)
-- Save & close (`implementations-manager.action.save-close`; button; behavior asserted)
 
 **Current automated evidence**
 
@@ -499,7 +503,7 @@ Maintain stored PCB layouts, default selection, and implementation associations.
 
 **Coverage:** Contracted — widget action and expected UI transition asserted.
 
-All registered controls are discovered on the production dialog. Real Tk invocations verify default-layout persistence, variant association, remove and asset cleanup, confirmation cancellation, add/copy into the block, save-failure retry, no-selection disabled states, and close/save behavior.
+All registered controls are discovered on the production dialog. Real Tk invocations verify default-layout persistence, variant association, remove and asset cleanup, confirmation cancellation, add/copy into the block, save-failure retry, no-selection disabled states, and immediate persistence. Close retries a failed write; it is not a save step.
 
 **Major functionality**
 
@@ -519,7 +523,6 @@ All registered controls are discovered on the production dialog. Real Tk invocat
 - Set default (`pcb-layout-manager.action.default`; button; behavior asserted)
 - Assign implementation (`pcb-layout-manager.action.assign`; button; behavior asserted)
 - Close (`pcb-layout-manager.action.close`; button; behavior asserted)
-- Save and close (`pcb-layout-manager.action.save-close`; button; behavior asserted)
 
 **Current automated evidence**
 
