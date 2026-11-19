@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import os
 import sys
-from pathlib import Path
 from collections.abc import Callable, Sequence
+from pathlib import Path
+from typing import cast
 
 import pytest
 
@@ -18,12 +19,10 @@ from kicad_blocks.model import parse_pins
 from kicad_blocks.repository import BlockRecord, create_block
 from ui_contracts import (
     ButtonContract,
-    Entry,
     EntryInputContract,
     MonkeyPatch,
     Tk,
     Toplevel,
-    Treeview,
     UiTestContext,
     assert_control_coverage,
 )
@@ -47,7 +46,10 @@ RECORD_PICKER_CONTROLS = {
 
 def _new_root(monkeypatch: MonkeyPatch) -> tuple[Tk, UiTestContext]:
     plugin_actions.load_tkinter()
-    monkeypatch.setattr(plugin_actions, "_create_action_icon", lambda *_args: None)
+    def no_icon(_parent: Misc, _name: str, _stroke_color: str | None = None) -> None:
+        return None
+
+    monkeypatch.setattr(plugin_actions, "_create_action_icon", no_icon)
     root = plugin_actions.tk.Tk()
     root.title("Record picker UI contract host")
     root.geometry("1100x760")
@@ -272,7 +274,9 @@ def test_record_picker_double_click_selects_the_clicked_record(
         row_id = next(
             iid for iid in tree.get_children() if tree.item(iid, "values")[0] == "USB Interface"
         )
-        x, y, width, height = tree.bbox(row_id)
+        bounds = tree.bbox(row_id)
+        assert isinstance(bounds, tuple)
+        x, y, width, height = bounds
         click_x = x + min(10, width // 2)
         click_y = y + height // 2
         # Tk recognizes a double click from two presses within its

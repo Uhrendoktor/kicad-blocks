@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import os
 import sys
-from pathlib import Path
 from collections.abc import Callable, Sequence
+from pathlib import Path
+from typing import cast
 
 import pytest
 
@@ -17,16 +18,12 @@ from kicad_blocks import plugin as plugin_actions
 from kicad_blocks.model import parse_parameters, parse_pins
 from kicad_blocks.repository import BlockRecord, create_block
 from ui_contracts import (
-    Button,
     ButtonContract,
     Canvas,
-    Combobox,
-    Entry,
     Misc,
     MonkeyPatch,
     Tk,
     Toplevel,
-    Treeview,
     UiTestContext,
     assert_control_coverage,
 )
@@ -114,7 +111,10 @@ def _fixture(tmp_path: Path) -> tuple[BlockRecord, BlockRecord]:
 
 def _new_root(monkeypatch: MonkeyPatch) -> tuple[Tk, UiTestContext]:
     plugin_actions.load_tkinter()
-    monkeypatch.setattr(plugin_actions, "_create_action_icon", lambda *_args: None)
+    def no_icon(_parent: Misc, _name: str, _stroke_color: str | None = None) -> None:
+        return None
+
+    monkeypatch.setattr(plugin_actions, "_create_action_icon", no_icon)
     root = plugin_actions.tk.Tk()
     root.title("Functional Block picker contract host")
     root.geometry("1280x760")
@@ -131,7 +131,7 @@ def _find_dialog(root: Tk) -> Toplevel:
 
 
 def _find_contract_widget(dialog: Toplevel, contract_id: str) -> Misc:
-    pending = [dialog]
+    pending: list[Misc] = [dialog]
     while pending:
         widget = pending.pop()
         if getattr(widget, "_kicad_ui_contract_id", None) == contract_id:
@@ -285,6 +285,7 @@ def test_functional_block_picker_filters_results_and_places_selected_record(
 
     try:
         selection = _run_picker(root, context, records, filter_and_place)
+        assert selection is not None
         assert selection["record"] is records[1]
         assert selection["variant"] == ""
         assert selection["profile"] == ""
@@ -365,6 +366,7 @@ def test_functional_block_picker_manual_variant_edit_switches_profile_to_custom(
 
     try:
         selection = _run_picker(root, context, records, choose_custom)
+        assert selection is not None
         assert selection["record"] is records[0]
         assert selection["variant"] == "3V3"
         assert selection["profile"] == ""
