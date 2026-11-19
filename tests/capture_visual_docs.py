@@ -689,19 +689,17 @@ def capture_ui_workflows(
                     if widget.winfo_class() != "Canvas" or not isinstance(widget, tk.Canvas):
                         continue
                     canvas = widget
-                    for item in canvas.find_all():
+                    for item in canvas.find_withtag("kicad-schematic-preview"):
                         if canvas.type(item) != "image" or not canvas.itemcget(item, "image"):
                             continue
                         bounds = canvas.bbox(item)
-                        if bounds is None:
+                        if bounds is None or bounds[2] <= bounds[0] or bounds[3] <= bounds[1]:
                             continue
-                        rendered_width = bounds[2] - bounds[0]
-                        rendered_height = bounds[3] - bounds[1]
-                        # The schematic page is a full-sheet KiCad render. Its image
-                        # is substantially larger than the small facade-symbol preview.
-                        if rendered_width >= 700 and rendered_height >= 500:
-                            schematic_canvases.append(canvas)
-                            break
+                        # The production renderer marks its image with a dedicated
+                        # semantic tag. Use that contract instead of fixed pixel sizes,
+                        # which vary with the page aspect ratio and preview scaling.
+                        schematic_canvases.append(canvas)
+                        break
                 if not schematic_canvases:
                     canvas_diagnostics: list[
                         tuple[str, int, tuple[tuple[str, tuple[str, ...], str], ...]]
