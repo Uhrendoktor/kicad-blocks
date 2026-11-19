@@ -5,9 +5,9 @@
     {
       "id": "task-hub",
       "title": "Task hub",
-      "purpose": "Launch the plugin's main workflows from three grouped tabs.",
+      "purpose": "Legacy grouped command panel retained for compatibility; direct Eeschema actions and the Functional Block Library are the intended workflows.",
       "coverage": "contracted",
-      "coverage_note": "All thirteen action-button routes, the Close action, the three notebook views, window creation, and interactive-control inventory are exercised against the real Tk widgets. Downstream KiCad operations have separate integration tests and are not implied by this component-level coverage.",
+      "coverage_note": "Legacy compatibility screen. Widget contracts still verify all three views and action routes; context-dependent actions must reflect live schematic selection and prerequisites. This panel is not the intended user workflow.",
       "evidence": [
         "tests/test_ui_contracts.py"
       ],
@@ -741,7 +741,7 @@
       "title": "Implementations manager",
       "purpose": "Review the single Default implementation row and maintain named alternatives.",
       "coverage": "contracted",
-      "coverage_note": "Every application-owned manager control has a real-Tk action or state contract. Tests verify the Default row and selection-dependent Edit/Set as default/Remove states, Add routing into create mode, Edit routing for Default and named alternatives, Set as default persistence, Remove file cleanup and profile-reference protection, confirmation cancellation, Keep/Discard choices on close with pending edits, and retry after a save failure. The nested Implementation details form is independently contracted across existing-file, browse, blank-schematic, copy-source, validation/recovery, and cancel paths.",
+      "coverage_note": "All registered manager controls are exercised with real Tk interactions. Every Add, Edit, Remove, and Set as default operation persists immediately; a failed write is retried by Close, which keeps the manager open until the change is safely stored.",
       "evidence": [
         "tests/test_implementation_manager_contracts.py",
         "tests/test_implementation_details_contracts.py",
@@ -773,7 +773,7 @@
         {
           "contract_id": "implementations-manager.status",
           "type": "status-label",
-          "label": "Persistence and usage status",
+          "label": "Immediate persistence and recovery status",
           "assertion": "asserted"
         },
         {
@@ -804,12 +804,6 @@
           "contract_id": "implementations-manager.action.close",
           "type": "button",
           "label": "Close",
-          "assertion": "asserted"
-        },
-        {
-          "contract_id": "implementations-manager.action.save-close",
-          "type": "button",
-          "label": "Save & close",
           "assertion": "asserted"
         }
       ]
@@ -896,7 +890,7 @@
       "title": "PCB Layout Manager",
       "purpose": "Maintain stored PCB layouts, default selection, and implementation associations.",
       "coverage": "contracted",
-      "coverage_note": "All registered controls are discovered on the production dialog. Real Tk invocations verify default-layout persistence, variant association, remove and asset cleanup, confirmation cancellation, add/copy into the block, save-failure retry, no-selection disabled states, and close/save behavior.",
+      "coverage_note": "All registered manager controls are exercised with real Tk interactions. Every Add, Remove, Assign, and Set default operation persists immediately; a failed write is retried by Close, which keeps the manager open until the change is safely stored.",
       "evidence": [
         "tests/test_library_and_pcb_manager_contracts.py",
         "tests/test_add_pcb_layout_contracts.py"
@@ -927,7 +921,7 @@
         {
           "contract_id": "pcb-layout-manager.status",
           "type": "status-label",
-          "label": "Save and recovery status",
+          "label": "Immediate persistence and recovery status",
           "assertion": "observed"
         },
         {
@@ -964,12 +958,6 @@
           "contract_id": "pcb-layout-manager.action.close",
           "type": "button",
           "label": "Close",
-          "assertion": "asserted"
-        },
-        {
-          "contract_id": "pcb-layout-manager.action.save-close",
-          "type": "button",
-          "label": "Save and close",
           "assertion": "asserted"
         }
       ]
@@ -1065,7 +1053,8 @@
         "Assert completed actions report through the expected passive feedback channel",
         "Assert error handling does not silently leave partial files or registrations"
       ],
-      "screenshots": []
+      "screenshots": [],
+      "controls": []
     },
     {
       "id": "kicad-native-documents",
