@@ -38,6 +38,7 @@ def test_every_known_top_level_screen_is_in_catalog():
         "record-picker",
         "instance-configuration",
         "create-block-form",
+        "facade-editor",
         "manage-libraries",
         "implementations-manager",
         "implementation-details",

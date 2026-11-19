@@ -454,6 +454,111 @@ def test_edit_facade_button_targets_selected_record(monkeypatch, tmp_path):
         root.destroy()
 
 
+def test_facade_editor_exposes_geometry_fields_and_saves_immediately(monkeypatch, tmp_path):
+    from kicad_blocks.model import parse_pins
+    from kicad_blocks.repository import (
+        build_project_symbol_catalog,
+        create_block,
+    )
+
+    plugin_actions._load_tkinter()
+    monkeypatch.setattr(plugin_actions, "_create_action_icon", lambda *_args: None)
+    library_root = tmp_path / "facade-library"
+    project_dir = tmp_path / "facade-project"
+    library_root.mkdir()
+    project_dir.mkdir()
+    record = create_block(
+        library_root,
+        "Facade layout test",
+        parse_pins("VIN:input, GND:passive, VOUT:output"),
+    )
+    project_catalog = build_project_symbol_catalog(project_dir, [library_root])
+    kicad = SimpleNamespace()
+    reload_library = []
+    monkeypatch.setattr(
+        plugin_actions,
+        "_reload_symbol_library",
+        lambda actual_kicad, nickname: reload_library.append((actual_kicad, nickname)) or True,
+    )
+
+    owner = plugin_actions.tk.Tk()
+    owner.withdraw()
+    try:
+        assert plugin_actions._edit_facade_symbol(
+            record,
+            kicad,
+            project_catalog=project_catalog,
+            parent=owner,
+        )
+        owner.update_idletasks()
+        owner.update()
+        dialog = next(
+            child for child in owner.winfo_children()
+            if child.winfo_class() == "Toplevel"
+            and child.title() == f"Facade pin layout — {record.name}"
+        )
+        context = UiTestContext(dialog)
+        WindowContract(
+            title=f"Facade pin layout — {record.name}",
+            screen_id="facade-editor",
+            required_widget_ids=(
+                "facade-editor.pins",
+                "facade-editor.x",
+                "facade-editor.y",
+                "facade-editor.angle",
+                "facade-editor.length",
+                "facade-editor.status",
+                "facade-editor.action.apply",
+                "facade-editor.action.close",
+            ),
+        ).run(context)
+
+        table = context.require_widget("facade-editor.pins")
+        selected = table.get_children()[0]
+        table.selection_set(selected)
+        table.event_generate("<<TreeviewSelect>>")
+        dialog.update()
+        x_entry = context.require_widget("facade-editor.x")
+        y_entry = context.require_widget("facade-editor.y")
+        angle_entry = context.require_widget("facade-editor.angle")
+        length_entry = context.require_widget("facade-editor.length")
+        for entry, value in (
+            (x_entry, "25.4"),
+            (y_entry, "17.78"),
+            (angle_entry, "180"),
+            (length_entry, "5.08"),
+        ):
+            entry.delete(0, "end")
+            entry.insert(0, value)
+
+        ButtonContract(
+            contract_id="facade-editor.action.apply",
+            expected_action=None,
+            destroys_window=False,
+            expected_label="Apply pin geometry",
+        ).run(context)
+
+        status = context.require_widget("facade-editor.status")
+        status_var = str(status.cget("textvariable"))
+        assert "Saved" in status.getvar(status_var)
+        assert reload_library == [(kicad, plugin_actions.LIBRARY_NICKNAME)]
+        catalog_text = project_catalog.read_text(encoding="utf-8")
+        assert "(at 25.4 17.78 180)" in catalog_text
+        assert "(length 5.08)" in catalog_text
+        assert record.symbol_library.read_bytes() != project_catalog.read_bytes() or (
+            record.symbol_library.read_text(encoding="utf-8")
+            != catalog_text
+        )
+        ButtonContract(
+            contract_id="facade-editor.action.close",
+            expected_action=None,
+            destroys_window=True,
+            expected_label="Close",
+        ).run(context)
+    finally:
+        owner.destroy()
+
+
 def test_open_pcb_button_creates_chooser_for_selected_block(monkeypatch, tmp_path):
     layouts = [
         {"id": "default-pcb", "name": "Default", "file": "default.kicad_pcb"}

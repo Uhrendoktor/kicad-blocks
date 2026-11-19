@@ -158,7 +158,7 @@
       "title": "Functional Block Library",
       "purpose": "Search registered block libraries, inspect facade and schematic previews, choose implementations, configure a block, and start placement.",
       "coverage": "contracted",
-      "coverage_note": "Every browser control and chooser route has a real-widget contract. Direct Publish is tested, selection-dependent actions disable when no row is selected, and placement/publish feedback is inline. The native KiCad hand-offs and placed-instance refresh are separately verified through KiCad IPC/GUI integration.",
+      "coverage_note": "Every browser control and chooser route has a real-widget contract. Direct Publish is tested, selection-dependent actions disable when no row is selected, and placement/publish feedback is inline. The facade pin-layout editor is separately tested for immediate project-catalog persistence and concurrent-edit protection.",
       "evidence": [
         "tests/test_library_browser_contracts.py",
         "tests/test_library_picker_gui.py",
@@ -316,6 +316,80 @@
           "assertion": "asserted"
         }
       ]
+    },
+    {
+      "id": "facade-editor",
+      "title": "Facade pin layout editor",
+      "purpose": "Adjust the external pin positions, angles, and lengths of a selected block facade. Pin names, numbers, and electrical types remain derived from the implementation's hierarchical-label interface.",
+      "coverage": "contracted",
+      "coverage_note": "The real Tk editor, selected-pin table, geometry fields, immediate catalog write, project-library reload, optimistic concurrency guard, invalid-value recovery, and Close action are covered by interaction and file-format contracts. Shared-library publication is performed by the normal Publish action.",
+      "functionality": [
+        "View every facade pin with its current number and electrical type",
+        "Edit the selected pin's X/Y position, orientation, and length",
+        "Persist each accepted geometry change immediately to the project catalog",
+        "Reload the project KBlocks library and publish the facade through the normal revision/conflict workflow"
+      ],
+      "controls": [
+        {
+          "contract_id": "facade-editor.window",
+          "type": "window",
+          "label": "Facade pin layout editor",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "facade-editor.pins",
+          "type": "treeview",
+          "label": "Facade pin list",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "facade-editor.x",
+          "type": "entry",
+          "label": "Pin X coordinate",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "facade-editor.y",
+          "type": "entry",
+          "label": "Pin Y coordinate",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "facade-editor.angle",
+          "type": "entry",
+          "label": "Pin orientation",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "facade-editor.length",
+          "type": "entry",
+          "label": "Pin length",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "facade-editor.action.apply",
+          "type": "button",
+          "label": "Apply pin geometry",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "facade-editor.action.close",
+          "type": "button",
+          "label": "Close",
+          "assertion": "asserted"
+        },
+        {
+          "contract_id": "facade-editor.status",
+          "type": "status-label",
+          "label": "Immediate save/reload and conflict status",
+          "assertion": "observed"
+        }
+      ],
+      "evidence": [
+        "tests/test_library_browser_contracts.py",
+        "tests/test_editor_workflow.py"
+      ],
+      "screenshots": []
     },
     {
       "id": "functional-block-picker",
