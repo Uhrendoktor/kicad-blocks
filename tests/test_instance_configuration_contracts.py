@@ -262,7 +262,7 @@ def _install_update_spy(monkeypatch: MonkeyPatch) -> list[str]:
 
 
 def test_profile_selection_updates_variant_parameter_and_layout_then_saves_one_ipc_edit(
-    monkeypatch, tmp_path
+    monkeypatch: MonkeyPatch, tmp_path
 ):
     library, project, _block, instance, schematic, commit = _fixture(tmp_path)
     root, context = _new_root(monkeypatch)
