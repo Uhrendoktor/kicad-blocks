@@ -6381,6 +6381,7 @@ def _preserve_instance_pin_ids(existing_definition, updated_definition) -> int:
     by pin name, because a hierarchical-label rename must retain its wire.
     """
     from collections import defaultdict, deque
+
     from kipy.proto.schematic import schematic_types_pb2
 
     def pin_key(child, pin):
