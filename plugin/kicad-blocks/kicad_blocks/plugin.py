@@ -4318,6 +4318,7 @@ def _ask_layout_details(
     ttk.Label(frame, text="PCB layout name").grid(row=0, column=0, sticky="w")
     name_value = tk.StringVar(value="New layout")
     name_entry = ttk.Entry(frame, textvariable=name_value)
+    name_entry._kicad_ui_variable = name_value
     name_entry._kicad_ui_contract_id = "add-pcb-layout.name"
     name_entry.grid(row=1, column=0, columnspan=3, sticky="ew", pady=(3, 8))
     ttk.Label(frame, text="Starting point").grid(row=2, column=0, sticky="w")
@@ -4328,10 +4329,12 @@ def _ask_layout_details(
         values=("Create a new empty board", "Choose an existing PCB file"),
         state="readonly",
     )
+    mode_combo._kicad_ui_variable = mode_value
     mode_combo._kicad_ui_contract_id = "add-pcb-layout.mode"
     mode_combo.grid(row=3, column=0, columnspan=3, sticky="ew", pady=(3, 8))
     source_value = tk.StringVar()
     source_entry = ttk.Entry(frame, textvariable=source_value)
+    source_entry._kicad_ui_variable = source_value
     source_entry._kicad_ui_contract_id = "add-pcb-layout.source"
     source_entry.grid(row=4, column=0, columnspan=2, sticky="ew", pady=(3, 8))
     browse_button = _action_button(
@@ -4355,6 +4358,7 @@ def _ask_layout_details(
         values=implementation_values,
         state="readonly",
     )
+    link_combo._kicad_ui_variable = link_value
     link_combo._kicad_ui_contract_id = "add-pcb-layout.implementation"
     link_combo.grid(row=6, column=0, columnspan=3, sticky="ew", pady=(3, 2))
     _add_tooltip(
@@ -5165,6 +5169,7 @@ def _show_block_variant_editor(
         foreground=palette.get("muted", "#5f6871"),
         font=("TkDefaultFont", 8),
     )
+    status_label._kicad_ui_variable = status_value
     status_label._kicad_ui_contract_id = "implementations-manager.status"
     status_label.grid(row=1, column=0, sticky="w", pady=(2, 6))
 

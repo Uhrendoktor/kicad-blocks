@@ -1030,6 +1030,13 @@ def test_place_block_reload_warning_does_not_start_native_placement(
     root, context, _records, _library, _project = _new_browser(monkeypatch, tmp_path)
     warnings: list[tuple[str, str, Misc | None]] = []
     placements: list[bool] = []
+
+    def record_placement(
+        *_args: _RecordedArgument,
+        **_kwargs: _RecordedArgument,
+    ) -> None:
+        placements.append(True)
+
     monkeypatch.setattr(
         plugin_actions,
         "_register_block",
