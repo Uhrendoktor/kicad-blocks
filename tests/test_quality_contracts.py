@@ -89,6 +89,7 @@ def test_ruff_policy_uses_full_selection_and_exact_compatibility_exceptions() ->
         "scripts/validate_schematic_style.py",
         "examples/stusb4500/generate_reference.py",
         "tests/test_schematic_style_rules.py",
+        "tests/test_uncovered_dialog_contracts.py",
         "tests/test_variants.py",
         "tests/test_profiles.py",
         "tests/test_operations.py",
