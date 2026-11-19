@@ -2856,25 +2856,28 @@ def _start_native_symbol_placement(
     symbol_name: str,
     *,
     pause=time.sleep,
+    backend: str | None = None,
+    executable: str | None = None,
+    command_runner=subprocess.run,
 ) -> None:
     """Start KiCad's native Add Symbol tool and attach the exact facade to the cursor."""
     if not symbol_name or any(char.isspace() for char in symbol_name):
         raise ValueError("The selected block has an invalid KiCad symbol name.")
-    backend = _desktop_keyboard_backend()
+    backend = backend or _desktop_keyboard_backend()
     if not backend:
         raise RuntimeError(
             "No desktop keyboard backend is available. Install xdotool for X11, "
             "wtype for Wayland, or pynput for Windows/macOS."
         )
     symbol_id = f"{LIBRARY_NICKNAME}:{symbol_name}"
-    executable = shutil.which("xdotool") if backend == "xdotool" else None
+    executable = (executable or shutil.which("xdotool")) if backend == "xdotool" else executable
 
     if backend == "xdotool":
         editor_window_id = editor_window_id or _capture_eeschema_window_id()
         if not editor_window_id:
             raise RuntimeError("Could not identify the active Eeschema window for placement.")
         def send(*args, check=True):
-            result = subprocess.run(
+            result = command_runner(
                 [executable, *args], capture_output=True, text=True,
                 check=check, timeout=5,
             )
@@ -2925,11 +2928,15 @@ def _start_native_symbol_placement(
 
     # Eeschema has no RunAction IPC handler; invoke the native Add Symbol tool
     # with its documented hotkey, then choose the fully qualified library ID.
-    _send_native_key("a", backend=backend)
+    _send_native_key("a", backend=backend, executable=executable, command_runner=command_runner)
     pause(0.25)
-    _type_native_text(symbol_id, backend=backend)
+    _type_native_text(
+        symbol_id, backend=backend, executable=executable, command_runner=command_runner
+    )
     pause(0.2)
-    _send_native_key("Return", backend=backend)
+    _send_native_key(
+        "Return", backend=backend, executable=executable, command_runner=command_runner
+    )
     LOG.info("Started native Eeschema cursor placement for %s.", symbol_id)
 
 
