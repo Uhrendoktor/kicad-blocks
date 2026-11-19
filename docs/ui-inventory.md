@@ -5,11 +5,11 @@ This page is generated from the declarative UI catalog. It inventories the curre
 
 | Coverage status | Screens | Meaning |
 |---|---:|---|
-| Contracted | 4 | Widget-level execute/result assertions are registered and run in CI. |
-| Partial | 8 | Targeted GUI, integration, model, or screenshot checks exist; the full control matrix is not contracted. |
-| Inventory only | 3 | Window/workflow is documented here; systematic interaction contracts remain future work. |
+| Contracted | 13 | Widget-level execute/result assertions are registered and run in CI. |
+| Partial | 2 | Targeted GUI, integration, model, or screenshot checks exist; the full control matrix is not contracted. |
+| Inventory only | 0 | Inventory only — systematic UI contracts remain future work; window/workflow is documented here for discovery and rollout planning. |
 
-The first contract milestones cover Task Hub routing and navigation and the Add PCB layout dialog's application-owned controls. The Functional Block Library and implementation manager have substantial partial contract coverage. None of this implies that every downstream KiCad operation or native OS chooser has been proven.
+Task Hub, both transient block choosers, Add PCB Layout, Create Block form, Record picker, Functional Block picker, Functional Block Library, Instance Configuration, Implementation details, Implementations Manager, Manage Libraries, and PCB Layout Manager now have full registered widget contracts. All 56 native messagebox/simpledialog call sites have direct result/effect contracts. The shared open/save/directory chooser wrappers have direct argument, fallback, and cancellation contracts; actual OS-native dialog rendering and cross-platform KiCad window ownership remain unverified, so the cross-cutting native-dialog screen remains partial.
 
 ## Screens
 
@@ -78,9 +78,9 @@ All thirteen action-button routes, the Close action, the three notebook views, w
 
 Search registered block libraries, inspect facade and schematic previews, choose implementations, configure a block, and start placement.
 
-**Coverage:** Partial — targeted GUI, integration, or visual checks exist.
+**Coverage:** Contracted — widget action and expected UI transition asserted.
 
-The production browser is captured in both themes. Real-widget contracts assert the results/pane inventory, search filtering and count, selection and selected details, Facade/Schematic navigation, implementation and sheet selector callbacks, split-pane geometry, and Refresh, Place, Implementation, Edit Facade, Variants, PCB layouts and Libraries toolbar callback routes. The Open PCB chooser is created with its default choice asserted. Confirm/cancel behavior in both transient choosers and end-to-end KiCad editor hand-off remain to be contracted.
+Every application-owned browser control and chooser route has a real-widget interaction contract. Tests assert search/count, selection/details, Facade/Schematic navigation, implementation/sheet selector callbacks, pane geometry, and every toolbar action (Place, Implementation, Edit Facade, Variants, Open PCB, PCB layouts, Refresh, Libraries). The implementation chooser and PCB chooser are each tested for selected-file open, cancellation without side effects, and the Manage layouts route. Native placement and document/editor behavior are separately exercised by KiCad CLI/IPC/editor integration tests; unsupported Symbol Editor targeting and cursor-anchored placement remain explicit product/API limitations, not untested browser buttons.
 
 **Major functionality**
 
@@ -116,6 +116,7 @@ The production browser is captured in both themes. Real-widget contracts assert 
 **Current automated evidence**
 
 - `tests/test_library_browser_contracts.py`
+- `tests/test_library_picker_gui.py`
 - `tests/test_library_browser.py`
 - `tests/capture_visual_docs.py`
 
@@ -145,9 +146,9 @@ The production browser is captured in both themes. Real-widget contracts assert 
 
 Search for a block, choose profile and variant settings, and return a fully specified placement selection.
 
-**Coverage:** Partial — targeted GUI, integration, or visual checks exist.
+**Coverage:** Contracted — widget action and expected UI transition asserted.
 
-A real Tk/X11 GUI test drives the production chooser with keyboard input and asserts the selected block. Full contracts for every selector, cancel path, and error state remain to be added.
+Every application-owned picker action and view selector has a stable semantic ID and real-Tk interaction contract. Tests search/filter the real Treeview, assert selected-block name/description/metadata and preview callback output, choose an implementation profile and verify its linked variant/typed parameters/PCB layout, change the variant and assert a switch to Custom, verify empty-result selector/preview state and Place Block no-op, and exercise Cancel, Escape, and the empty-library guard. Native SVG generation and final placement are separately verified by the live KiCad picker/placement integration tests.
 
 **Major functionality**
 
@@ -156,8 +157,24 @@ A real Tk/X11 GUI test drives the production chooser with keyboard input and ass
 - Render the native KiCad facade preview
 - Return the selected record, variant, profile, and typed parameters
 
+**Registered semantic controls**
+
+- Place Functional Block dialog (`functional-block-picker.window`; window; behavior asserted)
+- Search blocks (`functional-block-picker.search`; entry; behavior asserted)
+- Search/results and configuration/preview panes (`functional-block-picker.panes`; panedwindow; behavior asserted)
+- Matching functional blocks (`functional-block-picker.results`; treeview; behavior asserted)
+- Selected block name (`functional-block-picker.name`; status-label; result observed)
+- Selected block description (`functional-block-picker.description`; status-label; result observed)
+- Implementation variant (`functional-block-picker.variant`; combobox; behavior asserted)
+- Configuration profile (`functional-block-picker.profile`; combobox; behavior asserted)
+- KiCad facade preview (`functional-block-picker.preview`; canvas; result observed)
+- Pin/parameter/layout metadata (`functional-block-picker.metadata`; status-label; result observed)
+- Cancel (`functional-block-picker.action.cancel`; button; behavior asserted)
+- Place Block (`functional-block-picker.action.place`; button; behavior asserted)
+
 **Current automated evidence**
 
+- `tests/test_functional_block_picker_contracts.py`
 - `tests/test_library_picker_gui.py`
 - `tests/capture_visual_docs.py`
 
@@ -181,9 +198,9 @@ A real Tk/X11 GUI test drives the production chooser with keyboard input and ass
 
 Change the selected schematic instance's profile, implementation, typed parameters, and PCB layout.
 
-**Coverage:** Partial — targeted GUI, integration, or visual checks exist.
+**Coverage:** Contracted — widget action and expected UI transition asserted.
 
-A GUI test exercises profile selection and the resulting schematic update. Every control, invalid value, stale instance, and rollback path is not yet covered by component contracts.
+Every application-owned interactive control has a stable semantic ID and real-Tk contracts. Tests select a profile and assert that its implementation, typed parameters, and PCB layout are applied; manually edit a parameter and verify the profile becomes Custom; save the values through one undoable KiCad IPC transaction; reject invalid parameter values without starting an IPC edit and recover; cancel with the button or Escape; and assert rollback after an IPC update failure. Missing required facade fields are rejected before the dialog opens. The existing live Eeschema GUI test separately verifies a real KiCad editor hand-off and save.
 
 **Major functionality**
 
@@ -192,8 +209,19 @@ A GUI test exercises profile selection and the resulting schematic update. Every
 - Edit typed parameter values
 - Save one undoable schematic update or cancel
 
+**Registered semantic controls**
+
+- Configure selected schematic instance (`instance-configuration.window`; window; behavior asserted)
+- Configuration profile (`instance-configuration.profile`; combobox; behavior asserted)
+- Implementation variant (`instance-configuration.variant`; combobox; behavior asserted)
+- Typed parameter value (one semantic ID per parameter) (`instance-configuration.parameter.{name}`; entry-or-combobox; behavior asserted)
+- PCB layout (`instance-configuration.layout`; combobox; behavior asserted)
+- Save instance (`instance-configuration.action.save`; button; behavior asserted)
+- Cancel (`instance-configuration.action.cancel`; button; behavior asserted)
+
 **Current automated evidence**
 
+- `tests/test_instance_configuration_contracts.py`
 - `tests/test_instance_configuration_gui.py`
 
 **Production screenshots**
@@ -210,9 +238,9 @@ A GUI test exercises profile selection and the resulting schematic update. Every
 
 Choose one block record for an action that operates on a library entry.
 
-**Coverage:** Inventory only — systematic UI contracts not implemented yet.
+**Coverage:** Contracted — widget action and expected UI transition asserted.
 
-Selection and empty-library behavior have unit tests, but the full window interaction and every button/key path are not yet covered by UI contracts.
+Every actionable control has a stable semantic ID and real-Tk interaction contracts. Tests filter the records and assert the result count/description, disable Select when no records match, invoke Select and Cancel, exercise Down/Return and double-click selection, and verify empty and one-record fast paths do not leave a modal window. These contracts test the production picker widgets; downstream operations that consume the chosen record remain separately covered.
 
 **Major functionality**
 
@@ -221,8 +249,19 @@ Selection and empty-library behavior have unit tests, but the full window intera
 - Cancel without changing the selected object
 - Exercise empty and single-record libraries
 
+**Registered semantic controls**
+
+- Searchable record picker dialog (`record-picker.window`; window; behavior asserted)
+- Search block library (`record-picker.search`; entry; behavior asserted)
+- Matching library blocks (`record-picker.results`; treeview; behavior asserted)
+- Selected block description (`record-picker.description`; status-label; behavior asserted)
+- Filtered result count (`record-picker.count`; status-label; behavior asserted)
+- Select block (`record-picker.action.select`; button; behavior asserted)
+- Cancel (`record-picker.action.cancel`; button; behavior asserted)
+
 **Current automated evidence**
 
+- `tests/test_record_picker_contracts.py`
 - `tests/test_library_browser.py`
 
 **Production screenshots:** Not yet captured for this surface.
@@ -233,9 +272,9 @@ Selection and empty-library behavior have unit tests, but the full window intera
 
 Name a block extracted from a selected hierarchical sheet and provide its description.
 
-**Coverage:** Partial — targeted GUI, integration, or visual checks exist.
+**Coverage:** Contracted — widget action and expected UI transition asserted.
 
-The production form is captured in both themes and the extraction/IPC flow has end-to-end tests. Form validation, cancellation, and every control are not yet registered as UI contracts.
+Every actionable form control has a stable semantic ID and a real-Tk interaction contract. Tests execute Create Block and Cancel, assert the returned name/description or cancellation result, reject a blank name without closing the dialog, verify recovery after validation, exercise Escape cancellation, and check that the initial form geometry exposes both primary actions. The full live Eeschema selection/extraction/registration workflow remains separately covered by the real KiCad IPC integration test.
 
 **Major functionality**
 
@@ -243,8 +282,17 @@ The production form is captured in both themes and the extraction/IPC flow has e
 - Enter the required block name and optional description
 - Create or cancel without leaving partial library files
 
+**Registered semantic controls**
+
+- Create Functional Block dialog (`create-block-form.window`; window; behavior asserted)
+- Block name (`create-block-form.name`; entry; behavior asserted)
+- Optional block description (`create-block-form.description`; text; behavior asserted)
+- Create Block (`create-block-form.action.create`; button; behavior asserted)
+- Cancel (`create-block-form.action.cancel`; button; behavior asserted)
+
 **Current automated evidence**
 
+- `tests/test_create_block_form_contracts.py`
 - `tests/create_block_ipc_integration.py`
 - `tests/capture_visual_docs.py`
 
@@ -262,9 +310,9 @@ The production form is captured in both themes and the extraction/IPC flow has e
 
 Register, create, change, and remove shared library roots.
 
-**Coverage:** Partial — targeted GUI, integration, or visual checks exist.
+**Coverage:** Contracted — widget action and expected UI transition asserted.
 
-The library-root manager is captured and has domain-level coverage for root configuration. Native chooser cancellation and all UI action outcomes are not yet contract-tested.
+All registered controls are discovered on the production dialog. Real Tk button invocations verify add-existing, create, change-folder, unregister, set-default and close; selection-dependent enabled states; chooser and confirmation cancellation; persistent registration changes; default fallback; and preservation of unregistered folders.
 
 **Major functionality**
 
@@ -273,10 +321,21 @@ The library-root manager is captured and has domain-level coverage for root conf
 - Remove a registration without deleting library data
 - Choose the default library root
 
+**Registered semantic controls**
+
+- Manage Libraries dialog (`manage-libraries.window`; window; behavior asserted)
+- Registered library rows (`manage-libraries.rows`; treeview; behavior asserted)
+- Registered-library count (`manage-libraries.status`; status-label; result observed)
+- Add existing library (`manage-libraries.action.add`; button; behavior asserted)
+- Create library (`manage-libraries.action.create`; button; behavior asserted)
+- Change folder (`manage-libraries.action.change`; button; behavior asserted)
+- Unregister library (`manage-libraries.action.unregister`; button; behavior asserted)
+- Set default library (`manage-libraries.action.default`; button; behavior asserted)
+- Close (`manage-libraries.action.close`; button; behavior asserted)
+
 **Current automated evidence**
 
-- `tests/test_library_browser.py`
-- `tests/capture_visual_docs.py`
+- `tests/test_library_and_pcb_manager_contracts.py`
 
 **Production screenshots**
 
@@ -353,9 +412,9 @@ Real Tk contracts assert the transient window identity, available layouts, openi
 
 Review the single Default implementation row and maintain named alternatives.
 
-**Coverage:** Partial — targeted GUI, integration, or visual checks exist.
+**Coverage:** Contracted — widget action and expected UI transition asserted.
 
-The current slice adds real-widget contracts for the manager's Treeview, Add, Edit, Set as default, Remove, Close, and Save & close controls. Tests exercise default promotion, manifest/file updates, renaming without recopying source data, profile-reference protection, and retry after a simulated save failure. The nested Implementation details form and every validation branch remain separately covered by its own screen.
+Every application-owned manager control has a real-Tk action or state contract. Tests verify the Default row and selection-dependent Edit/Set as default/Remove states, Add routing into create mode, Edit routing for Default and named alternatives, Set as default persistence, Remove file cleanup and profile-reference protection, confirmation cancellation, Keep/Discard choices on close with pending edits, and retry after a save failure. The nested Implementation details form is independently contracted across existing-file, browse, blank-schematic, copy-source, validation/recovery, and cancel paths.
 
 **Major functionality**
 
@@ -379,7 +438,7 @@ The current slice adds real-widget contracts for the manager's Treeview, Add, Ed
 **Current automated evidence**
 
 - `tests/test_implementation_manager_contracts.py`
-- `tests/test_library_browser.py`
+- `tests/test_implementation_details_contracts.py`
 - `tests/capture_visual_docs.py`
 
 **Production screenshots**
@@ -396,9 +455,9 @@ The current slice adds real-widget contracts for the manager's Treeview, Add, Ed
 
 Define a named implementation and choose how its schematic source is created.
 
-**Coverage:** Partial — targeted GUI, integration, or visual checks exist.
+**Coverage:** Contracted — widget action and expected UI transition asserted.
 
-The real dialog is captured in both themes. Its source mode, file chooser, validation, and cancel behavior still need contracts.
+Every application-owned control in the nested form has a stable semantic ID and real-Tk interaction contract. Tests exercise existing-schematic path submission, browse callback and selected-file persistence, blank-selector validation/recovery, invalid-extension rejection and browse recovery, blank temporary schematic creation, copy-from-Default/named-variant selection, missing-copy-source rejection/recovery, and Cancel/Escape without library mutation. Native Eeschema launch/save remains separately verified by the full KiCad GUI integration.
 
 **Major functionality**
 
@@ -406,8 +465,22 @@ The real dialog is captured in both themes. Its source mode, file chooser, valid
 - Choose blank, existing-file, or copy-from-implementation mode
 - Confirm or cancel without creating partial files
 
+**Registered semantic controls**
+
+- Implementation details dialog (`implementation-details.window`; window; behavior asserted)
+- Implementation selector value (`implementation-details.variant`; entry; behavior asserted)
+- Starting-point mode (create flow only) (`implementation-details.mode`; combobox; behavior asserted)
+- Source-mode instructions (`implementation-details.source-label`; status-label; result observed)
+- Source schematic path (file mode) (`implementation-details.source`; entry; behavior asserted)
+- Library implementation to copy (copy mode) (`implementation-details.copy`; combobox; behavior asserted)
+- Choose file (`implementation-details.action.browse`; button; behavior asserted)
+- Use implementation (`implementation-details.action.use`; button; behavior asserted)
+- Cancel (`implementation-details.action.cancel`; button; behavior asserted)
+
 **Current automated evidence**
 
+- `tests/test_implementation_details_contracts.py`
+- `tests/test_implementation_manager_contracts.py`
 - `tests/capture_visual_docs.py`
 
 **Production screenshots**
@@ -424,9 +497,9 @@ The real dialog is captured in both themes. Its source mode, file chooser, valid
 
 Maintain stored PCB layouts, default selection, and implementation associations.
 
-**Coverage:** Partial — targeted GUI, integration, or visual checks exist.
+**Coverage:** Contracted — widget action and expected UI transition asserted.
 
-The manager is captured in both themes and layout/model changes have substantial unit coverage. The full UI state matrix and persistence failure paths do not yet have component contracts.
+All registered controls are discovered on the production dialog. Real Tk invocations verify default-layout persistence, variant association, remove and asset cleanup, confirmation cancellation, add/copy into the block, save-failure retry, no-selection disabled states, and close/save behavior.
 
 **Major functionality**
 
@@ -435,10 +508,23 @@ The manager is captured in both themes and layout/model changes have substantial
 - Refresh the table after mutations
 - Persist accepted changes and report write failures
 
+**Registered semantic controls**
+
+- PCB Layout Manager dialog (`pcb-layout-manager.window`; window; behavior asserted)
+- Stored PCB layouts (`pcb-layout-manager.rows`; treeview; behavior asserted)
+- Save and recovery status (`pcb-layout-manager.status`; status-label; result observed)
+- Implementation association selector (`pcb-layout-manager.implementation`; combobox; behavior asserted)
+- Add layout (`pcb-layout-manager.action.add`; button; behavior asserted)
+- Remove layout (`pcb-layout-manager.action.remove`; button; behavior asserted)
+- Set default (`pcb-layout-manager.action.default`; button; behavior asserted)
+- Assign implementation (`pcb-layout-manager.action.assign`; button; behavior asserted)
+- Close (`pcb-layout-manager.action.close`; button; behavior asserted)
+- Save and close (`pcb-layout-manager.action.save-close`; button; behavior asserted)
+
 **Current automated evidence**
 
-- `tests/test_library_browser.py`
-- `tests/capture_visual_docs.py`
+- `tests/test_library_and_pcb_manager_contracts.py`
+- `tests/test_add_pcb_layout_contracts.py`
 
 **Production screenshots**
 
@@ -499,9 +585,9 @@ Every application-owned interactive control in this dialog has a semantic ID and
 
 Explain blocked operations, recoverable errors, destructive confirmations, and completed reports.
 
-**Coverage:** Inventory only — systematic UI contracts not implemented yet.
+**Coverage:** Partial — targeted GUI, integration, or visual checks exist.
 
-Dialog behavior is covered selectively by existing operation tests. There is no exhaustive cross-action dialog contract or standard generated dialog inventory yet.
+The production plugin contains 56 native messagebox/simpledialog call sites across profile creation, source/layout selection, validation, library and implementation maintenance, the Functional Block Library, PCB mapping/anchor/rotation, and action dispatch. The AST-generated registry links all 56 call sites to direct result/effect tests (56 tested, 0 partial, 0 uncovered). This screen remains partial only because those tests stub the OS dialogs: actual native-window rendering, focus/ownership, and platform-specific button layout are not covered by the in-process contracts.
 
 **Major functionality**
 
@@ -512,8 +598,17 @@ Dialog behavior is covered selectively by existing operation tests. There is no 
 
 **Current automated evidence**
 
-- `tests/test_library_browser.py`
-- `tests/test_editor_workflow.py`
+- `scripts/dialog_callsite_inventory.py`
+- `tests/dialog_callsite_catalog.json`
+- `tests/test_dialog_inventory.py`
+- `tests/test_dialog_callsite_contracts.py`
+- `tests/test_create_block_form_contracts.py`
+- `tests/test_add_pcb_layout_contracts.py`
+- `tests/test_library_and_pcb_manager_contracts.py`
+- `tests/test_implementation_manager_contracts.py`
+- `tests/test_implementation_details_contracts.py`
+- `tests/test_instance_configuration_contracts.py`
+- `tests/test_uncovered_dialog_contracts.py`
 
 **Production screenshots:** Not yet captured for this surface.
 
@@ -523,9 +618,9 @@ Dialog behavior is covered selectively by existing operation tests. There is no 
 
 Open and focus KiCad-owned schematic, symbol, and PCB documents, or select files using the operating system's native dialogs.
 
-**Coverage:** Inventory only — systematic UI contracts not implemented yet.
+**Coverage:** Partial — targeted GUI, integration, or visual checks exist.
 
-Some Eeschema and PCB hand-offs have real integration coverage. Cross-platform native window ownership, Symbol Editor selection, and every native file chooser outcome are not established by the current Linux/X11 tests.
+The shared Tk native-dialog wrappers now have direct execute/result contracts for existing/missing initial paths, extension filters, suggested save names/extensions, parent-window ownership arguments, must-exist directory selection, fallback-to-current-directory behavior, and user cancellation. Real KiCad GUI/IPC tests separately cover schematic editor launch/edit/save, symbol facade placement, and PCB document load/save. Actual OS-native chooser rendering, window-manager focus/ownership, and the complete editor hand-off matrix on Windows and macOS remain unverified; this is not cross-platform sign-off.
 
 **Major functionality**
 
@@ -534,8 +629,17 @@ Some Eeschema and PCB hand-offs have real integration coverage. Cross-platform n
 - Test native file/directory chooser filters, initial paths, and cancellation
 - Separate proven IPC behavior from platform-specific window-manager behavior
 
+**Registered semantic controls**
+
+- Open KiCad schematic/PCB file chooser wrapper (`kicad-native-documents.open-file`; native-file-dialog; behavior asserted)
+- Save KiCad document/report chooser wrapper (`kicad-native-documents.save-file`; native-file-dialog; behavior asserted)
+- Choose library folder wrapper (`kicad-native-documents.choose-directory`; native-directory-dialog; behavior asserted)
+
 **Current automated evidence**
 
+- `tests/test_native_file_dialog_contracts.py`
+- `tests/test_implementation_details_contracts.py`
+- `tests/test_add_pcb_layout_contracts.py`
 - `tests/test_eeschema_gui.py`
 - `tests/test_pcb_ipc.py`
 - `docs/explanation/compatibility.md`

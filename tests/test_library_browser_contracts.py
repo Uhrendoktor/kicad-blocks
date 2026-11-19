@@ -986,3 +986,420 @@ def test_open_pcb_chooser_manage_layouts_opens_manager_and_refreshes(
         ).run(context)
     finally:
         root.destroy()
+
+
+
+def test_library_browser_refresh_error_keeps_existing_records(monkeypatch, tmp_path):
+    root, context, _records, _library, _project = _new_browser(monkeypatch, tmp_path)
+    errors = []
+    monkeypatch.setattr(
+        plugin_actions.messagebox,
+        "showerror",
+        lambda title, message, **kwargs: errors.append(
+            (title, str(message), kwargs.get("parent"))
+        ),
+    )
+
+    def fail_refresh(_roots=None):
+        context.action_calls.append("refresh-error")
+        raise OSError("library folder is temporarily unavailable")
+
+    monkeypatch.setattr(plugin_actions, "_list_library_records", fail_refresh)
+    try:
+        ButtonContract(
+            contract_id="library-browser.action.refresh",
+            expected_action="refresh-error",
+            destroys_window=False,
+            expected_label="Refresh",
+        ).run(context)
+        assert len(errors) == 1
+        assert errors[0][0] == "Refresh Block Library"
+        assert "library folder is temporarily unavailable" in errors[0][1]
+        assert errors[0][2] is not None and errors[0][2].winfo_exists()
+        assert context.require_widget("library-browser.results").get_children()
+        assert "2 of 2 blocks" in context.require_widget("library-browser.summary").getvar(
+            context.require_widget("library-browser.summary").cget("textvariable")
+        )
+    finally:
+        root.destroy()
+
+
+def test_place_block_reload_warning_does_not_start_native_placement(monkeypatch, tmp_path):
+    root, context, _records, _library, _project = _new_browser(monkeypatch, tmp_path)
+    warnings = []
+    placements = []
+    monkeypatch.setattr(
+        plugin_actions,
+        "_register_block",
+        lambda *_args, **_kwargs: context.action_calls.append("registered"),
+    )
+    monkeypatch.setattr(plugin_actions, "_LAST_LIBRARY_RELOAD_OK", False)
+    monkeypatch.setattr(
+        plugin_actions,
+        "_LAST_LIBRARY_RELOAD_WARNING",
+        "Restart Eeschema to reload the project symbol table.",
+    )
+    monkeypatch.setattr(
+        plugin_actions.messagebox,
+        "showwarning",
+        lambda title, message, **kwargs: warnings.append(
+            (title, str(message), kwargs.get("parent"))
+        ),
+    )
+    monkeypatch.setattr(
+        plugin_actions,
+        "_start_native_symbol_placement",
+        lambda *_args, **_kwargs: placements.append(True),
+    )
+    try:
+        _select_first_record(context)
+        ButtonContract(
+            contract_id="library-browser.action.place",
+            expected_action="registered",
+            destroys_window=False,
+            expected_label="Place block",
+        ).run(context)
+        assert len(warnings) == 1
+        assert warnings[0][0] == "Block library saved"
+        assert warnings[0][1] == "Restart Eeschema to reload the project symbol table."
+        assert warnings[0][2] is not None and warnings[0][2].winfo_exists()
+        assert placements == []
+    finally:
+        root.destroy()
+
+
+def test_place_block_registration_failure_shows_error_and_keeps_browser_open(
+    monkeypatch, tmp_path
+):
+    root, context, _records, _library, _project = _new_browser(monkeypatch, tmp_path)
+    errors = []
+
+    def fail_register(*_args, **_kwargs):
+        context.action_calls.append("registration-failed")
+        raise RuntimeError("project library table could not be written")
+
+    monkeypatch.setattr(plugin_actions, "_register_block", fail_register)
+    monkeypatch.setattr(
+        plugin_actions.messagebox,
+        "showerror",
+        lambda title, message, **kwargs: errors.append(
+            (title, str(message), kwargs.get("parent"))
+        ),
+    )
+    try:
+        _select_first_record(context)
+        ButtonContract(
+            contract_id="library-browser.action.place",
+            expected_action="registration-failed",
+            destroys_window=False,
+            expected_label="Place block",
+        ).run(context)
+        assert len(errors) == 1
+        assert errors[0][0] == "Place Block"
+        assert errors[0][1] == "project library table could not be written"
+        assert errors[0][2] is not None and errors[0][2].winfo_exists()
+        assert _select_first_record(context) is not None
+    finally:
+        root.destroy()
+
+
+def test_open_implementation_registration_failure_shows_error(monkeypatch, tmp_path):
+    root, context, _records, _library, _project = _new_browser(monkeypatch, tmp_path)
+    errors = []
+
+    def fail_register(*_args, **_kwargs):
+        context.action_calls.append("implementation-registration-failed")
+        raise RuntimeError("implementation catalog write failed")
+
+    monkeypatch.setattr(plugin_actions, "_register_implementation_catalog", fail_register)
+    monkeypatch.setattr(
+        plugin_actions.messagebox,
+        "showerror",
+        lambda title, message, **kwargs: errors.append(
+            (title, str(message), kwargs.get("parent"))
+        ),
+    )
+    try:
+        _select_first_record(context)
+        ButtonContract(
+            contract_id="library-browser.action.implementation",
+            expected_action="implementation-registration-failed",
+            destroys_window=False,
+            expected_label="Implementation",
+        ).run(context)
+        assert len(errors) == 1
+        assert errors[0][0] == "Open implementation"
+        assert errors[0][1] == "implementation catalog write failed"
+        assert errors[0][2] is not None and errors[0][2].winfo_exists()
+        assert not any(
+            child.winfo_class() == "Toplevel"
+            and child.title().startswith("Open implementation — ")
+            for child in root.winfo_children()
+        )
+    finally:
+        root.destroy()
+
+
+def test_open_default_implementation_launch_failure_shows_error(
+    monkeypatch, tmp_path
+):
+    root, context, records, _library, _project = _new_browser(monkeypatch, tmp_path)
+    errors = []
+    records[0].manifest["variants"] = []
+    monkeypatch.setattr(
+        plugin_actions,
+        "_register_implementation_catalog",
+        lambda *_args, **_kwargs: context.action_calls.append("registered"),
+    )
+
+    def fail_launch(*_args, **_kwargs):
+        context.action_calls.append("launch-default-failed")
+        raise OSError("Eeschema executable is unavailable")
+
+    monkeypatch.setattr(plugin_actions, "_launch_block_asset", fail_launch)
+    monkeypatch.setattr(
+        plugin_actions.messagebox,
+        "showerror",
+        lambda title, message, **kwargs: errors.append(
+            (title, str(message), kwargs.get("parent"))
+        ),
+    )
+    try:
+        _select_first_record(context)
+        ButtonContract(
+            contract_id="library-browser.action.implementation",
+            expected_action=("registered", "launch-default-failed"),
+            destroys_window=False,
+            expected_label="Implementation",
+        ).run(context)
+        assert len(errors) == 1
+        assert errors[0][0] == "Open implementation"
+        assert errors[0][1] == "Eeschema executable is unavailable"
+        assert errors[0][2] is not None and errors[0][2].winfo_exists()
+    finally:
+        root.destroy()
+
+
+def test_open_named_implementation_launch_failure_shows_error_after_chooser(
+    monkeypatch, tmp_path
+):
+    root, context, records, _library, _project = _new_browser(monkeypatch, tmp_path)
+    records[0].manifest["variants"] = [
+        {"value": "1V8", "file": "implementation_1v8.kicad_sch"}
+    ]
+    errors = []
+    monkeypatch.setattr(
+        plugin_actions,
+        "_register_implementation_catalog",
+        lambda *_args, **_kwargs: context.action_calls.append("registered"),
+    )
+
+    def fail_launch(*_args, **_kwargs):
+        context.action_calls.append("launch-named-failed")
+        raise OSError("named implementation file is missing")
+
+    monkeypatch.setattr(plugin_actions, "_launch_block_asset", fail_launch)
+    monkeypatch.setattr(
+        plugin_actions.messagebox,
+        "showerror",
+        lambda title, message, **kwargs: errors.append(
+            (title, str(message), kwargs.get("parent"))
+        ),
+    )
+    chooser_title = "Open implementation — USB power block"
+    try:
+        _select_first_record(context)
+        ButtonContract(
+            contract_id="library-browser.action.implementation",
+            expected_action="registered",
+            destroys_window=False,
+            expected_label="Implementation",
+            expected_new_window_title=chooser_title,
+        ).run(context)
+        chooser = _find_toplevel(root, chooser_title)
+        combo = next(
+            widget
+            for widget in chooser.winfo_children()[0].winfo_children()
+            if widget.winfo_class() == "TCombobox"
+        )
+        combo.set("1V8")
+        context.action_calls.clear()
+        context.refresh_widgets()
+        ButtonContract(
+            contract_id="open-implementation-chooser.action.open",
+            expected_action="launch-named-failed",
+            destroys_window=False,
+            expected_label="Open",
+            expected_closed_window_title=chooser_title,
+        ).run(context)
+        assert len(errors) == 1
+        assert errors[0][0] == "Open implementation"
+        assert errors[0][1] == "named implementation file is missing"
+        assert errors[0][2] is not None and errors[0][2].winfo_exists()
+        assert not _find_dialog_exists(root, chooser_title)
+    finally:
+        root.destroy()
+
+
+def _find_dialog_exists(root, title: str) -> bool:
+    return any(
+        child.winfo_class() == "Toplevel" and child.title() == title
+        for child in root.winfo_children()
+    )
+
+
+def test_edit_facade_failure_shows_recoverable_error(monkeypatch, tmp_path):
+    root, context, _records, _library, _project = _new_browser(monkeypatch, tmp_path)
+    errors = []
+
+    def fail_edit(*_args, **_kwargs):
+        context.action_calls.append("facade-edit-failed")
+        raise RuntimeError("KiCad Symbol Editor IPC cannot select this library entry")
+
+    monkeypatch.setattr(plugin_actions, "_edit_facade_symbol", fail_edit)
+    monkeypatch.setattr(
+        plugin_actions.messagebox,
+        "showerror",
+        lambda title, message, **kwargs: errors.append(
+            (title, str(message), kwargs.get("parent"))
+        ),
+    )
+    try:
+        _select_first_record(context)
+        ButtonContract(
+            contract_id="library-browser.action.facade",
+            expected_action="facade-edit-failed",
+            destroys_window=False,
+            expected_label="Edit facade",
+        ).run(context)
+        assert len(errors) == 1
+        assert errors[0][0] == "Edit facade"
+        assert "cannot select this library entry" in errors[0][1]
+        assert errors[0][2] is not None and errors[0][2].winfo_exists()
+    finally:
+        root.destroy()
+
+
+def test_manage_pcb_layouts_failure_shows_error_and_preserves_browser(
+    monkeypatch, tmp_path
+):
+    root, context, _records, _library, _project = _new_browser(monkeypatch, tmp_path)
+    errors = []
+
+    def fail_manage(*_args, **_kwargs):
+        context.action_calls.append("manage-layouts-failed")
+        raise RuntimeError("PCB layout manifest is invalid")
+
+    monkeypatch.setattr(plugin_actions, "_show_block_layout_editor", fail_manage)
+    monkeypatch.setattr(
+        plugin_actions.messagebox,
+        "showerror",
+        lambda title, message, **kwargs: errors.append(
+            (title, str(message), kwargs.get("parent"))
+        ),
+    )
+    try:
+        _select_first_record(context)
+        ButtonContract(
+            contract_id="library-browser.action.manage-pcb-layouts",
+            expected_action="manage-layouts-failed",
+            destroys_window=False,
+            expected_label="PCB layouts",
+        ).run(context)
+        assert len(errors) == 1
+        assert errors[0][0] == "Manage PCB layouts"
+        assert errors[0][1] == "PCB layout manifest is invalid"
+        assert errors[0][2] is not None and errors[0][2].winfo_exists()
+    finally:
+        root.destroy()
+
+
+def test_manage_implementations_failure_shows_error_and_preserves_browser(
+    monkeypatch, tmp_path
+):
+    root, context, _records, _library, _project = _new_browser(monkeypatch, tmp_path)
+    errors = []
+
+    def fail_manage(*_args, **_kwargs):
+        context.action_calls.append("manage-implementations-failed")
+        raise RuntimeError("implementation manifest cannot be opened")
+
+    monkeypatch.setattr(plugin_actions, "_show_block_variant_editor", fail_manage)
+    monkeypatch.setattr(
+        plugin_actions.messagebox,
+        "showerror",
+        lambda title, message, **kwargs: errors.append(
+            (title, str(message), kwargs.get("parent"))
+        ),
+    )
+    try:
+        _select_first_record(context)
+        ButtonContract(
+            contract_id="library-browser.action.variants",
+            expected_action="manage-implementations-failed",
+            destroys_window=False,
+            expected_label="Variants",
+        ).run(context)
+        assert len(errors) == 1
+        assert errors[0][0] == "Manage implementations"
+        assert errors[0][1] == "implementation manifest cannot be opened"
+        assert errors[0][2] is not None and errors[0][2].winfo_exists()
+    finally:
+        root.destroy()
+
+
+def test_open_pcb_layout_launch_failure_shows_error_after_chooser(
+    monkeypatch, tmp_path
+):
+    layouts = [
+        {"id": "default-pcb", "name": "Default", "file": "default.kicad_pcb"}
+    ]
+    root, context, _records, _library, _project = _new_browser(
+        monkeypatch, tmp_path, layouts=layouts
+    )
+    errors = []
+
+    def fail_launch(*_args, **_kwargs):
+        context.action_calls.append("open-layout-failed")
+        raise OSError("PCB Editor could not open the selected layout")
+
+    monkeypatch.setattr(plugin_actions, "_launch_block_asset", fail_launch)
+    monkeypatch.setattr(
+        plugin_actions.messagebox,
+        "showerror",
+        lambda title, message, **kwargs: errors.append(
+            (title, str(message), kwargs.get("parent"))
+        ),
+    )
+    chooser_title = "Open PCB layout — USB power block"
+    try:
+        _select_first_record(context)
+        ButtonContract(
+            contract_id="library-browser.action.open-pcb",
+            expected_action=None,
+            destroys_window=False,
+            expected_label="Open PCB",
+            expected_new_window_title=chooser_title,
+        ).run(context)
+        chooser = _find_toplevel(root, chooser_title)
+        combo = next(
+            widget
+            for widget in chooser.winfo_children()[0].winfo_children()
+            if widget.winfo_class() == "TCombobox"
+        )
+        combo.set("Default [default-pcb]")
+        context.refresh_widgets()
+        ButtonContract(
+            contract_id="open-pcb-layout-chooser.action.open",
+            expected_action="open-layout-failed",
+            destroys_window=False,
+            expected_label="Open",
+            expected_closed_window_title=chooser_title,
+        ).run(context)
+        assert len(errors) == 1
+        assert errors[0][0] == "Open PCB layout"
+        assert errors[0][1] == "PCB Editor could not open the selected layout"
+        assert errors[0][2] is not None and errors[0][2].winfo_exists()
+        assert not _find_dialog_exists(root, chooser_title)
+    finally:
+        root.destroy()

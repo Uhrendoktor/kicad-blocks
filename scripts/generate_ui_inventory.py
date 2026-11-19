@@ -23,7 +23,7 @@ TICK = chr(96)
 COVERAGE_LABELS = {
     "contracted": "Contracted — widget action and expected UI transition asserted",
     "partial": "Partial — targeted GUI, integration, or visual checks exist",
-    "inventory-only": "Inventory only — systematic UI contracts not implemented yet",
+    "inventory-only": "Inventory only — systematic UI contracts remain future work",
 }
 ASSERTION_LABELS = {
     "asserted": "behavior asserted",
@@ -154,9 +154,9 @@ def render_inventory(catalog: UICatalog) -> str:
         "|---|---:|---|",
         f"| Contracted | {counts['contracted']} | Widget-level execute/result assertions are registered and run in CI. |",
         f"| Partial | {counts['partial']} | Targeted GUI, integration, model, or screenshot checks exist; the full control matrix is not contracted. |",
-        f"| Inventory only | {counts['inventory-only']} | Window/workflow is documented here; systematic interaction contracts remain future work. |",
+        f"| Inventory only | {counts['inventory-only']} | {COVERAGE_LABELS['inventory-only']}; window/workflow is documented here for discovery and rollout planning. |",
         "",
-        "The first contract milestones cover Task Hub routing and navigation and the Add PCB layout dialog's application-owned controls. The Functional Block Library and implementation manager have substantial partial contract coverage. None of this implies that every downstream KiCad operation or native OS chooser has been proven.",
+        "Task Hub, both transient block choosers, Add PCB Layout, Create Block form, Record picker, Functional Block picker, Functional Block Library, Instance Configuration, Implementation details, Implementations Manager, Manage Libraries, and PCB Layout Manager now have full registered widget contracts. All 56 native messagebox/simpledialog call sites have direct result/effect contracts. The shared open/save/directory chooser wrappers have direct argument, fallback, and cancellation contracts; actual OS-native dialog rendering and cross-platform KiCad window ownership remain unverified, so the cross-cutting native-dialog screen remains partial.",
         "",
         "## Screens",
         "",
