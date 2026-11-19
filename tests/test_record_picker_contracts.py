@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 import sys
 from pathlib import Path
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 
 import pytest
 
@@ -81,16 +81,16 @@ def _make_records(tmp_path: Path) -> tuple[BlockRecord, BlockRecord, BlockRecord
 
 def _find_dialog(root: Tk) -> Toplevel:
     return next(
-        child
+        cast(Toplevel, child)
         for child in root.winfo_children()
-        if child.winfo_class() == "Toplevel" and child.title() == WINDOW_TITLE
+        if child.winfo_class() == "Toplevel" and cast(Toplevel, child).title() == WINDOW_TITLE
     )
 
 
 def _run_picker(
     root: Tk,
     context: UiTestContext,
-    records: list[BlockRecord],
+    records: Sequence[BlockRecord],
     action: Callable[[Toplevel], None],
 ) -> BlockRecord | None:
     callback_errors: list[Exception] = []
@@ -100,7 +100,7 @@ def _run_picker(
         try:
             dialog = _find_dialog(root)
             assert dialog.winfo_viewable()
-            assert dialog._kicad_ui_screen_id == "record-picker"
+            assert getattr(dialog, "_kicad_ui_screen_id", None) == "record-picker"
             context.refresh_widgets()
             assert_control_coverage(dialog, RECORD_PICKER_CONTROLS)
             action(dialog)
@@ -119,7 +119,7 @@ def _run_picker(
                 dialog.destroy()
 
     root.after(100, drive)
-    result = plugin_actions.pick_record(records, root, WINDOW_TITLE)
+    result = plugin_actions.pick_record(list(records), root, WINDOW_TITLE)
     if callback_errors:
         raise callback_errors[0]
     return result
@@ -166,8 +166,8 @@ def test_record_picker_filters_and_selects_the_matching_record(
             expected_summary="1 of 3 blocks",
         ).run(context)
         assert (
-            context.require_widget("record-picker.results").item(
-                context.require_widget("record-picker.results").get_children()[0],
+            context.require_treeview("record-picker.results").item(
+                context.require_treeview("record-picker.results").get_children()[0],
                 "values",
             )[0]
             == "USB Interface"
@@ -197,20 +197,20 @@ def test_record_picker_empty_search_disables_select_and_cancel_returns_none(
 
     def no_match_then_cancel(_dialog: Toplevel) -> None:
         _assert_initial_state(context)
-        search = context.require_widget("record-picker.search")
+        search = context.require_entry("record-picker.search")
         search.delete(0, "end")
         search.insert(0, "not-a-real-block")
         root.update_idletasks()
         root.update()
 
-        tree = context.require_widget("record-picker.results")
+        tree = context.require_treeview("record-picker.results")
         assert tree.get_children() == ()
         assert context.require_widget("record-picker.count").cget("text") == "0 of 3 blocks"
         assert context.require_widget("record-picker.description").cget("text") == (
             "No matching blocks."
         )
-        assert context.require_widget("record-picker.action.select").instate(["disabled"])
-        assert context.require_widget("record-picker.action.cancel").instate(["!disabled"])
+        assert context.require_button("record-picker.action.select").instate(["disabled"])
+        assert context.require_button("record-picker.action.cancel").instate(["!disabled"])
 
         _click(
             context,
@@ -234,11 +234,11 @@ def test_record_picker_down_and_return_choose_the_highlighted_record(
 
     def choose_with_keyboard(_dialog: Toplevel) -> None:
         _assert_initial_state(context)
-        search = context.require_widget("record-picker.search")
+        search = context.require_entry("record-picker.search")
         search.event_generate("<Down>")
         root.update_idletasks()
         root.update()
-        tree = context.require_widget("record-picker.results")
+        tree = context.require_treeview("record-picker.results")
         assert root.focus_get() is tree
         assert tree.selection()
         tree.event_generate("<Return>")
@@ -268,7 +268,7 @@ def test_record_picker_double_click_selects_the_clicked_record(
 
     def double_click_target(_dialog: Toplevel) -> None:
         _assert_initial_state(context)
-        tree = context.require_widget("record-picker.results")
+        tree = context.require_treeview("record-picker.results")
         row_id = next(
             iid for iid in tree.get_children() if tree.item(iid, "values")[0] == "USB Interface"
         )
@@ -318,10 +318,10 @@ def test_record_picker_empty_and_single_record_fast_paths(monkeypatch: MonkeyPat
     root, _context = _new_root(monkeypatch)
     try:
         with pytest.raises(ValueError, match="No blocks were found"):
-            plugin_actions._pick_record([], root, WINDOW_TITLE)
+            plugin_actions.pick_record([], root, WINDOW_TITLE)
         assert not _find_dialog_exists(root)
 
-        chosen = plugin_actions._pick_record([first], root, WINDOW_TITLE)
+        chosen = plugin_actions.pick_record([first], root, WINDOW_TITLE)
         assert chosen is first
         assert not _find_dialog_exists(root)
     finally:

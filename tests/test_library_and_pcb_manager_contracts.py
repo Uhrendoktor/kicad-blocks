@@ -65,7 +65,10 @@ PCB_CONTROLS = {
 
 def _new_root(monkeypatch: MonkeyPatch) -> Tk:
     plugin_actions.load_tkinter()
-    monkeypatch.setattr(plugin_actions, "_create_action_icon", lambda *_args: None)
+    def no_icon(_parent: Misc, _name: str, _stroke_color: str | None = None) -> None:
+        return None
+
+    monkeypatch.setattr(plugin_actions, "_create_action_icon", no_icon)
     root = plugin_actions.tk.Tk()
     root.title("UI contract host")
     root.geometry("1280x800")
@@ -75,9 +78,9 @@ def _new_root(monkeypatch: MonkeyPatch) -> Tk:
 
 def _find_dialog(root: Tk, title: str) -> Toplevel:
     return next(
-        child
+        cast(Toplevel, child)
         for child in root.winfo_children()
-        if child.winfo_class() == "Toplevel" and child.title() == title
+        if child.winfo_class() == "Toplevel" and cast(Toplevel, child).title() == title
     )
 
 

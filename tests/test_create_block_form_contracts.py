@@ -41,7 +41,11 @@ CREATE_BLOCK_CONTROLS = {
 
 def _new_root(monkeypatch: MonkeyPatch) -> tuple[Tk, UiTestContext]:
     plugin_actions.load_tkinter()
-    monkeypatch.setattr(plugin_actions, "_create_action_icon", lambda *_args: None)
+
+    def no_icon(_parent: Misc, _name: str, _stroke_color: str | None = None) -> None:
+        return None
+
+    monkeypatch.setattr(plugin_actions, "_create_action_icon", no_icon)
     root = plugin_actions.tk.Tk()
     root.title("Create Block UI contract host")
     root.geometry("820x580")
@@ -51,9 +55,9 @@ def _new_root(monkeypatch: MonkeyPatch) -> tuple[Tk, UiTestContext]:
 
 def _find_dialog(root: Tk) -> Toplevel:
     return next(
-        child
+        cast(Toplevel, child)
         for child in root.winfo_children()
-        if child.winfo_class() == "Toplevel" and child.title() == WINDOW_TITLE
+        if child.winfo_class() == "Toplevel" and cast(Toplevel, child).title() == WINDOW_TITLE
     )
 
 
@@ -84,7 +88,7 @@ def _run_form(
         try:
             dialog = _find_dialog(root)
             assert dialog.winfo_viewable()
-            assert dialog._kicad_ui_screen_id == SCREEN_ID
+            assert getattr(dialog, "_kicad_ui_screen_id", None) == SCREEN_ID
             context.refresh_widgets()
             assert_control_coverage(dialog, CREATE_BLOCK_CONTROLS)
             action(dialog)
@@ -115,10 +119,10 @@ def _assert_initial_form_state(context: UiTestContext, dialog: Toplevel) -> None
     assert dialog.winfo_width() >= 580
     assert dialog.winfo_height() >= 340
 
-    name_entry = widgets["create-block-form.name"]
-    description = widgets["create-block-form.description"]
-    cancel_button = widgets["create-block-form.action.cancel"]
-    create_button = widgets["create-block-form.action.create"]
+    name_entry = context.require_entry("create-block-form.name")
+    description = context.require_text("create-block-form.description")
+    cancel_button = context.require_button("create-block-form.action.cancel")
+    create_button = context.require_button("create-block-form.action.create")
 
     assert name_entry.winfo_viewable()
     assert name_entry.get() == "Power Stage"
@@ -139,8 +143,8 @@ def test_create_block_form_submits_name_and_optional_description(monkeypatch: Mo
 
     def create(dialog: Toplevel) -> None:
         _assert_initial_form_state(context, dialog)
-        context.require_widget("create-block-form.name").delete(0, "end")
-        context.require_widget("create-block-form.name").insert(0, "USB Power Stage")
+        context.require_entry("create-block-form.name").delete(0, "end")
+        context.require_entry("create-block-form.name").insert(0, "USB Power Stage")
         description = context.require_widget("create-block-form.description")
         description.insert("1.0", "Isolated USB power conversion stage.")
         _click(
@@ -171,7 +175,7 @@ def test_create_block_form_rejects_blank_name_and_recovers(monkeypatch: MonkeyPa
 
     def recover(dialog: Toplevel) -> None:
         _assert_initial_form_state(context, dialog)
-        name_entry = context.require_widget("create-block-form.name")
+        name_entry = context.require_entry("create-block-form.name")
         name_entry.delete(0, "end")
         _click(context, "create-block-form.action.create", "Create Block")
         assert dialog.winfo_exists()

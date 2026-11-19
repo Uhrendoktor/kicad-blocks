@@ -50,7 +50,7 @@ MODE_BLANK = "Create a new empty schematic"
 MODE_COPY = "Copy an existing implementation"
 
 
-def _fixture(tmp_path: Path) -> BlockRecord:
+def _fixture(tmp_path: Path) -> tuple[BlockRecord, Path, Path, Path]:
     library = tmp_path / "library"
     sources = tmp_path / "sources"
     sources.mkdir()
@@ -76,7 +76,7 @@ def _fixture(tmp_path: Path) -> BlockRecord:
     return record, first, second, default_file
 
 
-def _new_root(monkeypatch: MonkeyPatch) -> Tk:
+def _new_root(monkeypatch: MonkeyPatch) -> tuple[Tk, UiTestContext]:
     plugin_actions.load_tkinter()
     monkeypatch.setattr(plugin_actions, "_create_action_icon", lambda *_args: None)
     root = plugin_actions.tk.Tk()
@@ -87,10 +87,13 @@ def _new_root(monkeypatch: MonkeyPatch) -> Tk:
 
 
 def _find_dialog(root: Tk) -> Toplevel:
-    return next(
-        child
-        for child in root.winfo_children()
-        if child.winfo_class() == "Toplevel" and child.title() == WINDOW_TITLE
+    return cast(
+        Toplevel,
+        next(
+            child
+            for child in root.winfo_children()
+            if child.winfo_class() == "Toplevel" and child.title() == WINDOW_TITLE
+        ),
     )
 
 
@@ -118,7 +121,7 @@ def _run_form(
         try:
             dialog = _find_dialog(root)
             assert dialog.winfo_viewable()
-            assert dialog._kicad_ui_screen_id == "implementation-details"
+            assert getattr(dialog, "_kicad_ui_screen_id", None) == "implementation-details"
             context.refresh_widgets()
             expected = CREATE_CONTROLS if allow_create else BASIC_CONTROLS
             assert_control_coverage(dialog, expected)
@@ -172,13 +175,13 @@ def _assert_initial_state(context: UiTestContext, dialog: Toplevel, *, allow_cre
     assert dialog.title() == WINDOW_TITLE
     assert dialog.winfo_width() >= 660
     assert dialog.winfo_height() >= 420
-    selector = widgets["implementation-details.variant"]
+    selector = context.require_combobox("implementation-details.variant")
     source_label = widgets["implementation-details.source-label"]
-    source = widgets["implementation-details.source"]
+    source = context.require_entry("implementation-details.source")
     browse = widgets["implementation-details.action.browse"]
     copy = widgets["implementation-details.copy"]
-    cancel = widgets["implementation-details.action.cancel"]
-    use = widgets["implementation-details.action.use"]
+    cancel = context.require_button("implementation-details.action.cancel")
+    use = context.require_button("implementation-details.action.use")
 
     assert selector.winfo_viewable()
     assert source_label.cget("text") == "Source schematic (.kicad_sch)"
@@ -188,7 +191,7 @@ def _assert_initial_state(context: UiTestContext, dialog: Toplevel, *, allow_cre
     assert cancel.winfo_viewable() and cancel.instate(["!disabled"])
     assert use.winfo_viewable() and use.instate(["!disabled"])
     if allow_create:
-        mode = widgets["implementation-details.mode"]
+        mode = context.require_combobox("implementation-details.mode")
         assert mode.winfo_viewable()
         assert tuple(mode.cget("values")) == (MODE_FILE, MODE_BLANK, MODE_COPY)
         assert mode.get() == MODE_FILE

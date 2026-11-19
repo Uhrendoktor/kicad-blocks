@@ -27,6 +27,7 @@ from kicad_blocks.manifest_types import BlockManifest
 from kicad_blocks.repository import BlockRecord
 from ui_contracts import (
     ButtonContract,
+    TkOption,
     ChoiceViewContract,
     UiTestContext,
     assert_control_coverage,
@@ -301,21 +302,21 @@ def test_add_pcb_layout_rejects_invalid_existing_file_then_recovers(
     invalid.write_text("not a KiCad board", encoding="utf-8")
     valid = tmp_path / "board.kicad_pcb"
     valid.write_text("(kicad_pcb (version 20250114))\\n", encoding="utf-8")
-    errors = []
-    monkeypatch.setattr(
-        plugin_actions.messagebox,
-        "showerror",
-        lambda title, message, **kwargs: errors.append((title, str(message), kwargs.get("parent"))),
-    )
+    errors: list[tuple[str, str, TkOption]] = []
+
+    def show_error(title: str, message: str, **kwargs: TkOption) -> None:
+        errors.append((title, str(message), kwargs.get("parent")))
+
+    monkeypatch.setattr(plugin_actions.messagebox, "showerror", show_error)
     context = UiTestContext(root)
 
     def interact(dialog: Toplevel) -> None:
-        mode = context.require_widget("add-pcb-layout.mode")
+        mode = context.require_combobox("add-pcb-layout.mode")
         mode.set("Choose an existing PCB file")
         mode.event_generate("<<ComboboxSelected>>")
         root.update_idletasks()
         root.update()
-        source = context.require_widget("add-pcb-layout.source")
+        source = context.require_entry("add-pcb-layout.source")
         source.insert(0, str(invalid))
         _contract_button(context, "add-pcb-layout.add", "Add layout")
         assert errors == [
@@ -332,7 +333,7 @@ def test_add_pcb_layout_rejects_invalid_existing_file_then_recovers(
 
     _schedule_dialog_action(root, context, interact)
     try:
-        result = plugin_actions._ask_layout_details(root, record)
+        result = plugin_actions.ask_layout_details(root, record)
         assert result == {
             "name": "New layout",
             "source": str(valid.resolve()),

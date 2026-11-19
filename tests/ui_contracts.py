@@ -16,9 +16,9 @@ from typing import TYPE_CHECKING, Generic, TypeVar, TypedDict, cast
 if TYPE_CHECKING:
     import tkinter as tk
     from tkinter import Menu, Toplevel
-    from tkinter.ttk import Button, Combobox, Entry, Notebook, Panedwindow, Treeview
+    from tkinter.ttk import Button, Checkbutton, Combobox, Entry, Notebook, Panedwindow, Text, Treeview
 else:
-    Menu = Toplevel = Button = Combobox = Entry = Notebook = Panedwindow = Treeview = object
+    Menu = Toplevel = Button = Checkbutton = Combobox = Entry = Notebook = Panedwindow = Text = Treeview = object
 
 
 class MenuEntry:
@@ -177,6 +177,15 @@ class UiTestContext:
     def require_button(self, contract_id: str) -> Button:
         """Return one registered ttk Button with its invocation/state API."""
         return cast(Button, self.require_widget(contract_id))
+
+    def require_checkbutton(self, contract_id: str) -> Checkbutton:
+        """Return one registered ttk Checkbutton with its state API."""
+        return cast(Checkbutton, self.require_widget(contract_id))
+
+    def require_text(self, contract_id: str) -> Text:
+        """Return one registered Tk Text widget with its text-buffer API."""
+        return cast(Text, self.require_widget(contract_id))
+
 
     def require_notebook(self, contract_id: str) -> Notebook:
         """Return one registered ttk Notebook with its page-selection API."""

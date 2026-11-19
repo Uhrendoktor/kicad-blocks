@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 import sys
 from pathlib import Path
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 
 import pytest
 
@@ -124,9 +124,9 @@ def _new_root(monkeypatch: MonkeyPatch) -> tuple[Tk, UiTestContext]:
 
 def _find_dialog(root: Tk) -> Toplevel:
     return next(
-        child
+        cast(Toplevel, child)
         for child in root.winfo_children()
-        if child.winfo_class() == "Toplevel" and child.title() == WINDOW_TITLE
+        if child.winfo_class() == "Toplevel" and cast(Toplevel, child).title() == WINDOW_TITLE
     )
 
 
@@ -150,7 +150,7 @@ def _find_dialog_exists(root: Tk) -> bool:
 def _run_picker(
     root: Tk,
     context: UiTestContext,
-    records: list[BlockRecord],
+    records: Sequence[BlockRecord],
     action: Callable[[Toplevel], None],
 ) -> plugin_actions.BlockPlacementSelection | None:
     callback_errors: list[Exception] = []
@@ -160,7 +160,7 @@ def _run_picker(
         try:
             dialog = _find_dialog(root)
             assert dialog.winfo_viewable()
-            assert dialog._kicad_ui_screen_id == "functional-block-picker"
+            assert getattr(dialog, "_kicad_ui_screen_id", None) == "functional-block-picker"
             context.refresh_widgets()
             assert_control_coverage(dialog, PICKER_CONTROLS)
             action(dialog)
@@ -179,7 +179,7 @@ def _run_picker(
                 dialog.destroy()
 
     root.after(100, drive)
-    result = plugin_actions.pick_block_for_placement(records, root)
+    result = plugin_actions.pick_block_for_placement(list(records), root)
     if callback_errors:
         raise callback_errors[0]
     return result
@@ -218,7 +218,7 @@ def _install_preview_spy(monkeypatch: MonkeyPatch) -> list[str]:
 def _assert_initial_state(
     context: UiTestContext, dialog: Toplevel, records: list[BlockRecord]
 ) -> None:
-    widgets = context.refresh_widgets()
+    context.refresh_widgets()
     tree = context.require_treeview("functional-block-picker.results")
     assert dialog.title() == WINDOW_TITLE
     assert dialog.winfo_width() >= 900
@@ -271,7 +271,7 @@ def test_functional_block_picker_filters_results_and_places_selected_record(
         assert "4 pins" in _find_contract_widget(_dialog, "functional-block-picker.metadata").cget(
             "text"
         )
-        assert _find_contract_widget(_dialog, "functional-block-picker.preview").find_all()
+        assert context.require_canvas("functional-block-picker.preview").find_all()
         assert preview_calls[-1] == "USB Interface"
         assert context.require_combobox("functional-block-picker.variant").instate(["disabled"])
         assert context.require_combobox("functional-block-picker.profile").instate(["disabled"])
@@ -398,9 +398,9 @@ def test_functional_block_picker_empty_search_disables_selectors_and_cancel_retu
             _find_contract_widget(_dialog, "functional-block-picker.description").cget("text") == ""
         )
         assert _find_contract_widget(_dialog, "functional-block-picker.metadata").cget("text") == ""
-        assert _find_contract_widget(_dialog, "functional-block-picker.preview").find_all() == ()
+        assert context.require_canvas("functional-block-picker.preview").find_all() == ()
         assert (
-            _find_contract_widget(_dialog, "functional-block-picker.preview").cget("height")
+            context.require_canvas("functional-block-picker.preview").cget("height")
             == "270"
         )
         assert context.require_combobox("functional-block-picker.variant").instate(["disabled"])
