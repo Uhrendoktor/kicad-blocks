@@ -689,15 +689,19 @@ def capture_ui_workflows(
                     if widget.winfo_class() != "Canvas" or not isinstance(widget, tk.Canvas):
                         continue
                     canvas = widget
-                    for item in canvas.find_withtag("kicad-schematic-preview"):
+                    tagged_items = canvas.find_withtag("kicad-schematic-preview")
+                    # Tk canvas tags are not preserved by every themed Canvas adapter.
+                    # The semantic tag is preferred, but a visible image item on the
+                    # selected schematic tab is also proof that KiCad content rendered.
+                    candidate_items = tagged_items or tuple(
+                        item for item in canvas.find_all() if canvas.type(item) == "image"
+                    )
+                    for item in candidate_items:
                         if canvas.type(item) != "image" or not canvas.itemcget(item, "image"):
                             continue
                         bounds = canvas.bbox(item)
                         if bounds is None or bounds[2] <= bounds[0] or bounds[3] <= bounds[1]:
                             continue
-                        # The production renderer marks its image with a dedicated
-                        # semantic tag. Use that contract instead of fixed pixel sizes,
-                        # which vary with the page aspect ratio and preview scaling.
                         schematic_canvases.append(canvas)
                         break
                 if not schematic_canvases:
