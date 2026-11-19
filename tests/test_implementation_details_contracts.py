@@ -59,18 +59,15 @@ def _fixture(tmp_path: Path):
             {"value": "1V8", "path": second},
         ],
     )
-    default_file = (
-        Path(record.path)
-        / plugin_actions.resolve_variant_implementation(record.manifest, "")
+    default_file = Path(record.path) / plugin_actions.resolve_variant_implementation(
+        record.manifest, ""
     )
     return record, first, second, default_file
 
 
 def _new_root(monkeypatch):
     plugin_actions._load_tkinter()
-    monkeypatch.setattr(
-        plugin_actions, "_create_action_icon", lambda *_args: None
-    )
+    monkeypatch.setattr(plugin_actions, "_create_action_icon", lambda *_args: None)
     root = plugin_actions.tk.Tk()
     root.title("Implementation details contract host")
     root.geometry("900x640")
@@ -191,7 +188,7 @@ def test_existing_schematic_source_is_returned_and_non_create_mode_has_no_mode_s
     monkeypatch, tmp_path
 ):
     source = tmp_path / "existing.kicad_sch"
-    source.write_text('(kicad_sch (version 20250114))\n', encoding="utf-8")
+    source.write_text("(kicad_sch (version 20250114))\n", encoding="utf-8")
     root, context = _new_root(monkeypatch)
 
     def accept_existing(dialog):
@@ -222,7 +219,7 @@ def test_existing_schematic_source_is_returned_and_non_create_mode_has_no_mode_s
 
 def test_blank_selector_validation_keeps_form_open_and_recovers(monkeypatch, tmp_path):
     source = tmp_path / "existing.kicad_sch"
-    source.write_text('(kicad_sch (version 20250114))\n', encoding="utf-8")
+    source.write_text("(kicad_sch (version 20250114))\n", encoding="utf-8")
     root, context = _new_root(monkeypatch)
     errors = []
     monkeypatch.setattr(
@@ -237,9 +234,7 @@ def test_blank_selector_validation_keeps_form_open_and_recovers(monkeypatch, tmp
         selector.delete(0, "end")
         _click(context, "implementation-details.action.use", "Use implementation")
         assert _find_dialog_exists(root)
-        assert errors == [
-            ("Implementation details", "Enter an implementation selector.")
-        ]
+        assert errors == [("Implementation details", "Enter an implementation selector.")]
 
         selector.insert(0, "VIN_1V8")
         context.require_widget("implementation-details.source").insert(0, str(source))
@@ -257,11 +252,9 @@ def test_blank_selector_validation_keeps_form_open_and_recovers(monkeypatch, tmp
         root.destroy()
 
 
-def test_browse_button_uses_kicad_schematic_picker_and_accepts_selected_file(
-    monkeypatch, tmp_path
-):
+def test_browse_button_uses_kicad_schematic_picker_and_accepts_selected_file(monkeypatch, tmp_path):
     source = tmp_path / "selected.kicad_sch"
-    source.write_text('(kicad_sch (version 20250114))\n', encoding="utf-8")
+    source.write_text("(kicad_sch (version 20250114))\n", encoding="utf-8")
     calls = []
 
     def choose_file(parent, *, title, suffix, initial_path):
@@ -292,13 +285,11 @@ def test_browse_button_uses_kicad_schematic_picker_and_accepts_selected_file(
         root.destroy()
 
 
-def test_invalid_source_extension_is_rejected_then_browse_recovers(
-    monkeypatch, tmp_path
-):
+def test_invalid_source_extension_is_rejected_then_browse_recovers(monkeypatch, tmp_path):
     invalid = tmp_path / "notes.txt"
     invalid.write_text("not a schematic\n", encoding="utf-8")
     source = tmp_path / "selected.kicad_sch"
-    source.write_text('(kicad_sch (version 20250114))\n', encoding="utf-8")
+    source.write_text("(kicad_sch (version 20250114))\n", encoding="utf-8")
     errors = []
     monkeypatch.setattr(
         plugin_actions.messagebox,
@@ -339,9 +330,7 @@ def test_invalid_source_extension_is_rejected_then_browse_recovers(
         root.destroy()
 
 
-def test_create_blank_schematic_mode_returns_a_valid_temporary_source(
-    monkeypatch, tmp_path
-):
+def test_create_blank_schematic_mode_returns_a_valid_temporary_source(monkeypatch, tmp_path):
     record, _first, _second, _default = _fixture(tmp_path)
     root, context = _new_root(monkeypatch)
     created = []
@@ -361,9 +350,10 @@ def test_create_blank_schematic_mode_returns_a_valid_temporary_source(
     def choose_blank(dialog):
         _assert_initial_state(context, dialog, allow_create=True)
         _select_mode(root, context, MODE_BLANK)
-        assert context.require_widget("implementation-details.source-label").cget(
-            "text"
-        ) == "The new implementation starts as a blank KiCad schematic."
+        assert (
+            context.require_widget("implementation-details.source-label").cget("text")
+            == "The new implementation starts as a blank KiCad schematic."
+        )
         assert not context.require_widget("implementation-details.source").winfo_viewable()
         assert not context.require_widget("implementation-details.action.browse").winfo_viewable()
         _click(
@@ -400,9 +390,10 @@ def test_copy_existing_implementation_uses_selected_library_variant(monkeypatch,
     def choose_copy(dialog):
         _assert_initial_state(context, dialog, allow_create=True)
         _select_mode(root, context, MODE_COPY)
-        assert context.require_widget("implementation-details.source-label").cget(
-            "text"
-        ) == "Copy this library implementation:"
+        assert (
+            context.require_widget("implementation-details.source-label").cget("text")
+            == "Copy this library implementation:"
+        )
         assert not context.require_widget("implementation-details.source").winfo_viewable()
         assert not context.require_widget("implementation-details.action.browse").winfo_viewable()
         copy = context.require_widget("implementation-details.copy")
@@ -437,9 +428,7 @@ def test_copy_existing_implementation_uses_selected_library_variant(monkeypatch,
         root.destroy()
 
 
-def test_missing_copy_source_is_rejected_and_can_switch_to_existing_variant(
-    monkeypatch, tmp_path
-):
+def test_missing_copy_source_is_rejected_and_can_switch_to_existing_variant(monkeypatch, tmp_path):
     record, _first, second, default = _fixture(tmp_path)
     default.unlink()
     root, context = _new_root(monkeypatch)
@@ -507,9 +496,7 @@ def test_cancel_and_escape_leave_library_sources_unchanged(monkeypatch, tmp_path
         )
 
     try:
-        result = _run_form(
-            root, context, cancel, value="1V8", record=record, allow_create=True
-        )
+        result = _run_form(root, context, cancel, value="1V8", record=record, allow_create=True)
         assert result is None
         assert default.is_file()
     finally:
@@ -529,9 +516,7 @@ def test_cancel_and_escape_leave_library_sources_unchanged(monkeypatch, tmp_path
         assert not _find_dialog_exists(root)
 
     try:
-        result = _run_form(
-            root, context, escape, value="1V8", record=record, allow_create=True
-        )
+        result = _run_form(root, context, escape, value="1V8", record=record, allow_create=True)
         assert result is None
         assert default.is_file()
     finally:

@@ -988,16 +988,13 @@ def test_open_pcb_chooser_manage_layouts_opens_manager_and_refreshes(
         root.destroy()
 
 
-
 def test_library_browser_refresh_error_keeps_existing_records(monkeypatch, tmp_path):
     root, context, _records, _library, _project = _new_browser(monkeypatch, tmp_path)
     errors = []
     monkeypatch.setattr(
         plugin_actions.messagebox,
         "showerror",
-        lambda title, message, **kwargs: errors.append(
-            (title, str(message), kwargs.get("parent"))
-        ),
+        lambda title, message, **kwargs: errors.append((title, str(message), kwargs.get("parent"))),
     )
 
     def fail_refresh(_roots=None):
@@ -1068,9 +1065,7 @@ def test_place_block_reload_warning_does_not_start_native_placement(monkeypatch,
         root.destroy()
 
 
-def test_place_block_registration_failure_shows_error_and_keeps_browser_open(
-    monkeypatch, tmp_path
-):
+def test_place_block_registration_failure_shows_error_and_keeps_browser_open(monkeypatch, tmp_path):
     root, context, _records, _library, _project = _new_browser(monkeypatch, tmp_path)
     errors = []
 
@@ -1082,9 +1077,7 @@ def test_place_block_registration_failure_shows_error_and_keeps_browser_open(
     monkeypatch.setattr(
         plugin_actions.messagebox,
         "showerror",
-        lambda title, message, **kwargs: errors.append(
-            (title, str(message), kwargs.get("parent"))
-        ),
+        lambda title, message, **kwargs: errors.append((title, str(message), kwargs.get("parent"))),
     )
     try:
         _select_first_record(context)
@@ -1115,9 +1108,7 @@ def test_open_implementation_registration_failure_shows_error(monkeypatch, tmp_p
     monkeypatch.setattr(
         plugin_actions.messagebox,
         "showerror",
-        lambda title, message, **kwargs: errors.append(
-            (title, str(message), kwargs.get("parent"))
-        ),
+        lambda title, message, **kwargs: errors.append((title, str(message), kwargs.get("parent"))),
     )
     try:
         _select_first_record(context)
@@ -1132,17 +1123,14 @@ def test_open_implementation_registration_failure_shows_error(monkeypatch, tmp_p
         assert errors[0][1] == "implementation catalog write failed"
         assert errors[0][2] is not None and errors[0][2].winfo_exists()
         assert not any(
-            child.winfo_class() == "Toplevel"
-            and child.title().startswith("Open implementation — ")
+            child.winfo_class() == "Toplevel" and child.title().startswith("Open implementation — ")
             for child in root.winfo_children()
         )
     finally:
         root.destroy()
 
 
-def test_open_default_implementation_launch_failure_shows_error(
-    monkeypatch, tmp_path
-):
+def test_open_default_implementation_launch_failure_shows_error(monkeypatch, tmp_path):
     root, context, records, _library, _project = _new_browser(monkeypatch, tmp_path)
     errors = []
     records[0].manifest["variants"] = []
@@ -1160,9 +1148,7 @@ def test_open_default_implementation_launch_failure_shows_error(
     monkeypatch.setattr(
         plugin_actions.messagebox,
         "showerror",
-        lambda title, message, **kwargs: errors.append(
-            (title, str(message), kwargs.get("parent"))
-        ),
+        lambda title, message, **kwargs: errors.append((title, str(message), kwargs.get("parent"))),
     )
     try:
         _select_first_record(context)
@@ -1180,13 +1166,9 @@ def test_open_default_implementation_launch_failure_shows_error(
         root.destroy()
 
 
-def test_open_named_implementation_launch_failure_shows_error_after_chooser(
-    monkeypatch, tmp_path
-):
+def test_open_named_implementation_launch_failure_shows_error_after_chooser(monkeypatch, tmp_path):
     root, context, records, _library, _project = _new_browser(monkeypatch, tmp_path)
-    records[0].manifest["variants"] = [
-        {"value": "1V8", "file": "implementation_1v8.kicad_sch"}
-    ]
+    records[0].manifest["variants"] = [{"value": "1V8", "file": "implementation_1v8.kicad_sch"}]
     errors = []
     monkeypatch.setattr(
         plugin_actions,
@@ -1202,9 +1184,7 @@ def test_open_named_implementation_launch_failure_shows_error_after_chooser(
     monkeypatch.setattr(
         plugin_actions.messagebox,
         "showerror",
-        lambda title, message, **kwargs: errors.append(
-            (title, str(message), kwargs.get("parent"))
-        ),
+        lambda title, message, **kwargs: errors.append((title, str(message), kwargs.get("parent"))),
     )
     chooser_title = "Open implementation — USB power block"
     try:
@@ -1260,9 +1240,7 @@ def test_edit_facade_failure_shows_recoverable_error(monkeypatch, tmp_path):
     monkeypatch.setattr(
         plugin_actions.messagebox,
         "showerror",
-        lambda title, message, **kwargs: errors.append(
-            (title, str(message), kwargs.get("parent"))
-        ),
+        lambda title, message, **kwargs: errors.append((title, str(message), kwargs.get("parent"))),
     )
     try:
         _select_first_record(context)
@@ -1308,9 +1286,7 @@ def test_edit_facade_without_native_handoff_shows_guidance(monkeypatch, tmp_path
         root.destroy()
 
 
-def test_manage_pcb_layouts_failure_shows_error_and_preserves_browser(
-    monkeypatch, tmp_path
-):
+def test_manage_pcb_layouts_failure_shows_error_and_preserves_browser(monkeypatch, tmp_path):
     root, context, _records, _library, _project = _new_browser(monkeypatch, tmp_path)
     errors = []
 
@@ -1322,9 +1298,7 @@ def test_manage_pcb_layouts_failure_shows_error_and_preserves_browser(
     monkeypatch.setattr(
         plugin_actions.messagebox,
         "showerror",
-        lambda title, message, **kwargs: errors.append(
-            (title, str(message), kwargs.get("parent"))
-        ),
+        lambda title, message, **kwargs: errors.append((title, str(message), kwargs.get("parent"))),
     )
     try:
         _select_first_record(context)
@@ -1342,9 +1316,7 @@ def test_manage_pcb_layouts_failure_shows_error_and_preserves_browser(
         root.destroy()
 
 
-def test_manage_implementations_failure_shows_error_and_preserves_browser(
-    monkeypatch, tmp_path
-):
+def test_manage_implementations_failure_shows_error_and_preserves_browser(monkeypatch, tmp_path):
     root, context, _records, _library, _project = _new_browser(monkeypatch, tmp_path)
     errors = []
 
@@ -1356,9 +1328,7 @@ def test_manage_implementations_failure_shows_error_and_preserves_browser(
     monkeypatch.setattr(
         plugin_actions.messagebox,
         "showerror",
-        lambda title, message, **kwargs: errors.append(
-            (title, str(message), kwargs.get("parent"))
-        ),
+        lambda title, message, **kwargs: errors.append((title, str(message), kwargs.get("parent"))),
     )
     try:
         _select_first_record(context)
@@ -1376,12 +1346,8 @@ def test_manage_implementations_failure_shows_error_and_preserves_browser(
         root.destroy()
 
 
-def test_open_pcb_layout_launch_failure_shows_error_after_chooser(
-    monkeypatch, tmp_path
-):
-    layouts = [
-        {"id": "default-pcb", "name": "Default", "file": "default.kicad_pcb"}
-    ]
+def test_open_pcb_layout_launch_failure_shows_error_after_chooser(monkeypatch, tmp_path):
+    layouts = [{"id": "default-pcb", "name": "Default", "file": "default.kicad_pcb"}]
     root, context, _records, _library, _project = _new_browser(
         monkeypatch, tmp_path, layouts=layouts
     )
@@ -1395,9 +1361,7 @@ def test_open_pcb_layout_launch_failure_shows_error_after_chooser(
     monkeypatch.setattr(
         plugin_actions.messagebox,
         "showerror",
-        lambda title, message, **kwargs: errors.append(
-            (title, str(message), kwargs.get("parent"))
-        ),
+        lambda title, message, **kwargs: errors.append((title, str(message), kwargs.get("parent"))),
     )
     chooser_title = "Open PCB layout — USB power block"
     try:

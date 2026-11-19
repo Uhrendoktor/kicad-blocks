@@ -47,13 +47,15 @@ def _profile_inputs():
 def test_profile_wizard_accepts_name_description_variant_parameters_and_layout(monkeypatch):
     parent = object()
     parameters, variants, layouts = _profile_inputs()
-    answers = iter([
-        "Low voltage",
-        "Optimized for 1.8 V operation",
-        "1V8",
-        "OUTPUT_VOLTAGE=1.8",
-        "Compact  [compact]",
-    ])
+    answers = iter(
+        [
+            "Low voltage",
+            "Optimized for 1.8 V operation",
+            "1V8",
+            "OUTPUT_VOLTAGE=1.8",
+            "Compact  [compact]",
+        ]
+    )
     simple_prompts = []
     confirmations = iter([True, False])
 
@@ -72,13 +74,15 @@ def test_profile_wizard_accepts_name_description_variant_parameters_and_layout(m
 
     profiles = plugin_actions._collect_block_profiles(parent, parameters, variants, layouts)
 
-    assert profiles == [{
-        "name": "Low voltage",
-        "description": "Optimized for 1.8 V operation",
-        "variant": "1V8",
-        "parameters": {"OUTPUT_VOLTAGE": "1.8"},
-        "layout": "compact",
-    }]
+    assert profiles == [
+        {
+            "name": "Low voltage",
+            "description": "Optimized for 1.8 V operation",
+            "variant": "1V8",
+            "parameters": {"OUTPUT_VOLTAGE": "1.8"},
+            "layout": "compact",
+        }
+    ]
     assert [item[0] for item in simple_prompts] == [
         "New Configuration Profile",
         "Profile Description",
@@ -136,9 +140,7 @@ def test_profile_wizard_blank_name_warns_and_does_not_create_partial_profile(mon
     monkeypatch.setattr(
         plugin_actions.messagebox,
         "showwarning",
-        lambda title, message, **kwargs: warnings.append(
-            (title, message, kwargs.get("parent"))
-        ),
+        lambda title, message, **kwargs: warnings.append((title, message, kwargs.get("parent"))),
     )
     assert plugin_actions._collect_block_profiles(parent, parameters, variants, layouts) is None
     assert len(warnings) == 1
@@ -206,14 +208,15 @@ def test_layout_selector_returns_the_user_selected_layout(monkeypatch):
 def test_layout_selector_cancel_and_invalid_choice_are_distinct(monkeypatch):
     parent = object()
     monkeypatch.setattr(plugin_actions.simpledialog, "askstring", lambda *_args, **_kwargs: None)
-    assert plugin_actions._choose_block_layout(
-        _layout_block(), parent, "Select PCB layout", None
-    ) is None
-    monkeypatch.setattr(plugin_actions.simpledialog, "askstring", lambda *_args, **_kwargs: "Missing")
+    assert (
+        plugin_actions._choose_block_layout(_layout_block(), parent, "Select PCB layout", None)
+        is None
+    )
+    monkeypatch.setattr(
+        plugin_actions.simpledialog, "askstring", lambda *_args, **_kwargs: "Missing"
+    )
     with pytest.raises(ValueError, match="No PCB layout"):
-        plugin_actions._choose_block_layout(
-            _layout_block(), parent, "Select PCB layout", None
-        )
+        plugin_actions._choose_block_layout(_layout_block(), parent, "Select PCB layout", None)
 
 
 def _install_validation_fakes(monkeypatch, tmp_path, report):
@@ -240,7 +243,14 @@ def _install_validation_fakes(monkeypatch, tmp_path, report):
     [
         (
             {
-                "blocks": [{"name": "Broken block", "status": "failed", "errors": ["manifest is invalid"], "warnings": []}],
+                "blocks": [
+                    {
+                        "name": "Broken block",
+                        "status": "failed",
+                        "errors": ["manifest is invalid"],
+                        "warnings": [],
+                    }
+                ],
                 "passed_count": 0,
                 "warning_count": 0,
                 "failed_count": 1,
@@ -249,7 +259,14 @@ def _install_validation_fakes(monkeypatch, tmp_path, report):
         ),
         (
             {
-                "blocks": [{"name": "ERC warning block", "status": "warnings", "errors": [], "warnings": ["unconnected output"]}],
+                "blocks": [
+                    {
+                        "name": "ERC warning block",
+                        "status": "warnings",
+                        "errors": [],
+                        "warnings": ["unconnected output"],
+                    }
+                ],
                 "passed_count": 0,
                 "warning_count": 1,
                 "failed_count": 0,
@@ -258,17 +275,15 @@ def _install_validation_fakes(monkeypatch, tmp_path, report):
         ),
     ],
 )
-def test_library_validation_uses_the_correct_warning_dialog(monkeypatch, tmp_path, report, expected_title):
-    _library, output, parent, calls = _install_validation_fakes(
-        monkeypatch, tmp_path, report
-    )
+def test_library_validation_uses_the_correct_warning_dialog(
+    monkeypatch, tmp_path, report, expected_title
+):
+    _library, output, parent, calls = _install_validation_fakes(monkeypatch, tmp_path, report)
     warnings = []
     monkeypatch.setattr(
         plugin_actions.messagebox,
         "showwarning",
-        lambda title, message, **kwargs: warnings.append(
-            (title, message, kwargs.get("parent"))
-        ),
+        lambda title, message, **kwargs: warnings.append((title, message, kwargs.get("parent"))),
     )
     plugin_actions._validate_shared_library(tmp_path, parent)
     assert len(calls) == 1

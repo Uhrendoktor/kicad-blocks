@@ -34,9 +34,7 @@ def _parent():
     return _ParentHandle()
 
 
-def test_open_kicad_file_uses_existing_file_parent_name_filter_and_parent(
-    monkeypatch, tmp_path
-):
+def test_open_kicad_file_uses_existing_file_parent_name_filter_and_parent(monkeypatch, tmp_path):
     source_dir = tmp_path / "schematics"
     source_dir.mkdir()
     initial = source_dir / "implementation.kicad_sch"
@@ -74,9 +72,7 @@ def test_open_kicad_file_uses_existing_file_parent_name_filter_and_parent(
         parent.destroy()
 
 
-def test_open_kicad_file_falls_back_to_cwd_for_missing_initial_path(
-    monkeypatch, tmp_path
-):
+def test_open_kicad_file_falls_back_to_cwd_for_missing_initial_path(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
     parent = _parent()
     calls = []
@@ -115,11 +111,14 @@ def test_open_kicad_file_cancel_returns_none(monkeypatch, tmp_path):
         lambda **kwargs: calls.append(kwargs) or "",
     )
     try:
-        assert plugin_actions._pick_kicad_file(
-            parent,
-            title="Choose schematic",
-            suffix=".kicad_sch",
-        ) is None
+        assert (
+            plugin_actions._pick_kicad_file(
+                parent,
+                title="Choose schematic",
+                suffix=".kicad_sch",
+            )
+            is None
+        )
         assert calls[0]["initialdir"] == str(tmp_path)
         assert calls[0]["initialfile"] == ""
         assert calls[0]["parent"] is parent
@@ -127,9 +126,7 @@ def test_open_kicad_file_cancel_returns_none(monkeypatch, tmp_path):
         parent.destroy()
 
 
-def test_save_file_uses_suggested_name_extension_filter_and_parent(
-    monkeypatch, tmp_path
-):
+def test_save_file_uses_suggested_name_extension_filter_and_parent(monkeypatch, tmp_path):
     suggested = tmp_path / "release" / "functional_block.kicad_sch"
     suggested.parent.mkdir(parents=True, exist_ok=True)
     parent = _parent()
@@ -168,9 +165,7 @@ def test_save_file_uses_suggested_name_extension_filter_and_parent(
         parent.destroy()
 
 
-def test_save_file_without_suffix_uses_directory_and_cancel_returns_none(
-    monkeypatch, tmp_path
-):
+def test_save_file_without_suffix_uses_directory_and_cancel_returns_none(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
     parent = _parent()
     calls = []
@@ -180,13 +175,16 @@ def test_save_file_without_suffix_uses_directory_and_cancel_returns_none(
         lambda **kwargs: calls.append(kwargs) or "",
     )
     try:
-        assert plugin_actions._pick_save_file(
-            parent,
-            title="Save report",
-            initial_path=tmp_path,
-            defaultextension=".json",
-            filetypes=[("JSON", "*.json")],
-        ) is None
+        assert (
+            plugin_actions._pick_save_file(
+                parent,
+                title="Save report",
+                initial_path=tmp_path,
+                defaultextension=".json",
+                filetypes=[("JSON", "*.json")],
+            )
+            is None
+        )
         assert calls[0]["initialdir"] == str(tmp_path)
         assert calls[0]["initialfile"] == ""
         assert calls[0]["defaultextension"] == ".json"
@@ -229,9 +227,7 @@ def test_directory_picker_uses_existing_file_parent_and_requires_existing_direct
         parent.destroy()
 
 
-def test_directory_picker_falls_back_to_cwd_and_cancel_returns_none(
-    monkeypatch, tmp_path
-):
+def test_directory_picker_falls_back_to_cwd_and_cancel_returns_none(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
     parent = _parent()
     calls = []
@@ -241,11 +237,14 @@ def test_directory_picker_falls_back_to_cwd_and_cancel_returns_none(
         lambda **kwargs: calls.append(kwargs) or "",
     )
     try:
-        assert plugin_actions._pick_directory(
-            parent,
-            title="Choose library location",
-            initial_path=tmp_path / "missing",
-        ) is None
+        assert (
+            plugin_actions._pick_directory(
+                parent,
+                title="Choose library location",
+                initial_path=tmp_path / "missing",
+            )
+            is None
+        )
         assert calls[0]["initialdir"] == str(tmp_path)
         assert calls[0]["mustexist"] is True
         assert calls[0]["parent"] is parent

@@ -451,9 +451,7 @@ def test_add_variant_save_failure_can_be_retried_with_save_and_close(
         root.destroy()
 
 
-def test_implementation_manager_selection_controls_follow_row_state(
-    monkeypatch, tmp_path
-):
+def test_implementation_manager_selection_controls_follow_row_state(monkeypatch, tmp_path):
     record, _sources = _new_manager_fixture(tmp_path, variants=("1V8",))
     root = _new_root(monkeypatch)
     context = UiTestContext(root)
@@ -521,9 +519,7 @@ def test_implementation_manager_selection_controls_follow_row_state(
         root.destroy()
 
 
-def test_edit_default_row_returns_default_schematic_and_closes_manager(
-    monkeypatch, tmp_path
-):
+def test_edit_default_row_returns_default_schematic_and_closes_manager(monkeypatch, tmp_path):
     record, _sources = _new_manager_fixture(tmp_path, variants=("1V8",))
     default_path = record.path / record.manifest["implementation_file"]
     root = _new_root(monkeypatch)
@@ -546,9 +542,7 @@ def test_edit_default_row_returns_default_schematic_and_closes_manager(
         root.destroy()
 
 
-def test_remove_confirmation_cancel_preserves_manifest_row_and_source_file(
-    monkeypatch, tmp_path
-):
+def test_remove_confirmation_cancel_preserves_manifest_row_and_source_file(monkeypatch, tmp_path):
     record, _sources = _new_manager_fixture(tmp_path, variants=("1V8",))
     variant_file = record.path / record.manifest["variants"][0]["file"]
     original_manifest = read_manifest(record.path)
@@ -583,9 +577,7 @@ def test_remove_confirmation_cancel_preserves_manifest_row_and_source_file(
         root.destroy()
 
 
-def test_close_confirmation_can_keep_pending_changes_or_discard_them(
-    monkeypatch, tmp_path
-):
+def test_close_confirmation_can_keep_pending_changes_or_discard_them(monkeypatch, tmp_path):
     record, _sources = _new_manager_fixture(tmp_path)
     source = tmp_path / "pending-implementation.kicad_sch"
     source.write_text(
@@ -658,9 +650,7 @@ def test_close_confirmation_can_keep_pending_changes_or_discard_them(
         root.destroy()
 
 
-def test_add_button_routes_to_create_mode_details_and_persists_source(
-    monkeypatch, tmp_path
-):
+def test_add_button_routes_to_create_mode_details_and_persists_source(monkeypatch, tmp_path):
     record, _sources = _new_manager_fixture(tmp_path)
     source_file = tmp_path / "add-dialog-source.kicad_sch"
     source_file.write_text(
@@ -722,9 +712,7 @@ def test_add_button_routes_to_create_mode_details_and_persists_source(
         root.destroy()
 
 
-def test_add_variant_duplicate_value_reports_error_and_preserves_manifest(
-    monkeypatch, tmp_path
-):
+def test_add_variant_duplicate_value_reports_error_and_preserves_manifest(monkeypatch, tmp_path):
     record, sources = _new_manager_fixture(tmp_path, variants=("1V8",))
     original = read_manifest(record.path)
     monkeypatch.setattr(
@@ -736,9 +724,7 @@ def test_add_variant_duplicate_value_reports_error_and_preserves_manifest(
     monkeypatch.setattr(
         plugin_actions.messagebox,
         "showerror",
-        lambda title, message, **kwargs: errors.append(
-            (title, str(message), kwargs.get("parent"))
-        ),
+        lambda title, message, **kwargs: errors.append((title, str(message), kwargs.get("parent"))),
     )
     root = _new_root(monkeypatch)
     context = UiTestContext(root)
@@ -763,9 +749,7 @@ def test_add_variant_duplicate_value_reports_error_and_preserves_manifest(
         root.destroy()
 
 
-def test_edit_variant_duplicate_value_reports_error_and_preserves_manifest(
-    monkeypatch, tmp_path
-):
+def test_edit_variant_duplicate_value_reports_error_and_preserves_manifest(monkeypatch, tmp_path):
     record, sources = _new_manager_fixture(tmp_path, variants=("1V8", "3V3"))
     original = read_manifest(record.path)
     monkeypatch.setattr(
@@ -777,9 +761,7 @@ def test_edit_variant_duplicate_value_reports_error_and_preserves_manifest(
     monkeypatch.setattr(
         plugin_actions.messagebox,
         "showerror",
-        lambda title, message, **kwargs: errors.append(
-            (title, str(message), kwargs.get("parent"))
-        ),
+        lambda title, message, **kwargs: errors.append((title, str(message), kwargs.get("parent"))),
     )
     root = _new_root(monkeypatch)
     context = UiTestContext(root)

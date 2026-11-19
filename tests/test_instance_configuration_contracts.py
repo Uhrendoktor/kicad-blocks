@@ -120,9 +120,7 @@ def _fixture(tmp_path: Path):
     commit = object()
     schematic = SimpleNamespace(
         get_selection=lambda: [instance],
-        get_project=lambda: SimpleNamespace(
-            expand_text_variables=lambda value: value
-        ),
+        get_project=lambda: SimpleNamespace(expand_text_variables=lambda value: value),
         begin_commit=Mock(return_value=commit),
         push_commit=Mock(),
         drop_commit=Mock(),
@@ -133,9 +131,7 @@ def _fixture(tmp_path: Path):
 
 def _new_root(monkeypatch):
     plugin_actions._load_tkinter()
-    monkeypatch.setattr(
-        plugin_actions, "_create_action_icon", lambda *_args: None
-    )
+    monkeypatch.setattr(plugin_actions, "_create_action_icon", lambda *_args: None)
     root = plugin_actions.tk.Tk()
     root.title("Instance configuration contract host")
     root.geometry("900x900")
@@ -147,8 +143,7 @@ def _find_dialog(root):
     return next(
         child
         for child in root.winfo_children()
-        if child.winfo_class() == "Toplevel"
-        and child.title() == WINDOW_TITLE
+        if child.winfo_class() == "Toplevel" and child.title() == WINDOW_TITLE
     )
 
 
@@ -196,9 +191,7 @@ def _run_dialog(root, context, library, project, schematic, action):
                 dialog.destroy()
 
     root.after(100, drive)
-    plugin_actions._show_selected_block_configuration(
-        schematic, project, library, root
-    )
+    plugin_actions._show_selected_block_configuration(schematic, project, library, root)
     if callback_errors:
         raise callback_errors[0]
 
@@ -246,10 +239,7 @@ def test_profile_selection_updates_variant_parameter_and_layout_then_saves_one_i
 
         assert context.require_widget("instance-configuration.variant").get() == "1V8"
         assert (
-            context.require_widget(
-                "instance-configuration.parameter.OUTPUT_VOLTAGE"
-            ).get()
-            == "1.8"
+            context.require_widget("instance-configuration.parameter.OUTPUT_VOLTAGE").get() == "1.8"
         )
         assert context.require_widget("instance-configuration.layout").get() == LAYOUT_COMPACT
 
@@ -271,9 +261,7 @@ def test_profile_selection_updates_variant_parameter_and_layout_then_saves_one_i
         }
         assert updates == ["X1"]
         schematic.begin_commit.assert_called_once_with()
-        schematic.push_commit.assert_called_once_with(
-            commit, "Configure KiCad block instance"
-        )
+        schematic.push_commit.assert_called_once_with(commit, "Configure KiCad block instance")
         schematic.save.assert_called_once_with()
         schematic.drop_commit.assert_not_called()
     finally:
@@ -287,9 +275,7 @@ def test_manual_parameter_edit_changes_profile_to_custom_and_saves(monkeypatch, 
 
     def edit_and_save(dialog):
         _assert_initial_state(context, dialog)
-        parameter = context.require_widget(
-            "instance-configuration.parameter.OUTPUT_VOLTAGE"
-        )
+        parameter = context.require_widget("instance-configuration.parameter.OUTPUT_VOLTAGE")
         parameter.delete(0, "end")
         parameter.insert(0, "2.5")
         root.update_idletasks()
@@ -314,17 +300,13 @@ def test_manual_parameter_edit_changes_profile_to_custom_and_saves(monkeypatch, 
         assert values["KB_LAYOUT"] == "standard"
         assert updates == ["X1"]
         schematic.begin_commit.assert_called_once_with()
-        schematic.push_commit.assert_called_once_with(
-            commit, "Configure KiCad block instance"
-        )
+        schematic.push_commit.assert_called_once_with(commit, "Configure KiCad block instance")
         schematic.save.assert_called_once_with()
     finally:
         root.destroy()
 
 
-def test_invalid_parameter_shows_error_without_ipc_edit_then_recovers(
-    monkeypatch, tmp_path
-):
+def test_invalid_parameter_shows_error_without_ipc_edit_then_recovers(monkeypatch, tmp_path):
     library, project, _block, instance, schematic, _commit = _fixture(tmp_path)
     root, context = _new_root(monkeypatch)
     updates = _install_update_spy(monkeypatch)
@@ -337,9 +319,7 @@ def test_invalid_parameter_shows_error_without_ipc_edit_then_recovers(
 
     def recover_from_invalid_parameter(dialog):
         _assert_initial_state(context, dialog)
-        parameter = context.require_widget(
-            "instance-configuration.parameter.OUTPUT_VOLTAGE"
-        )
+        parameter = context.require_widget("instance-configuration.parameter.OUTPUT_VOLTAGE")
         parameter.delete(0, "end")
         parameter.insert(0, "not-a-number")
         _click(context, "instance-configuration.action.save", "Save instance")
@@ -358,9 +338,7 @@ def test_invalid_parameter_shows_error_without_ipc_edit_then_recovers(
         )
 
     try:
-        _run_dialog(
-            root, context, library, project, schematic, recover_from_invalid_parameter
-        )
+        _run_dialog(root, context, library, project, schematic, recover_from_invalid_parameter)
         values = {field.name: field.text.value for field in instance.user_fields}
         assert values["KB_PARAM_OUTPUT_VOLTAGE"] == "1.9"
         schematic.begin_commit.assert_called_once_with()
@@ -379,9 +357,7 @@ def test_cancel_and_escape_discard_pending_instance_changes(monkeypatch, tmp_pat
 
     def cancel_after_edit(dialog):
         _assert_initial_state(context, dialog)
-        parameter = context.require_widget(
-            "instance-configuration.parameter.OUTPUT_VOLTAGE"
-        )
+        parameter = context.require_widget("instance-configuration.parameter.OUTPUT_VOLTAGE")
         parameter.delete(0, "end")
         parameter.insert(0, "4.2")
         _click(
@@ -424,9 +400,7 @@ def test_cancel_and_escape_discard_pending_instance_changes(monkeypatch, tmp_pat
         root.destroy()
 
 
-def test_failed_instance_update_rolls_back_field_values_and_keeps_form_open(
-    monkeypatch, tmp_path
-):
+def test_failed_instance_update_rolls_back_field_values_and_keeps_form_open(monkeypatch, tmp_path):
     library, project, _block, instance, schematic, commit = _fixture(tmp_path)
     root, context = _new_root(monkeypatch)
     errors = []
@@ -448,9 +422,7 @@ def test_failed_instance_update_rolls_back_field_values_and_keeps_form_open(
 
     def retry_after_failure(dialog):
         _assert_initial_state(context, dialog)
-        parameter = context.require_widget(
-            "instance-configuration.parameter.OUTPUT_VOLTAGE"
-        )
+        parameter = context.require_widget("instance-configuration.parameter.OUTPUT_VOLTAGE")
         parameter.delete(0, "end")
         parameter.insert(0, "2.2")
         _click(context, "instance-configuration.action.save", "Save instance")
@@ -474,24 +446,15 @@ def test_failed_instance_update_rolls_back_field_values_and_keeps_form_open(
         root.destroy()
 
 
-def test_missing_required_configuration_field_fails_before_opening_dialog(
-    monkeypatch, tmp_path
-):
+def test_missing_required_configuration_field_fails_before_opening_dialog(monkeypatch, tmp_path):
     library, project, _block, instance, schematic, _commit = _fixture(tmp_path)
     root, _context = _new_root(monkeypatch)
-    instance.user_fields = [
-        field
-        for field in instance.user_fields
-        if field.name != "KB_LAYOUT"
-    ]
+    instance.user_fields = [field for field in instance.user_fields if field.name != "KB_LAYOUT"]
     try:
         with pytest.raises(RuntimeError, match="KB_LAYOUT"):
-            plugin_actions._show_selected_block_configuration(
-                schematic, project, library, root
-            )
+            plugin_actions._show_selected_block_configuration(schematic, project, library, root)
         assert not any(
-            child.winfo_class() == "Toplevel"
-            and child.title() == WINDOW_TITLE
+            child.winfo_class() == "Toplevel" and child.title() == WINDOW_TITLE
             for child in root.winfo_children()
         )
     finally:

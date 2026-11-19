@@ -1712,9 +1712,7 @@ def _show_selected_block_configuration(
                 )
             else:
                 widget = ttk.Entry(section, textvariable=variable)
-            widget._kicad_ui_contract_id = (
-                f"instance-configuration.parameter.{name}"
-            )
+            widget._kicad_ui_contract_id = f"instance-configuration.parameter.{name}"
             widget.grid(row=row * 2, column=1, sticky="ew", pady=(3, 0))
             description = parameter.get("description") or f"Default: {parameter['default']}"
             _add_tooltip(widget, description)
@@ -1919,7 +1917,11 @@ def _show_selected_block_configuration(
         dialog.destroy()
 
     _action_button(
-        footer, "Cancel", dialog.destroy, "cancel", "Discard instance edits",
+        footer,
+        "Cancel",
+        dialog.destroy,
+        "cancel",
+        "Discard instance edits",
         contract_id="instance-configuration.action.cancel",
     ).pack(side="right", padx=(8, 0))
     _action_button(
@@ -2211,11 +2213,19 @@ def _pick_block_for_placement(
     buttons = ttk.Frame(outer)
     buttons.pack(fill="x", pady=(10, 0))
     _action_button(
-        buttons, "Cancel", dialog.destroy, "cancel", "Cancel and close this dialog",
+        buttons,
+        "Cancel",
+        dialog.destroy,
+        "cancel",
+        "Cancel and close this dialog",
         contract_id="functional-block-picker.action.cancel",
     ).pack(side="right")
     _action_button(
-        buttons, "Place Block", choose, "place", "Start native symbol placement with this block",
+        buttons,
+        "Place Block",
+        choose,
+        "place",
+        "Start native symbol placement with this block",
         contract_id="functional-block-picker.action.place",
     ).pack(side="right", padx=(0, 8))
     render_results()
@@ -2370,9 +2380,7 @@ def _pick_record(
         record = records_by_id.get(selection[0]) if selection else None
         selected_record[0] = record
         if record is None:
-            description.configure(
-                text="No matching blocks." if not tree.get_children() else ""
-            )
+            description.configure(text="No matching blocks." if not tree.get_children() else "")
             select_button.configure(state="disabled")
         else:
             description.configure(text=short_description(record))
@@ -2828,11 +2836,19 @@ def _ask_create_block_details(
     buttons = ttk.Frame(frame)
     buttons.pack(fill="x")
     _action_button(
-        buttons, "Cancel", finish, "cancel", "Cancel block creation",
+        buttons,
+        "Cancel",
+        finish,
+        "cancel",
+        "Cancel block creation",
         contract_id="create-block-form.action.cancel",
     ).pack(side="right")
     _action_button(
-        buttons, "Create Block", accept, "create", "Create the reusable block from this sheet",
+        buttons,
+        "Create Block",
+        accept,
+        "create",
+        "Create the reusable block from this sheet",
         contract_id="create-block-form.action.create",
     ).pack(side="right", padx=(0, 8))
 
@@ -4527,9 +4543,7 @@ def _show_block_layout_editor(
                 values=(
                     item.get("name", item["id"]),
                     assigned_to(item["id"]),
-                    item.get("file")
-                    or Path(str(item.get("source") or "")).name
-                    or "Pending save",
+                    item.get("file") or Path(str(item.get("source") or "")).name or "Pending save",
                 ),
                 tags=("even" if index % 2 == 0 else "odd",),
             )
@@ -4700,7 +4714,11 @@ def _show_block_layout_editor(
     actions = ttk.Frame(frame)
     actions.grid(row=3, column=0, sticky="ew", pady=(8, 0))
     _action_button(
-        actions, "Add layout", add_layout, "add", "Add a PCB layout",
+        actions,
+        "Add layout",
+        add_layout,
+        "add",
+        "Add a PCB layout",
         contract_id="pcb-layout-manager.action.add",
     ).pack(side="left")
     remove_button = _action_button(
@@ -4976,7 +4994,10 @@ def _ask_implementation_details(
     source_entry._kicad_ui_contract_id = "implementation-details.source"
     source_entry.grid(row=source_row + 1, column=0, columnspan=2, sticky="ew", pady=(3, 10))
     browse_button = _action_button(
-        frame, "Choose file…", lambda: None, "file",
+        frame,
+        "Choose file…",
+        lambda: None,
+        "file",
         "Choose an implementation schematic",
         contract_id="implementation-details.action.browse",
     )
@@ -5089,7 +5110,11 @@ def _ask_implementation_details(
     buttons = ttk.Frame(frame)
     buttons.grid(row=source_row + 2, column=0, columnspan=3, sticky="ew", pady=(8, 2))
     _action_button(
-        buttons, "Cancel", dialog.destroy, "cancel", "Cancel implementation setup",
+        buttons,
+        "Cancel",
+        dialog.destroy,
+        "cancel",
+        "Cancel implementation setup",
         contract_id="implementation-details.action.cancel",
     ).pack(side="right")
     _action_button(
@@ -5807,9 +5832,7 @@ def _show_library_roots_dialog(parent: tkinter_types.Misc) -> bool:
         path = selected_path()
         fixed = path is None or path == environment_root
         change_button.configure(state="disabled" if fixed else "normal")
-        other_roots_remain = any(
-            candidate != path for candidate in configured_library_roots()
-        )
+        other_roots_remain = any(candidate != path for candidate in configured_library_roots())
         remove_button.configure(
             state=(
                 "normal"

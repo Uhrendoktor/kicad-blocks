@@ -305,9 +305,7 @@ def test_add_pcb_layout_rejects_invalid_existing_file_then_recovers(monkeypatch,
     monkeypatch.setattr(
         plugin_actions.messagebox,
         "showerror",
-        lambda title, message, **kwargs: errors.append(
-            (title, str(message), kwargs.get("parent"))
-        ),
+        lambda title, message, **kwargs: errors.append((title, str(message), kwargs.get("parent"))),
     )
     context = UiTestContext(root)
 

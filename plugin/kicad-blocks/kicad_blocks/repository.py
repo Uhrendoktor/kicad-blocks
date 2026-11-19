@@ -1781,9 +1781,7 @@ def synchronize_facade_pins_from_implementation(block: BlockRecord) -> list[str]
             node = copy.deepcopy(existing)
             # KiCad's pin electrical type is a bare S-expression atom, not
             # a quoted string. Quoting it makes the republished library invalid.
-            node[1] = (
-                "tri_state" if pin.electrical_type == "tristate" else pin.electrical_type
-            )
+            node[1] = "tri_state" if pin.electrical_type == "tristate" else pin.electrical_type
             name_node = _direct(node, "name")
             if name_node is not None and len(name_node) >= 2:
                 name_node[1] = _Quoted(pin.name)

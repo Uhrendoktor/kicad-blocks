@@ -112,11 +112,7 @@ def _click(context, contract_id: str, label: str, *, closes=False, title=None):
 def _select_path(context, tree_id: str, path: Path, *, path_column: str):
     tree = context.require_widget(tree_id)
     wanted = str(path.expanduser().resolve())
-    row_id = next(
-        iid
-        for iid in tree.get_children()
-        if str(tree.set(iid, path_column)) == wanted
-    )
+    row_id = next(iid for iid in tree.get_children() if str(tree.set(iid, path_column)) == wanted)
     tree.selection_set(row_id)
     tree.focus(row_id)
     tree.event_generate("<<TreeviewSelect>>")
@@ -151,9 +147,7 @@ def _run_library_manager(root, context, action):
     )
 
 
-def test_manage_libraries_add_existing_registers_and_refreshes_the_real_tree(
-    monkeypatch, tmp_path
-):
+def test_manage_libraries_add_existing_registers_and_refreshes_the_real_tree(monkeypatch, tmp_path):
     _settings, first, second = _library_fixture(monkeypatch, tmp_path)
     new_library = tmp_path / "third-library"
     new_library.mkdir()
@@ -161,7 +155,7 @@ def test_manage_libraries_add_existing_registers_and_refreshes_the_real_tree(
     monkeypatch.setattr(
         plugin_actions.filedialog,
         "askdirectory",
-        lambda **kwargs: (chooser_calls.append(kwargs) or str(new_library)),
+        lambda **kwargs: chooser_calls.append(kwargs) or str(new_library),
     )
     root = _new_root(monkeypatch)
     context = UiTestContext(root)
@@ -176,8 +170,11 @@ def test_manage_libraries_add_existing_registers_and_refreshes_the_real_tree(
         variable = str(status.cget("textvariable"))
         assert "registered libraries" in status.getvar(variable)
         _click(
-            context, "manage-libraries.action.close", "Close",
-            closes=True, title="Manage Libraries",
+            context,
+            "manage-libraries.action.close",
+            "Close",
+            closes=True,
+            title="Manage Libraries",
         )
 
     try:
@@ -215,8 +212,11 @@ def test_manage_libraries_create_makes_and_registers_new_folder(monkeypatch, tmp
         assert created.is_dir()
         assert created.resolve() in repository.library_roots()
         _click(
-            context, "manage-libraries.action.close", "Close",
-            closes=True, title="Manage Libraries",
+            context,
+            "manage-libraries.action.close",
+            "Close",
+            closes=True,
+            title="Manage Libraries",
         )
 
     try:
@@ -242,8 +242,11 @@ def test_manage_libraries_unregister_removes_registration_but_preserves_files(
         assert (second / ".gitignore").is_file()
         assert (first / "keep-me.txt").read_text(encoding="utf-8") == "preserve library data"
         _click(
-            context, "manage-libraries.action.close", "Close",
-            closes=True, title="Manage Libraries",
+            context,
+            "manage-libraries.action.close",
+            "Close",
+            closes=True,
+            title="Manage Libraries",
         )
 
     try:
@@ -258,7 +261,7 @@ def test_manage_libraries_confirmation_cancel_keeps_registration(monkeypatch, tm
     monkeypatch.setattr(
         plugin_actions.messagebox,
         "askyesno",
-        lambda title, message, **_kwargs: (prompts.append((title, message)) or False),
+        lambda title, message, **_kwargs: prompts.append((title, message)) or False,
     )
     root = _new_root(monkeypatch)
     context = UiTestContext(root)
@@ -269,8 +272,11 @@ def test_manage_libraries_confirmation_cancel_keeps_registration(monkeypatch, tm
         assert prompts and prompts[0][0] == "Unregister library"
         assert second.resolve() in repository.library_roots()
         _click(
-            context, "manage-libraries.action.close", "Close",
-            closes=True, title="Manage Libraries",
+            context,
+            "manage-libraries.action.close",
+            "Close",
+            closes=True,
+            title="Manage Libraries",
         )
 
     try:
@@ -295,8 +301,11 @@ def test_manage_libraries_set_default_persists_selected_library(monkeypatch, tmp
         assert tree.set(selected, "role") == "Default"
         assert context.require_widget("manage-libraries.action.default").instate(["disabled"])
         _click(
-            context, "manage-libraries.action.close", "Close",
-            closes=True, title="Manage Libraries",
+            context,
+            "manage-libraries.action.close",
+            "Close",
+            closes=True,
+            title="Manage Libraries",
         )
 
     try:
@@ -307,9 +316,7 @@ def test_manage_libraries_set_default_persists_selected_library(monkeypatch, tmp
         root.destroy()
 
 
-def test_manage_libraries_change_folder_is_transactional_and_keeps_old_data(
-    monkeypatch, tmp_path
-):
+def test_manage_libraries_change_folder_is_transactional_and_keeps_old_data(monkeypatch, tmp_path):
     _settings, first, second = _library_fixture(monkeypatch, tmp_path)
     replacement = tmp_path / "replacement-library"
     replacement.mkdir()
@@ -331,8 +338,11 @@ def test_manage_libraries_change_folder_is_transactional_and_keeps_old_data(
         assert (first / "keep-me.txt").read_text(encoding="utf-8") == "preserve library data"
         assert second.resolve() in roots
         _click(
-            context, "manage-libraries.action.close", "Close",
-            closes=True, title="Manage Libraries",
+            context,
+            "manage-libraries.action.close",
+            "Close",
+            closes=True,
+            title="Manage Libraries",
         )
 
     try:
@@ -341,9 +351,7 @@ def test_manage_libraries_change_folder_is_transactional_and_keeps_old_data(
         root.destroy()
 
 
-def test_manage_libraries_environment_override_and_empty_selection_states(
-    monkeypatch, tmp_path
-):
+def test_manage_libraries_environment_override_and_empty_selection_states(monkeypatch, tmp_path):
     _settings, first, _second = _library_fixture(monkeypatch, tmp_path)
     monkeypatch.setenv("KICAD_BLOCKS_LIBRARY", str(first))
     root = _new_root(monkeypatch)
@@ -366,8 +374,11 @@ def test_manage_libraries_environment_override_and_empty_selection_states(
         ):
             assert context.require_widget(button_id).instate(["!disabled"])
         _click(
-            context, "manage-libraries.action.close", "Close",
-            closes=True, title="Manage Libraries",
+            context,
+            "manage-libraries.action.close",
+            "Close",
+            closes=True,
+            title="Manage Libraries",
         )
 
     try:
@@ -437,7 +448,7 @@ def test_pcb_layout_manager_updates_default_and_variant_associations_then_remove
     monkeypatch.setattr(
         plugin_actions.messagebox,
         "askyesno",
-        lambda title, message, **_kwargs: (prompts.append((title, message)) or True),
+        lambda title, message, **_kwargs: prompts.append((title, message)) or True,
     )
     original_manifest = read_manifest(record.path)
     original_layouts = original_manifest["layouts"]
@@ -470,8 +481,11 @@ def test_pcb_layout_manager_updates_default_and_variant_associations_then_remove
         assert manifest["variants"][0]["layout_id"] == first_id
         assert prompts and prompts[0][0] == "Remove PCB layout"
         _click(
-            context, "pcb-layout-manager.action.close", "Close",
-            closes=True, title=f"PCB layouts — {record.name}",
+            context,
+            "pcb-layout-manager.action.close",
+            "Close",
+            closes=True,
+            title=f"PCB layouts — {record.name}",
         )
 
     try:
@@ -525,8 +539,11 @@ def test_pcb_layout_manager_add_and_save_failure_can_be_retried(monkeypatch, tmp
         assert errors and errors[0][0] == "Save PCB layouts"
         assert len(read_manifest(record.path)["layouts"]) == 1
         _click(
-            context, "pcb-layout-manager.action.save-close", "Save & close",
-            closes=True, title=f"PCB layouts — {record.name}",
+            context,
+            "pcb-layout-manager.action.save-close",
+            "Save & close",
+            closes=True,
+            title=f"PCB layouts — {record.name}",
         )
 
     try:
@@ -543,16 +560,14 @@ def test_pcb_layout_manager_add_and_save_failure_can_be_retried(monkeypatch, tmp
         root.destroy()
 
 
-def test_pcb_layout_manager_cancelled_remove_preserves_board_and_manifest(
-    monkeypatch, tmp_path
-):
+def test_pcb_layout_manager_cancelled_remove_preserves_board_and_manifest(monkeypatch, tmp_path):
     record, _sources = _pcb_fixture(tmp_path, layout_count=2)
     before = json.loads(json.dumps(read_manifest(record.path)))
     prompts = []
     monkeypatch.setattr(
         plugin_actions.messagebox,
         "askyesno",
-        lambda title, message, **_kwargs: (prompts.append((title, message)) or False),
+        lambda title, message, **_kwargs: prompts.append((title, message)) or False,
     )
     root = _new_root(monkeypatch)
     context = UiTestContext(root)
@@ -565,8 +580,11 @@ def test_pcb_layout_manager_cancelled_remove_preserves_board_and_manifest(
         assert read_manifest(record.path)["layouts"] == before["layouts"]
         assert prompts and prompts[0][0] == "Remove PCB layout"
         _click(
-            context, "pcb-layout-manager.action.close", "Close",
-            closes=True, title=f"PCB layouts — {record.name}",
+            context,
+            "pcb-layout-manager.action.close",
+            "Close",
+            closes=True,
+            title=f"PCB layouts — {record.name}",
         )
 
     try:
@@ -575,9 +593,7 @@ def test_pcb_layout_manager_cancelled_remove_preserves_board_and_manifest(
         root.destroy()
 
 
-def test_pcb_layout_manager_disables_selection_actions_when_empty(
-    monkeypatch, tmp_path
-):
+def test_pcb_layout_manager_disables_selection_actions_when_empty(monkeypatch, tmp_path):
     record, _sources = _pcb_fixture(tmp_path, layout_count=0, with_variant=False)
     root = _new_root(monkeypatch)
     context = UiTestContext(root)
@@ -588,8 +604,11 @@ def test_pcb_layout_manager_disables_selection_actions_when_empty(
         assert context.require_widget("pcb-layout-manager.action.assign").instate(["disabled"])
         assert context.require_widget("pcb-layout-manager.action.add").instate(["!disabled"])
         _click(
-            context, "pcb-layout-manager.action.close", "Close",
-            closes=True, title=f"PCB layouts — {record.name}",
+            context,
+            "pcb-layout-manager.action.close",
+            "Close",
+            closes=True,
+            title=f"PCB layouts — {record.name}",
         )
 
     try:
@@ -619,9 +638,7 @@ def test_pcb_layout_manager_duplicate_name_reports_error_without_mutating_manife
     monkeypatch.setattr(
         plugin_actions.messagebox,
         "showerror",
-        lambda title, message, **kwargs: errors.append(
-            (title, str(message), kwargs.get("parent"))
-        ),
+        lambda title, message, **kwargs: errors.append((title, str(message), kwargs.get("parent"))),
     )
     root = _new_root(monkeypatch)
     context = UiTestContext(root)
@@ -647,9 +664,7 @@ def test_pcb_layout_manager_duplicate_name_reports_error_without_mutating_manife
         root.destroy()
 
 
-def test_manage_libraries_add_registration_error_keeps_existing_roots(
-    monkeypatch, tmp_path
-):
+def test_manage_libraries_add_registration_error_keeps_existing_roots(monkeypatch, tmp_path):
     _settings, first, second = _library_fixture(monkeypatch, tmp_path)
     registered_before = set(repository.library_roots())
     assert {first.resolve(), second.resolve()} <= registered_before
@@ -665,9 +680,7 @@ def test_manage_libraries_add_registration_error_keeps_existing_roots(
     monkeypatch.setattr(
         plugin_actions.messagebox,
         "showerror",
-        lambda title, message, **kwargs: errors.append(
-            (title, str(message), kwargs.get("parent"))
-        ),
+        lambda title, message, **kwargs: errors.append((title, str(message), kwargs.get("parent"))),
     )
     root = _new_root(monkeypatch)
     context = UiTestContext(root)
@@ -680,7 +693,9 @@ def test_manage_libraries_add_registration_error_keeps_existing_roots(
         assert errors[0][2].title() == "Manage Libraries"
         assert set(repository.library_roots()) == registered_before
         assert candidate.resolve() not in repository.library_roots()
-        _click(context, "manage-libraries.action.close", "Close", closes=True, title="Manage Libraries")
+        _click(
+            context, "manage-libraries.action.close", "Close", closes=True, title="Manage Libraries"
+        )
 
     try:
         _run_library_manager(root, context, add)
@@ -702,9 +717,7 @@ def test_manage_libraries_create_rejects_path_like_folder_name(monkeypatch, tmp_
     monkeypatch.setattr(
         plugin_actions.messagebox,
         "showerror",
-        lambda title, message, **kwargs: errors.append(
-            (title, str(message), kwargs.get("parent"))
-        ),
+        lambda title, message, **kwargs: errors.append((title, str(message), kwargs.get("parent"))),
     )
     root = _new_root(monkeypatch)
     context = UiTestContext(root)
@@ -716,7 +729,9 @@ def test_manage_libraries_create_rejects_path_like_folder_name(monkeypatch, tmp_
         assert errors[0][1] == "Enter a single folder name without a path."
         assert errors[0][2].title() == "Manage Libraries"
         assert not (tmp_path / "outside").exists()
-        _click(context, "manage-libraries.action.close", "Close", closes=True, title="Manage Libraries")
+        _click(
+            context, "manage-libraries.action.close", "Close", closes=True, title="Manage Libraries"
+        )
 
     try:
         _run_library_manager(root, context, create)
@@ -724,9 +739,7 @@ def test_manage_libraries_create_rejects_path_like_folder_name(monkeypatch, tmp_
         root.destroy()
 
 
-def test_manage_libraries_create_filesystem_error_keeps_existing_folder(
-    monkeypatch, tmp_path
-):
+def test_manage_libraries_create_filesystem_error_keeps_existing_folder(monkeypatch, tmp_path):
     _settings, _first, _second = _library_fixture(monkeypatch, tmp_path)
     destination = tmp_path / "created"
     existing = destination / "already-there"
@@ -744,9 +757,7 @@ def test_manage_libraries_create_filesystem_error_keeps_existing_folder(
     monkeypatch.setattr(
         plugin_actions.messagebox,
         "showerror",
-        lambda title, message, **kwargs: errors.append(
-            (title, str(message), kwargs.get("parent"))
-        ),
+        lambda title, message, **kwargs: errors.append((title, str(message), kwargs.get("parent"))),
     )
     root = _new_root(monkeypatch)
     context = UiTestContext(root)
@@ -759,7 +770,9 @@ def test_manage_libraries_create_filesystem_error_keeps_existing_folder(
         assert errors[0][2].title() == "Manage Libraries"
         assert marker.read_text(encoding="utf-8") == "keep"
         assert existing.resolve() not in repository.library_roots()
-        _click(context, "manage-libraries.action.close", "Close", closes=True, title="Manage Libraries")
+        _click(
+            context, "manage-libraries.action.close", "Close", closes=True, title="Manage Libraries"
+        )
 
     try:
         _run_library_manager(root, context, create)
@@ -787,9 +800,7 @@ def test_manage_libraries_change_folder_rolls_back_after_old_root_removal_fails(
     monkeypatch.setattr(
         plugin_actions.messagebox,
         "showerror",
-        lambda title, message, **kwargs: errors.append(
-            (title, str(message), kwargs.get("parent"))
-        ),
+        lambda title, message, **kwargs: errors.append((title, str(message), kwargs.get("parent"))),
     )
     root = _new_root(monkeypatch)
     context = UiTestContext(root)
@@ -805,7 +816,9 @@ def test_manage_libraries_change_folder_rolls_back_after_old_root_removal_fails(
         assert second.resolve() in repository.library_roots()
         assert replacement.resolve() not in repository.library_roots()
         assert repository.default_library_root() == first.resolve()
-        _click(context, "manage-libraries.action.close", "Close", closes=True, title="Manage Libraries")
+        _click(
+            context, "manage-libraries.action.close", "Close", closes=True, title="Manage Libraries"
+        )
 
     try:
         _run_library_manager(root, context, change)
@@ -825,9 +838,7 @@ def test_manage_libraries_unregister_error_keeps_root_registered(monkeypatch, tm
     monkeypatch.setattr(
         plugin_actions.messagebox,
         "showerror",
-        lambda title, message, **kwargs: errors.append(
-            (title, str(message), kwargs.get("parent"))
-        ),
+        lambda title, message, **kwargs: errors.append((title, str(message), kwargs.get("parent"))),
     )
     root = _new_root(monkeypatch)
     context = UiTestContext(root)
@@ -841,7 +852,9 @@ def test_manage_libraries_unregister_error_keeps_root_registered(monkeypatch, tm
         assert errors[0][2].title() == "Manage Libraries"
         assert second.resolve() in repository.library_roots()
         assert first.resolve() in repository.library_roots()
-        _click(context, "manage-libraries.action.close", "Close", closes=True, title="Manage Libraries")
+        _click(
+            context, "manage-libraries.action.close", "Close", closes=True, title="Manage Libraries"
+        )
 
     try:
         _run_library_manager(root, context, unregister)
@@ -860,9 +873,7 @@ def test_manage_libraries_set_default_error_preserves_previous_default(monkeypat
     monkeypatch.setattr(
         plugin_actions.messagebox,
         "showerror",
-        lambda title, message, **kwargs: errors.append(
-            (title, str(message), kwargs.get("parent"))
-        ),
+        lambda title, message, **kwargs: errors.append((title, str(message), kwargs.get("parent"))),
     )
     root = _new_root(monkeypatch)
     context = UiTestContext(root)
@@ -875,7 +886,9 @@ def test_manage_libraries_set_default_error_preserves_previous_default(monkeypat
         assert errors[0][1] == "could not write default setting"
         assert errors[0][2].title() == "Manage Libraries"
         assert repository.default_library_root() == first.resolve()
-        _click(context, "manage-libraries.action.close", "Close", closes=True, title="Manage Libraries")
+        _click(
+            context, "manage-libraries.action.close", "Close", closes=True, title="Manage Libraries"
+        )
 
     try:
         _run_library_manager(root, context, set_default)

@@ -194,9 +194,7 @@ def load_catalog(path: Path = CATALOG_PATH) -> DialogCatalog:
 def render_inventory(catalog: DialogCatalog | None = None) -> str:
     catalog = catalog if catalog is not None else load_catalog()
     calls = discover_dialog_calls()
-    by_id: dict[str, DialogCatalogEntry] = {
-        item["id"]: item for item in catalog["call_sites"]
-    }
+    by_id: dict[str, DialogCatalogEntry] = {item["id"]: item for item in catalog["call_sites"]}
     counts = {
         status: sum(item["coverage"] == status for item in catalog["call_sites"])
         for status in COVERAGE_LABELS
@@ -229,9 +227,7 @@ def render_inventory(catalog: DialogCatalog | None = None) -> str:
         )
     lines.extend(["", "## Coverage boundaries", ""])
     for status in ("tested", "partial", "uncovered"):
-        selected = [
-            item for item in catalog["call_sites"] if item["coverage"] == status
-        ]
+        selected = [item for item in catalog["call_sites"] if item["coverage"] == status]
         if not selected:
             continue
         lines.append(f"### {status.title()}")
@@ -269,7 +265,10 @@ def main() -> int:
         return 1
     if args.check:
         if not args.output.is_file() or args.output.read_text(encoding="utf-8") != rendered:
-            print(f"{args.output} is stale; run scripts/dialog_callsite_inventory.py.", file=sys.stderr)
+            print(
+                f"{args.output} is stale; run scripts/dialog_callsite_inventory.py.",
+                file=sys.stderr,
+            )
             return 1
         print(f"Native dialog inventory is current: {args.output}")
         return 0

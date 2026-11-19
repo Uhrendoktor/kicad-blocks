@@ -144,12 +144,7 @@ def _pcb_placement_source(
 def _pcb_batch_placement_source(
     result: BatchBlockLayoutMergeResult,
 ) -> BatchBlockLayoutPlacementSource:
-    return {
-        "placements": [
-            _pcb_placement_source(item)
-            for item in result["placements"]
-        ]
-    }
+    return {"placements": [_pcb_placement_source(item) for item in result["placements"]]}
 
 
 def _single_layout_context(monkeypatch, tmp_path: Path, *, open_after_merge: bool):
@@ -187,16 +182,12 @@ def _single_layout_context(monkeypatch, tmp_path: Path, *, open_after_merge: boo
     monkeypatch.setattr(
         plugin_actions,
         "_pick_kicad_file",
-        lambda _parent, **kwargs: (
-            calls.setdefault("board_picker", []).append(kwargs) or board
-        ),
+        lambda _parent, **kwargs: calls.setdefault("board_picker", []).append(kwargs) or board,
     )
     monkeypatch.setattr(
         plugin_actions,
         "_pick_save_file",
-        lambda _parent, **kwargs: (
-            calls.setdefault("save_picker", []).append(kwargs) or output
-        ),
+        lambda _parent, **kwargs: calls.setdefault("save_picker", []).append(kwargs) or output,
     )
     monkeypatch.setattr(
         plugin_actions,
@@ -217,9 +208,9 @@ def _single_layout_context(monkeypatch, tmp_path: Path, *, open_after_merge: boo
     monkeypatch.setattr(
         plugin_actions.messagebox,
         "askyesno",
-        lambda title, message, **kwargs: calls["confirm"].append(
-            (title, message, kwargs)
-        ) or open_after_merge,
+        lambda title, message, **kwargs: (
+            calls["confirm"].append((title, message, kwargs)) or open_after_merge
+        ),
     )
     monkeypatch.setattr(
         plugin_actions,
@@ -241,9 +232,7 @@ def test_single_pcb_layout_prompts_map_anchor_rotation_and_confirms_open(
         output,
         _sidecar,
         calls,
-    ) = _single_layout_context(
-        monkeypatch, tmp_path, open_after_merge=open_after_merge
-    )
+    ) = _single_layout_context(monkeypatch, tmp_path, open_after_merge=open_after_merge)
 
     plugin_actions._apply_block_pcb_layout(
         object(), object(), tmp_path, tmp_path / "library", parent
@@ -275,9 +264,7 @@ def test_single_pcb_layout_prompts_map_anchor_rotation_and_confirms_open(
     assert calls["board_picker"][0]["title"] == "Select the existing project PCB board"
     assert calls["board_picker"][0]["suffix"] == ".kicad_pcb"
     assert calls["save_picker"][0]["title"] == "Save merged PCB board copy"
-    assert calls["save_picker"][0]["initial_path"] == (
-        tmp_path / "project_U1_blocks.kicad_pcb"
-    )
+    assert calls["save_picker"][0]["initial_path"] == (tmp_path / "project_U1_blocks.kicad_pcb")
     assert calls["sidecar"] == [
         (output.resolve(), _pcb_placement_source(_pcb_merge_result(output, rotation=90.0)))
     ]
@@ -331,8 +318,7 @@ def test_single_pcb_layout_cancelling_any_mapping_prompt_stops_before_merge(
     monkeypatch.setattr(
         plugin_actions.simpledialog,
         "askstring",
-        lambda title, prompt, **kwargs: prompts.append((title, kwargs))
-        or next(response_iter),
+        lambda title, prompt, **kwargs: prompts.append((title, kwargs)) or next(response_iter),
     )
     monkeypatch.setattr(
         plugin_actions,
@@ -402,16 +388,12 @@ def _batch_context(monkeypatch, tmp_path: Path, *, open_after_merge: bool):
     monkeypatch.setattr(
         plugin_actions,
         "_pick_kicad_file",
-        lambda _parent, **kwargs: (
-            calls.setdefault("board_picker", []).append(kwargs) or board
-        ),
+        lambda _parent, **kwargs: calls.setdefault("board_picker", []).append(kwargs) or board,
     )
     monkeypatch.setattr(
         plugin_actions,
         "_pick_save_file",
-        lambda _parent, **kwargs: (
-            calls.setdefault("save_picker", []).append(kwargs) or output
-        ),
+        lambda _parent, **kwargs: calls.setdefault("save_picker", []).append(kwargs) or output,
     )
     monkeypatch.setattr(plugin_actions, "placement_manifest_path", lambda _path: sidecar)
 
@@ -428,9 +410,9 @@ def _batch_context(monkeypatch, tmp_path: Path, *, open_after_merge: bool):
     monkeypatch.setattr(
         plugin_actions.messagebox,
         "askyesno",
-        lambda title, message, **kwargs: calls["confirm"].append(
-            (title, message, kwargs)
-        ) or open_after_merge,
+        lambda title, message, **kwargs: (
+            calls["confirm"].append((title, message, kwargs)) or open_after_merge
+        ),
     )
     monkeypatch.setattr(
         plugin_actions,
@@ -494,9 +476,7 @@ def test_batch_pcb_layout_prompts_all_instances_and_confirms_open(
     assert calls["sidecar"] == [
         (
             output.resolve(),
-            _pcb_batch_placement_source(
-                _pcb_merge_result(output, rotation=90.0, block_count=2)
-            ),
+            _pcb_batch_placement_source(_pcb_merge_result(output, rotation=90.0, block_count=2)),
         )
     ]
     assert len(calls["confirm"]) == 1
@@ -541,8 +521,7 @@ def test_batch_pcb_layout_cancelling_any_mapping_prompt_prevents_merge(
     monkeypatch.setattr(
         plugin_actions.simpledialog,
         "askstring",
-        lambda title, prompt, **kwargs: prompts.append((title, kwargs))
-        or next(response_iter),
+        lambda title, prompt, **kwargs: prompts.append((title, kwargs)) or next(response_iter),
     )
     monkeypatch.setattr(
         plugin_actions,
@@ -604,9 +583,7 @@ def _patch_action_environment(monkeypatch, *, schematic):
     return root, kicad
 
 
-def test_run_action_missing_schematic_shows_attention_warning_and_closes_root(
-    monkeypatch
-):
+def test_run_action_missing_schematic_shows_attention_warning_and_closes_root(monkeypatch):
     root, _kicad = _patch_action_environment(monkeypatch, schematic=None)
     warnings = []
     monkeypatch.setattr(
@@ -626,9 +603,7 @@ def test_run_action_missing_schematic_shows_attention_warning_and_closes_root(
     assert root.destroyed
 
 
-def test_run_action_unexpected_failure_shows_error_and_closes_root(
-    monkeypatch, tmp_path
-):
+def test_run_action_unexpected_failure_shows_error_and_closes_root(monkeypatch, tmp_path):
     schematic = object()
     root, _kicad = _patch_action_environment(monkeypatch, schematic=schematic)
     library = tmp_path / "library"
@@ -636,6 +611,7 @@ def test_run_action_unexpected_failure_shows_error_and_closes_root(
     monkeypatch.setattr(plugin_actions, "project_directory", lambda _s: tmp_path)
     monkeypatch.setattr(plugin_actions, "configured_library_roots", lambda: [library])
     monkeypatch.setattr(plugin_actions, "default_library_root", lambda: library)
+
     def fail_publish(*_args, **_kwargs):
         raise RuntimeError("simulated publish failure")
 

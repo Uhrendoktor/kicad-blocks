@@ -93,9 +93,7 @@ def _run_form(root, context, action):
                 dialog.destroy()
 
     root.after(100, drive)
-    result = plugin_actions._ask_create_block_details(
-        root, Path("power_stage.kicad_sch")
-    )
+    result = plugin_actions._ask_create_block_details(root, Path("power_stage.kicad_sch"))
     if callback_errors:
         raise callback_errors[0]
     return result

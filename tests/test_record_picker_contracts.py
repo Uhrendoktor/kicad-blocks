@@ -152,10 +152,13 @@ def test_record_picker_filters_and_selects_the_matching_record(monkeypatch, tmp_
             summary_contract_id="record-picker.count",
             expected_summary="1 of 3 blocks",
         ).run(context)
-        assert context.require_widget("record-picker.results").item(
-            context.require_widget("record-picker.results").get_children()[0],
-            "values",
-        )[0] == "USB Interface"
+        assert (
+            context.require_widget("record-picker.results").item(
+                context.require_widget("record-picker.results").get_children()[0],
+                "values",
+            )[0]
+            == "USB Interface"
+        )
         assert context.require_widget("record-picker.description").cget("text") == (
             "USB host interface and protection circuit."
         )
@@ -173,9 +176,7 @@ def test_record_picker_filters_and_selects_the_matching_record(monkeypatch, tmp_
         root.destroy()
 
 
-def test_record_picker_empty_search_disables_select_and_cancel_returns_none(
-    monkeypatch, tmp_path
-):
+def test_record_picker_empty_search_disables_select_and_cancel_returns_none(monkeypatch, tmp_path):
     records = _make_records(tmp_path)
     root, context = _new_root(monkeypatch)
 
@@ -250,9 +251,7 @@ def test_record_picker_double_click_selects_the_clicked_record(monkeypatch, tmp_
         _assert_initial_state(context)
         tree = context.require_widget("record-picker.results")
         row_id = next(
-            iid
-            for iid in tree.get_children()
-            if tree.item(iid, "values")[0] == "USB Interface"
+            iid for iid in tree.get_children() if tree.item(iid, "values")[0] == "USB Interface"
         )
         x, y, width, height = tree.bbox(row_id)
         click_x = x + min(10, width // 2)
