@@ -400,7 +400,7 @@ def test_publish_button_publishes_the_selected_record_without_a_picker(monkeypat
         _select_first_record(context)
         ButtonContract(
             contract_id="library-browser.action.publish",
-            expected_action=("publish", "usb-power"),
+            expected_action=(("publish", "usb-power"), "refresh"),
             destroys_window=False,
             expected_label="Publish",
         ).run(context)
