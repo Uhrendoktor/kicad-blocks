@@ -692,7 +692,7 @@ def main() -> None:
                 facade_editor_client.close()
 
             placement_client = KiCad(timeout_ms=30000)
-            placed_instance = plugin_actions._start_native_symbol_placement(
+            placed_instance, cursor_attached = plugin_actions._start_native_symbol_placement(
                 placement_client,
                 None,
                 placement_symbol_name,
@@ -719,9 +719,14 @@ def main() -> None:
                 raise AssertionError(
                     f"Saved schematic does not contain the placed block {expected_lib_id!r}."
                 )
+            placement_mode = (
+                "attached to KiCad's native cursor move tool"
+                if cursor_attached
+                else "at the A4 page centre"
+            )
             print(
                 f"Functional Block Library placement helper placed {expected_lib_id} "
-                "at the A4 page centre and left it selected."
+                f"{placement_mode} and left it selected."
             )
 
             placement_svg = root / "placed-block-svg"
