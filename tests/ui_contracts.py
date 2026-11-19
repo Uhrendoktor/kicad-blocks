@@ -99,6 +99,19 @@ class PaneGroupObservation(TypedDict):
     panes: dict[str, PaneObservation]
 
 
+type TkOption = (
+    str
+    | int
+    | float
+    | bool
+    | bytes
+    | None
+    | Sequence[str | int | float | bool | bytes | None]
+    | Sequence[tuple[str, str]]
+    | Callable[..., str | None]
+)
+
+
 ObservationT = TypeVar("ObservationT")
 
 

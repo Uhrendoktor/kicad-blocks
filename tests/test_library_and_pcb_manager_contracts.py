@@ -178,7 +178,7 @@ def _run_library_manager(
 
 
 def test_manage_libraries_add_existing_registers_and_refreshes_the_real_tree(monkeypatch: MonkeyPatch, tmp_path: Path):
-    _settings, first, second = _library_fixture(monkeypatch: MonkeyPatch, tmp_path: Path)
+    _settings, first, second = _library_fixture(monkeypatch, tmp_path)
     new_library = tmp_path / "third-library"
     new_library.mkdir()
     chooser_calls = []
