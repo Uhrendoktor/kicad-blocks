@@ -9,11 +9,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from _pytest.monkeypatch import MonkeyPatch
 import pytest
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+
+    from _pytest.monkeypatch import MonkeyPatch
+    from kicad_blocks.manifest_types import BlockLayoutEditInput
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "plugin" / "kicad-blocks"))
@@ -21,7 +23,6 @@ sys.path.insert(0, str(ROOT / "tests"))
 
 from kicad_blocks import plugin as plugin_actions  # noqa: E402
 from kicad_blocks import repository  # noqa: E402
-from kicad_blocks.manifest_types import BlockLayoutEditInput  # noqa: E402
 from kicad_blocks.model import parse_pins  # noqa: E402
 from kicad_blocks.repository import BlockRecord, create_block, read_manifest  # noqa: E402
 from ui_contracts import (  # noqa: E402
@@ -382,7 +383,7 @@ def test_manage_libraries_change_folder_is_transactional_and_keeps_old_data(
     monkeypatch.setattr(
         plugin_actions.filedialog,
         "askdirectory",
-        lambda **kwargs: str(replacement),
+        lambda **_kwargs: str(replacement),
     )
     root = _new_root(monkeypatch)
     context = UiTestContext(root)
