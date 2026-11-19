@@ -18,7 +18,7 @@ A hierarchical sheet is useful for organizing a design inside one project. KiCad
 - **Create** a block from a selected hierarchical sheet. Root-sheet hierarchical labels define the facade pins and their electrical types.
 - **Browse and place** blocks from registered shared folders. The selected facade is created at the active sheet center, focused in the viewport and selected; cursor-attached placement awaits a supported KiCad schematic IPC operation. See the [compatibility notes](docs/explanation/compatibility.md).
 - **Configure per instance** with a variant, named profile, typed parameter overrides, and optional PCB layout.
-- **Maintain** shared implementations, edit facade artwork, publish revisions, or create project-local copies and synchronize them.
+- **Maintain** shared implementations, adjust facade pin geometry, publish revisions, or create project-local copies and synchronize them.
 - **Compose automatically** by placing child block facades inside an implementation and wiring their pins normally; KiCad Blocks derives dependencies from the saved schematic and netlist on publish.
 - **Reuse PCB work** by storing named board layouts and merging them into a separate copy of a project board.
 
@@ -45,7 +45,7 @@ The current full integration target is **KiCad 10.99.0 development nightly on Li
 
 Stable KiCad 10.x does not expose the Schematic Editor IPC plugin surface that this project requires. The current 10.99.0 nightly target is a development build; stable KiCad 11 is not yet validated by this repository's integration suite. See the [KiCad IPC API support matrix](https://dev-docs.kicad.org/en/apis-and-binding/ipc-api/for-addon-developers/).
 
-Place Block currently creates the selected facade at the active sheet's page center, snaps it to the schematic grid, focuses it in Eeschema, and selects it. KiCad still lacks the supported schematic interactive-move operation needed to attach the symbol to the cursor. Edit Facade remains blocked because the API cannot open and select a library symbol in Symbol Editor. The plugin does not use unstable `RunAction`, global keyboard injection, or X11/Wayland-specific runtime fallbacks. See the [compatibility notes](docs/explanation/compatibility.md).
+Place Block inserts the selected facade at the active sheet's page center, snaps it to the schematic grid, focuses it in Eeschema, and selects it through supported IPC. Cursor-attached placement still needs a schematic interactive-move API. Edit Facade opens a portable pin-layout editor for X/Y position, angle, and length; pin names, numbers, and electrical types stay derived from implementation hierarchical labels, and changes persist to the project catalog before Publish. Full native Symbol Editor launch also needs an upstream GUI IPC request. The plugin does not use unstable `RunAction`, global keyboard injection, or X11/Wayland-specific runtime fallbacks. See the [compatibility notes](docs/explanation/compatibility.md).
 
 See the [compatibility and test-coverage guide](docs/explanation/compatibility.md) before installing.
 

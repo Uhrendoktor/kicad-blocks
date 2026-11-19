@@ -2655,7 +2655,7 @@ def _edit_facade_symbol(
 
 
 def _place_existing(root, schematic, kicad, project_dir, parent) -> None:
-    """Open the searchable browser; placement is handed to KiCad's native cursor tool."""
+    """Open the searchable browser; placement uses page-aware schematic IPC."""
     editor_window_id = getattr(parent, "_kicad_blocks_editor_window_id", None)
     browser = tk.Toplevel(parent)
     _attach_tk_window_to_editor(browser, editor_window_id)
@@ -5736,20 +5736,15 @@ def _show_library_browser(
                     or "The project library is saved, but Eeschema has not reloaded it. Restart Eeschema before placing."
                 )
                 return
-            minimized_windows = _minimize_placement_windows(window)
-            try:
-                _start_native_symbol_placement(
-                    kicad, editor_window_id, str(record.manifest["symbol_name"])
-                )
-            except Exception:
-                _restore_placement_windows(minimized_windows)
-                raise
+            placed = _start_native_symbol_placement(
+                kicad, editor_window_id, str(record.manifest["symbol_name"])
+            )
         except Exception as exc:
-            LOG.exception("Native block placement handoff failed")
-            notice_value.set(f"Placement could not start: {exc}")
+            LOG.exception("Schematic IPC block placement failed")
+            notice_value.set(f"Placement could not complete: {exc}")
         else:
             notice_value.set(
-                f"{record.name}: choose the highlighted facade, move it to the desired location, then click to place. Esc cancels."
+                f"Placed {record.name} at the active sheet center and selected it in Eeschema."
             )
 
     def open_implementation(_event=None):
@@ -6073,7 +6068,7 @@ def _show_library_browser(
     action_toolbar.pack(fill="x")
     place_button[0] = _action_button(
         action_toolbar, "Place block", place_selected, "place",
-        "Start KiCad's native cursor placement for the selected facade",
+        "Insert the selected facade at the active sheet center, focus it, and select it.",
         state="disabled",
         contract_id="library-browser.action.place",
         style="Primary.TButton",

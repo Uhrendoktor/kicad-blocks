@@ -33,9 +33,8 @@ The browser searches all registered libraries. A folder that contains no valid `
 4. Select a result to inspect its description, facade, pins, configurable settings, implementations, profiles, and PCB layout options.
 5. Choose an implementation variant or named profile when the block provides one.
 6. Choose **Place block** or double-click the selected row.
-7. Confirm the facade in KiCad's native **Choose Symbol** dialog and place it with the normal KiCad tool.
 
-The browser minimizes before placement so the Eeschema canvas remains visible. Restore it from the taskbar after placement or cancellation.
+KiCad Blocks inserts the selected facade at the active sheet's page center, focuses it in Eeschema, selects it, and saves. You can reposition the selected facade using Eeschema's normal Move command. The native cursor-attached placement flow awaits a supported schematic interactive-move API; no keyboard injection or platform-specific window automation is used.
 
 The project receives a combined `KBlocks.kicad_sym` catalog and `.kicad_blocks/` metadata. The shared library stays in its original folder; implementation schematics are not copied into the parent project.
 
