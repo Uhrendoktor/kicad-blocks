@@ -7813,6 +7813,7 @@ save_block_layouts = _save_block_layouts
 apply_block_pcb_layout = _apply_block_pcb_layout
 apply_selected_block_pcb_layouts = _apply_selected_block_pcb_layouts
 show_block_variant_editor = _show_block_variant_editor
+save_block_variants = _save_block_variants
 ask_create_block_details = _ask_create_block_details
 ask_implementation_details = _ask_implementation_details
 ask_layout_details = _ask_layout_details

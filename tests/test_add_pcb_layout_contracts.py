@@ -50,7 +50,7 @@ ADD_LAYOUT_CONTROLS = {
 
 _load_tkinter = plugin_actions.load_tkinter
 _ask_layout_details = cast(
-    Callable[..., dict[str, str] | None], getattr(plugin_actions, "_ask_layout_details")
+    Callable[..., dict[str, str] | None], plugin_actions.ask_layout_details
 )
 
 
@@ -295,7 +295,9 @@ def test_add_pcb_layout_cancel_returns_none_without_creating_board(
         root.destroy()
 
 
-def test_add_pcb_layout_rejects_invalid_existing_file_then_recovers(monkeypatch, tmp_path):
+def test_add_pcb_layout_rejects_invalid_existing_file_then_recovers(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+) -> None:
     root, record = _new_parent_and_record(tmp_path)
     invalid = tmp_path / "notes.txt"
     invalid.write_text("not a KiCad board", encoding="utf-8")
@@ -309,7 +311,7 @@ def test_add_pcb_layout_rejects_invalid_existing_file_then_recovers(monkeypatch,
     )
     context = UiTestContext(root)
 
-    def interact(dialog):
+    def interact(dialog: Toplevel) -> None:
         mode = context.require_widget("add-pcb-layout.mode")
         mode.set("Choose an existing PCB file")
         mode.event_generate("<<ComboboxSelected>>")
