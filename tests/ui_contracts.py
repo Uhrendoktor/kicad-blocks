@@ -15,10 +15,45 @@ from typing import TYPE_CHECKING, Generic, TypeVar, TypedDict, cast
 
 if TYPE_CHECKING:
     import tkinter as tk
-    from tkinter import Menu, Toplevel
+    from _pytest.monkeypatch import MonkeyPatch
+    from tkinter import Canvas, Event as TkEvent, Menu, Misc, Tk, Toplevel
     from tkinter.ttk import Button, Checkbutton, Combobox, Entry, Notebook, Panedwindow, Text, Treeview
 else:
-    Menu = Toplevel = Button = Checkbutton = Combobox = Entry = Notebook = Panedwindow = Text = Treeview = object
+    MonkeyPatch = Canvas = TkEvent = Menu = Misc = Tk = Toplevel = (
+        Button
+    ) = Checkbutton = Combobox = Entry = Notebook = Panedwindow = Text = Treeview = object
+
+
+__all__ = [
+    "MonkeyPatch",
+    "Canvas",
+    "TkEvent",
+    "Menu",
+    "Misc",
+    "Tk",
+    "Toplevel",
+    "Button",
+    "Checkbutton",
+    "Combobox",
+    "Entry",
+    "Notebook",
+    "Panedwindow",
+    "Text",
+    "Treeview",
+    "TkOption",
+    "MenuEntry",
+    "UiTestContext",
+    "WindowContract",
+    "ButtonContract",
+    "MenuItemContract",
+    "EntryInputContract",
+    "TreeSelectionContract",
+    "ChoiceViewContract",
+    "NotebookViewContract",
+    "PaneGroupContract",
+    "assert_control_coverage",
+    "discover_interactive_controls",
+]
 
 
 class MenuEntry:
