@@ -6391,8 +6391,8 @@ def _preserve_instance_pin_ids(existing_definition, updated_definition) -> int:
             str(pin.number),
             unit,
             body_style,
-            int(pin.position.x),
-            int(pin.position.y),
+            int(pin.position.x_nm),
+            int(pin.position.y_nm),
         )
 
     existing_ids = defaultdict(deque)
