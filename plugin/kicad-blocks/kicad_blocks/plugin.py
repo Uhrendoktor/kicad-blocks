@@ -2293,17 +2293,20 @@ def _edit_facade_symbol(
     editor_window_id: str | None = None,
     *,
     project_catalog: Path | None = None,
-    close_browser=None,
-    pause=time.sleep,
+    parent=None,
 ) -> bool:
-    """Open the native Symbol Editor and load the exact facade via KiCad IPC.
+    """Open the portable facade pin-layout editor for one generated symbol.
 
-    The public Python wrapper currently exposes only footprint OpenLibraryItem,
-    but Eeschema's Symbol Editor registers the same protobuf request for symbols.
-    We use the native Tools → Symbol Editor command to create that editor context,
-    then issue OpenLibraryItem directly and verify GetOpenDocuments returns the
-    exact KBlocks library identifier.
+    The current stable Eeschema IPC surface cannot launch Symbol Editor in GUI
+    mode from a separate plugin process. This editor therefore changes the
+    project-local KiCad symbol catalog through validated S-expression edits.
+    Pin names and electrical types remain implementation-label driven; only
+    pin geometry (position, orientation, and length) is edited here.
     """
+    del editor_window_id
+    from .pcb_layout import _Quoted, _all, _direct, _dump, _head, parse_sexpr
+    from .repository import _named_symbol_node, atomic_write, sha256_file
+
     symbol_name = str(record.manifest.get("symbol_name") or "").strip()
     catalog_path = (
         Path(project_catalog).expanduser().resolve()
@@ -2311,126 +2314,278 @@ def _edit_facade_symbol(
         else Path(record.symbol_library).expanduser().resolve()
     )
     if not symbol_name or any(char.isspace() for char in symbol_name):
-        raise ValueError("The highlighted block has an invalid library symbol identifier.")
+        raise ValueError("The selected block has an invalid library symbol identifier.")
     if not catalog_path.is_file():
         raise FileNotFoundError(f"The project facade catalog is missing: {catalog_path}")
 
-    from .pcb_layout import parse_sexpr
-    from .repository import _named_symbol_node
+    original_text = catalog_path.read_text(encoding="utf-8")
+    catalog = parse_sexpr(original_text)
+    symbol = _named_symbol_node(catalog, symbol_name, catalog_path)
+    pin_units = [
+        child for child in symbol[1:]
+        if _head(child) == "symbol" and len(child) >= 2
+        and str(child[1]).startswith(symbol_name + "_")
+    ]
+    pin_rows = []
+    for unit in pin_units:
+        unit_name = str(unit[1])
+        for pin_index, pin in enumerate(_all(unit, "pin")):
+            name_node = _direct(pin, "name")
+            number_node = _direct(pin, "number")
+            at_node = _direct(pin, "at")
+            length_node = _direct(pin, "length")
+            if (
+                name_node is None or len(name_node) < 2
+                or number_node is None or len(number_node) < 2
+                or at_node is None or len(at_node) < 4
+                or length_node is None or len(length_node) < 2
+            ):
+                raise ValueError(
+                    f"Facade pin {unit_name}[{pin_index}] has an incomplete geometry definition."
+                )
+            pin_rows.append({
+                "unit": unit_name,
+                "index": pin_index,
+                "node": pin,
+                "name": str(name_node[1]),
+                "number": str(number_node[1]),
+                "electrical_type": str(pin[1]),
+                "x": str(at_node[1]),
+                "y": str(at_node[2]),
+                "angle": str(at_node[3]),
+                "length": str(length_node[1]),
+            })
+    if not pin_rows:
+        raise ValueError(f"The facade {symbol_name!r} contains no editable pins.")
 
-    catalog = parse_sexpr(catalog_path.read_text(encoding="utf-8"))
-    _named_symbol_node(catalog, symbol_name, catalog_path)
+    _load_tkinter()
+    dialog = tk.Toplevel(parent) if parent is not None else tk.Toplevel()
+    _configure_tk_theme(dialog, kicad)
+    dialog._kicad_ui_screen_id = "facade-editor"
+    dialog._kicad_ui_contract_id = "facade-editor.window"
+    dialog.title(f"Facade pin layout — {record.name}")
+    if parent is not None:
+        dialog.transient(parent)
+    dialog.minsize(760, 460)
 
-    # The direct API path also switches an already-open Symbol Editor tab to
-    # this exact library item. Only open the editor frame when that handler is
-    # not available yet.
-    try:
-        if _open_symbol_library_item(
-            kicad, LIBRARY_NICKNAME, symbol_name, pause=pause, timeout=0.25
-        ):
-            return True
-    except Exception:
-        LOG.debug("Symbol Editor IPC handler is not ready; opening the native editor.", exc_info=True)
+    frame = ttk.Frame(dialog, padding=14)
+    frame.pack(fill="both", expand=True)
+    frame.columnconfigure(0, weight=1)
+    frame.rowconfigure(1, weight=1)
 
-    # Eeschema does not register the RunAction IPC handler (KiCad currently
-    # registers it for PCB Editor only). Open the native Tools-menu command
-    # through the platform input backend, then use exact-item IPC for selection.
-    backend = _desktop_keyboard_backend()
-    if not backend:
-        raise RuntimeError(
-            "KiCad did not expose the Symbol Editor action and no native input "
-            "bridge is available. Install xdotool (X11), wtype (Wayland), or "
-            "pynput (Windows/macOS)."
-        )
-    xdotool = shutil.which("xdotool") if backend == "xdotool" else None
-    editor_pid = ""
-    if backend == "xdotool":
-        editor_window_id = editor_window_id or _capture_eeschema_window_id()
-        if not editor_window_id:
-            raise RuntimeError("Could not identify the invoking Eeschema window for Edit Facade.")
-        def send(*args, check=True):
-            result = subprocess.run(
-                [xdotool, *args], capture_output=True, text=True,
-                check=check, timeout=5,
+    ttk.Label(
+        frame,
+        text=f"{record.name} · {symbol_name}",
+        font=("TkDefaultFont", 12, "bold"),
+    ).grid(row=0, column=0, sticky="w")
+
+    table_frame = ttk.Frame(frame)
+    table_frame.grid(row=1, column=0, sticky="nsew", pady=(10, 8))
+    table_frame.columnconfigure(0, weight=1)
+    table_frame.rowconfigure(0, weight=1)
+    columns = ("pin", "number", "type", "x", "y", "angle", "length")
+    tree = ttk.Treeview(
+        table_frame, columns=columns, show="headings", selectmode="browse", height=12
+    )
+    tree._kicad_ui_contract_id = "facade-editor.pins"
+    headings = {
+        "pin": ("Pin", 190),
+        "number": ("Number", 75),
+        "type": ("Electrical type", 115),
+        "x": ("X (mm)", 85),
+        "y": ("Y (mm)", 85),
+        "angle": ("Angle", 85),
+        "length": ("Length (mm)", 105),
+    }
+    for column, (label, width) in headings.items():
+        tree.heading(column, text=label)
+        tree.column(column, width=width, minwidth=60, stretch=column == "pin")
+    scrollbar = ttk.Scrollbar(
+        table_frame, orient="vertical", command=tree.yview, style="Vertical.TScrollbar"
+    )
+    tree.configure(yscrollcommand=scrollbar.set)
+    tree.grid(row=0, column=0, sticky="nsew")
+    scrollbar.grid(row=0, column=1, sticky="ns")
+
+    selected_pin = [None]
+    expected_hash = [sha256_file(catalog_path)]
+    pin_by_id = {str(index): row for index, row in enumerate(pin_rows)}
+    x_value = tk.StringVar(master=dialog)
+    y_value = tk.StringVar(master=dialog)
+    angle_value = tk.StringVar(master=dialog)
+    length_value = tk.StringVar(master=dialog)
+    status_value = tk.StringVar(
+        master=dialog,
+        value="Select a pin to adjust its position, angle, or length. Changes save immediately.",
+    )
+
+    editor = ttk.LabelFrame(frame, text="Selected pin geometry", padding=10)
+    editor.grid(row=2, column=0, sticky="ew")
+    for column in range(8):
+        editor.columnconfigure(column, weight=1 if column in (1, 3, 5, 7) else 0)
+    fields = (
+        ("X (mm)", x_value, 0),
+        ("Y (mm)", y_value, 2),
+        ("Angle", angle_value, 4),
+        ("Length (mm)", length_value, 6),
+    )
+    entries = {}
+    for label, variable, column in fields:
+        ttk.Label(editor, text=label).grid(row=0, column=column, sticky="w", padx=(0, 5))
+        entry = ttk.Entry(editor, textvariable=variable, width=12)
+        entry.grid(row=0, column=column + 1, sticky="ew", padx=(0, 10))
+        entries[label] = entry
+
+    notice = ttk.Label(
+        frame, textvariable=status_value, style="Muted.TLabel", wraplength=1000
+    )
+    notice._kicad_ui_contract_id = "facade-editor.status"
+    notice.grid(row=3, column=0, sticky="ew", pady=(9, 0))
+
+    def render(selected_id: str | None = None) -> None:
+        tree.delete(*tree.get_children())
+        for row_id, row in pin_by_id.items():
+            tree.insert(
+                "",
+                "end",
+                iid=row_id,
+                values=(
+                    row["name"],
+                    row["number"],
+                    row["electrical_type"],
+                    row["x"],
+                    row["y"],
+                    row["angle"],
+                    row["length"],
+                ),
             )
-            return str(getattr(result, "stdout", "") or "").strip()
+            if row_id == selected_id:
+                tree.selection_set(row_id)
+                tree.focus(row_id)
+        if selected_id is not None:
+            on_pin_selected()
 
-        editor_title = send("getwindowname", str(editor_window_id), check=False).casefold()
-        editor_class = send("getwindowclassname", str(editor_window_id), check=False).casefold()
-        if "schematic editor" not in editor_title and "eeschema" not in editor_class:
-            raise RuntimeError(
-                f"Edit Facade target is not Eeschema (title={editor_title!r}, class={editor_class!r})."
-            )
-        editor_pid = send("getwindowpid", str(editor_window_id), check=False)
-        if not editor_pid:
-            raise RuntimeError("Could not determine the Eeschema process for Edit Facade.")
+    def on_pin_selected(_event=None) -> None:
+        selection = tree.selection()
+        if not selection:
+            selected_pin[0] = None
+            return
+        row_id = selection[0]
+        row = pin_by_id[row_id]
+        selected_pin[0] = row_id
+        x_value.set(row["x"])
+        y_value.set(row["y"])
+        angle_value.set(row["angle"])
+        length_value.set(row["length"])
+        for entry in entries.values():
+            entry.configure(state="normal")
 
-        existing = send("search", "--onlyvisible", "--name", "Symbol Editor", check=False)
-        symbol_editor_id = None
-        for candidate in reversed([item.strip() for item in existing.splitlines() if item.strip()]):
-            title = send("getwindowname", candidate, check=False).casefold()
-            if "symbol editor" in title:
-                symbol_editor_id = candidate
-                break
-        if symbol_editor_id is None:
-            send("windowraise", str(editor_window_id), check=False)
-            send("windowactivate", "--sync", str(editor_window_id), check=False)
-            send("windowfocus", "--sync", str(editor_window_id))
-            if send("getwindowfocus", check=False) != str(editor_window_id):
-                raise RuntimeError("Could not focus Eeschema to open Symbol Editor.")
-            send("key", "--clearmodifiers", "alt+t")
-            pause(0.12)
-            send("key", "--clearmodifiers", "Home")
-            for _ in range(_symbol_editor_menu_down_count(editor_pid)):
-                send("key", "--clearmodifiers", "Down")
-            send("key", "--clearmodifiers", "Return")
-            for _ in range(50):
-                found = send("search", "--onlyvisible", "--name", "Symbol Editor", check=False)
-                candidates = [item.strip() for item in found.splitlines() if item.strip()]
-                if candidates:
-                    symbol_editor_id = candidates[-1]
-                    break
-                pause(0.1)
-            if symbol_editor_id is None:
-                raise RuntimeError("Eeschema did not open its native Symbol Editor window.")
-        send("windowraise", str(symbol_editor_id), check=False)
-        send("windowactivate", "--sync", str(symbol_editor_id), check=False)
-        send("windowfocus", "--sync", str(symbol_editor_id))
-        if send("getwindowfocus", check=False) != str(symbol_editor_id):
-            raise RuntimeError("Could not activate Symbol Editor for the facade hand-off.")
-        if close_browser is not None:
-            close_browser()
-    else:
-        # On Wayland/macOS/Windows the browser is transient to Eeschema. Closing
-        # it returns focus to the invoking editor before native menu input.
-        if close_browser is not None:
-            close_browser()
-        if sys.platform == "darwin":
-            # AppleScript selects the named native menu item rather than relying
-            # on a menu index. macOS may require Accessibility permission.
-            script = (
-                'tell application "System Events" to tell '
-                '(first process whose frontmost is true) to click '
-                'menu item "Symbol Editor" of menu "Tools" of menu bar 1'
+    def apply_geometry(_event=None) -> None:
+        import math
+
+        row_id = selected_pin[0]
+        if row_id is None or row_id not in pin_by_id:
+            status_value.set("Select a pin first.")
+            return
+        row = pin_by_id[row_id]
+        try:
+            x = float(x_value.get().strip())
+            y = float(y_value.get().strip())
+            angle = float(angle_value.get().strip())
+            length = float(length_value.get().strip())
+        except ValueError:
+            status_value.set("Enter valid numeric values for X, Y, angle, and length.")
+            return
+        if not all(math.isfinite(value) for value in (x, y, angle, length)):
+            status_value.set("Pin geometry must use finite numeric values.")
+            return
+        if abs(x) > 1000 or abs(y) > 1000:
+            status_value.set("Pin coordinates must be within ±1000 mm.")
+            return
+        normalized_angle = angle % 360
+        if min(abs(normalized_angle - value) for value in (0, 90, 180, 270, 360)) > 1e-6:
+            status_value.set("Pin angles must be 0, 90, 180, or 270 degrees.")
+            return
+        if not 0.1 <= length <= 100:
+            status_value.set("Pin length must be between 0.1 mm and 100 mm.")
+            return
+
+        if sha256_file(catalog_path) != expected_hash[0]:
+            status_value.set(
+                "The project symbol catalog changed outside this editor. Close and reopen "
+                "the facade editor to avoid overwriting another edit."
             )
-            subprocess.run(
-                ["osascript", "-e", script],
-                capture_output=True,
-                text=True,
-                check=True,
-                timeout=8,
+            return
+
+        def format_mm(value: float) -> str:
+            rounded = round(value, 6)
+            if abs(rounded) < 0.0000005:
+                rounded = 0.0
+            return f"{rounded:.6f}".rstrip("0").rstrip(".") or "0"
+
+        node = row["node"]
+        at_node = _direct(node, "at")
+        length_node = _direct(node, "length")
+        original_at = copy.deepcopy(at_node)
+        original_length = copy.deepcopy(length_node)
+        at_node[1] = format_mm(x)
+        at_node[2] = format_mm(y)
+        at_node[3] = str(int(round(normalized_angle)) % 360)
+        length_node[1] = format_mm(length)
+        try:
+            atomic_write(catalog_path, _dump(catalog) + "\n")
+        except Exception:
+            at_node[:] = original_at
+            length_node[:] = original_length
+            raise
+
+        row["x"] = at_node[1]
+        row["y"] = at_node[2]
+        row["angle"] = at_node[3]
+        row["length"] = length_node[1]
+        expected_hash[0] = sha256_file(catalog_path)
+        reloaded = _reload_symbol_library(kicad, LIBRARY_NICKNAME)
+        if reloaded:
+            status_value.set(
+                f"Saved {row['name']} (pin {row['number']}) and reloaded the project library."
             )
         else:
-            _send_native_key("alt+t", backend=backend)
-            pause(0.12)
-            _send_native_key("Home", backend=backend)
-            for _ in range(_symbol_editor_menu_down_count()):
-                _send_native_key("Down", backend=backend)
-            _send_native_key("Return", backend=backend)
+            status_value.set(
+                f"Saved {row['name']} (pin {row['number']}). {_LAST_LIBRARY_RELOAD_WARNING or 'Restart Eeschema to reload the library.'}"
+            )
+        render(row_id)
 
-    return _open_symbol_library_item(
-        kicad, LIBRARY_NICKNAME, symbol_name, pause=pause, timeout=7.0
-    )
+    tree.bind("<<TreeviewSelect>>", on_pin_selected)
+    for entry in entries.values():
+        entry.bind("<Return>", apply_geometry)
+        entry.bind("<FocusOut>", lambda _event: apply_geometry())
+
+    actions = ttk.Frame(frame)
+    actions.grid(row=4, column=0, sticky="ew", pady=(10, 0))
+    _action_button(
+        actions,
+        "Apply pin geometry",
+        apply_geometry,
+        "apply",
+        "Persist the selected pin position, angle, and length immediately",
+        contract_id="facade-editor.action.apply",
+        style="Primary.TButton",
+    ).pack(side="left")
+    _action_button(
+        actions,
+        "Close",
+        dialog.destroy,
+        "close",
+        "Close the facade pin-layout editor",
+        contract_id="facade-editor.action.close",
+    ).pack(side="right")
+
+    render("0")
+    tree.focus_set()
+    _set_window_geometry(dialog, 1060, 650, 760, 460)
+    return True
+
+
 
 
 def _place_existing(root, schematic, kicad, project_dir, parent) -> None:
@@ -5627,9 +5782,8 @@ def _show_library_browser(
             _edit_facade_symbol(
                 record,
                 kicad,
-                editor_window_id,
                 project_catalog=project_catalog,
-                close_browser=window.destroy,
+                parent=window,
             )
         except (OSError, RuntimeError, ValueError, LookupError, subprocess.SubprocessError) as exc:
             LOG.exception("Could not open generated library facade")
@@ -6973,10 +7127,9 @@ def run_action(action: str, *, editor_window_id: str | None = None) -> None:
     if action not in valid_actions:
         raise ValueError(f"Unknown KiCad Blocks action: {action!r}")
 
-    # Capture Eeschema before creating Tk UI so subsequent native hand-offs
-    # can target the correct editor rather than the plugin's own window.
-    if editor_window_id is None:
-        editor_window_id = _capture_eeschema_window_id()
+    # KiCad Blocks uses the portable schematic IPC surface; the plugin UI
+    # does not inspect or control native Eeschema window IDs.
+    editor_window_id = None
     _load_tkinter()
     root = tk.Tk()
     root._kicad_blocks_editor_window_id = editor_window_id
