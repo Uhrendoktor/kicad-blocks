@@ -163,6 +163,32 @@ class HierarchicalSheetExtractionTests(unittest.TestCase):
         self.assertGreater(result["version"], 1)
 
 
+    def test_publish_keeps_existing_pin_electrical_type_as_bare_atom(self):
+        record = create_block(
+            self.root,
+            "Power Stage",
+            source_schematic=self.source,
+            source_project_name="TestProject",
+        )
+        implementation = record.implementation.read_text(encoding="utf-8")
+        implementation = implementation.replace(
+            '(hierarchical_label "VIN"',
+            '(hierarchical_label "VIN"',
+            1,
+        ).replace("(shape input)", "(shape bidirectional)", 1)
+        record.implementation.write_text(implementation, encoding="utf-8")
+
+        result = refresh_library_block(record)
+        self.assertIn("block.kicad_sym", result["changed"])
+        shared_text = record.symbol_library.read_text(encoding="utf-8")
+        self.assertIn("(pin bidirectional line", shared_text)
+        self.assertNotIn('(pin "bidirectional" line', shared_text)
+
+        project_catalog = build_project_symbol_catalog(self.project, [self.root])
+        project_text = project_catalog.read_text(encoding="utf-8")
+        self.assertIn("(pin bidirectional line", project_text)
+        self.assertNotIn('(pin "bidirectional" line', project_text)
+
     def test_publish_updates_project_facade_catalog_when_implementation_pins_are_added_and_removed(self):
         record = create_block(
             self.root,
