@@ -36,7 +36,6 @@ MANAGER_CONTROLS = {
     "implementations-manager.action.default",
     "implementations-manager.action.remove",
     "implementations-manager.action.close",
-    "implementations-manager.action.save-close",
 }
 STATUS_TEXT = "Empty KB_VARIANT uses the default implementation."
 
@@ -211,8 +210,8 @@ def test_set_as_default_promotes_selected_implementation_and_persists_manifest(
         )
         _click(
             context,
-            "implementations-manager.action.save-close",
-            "Save & close",
+            "implementations-manager.action.close",
+            "Close",
             closes=True,
         )
 
@@ -242,8 +241,8 @@ def test_remove_alternative_updates_manifest_and_removes_unreferenced_file(
         assert not variant_file.exists()
         _click(
             context,
-            "implementations-manager.action.save-close",
-            "Save & close",
+            "implementations-manager.action.close",
+            "Close",
             closes=True,
         )
 
@@ -253,7 +252,7 @@ def test_remove_alternative_updates_manifest_and_removes_unreferenced_file(
         root.destroy()
 
 
-def test_remove_is_blocked_when_an_implementation_is_referenced_by_a_profile(
+def test_remove_blocker_is_reported_inline_when_variant_is_referenced_by_a_profile(
     monkeypatch, tmp_path
 ):
     record, _sources = _new_manager_fixture(
@@ -263,20 +262,19 @@ def test_remove_is_blocked_when_an_implementation_is_referenced_by_a_profile(
     )
     root = _new_root(monkeypatch)
     context = UiTestContext(root)
-    notices = []
     monkeypatch.setattr(
         plugin_actions.messagebox,
         "showinfo",
-        lambda title, message, **_kwargs: notices.append((title, message)),
+        lambda *_args, **_kwargs: pytest.fail("A profile-reference notice must not be modal."),
     )
 
     def guard(_dialog):
         tree = context.require_widget("implementations-manager.rows")
         _select_variant(context, "1", tuple(tree.item("1", "values")))
         _click(context, "implementations-manager.action.remove", "Remove")
-        assert len(notices) == 1
-        assert notices[0][0] == "Implementation is in use"
-        assert "Low voltage" in notices[0][1]
+        status = context.require_widget("implementations-manager.status")
+        variable = str(status.cget("textvariable"))
+        assert "Low voltage" in status.getvar(variable)
         assert len(read_manifest(record.path)["variants"]) == 1
         _click(context, "implementations-manager.action.close", "Close", closes=True)
 
@@ -314,8 +312,8 @@ def test_edit_variant_renames_selector_and_preserves_implementation_file(
         assert current_file.read_bytes() == original_bytes
         _click(
             context,
-            "implementations-manager.action.save-close",
-            "Save & close",
+            "implementations-manager.action.close",
+            "Close",
             closes=True,
         )
 
@@ -325,7 +323,7 @@ def test_edit_variant_renames_selector_and_preserves_implementation_file(
         root.destroy()
 
 
-def test_add_variant_save_failure_can_be_retried_with_save_and_close(
+def test_add_variant_save_failure_is_retried_by_close(
     monkeypatch, tmp_path
 ):
     record, _sources = _new_manager_fixture(tmp_path)
@@ -362,12 +360,12 @@ def test_add_variant_save_failure_can_be_retried_with_save_and_close(
         _click(context, "implementations-manager.action.add", "Add variant")
         status = context.require_widget("implementations-manager.status")
         status_variable = str(status.cget("textvariable"))
-        assert "Save failed; use Save & close to retry." in status.getvar(status_variable)
+        assert "Automatic save failed. Close will retry; the pending change is retained." in status.getvar(status_variable)
         assert len(errors) == 1
         _click(
             context,
-            "implementations-manager.action.save-close",
-            "Save & close",
+            "implementations-manager.action.close",
+            "Close",
             closes=True,
         )
 
@@ -440,7 +438,6 @@ def test_implementation_manager_selection_controls_follow_row_state(
         for contract_id in (
             "implementations-manager.action.add",
             "implementations-manager.action.close",
-            "implementations-manager.action.save-close",
         ):
             assert_state(widgets[contract_id], "!disabled")
         _click(context, "implementations-manager.action.close", "Close", closes=True)
@@ -514,77 +511,55 @@ def test_remove_confirmation_cancel_preserves_manifest_row_and_source_file(
         root.destroy()
 
 
-def test_close_confirmation_can_keep_pending_changes_or_discard_them(
+def test_close_retries_failed_autosave_and_preserves_the_change(
     monkeypatch, tmp_path
 ):
     record, _sources = _new_manager_fixture(tmp_path)
     source = tmp_path / "pending-implementation.kicad_sch"
     source.write_text(
-        '(kicad_sch (version 20250114) (generator "discard-contract"))\n',
+        '(kicad_sch (version 20250114) (generator "retry-on-close"))\n',
         encoding="utf-8",
     )
-    original_manifest = read_manifest(record.path)
     monkeypatch.setattr(
         plugin_actions,
         "_ask_implementation_details",
         lambda *_args, **_kwargs: ("3V3", str(source)),
     )
-    save_attempts = []
-
-    def fail_save(*_args, **_kwargs):
-        save_attempts.append("attempt")
-        raise OSError("simulated library write failure")
-
-    monkeypatch.setattr(plugin_actions, "_save_block_variants", fail_save)
+    original_save = plugin_actions._save_block_variants
+    attempts = []
     errors = []
+
+    def fail_once(*args, **kwargs):
+        attempts.append("attempt")
+        if len(attempts) == 1:
+            raise OSError("simulated library write failure")
+        return original_save(*args, **kwargs)
+
+    monkeypatch.setattr(plugin_actions, "_save_block_variants", fail_once)
     monkeypatch.setattr(
         plugin_actions.messagebox,
         "showerror",
         lambda title, message, **_kwargs: errors.append((title, str(message))),
     )
-    confirmations = []
-    answers = iter((False, True))
-
-    def confirm_discard(title, message, **_kwargs):
-        confirmations.append((title, message))
-        return next(answers)
-
-    monkeypatch.setattr(plugin_actions.messagebox, "askyesno", confirm_discard)
     root = _new_root(monkeypatch)
     context = UiTestContext(root)
 
-    def stage_then_discard(_dialog):
+    def add_then_close(_dialog):
         _click(context, "implementations-manager.action.add", "Add variant")
         status = context.require_widget("implementations-manager.status")
         variable = str(status.cget("textvariable"))
-        assert "Save failed; use Save & close to retry." in status.getvar(variable)
-        assert save_attempts == ["attempt"]
-        assert len(errors) == 1
-        assert read_manifest(record.path) == original_manifest
-
-        _click(context, "implementations-manager.action.close", "Close")
-        assert confirmations == [
-            (
-                "Discard implementation changes",
-                "Discard the unsaved implementation changes?",
-            )
-        ]
-        assert _manager_dialog(root).winfo_exists()
-        assert read_manifest(record.path) == original_manifest
-
-        _click(
-            context,
-            "implementations-manager.action.close",
-            "Close",
-            closes=True,
-        )
-        assert len(confirmations) == 2
+        assert "Automatic save failed" in status.getvar(variable)
+        assert attempts == ["attempt"]
+        assert errors and errors[0][0] == "Save implementations"
+        _click(context, "implementations-manager.action.close", "Close", closes=True)
 
     try:
-        result = _run_manager(root, record, context, stage_then_discard)
-        assert result is None
-        assert read_manifest(record.path) == original_manifest
-        assert not (Path(record.path) / "implementation_3v3.kicad_sch").exists()
+        opened = _run_manager(root, record, context, add_then_close)
+        saved = read_manifest(record.path)
+        assert [item["value"] for item in saved["variants"]] == ["3V3"]
+        assert attempts == ["attempt", "attempt"]
+        assert opened == record.path / saved["variants"][0]["file"]
+        assert opened.is_file()
     finally:
         root.destroy()
 
@@ -639,8 +614,8 @@ def test_add_button_routes_to_create_mode_details_and_persists_source(
         assert library_source.read_bytes() == source_file.read_bytes()
         _click(
             context,
-            "implementations-manager.action.save-close",
-            "Save & close",
+            "implementations-manager.action.close",
+            "Close",
             closes=True,
         )
 
