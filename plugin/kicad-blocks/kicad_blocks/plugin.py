@@ -2299,9 +2299,7 @@ def _apply_facade_pin_geometry(
     expected_sha256: str,
 ) -> dict[str, str]:
     """Atomically update only one pin's geometry in a project symbol catalog."""
-    import math
-
-    from .pcb_layout import _all, _direct, _head, _dump, parse_sexpr
+    from .pcb_layout import _all, _direct, _dump, _head, parse_sexpr
     from .repository import _named_symbol_node, atomic_write, sha256_file
 
     target = Path(catalog_path).expanduser().resolve()
@@ -2363,7 +2361,7 @@ def _apply_facade_pin_geometry(
         raise ValueError(f"Pin {pin_name!r} has incomplete geometry in {target}.")
     at_node[1] = format_number(x_mm)
     at_node[2] = format_number(y_mm)
-    at_node[3] = str(int(round(normalized_angle)) % 360)
+    at_node[3] = str(round(normalized_angle) % 360)
     length_node[1] = format_number(length_mm)
     atomic_write(target, _dump(document) + "\n")
     return {
@@ -2574,8 +2572,6 @@ def _edit_facade_symbol(
             entry.configure(state="normal")
 
     def apply_geometry(_event=None) -> None:
-        import math
-
         row_id = selected_pin[0]
         if row_id is None or row_id not in pin_by_id:
             status_value.set("Select a pin first.")
@@ -5806,7 +5802,7 @@ def _show_library_browser(
                     or "The project library is saved, but Eeschema has not reloaded it. Restart Eeschema before placing."
                 )
                 return
-            placed, cursor_attached = _start_native_symbol_placement(
+            _placed, cursor_attached = _start_native_symbol_placement(
                 kicad, editor_window_id, str(record.manifest["symbol_name"])
             )
         except Exception as exc:
@@ -7045,9 +7041,11 @@ def _show_action_hub(
     def refresh_action_states() -> dict[str, bool]:
         """Re-evaluate the current editor selection; never rely on stale UI state."""
         selection_error = None
+        from kipy.errors import ApiError
+
         try:
             selection = _safe_schematic_selection(schematic)
-        except Exception as exc:
+        except (ApiError, OSError, RuntimeError, TypeError, ValueError) as exc:
             selection = []
             selection_error = str(exc)
         symbols = [

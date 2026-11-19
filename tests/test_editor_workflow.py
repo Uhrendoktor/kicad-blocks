@@ -248,7 +248,7 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
     def test_facade_geometry_edit_changes_only_selected_pin_in_project_catalog(self):
         import copy
 
-        from kicad_blocks.pcb_layout import _all, _direct, _head, _dump, parse_sexpr
+        from kicad_blocks.pcb_layout import _all, _direct, _head, parse_sexpr
         from kicad_blocks.repository import (
             _named_symbol_node,
             build_project_symbol_catalog,

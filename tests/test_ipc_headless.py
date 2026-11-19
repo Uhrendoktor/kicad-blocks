@@ -24,11 +24,10 @@ from kicad_blocks.model import (
     schematic_symbol_orientation,
     transform_symbol_point_to_schematic,
 )
-from kicad_blocks.pcb_layout import parse_sexpr
 from kicad_blocks.plugin import (
     LIBRARY_NICKNAME,
-    _register_block,
     _refresh_placed_facade_instances,
+    _register_block,
     _write_instance_configuration,
     make_selected_local,
     sync_selected_local,
