@@ -6971,11 +6971,26 @@ def _apply_selected_block_pcb_layouts(
         "The original board and project settings were not modified.")
 
 
-def _show_action_hub(root, kicad=None):
-    """Show compact, icon-led task actions with secondary guidance in tooltips."""
+def _show_action_hub(
+    root,
+    kicad=None,
+    schematic=None,
+    project_dir: Path | None = None,
+    library_paths: list[Path] | None = None,
+):
+    """Show the legacy grouped panel with live selection-aware action states."""
     _configure_tk_theme(root, kicad)
     root._kicad_ui_screen_id = "task-hub"
-    root.title("KiCad Blocks — Tasks")
+    root.title("KiCad Blocks — Legacy Tasks")
+
+    if schematic is None and kicad is not None:
+        schematic = kicad.get_schematic()
+    if project_dir is None and schematic is not None:
+        with contextlib.suppress(Exception):
+            project_dir = project_directory(schematic)
+    if library_paths is None:
+        library_paths = configured_library_roots()
+    library_paths = _library_roots_for(library_paths) if library_paths else []
 
     outer = ttk.Frame(root, padding=12)
     outer.pack(fill="both", expand=True)
@@ -6983,6 +6998,12 @@ def _show_action_hub(root, kicad=None):
         outer,
         text="KiCad Blocks",
         font=("TkDefaultFont", 14, "bold"),
+    ).pack(anchor="w", pady=(0, 2))
+    ttk.Label(
+        outer,
+        text="Legacy compatibility panel · use the Functional Block Library for create, place, and publish.",
+        style="Muted.TLabel",
+        wraplength=680,
     ).pack(anchor="w", pady=(0, 7))
 
     tabs = ttk.Notebook(outer)
@@ -6995,13 +7016,13 @@ def _show_action_hub(root, kicad=None):
             [
                 (
                     "Browse and place blocks",
-                    "Browse registered libraries, configure a facade, and start native placement.",
+                    "Browse registered libraries, preview a block, and start native cursor placement.",
                     "manage-library",
                     "libraries",
                 ),
                 (
                     "Create block from sheet",
-                    "Select a hierarchical sheet symbol, or create from the currently open sheet.",
+                    "Select one hierarchical sheet symbol, or clear the selection to use the open sheet.",
                     "create-block",
                     "create",
                 ),
@@ -7024,13 +7045,13 @@ def _show_action_hub(root, kicad=None):
                 ),
                 (
                     "Edit facade symbol",
-                    "Edit the generated library facade for the highlighted block.",
+                    "Open Symbol Editor for a selected library block.",
                     "edit-facade",
                     "facade",
                 ),
                 (
                     "Publish implementation",
-                    "Publish the current library implementation and update dependent metadata.",
+                    "Publish a library block and refresh compatible placed instances.",
                     "publish-block",
                     "publish",
                 ),
@@ -7071,13 +7092,13 @@ def _show_action_hub(root, kicad=None):
                 ),
                 (
                     "Apply selected PCB layout",
-                    "Create a merged board copy from one selected block layout.",
+                    "Create a merged board copy from one selected block instance with a stored layout.",
                     "apply-pcb-layout",
                     "pcb",
                 ),
                 (
                     "Apply multiple PCB layouts",
-                    "Create one combined board copy from multiple selected block layouts.",
+                    "Create one combined board copy from two or more selected block instances with stored layouts.",
                     "apply-multiple-pcb-layouts",
                     "layouts",
                 ),
@@ -7085,7 +7106,133 @@ def _show_action_hub(root, kicad=None):
         ),
     ]
 
+    buttons: dict[str, object] = {}
+    status_value = tk.StringVar(
+        master=root,
+        value="Selection-dependent actions update from the active Eeschema selection.",
+    )
+    status = ttk.Label(
+        outer,
+        textvariable=status_value,
+        style="Muted.TLabel",
+        wraplength=680,
+    )
+    status._kicad_ui_contract_id = "task-hub.status"
+    status.pack(fill="x", pady=(6, 0))
+
+    def refresh_action_states() -> dict[str, bool]:
+        """Re-evaluate the current editor selection; never rely on stale UI state."""
+        selection_error = None
+        try:
+            selection = _safe_schematic_selection(schematic)
+        except Exception as exc:
+            selection = []
+            selection_error = str(exc)
+        symbols = [
+            item for item in selection
+            if hasattr(item, "definition") and hasattr(item.definition, "id")
+        ]
+        all_selected_are_symbols = len(selection) == len(symbols)
+        selected_record = None
+        selected_local = None
+        if (
+            all_selected_are_symbols
+            and len(symbols) == 1
+            and project_dir is not None
+            and library_paths
+        ):
+            try:
+                selected_record = _block_record_for_instance(
+                    library_paths, project_dir, symbols[0]
+                )
+                selected_local = local_copy_for_instance(
+                    project_dir, str(symbols[0].id)
+                )
+            except (OSError, RuntimeError, ValueError, LookupError):
+                selected_record = None
+                selected_local = None
+
+        create_valid = not selection
+        if len(selection) == 1 and not symbols and project_dir is not None:
+            try:
+                create_valid = _selected_sheet_symbol_source(
+                    schematic, project_dir, selection=selection
+                ) is not None
+            except (OSError, RuntimeError, ValueError, LookupError):
+                create_valid = False
+
+        one_block = selected_record is not None
+        one_has_layout = bool(
+            one_block and _layout_choices(selected_record)
+        )
+        multiple_records = []
+        if (
+            all_selected_are_symbols
+            and len(symbols) >= 2
+            and project_dir is not None
+            and library_paths
+        ):
+            try:
+                multiple_records = [
+                    _block_record_for_instance(library_paths, project_dir, item)
+                    for item in symbols
+                ]
+            except (OSError, RuntimeError, ValueError, LookupError):
+                multiple_records = []
+        multiple_have_layouts = len(multiple_records) == len(symbols) and all(
+            _layout_choices(record) for record in multiple_records
+        )
+
+        enabled = {
+            "manage-library": True,
+            "create-block": create_valid,
+            "open-implementation": one_block,
+            "configure-instance": one_block,
+            "edit-facade": True,
+            "publish-block": True,
+            "make-local-copy": one_block and selected_local is None,
+            "synchronize-local-copy": one_block and selected_local is not None,
+            "validate-libraries": True,
+            "recursive-bom": True,
+            "recursive-erc": True,
+            "apply-pcb-layout": one_has_layout,
+            "apply-multiple-pcb-layouts": multiple_have_layouts,
+        }
+        for action_id, button in buttons.items():
+            button.configure(state="normal" if enabled.get(action_id, True) else "disabled")
+
+        if selection_error:
+            status_value.set(f"Could not read the active selection: {selection_error}")
+        elif not selection:
+            status_value.set(
+                "No selection: create from the open sheet or choose a block in the Functional Block Library."
+            )
+        elif one_block:
+            local_text = "local copy" if selected_local is not None else "shared library block"
+            status_value.set(
+                f"{getattr(symbols[0], 'reference', 'Selected instance')}: {local_text} selected."
+            )
+        elif len(symbols) >= 2 and multiple_have_layouts:
+            status_value.set(f"{len(symbols)} block instances selected; batch PCB layout is available.")
+        elif len(selection) == 1:
+            status_value.set(
+                "The selection is not a registered KiCad Blocks facade. Select one block instance or a sheet symbol."
+            )
+        else:
+            status_value.set(
+                "Selection does not meet the requirements of the disabled actions."
+            )
+        root._kicad_blocks_hub_enabled_actions = {
+            action_id for action_id, active in enabled.items() if active
+        }
+        return enabled
+
     def dispatch(selected_action: str) -> None:
+        # Selection can change in Eeschema while this compatibility panel is
+        # open. Re-read it at click time, before closing the panel.
+        enabled = refresh_action_states()
+        if not enabled.get(selected_action, True):
+            return
         root.destroy()
         run_action(selected_action)
 
@@ -7102,27 +7249,66 @@ def _show_action_hub(root, kicad=None):
                 row=row, column=column, columnspan=column_span,
                 sticky="ew", padx=4, pady=3,
             )
+            needs_selection = action_id in {
+                "create-block",
+                "open-implementation",
+                "configure-instance",
+                "make-local-copy",
+                "synchronize-local-copy",
+                "apply-pcb-layout",
+                "apply-multiple-pcb-layouts",
+            }
             button = _action_button(
                 cell,
                 title,
                 command=lambda selected=action_id: dispatch(selected),
                 icon=icon_name,
                 tooltip=description,
+                state="disabled" if needs_selection else "normal",
                 contract_id=f"task-hub.action.{action_id}",
             )
+            buttons[action_id] = button
             button.pack(fill="x", expand=True)
 
     footer = ttk.Frame(outer)
     footer.pack(fill="x", pady=(8, 0))
     _action_button(
         footer,
+        "Refresh selection",
+        refresh_action_states,
+        "refresh",
+        "Re-read the active Eeschema selection and update available actions",
+        contract_id="task-hub.action.refresh-selection",
+    ).pack(side="left")
+    _action_button(
+        footer,
         "Close",
         root.destroy,
         "close",
-        "Close the task hub",
+        "Close the compatibility panel",
         contract_id="task-hub.close",
     ).pack(side="right")
-    _set_window_geometry(root, 760, 520, 640, 440)
+
+    refresh_action_states()
+    root.bind("<FocusIn>", lambda _event: refresh_action_states(), add="+")
+    refresh_id = [None]
+
+    def poll_selection():
+        if not root.winfo_exists():
+            return
+        refresh_action_states()
+        refresh_id[0] = root.after(400, poll_selection)
+
+    refresh_id[0] = root.after(400, poll_selection)
+
+    def stop_polling(_event=None):
+        if refresh_id[0] is not None:
+            with contextlib.suppress(tk.TclError):
+                root.after_cancel(refresh_id[0])
+            refresh_id[0] = None
+
+    root.bind("<Destroy>", lambda event: stop_polling() if event.widget is root else None, add="+")
+    _set_window_geometry(root, 760, 550, 640, 470)
     return tabs
 
 
@@ -7168,7 +7354,15 @@ def run_action(action: str, *, editor_window_id: str | None = None) -> None:
         kicad = KiCad()
         _configure_tk_theme(root, kicad)
         if action == "open-hub":
-            _show_action_hub(root, kicad)
+            schematic = kicad.get_schematic()
+            project_dir = project_directory(schematic) if schematic is not None else None
+            _show_action_hub(
+                root,
+                kicad,
+                schematic=schematic,
+                project_dir=project_dir,
+                library_paths=configured_library_roots(),
+            )
             root.mainloop()
             return
 
