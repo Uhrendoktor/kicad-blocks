@@ -174,11 +174,45 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
         target.add_to_selection.assert_called_once_with([instance])
         target.save.assert_called_once_with()
 
+    def test_place_block_uses_supported_page_center_api_without_transaction_methods(self):
+        instance = SimpleNamespace(id=SimpleNamespace(value="block-instance-id"))
+        target = SimpleNamespace(
+            clear_selection=Mock(),
+            add_to_selection=Mock(),
+            get_selection=Mock(return_value=[instance]),
+            save=Mock(),
+        )
+        schematic = SimpleNamespace(
+            place_symbol_from_library=Mock(return_value=instance),
+        )
+        kicad = SimpleNamespace(get_schematic=Mock(return_value=schematic))
+        with (
+            patch.object(
+                plugin_actions, "_schematic_page_center_mm", return_value=(100.0, 75.0)
+            ),
+            patch.object(
+                plugin_actions, "_focus_schematic_items_in_editor", return_value=target
+            ) as focus_items,
+        ):
+            placed, cursor_attached = plugin_actions._start_native_symbol_placement(
+                kicad, None, self.block.manifest["symbol_name"]
+            )
+
+        self.assertIs(placed, instance)
+        self.assertFalse(cursor_attached)
+        schematic.place_symbol_from_library.assert_called_once()
+        focus_items.assert_called_once_with(schematic, [instance])
+        target.clear_selection.assert_called_once_with()
+        target.add_to_selection.assert_called_once_with([instance])
+        target.save.assert_called_once_with()
+
     def test_place_block_drops_transaction_when_symbol_creation_fails(self):
         commit = object()
         schematic = SimpleNamespace(
             begin_commit=Mock(return_value=commit),
             place_symbol_from_library=Mock(side_effect=RuntimeError("library is stale")),
+            interactive_move=Mock(),
+            push_commit=Mock(),
             drop_commit=Mock(),
         )
         kicad = SimpleNamespace(get_schematic=Mock(return_value=schematic))

@@ -2811,38 +2811,50 @@ def _start_native_symbol_placement(
     symbol_id = f"{LIBRARY_NICKNAME}:{symbol_name}"
     position = Vector2.from_xy_mm(x_mm, y_mm)
 
-    # Start the transaction before inserting the symbol. If the interactive
-    # API is available, it takes ownership; otherwise we push the same commit
-    # before using the documented page-center fallback.
-    commit = schematic.begin_commit()
-    try:
-        instance = schematic.place_symbol_from_library(symbol_id, position)
-    except Exception:
-        with contextlib.suppress(Exception):
-            schematic.drop_commit(commit)
-        raise
-
     interactive_move = getattr(schematic, "interactive_move", None)
-    if callable(interactive_move):
+    begin_commit = getattr(schematic, "begin_commit", None)
+    push_commit = getattr(schematic, "push_commit", None)
+    drop_commit = getattr(schematic, "drop_commit", None)
+
+    # Interactive move owns the insertion commit until the user confirms or
+    # cancels it. Use this path only when the binding exposes the complete
+    # transaction contract. Current Eeschema builds do not; their documented
+    # PlaceSymbolFromLibrary call commits its own placement at the given point.
+    can_transfer_commit = all(
+        callable(method)
+        for method in (interactive_move, begin_commit, push_commit, drop_commit)
+    )
+    if can_transfer_commit:
+        commit = begin_commit()
+        try:
+            instance = schematic.place_symbol_from_library(symbol_id, position)
+        except Exception:
+            with contextlib.suppress(Exception):
+                drop_commit(commit)
+            raise
+
         try:
             interactive_move(instance.id)
             LOG.info("Started native Eeschema cursor placement for %s.", symbol_id)
             return instance, True
         except Exception as exc:
-            # A new kipy wrapper may be installed before the running KiCad
-            # build has the matching server handler. The transaction is still
-            # client-owned in that case, and can be committed at page center.
+            # A newer Python wrapper may be installed before the connected
+            # Eeschema server implements the command. Commit at page centre,
+            # then use the same verified focus/selection path as older builds.
             LOG.info(
                 "Schematic interactive move IPC is unavailable; using page-center placement: %s",
                 exc,
             )
-
-    try:
-        schematic.push_commit(commit, f"Place functional block {symbol_name}")
-    except Exception:
-        with contextlib.suppress(Exception):
-            schematic.drop_commit(commit)
-        raise
+            try:
+                push_commit(commit, f"Place functional block {symbol_name}")
+            except Exception:
+                with contextlib.suppress(Exception):
+                    drop_commit(commit)
+                raise
+    else:
+        # Keep the supported fixed-coordinate route usable with the public
+        # Schematic API, which does not currently expose begin_commit().
+        instance = schematic.place_symbol_from_library(symbol_id, position)
 
     target_schematic = _focus_schematic_items_in_editor(schematic, [instance])
     target_schematic.clear_selection()
