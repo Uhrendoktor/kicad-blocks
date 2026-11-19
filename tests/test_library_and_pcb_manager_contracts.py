@@ -7,7 +7,7 @@ import os
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import pytest
 
@@ -27,6 +27,7 @@ from kicad_blocks.model import parse_pins  # noqa: E402
 from kicad_blocks.repository import BlockRecord, create_block, read_manifest  # noqa: E402
 from ui_contracts import (  # noqa: E402
     ButtonContract,
+    Misc,
     Tk,
     Toplevel,
     UiTestContext,
@@ -353,7 +354,7 @@ def test_manage_libraries_set_default_persists_selected_library(
         assert button.instate(["!disabled"])
         _click(context, "manage-libraries.action.default", "Set default")
         assert repository.default_library_root() == second.resolve()
-        tree = context.require_widget("manage-libraries.rows")
+        tree = context.require_treeview("manage-libraries.rows")
         selected = tree.selection()[0]
         assert tree.set(selected, "role") == "Default"
         assert context.require_button("manage-libraries.action.default").instate(["disabled"])
@@ -429,15 +430,15 @@ def test_manage_libraries_environment_override_and_empty_selection_states(
             "manage-libraries.action.default",
         )
         for button_id in fixed_actions:
-            assert context.require_widget(button_id).instate(["disabled"])
+            assert context.require_button(button_id).instate(["disabled"])
         _select_path(context, "manage-libraries.rows", first, path_column="path")
         for button_id in fixed_actions:
-            assert context.require_widget(button_id).instate(["disabled"])
+            assert context.require_button(button_id).instate(["disabled"])
         for button_id in (
             "manage-libraries.action.add",
             "manage-libraries.action.create",
         ):
-            assert context.require_widget(button_id).instate(["!disabled"])
+            assert context.require_button(button_id).instate(["!disabled"])
         _click(
             context,
             "manage-libraries.action.close",

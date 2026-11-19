@@ -6,6 +6,7 @@ import os
 import sys
 from collections.abc import Callable
 from pathlib import Path
+from typing import cast
 
 import pytest
 
@@ -16,6 +17,7 @@ sys.path.insert(0, str(ROOT / "tests"))
 from kicad_blocks import plugin as plugin_actions
 from ui_contracts import (
     ButtonContract,
+    Misc,
     MonkeyPatch,
     Tk,
     Toplevel,
@@ -114,7 +116,7 @@ def _run_form(
 
 
 def _assert_initial_form_state(context: UiTestContext, dialog: Toplevel) -> None:
-    widgets = context.refresh_widgets()
+    context.refresh_widgets()
     assert dialog.title() == WINDOW_TITLE
     assert dialog.winfo_width() >= 580
     assert dialog.winfo_height() >= 340
@@ -145,7 +147,7 @@ def test_create_block_form_submits_name_and_optional_description(monkeypatch: Mo
         _assert_initial_form_state(context, dialog)
         context.require_entry("create-block-form.name").delete(0, "end")
         context.require_entry("create-block-form.name").insert(0, "USB Power Stage")
-        description = context.require_widget("create-block-form.description")
+        description = context.require_text("create-block-form.description")
         description.insert("1.0", "Isolated USB power conversion stage.")
         _click(
             context,
