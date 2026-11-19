@@ -1033,10 +1033,10 @@ def test_place_block_reload_warning_does_not_start_native_placement(monkeypatch,
         "_register_block",
         lambda *_args, **_kwargs: context.action_calls.append("registered"),
     )
-    monkeypatch.setattr(plugin_actions, "_LAST_LIBRARY_RELOAD_OK", False)
+    monkeypatch.setattr(plugin_actions, "_last_library_reload_ok", False)
     monkeypatch.setattr(
         plugin_actions,
-        "_LAST_LIBRARY_RELOAD_WARNING",
+        "_last_library_reload_warning",
         "Restart Eeschema to reload the project symbol table.",
     )
     monkeypatch.setattr(
@@ -1276,6 +1276,34 @@ def test_edit_facade_failure_shows_recoverable_error(monkeypatch, tmp_path):
         assert errors[0][0] == "Edit facade"
         assert "cannot select this library entry" in errors[0][1]
         assert errors[0][2] is not None and errors[0][2].winfo_exists()
+    finally:
+        root.destroy()
+
+
+def test_edit_facade_without_native_handoff_shows_guidance(monkeypatch, tmp_path):
+    root, context, _records, _library, _project = _new_browser(monkeypatch, tmp_path)
+    notices: list[tuple[str, str, object]] = []
+
+    monkeypatch.setattr(plugin_actions, "_edit_facade_symbol", lambda *_args, **_kwargs: False)
+    monkeypatch.setattr(
+        plugin_actions.messagebox,
+        "showinfo",
+        lambda title, message, **kwargs: notices.append(
+            (title, str(message), kwargs.get("parent"))
+        ),
+    )
+    try:
+        _select_first_record(context)
+        ButtonContract(
+            contract_id="library-browser.action.facade",
+            expected_action=None,
+            destroys_window=False,
+            expected_label="Edit facade",
+        ).run(context)
+        assert len(notices) == 1
+        assert notices[0][0] == "Edit facade"
+        assert "Symbol Editor" in notices[0][1]
+        assert root.winfo_exists()
     finally:
         root.destroy()
 

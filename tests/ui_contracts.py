@@ -392,6 +392,7 @@ class ChoiceViewContract(ComponentContract[ChoiceViewObservation]):
         choice.set(self.value)
         choice.event_generate("<<ComboboxSelected>>")
         context.root.update_idletasks()
+        context.root.update()
         return {
             "value": choice.get(),
             "events": list(context.events),

@@ -3,11 +3,11 @@
 
 This inventory is generated from the production plugin's Python AST. It records every messagebox and simpledialog call site, its owning operation, the available automated evidence, and the remaining gap. These are native OS/Tk dialogs rather than controls inside the reusable in-process window contract.
 
-Source: plugin/kicad-blocks/kicad_blocks/plugin.py — 56 call sites.
+Source: plugin/kicad-blocks/kicad_blocks/plugin.py — 57 call sites.
 
 | Coverage | Call sites | Meaning |
 |---|---:|---|
-| Tested | 56 | Direct native-dialog result and downstream behavior are asserted. |
+| Tested | 57 | Direct native-dialog result and downstream behavior are asserted. |
 | Partial | 0 | The owning action is tested; this dialog branch is not directly asserted. |
 | Uncovered | 0 | No direct native-dialog path contract exists yet. |
 
@@ -15,62 +15,63 @@ Source: plugin/kicad-blocks/kicad_blocks/plugin.py — 56 call sites.
 
 | Source line | Owning operation | Dialog API | Coverage | Automated evidence |
 |---:|---|---|---|---|
-| 1179 | _show_selected_block_configuration.save_configuration | messagebox.showerror | tested | tests/test_instance_configuration_contracts.py |
-| 1706 | _choose_block_layout | simpledialog.askstring | tested | tests/test_dialog_callsite_contracts.py |
-| 1761 | _collect_block_profiles | messagebox.askyesno | tested | tests/test_dialog_callsite_contracts.py |
-| 1771 | _collect_block_profiles | simpledialog.askstring | tested | tests/test_dialog_callsite_contracts.py |
-| 1779 | _collect_block_profiles | messagebox.showwarning | tested | tests/test_dialog_callsite_contracts.py |
-| 1786 | _collect_block_profiles | simpledialog.askstring | tested | tests/test_dialog_callsite_contracts.py |
-| 1798 | _collect_block_profiles | simpledialog.askstring | tested | tests/test_dialog_callsite_contracts.py |
-| 1818 | _collect_block_profiles | simpledialog.askstring | tested | tests/test_dialog_callsite_contracts.py |
-| 1838 | _collect_block_profiles | simpledialog.askstring | tested | tests/test_dialog_callsite_contracts.py |
-| 1866 | _collect_block_profiles | messagebox.askyesno | tested | tests/test_dialog_callsite_contracts.py |
-| 2020 | _ask_create_block_details.accept | messagebox.showerror | tested | tests/test_create_block_form_contracts.py |
-| 3561 | _ask_layout_details.accept | messagebox.showerror | tested | tests/test_add_pcb_layout_contracts.py |
-| 3569 | _ask_layout_details.accept | messagebox.showerror | tested | tests/test_add_pcb_layout_contracts.py |
-| 3723 | _show_block_layout_editor.add_layout | messagebox.showerror | tested | tests/test_library_and_pcb_manager_contracts.py |
-| 3760 | _show_block_layout_editor.remove_layout | messagebox.askyesno | tested | tests/test_library_and_pcb_manager_contracts.py |
-| 3878 | _show_block_layout_editor.cancel_layout_edits | messagebox.askyesno | tested | tests/test_library_and_pcb_manager_contracts.py |
-| 3921 | _show_block_layout_editor.persist_layout_changes | messagebox.showerror | tested | tests/test_library_and_pcb_manager_contracts.py |
-| 4158 | _ask_implementation_details.accept | messagebox.showerror | tested | tests/test_implementation_details_contracts.py |
-| 4171 | _ask_implementation_details.accept | messagebox.showerror | tested | tests/test_implementation_details_contracts.py |
-| 4184 | _ask_implementation_details.accept | messagebox.showerror | tested | tests/test_implementation_details_contracts.py |
-| 4364 | _show_block_variant_editor.add_variant | messagebox.showerror | tested | tests/test_implementation_manager_contracts.py |
-| 4395 | _show_block_variant_editor.edit_variant | messagebox.showerror | tested | tests/test_implementation_manager_contracts.py |
-| 4424 | _show_block_variant_editor.remove_variant | messagebox.showinfo | tested | tests/test_implementation_manager_contracts.py |
-| 4432 | _show_block_variant_editor.remove_variant | messagebox.askyesno | tested | tests/test_implementation_manager_contracts.py |
-| 4490 | _show_block_variant_editor.persist_variant_changes | messagebox.showerror | tested | tests/test_implementation_manager_contracts.py |
-| 4531 | _show_block_variant_editor.cancel_variant_edits | messagebox.askyesno | tested | tests/test_implementation_manager_contracts.py |
-| 4680 | _show_library_roots_dialog.add_library | messagebox.showerror | tested | tests/test_library_and_pcb_manager_contracts.py |
-| 4688 | _show_library_roots_dialog.create_library | simpledialog.askstring | tested | tests/test_library_and_pcb_manager_contracts.py |
-| 4703 | _show_library_roots_dialog.create_library | messagebox.showerror | tested | tests/test_library_and_pcb_manager_contracts.py |
-| 4720 | _show_library_roots_dialog.create_library | messagebox.showerror | tested | tests/test_library_and_pcb_manager_contracts.py |
-| 4756 | _show_library_roots_dialog.change_library_folder | messagebox.showerror | tested | tests/test_library_and_pcb_manager_contracts.py |
-| 4762 | _show_library_roots_dialog.remove_library | messagebox.askyesno | tested | tests/test_library_and_pcb_manager_contracts.py |
-| 4773 | _show_library_roots_dialog.remove_library | messagebox.showerror | tested | tests/test_library_and_pcb_manager_contracts.py |
-| 4784 | _show_library_roots_dialog.make_default | messagebox.showerror | tested | tests/test_library_and_pcb_manager_contracts.py |
-| 5367 | _show_library_browser.refresh_records | messagebox.showerror | tested | tests/test_library_browser_contracts.py |
-| 5405 | _show_library_browser.place_selected | messagebox.showwarning | tested | tests/test_library_browser_contracts.py |
-| 5421 | _show_library_browser.place_selected | messagebox.showerror | tested | tests/test_library_browser_contracts.py |
-| 5430 | _show_library_browser.open_implementation | messagebox.showerror | tested | tests/test_library_browser_contracts.py |
-| 5451 | _show_library_browser.open_implementation | messagebox.showerror | tested | tests/test_library_browser_contracts.py |
-| 5489 | _show_library_browser.open_implementation.launch_variant | messagebox.showerror | tested | tests/test_library_browser_contracts.py |
-| 5525 | _show_library_browser.edit_facade | messagebox.showerror | tested | tests/test_library_browser_contracts.py |
-| 5543 | _show_library_browser.manage_layouts | messagebox.showerror | tested | tests/test_library_browser_contracts.py |
-| 5566 | _show_library_browser.edit_variants | messagebox.showerror | tested | tests/test_library_browser_contracts.py |
-| 5628 | _show_library_browser.open_layout.launch_layout | messagebox.showerror | tested | tests/test_library_browser_contracts.py |
-| 5951 | _validate_shared_library | messagebox.showwarning | tested | tests/test_dialog_callsite_contracts.py |
-| 5953 | _validate_shared_library | messagebox.showwarning | tested | tests/test_dialog_callsite_contracts.py |
-| 6075 | _apply_block_pcb_layout | simpledialog.askstring | tested | tests/test_uncovered_dialog_contracts.py |
-| 6091 | _apply_block_pcb_layout | simpledialog.askstring | tested | tests/test_uncovered_dialog_contracts.py |
-| 6107 | _apply_block_pcb_layout | simpledialog.askstring | tested | tests/test_uncovered_dialog_contracts.py |
-| 6153 | _apply_block_pcb_layout | messagebox.askyesno | tested | tests/test_uncovered_dialog_contracts.py |
-| 6214 | _apply_selected_block_pcb_layouts | simpledialog.askstring | tested | tests/test_uncovered_dialog_contracts.py |
-| 6229 | _apply_selected_block_pcb_layouts | simpledialog.askstring | tested | tests/test_uncovered_dialog_contracts.py |
-| 6245 | _apply_selected_block_pcb_layouts | simpledialog.askstring | tested | tests/test_uncovered_dialog_contracts.py |
-| 6299 | _apply_selected_block_pcb_layouts | messagebox.askyesno | tested | tests/test_uncovered_dialog_contracts.py |
-| 6597 | run_action | messagebox.showwarning | tested | tests/test_uncovered_dialog_contracts.py |
-| 6604 | run_action | messagebox.showerror | tested | tests/test_uncovered_dialog_contracts.py |
+| 1910 | _show_selected_block_configuration.save_configuration | messagebox.showerror | tested | tests/test_instance_configuration_contracts.py |
+| 2496 | _choose_block_layout | simpledialog.askstring | tested | tests/test_dialog_callsite_contracts.py |
+| 2558 | _collect_block_profiles | messagebox.askyesno | tested | tests/test_dialog_callsite_contracts.py |
+| 2568 | _collect_block_profiles | simpledialog.askstring | tested | tests/test_dialog_callsite_contracts.py |
+| 2576 | _collect_block_profiles | messagebox.showwarning | tested | tests/test_dialog_callsite_contracts.py |
+| 2583 | _collect_block_profiles | simpledialog.askstring | tested | tests/test_dialog_callsite_contracts.py |
+| 2595 | _collect_block_profiles | simpledialog.askstring | tested | tests/test_dialog_callsite_contracts.py |
+| 2615 | _collect_block_profiles | simpledialog.askstring | tested | tests/test_dialog_callsite_contracts.py |
+| 2633 | _collect_block_profiles | simpledialog.askstring | tested | tests/test_dialog_callsite_contracts.py |
+| 2664 | _collect_block_profiles | messagebox.askyesno | tested | tests/test_dialog_callsite_contracts.py |
+| 2822 | _ask_create_block_details.accept | messagebox.showerror | tested | tests/test_create_block_form_contracts.py |
+| 4380 | _ask_layout_details.accept | messagebox.showerror | tested | tests/test_add_pcb_layout_contracts.py |
+| 4390 | _ask_layout_details.accept | messagebox.showerror | tested | tests/test_add_pcb_layout_contracts.py |
+| 4561 | _show_block_layout_editor.add_layout | messagebox.showerror | tested | tests/test_library_and_pcb_manager_contracts.py |
+| 4610 | _show_block_layout_editor.remove_layout | messagebox.askyesno | tested | tests/test_library_and_pcb_manager_contracts.py |
+| 4751 | _show_block_layout_editor.cancel_layout_edits | messagebox.askyesno | tested | tests/test_library_and_pcb_manager_contracts.py |
+| 4800 | _show_block_layout_editor.persist_layout_changes | messagebox.showerror | tested | tests/test_library_and_pcb_manager_contracts.py |
+| 5056 | _ask_implementation_details.accept | messagebox.showerror | tested | tests/test_implementation_details_contracts.py |
+| 5069 | _ask_implementation_details.accept | messagebox.showerror | tested | tests/test_implementation_details_contracts.py |
+| 5079 | _ask_implementation_details.accept | messagebox.showerror | tested | tests/test_implementation_details_contracts.py |
+| 5286 | _show_block_variant_editor.add_variant | messagebox.showerror | tested | tests/test_implementation_manager_contracts.py |
+| 5317 | _show_block_variant_editor.edit_variant | messagebox.showerror | tested | tests/test_implementation_manager_contracts.py |
+| 5349 | _show_block_variant_editor.remove_variant | messagebox.showinfo | tested | tests/test_implementation_manager_contracts.py |
+| 5357 | _show_block_variant_editor.remove_variant | messagebox.askyesno | tested | tests/test_implementation_manager_contracts.py |
+| 5415 | _show_block_variant_editor.persist_variant_changes | messagebox.showerror | tested | tests/test_implementation_manager_contracts.py |
+| 5472 | _show_block_variant_editor.cancel_variant_edits | messagebox.askyesno | tested | tests/test_implementation_manager_contracts.py |
+| 5642 | _show_library_roots_dialog.add_library | messagebox.showerror | tested | tests/test_library_and_pcb_manager_contracts.py |
+| 5648 | _show_library_roots_dialog.create_library | simpledialog.askstring | tested | tests/test_library_and_pcb_manager_contracts.py |
+| 5663 | _show_library_roots_dialog.create_library | messagebox.showerror | tested | tests/test_library_and_pcb_manager_contracts.py |
+| 5680 | _show_library_roots_dialog.create_library | messagebox.showerror | tested | tests/test_library_and_pcb_manager_contracts.py |
+| 5716 | _show_library_roots_dialog.change_library_folder | messagebox.showerror | tested | tests/test_library_and_pcb_manager_contracts.py |
+| 5722 | _show_library_roots_dialog.remove_library | messagebox.askyesno | tested | tests/test_library_and_pcb_manager_contracts.py |
+| 5733 | _show_library_roots_dialog.remove_library | messagebox.showerror | tested | tests/test_library_and_pcb_manager_contracts.py |
+| 5744 | _show_library_roots_dialog.make_default | messagebox.showerror | tested | tests/test_library_and_pcb_manager_contracts.py |
+| 6383 | _show_library_browser.refresh_records | messagebox.showerror | tested | tests/test_library_browser_contracts.py |
+| 6422 | _show_library_browser.place_selected | messagebox.showwarning | tested | tests/test_library_browser_contracts.py |
+| 6439 | _show_library_browser.place_selected | messagebox.showerror | tested | tests/test_library_browser_contracts.py |
+| 6448 | _show_library_browser.open_implementation | messagebox.showerror | tested | tests/test_library_browser_contracts.py |
+| 6469 | _show_library_browser.open_implementation | messagebox.showerror | tested | tests/test_library_browser_contracts.py |
+| 6507 | _show_library_browser.open_implementation.launch_variant | messagebox.showerror | tested | tests/test_library_browser_contracts.py |
+| 6548 | _show_library_browser.edit_facade | messagebox.showinfo | tested | tests/test_library_browser_contracts.py |
+| 6557 | _show_library_browser.edit_facade | messagebox.showerror | tested | tests/test_library_browser_contracts.py |
+| 6575 | _show_library_browser.manage_layouts | messagebox.showerror | tested | tests/test_library_browser_contracts.py |
+| 6598 | _show_library_browser.edit_variants | messagebox.showerror | tested | tests/test_library_browser_contracts.py |
+| 6660 | _show_library_browser.open_layout.launch_layout | messagebox.showerror | tested | tests/test_library_browser_contracts.py |
+| 7044 | _validate_shared_library | messagebox.showwarning | tested | tests/test_dialog_callsite_contracts.py |
+| 7046 | _validate_shared_library | messagebox.showwarning | tested | tests/test_dialog_callsite_contracts.py |
+| 7190 | _apply_block_pcb_layout | simpledialog.askstring | tested | tests/test_uncovered_dialog_contracts.py |
+| 7205 | _apply_block_pcb_layout | simpledialog.askstring | tested | tests/test_uncovered_dialog_contracts.py |
+| 7221 | _apply_block_pcb_layout | simpledialog.askstring | tested | tests/test_uncovered_dialog_contracts.py |
+| 7267 | _apply_block_pcb_layout | messagebox.askyesno | tested | tests/test_uncovered_dialog_contracts.py |
+| 7331 | _apply_selected_block_pcb_layouts | simpledialog.askstring | tested | tests/test_uncovered_dialog_contracts.py |
+| 7346 | _apply_selected_block_pcb_layouts | simpledialog.askstring | tested | tests/test_uncovered_dialog_contracts.py |
+| 7362 | _apply_selected_block_pcb_layouts | simpledialog.askstring | tested | tests/test_uncovered_dialog_contracts.py |
+| 7416 | _apply_selected_block_pcb_layouts | messagebox.askyesno | tested | tests/test_uncovered_dialog_contracts.py |
+| 7715 | run_action | messagebox.showwarning | tested | tests/test_uncovered_dialog_contracts.py |
+| 7722 | run_action | messagebox.showerror | tested | tests/test_uncovered_dialog_contracts.py |
 
 ## Coverage boundaries
 
@@ -116,6 +117,7 @@ Source: plugin/kicad-blocks/kicad_blocks/plugin.py — 56 call sites.
 - _show_library_browser.open_implementation::messagebox.showerror#1 — A failure registering the implementation catalog is shown before an implementation chooser is opened.
 - _show_library_browser.open_implementation::messagebox.showerror#2 — A failure launching the default implementation is reported after registration; the browser remains available.
 - _show_library_browser.open_implementation.launch_variant::messagebox.showerror#1 — A failure launching the explicitly selected named implementation is reported after the chooser closes, without closing the parent library browser.
+- _show_library_browser.edit_facade::messagebox.showinfo#1 — The direct Edit Facade contract exercises the no-IPC-handoff branch, asserts the Symbol Editor guidance and parent-window lifetime, and verifies the Functional Block Library remains open.
 - _show_library_browser.edit_facade::messagebox.showerror#1 — An Edit facade launch/IPC failure is reported and the Functional Block Library remains available.
 - _show_library_browser.manage_layouts::messagebox.showerror#1 — A PCB layout manager failure is reported and leaves the Functional Block Library open.
 - _show_library_browser.edit_variants::messagebox.showerror#1 — An implementation manager failure is reported and leaves the Functional Block Library open.
@@ -139,4 +141,4 @@ Source: plugin/kicad-blocks/kicad_blocks/plugin.py — 56 call sites.
 - Partial means the owning action has tests, but the specific error/confirmation/prompt path is not directly exercised.
 - Uncovered means no direct call-site behavior contract exists yet.
 
-All 56 native message-dialog call sites now have direct result/effect assertions. These in-process tests do not replace native desktop accessibility, OS-specific dialog ownership, or cross-platform rendering checks.
+All 57 native message-dialog call sites now have direct result/effect assertions. These in-process tests do not replace native desktop accessibility, OS-specific dialog ownership, or cross-platform rendering checks.

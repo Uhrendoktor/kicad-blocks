@@ -43,24 +43,97 @@ def _block(name: str):
     )
 
 
-def _pcb_merge_result(output: Path, *, rotation: float = 0.0, block_count: int = 1):
+def _pcb_placement_entry(
+    instance_reference: str,
+    block_name: str,
+    item_uuid: str,
+    *,
+    layout_id: str = "standard",
+    layout_name: str | None = "Standard",
+    rotation: float = 0.0,
+) -> dict[str, object]:
     return {
-        "output": str(output),
-        "footprint_count": 2 * block_count,
-        "object_count": 5 * block_count,
-        "new_nets": ["VBUS"] if block_count == 1 else ["VBUS", "VBAT"],
+        "output": "unused-stage.kicad_pcb",
+        "block": block_name,
+        "layout_id": layout_id,
+        "layout_name": layout_name,
+        "instance_reference": instance_reference,
         "rotation_deg": rotation,
         "project_file": None,
         "merged_netclasses": [],
         "assigned_project_nets": [],
+        "ignored_project_patterns": False,
         "applied_project_patterns": [],
-        "skipped_top_level_items": [],
-        "ignored_project_patterns": [],
         "unmatched_project_patterns": [],
-        "ignored_project_chain_classes": [],
+        "ignored_project_chain_classes": False,
+        "merged_project_chain_names": [],
         "unmatched_project_chains": [],
         "merged_board_chains": [],
+        "footprints": [f"{instance_reference}_1"],
+        "interactive_item_uuids": [item_uuid],
+        "footprint_count": 1,
+        "object_count": 1,
+        "new_net_count": 0,
+        "new_nets": [],
+        "skipped_top_level_items": [],
+    }
+
+
+def _pcb_merge_result(output: Path, *, rotation: float = 0.0, block_count: int = 1):
+    placements = [
+        _pcb_placement_entry(
+            f"U{index}",
+            f"Power stage U{index}" if block_count > 1 else "Power stage",
+            f"placement-{index}",
+            rotation=rotation if block_count == 1 else (45.0 if index == 1 else 90.0),
+        )
+        for index in range(1, block_count + 1)
+    ]
+    result = {
+        "output": str(output),
+        "project_file": None,
         "block_count": block_count,
+        "placements": placements,
+        "footprints": [reference for item in placements for reference in item["footprints"]],
+        "footprint_count": sum(int(item["footprint_count"]) for item in placements),
+        "object_count": sum(int(item["object_count"]) for item in placements),
+        "new_net_count": 1 if block_count == 1 else 2,
+        "new_nets": ["VBUS"] if block_count == 1 else ["VBUS", "VBAT"],
+        "merged_netclasses": [],
+        "assigned_project_nets": [],
+        "applied_project_patterns": [],
+        "unmatched_project_patterns": [],
+        "merged_project_chain_names": [],
+        "unmatched_project_chains": [],
+        "merged_board_chains": [],
+        "skipped_top_level_items": [],
+        "ignored_project_patterns": False,
+        "ignored_project_chain_classes": False,
+    }
+    if block_count == 1:
+        result.update(placements[0])
+        result["output"] = str(output)
+        return result
+    return result
+
+
+def _pcb_placement_source(result: dict[str, object]) -> dict[str, object]:
+    source: dict[str, object] = {
+        "instance_reference": result["instance_reference"],
+        "interactive_item_uuids": result["interactive_item_uuids"],
+        "block": result["block"],
+    }
+    if result["layout_name"] is not None:
+        source["layout_name"] = result["layout_name"]
+    return source
+
+
+def _pcb_batch_placement_source(result: dict[str, object]) -> dict[str, object]:
+    return {
+        "placements": [
+            _pcb_placement_source(item)
+            for item in result["placements"]
+        ]
     }
 
 
@@ -191,7 +264,7 @@ def test_single_pcb_layout_prompts_map_anchor_rotation_and_confirms_open(
         tmp_path / "project_U1_blocks.kicad_pcb"
     )
     assert calls["sidecar"] == [
-        (output.resolve(), _pcb_merge_result(output, rotation=90.0))
+        (output.resolve(), _pcb_placement_source(_pcb_merge_result(output, rotation=90.0)))
     ]
     assert len(calls["confirm"]) == 1
     title, message, kwargs = calls["confirm"][0]
@@ -404,7 +477,12 @@ def test_batch_pcb_layout_prompts_all_instances_and_confirms_open(
     assert calls["save_picker"][0]["title"] == "Save combined PCB block layout copy"
     assert calls["save_picker"][0]["initial_path"] == output
     assert calls["sidecar"] == [
-        (output.resolve(), _pcb_merge_result(output, rotation=90.0, block_count=2))
+        (
+            output.resolve(),
+            _pcb_batch_placement_source(
+                _pcb_merge_result(output, rotation=90.0, block_count=2)
+            ),
+        )
     ]
     assert len(calls["confirm"]) == 1
     assert calls["confirm"][0][0] == "Open combined PCB board"

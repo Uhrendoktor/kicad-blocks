@@ -4331,6 +4331,7 @@ def _ask_layout_details(
         str(item["value"]) for item in record.manifest.get("variants", [])
     ]
     link_value = tk.StringVar(value=implementation_values[0])
+    dialog._kicad_ui_variables = [name_value, mode_value, source_value, link_value]
     ttk.Label(frame, text="Use for implementation").grid(row=5, column=0, sticky="w")
     link_combo = ttk.Combobox(
         frame,
@@ -4370,6 +4371,7 @@ def _ask_layout_details(
             cast(_TkGridManaged, browse_button).grid_remove()
 
     mode_combo.bind("<<ComboboxSelected>>", update_mode)
+    mode_value.trace_add("write", lambda *_args: update_mode())
     update_mode()
 
     def accept():
@@ -5131,6 +5133,7 @@ def _show_block_variant_editor(
         row=0, column=0, sticky="w"
     )
     status_value = tk.StringVar(value="Empty KB_VARIANT uses the default implementation.")
+    dialog._kicad_ui_variables = [status_value]
     status_label = ttk.Label(
         frame,
         textvariable=status_value,
