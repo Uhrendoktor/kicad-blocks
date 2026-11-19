@@ -599,15 +599,8 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
                 sheet_path=FakeSheetPath(["root-id", "sheet-id"])
             ),
         )
-        messagebox = SimpleNamespace(showinfo=Mock())
-
         with (
-            patch.object(
-                plugin_actions,
-                "_ask_create_block_details",
-                return_value=("Power Stage", "Current sheet capture"),
-            ) as details,
-            patch.object(plugin_actions, "messagebox", messagebox),
+            patch.object(plugin_actions, "_ask_create_block_details") as details,
             patch.object(plugin_actions, "create_block", return_value=self.block) as create,
             patch.object(plugin_actions, "_register_block", return_value=self.block),
         ):
@@ -615,14 +608,14 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
                 self.library, schematic, self.kicad, self.project, self.parent
             )
 
-        details.assert_called_once_with(self.parent, source.resolve())
+        details.assert_not_called()
         create.assert_called_once_with(
             self.library,
             "Power Stage",
             source_schematic=source.resolve(),
             source_project_name=self.project.name,
             source_sheet_uuid="sheet-id",
-            description="Current sheet capture",
+            description="",
         )
 
     def test_reload_symbol_library_uses_gui_supported_reload_only(self):
@@ -931,12 +924,7 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
             ),
         )
         with (
-            patch.object(
-                plugin_actions,
-                "_ask_create_block_details",
-                return_value=("Power Stage", "Active sheet fallback"),
-            ),
-            patch.object(plugin_actions, "messagebox", self.messagebox),
+            patch.object(plugin_actions, "_ask_create_block_details") as details,
             patch.object(plugin_actions, "create_block", return_value=self.block) as create,
             patch.object(plugin_actions, "_register_block", return_value=self.block),
         ):
@@ -944,13 +932,14 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
                 self.library, schematic, self.kicad, self.project, self.parent
             )
 
+        details.assert_not_called()
         create.assert_called_once_with(
             self.library,
             "Power Stage",
             source_schematic=source.resolve(),
             source_project_name=self.project.name,
             source_sheet_uuid="sheet-id",
-            description="Active sheet fallback",
+            description="",
         )
 
     def test_create_block_uses_selected_sheet_symbol_relative_to_active_sheet(self):
@@ -995,12 +984,8 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
             ),
         )
         with (
-            patch.object(
-                plugin_actions,
-                "_ask_create_block_details",
-                return_value=("UART Interface", "Selected child sheet"),
-            ),
-            patch.object(plugin_actions, "messagebox", self.messagebox),
+            patch.object(plugin_actions, "_ask_create_block_details") as details,
+            patch.object(plugin_actions, "_list_library_records", return_value=[]),
             patch.object(plugin_actions, "create_block", return_value=self.block) as create,
             patch.object(plugin_actions, "_register_block", return_value=self.block),
         ):
@@ -1008,16 +993,17 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
                 self.library, schematic, self.kicad, self.project, self.parent
             )
 
+        details.assert_not_called()
         create.assert_called_once_with(
             self.library,
-            "UART Interface",
+            "Uart",
             source_schematic=selected_source.resolve(),
             source_project_name=self.project.name,
             source_sheet_uuid=selected_uuid,
-            description="Selected child sheet",
+            description="",
         )
 
-    def test_task_hub_opens_the_portable_facade_layout_editor(self):
+    def test_edit_facade_action_opens_the_portable_facade_layout_editor(self):
         root = SimpleNamespace(
             title=Mock(), withdraw=Mock(), destroy=Mock(), mainloop=Mock()
         )
@@ -1052,7 +1038,10 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
             project_catalog=project_catalog,
             parent=root,
         )
-        root.title.assert_called_once_with(f"KiCad Blocks — Facade layout: {self.block.name}")
+        self.assertEqual(
+            [item.args[0] for item in root.title.call_args_list],
+            ["KiCad Blocks", f"KiCad Blocks — Facade layout: {self.block.name}"],
+        )
         root.mainloop.assert_called_once_with()
         root.withdraw.assert_not_called()
         root.destroy.assert_called_once_with()
@@ -1094,13 +1083,15 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
             TclError=Exception,
         )
         fake_kipy = types.ModuleType("kipy")
-        fake_kipy.KiCad = Mock(side_effect=lambda: events.append("kipy.KiCad") or object())
+        kicad = SimpleNamespace(get_schematic=Mock(return_value=None))
+        fake_kipy.KiCad = Mock(side_effect=lambda: events.append("kipy.KiCad") or kicad)
         with (
             patch.object(plugin_actions, "_load_tkinter", side_effect=lambda: events.append("load tkinter")),
             patch.object(plugin_actions, "tk", fake_tk),
             patch.object(plugin_actions, "_configure_tk_theme"),
             patch.object(plugin_actions, "_attach_tk_window_to_editor"),
             patch.object(plugin_actions, "_show_action_hub"),
+            patch.object(plugin_actions, "messagebox", self.messagebox),
             patch.dict(sys.modules, {"kipy": fake_kipy}),
         ):
             plugin_actions.run_action("open-hub")

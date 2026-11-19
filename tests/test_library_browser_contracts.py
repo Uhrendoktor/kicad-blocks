@@ -482,7 +482,6 @@ def test_facade_editor_exposes_geometry_fields_and_saves_immediately(monkeypatch
     )
 
     owner = plugin_actions.tk.Tk()
-    owner.withdraw()
     try:
         assert plugin_actions._edit_facade_symbol(
             record,
@@ -1090,7 +1089,8 @@ def test_place_button_reports_ready_state_without_success_popup(monkeypatch, tmp
         ).run(context)
         status = context.require_widget("library-browser.status")
         variable = str(status.cget("textvariable"))
-        assert "move it to the desired location" in status.getvar(variable)
+        assert "active sheet center" in status.getvar(variable)
+        assert "selected it in Eeschema" in status.getvar(variable)
     finally:
         root.destroy()
 
@@ -1120,7 +1120,7 @@ def test_place_block_registration_failure_uses_inline_status_and_keeps_browser_o
         ).run(context)
         status = context.require_widget("library-browser.status")
         variable = str(status.cget("textvariable"))
-        assert "Placement could not start" in status.getvar(variable)
+        assert "Placement could not complete" in status.getvar(variable)
         assert "project library table could not be written" in status.getvar(variable)
         assert _select_first_record(context) is not None
     finally:
