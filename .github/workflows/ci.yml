@@ -47,7 +47,10 @@ jobs:
             exit 0
           fi
           echo "::notice::Merging current main into $REF_NAME."
-          if git merge --no-commit --no-ff origin/main; then
+          # Prefer the PR's validated source-side fixes for overlapping hunks.
+          # Current-main additions are still merged normally everywhere else;
+          # follow up by restoring any additive UI contract/test coverage from main.
+          if git merge -X ours --no-commit --no-ff origin/main; then
             git commit -m "merge: synchronize strict quality PR with current main"
             git push origin "HEAD:refs/heads/$REF_NAME"
             echo "updated=true" >> "$GITHUB_OUTPUT"
