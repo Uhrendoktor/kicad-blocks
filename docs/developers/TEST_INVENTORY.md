@@ -7,8 +7,8 @@ is listed individually with its assertion purpose. Files that are executable acc
 programs rather than pytest modules are listed separately and must remain explicitly
 registered in STANDALONE_TESTS in scripts/test_inventory.py.
 
-- Pytest modules: **31**
-- Individually inventoried pytest cases: **352**
+- Pytest modules: **41**
+- Individually inventoried pytest cases: **446**
 - Standalone acceptance runners: **7**
 - Additional CI validation runners: **2**
 
@@ -24,6 +24,7 @@ Real Tk interaction contracts for the Add PCB layout dialog.
 | test_add_pcb_layout_switches_to_existing_file_and_uses_named_implementation | Exercises add pcb layout switches to existing file and uses named implementation. |
 | test_add_pcb_layout_rejects_missing_name_and_keeps_dialog_open | Exercises add pcb layout rejects missing name and keeps dialog open. |
 | test_add_pcb_layout_cancel_returns_none_without_creating_board | Exercises add pcb layout cancel returns none without creating board. |
+| test_add_pcb_layout_rejects_invalid_existing_file_then_recovers | Exercises add pcb layout rejects invalid existing file then recovers. |
 
 ### tests/test_auto_dependencies.py
 
@@ -101,6 +102,45 @@ Core block model, facade generation, parameter handling, library registration, c
 | test_nested_symbol_library_table_uses_relative_path_and_can_retarget | Exercises nested symbol library table uses relative path and can retarget. |
 | test_nested_dependencies_are_recorded_and_cycles_rejected | Exercises nested dependencies are recorded and cycles rejected. |
 
+### tests/test_create_block_form_contracts.py
+
+Real Tk interaction contracts for the Create Functional Block form.
+
+| Test | Purpose |
+| --- | --- |
+| test_create_block_form_submits_name_and_optional_description | Creates block form submits name and optional description. |
+| test_create_block_form_rejects_blank_name_and_recovers | Creates block form rejects blank name and recovers. |
+| test_create_block_form_cancel_returns_none_without_creating_block | Creates block form cancel returns none without creating block. |
+| test_create_block_form_escape_key_cancels | Creates block form escape key cancels. |
+
+### tests/test_dialog_callsite_contracts.py
+
+Dialog-path contracts for native Tk message and text-entry prompts.
+
+| Test | Purpose |
+| --- | --- |
+| test_profile_wizard_accepts_name_description_variant_parameters_and_layout | Exercises profile wizard accepts name description variant parameters and layout. |
+| test_profile_wizard_decline_returns_empty_without_opening_text_prompts | Exercises profile wizard decline returns empty without opening text prompts. |
+| test_profile_wizard_cancel_discards_an_incomplete_profile | Exercises profile wizard cancel discards an incomplete profile. |
+| test_profile_wizard_blank_name_warns_and_does_not_create_partial_profile | Exercises profile wizard blank name warns and does not create partial profile. |
+| test_profile_wizard_rejects_unknown_variant_before_requesting_overrides | Exercises profile wizard rejects unknown variant before requesting overrides. |
+| test_layout_selector_returns_the_user_selected_layout | Exercises layout selector returns the user selected layout. |
+| test_layout_selector_cancel_and_invalid_choice_are_distinct | Exercises layout selector cancel and invalid choice are distinct. |
+| test_library_validation_uses_the_correct_warning_dialog | Exercises library validation uses the correct warning dialog. |
+| test_successful_library_validation_does_not_show_a_warning_dialog | Exercises successful library validation does not show a warning dialog. |
+| test_validation_report_dialog_cancel_skips_all_library_validation | Exercises validation report dialog cancel skips all library validation. |
+
+### tests/test_dialog_inventory.py
+
+Regression tests for the native message-dialog call-site inventory.
+
+| Test | Purpose |
+| --- | --- |
+| test_catalog_tracks_every_native_messagebox_and_simpledialog_call_site | Exercises catalog tracks every native messagebox and simpledialog call site. |
+| test_dialog_inventory_distinguishes_tested_partial_and_uncovered_paths | Exercises dialog inventory distinguishes tested partial and uncovered paths. |
+| test_every_tested_dialog_call_site_references_existing_behavior_evidence | Exercises every tested dialog call site references existing behavior evidence. |
+| test_committed_dialog_inventory_matches_the_ast_catalog | Exercises committed dialog inventory matches the ast catalog. |
+
 ### tests/test_dispatch_release.py
 
 Release-workflow dispatch decisions, idempotency when assets already exist, and tag/source-commit mismatch rejection.
@@ -168,11 +208,40 @@ Hierarchical-sheet selection and extraction, interface pin/electrical-shape sync
 | test_selected_hierarchical_sheet_resolves_its_sheetfile | Exercises selected hierarchical sheet resolves its sheetfile. |
 | test_create_block_derives_facade_pins_from_all_hierarchical_labels | Creates block derives facade pins from all hierarchical labels. |
 | test_publish_syncs_label_name_and_electrical_shape_to_facade | Publishes syncs label name and electrical shape to facade. |
+| test_publish_keeps_existing_pin_electrical_type_as_bare_atom | Publishes keeps existing pin electrical type as bare atom. |
+| test_publish_updates_project_facade_catalog_when_implementation_pins_are_added_and_removed | Publishes updates project facade catalog when implementation pins are added and removed. |
 | test_publish_preserves_symbol_editor_body_artwork_while_syncing_pins | Publishes preserves symbol editor body artwork while syncing pins. |
 | test_publish_rejects_concurrent_catalog_and_block_facade_edits | Publishes rejects concurrent catalog and block facade edits. |
 | test_publish_rejects_an_extracted_block_with_no_hierarchical_labels | Publishes rejects an extracted block with no hierarchical labels. |
 | test_conflicting_duplicate_hierarchical_label_shapes_are_rejected | Exercises conflicting duplicate hierarchical label shapes are rejected. |
 | test_nested_hierarchical_sheet_tree_is_copied_and_kept_internal | Exercises nested hierarchical sheet tree is copied and kept internal. |
+
+### tests/test_functional_block_picker_contracts.py
+
+Real Tk interaction contracts for the Functional Block placement chooser.
+
+| Test | Purpose |
+| --- | --- |
+| test_functional_block_picker_filters_results_and_places_selected_record | Exercises functional block picker filters results and places selected record. |
+| test_functional_block_picker_profile_applies_variant_and_returns_typed_values | Exercises functional block picker profile applies variant and returns typed values. |
+| test_functional_block_picker_manual_variant_edit_switches_profile_to_custom | Exercises functional block picker manual variant edit switches profile to custom. |
+| test_functional_block_picker_empty_search_disables_selectors_and_cancel_returns_none | Exercises functional block picker empty search disables selectors and cancel returns none. |
+| test_functional_block_picker_escape_cancels_and_empty_library_is_rejected | Exercises functional block picker escape cancels and empty library is rejected. |
+
+### tests/test_implementation_details_contracts.py
+
+Real Tk interaction contracts for the Implementation details dialog.
+
+| Test | Purpose |
+| --- | --- |
+| test_existing_schematic_source_is_returned_and_non_create_mode_has_no_mode_selector | Exercises existing schematic source is returned and non create mode has no mode selector. |
+| test_blank_selector_validation_keeps_form_open_and_recovers | Exercises blank selector validation keeps form open and recovers. |
+| test_browse_button_uses_kicad_schematic_picker_and_accepts_selected_file | Exercises browse button uses kicad schematic picker and accepts selected file. |
+| test_invalid_source_extension_is_rejected_then_browse_recovers | Exercises invalid source extension is rejected then browse recovers. |
+| test_create_blank_schematic_mode_returns_a_valid_temporary_source | Creates blank schematic mode returns a valid temporary source. |
+| test_copy_existing_implementation_uses_selected_library_variant | Exercises copy existing implementation uses selected library variant. |
+| test_missing_copy_source_is_rejected_and_can_switch_to_existing_variant | Exercises missing copy source is rejected and can switch to existing variant. |
+| test_cancel_and_escape_leave_library_sources_unchanged | Exercises cancel and escape leave library sources unchanged. |
 
 ### tests/test_implementation_manager_contracts.py
 
@@ -186,6 +255,13 @@ Real Tk contracts for the implementation variants manager.
 | test_remove_is_blocked_when_an_implementation_is_referenced_by_a_profile | Exercises remove is blocked when an implementation is referenced by a profile. |
 | test_edit_variant_renames_selector_and_preserves_implementation_file | Exercises edit variant renames selector and preserves implementation file. |
 | test_add_variant_save_failure_can_be_retried_with_save_and_close | Exercises add variant save failure can be retried with save and close. |
+| test_implementation_manager_selection_controls_follow_row_state | Exercises implementation manager selection controls follow row state. |
+| test_edit_default_row_returns_default_schematic_and_closes_manager | Exercises edit default row returns default schematic and closes manager. |
+| test_remove_confirmation_cancel_preserves_manifest_row_and_source_file | Exercises remove confirmation cancel preserves manifest row and source file. |
+| test_close_confirmation_can_keep_pending_changes_or_discard_them | Exercises close confirmation can keep pending changes or discard them. |
+| test_add_button_routes_to_create_mode_details_and_persists_source | Exercises add button routes to create mode details and persists source. |
+| test_add_variant_duplicate_value_reports_error_and_preserves_manifest | Exercises add variant duplicate value reports error and preserves manifest. |
+| test_edit_variant_duplicate_value_reports_error_and_preserves_manifest | Exercises edit variant duplicate value reports error and preserves manifest. |
 
 ### tests/test_install.py
 
@@ -203,6 +279,44 @@ Installer Python/KiCad/platform compatibility, plugin metadata and dependency ch
 | test_installer_allows_kiCad_10_99_nightly_and_11_or_newer | Exercises installer allows kiCad 10 99 nightly and 11 or newer. |
 | test_installer_rejects_unsupported_platform_and_architecture | Exercises installer rejects unsupported platform and architecture. |
 | test_installer_rejects_invalid_kicad_version_format | Exercises installer rejects invalid kicad version format. |
+
+### tests/test_instance_configuration_contracts.py
+
+Real Tk execute/result contracts for instance configuration.
+
+| Test | Purpose |
+| --- | --- |
+| test_profile_selection_updates_variant_parameter_and_layout_then_saves_one_ipc_edit | Exercises profile selection updates variant parameter and layout then saves one ipc edit. |
+| test_manual_parameter_edit_changes_profile_to_custom_and_saves | Exercises manual parameter edit changes profile to custom and saves. |
+| test_invalid_parameter_shows_error_without_ipc_edit_then_recovers | Exercises invalid parameter shows error without ipc edit then recovers. |
+| test_cancel_and_escape_discard_pending_instance_changes | Exercises cancel and escape discard pending instance changes. |
+| test_failed_instance_update_rolls_back_field_values_and_keeps_form_open | Exercises failed instance update rolls back field values and keeps form open. |
+| test_missing_required_configuration_field_fails_before_opening_dialog | Exercises missing required configuration field fails before opening dialog. |
+
+### tests/test_library_and_pcb_manager_contracts.py
+
+Real Tk interaction contracts for library and PCB layout managers.
+
+| Test | Purpose |
+| --- | --- |
+| test_manage_libraries_add_existing_registers_and_refreshes_the_real_tree | Exercises manage libraries add existing registers and refreshes the real tree. |
+| test_manage_libraries_create_makes_and_registers_new_folder | Exercises manage libraries create makes and registers new folder. |
+| test_manage_libraries_unregister_removes_registration_but_preserves_files | Exercises manage libraries unregister removes registration but preserves files. |
+| test_manage_libraries_confirmation_cancel_keeps_registration | Exercises manage libraries confirmation cancel keeps registration. |
+| test_manage_libraries_set_default_persists_selected_library | Exercises manage libraries set default persists selected library. |
+| test_manage_libraries_change_folder_is_transactional_and_keeps_old_data | Exercises manage libraries change folder is transactional and keeps old data. |
+| test_manage_libraries_environment_override_and_empty_selection_states | Exercises manage libraries environment override and empty selection states. |
+| test_pcb_layout_manager_updates_default_and_variant_associations_then_removes | Exercises pcb layout manager updates default and variant associations then removes. |
+| test_pcb_layout_manager_add_and_save_failure_can_be_retried | Exercises pcb layout manager add and save failure can be retried. |
+| test_pcb_layout_manager_cancelled_remove_preserves_board_and_manifest | Exercises pcb layout manager cancelled remove preserves board and manifest. |
+| test_pcb_layout_manager_disables_selection_actions_when_empty | Exercises pcb layout manager disables selection actions when empty. |
+| test_pcb_layout_manager_duplicate_name_reports_error_without_mutating_manifest | Exercises pcb layout manager duplicate name reports error without mutating manifest. |
+| test_manage_libraries_add_registration_error_keeps_existing_roots | Exercises manage libraries add registration error keeps existing roots. |
+| test_manage_libraries_create_rejects_path_like_folder_name | Exercises manage libraries create rejects path like folder name. |
+| test_manage_libraries_create_filesystem_error_keeps_existing_folder | Exercises manage libraries create filesystem error keeps existing folder. |
+| test_manage_libraries_change_folder_rolls_back_after_old_root_removal_fails | Exercises manage libraries change folder rolls back after old root removal fails. |
+| test_manage_libraries_unregister_error_keeps_root_registered | Exercises manage libraries unregister error keeps root registered. |
+| test_manage_libraries_set_default_error_preserves_previous_default | Exercises manage libraries set default error preserves previous default. |
 
 ### tests/test_library_browser.py
 
@@ -289,6 +403,17 @@ Reusable interaction contracts for the production Functional Block Library.
 | test_open_pcb_chooser_opens_the_selected_layout | Exercises open pcb chooser opens the selected layout. |
 | test_open_pcb_chooser_cancel_closes_without_opening | Exercises open pcb chooser cancel closes without opening. |
 | test_open_pcb_chooser_manage_layouts_opens_manager_and_refreshes | Exercises open pcb chooser manage layouts opens manager and refreshes. |
+| test_library_browser_refresh_error_keeps_existing_records | Exercises library browser refresh error keeps existing records. |
+| test_place_block_reload_warning_does_not_start_native_placement | Exercises place block reload warning does not start native placement. |
+| test_place_block_registration_failure_shows_error_and_keeps_browser_open | Exercises place block registration failure shows error and keeps browser open. |
+| test_open_implementation_registration_failure_shows_error | Exercises open implementation registration failure shows error. |
+| test_open_default_implementation_launch_failure_shows_error | Exercises open default implementation launch failure shows error. |
+| test_open_named_implementation_launch_failure_shows_error_after_chooser | Exercises open named implementation launch failure shows error after chooser. |
+| test_edit_facade_failure_shows_recoverable_error | Exercises edit facade failure shows recoverable error. |
+| test_edit_facade_without_native_handoff_shows_guidance | Exercises edit facade without native handoff shows guidance. |
+| test_manage_pcb_layouts_failure_shows_error_and_preserves_browser | Exercises manage pcb layouts failure shows error and preserves browser. |
+| test_manage_implementations_failure_shows_error_and_preserves_browser | Exercises manage implementations failure shows error and preserves browser. |
+| test_open_pcb_layout_launch_failure_shows_error_after_chooser | Exercises open pcb layout launch failure shows error after chooser. |
 
 ### tests/test_library_gitignore.py
 
@@ -313,6 +438,20 @@ Machine-readable library validation reports, asset hashes/revisions, corrupt or 
 | test_corrupt_manifest_is_reported_and_does_not_hide_other_blocks | Exercises corrupt manifest is reported and does not hide other blocks. |
 | test_full_validation_runs_recursive_erc_when_kicad_cli_is_available | Exercises full validation runs recursive erc when kicad cli is available. |
 | test_empty_library_is_valid | Exercises empty library is valid. |
+
+### tests/test_native_file_dialog_contracts.py
+
+Real Tk wrapper contracts for native file and directory chooser hand-offs.
+
+| Test | Purpose |
+| --- | --- |
+| test_open_kicad_file_uses_existing_file_parent_name_filter_and_parent | Exercises open kicad file uses existing file parent name filter and parent. |
+| test_open_kicad_file_falls_back_to_cwd_for_missing_initial_path | Exercises open kicad file falls back to cwd for missing initial path. |
+| test_open_kicad_file_cancel_returns_none | Exercises open kicad file cancel returns none. |
+| test_save_file_uses_suggested_name_extension_filter_and_parent | Exercises save file uses suggested name extension filter and parent. |
+| test_save_file_without_suffix_uses_directory_and_cancel_returns_none | Exercises save file without suffix uses directory and cancel returns none. |
+| test_directory_picker_uses_existing_file_parent_and_requires_existing_directory | Exercises directory picker uses existing file parent and requires existing directory. |
+| test_directory_picker_falls_back_to_cwd_and_cancel_returns_none | Exercises directory picker falls back to cwd and cancel returns none. |
 
 ### tests/test_operations.py
 
@@ -425,6 +564,18 @@ Regression tests for the AST-based Any/object policy, annotation-debt ratchet, a
 | test_different_bodies_and_class_fixture_scopes_are_not_duplicates | Exercises different bodies and class fixture scopes are not duplicates. |
 | test_reports_empty_and_pass_only_test_bodies | Reports empty and pass only test bodies. |
 
+### tests/test_record_picker_contracts.py
+
+Real Tk execute/result contracts for the searchable library record picker.
+
+| Test | Purpose |
+| --- | --- |
+| test_record_picker_filters_and_selects_the_matching_record | Exercises record picker filters and selects the matching record. |
+| test_record_picker_empty_search_disables_select_and_cancel_returns_none | Exercises record picker empty search disables select and cancel returns none. |
+| test_record_picker_down_and_return_choose_the_highlighted_record | Exercises record picker down and return choose the highlighted record. |
+| test_record_picker_double_click_selects_the_clicked_record | Exercises record picker double click selects the clicked record. |
+| test_record_picker_empty_and_single_record_fast_paths | Exercises record picker empty and single record fast paths. |
+
 ### tests/test_release_package.py
 
 Deterministic release archive contents, installation from the extracted package, user-data path selection, and pinned binding URL consistency.
@@ -535,6 +686,19 @@ Tests for the generated screen inventory and its honesty about coverage.
 | test_committed_inventory_matches_the_catalog | Exercises committed inventory matches the catalog. |
 | test_catalog_rejects_duplicate_screen_ids | Exercises catalog rejects duplicate screen ids. |
 | test_catalog_rejects_unregistered_screenshot_assets | Exercises catalog rejects unregistered screenshot assets. |
+
+### tests/test_uncovered_dialog_contracts.py
+
+Direct behavior contracts for previously uncovered native dialog call sites.
+
+| Test | Purpose |
+| --- | --- |
+| test_single_pcb_layout_prompts_map_anchor_rotation_and_confirms_open | Exercises single pcb layout prompts map anchor rotation and confirms open. |
+| test_single_pcb_layout_cancelling_any_mapping_prompt_stops_before_merge | Exercises single pcb layout cancelling any mapping prompt stops before merge. |
+| test_batch_pcb_layout_prompts_all_instances_and_confirms_open | Exercises batch pcb layout prompts all instances and confirms open. |
+| test_batch_pcb_layout_cancelling_any_mapping_prompt_prevents_merge | Exercises batch pcb layout cancelling any mapping prompt prevents merge. |
+| test_run_action_missing_schematic_shows_attention_warning_and_closes_root | Exercises run action missing schematic shows attention warning and closes root. |
+| test_run_action_unexpected_failure_shows_error_and_closes_root | Exercises run action unexpected failure shows error and closes root. |
 
 ### tests/test_validate_docs.py
 
