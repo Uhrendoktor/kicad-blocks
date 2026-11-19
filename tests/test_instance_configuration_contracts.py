@@ -7,6 +7,7 @@ import sys
 from collections.abc import Callable
 from pathlib import Path
 from types import SimpleNamespace
+from typing import cast
 from unittest.mock import Mock
 from typing import cast
 
@@ -248,7 +249,7 @@ def test_profile_selection_updates_variant_parameter_and_layout_then_saves_one_i
 
     def select_profile_and_save(dialog: Toplevel) -> None:
         _assert_initial_state(context, dialog)
-        profile = context.require_widget("instance-configuration.profile")
+        profile = context.require_combobox("instance-configuration.profile")
         profile.set(PROFILE_1V8)
         profile.event_generate("<<ComboboxSelected>>")
         root.update_idletasks()
@@ -398,7 +399,7 @@ def test_cancel_and_escape_discard_pending_instance_changes(monkeypatch: MonkeyP
 
     def escape(dialog: Toplevel) -> None:
         _assert_initial_state(context, dialog)
-        target = context.require_widget("instance-configuration.profile")
+        target = context.require_combobox("instance-configuration.profile")
         target.focus_force()
         root.update()
         assert root.focus_get() is target
