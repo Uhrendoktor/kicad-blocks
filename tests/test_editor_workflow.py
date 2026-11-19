@@ -123,7 +123,7 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
         self.assertIn("In Progress", project_catalog.read_text(encoding="utf-8"))
         reload_library.assert_not_called()
 
-    def test_create_block_from_selected_sheet_never_prompts_for_manual_pins(self):
+    def test_create_block_from_selected_sheet_is_one_click_and_names_from_source(self):
         source = self.project / "power_stage.kicad_sch"
         source.write_text("(kicad_sch)", encoding="utf-8")
         selection = '''(sheet
@@ -134,39 +134,49 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
         schematic = SimpleNamespace(
             get_selection_as_string=Mock(return_value=selection)
         )
-        messagebox = SimpleNamespace(showinfo=Mock())
         with (
-            patch.object(
-                plugin_actions,
-                "_ask_create_block_details",
-                return_value=("Power Stage", "Power stage description"),
-            ) as details,
-            patch.object(plugin_actions, "messagebox", messagebox),
+            patch.object(plugin_actions, "_ask_create_block_details") as details,
             patch.object(plugin_actions, "create_block", return_value=self.block) as create,
             patch.object(plugin_actions, "_register_block", return_value=self.block) as register,
         ):
             plugin_actions._create_and_place(
-                self.library,
-                schematic,
-                self.kicad,
-                self.project,
-                self.parent,
-                "0x100",
+                self.library, schematic, self.kicad, self.project, self.parent, "0x100"
             )
 
-        details.assert_called_once_with(self.parent, source.resolve())
+        details.assert_not_called()
         create.assert_called_once_with(
             self.library,
             "Power Stage",
             source_schematic=source.resolve(),
             source_project_name=self.project.name,
             source_sheet_uuid="dddddddd-dddd-4ddd-8ddd-dddddddddddd",
-            description="Power stage description",
+            description="",
         )
         register.assert_called_once_with(
             self.project, self.block, self.kicad, [self.library.resolve()]
         )
-        messagebox.showinfo.assert_not_called()
+
+    def test_create_block_chooses_collision_safe_name_without_prompting(self):
+        source = self.project / "power_stage.kicad_sch"
+        source.write_text("(kicad_sch)", encoding="utf-8")
+        selection = '''(sheet
+            (property "Sheetname" "Power Stage" (at 100 100 0) (effects (font (size 1 1))))
+            (property "Sheetfile" "power_stage.kicad_sch" (at 100 100 0) (effects (font (size 1 1))))
+            (uuid "dddddddd-dddd-4ddd-8ddd-dddddddddddd")
+        )'''
+        schematic = SimpleNamespace(get_selection_as_string=Mock(return_value=selection))
+        existing = [SimpleNamespace(name="Power Stage"), SimpleNamespace(name="Power Stage (2)")]
+        with (
+            patch.object(plugin_actions, "_list_library_records", return_value=existing),
+            patch.object(plugin_actions, "_ask_create_block_details") as details,
+            patch.object(plugin_actions, "create_block", return_value=self.block) as create,
+            patch.object(plugin_actions, "_register_block", return_value=self.block),
+        ):
+            plugin_actions._create_and_place(
+                self.library, schematic, self.kicad, self.project, self.parent
+            )
+        details.assert_not_called()
+        self.assertEqual(create.call_args.args[:2], (self.library, "Power Stage (3)"))
 
 
     def test_create_block_rolls_back_new_block_when_project_registration_fails(self):
@@ -193,12 +203,8 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
         symbol_table.write_text("original table", encoding="utf-8")
 
         with (
-            patch.object(
-                plugin_actions,
-                "_ask_create_block_details",
-                return_value=("Registration Failure Block", "Rollback test"),
-            ),
-            patch.object(plugin_actions, "messagebox", self.messagebox),
+            patch.object(plugin_actions, "_ask_create_block_details") as details,
+            patch.object(plugin_actions, "_list_library_records", return_value=[]),
             patch.object(plugin_actions, "create_block", return_value=created),
             patch.object(
                 plugin_actions,
@@ -211,11 +217,11 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
                 self.library, schematic, self.kicad, self.project, self.parent
             )
 
+        details.assert_not_called()
         self.assertFalse(created.path.exists())
         self.assertTrue(self.block.path.is_dir())
         self.assertEqual(catalog.read_text(encoding="utf-8"), "original catalog")
         self.assertEqual(symbol_table.read_text(encoding="utf-8"), "original table")
-        self.messagebox.showinfo.assert_not_called()
 
     def test_create_block_prefers_typed_sheet_symbol_over_serialized_selection(self):
         source = self.project / "power_stage.kicad_sch"
@@ -237,12 +243,8 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
             ),
         )
         with (
-            patch.object(
-                plugin_actions,
-                "_ask_create_block_details",
-                return_value=("Power Stage", "Typed IPC selection"),
-            ) as details,
-            patch.object(plugin_actions, "messagebox", self.messagebox),
+            patch.object(plugin_actions, "_ask_create_block_details") as details,
+            patch.object(plugin_actions, "_list_library_records", return_value=[]),
             patch.object(plugin_actions, "create_block", return_value=self.block) as create,
             patch.object(plugin_actions, "_register_block", return_value=self.block),
         ):
@@ -250,14 +252,14 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
                 self.library, schematic, self.kicad, self.project, self.parent
             )
 
-        details.assert_called_once_with(self.parent, source.resolve())
+        details.assert_not_called()
         create.assert_called_once_with(
             self.library,
             "Power Stage",
             source_schematic=source.resolve(),
             source_project_name=self.project.name,
             source_sheet_uuid=selected_uuid,
-            description="Typed IPC selection",
+            description="",
         )
         schematic.get_selection_as_string.assert_not_called()
 
@@ -330,25 +332,22 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
             ),
         )
         with (
-            patch.object(
-                plugin_actions,
-                "_ask_create_block_details",
-                return_value=("Power Stage", "Empty selection"),
-            ),
-            patch.object(plugin_actions, "messagebox", self.messagebox),
+            patch.object(plugin_actions, "_ask_create_block_details") as details,
+            patch.object(plugin_actions, "_list_library_records", return_value=[]),
             patch.object(plugin_actions, "create_block", return_value=self.block) as create,
             patch.object(plugin_actions, "_register_block", return_value=self.block),
         ):
             plugin_actions._create_and_place(
                 self.library, schematic, self.kicad, self.project, self.parent
             )
+        details.assert_not_called()
         create.assert_called_once_with(
             self.library,
             "Power Stage",
             source_schematic=source.resolve(),
             source_project_name=self.project.name,
             source_sheet_uuid="sheet-id",
-            description="Empty selection",
+            description="",
         )
 
     def test_create_block_rejects_empty_sheetfile_before_creating_anything(self):
