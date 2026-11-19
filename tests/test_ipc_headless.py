@@ -321,10 +321,24 @@ def main() -> None:
             # A same-topology electrical edit is safe to refresh on already
             # placed facades: change GND's electrical type while preserving
             # its name, number, unit, body style, and connection coordinate.
+            current_x1 = next(
+                item for item in schematic.get_symbols() if item.reference == "X1"
+            )
             original_parent_pin_names = {
-                pin.name for pin in instance.definition.pins
+                pin.name for pin in current_x1.definition.pins
             }
-            if original_parent_pin_names != {"VIN", "GND", "VOUT"}:
+            original_parent_pin_ids = {
+                str(pin.number): str(
+                    getattr(getattr(pin, "id", None), "value", None)
+                    or getattr(pin, "id", "")
+                )
+                for pin in current_x1.definition.pins
+            }
+            if (
+                original_parent_pin_names != {"VIN", "GND", "VOUT"}
+                or not all(original_parent_pin_ids.values())
+                or len(set(original_parent_pin_ids.values())) != 3
+            ):
                 raise AssertionError(
                     f"Unexpected original parent facade pins: {original_parent_pin_names!r}"
                 )
@@ -350,6 +364,18 @@ def main() -> None:
                 )
             if str(parent_x1.id) != original_instance_id or parent_x1.reference != "X1":
                 raise AssertionError("Safe facade refresh changed the existing KIID/reference.")
+            safe_pin_ids = {
+                str(pin.number): str(
+                    getattr(getattr(pin, "id", None), "value", None)
+                    or getattr(pin, "id", "")
+                )
+                for pin in parent_x1.definition.pins
+            }
+            if safe_pin_ids != original_parent_pin_ids:
+                raise AssertionError(
+                    "Safe facade refresh changed the placed pin KIIDs and may have detached "
+                    f"existing wires: before={original_parent_pin_ids!r}, after={safe_pin_ids!r}"
+                )
 
             # A pin-topology change (remove GND, add ENABLE) is deliberately
             # not applied to existing instances; the UI must report migration.
@@ -379,6 +405,18 @@ def main() -> None:
                 raise AssertionError("A topology-changing publish altered X1 without migration.")
             if str(parent_x1.id) != original_instance_id:
                 raise AssertionError("A topology-changing publish changed the existing KIID.")
+            topology_pin_ids = {
+                str(pin.number): str(
+                    getattr(getattr(pin, "id", None), "value", None)
+                    or getattr(pin, "id", "")
+                )
+                for pin in parent_x1.definition.pins
+            }
+            if topology_pin_ids != original_parent_pin_ids:
+                raise AssertionError(
+                    "A topology-changing publish altered the existing pin identities; "
+                    "the instance must be left intact for explicit migration."
+                )
 
             # Verify the project library is current and new placements receive
             # its regenerated pins while the old placed instance stays intact.
