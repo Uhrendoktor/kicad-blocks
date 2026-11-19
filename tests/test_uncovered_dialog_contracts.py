@@ -5,6 +5,15 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from kicad_blocks.pcb_types import (
+        BatchBlockLayoutMergeResult,
+        BatchBlockLayoutPlacementSource,
+        BlockLayoutMergeResult,
+        BlockLayoutPlacementSource,
+    )
 
 import pytest
 
@@ -12,12 +21,6 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "plugin" / "kicad-blocks"))
 
 from kicad_blocks import plugin as plugin_actions
-from kicad_blocks.pcb_types import (
-    BatchBlockLayoutMergeResult,
-    BatchBlockLayoutPlacementSource,
-    BlockLayoutMergeResult,
-    BlockLayoutPlacementSource,
-)
 
 
 # Native dialog call-site contracts patch the functions and do not need Tk installed.
