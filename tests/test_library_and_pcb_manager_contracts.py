@@ -122,6 +122,7 @@ def _run_modal[T](spec: _ModalInvocation[T]) -> T:
         raise callback_errors[0]
     return result
 
+
 def _click(
     context: UiTestContext,
     contract_id: str,
@@ -139,9 +140,7 @@ def _click(
     ).run(context)
 
 
-def _select_path(
-    context: UiTestContext, tree_id: str, path: Path, *, path_column: str
-) -> str:
+def _select_path(context: UiTestContext, tree_id: str, path: Path, *, path_column: str) -> str:
     tree = context.require_treeview(tree_id)
     wanted = str(path.expanduser().resolve())
     row_id = next(iid for iid in tree.get_children() if str(tree.set(iid, path_column)) == wanted)
@@ -153,9 +152,7 @@ def _select_path(
     return row_id
 
 
-def _library_fixture(
-    monkeypatch: MonkeyPatch, tmp_path: Path
-) -> tuple[Path, Path, Path]:
+def _library_fixture(monkeypatch: MonkeyPatch, tmp_path: Path) -> tuple[Path, Path, Path]:
     settings = tmp_path / "settings.json"
     monkeypatch.setattr(repository, "settings_file", lambda: settings)
     monkeypatch.setenv("KICAD_BLOCKS_LIBRARY", "")

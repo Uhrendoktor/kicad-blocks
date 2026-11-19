@@ -19,7 +19,9 @@ if TYPE_CHECKING:
     from tkinter import Canvas, Event as TkEvent, Menu, Misc, Tk, Toplevel
     from tkinter.ttk import Button, Combobox, Entry, Notebook, Panedwindow, Treeview
 else:
-    MonkeyPatch = TkEvent = Canvas = Menu = Misc = Tk = Toplevel = Button = Combobox = Entry = Notebook = Panedwindow = Treeview = object
+    MonkeyPatch = TkEvent = Canvas = Menu = Misc = Tk = Toplevel = Button = Combobox = Entry = (
+        Notebook
+    ) = Panedwindow = Treeview = object
 
 
 class MenuEntry:

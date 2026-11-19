@@ -35,7 +35,9 @@ def _parent() -> _ParentHandle:
     return _ParentHandle()
 
 
-def test_open_kicad_file_uses_existing_file_parent_name_filter_and_parent(monkeypatch: MonkeyPatch, tmp_path: Path):
+def test_open_kicad_file_uses_existing_file_parent_name_filter_and_parent(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+):
     source_dir = tmp_path / "schematics"
     source_dir.mkdir()
     initial = source_dir / "implementation.kicad_sch"
@@ -73,7 +75,9 @@ def test_open_kicad_file_uses_existing_file_parent_name_filter_and_parent(monkey
         parent.destroy()
 
 
-def test_open_kicad_file_falls_back_to_cwd_for_missing_initial_path(monkeypatch: MonkeyPatch, tmp_path: Path):
+def test_open_kicad_file_falls_back_to_cwd_for_missing_initial_path(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+):
     monkeypatch.chdir(tmp_path)
     parent = _parent()
     calls = []
@@ -127,7 +131,9 @@ def test_open_kicad_file_cancel_returns_none(monkeypatch: MonkeyPatch, tmp_path:
         parent.destroy()
 
 
-def test_save_file_uses_suggested_name_extension_filter_and_parent(monkeypatch: MonkeyPatch, tmp_path: Path):
+def test_save_file_uses_suggested_name_extension_filter_and_parent(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+):
     suggested = tmp_path / "release" / "functional_block.kicad_sch"
     suggested.parent.mkdir(parents=True, exist_ok=True)
     parent = _parent()
@@ -166,7 +172,9 @@ def test_save_file_uses_suggested_name_extension_filter_and_parent(monkeypatch: 
         parent.destroy()
 
 
-def test_save_file_without_suffix_uses_directory_and_cancel_returns_none(monkeypatch: MonkeyPatch, tmp_path: Path):
+def test_save_file_without_suffix_uses_directory_and_cancel_returns_none(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+):
     monkeypatch.chdir(tmp_path)
     parent = _parent()
     calls = []
@@ -228,7 +236,9 @@ def test_directory_picker_uses_existing_file_parent_and_requires_existing_direct
         parent.destroy()
 
 
-def test_directory_picker_falls_back_to_cwd_and_cancel_returns_none(monkeypatch: MonkeyPatch, tmp_path: Path):
+def test_directory_picker_falls_back_to_cwd_and_cancel_returns_none(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+):
     monkeypatch.chdir(tmp_path)
     parent = _parent()
     calls = []

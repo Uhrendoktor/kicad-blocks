@@ -125,9 +125,7 @@ def _run_picker(
     return result
 
 
-def _click(
-    context: UiTestContext, contract_id: str, label: str, *, closes: bool = False
-) -> None:
+def _click(context: UiTestContext, contract_id: str, label: str, *, closes: bool = False) -> None:
     ButtonContract(
         contract_id=contract_id,
         expected_action=None,
@@ -151,7 +149,9 @@ def _assert_initial_state(context: UiTestContext) -> None:
     assert context.require_button("record-picker.action.cancel").instate(["!disabled"])
 
 
-def test_record_picker_filters_and_selects_the_matching_record(monkeypatch: MonkeyPatch, tmp_path: Path):
+def test_record_picker_filters_and_selects_the_matching_record(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+):
     records = _make_records(tmp_path)
     root, context = _new_root(monkeypatch)
 
@@ -189,7 +189,9 @@ def test_record_picker_filters_and_selects_the_matching_record(monkeypatch: Monk
         root.destroy()
 
 
-def test_record_picker_empty_search_disables_select_and_cancel_returns_none(monkeypatch: MonkeyPatch, tmp_path: Path):
+def test_record_picker_empty_search_disables_select_and_cancel_returns_none(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+):
     records = _make_records(tmp_path)
     root, context = _new_root(monkeypatch)
 
@@ -224,7 +226,9 @@ def test_record_picker_empty_search_disables_select_and_cancel_returns_none(monk
         root.destroy()
 
 
-def test_record_picker_down_and_return_choose_the_highlighted_record(monkeypatch: MonkeyPatch, tmp_path: Path):
+def test_record_picker_down_and_return_choose_the_highlighted_record(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+):
     records = _make_records(tmp_path)
     root, context = _new_root(monkeypatch)
 
@@ -256,7 +260,9 @@ def _find_dialog_exists(root: Tk) -> bool:
     )
 
 
-def test_record_picker_double_click_selects_the_clicked_record(monkeypatch: MonkeyPatch, tmp_path: Path):
+def test_record_picker_double_click_selects_the_clicked_record(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+):
     records = _make_records(tmp_path)
     root, context = _new_root(monkeypatch)
 
