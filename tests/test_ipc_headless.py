@@ -422,7 +422,7 @@ def main() -> None:
                 "Runtime-Registered Block",
                 parse_pins("A:input, B:output"),
             )
-            late_block = _register_block(project_dir, late_block, kicad)
+            late_block = _register_block(project_dir, late_block, kicad, [library_root])
             late_instance = schematic.place_symbol_from_library(
                 f"{late_block.manifest['library_nickname']}:{late_block.manifest['symbol_name']}",
                 Vector2.from_xy_mm(140.0, 100.0),
