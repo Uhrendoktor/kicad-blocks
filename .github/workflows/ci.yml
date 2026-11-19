@@ -273,6 +273,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          export PATH="${RUNNER_TEMP}/kicad-blocks-venv/bin:$PATH"
           PY="${RUNNER_TEMP}/kicad-blocks-venv/bin/python"
           "$PY" scripts/check_python_quality.py
           "$PY" scripts/test_inventory.py --check
