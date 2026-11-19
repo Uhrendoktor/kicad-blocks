@@ -65,7 +65,9 @@ def _profile_inputs() -> tuple[
     )
 
 
-def test_profile_wizard_accepts_name_description_variant_parameters_and_layout(monkeypatch: MonkeyPatch) -> None:
+def test_profile_wizard_accepts_name_description_variant_parameters_and_layout(
+    monkeypatch: MonkeyPatch,
+) -> None:
     parent = cast(Misc, object())
     parameters, variants, layouts = _profile_inputs()
     answers = iter(
@@ -120,7 +122,9 @@ def test_profile_wizard_accepts_name_description_variant_parameters_and_layout(m
     assert "Add another profile?" in confirmation_prompts[1][1]
 
 
-def test_profile_wizard_decline_returns_empty_without_opening_text_prompts(monkeypatch: MonkeyPatch) -> None:
+def test_profile_wizard_decline_returns_empty_without_opening_text_prompts(
+    monkeypatch: MonkeyPatch,
+) -> None:
     prompts = []
     monkeypatch.setattr(plugin_actions.messagebox, "askyesno", lambda *_args, **_kwargs: False)
     monkeypatch.setattr(
@@ -152,7 +156,9 @@ def test_profile_wizard_cancel_discards_an_incomplete_profile(monkeypatch: Monke
     ]
 
 
-def test_profile_wizard_blank_name_warns_and_does_not_create_partial_profile(monkeypatch: MonkeyPatch) -> None:
+def test_profile_wizard_blank_name_warns_and_does_not_create_partial_profile(
+    monkeypatch: MonkeyPatch,
+) -> None:
     parent = object()
     parameters, variants, layouts = _profile_inputs()
     warnings = []
@@ -170,7 +176,9 @@ def test_profile_wizard_blank_name_warns_and_does_not_create_partial_profile(mon
     assert warnings[0][2] is parent
 
 
-def test_profile_wizard_rejects_unknown_variant_before_requesting_overrides(monkeypatch: MonkeyPatch) -> None:
+def test_profile_wizard_rejects_unknown_variant_before_requesting_overrides(
+    monkeypatch: MonkeyPatch,
+) -> None:
     parent = object()
     parameters, variants, layouts = _profile_inputs()
     prompts = iter(["Bad profile", "Description", "9V9"])
@@ -192,18 +200,21 @@ def test_profile_wizard_rejects_unknown_variant_before_requesting_overrides(monk
 
 
 def _layout_block() -> BlockRecord:
-    return cast(BlockRecord, SimpleNamespace(
-        name="Power block",
-        manifest={
-            "default_layout": "standard",
-            "default_variant": "",
-            "variants": [],
-            "layouts": [
-                {"id": "standard", "name": "Standard"},
-                {"id": "compact", "name": "Compact"},
-            ],
-        },
-    ))
+    return cast(
+        BlockRecord,
+        SimpleNamespace(
+            name="Power block",
+            manifest={
+                "default_layout": "standard",
+                "default_variant": "",
+                "variants": [],
+                "layouts": [
+                    {"id": "standard", "name": "Standard"},
+                    {"id": "compact", "name": "Compact"},
+                ],
+            },
+        ),
+    )
 
 
 def test_layout_selector_returns_the_user_selected_layout(monkeypatch: MonkeyPatch) -> None:

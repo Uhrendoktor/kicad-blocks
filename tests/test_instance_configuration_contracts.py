@@ -52,7 +52,16 @@ LAYOUT_STANDARD = "Standard  [standard]"
 LAYOUT_COMPACT = "Compact  [compact]"
 
 
-def _fixture(tmp_path: Path) -> tuple[Path, Path, BlockRecord, plugin_actions.SchematicSymbol, plugin_actions.Schematic, SimpleNamespace]:
+def _fixture(
+    tmp_path: Path,
+) -> tuple[
+    Path,
+    Path,
+    BlockRecord,
+    plugin_actions.SchematicSymbol,
+    plugin_actions.Schematic,
+    SimpleNamespace,
+]:
     library = tmp_path / "library"
     project = tmp_path / "project"
     project.mkdir()
@@ -118,26 +127,32 @@ def _fixture(tmp_path: Path) -> tuple[Path, Path, BlockRecord, plugin_actions.Sc
             text=SimpleNamespace(value="standard"),
         ),
     ]
-    instance = cast(plugin_actions.SchematicSymbol, SimpleNamespace(
-        id="00000000-0000-0000-0000-000000000777",
-        reference="X1",
-        definition=SimpleNamespace(
-            id=SimpleNamespace(
-                library=block.manifest["library_nickname"],
-                name=block.manifest["symbol_name"],
-            )
+    instance = cast(
+        plugin_actions.SchematicSymbol,
+        SimpleNamespace(
+            id="00000000-0000-0000-0000-000000000777",
+            reference="X1",
+            definition=SimpleNamespace(
+                id=SimpleNamespace(
+                    library=block.manifest["library_nickname"],
+                    name=block.manifest["symbol_name"],
+                )
+            ),
+            user_fields=fields,
         ),
-        user_fields=fields,
-    ))
+    )
     commit = SimpleNamespace()
-    schematic = cast(plugin_actions.Schematic, SimpleNamespace(
-        get_selection=lambda: [instance],
-        get_project=lambda: SimpleNamespace(expand_text_variables=lambda value: value),
-        begin_commit=Mock(return_value=commit),
-        push_commit=Mock(),
-        drop_commit=Mock(),
-        save=Mock(),
-    ))
+    schematic = cast(
+        plugin_actions.Schematic,
+        SimpleNamespace(
+            get_selection=lambda: [instance],
+            get_project=lambda: SimpleNamespace(expand_text_variables=lambda value: value),
+            begin_commit=Mock(return_value=commit),
+            push_commit=Mock(),
+            drop_commit=Mock(),
+            save=Mock(),
+        ),
+    )
     return library, project, block, instance, schematic, commit
 
 
@@ -223,7 +238,10 @@ def _assert_initial_state(context: UiTestContext, dialog: Toplevel) -> None:
     for contract_id in INSTANCE_CONTROLS - {"instance-configuration.window"}:
         widget = widgets[contract_id]
         assert widget.winfo_viewable()
-    assert context.require_combobox("instance-configuration.profile").get() == "Custom (manual settings)"
+    assert (
+        context.require_combobox("instance-configuration.profile").get()
+        == "Custom (manual settings)"
+    )
     assert context.require_combobox("instance-configuration.variant").get() == "3V3"
     assert context.require_entry("instance-configuration.parameter.OUTPUT_VOLTAGE").get() == "3.3"
     assert context.require_combobox("instance-configuration.layout").get() == LAYOUT_STANDARD
@@ -233,7 +251,10 @@ def _assert_initial_state(context: UiTestContext, dialog: Toplevel) -> None:
 
 def _install_update_spy(monkeypatch: MonkeyPatch) -> list[str]:
     updates: list[str] = []
-    def capture_update(_schematic: plugin_actions.Schematic, target: plugin_actions.SchematicSymbol) -> None:
+
+    def capture_update(
+        _schematic: plugin_actions.Schematic, target: plugin_actions.SchematicSymbol
+    ) -> None:
         updates.append(target.reference)
 
     monkeypatch.setattr(plugin_actions, "_update_schematic_item_checked", capture_update)
@@ -286,7 +307,9 @@ def test_profile_selection_updates_variant_parameter_and_layout_then_saves_one_i
         root.destroy()
 
 
-def test_manual_parameter_edit_changes_profile_to_custom_and_saves(monkeypatch: MonkeyPatch, tmp_path: Path):
+def test_manual_parameter_edit_changes_profile_to_custom_and_saves(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+):
     library, project, _block, instance, schematic, commit = _fixture(tmp_path)
     root, context = _new_root(monkeypatch)
     updates = _install_update_spy(monkeypatch)
@@ -324,7 +347,9 @@ def test_manual_parameter_edit_changes_profile_to_custom_and_saves(monkeypatch: 
         root.destroy()
 
 
-def test_invalid_parameter_shows_error_without_ipc_edit_then_recovers(monkeypatch: MonkeyPatch, tmp_path: Path):
+def test_invalid_parameter_shows_error_without_ipc_edit_then_recovers(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+):
     library, project, _block, instance, schematic, _commit = _fixture(tmp_path)
     root, context = _new_root(monkeypatch)
     updates = _install_update_spy(monkeypatch)
@@ -367,7 +392,9 @@ def test_invalid_parameter_shows_error_without_ipc_edit_then_recovers(monkeypatc
         root.destroy()
 
 
-def test_cancel_and_escape_discard_pending_instance_changes(monkeypatch: MonkeyPatch, tmp_path: Path):
+def test_cancel_and_escape_discard_pending_instance_changes(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+):
     library, project, _block, instance, schematic, _commit = _fixture(tmp_path)
     root, context = _new_root(monkeypatch)
     updates = _install_update_spy(monkeypatch)
@@ -418,7 +445,9 @@ def test_cancel_and_escape_discard_pending_instance_changes(monkeypatch: MonkeyP
         root.destroy()
 
 
-def test_failed_instance_update_rolls_back_field_values_and_keeps_form_open(monkeypatch: MonkeyPatch, tmp_path: Path):
+def test_failed_instance_update_rolls_back_field_values_and_keeps_form_open(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+):
     library, project, _block, instance, schematic, commit = _fixture(tmp_path)
     root, context = _new_root(monkeypatch)
     errors = []
@@ -466,7 +495,9 @@ def test_failed_instance_update_rolls_back_field_values_and_keeps_form_open(monk
         root.destroy()
 
 
-def test_missing_required_configuration_field_fails_before_opening_dialog(monkeypatch: MonkeyPatch, tmp_path: Path):
+def test_missing_required_configuration_field_fails_before_opening_dialog(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+):
     library, project, _block, instance, schematic, _commit = _fixture(tmp_path)
     root, _context = _new_root(monkeypatch)
     instance.user_fields = [field for field in instance.user_fields if field.name != "KB_LAYOUT"]

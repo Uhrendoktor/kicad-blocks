@@ -242,7 +242,9 @@ def _assert_initial_state(
     assert context.require_button("functional-block-picker.action.place").instate(["!disabled"])
 
 
-def test_functional_block_picker_filters_results_and_places_selected_record(monkeypatch: MonkeyPatch, tmp_path: Path):
+def test_functional_block_picker_filters_results_and_places_selected_record(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+):
     records = _fixture(tmp_path)
     root, context = _new_root(monkeypatch)
     preview_calls = _install_preview_spy(monkeypatch)

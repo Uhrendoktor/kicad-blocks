@@ -237,7 +237,9 @@ def test_existing_schematic_source_is_returned_and_non_create_mode_has_no_mode_s
         root.destroy()
 
 
-def test_blank_selector_validation_keeps_form_open_and_recovers(monkeypatch: MonkeyPatch, tmp_path: Path):
+def test_blank_selector_validation_keeps_form_open_and_recovers(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+):
     source = tmp_path / "existing.kicad_sch"
     source.write_text("(kicad_sch (version 20250114))\n", encoding="utf-8")
     root, context = _new_root(monkeypatch)
@@ -272,7 +274,9 @@ def test_blank_selector_validation_keeps_form_open_and_recovers(monkeypatch: Mon
         root.destroy()
 
 
-def test_browse_button_uses_kicad_schematic_picker_and_accepts_selected_file(monkeypatch: MonkeyPatch, tmp_path: Path):
+def test_browse_button_uses_kicad_schematic_picker_and_accepts_selected_file(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+):
     source = tmp_path / "selected.kicad_sch"
     source.write_text("(kicad_sch (version 20250114))\n", encoding="utf-8")
     calls = []
@@ -305,7 +309,9 @@ def test_browse_button_uses_kicad_schematic_picker_and_accepts_selected_file(mon
         root.destroy()
 
 
-def test_invalid_source_extension_is_rejected_then_browse_recovers(monkeypatch: MonkeyPatch, tmp_path: Path):
+def test_invalid_source_extension_is_rejected_then_browse_recovers(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+):
     invalid = tmp_path / "notes.txt"
     invalid.write_text("not a schematic\n", encoding="utf-8")
     source = tmp_path / "selected.kicad_sch"
@@ -350,7 +356,9 @@ def test_invalid_source_extension_is_rejected_then_browse_recovers(monkeypatch: 
         root.destroy()
 
 
-def test_create_blank_schematic_mode_returns_a_valid_temporary_source(monkeypatch: MonkeyPatch, tmp_path: Path):
+def test_create_blank_schematic_mode_returns_a_valid_temporary_source(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+):
     record, _first, _second, _default = _fixture(tmp_path)
     root, context = _new_root(monkeypatch)
     created = []
@@ -403,7 +411,9 @@ def test_create_blank_schematic_mode_returns_a_valid_temporary_source(monkeypatc
         root.destroy()
 
 
-def test_copy_existing_implementation_uses_selected_library_variant(monkeypatch: MonkeyPatch, tmp_path: Path):
+def test_copy_existing_implementation_uses_selected_library_variant(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+):
     record, first, second, _default = _fixture(tmp_path)
     root, context = _new_root(monkeypatch)
 
@@ -448,7 +458,9 @@ def test_copy_existing_implementation_uses_selected_library_variant(monkeypatch:
         root.destroy()
 
 
-def test_missing_copy_source_is_rejected_and_can_switch_to_existing_variant(monkeypatch: MonkeyPatch, tmp_path: Path):
+def test_missing_copy_source_is_rejected_and_can_switch_to_existing_variant(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+):
     record, _first, second, default = _fixture(tmp_path)
     default.unlink()
     root, context = _new_root(monkeypatch)
@@ -502,7 +514,9 @@ def _first_path(record: BlockRecord) -> Path:
     return Path(record.path) / str(variant["file"])
 
 
-def test_cancel_and_escape_leave_library_sources_unchanged(monkeypatch: MonkeyPatch, tmp_path: Path):
+def test_cancel_and_escape_leave_library_sources_unchanged(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+):
     record, _first, _second, default = _fixture(tmp_path)
     root, context = _new_root(monkeypatch)
 
