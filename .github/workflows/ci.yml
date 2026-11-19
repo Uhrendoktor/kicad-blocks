@@ -210,7 +210,7 @@ jobs:
               local timeout_seconds="$1"
               shift
               local attempt=1
-              until timeout "${timeout_seconds}s" "${SUDO[@]}" apt-get \
+              until timeout --kill-after=15s "${timeout_seconds}s" "${SUDO[@]}" apt-get \
                 -o Acquire::Retries=1 \
                 -o Acquire::http::Timeout=30 \
                 -o Acquire::https::Timeout=30 "$@"; do
@@ -228,7 +228,7 @@ jobs:
             apt_with_retry 180 install -y --no-install-recommends software-properties-common
             ppa_added=false
             for attempt in 1 2 3 4; do
-              if timeout 120s "${SUDO[@]}" add-apt-repository --yes ppa:kicad/kicad-dev-nightly; then
+              if timeout --kill-after=15s 120s "${SUDO[@]}" add-apt-repository --yes ppa:kicad/kicad-dev-nightly; then
                 ppa_added=true
                 break
               fi
@@ -764,7 +764,7 @@ jobs:
             local timeout_seconds="$1"
             shift
             local attempt=1
-            until timeout "${timeout_seconds}s" sudo apt-get \
+            until timeout --kill-after=15s "${timeout_seconds}s" sudo apt-get \
               -o Acquire::Retries=1 \
               -o Acquire::http::Timeout=30 \
               -o Acquire::https::Timeout=30 "$@"; do
@@ -781,7 +781,7 @@ jobs:
           apt_with_retry 180 update
           apt_with_retry 180 install -y --no-install-recommends software-properties-common xvfb xdotool python3-tk
           attempt=1
-          until timeout 120s sudo add-apt-repository --yes ppa:kicad/kicad-dev-nightly; do
+          until timeout --kill-after=15s 120s sudo add-apt-repository --yes ppa:kicad/kicad-dev-nightly; do
             if (( attempt >= 4 )); then
               echo "::error::Unable to query the KiCad nightly PPA through Launchpad after ${attempt} attempts."
               exit 1
@@ -793,7 +793,7 @@ jobs:
           done
           apt_with_retry 180 update
           attempt=1
-          until timeout 600s sudo apt-get -o Acquire::Retries=1 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y --no-install-recommends kicad-nightly; do
+          until timeout --kill-after=15s 600s sudo apt-get -o Acquire::Retries=1 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y --no-install-recommends kicad-nightly; do
             if (( attempt >= 4 )); then
               echo "::error::Unable to download the KiCad nightly packages after ${attempt} install attempts."
               exit 1
@@ -801,7 +801,7 @@ jobs:
             delay=$(( 5 * 2 ** (attempt - 1) ))
             echo "::warning::KiCad nightly package fetch failed; retrying in ${delay}s (attempt ${attempt}/4)."
             sleep "$delay"
-            sudo apt-get update
+            apt_with_retry 180 update
             attempt=$(( attempt + 1 ))
           done
           CLI="$(command -v kicad-cli-nightly || command -v kicad-cli || true)"
