@@ -206,6 +206,29 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
         target.add_to_selection.assert_called_once_with([instance])
         target.save.assert_called_once_with()
 
+    def test_place_block_does_not_mask_non_capability_interactive_move_errors(self):
+        instance = SimpleNamespace(id=SimpleNamespace(value="block-instance-id"))
+        commit = object()
+        schematic = SimpleNamespace(
+            begin_commit=Mock(return_value=commit),
+            place_symbol_from_library=Mock(return_value=instance),
+            interactive_move=Mock(side_effect=RuntimeError("editor is busy")),
+            push_commit=Mock(),
+            drop_commit=Mock(),
+        )
+        kicad = SimpleNamespace(get_schematic=Mock(return_value=schematic))
+        with (
+            patch.object(
+                plugin_actions, "_schematic_page_center_mm", return_value=(100.0, 75.0)
+            ),
+            self.assertRaisesRegex(RuntimeError, "editor is busy"),
+        ):
+            plugin_actions._start_native_symbol_placement(
+                kicad, None, self.block.manifest["symbol_name"]
+            )
+        schematic.drop_commit.assert_called_once_with(commit)
+        schematic.push_commit.assert_not_called()
+
     def test_place_block_drops_transaction_when_symbol_creation_fails(self):
         commit = object()
         schematic = SimpleNamespace(

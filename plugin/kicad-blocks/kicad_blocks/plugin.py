@@ -2782,6 +2782,21 @@ def _focus_schematic_items_in_editor(schematic, items):
     return target_schematic
 
 
+def _is_unsupported_schematic_move_error(exc: Exception) -> bool:
+    """Recognize only a missing Eeschema IPC handler, not arbitrary failures."""
+    detail = str(exc).casefold()
+    return any(
+        marker in detail
+        for marker in (
+            "no handler available for request",
+            "unhandled request",
+            "unhandled interactivemoveitems",
+            "interactive move is not supported",
+            "unknown request type",
+        )
+    )
+
+
 def _start_native_symbol_placement(
     kicad,
     _editor_window_id: str | None,
@@ -2838,6 +2853,12 @@ def _start_native_symbol_placement(
             LOG.info("Started native Eeschema cursor placement for %s.", symbol_id)
             return instance, True
         except Exception as exc:
+            if not _is_unsupported_schematic_move_error(exc):
+                # Busy, stale-ID, validation, transport, and editor failures are
+                # real failures, not evidence that the capability is missing.
+                with contextlib.suppress(Exception):
+                    drop_commit(commit)
+                raise
             # A newer Python wrapper may be installed before the connected
             # Eeschema server implements the command. Commit at page centre,
             # then use the same verified focus/selection path as older builds.
