@@ -10,7 +10,6 @@ This page is generated from the declarative UI catalog. It inventories the curre
 | Inventory only | 0 | Inventory only — systematic UI contracts remain future work; window/workflow is documented here for discovery and rollout planning. |
 
 The Functional Block Library, legacy Task Hub, transient choosers, Add PCB Layout, Record picker, Instance Configuration, Implementation details, Implementations Manager, Manage Libraries, PCB Layout Manager, and Facade Pin Layout editor have registered widget contracts. Create Block is a one-click action and no longer opens a details form. All 50 native messagebox/simpledialog call sites have direct result/effect contracts. Place Block uses supported page-aware schematic IPC placement, focus and selection while the schematic interactive-move API is pending; Edit Facade provides a project-local pin-layout editor with immediate persistence and safe publishing. Native Symbol Editor launch and cursor-attached placement remain upstream API gaps, not disabled features or OS-specific automation paths. The shared file chooser wrappers have argument/cancellation contracts; native OS rendering and cross-process KiCad window ownership remain unverified.
-
 ## Screens
 
 ### Legacy Task Hub
