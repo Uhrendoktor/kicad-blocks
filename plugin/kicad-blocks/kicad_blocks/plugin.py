@@ -10,10 +10,8 @@ import math
 import os
 import re
 import shutil
-import sys
 import subprocess
 import tempfile
-import time
 from pathlib import Path
 
 # The core block model and IPC helpers must remain importable in headless
@@ -2287,6 +2285,96 @@ def _ensure_project_facade_catalog(
     return catalog
 
 
+def _apply_facade_pin_geometry(
+    catalog_path: Path,
+    symbol_name: str,
+    unit_name: str,
+    pin_name: str,
+    pin_number: str,
+    *,
+    x_mm: float,
+    y_mm: float,
+    angle_degrees: float,
+    length_mm: float,
+    expected_sha256: str,
+) -> dict[str, str]:
+    """Atomically update only one pin's geometry in a project symbol catalog."""
+    import math
+
+    from .pcb_layout import _all, _direct, _head, _dump, parse_sexpr
+    from .repository import _named_symbol_node, atomic_write, sha256_file
+
+    target = Path(catalog_path).expanduser().resolve()
+    if not target.is_file():
+        raise FileNotFoundError(f"Project facade catalog is missing: {target}")
+    current_hash = sha256_file(target)
+    if current_hash != expected_sha256:
+        raise RuntimeError(
+            "The project symbol catalog changed outside the facade editor. "
+            "Reopen the editor to preserve the concurrent change."
+        )
+    values = (x_mm, y_mm, angle_degrees, length_mm)
+    if not all(math.isfinite(float(value)) for value in values):
+        raise ValueError("Pin geometry must use finite numeric values.")
+    if abs(x_mm) > 1000 or abs(y_mm) > 1000:
+        raise ValueError("Pin coordinates must be within ±1000 mm.")
+    normalized_angle = angle_degrees % 360
+    if min(abs(normalized_angle - value) for value in (0, 90, 180, 270, 360)) > 1e-6:
+        raise ValueError("Pin angles must be 0, 90, 180, or 270 degrees.")
+    if not 0.1 <= length_mm <= 100:
+        raise ValueError("Pin length must be between 0.1 mm and 100 mm.")
+
+    def format_number(value: float) -> str:
+        rounded = round(value, 6)
+        if abs(rounded) < 0.0000005:
+            rounded = 0.0
+        return f"{rounded:.6f}".rstrip("0").rstrip(".") or "0"
+
+    document = parse_sexpr(target.read_text(encoding="utf-8"))
+    symbol = _named_symbol_node(document, symbol_name, target)
+    units = [
+        child for child in symbol[1:]
+        if _head(child) == "symbol" and len(child) >= 2 and str(child[1]) == unit_name
+    ]
+    if len(units) != 1:
+        raise ValueError(
+            f"Expected exactly one pin unit {unit_name!r} in {symbol_name!r}; found {len(units)}."
+        )
+    matches = []
+    for pin in _all(units[0], "pin"):
+        name_node = _direct(pin, "name")
+        number_node = _direct(pin, "number")
+        if (
+            name_node is not None and len(name_node) >= 2
+            and number_node is not None and len(number_node) >= 2
+            and str(name_node[1]) == pin_name
+            and str(number_node[1]) == pin_number
+        ):
+            matches.append(pin)
+    if len(matches) != 1:
+        raise ValueError(
+            f"Expected exactly one {pin_name!r} (pin {pin_number}) in {unit_name!r}; "
+            f"found {len(matches)}."
+        )
+    pin = matches[0]
+    at_node = _direct(pin, "at")
+    length_node = _direct(pin, "length")
+    if at_node is None or len(at_node) < 4 or length_node is None or len(length_node) < 2:
+        raise ValueError(f"Pin {pin_name!r} has incomplete geometry in {target}.")
+    at_node[1] = format_number(x_mm)
+    at_node[2] = format_number(y_mm)
+    at_node[3] = str(int(round(normalized_angle)) % 360)
+    length_node[1] = format_number(length_mm)
+    atomic_write(target, _dump(document) + "\n")
+    return {
+        "x": str(at_node[1]),
+        "y": str(at_node[2]),
+        "angle": str(at_node[3]),
+        "length": str(length_node[1]),
+        "sha256": sha256_file(target),
+    }
+
+
 def _edit_facade_symbol(
     record,
     kicad,
@@ -2304,8 +2392,8 @@ def _edit_facade_symbol(
     pin geometry (position, orientation, and length) is edited here.
     """
     del editor_window_id
-    from .pcb_layout import _Quoted, _all, _direct, _dump, _head, parse_sexpr
-    from .repository import _named_symbol_node, atomic_write, sha256_file
+    from .pcb_layout import _all, _direct, _head, parse_sexpr
+    from .repository import _named_symbol_node, sha256_file
 
     symbol_name = str(record.manifest.get("symbol_name") or "").strip()
     catalog_path = (
@@ -2346,7 +2434,6 @@ def _edit_facade_symbol(
             pin_rows.append({
                 "unit": unit_name,
                 "index": pin_index,
-                "node": pin,
                 "name": str(name_node[1]),
                 "number": str(number_node[1]),
                 "electrical_type": str(pin[1]),
@@ -2496,54 +2583,28 @@ def _edit_facade_symbol(
         except ValueError:
             status_value.set("Enter valid numeric values for X, Y, angle, and length.")
             return
-        if not all(math.isfinite(value) for value in (x, y, angle, length)):
-            status_value.set("Pin geometry must use finite numeric values.")
-            return
-        if abs(x) > 1000 or abs(y) > 1000:
-            status_value.set("Pin coordinates must be within ±1000 mm.")
-            return
-        normalized_angle = angle % 360
-        if min(abs(normalized_angle - value) for value in (0, 90, 180, 270, 360)) > 1e-6:
-            status_value.set("Pin angles must be 0, 90, 180, or 270 degrees.")
-            return
-        if not 0.1 <= length <= 100:
-            status_value.set("Pin length must be between 0.1 mm and 100 mm.")
-            return
-
-        if sha256_file(catalog_path) != expected_hash[0]:
-            status_value.set(
-                "The project symbol catalog changed outside this editor. Close and reopen "
-                "the facade editor to avoid overwriting another edit."
-            )
-            return
-
-        def format_mm(value: float) -> str:
-            rounded = round(value, 6)
-            if abs(rounded) < 0.0000005:
-                rounded = 0.0
-            return f"{rounded:.6f}".rstrip("0").rstrip(".") or "0"
-
-        node = row["node"]
-        at_node = _direct(node, "at")
-        length_node = _direct(node, "length")
-        original_at = copy.deepcopy(at_node)
-        original_length = copy.deepcopy(length_node)
-        at_node[1] = format_mm(x)
-        at_node[2] = format_mm(y)
-        at_node[3] = str(int(round(normalized_angle)) % 360)
-        length_node[1] = format_mm(length)
         try:
-            atomic_write(catalog_path, _dump(catalog) + "\n")
-        except Exception:
-            at_node[:] = original_at
-            length_node[:] = original_length
-            raise
+            updated = _apply_facade_pin_geometry(
+                catalog_path,
+                symbol_name,
+                row["unit"],
+                row["name"],
+                row["number"],
+                x_mm=x,
+                y_mm=y,
+                angle_degrees=angle,
+                length_mm=length,
+                expected_sha256=expected_hash[0],
+            )
+        except (OSError, RuntimeError, ValueError) as exc:
+            status_value.set(str(exc))
+            return
 
-        row["x"] = at_node[1]
-        row["y"] = at_node[2]
-        row["angle"] = at_node[3]
-        row["length"] = length_node[1]
-        expected_hash[0] = sha256_file(catalog_path)
+        row["x"] = updated["x"]
+        row["y"] = updated["y"]
+        row["angle"] = updated["angle"]
+        row["length"] = updated["length"]
+        expected_hash[0] = updated["sha256"]
         reloaded = _reload_symbol_library(kicad, LIBRARY_NICKNAME)
         if reloaded:
             status_value.set(
@@ -2558,7 +2619,6 @@ def _edit_facade_symbol(
     tree.bind("<<TreeviewSelect>>", on_pin_selected)
     for entry in entries.values():
         entry.bind("<Return>", apply_geometry)
-        entry.bind("<FocusOut>", lambda _event: apply_geometry())
 
     actions = ttk.Frame(frame)
     actions.grid(row=4, column=0, sticky="ew", pady=(10, 0))
