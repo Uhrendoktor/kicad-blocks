@@ -8,6 +8,7 @@ from collections.abc import Callable
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
+from typing import cast
 
 import pytest
 
@@ -116,7 +117,7 @@ def _fixture(tmp_path: Path) -> tuple[Path, Path, BlockRecord, plugin_actions.Sc
             text=SimpleNamespace(value="standard"),
         ),
     ]
-    instance = plugin_actions.SchematicSymbol(
+    instance = cast(plugin_actions.SchematicSymbol, SimpleNamespace(
         id="00000000-0000-0000-0000-000000000777",
         reference="X1",
         definition=SimpleNamespace(
@@ -126,16 +127,16 @@ def _fixture(tmp_path: Path) -> tuple[Path, Path, BlockRecord, plugin_actions.Sc
             )
         ),
         user_fields=fields,
-    )
-    commit = object()
-    schematic = plugin_actions.Schematic(
+    ))
+    commit = SimpleNamespace()
+    schematic = cast(plugin_actions.Schematic, SimpleNamespace(
         get_selection=lambda: [instance],
         get_project=lambda: SimpleNamespace(expand_text_variables=lambda value: value),
         begin_commit=Mock(return_value=commit),
         push_commit=Mock(),
         drop_commit=Mock(),
         save=Mock(),
-    )
+    ))
     return library, project, block, instance, schematic, commit
 
 
@@ -253,11 +254,11 @@ def test_profile_selection_updates_variant_parameter_and_layout_then_saves_one_i
         root.update_idletasks()
         root.update()
 
-        assert context.require_widget("instance-configuration.variant").get() == "1V8"
+        assert context.require_combobox("instance-configuration.variant").get() == "1V8"
         assert (
-            context.require_widget("instance-configuration.parameter.OUTPUT_VOLTAGE").get() == "1.8"
+            context.require_entry("instance-configuration.parameter.OUTPUT_VOLTAGE").get() == "1.8"
         )
-        assert context.require_widget("instance-configuration.layout").get() == LAYOUT_COMPACT
+        assert context.require_combobox("instance-configuration.layout").get() == LAYOUT_COMPACT
 
         _click(
             context,
@@ -291,13 +292,13 @@ def test_manual_parameter_edit_changes_profile_to_custom_and_saves(monkeypatch: 
 
     def edit_and_save(dialog: Toplevel) -> None:
         _assert_initial_state(context, dialog)
-        parameter = context.require_widget("instance-configuration.parameter.OUTPUT_VOLTAGE")
+        parameter = context.require_entry("instance-configuration.parameter.OUTPUT_VOLTAGE")
         parameter.delete(0, "end")
         parameter.insert(0, "2.5")
         root.update_idletasks()
         root.update()
         assert (
-            context.require_widget("instance-configuration.profile").get()
+            context.require_combobox("instance-configuration.profile").get()
             == "Custom (manual settings)"
         )
         _click(
@@ -335,7 +336,7 @@ def test_invalid_parameter_shows_error_without_ipc_edit_then_recovers(monkeypatc
 
     def recover_from_invalid_parameter(dialog: Toplevel) -> None:
         _assert_initial_state(context, dialog)
-        parameter = context.require_widget("instance-configuration.parameter.OUTPUT_VOLTAGE")
+        parameter = context.require_entry("instance-configuration.parameter.OUTPUT_VOLTAGE")
         parameter.delete(0, "end")
         parameter.insert(0, "not-a-number")
         _click(context, "instance-configuration.action.save", "Save instance")
@@ -373,7 +374,7 @@ def test_cancel_and_escape_discard_pending_instance_changes(monkeypatch: MonkeyP
 
     def cancel_after_edit(dialog: Toplevel) -> None:
         _assert_initial_state(context, dialog)
-        parameter = context.require_widget("instance-configuration.parameter.OUTPUT_VOLTAGE")
+        parameter = context.require_entry("instance-configuration.parameter.OUTPUT_VOLTAGE")
         parameter.delete(0, "end")
         parameter.insert(0, "4.2")
         _click(
@@ -427,7 +428,9 @@ def test_failed_instance_update_rolls_back_field_values_and_keeps_form_open(monk
     )
     original_values = {field.name: field.text.value for field in instance.user_fields}
 
-    def fail_update(_schematic, _target):
+    def fail_update(
+        _schematic: plugin_actions.Schematic, _target: plugin_actions.SchematicSymbol
+    ) -> None:
         raise OSError("simulated IPC update failure")
 
     monkeypatch.setattr(
@@ -438,7 +441,7 @@ def test_failed_instance_update_rolls_back_field_values_and_keeps_form_open(monk
 
     def retry_after_failure(dialog: Toplevel) -> None:
         _assert_initial_state(context, dialog)
-        parameter = context.require_widget("instance-configuration.parameter.OUTPUT_VOLTAGE")
+        parameter = context.require_entry("instance-configuration.parameter.OUTPUT_VOLTAGE")
         parameter.delete(0, "end")
         parameter.insert(0, "2.2")
         _click(context, "instance-configuration.action.save", "Save instance")
@@ -468,7 +471,7 @@ def test_missing_required_configuration_field_fails_before_opening_dialog(monkey
     instance.user_fields = [field for field in instance.user_fields if field.name != "KB_LAYOUT"]
     try:
         with pytest.raises(RuntimeError, match="KB_LAYOUT"):
-            plugin_actions._show_selected_block_configuration(schematic, project, library, root)
+            plugin_actions.show_selected_block_configuration(schematic, project, library, root)
         assert not any(
             child.winfo_class() == "Toplevel" and child.title() == WINDOW_TITLE
             for child in root.winfo_children()

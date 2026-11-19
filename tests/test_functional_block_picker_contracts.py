@@ -249,12 +249,12 @@ def test_functional_block_picker_filters_results_and_places_selected_record(monk
 
     def filter_and_place(_dialog: Toplevel) -> None:
         _assert_initial_state(context, _dialog, records)
-        search = context.require_widget("functional-block-picker.search")
+        search = context.require_entry("functional-block-picker.search")
         search.insert(0, "usb")
         root.update_idletasks()
         root.update()
 
-        tree = context.require_widget("functional-block-picker.results")
+        tree = context.require_treeview("functional-block-picker.results")
         rows = tree.get_children()
         assert len(rows) == 1
         assert tree.item(rows[0], "values")[0] == "USB Interface"
@@ -271,8 +271,8 @@ def test_functional_block_picker_filters_results_and_places_selected_record(monk
         )
         assert _find_contract_widget(_dialog, "functional-block-picker.preview").find_all()
         assert preview_calls[-1] == "USB Interface"
-        assert context.require_widget("functional-block-picker.variant").instate(["disabled"])
-        assert context.require_widget("functional-block-picker.profile").instate(["disabled"])
+        assert context.require_combobox("functional-block-picker.variant").instate(["disabled"])
+        assert context.require_combobox("functional-block-picker.profile").instate(["disabled"])
 
         _click(
             context,
@@ -301,17 +301,17 @@ def test_functional_block_picker_profile_applies_variant_and_returns_typed_value
 
     def choose_profile(_dialog: Toplevel) -> None:
         _assert_initial_state(context, _dialog, records)
-        assert context.require_widget("functional-block-picker.variant").get() == "3V3"
-        assert context.require_widget("functional-block-picker.profile").get() == "Custom"
+        assert context.require_combobox("functional-block-picker.variant").get() == "3V3"
+        assert context.require_combobox("functional-block-picker.profile").get() == "Custom"
         assert preview_calls and preview_calls[0] == "Power Stage"
 
-        profile = context.require_widget("functional-block-picker.profile")
+        profile = context.require_combobox("functional-block-picker.profile")
         profile.set(PROFILE_1V8)
         profile.event_generate("<<ComboboxSelected>>")
         root.update_idletasks()
         root.update()
 
-        assert context.require_widget("functional-block-picker.variant").get() == "1V8"
+        assert context.require_combobox("functional-block-picker.variant").get() == "1V8"
         _click(
             context,
             "functional-block-picker.action.place",
@@ -341,14 +341,14 @@ def test_functional_block_picker_manual_variant_edit_switches_profile_to_custom(
 
     def choose_custom(_dialog: Toplevel) -> None:
         _assert_initial_state(context, _dialog, records)
-        profile = context.require_widget("functional-block-picker.profile")
+        profile = context.require_combobox("functional-block-picker.profile")
         profile.set(PROFILE_1V8)
         profile.event_generate("<<ComboboxSelected>>")
         root.update_idletasks()
         root.update()
-        assert context.require_widget("functional-block-picker.variant").get() == "1V8"
+        assert context.require_combobox("functional-block-picker.variant").get() == "1V8"
 
-        variant = context.require_widget("functional-block-picker.variant")
+        variant = context.require_combobox("functional-block-picker.variant")
         variant.set("3V3")
         variant.event_generate("<<ComboboxSelected>>")
         root.update_idletasks()
@@ -381,12 +381,12 @@ def test_functional_block_picker_empty_search_disables_selectors_and_cancel_retu
 
     def no_match_and_cancel(_dialog: Toplevel) -> None:
         _assert_initial_state(context, _dialog, records)
-        search = context.require_widget("functional-block-picker.search")
+        search = context.require_entry("functional-block-picker.search")
         search.insert(0, "no-such-block")
         root.update_idletasks()
         root.update()
 
-        tree = context.require_widget("functional-block-picker.results")
+        tree = context.require_treeview("functional-block-picker.results")
         assert tree.get_children() == ()
         assert (
             _find_contract_widget(_dialog, "functional-block-picker.name").cget("text")
@@ -401,10 +401,10 @@ def test_functional_block_picker_empty_search_disables_selectors_and_cancel_retu
             _find_contract_widget(_dialog, "functional-block-picker.preview").cget("height")
             == "270"
         )
-        assert context.require_widget("functional-block-picker.variant").instate(["disabled"])
-        assert context.require_widget("functional-block-picker.profile").instate(["disabled"])
+        assert context.require_combobox("functional-block-picker.variant").instate(["disabled"])
+        assert context.require_combobox("functional-block-picker.profile").instate(["disabled"])
         assert preview_calls[-1] == "Power Stage"
-        assert context.require_widget("functional-block-picker.action.place").instate(["!disabled"])
+        assert context.require_button("functional-block-picker.action.place").instate(["!disabled"])
 
         # With no selected record the real Place button is a no-op and keeps
         # the picker open, allowing search recovery or explicit cancellation.
@@ -437,7 +437,7 @@ def test_functional_block_picker_escape_cancels_and_empty_library_is_rejected(
 
     def escape(_dialog: Toplevel) -> None:
         _assert_initial_state(context, _dialog, records)
-        search = context.require_widget("functional-block-picker.search")
+        search = context.require_entry("functional-block-picker.search")
         search.focus_force()
         root.update()
         assert root.focus_get() is search
@@ -450,7 +450,7 @@ def test_functional_block_picker_escape_cancels_and_empty_library_is_rejected(
         selection = _run_picker(root, context, records, escape)
         assert selection is None
         with pytest.raises(ValueError, match="No blocks were found"):
-            plugin_actions._pick_block_for_placement([], root)
+            plugin_actions.pick_block_for_placement([], root)
         assert not _find_dialog_exists(root)
     finally:
         root.destroy()

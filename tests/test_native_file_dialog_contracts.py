@@ -85,7 +85,7 @@ def test_open_kicad_file_falls_back_to_cwd_for_missing_initial_path(monkeypatch:
         lambda **kwargs: calls.append(kwargs) or str(selected),
     )
     try:
-        result = plugin_actions._pick_kicad_file(
+        result = plugin_actions.pick_kicad_file(
             parent,
             title="Choose PCB layout",
             suffix=".kicad_pcb",
@@ -114,7 +114,7 @@ def test_open_kicad_file_cancel_returns_none(monkeypatch: MonkeyPatch, tmp_path:
     )
     try:
         assert (
-            plugin_actions._pick_kicad_file(
+            plugin_actions.pick_kicad_file(
                 parent,
                 title="Choose schematic",
                 suffix=".kicad_sch",
@@ -178,7 +178,7 @@ def test_save_file_without_suffix_uses_directory_and_cancel_returns_none(monkeyp
     )
     try:
         assert (
-            plugin_actions._pick_save_file(
+            plugin_actions.pick_save_file(
                 parent,
                 title="Save report",
                 initial_path=tmp_path,
@@ -240,7 +240,7 @@ def test_directory_picker_falls_back_to_cwd_and_cancel_returns_none(monkeypatch:
     )
     try:
         assert (
-            plugin_actions._pick_directory(
+            plugin_actions.pick_directory(
                 parent,
                 title="Choose library location",
                 initial_path=tmp_path / "missing",

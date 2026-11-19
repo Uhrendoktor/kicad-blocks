@@ -265,7 +265,7 @@ def test_manage_libraries_unregister_removes_registration_but_preserves_files(
 
     def unregister(_dialog: Toplevel) -> None:
         _select_path(context, "manage-libraries.rows", second, path_column="path")
-        button = context.require_widget("manage-libraries.action.unregister")
+        button = context.require_button("manage-libraries.action.unregister")
         assert button.instate(["!disabled"])
         _click(context, "manage-libraries.action.unregister", "Unregister")
         assert second.resolve() not in repository.library_roots()
@@ -322,14 +322,14 @@ def test_manage_libraries_set_default_persists_selected_library(monkeypatch: Mon
 
     def set_default(_dialog: Toplevel) -> None:
         _select_path(context, "manage-libraries.rows", second, path_column="path")
-        button = context.require_widget("manage-libraries.action.default")
+        button = context.require_button("manage-libraries.action.default")
         assert button.instate(["!disabled"])
         _click(context, "manage-libraries.action.default", "Set default")
         assert repository.default_library_root() == second.resolve()
         tree = context.require_widget("manage-libraries.rows")
         selected = tree.selection()[0]
         assert tree.set(selected, "role") == "Default"
-        assert context.require_widget("manage-libraries.action.default").instate(["disabled"])
+        assert context.require_button("manage-libraries.action.default").instate(["disabled"])
         _click(
             context,
             "manage-libraries.action.close",
@@ -498,7 +498,7 @@ def test_pcb_layout_manager_updates_default_and_variant_associations_then_remove
         manifest = read_manifest(record.path)
         assert manifest["default_layout"] == second["id"]
 
-        combo = context.require_widget("pcb-layout-manager.implementation")
+        combo = context.require_combobox("pcb-layout-manager.implementation")
         combo.set("Boost")
         _click(context, "pcb-layout-manager.action.assign", "Assign")
         manifest = read_manifest(record.path)
@@ -544,15 +544,28 @@ def test_pcb_layout_manager_add_and_save_failure_can_be_retried(monkeypatch: Mon
             "linked_implementation": "Boost",
         },
     )
-    original_save = plugin_actions._save_block_layouts
+    original_save = plugin_actions.save_block_layouts
     attempts = []
     errors = []
 
-    def fail_once(*args: str, **kwargs: str) -> None:
+    def fail_once(
+        record: BlockRecord,
+        layouts: list[BlockLayoutEditInput],
+        *,
+        default_layout_id: str | None,
+        variant_layouts: dict[str, str] | None = None,
+        layout_implementations: dict[str, list[str]] | None = None,
+    ) -> BlockRecord:
         attempts.append("save")
         if len(attempts) == 1:
             raise OSError("simulated PCB layout write failure")
-        return original_save(*args, **kwargs)
+        return original_save(
+            record,
+            layouts,
+            default_layout_id=default_layout_id,
+            variant_layouts=variant_layouts,
+            layout_implementations=layout_implementations,
+        )
 
     monkeypatch.setattr(plugin_actions, "_save_block_layouts", fail_once)
     monkeypatch.setattr(
@@ -565,7 +578,7 @@ def test_pcb_layout_manager_add_and_save_failure_can_be_retried(monkeypatch: Mon
 
     def add_and_retry(_dialog: Toplevel) -> None:
         _click(context, "pcb-layout-manager.action.add", "Add layout")
-        tree = context.require_widget("pcb-layout-manager.rows")
+        tree = context.require_treeview("pcb-layout-manager.rows")
         assert tree.item("1", "values")[2] == "new-boost.kicad_pcb"
         status = context.require_widget("pcb-layout-manager.status")
         variable = str(status.cget("textvariable"))
@@ -633,10 +646,10 @@ def test_pcb_layout_manager_disables_selection_actions_when_empty(monkeypatch: M
     context = UiTestContext(root)
 
     def inspect(_dialog: Toplevel) -> None:
-        assert context.require_widget("pcb-layout-manager.action.remove").instate(["disabled"])
-        assert context.require_widget("pcb-layout-manager.action.default").instate(["disabled"])
-        assert context.require_widget("pcb-layout-manager.action.assign").instate(["disabled"])
-        assert context.require_widget("pcb-layout-manager.action.add").instate(["!disabled"])
+        assert context.require_button("pcb-layout-manager.action.remove").instate(["disabled"])
+        assert context.require_button("pcb-layout-manager.action.default").instate(["disabled"])
+        assert context.require_button("pcb-layout-manager.action.assign").instate(["disabled"])
+        assert context.require_button("pcb-layout-manager.action.add").instate(["!disabled"])
         _click(
             context,
             "pcb-layout-manager.action.close",

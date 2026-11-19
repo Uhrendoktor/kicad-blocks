@@ -138,7 +138,7 @@ def _run_form(
                 dialog.destroy()
 
     root.after(100, drive)
-    result = plugin_actions._ask_implementation_details(
+    result = plugin_actions.ask_implementation_details(
         root,
         value=value,
         source=source,
@@ -213,9 +213,9 @@ def test_existing_schematic_source_is_returned_and_non_create_mode_has_no_mode_s
 
     def accept_existing(dialog: Toplevel) -> None:
         _assert_initial_state(context, dialog, allow_create=False)
-        assert context.require_widget("implementation-details.variant").get() == "3V3"
-        context.require_widget("implementation-details.source").delete(0, "end")
-        context.require_widget("implementation-details.source").insert(0, str(source))
+        assert context.require_combobox("implementation-details.variant").get() == "3V3"
+        context.require_entry("implementation-details.source").delete(0, "end")
+        context.require_entry("implementation-details.source").insert(0, str(source))
         _click(
             context,
             "implementation-details.action.use",
@@ -250,14 +250,14 @@ def test_blank_selector_validation_keeps_form_open_and_recovers(monkeypatch: Mon
 
     def recover(_dialog: Toplevel) -> None:
         _assert_initial_state(context, _dialog, allow_create=False)
-        selector = context.require_widget("implementation-details.variant")
+        selector = context.require_combobox("implementation-details.variant")
         selector.delete(0, "end")
         _click(context, "implementation-details.action.use", "Use implementation")
         assert _find_dialog_exists(root)
         assert errors == [("Implementation details", "Enter an implementation selector.")]
 
         selector.insert(0, "VIN_1V8")
-        context.require_widget("implementation-details.source").insert(0, str(source))
+        context.require_entry("implementation-details.source").insert(0, str(source))
         _click(
             context,
             "implementation-details.action.use",
@@ -290,7 +290,7 @@ def test_browse_button_uses_kicad_schematic_picker_and_accepts_selected_file(mon
         assert calls == [
             ("Implementation details", "Choose implementation schematic", ".kicad_sch", "")
         ]
-        assert context.require_widget("implementation-details.source").get() == str(source)
+        assert context.require_entry("implementation-details.source").get() == str(source)
         _click(
             context,
             "implementation-details.action.use",
@@ -325,7 +325,7 @@ def test_invalid_source_extension_is_rejected_then_browse_recovers(monkeypatch: 
 
     def recover(dialog):
         _assert_initial_state(context, dialog, allow_create=False)
-        context.require_widget("implementation-details.source").insert(0, str(invalid))
+        context.require_entry("implementation-details.source").insert(0, str(invalid))
         _click(context, "implementation-details.action.use", "Use implementation")
         assert _find_dialog_exists(root)
         assert errors == [
@@ -335,7 +335,7 @@ def test_invalid_source_extension_is_rejected_then_browse_recovers(monkeypatch: 
             )
         ]
         _click(context, "implementation-details.action.browse", "Choose file…")
-        assert context.require_widget("implementation-details.source").get() == str(source)
+        assert context.require_entry("implementation-details.source").get() == str(source)
         _click(
             context,
             "implementation-details.action.use",
@@ -354,7 +354,7 @@ def test_create_blank_schematic_mode_returns_a_valid_temporary_source(monkeypatc
     record, _first, _second, _default = _fixture(tmp_path)
     root, context = _new_root(monkeypatch)
     created = []
-    create_source = plugin_actions._new_blank_schematic_source
+    create_source = plugin_actions.new_blank_schematic_source
 
     def capture_blank_source() -> Path:
         path = Path(create_source())
@@ -374,7 +374,7 @@ def test_create_blank_schematic_mode_returns_a_valid_temporary_source(monkeypatc
             context.require_widget("implementation-details.source-label").cget("text")
             == "The new implementation starts as a blank KiCad schematic."
         )
-        assert not context.require_widget("implementation-details.source").winfo_viewable()
+        assert not context.require_entry("implementation-details.source").winfo_viewable()
         assert not context.require_widget("implementation-details.action.browse").winfo_viewable()
         _click(
             context,
@@ -414,9 +414,9 @@ def test_copy_existing_implementation_uses_selected_library_variant(monkeypatch:
             context.require_widget("implementation-details.source-label").cget("text")
             == "Copy this library implementation:"
         )
-        assert not context.require_widget("implementation-details.source").winfo_viewable()
+        assert not context.require_entry("implementation-details.source").winfo_viewable()
         assert not context.require_widget("implementation-details.action.browse").winfo_viewable()
-        copy = context.require_widget("implementation-details.copy")
+        copy = context.require_button("implementation-details.copy")
         assert copy.winfo_viewable()
         assert tuple(copy.cget("values")) == ("Default", "3V3", "1V8")
         copy.set("1V8")
@@ -462,7 +462,7 @@ def test_missing_copy_source_is_rejected_and_can_switch_to_existing_variant(monk
     def recover_copy(dialog: Toplevel) -> None:
         _assert_initial_state(context, dialog, allow_create=True)
         _select_mode(root, context, MODE_COPY)
-        copy = context.require_widget("implementation-details.copy")
+        copy = context.require_button("implementation-details.copy")
         assert copy.get() == "Default"
         _click(context, "implementation-details.action.use", "Use implementation")
         assert _find_dialog_exists(root)
@@ -526,7 +526,7 @@ def test_cancel_and_escape_leave_library_sources_unchanged(monkeypatch: MonkeyPa
 
     def escape(dialog: Toplevel) -> None:
         _assert_initial_state(context, dialog, allow_create=True)
-        selector = context.require_widget("implementation-details.variant")
+        selector = context.require_combobox("implementation-details.variant")
         selector.focus_force()
         root.update()
         assert root.focus_get() is selector
