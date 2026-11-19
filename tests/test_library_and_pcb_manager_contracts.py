@@ -5,7 +5,9 @@ from __future__ import annotations
 import json
 import os
 import sys
+from collections.abc import Callable
 from pathlib import Path
+from typing import TypeVar
 
 import pytest
 
@@ -16,8 +18,18 @@ sys.path.insert(0, str(ROOT / "tests"))
 from kicad_blocks import plugin as plugin_actions
 from kicad_blocks import repository
 from kicad_blocks.model import parse_pins
-from kicad_blocks.repository import create_block, read_manifest
-from ui_contracts import ButtonContract, UiTestContext, assert_control_coverage
+from kicad_blocks.repository import BlockRecord, create_block, read_manifest
+from ui_contracts import (
+    ButtonContract,
+    MonkeyPatch,
+    Tk,
+    Toplevel,
+    Treeview,
+    UiTestContext,
+    assert_control_coverage,
+)
+
+_ResultT = TypeVar("_ResultT")
 
 pytestmark = pytest.mark.skipif(
     not os.environ.get("DISPLAY"),
@@ -49,8 +61,8 @@ PCB_CONTROLS = {
 }
 
 
-def _new_root(monkeypatch):
-    plugin_actions._load_tkinter()
+def _new_root(monkeypatch: MonkeyPatch) -> Tk:
+    plugin_actions.load_tkinter()
     monkeypatch.setattr(plugin_actions, "_create_action_icon", lambda *_args: None)
     root = plugin_actions.tk.Tk()
     root.title("UI contract host")
@@ -59,7 +71,7 @@ def _new_root(monkeypatch):
     return root
 
 
-def _find_dialog(root, title: str):
+def _find_dialog(root: Tk, title: str) -> Toplevel:
     return next(
         child
         for child in root.winfo_children()
@@ -67,11 +79,18 @@ def _find_dialog(root, title: str):
     )
 
 
-def _run_modal(root, context, title, expected_ids, action, invoke):
-    callback_errors = []
+def _run_modal(
+    root: Tk,
+    context: UiTestContext,
+    title: str,
+    expected_ids: set[str],
+    action: Callable[[Toplevel], None],
+    invoke: Callable[[], _ResultT],
+) -> _ResultT:
+    callback_errors: list[Exception] = []
 
-    def drive():
-        dialog = None
+    def drive() -> None:
+        dialog: Toplevel | None = None
         try:
             dialog = _find_dialog(root, title)
             assert dialog.winfo_viewable()
@@ -99,7 +118,14 @@ def _run_modal(root, context, title, expected_ids, action, invoke):
     return result
 
 
-def _click(context, contract_id: str, label: str, *, closes=False, title=None):
+def _click(
+    context: UiTestContext,
+    contract_id: str,
+    label: str,
+    *,
+    closes: bool = False,
+    title: str | None = None,
+) -> None:
     ButtonContract(
         contract_id=contract_id,
         expected_action=None,
@@ -109,8 +135,10 @@ def _click(context, contract_id: str, label: str, *, closes=False, title=None):
     ).run(context)
 
 
-def _select_path(context, tree_id: str, path: Path, *, path_column: str):
-    tree = context.require_widget(tree_id)
+def _select_path(
+    context: UiTestContext, tree_id: str, path: Path, *, path_column: str
+) -> str:
+    tree = context.require_treeview(tree_id)
     wanted = str(path.expanduser().resolve())
     row_id = next(iid for iid in tree.get_children() if str(tree.set(iid, path_column)) == wanted)
     tree.selection_set(row_id)
@@ -121,7 +149,7 @@ def _select_path(context, tree_id: str, path: Path, *, path_column: str):
     return row_id
 
 
-def _library_fixture(monkeypatch, tmp_path: Path):
+def _library_fixture(monkeypatch: MonkeyPatch, tmp_path: Path) -> tuple[Path, Path, Path]:
     settings = tmp_path / "settings.json"
     monkeypatch.setattr(repository, "settings_file", lambda: settings)
     monkeypatch.setenv("KICAD_BLOCKS_LIBRARY", "")
@@ -136,19 +164,21 @@ def _library_fixture(monkeypatch, tmp_path: Path):
     return settings, first, second
 
 
-def _run_library_manager(root, context, action):
+def _run_library_manager(
+    root: Tk, context: UiTestContext, action: Callable[[Toplevel], None]
+) -> bool:
     return _run_modal(
         root,
         context,
         "Manage Libraries",
         LIBRARY_CONTROLS,
         action,
-        lambda: plugin_actions._show_library_roots_dialog(root),
+        lambda: plugin_actions.show_library_roots_dialog(root),
     )
 
 
-def test_manage_libraries_add_existing_registers_and_refreshes_the_real_tree(monkeypatch, tmp_path):
-    _settings, first, second = _library_fixture(monkeypatch, tmp_path)
+def test_manage_libraries_add_existing_registers_and_refreshes_the_real_tree(monkeypatch: MonkeyPatch, tmp_path: Path):
+    _settings, first, second = _library_fixture(monkeypatch: MonkeyPatch, tmp_path: Path)
     new_library = tmp_path / "third-library"
     new_library.mkdir()
     chooser_calls = []
@@ -160,7 +190,7 @@ def test_manage_libraries_add_existing_registers_and_refreshes_the_real_tree(mon
     root = _new_root(monkeypatch)
     context = UiTestContext(root)
 
-    def add(_dialog):
+    def add(_dialog: Toplevel) -> None:
         _click(context, "manage-libraries.action.add", "Add library")
         assert chooser_calls[0]["title"] == "Add existing block library folder"
         assert chooser_calls[0]["parent"].title() == "Manage Libraries"
@@ -186,8 +216,8 @@ def test_manage_libraries_add_existing_registers_and_refreshes_the_real_tree(mon
         root.destroy()
 
 
-def test_manage_libraries_create_makes_and_registers_new_folder(monkeypatch, tmp_path):
-    _settings, _first, _second = _library_fixture(monkeypatch, tmp_path)
+def test_manage_libraries_create_makes_and_registers_new_folder(monkeypatch: MonkeyPatch, tmp_path: Path):
+    _settings, _first, _second = _library_fixture(monkeypatch: MonkeyPatch, tmp_path: Path)
     destination = tmp_path / "created-libraries"
     destination.mkdir()
     monkeypatch.setattr(
@@ -205,7 +235,7 @@ def test_manage_libraries_create_makes_and_registers_new_folder(monkeypatch, tmp
     context = UiTestContext(root)
     created = destination / "new-library"
 
-    def create(_dialog):
+    def create(_dialog: Toplevel) -> None:
         _click(context, "manage-libraries.action.create", "Create library")
         assert ask_calls[0][0] == "Create block library"
         assert ask_calls[0][2].title() == "Manage Libraries"
@@ -228,12 +258,12 @@ def test_manage_libraries_create_makes_and_registers_new_folder(monkeypatch, tmp
 def test_manage_libraries_unregister_removes_registration_but_preserves_files(
     monkeypatch, tmp_path
 ):
-    _settings, first, second = _library_fixture(monkeypatch, tmp_path)
+    _settings, first, second = _library_fixture(monkeypatch: MonkeyPatch, tmp_path: Path)
     monkeypatch.setattr(plugin_actions.messagebox, "askyesno", lambda *_a, **_k: True)
     root = _new_root(monkeypatch)
     context = UiTestContext(root)
 
-    def unregister(_dialog):
+    def unregister(_dialog: Toplevel) -> None:
         _select_path(context, "manage-libraries.rows", second, path_column="path")
         button = context.require_widget("manage-libraries.action.unregister")
         assert button.instate(["!disabled"])
@@ -255,8 +285,8 @@ def test_manage_libraries_unregister_removes_registration_but_preserves_files(
         root.destroy()
 
 
-def test_manage_libraries_confirmation_cancel_keeps_registration(monkeypatch, tmp_path):
-    _settings, _first, second = _library_fixture(monkeypatch, tmp_path)
+def test_manage_libraries_confirmation_cancel_keeps_registration(monkeypatch: MonkeyPatch, tmp_path: Path):
+    _settings, _first, second = _library_fixture(monkeypatch: MonkeyPatch, tmp_path: Path)
     prompts = []
     monkeypatch.setattr(
         plugin_actions.messagebox,
@@ -266,7 +296,7 @@ def test_manage_libraries_confirmation_cancel_keeps_registration(monkeypatch, tm
     root = _new_root(monkeypatch)
     context = UiTestContext(root)
 
-    def cancel(_dialog):
+    def cancel(_dialog: Toplevel) -> None:
         _select_path(context, "manage-libraries.rows", second, path_column="path")
         _click(context, "manage-libraries.action.unregister", "Unregister")
         assert prompts and prompts[0][0] == "Unregister library"
@@ -285,12 +315,12 @@ def test_manage_libraries_confirmation_cancel_keeps_registration(monkeypatch, tm
         root.destroy()
 
 
-def test_manage_libraries_set_default_persists_selected_library(monkeypatch, tmp_path):
-    _settings, first, second = _library_fixture(monkeypatch, tmp_path)
+def test_manage_libraries_set_default_persists_selected_library(monkeypatch: MonkeyPatch, tmp_path: Path):
+    _settings, first, second = _library_fixture(monkeypatch: MonkeyPatch, tmp_path: Path)
     root = _new_root(monkeypatch)
     context = UiTestContext(root)
 
-    def set_default(_dialog):
+    def set_default(_dialog: Toplevel) -> None:
         _select_path(context, "manage-libraries.rows", second, path_column="path")
         button = context.require_widget("manage-libraries.action.default")
         assert button.instate(["!disabled"])
@@ -316,8 +346,8 @@ def test_manage_libraries_set_default_persists_selected_library(monkeypatch, tmp
         root.destroy()
 
 
-def test_manage_libraries_change_folder_is_transactional_and_keeps_old_data(monkeypatch, tmp_path):
-    _settings, first, second = _library_fixture(monkeypatch, tmp_path)
+def test_manage_libraries_change_folder_is_transactional_and_keeps_old_data(monkeypatch: MonkeyPatch, tmp_path: Path):
+    _settings, first, second = _library_fixture(monkeypatch: MonkeyPatch, tmp_path: Path)
     replacement = tmp_path / "replacement-library"
     replacement.mkdir()
     monkeypatch.setattr(
@@ -328,7 +358,7 @@ def test_manage_libraries_change_folder_is_transactional_and_keeps_old_data(monk
     root = _new_root(monkeypatch)
     context = UiTestContext(root)
 
-    def change(_dialog):
+    def change(_dialog: Toplevel) -> None:
         _select_path(context, "manage-libraries.rows", first, path_column="path")
         _click(context, "manage-libraries.action.change", "Change folder")
         roots = repository.library_roots()
@@ -351,13 +381,13 @@ def test_manage_libraries_change_folder_is_transactional_and_keeps_old_data(monk
         root.destroy()
 
 
-def test_manage_libraries_environment_override_and_empty_selection_states(monkeypatch, tmp_path):
-    _settings, first, _second = _library_fixture(monkeypatch, tmp_path)
+def test_manage_libraries_environment_override_and_empty_selection_states(monkeypatch: MonkeyPatch, tmp_path: Path):
+    _settings, first, _second = _library_fixture(monkeypatch: MonkeyPatch, tmp_path: Path)
     monkeypatch.setenv("KICAD_BLOCKS_LIBRARY", str(first))
     root = _new_root(monkeypatch)
     context = UiTestContext(root)
 
-    def inspect(_dialog):
+    def inspect(_dialog: Toplevel) -> None:
         fixed_actions = (
             "manage-libraries.action.change",
             "manage-libraries.action.unregister",
@@ -387,7 +417,9 @@ def test_manage_libraries_environment_override_and_empty_selection_states(monkey
         root.destroy()
 
 
-def _pcb_fixture(tmp_path: Path, *, layout_count=2, with_variant=True):
+def _pcb_fixture(
+    tmp_path: Path, *, layout_count: int = 2, with_variant: bool = True
+) -> tuple[BlockRecord, list[Path]]:
     library = tmp_path / "pcb-library"
     library.mkdir()
     source_boards = []
@@ -420,19 +452,21 @@ def _pcb_fixture(tmp_path: Path, *, layout_count=2, with_variant=True):
     return record, source_boards
 
 
-def _run_pcb_manager(root, context, record, action):
+def _run_pcb_manager(
+    root: Tk, context: UiTestContext, record: BlockRecord, action: Callable[[Toplevel], None]
+) -> Path | None:
     return _run_modal(
         root,
         context,
         f"PCB layouts — {record.name}",
         PCB_CONTROLS,
         action,
-        lambda: plugin_actions._show_block_layout_editor(record, root),
+        lambda: plugin_actions.show_block_layout_editor(record, root),
     )
 
 
-def _select_pcb_row(context, row_id: str):
-    tree = context.require_widget("pcb-layout-manager.rows")
+def _select_pcb_row(context: UiTestContext, row_id: str) -> None:
+    tree = context.require_treeview("pcb-layout-manager.rows")
     tree.selection_set(row_id)
     tree.focus(row_id)
     tree.event_generate("<<TreeviewSelect>>")
@@ -458,7 +492,7 @@ def test_pcb_layout_manager_updates_default_and_variant_associations_then_remove
     root = _new_root(monkeypatch)
     context = UiTestContext(root)
 
-    def maintain(_dialog):
+    def maintain(_dialog: Toplevel) -> None:
         _select_pcb_row(context, "1")
         _click(context, "pcb-layout-manager.action.default", "Set default")
         manifest = read_manifest(record.path)
@@ -494,7 +528,7 @@ def test_pcb_layout_manager_updates_default_and_variant_associations_then_remove
         root.destroy()
 
 
-def test_pcb_layout_manager_add_and_save_failure_can_be_retried(monkeypatch, tmp_path):
+def test_pcb_layout_manager_add_and_save_failure_can_be_retried(monkeypatch: MonkeyPatch, tmp_path: Path):
     record, _sources = _pcb_fixture(tmp_path, layout_count=1)
     new_board = tmp_path / "new-boost.kicad_pcb"
     new_board.write_text(
@@ -514,7 +548,7 @@ def test_pcb_layout_manager_add_and_save_failure_can_be_retried(monkeypatch, tmp
     attempts = []
     errors = []
 
-    def fail_once(*args, **kwargs):
+    def fail_once(*args: str, **kwargs: str) -> None:
         attempts.append("save")
         if len(attempts) == 1:
             raise OSError("simulated PCB layout write failure")
@@ -529,7 +563,7 @@ def test_pcb_layout_manager_add_and_save_failure_can_be_retried(monkeypatch, tmp
     root = _new_root(monkeypatch)
     context = UiTestContext(root)
 
-    def add_and_retry(_dialog):
+    def add_and_retry(_dialog: Toplevel) -> None:
         _click(context, "pcb-layout-manager.action.add", "Add layout")
         tree = context.require_widget("pcb-layout-manager.rows")
         assert tree.item("1", "values")[2] == "new-boost.kicad_pcb"
@@ -560,7 +594,7 @@ def test_pcb_layout_manager_add_and_save_failure_can_be_retried(monkeypatch, tmp
         root.destroy()
 
 
-def test_pcb_layout_manager_cancelled_remove_preserves_board_and_manifest(monkeypatch, tmp_path):
+def test_pcb_layout_manager_cancelled_remove_preserves_board_and_manifest(monkeypatch: MonkeyPatch, tmp_path: Path):
     record, _sources = _pcb_fixture(tmp_path, layout_count=2)
     before = json.loads(json.dumps(read_manifest(record.path)))
     prompts = []
@@ -572,7 +606,7 @@ def test_pcb_layout_manager_cancelled_remove_preserves_board_and_manifest(monkey
     root = _new_root(monkeypatch)
     context = UiTestContext(root)
 
-    def cancel(_dialog):
+    def cancel(_dialog: Toplevel) -> None:
         _select_pcb_row(context, "1")
         second_file = record.path / before["layouts"][1]["file"]
         _click(context, "pcb-layout-manager.action.remove", "Remove")
@@ -593,12 +627,12 @@ def test_pcb_layout_manager_cancelled_remove_preserves_board_and_manifest(monkey
         root.destroy()
 
 
-def test_pcb_layout_manager_disables_selection_actions_when_empty(monkeypatch, tmp_path):
+def test_pcb_layout_manager_disables_selection_actions_when_empty(monkeypatch: MonkeyPatch, tmp_path: Path):
     record, _sources = _pcb_fixture(tmp_path, layout_count=0, with_variant=False)
     root = _new_root(monkeypatch)
     context = UiTestContext(root)
 
-    def inspect(_dialog):
+    def inspect(_dialog: Toplevel) -> None:
         assert context.require_widget("pcb-layout-manager.action.remove").instate(["disabled"])
         assert context.require_widget("pcb-layout-manager.action.default").instate(["disabled"])
         assert context.require_widget("pcb-layout-manager.action.assign").instate(["disabled"])
@@ -643,7 +677,7 @@ def test_pcb_layout_manager_duplicate_name_reports_error_without_mutating_manife
     root = _new_root(monkeypatch)
     context = UiTestContext(root)
 
-    def add_duplicate(_dialog):
+    def add_duplicate(_dialog: Toplevel) -> None:
         _click(context, "pcb-layout-manager.action.add", "Add layout")
         assert len(errors) == 1
         assert errors[0][0] == "Add PCB layout"
@@ -664,15 +698,15 @@ def test_pcb_layout_manager_duplicate_name_reports_error_without_mutating_manife
         root.destroy()
 
 
-def test_manage_libraries_add_registration_error_keeps_existing_roots(monkeypatch, tmp_path):
-    _settings, first, second = _library_fixture(monkeypatch, tmp_path)
+def test_manage_libraries_add_registration_error_keeps_existing_roots(monkeypatch: MonkeyPatch, tmp_path: Path):
+    _settings, first, second = _library_fixture(monkeypatch: MonkeyPatch, tmp_path: Path)
     registered_before = set(repository.library_roots())
     assert {first.resolve(), second.resolve()} <= registered_before
     candidate = tmp_path / "candidate-library"
     candidate.mkdir()
     monkeypatch.setattr(plugin_actions, "_pick_directory", lambda *_a, **_k: str(candidate))
 
-    def fail_add(_path):
+    def fail_add(_path: Path) -> None:
         raise OSError("permission denied while registering library")
 
     monkeypatch.setattr(plugin_actions, "add_library_root", fail_add)
@@ -685,7 +719,7 @@ def test_manage_libraries_add_registration_error_keeps_existing_roots(monkeypatc
     root = _new_root(monkeypatch)
     context = UiTestContext(root)
 
-    def add(_dialog):
+    def add(_dialog: Toplevel) -> None:
         _click(context, "manage-libraries.action.add", "Add library")
         assert len(errors) == 1
         assert errors[0][0] == "Add existing library"
@@ -703,8 +737,8 @@ def test_manage_libraries_add_registration_error_keeps_existing_roots(monkeypatc
         root.destroy()
 
 
-def test_manage_libraries_create_rejects_path_like_folder_name(monkeypatch, tmp_path):
-    _settings, _first, _second = _library_fixture(monkeypatch, tmp_path)
+def test_manage_libraries_create_rejects_path_like_folder_name(monkeypatch: MonkeyPatch, tmp_path: Path):
+    _settings, _first, _second = _library_fixture(monkeypatch: MonkeyPatch, tmp_path: Path)
     destination = tmp_path / "created"
     destination.mkdir()
     monkeypatch.setattr(plugin_actions, "_pick_directory", lambda *_a, **_k: str(destination))
@@ -722,7 +756,7 @@ def test_manage_libraries_create_rejects_path_like_folder_name(monkeypatch, tmp_
     root = _new_root(monkeypatch)
     context = UiTestContext(root)
 
-    def create(_dialog):
+    def create(_dialog: Toplevel) -> None:
         _click(context, "manage-libraries.action.create", "Create library")
         assert len(errors) == 1
         assert errors[0][0] == "Create block library"
@@ -739,8 +773,8 @@ def test_manage_libraries_create_rejects_path_like_folder_name(monkeypatch, tmp_
         root.destroy()
 
 
-def test_manage_libraries_create_filesystem_error_keeps_existing_folder(monkeypatch, tmp_path):
-    _settings, _first, _second = _library_fixture(monkeypatch, tmp_path)
+def test_manage_libraries_create_filesystem_error_keeps_existing_folder(monkeypatch: MonkeyPatch, tmp_path: Path):
+    _settings, _first, _second = _library_fixture(monkeypatch: MonkeyPatch, tmp_path: Path)
     destination = tmp_path / "created"
     existing = destination / "already-there"
     destination.mkdir()
@@ -762,7 +796,7 @@ def test_manage_libraries_create_filesystem_error_keeps_existing_folder(monkeypa
     root = _new_root(monkeypatch)
     context = UiTestContext(root)
 
-    def create(_dialog):
+    def create(_dialog: Toplevel) -> None:
         _click(context, "manage-libraries.action.create", "Create library")
         assert len(errors) == 1
         assert errors[0][0] == "Create block library"
@@ -783,13 +817,13 @@ def test_manage_libraries_create_filesystem_error_keeps_existing_folder(monkeypa
 def test_manage_libraries_change_folder_rolls_back_after_old_root_removal_fails(
     monkeypatch, tmp_path
 ):
-    _settings, first, second = _library_fixture(monkeypatch, tmp_path)
+    _settings, first, second = _library_fixture(monkeypatch: MonkeyPatch, tmp_path: Path)
     replacement = tmp_path / "replacement"
     replacement.mkdir()
     monkeypatch.setattr(plugin_actions, "_pick_directory", lambda *_a, **_k: str(replacement))
     original_remove = plugin_actions.remove_library_root
 
-    def fail_old_root(path):
+    def fail_old_root(path: Path) -> None:
         resolved = Path(path).expanduser().resolve()
         if resolved == first.resolve():
             raise OSError("simulated old-root unregister failure")
@@ -805,7 +839,7 @@ def test_manage_libraries_change_folder_rolls_back_after_old_root_removal_fails(
     root = _new_root(monkeypatch)
     context = UiTestContext(root)
 
-    def change(_dialog):
+    def change(_dialog: Toplevel) -> None:
         _select_path(context, "manage-libraries.rows", first, path_column="path")
         _click(context, "manage-libraries.action.change", "Change folder")
         assert len(errors) == 1
@@ -826,8 +860,8 @@ def test_manage_libraries_change_folder_rolls_back_after_old_root_removal_fails(
         root.destroy()
 
 
-def test_manage_libraries_unregister_error_keeps_root_registered(monkeypatch, tmp_path):
-    _settings, first, second = _library_fixture(monkeypatch, tmp_path)
+def test_manage_libraries_unregister_error_keeps_root_registered(monkeypatch: MonkeyPatch, tmp_path: Path):
+    _settings, first, second = _library_fixture(monkeypatch: MonkeyPatch, tmp_path: Path)
     monkeypatch.setattr(plugin_actions.messagebox, "askyesno", lambda *_a, **_k: True)
     monkeypatch.setattr(
         plugin_actions,
@@ -843,7 +877,7 @@ def test_manage_libraries_unregister_error_keeps_root_registered(monkeypatch, tm
     root = _new_root(monkeypatch)
     context = UiTestContext(root)
 
-    def unregister(_dialog):
+    def unregister(_dialog: Toplevel) -> None:
         _select_path(context, "manage-libraries.rows", second, path_column="path")
         _click(context, "manage-libraries.action.unregister", "Unregister")
         assert len(errors) == 1
@@ -862,8 +896,8 @@ def test_manage_libraries_unregister_error_keeps_root_registered(monkeypatch, tm
         root.destroy()
 
 
-def test_manage_libraries_set_default_error_preserves_previous_default(monkeypatch, tmp_path):
-    _settings, first, second = _library_fixture(monkeypatch, tmp_path)
+def test_manage_libraries_set_default_error_preserves_previous_default(monkeypatch: MonkeyPatch, tmp_path: Path):
+    _settings, first, second = _library_fixture(monkeypatch: MonkeyPatch, tmp_path: Path)
     monkeypatch.setattr(
         plugin_actions,
         "set_library_root",
@@ -878,7 +912,7 @@ def test_manage_libraries_set_default_error_preserves_previous_default(monkeypat
     root = _new_root(monkeypatch)
     context = UiTestContext(root)
 
-    def set_default(_dialog):
+    def set_default(_dialog: Toplevel) -> None:
         _select_path(context, "manage-libraries.rows", second, path_column="path")
         _click(context, "manage-libraries.action.default", "Set default")
         assert len(errors) == 1

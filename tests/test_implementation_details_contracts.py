@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import sys
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -15,7 +16,17 @@ sys.path.insert(0, str(ROOT / "tests"))
 from kicad_blocks import plugin as plugin_actions
 from kicad_blocks.model import parse_pins
 from kicad_blocks.repository import BlockRecord, create_block
-from ui_contracts import ButtonContract, UiTestContext, assert_control_coverage
+from ui_contracts import (
+    ButtonContract,
+    Combobox,
+    Entry,
+    MonkeyPatch,
+    Misc,
+    Tk,
+    Toplevel,
+    UiTestContext,
+    assert_control_coverage,
+)
 
 pytestmark = pytest.mark.skipif(
     not os.environ.get("DISPLAY"),
@@ -39,7 +50,7 @@ MODE_BLANK = "Create a new empty schematic"
 MODE_COPY = "Copy an existing implementation"
 
 
-def _fixture(tmp_path: Path):
+def _fixture(tmp_path: Path) -> BlockRecord:
     library = tmp_path / "library"
     sources = tmp_path / "sources"
     sources.mkdir()
@@ -65,8 +76,8 @@ def _fixture(tmp_path: Path):
     return record, first, second, default_file
 
 
-def _new_root(monkeypatch):
-    plugin_actions._load_tkinter()
+def _new_root(monkeypatch: MonkeyPatch) -> Tk:
+    plugin_actions.load_tkinter()
     monkeypatch.setattr(plugin_actions, "_create_action_icon", lambda *_args: None)
     root = plugin_actions.tk.Tk()
     root.title("Implementation details contract host")
@@ -75,7 +86,7 @@ def _new_root(monkeypatch):
     return root, UiTestContext(root)
 
 
-def _find_dialog(root):
+def _find_dialog(root: Tk) -> Toplevel:
     return next(
         child
         for child in root.winfo_children()
@@ -83,18 +94,27 @@ def _find_dialog(root):
     )
 
 
-def _find_dialog_exists(root) -> bool:
+def _find_dialog_exists(root: Tk) -> bool:
     return any(
         child.winfo_class() == "Toplevel" and child.title() == WINDOW_TITLE
         for child in root.winfo_children()
     )
 
 
-def _run_form(root, context, action, *, value="", source="", record=None, allow_create=False):
-    callback_errors = []
+def _run_form(
+    root: Tk,
+    context: UiTestContext,
+    action: Callable[[Toplevel], None],
+    *,
+    value: str = "",
+    source: str = "",
+    record: BlockRecord | None = None,
+    allow_create: bool = False,
+) -> tuple[str, str] | None:
+    callback_errors: list[Exception] = []
 
-    def drive():
-        dialog = None
+    def drive() -> None:
+        dialog: Toplevel | None = None
         try:
             dialog = _find_dialog(root)
             assert dialog.winfo_viewable()
@@ -147,7 +167,7 @@ def _click(
     context.refresh_widgets()
 
 
-def _assert_initial_state(context: UiTestContext, dialog, *, allow_create: bool):
+def _assert_initial_state(context: UiTestContext, dialog: Toplevel, *, allow_create: bool) -> None:
     widgets = context.refresh_widgets()
     assert dialog.title() == WINDOW_TITLE
     assert dialog.winfo_width() >= 660
@@ -177,7 +197,7 @@ def _assert_initial_state(context: UiTestContext, dialog, *, allow_create: bool)
 
 
 def _select_mode(root, context, mode: str):
-    combo = context.require_widget("implementation-details.mode")
+    combo = context.require_combobox("implementation-details.mode")
     combo.set(mode)
     combo.event_generate("<<ComboboxSelected>>")
     root.update_idletasks()
@@ -191,7 +211,7 @@ def test_existing_schematic_source_is_returned_and_non_create_mode_has_no_mode_s
     source.write_text("(kicad_sch (version 20250114))\n", encoding="utf-8")
     root, context = _new_root(monkeypatch)
 
-    def accept_existing(dialog):
+    def accept_existing(dialog: Toplevel) -> None:
         _assert_initial_state(context, dialog, allow_create=False)
         assert context.require_widget("implementation-details.variant").get() == "3V3"
         context.require_widget("implementation-details.source").delete(0, "end")
@@ -217,7 +237,7 @@ def test_existing_schematic_source_is_returned_and_non_create_mode_has_no_mode_s
         root.destroy()
 
 
-def test_blank_selector_validation_keeps_form_open_and_recovers(monkeypatch, tmp_path):
+def test_blank_selector_validation_keeps_form_open_and_recovers(monkeypatch: MonkeyPatch, tmp_path: Path):
     source = tmp_path / "existing.kicad_sch"
     source.write_text("(kicad_sch (version 20250114))\n", encoding="utf-8")
     root, context = _new_root(monkeypatch)
@@ -228,7 +248,7 @@ def test_blank_selector_validation_keeps_form_open_and_recovers(monkeypatch, tmp
         lambda title, message, **_kwargs: errors.append((title, str(message))),
     )
 
-    def recover(_dialog):
+    def recover(_dialog: Toplevel) -> None:
         _assert_initial_state(context, _dialog, allow_create=False)
         selector = context.require_widget("implementation-details.variant")
         selector.delete(0, "end")
@@ -252,19 +272,19 @@ def test_blank_selector_validation_keeps_form_open_and_recovers(monkeypatch, tmp
         root.destroy()
 
 
-def test_browse_button_uses_kicad_schematic_picker_and_accepts_selected_file(monkeypatch, tmp_path):
+def test_browse_button_uses_kicad_schematic_picker_and_accepts_selected_file(monkeypatch: MonkeyPatch, tmp_path: Path):
     source = tmp_path / "selected.kicad_sch"
     source.write_text("(kicad_sch (version 20250114))\n", encoding="utf-8")
     calls = []
 
-    def choose_file(parent, *, title, suffix, initial_path):
+    def choose_file(parent: Misc, *, title: str, suffix: str, initial_path: Path) -> str:
         calls.append((parent.title(), title, suffix, initial_path))
         return source
 
     monkeypatch.setattr(plugin_actions, "_pick_kicad_file", choose_file)
     root, context = _new_root(monkeypatch)
 
-    def browse_and_accept(dialog):
+    def browse_and_accept(dialog: Toplevel) -> None:
         _assert_initial_state(context, dialog, allow_create=False)
         _click(context, "implementation-details.action.browse", "Choose file…")
         assert calls == [
@@ -285,7 +305,7 @@ def test_browse_button_uses_kicad_schematic_picker_and_accepts_selected_file(mon
         root.destroy()
 
 
-def test_invalid_source_extension_is_rejected_then_browse_recovers(monkeypatch, tmp_path):
+def test_invalid_source_extension_is_rejected_then_browse_recovers(monkeypatch: MonkeyPatch, tmp_path: Path):
     invalid = tmp_path / "notes.txt"
     invalid.write_text("not a schematic\n", encoding="utf-8")
     source = tmp_path / "selected.kicad_sch"
@@ -330,13 +350,13 @@ def test_invalid_source_extension_is_rejected_then_browse_recovers(monkeypatch, 
         root.destroy()
 
 
-def test_create_blank_schematic_mode_returns_a_valid_temporary_source(monkeypatch, tmp_path):
+def test_create_blank_schematic_mode_returns_a_valid_temporary_source(monkeypatch: MonkeyPatch, tmp_path: Path):
     record, _first, _second, _default = _fixture(tmp_path)
     root, context = _new_root(monkeypatch)
     created = []
     create_source = plugin_actions._new_blank_schematic_source
 
-    def capture_blank_source():
+    def capture_blank_source() -> Path:
         path = Path(create_source())
         created.append(path)
         return str(path)
@@ -347,7 +367,7 @@ def test_create_blank_schematic_mode_returns_a_valid_temporary_source(monkeypatc
         capture_blank_source,
     )
 
-    def choose_blank(dialog):
+    def choose_blank(dialog: Toplevel) -> None:
         _assert_initial_state(context, dialog, allow_create=True)
         _select_mode(root, context, MODE_BLANK)
         assert (
@@ -383,11 +403,11 @@ def test_create_blank_schematic_mode_returns_a_valid_temporary_source(monkeypatc
         root.destroy()
 
 
-def test_copy_existing_implementation_uses_selected_library_variant(monkeypatch, tmp_path):
+def test_copy_existing_implementation_uses_selected_library_variant(monkeypatch: MonkeyPatch, tmp_path: Path):
     record, first, second, _default = _fixture(tmp_path)
     root, context = _new_root(monkeypatch)
 
-    def choose_copy(dialog):
+    def choose_copy(dialog: Toplevel) -> None:
         _assert_initial_state(context, dialog, allow_create=True)
         _select_mode(root, context, MODE_COPY)
         assert (
@@ -428,7 +448,7 @@ def test_copy_existing_implementation_uses_selected_library_variant(monkeypatch,
         root.destroy()
 
 
-def test_missing_copy_source_is_rejected_and_can_switch_to_existing_variant(monkeypatch, tmp_path):
+def test_missing_copy_source_is_rejected_and_can_switch_to_existing_variant(monkeypatch: MonkeyPatch, tmp_path: Path):
     record, _first, second, default = _fixture(tmp_path)
     default.unlink()
     root, context = _new_root(monkeypatch)
@@ -439,7 +459,7 @@ def test_missing_copy_source_is_rejected_and_can_switch_to_existing_variant(monk
         lambda title, message, **_kwargs: errors.append((title, str(message))),
     )
 
-    def recover_copy(dialog):
+    def recover_copy(dialog: Toplevel) -> None:
         _assert_initial_state(context, dialog, allow_create=True)
         _select_mode(root, context, MODE_COPY)
         copy = context.require_widget("implementation-details.copy")
@@ -482,11 +502,11 @@ def _first_path(record: BlockRecord) -> Path:
     return Path(record.path) / str(variant["file"])
 
 
-def test_cancel_and_escape_leave_library_sources_unchanged(monkeypatch, tmp_path):
+def test_cancel_and_escape_leave_library_sources_unchanged(monkeypatch: MonkeyPatch, tmp_path: Path):
     record, _first, _second, default = _fixture(tmp_path)
     root, context = _new_root(monkeypatch)
 
-    def cancel(dialog):
+    def cancel(dialog: Toplevel) -> None:
         _assert_initial_state(context, dialog, allow_create=True)
         _click(
             context,
@@ -504,7 +524,7 @@ def test_cancel_and_escape_leave_library_sources_unchanged(monkeypatch, tmp_path
 
     root, context = _new_root(monkeypatch)
 
-    def escape(dialog):
+    def escape(dialog: Toplevel) -> None:
         _assert_initial_state(context, dialog, allow_create=True)
         selector = context.require_widget("implementation-details.variant")
         selector.focus_force()

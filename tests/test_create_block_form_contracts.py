@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import sys
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -13,7 +14,7 @@ sys.path.insert(0, str(ROOT / "plugin" / "kicad-blocks"))
 sys.path.insert(0, str(ROOT / "tests"))
 
 from kicad_blocks import plugin as plugin_actions
-from ui_contracts import ButtonContract, UiTestContext, assert_control_coverage
+from ui_contracts import ButtonContract, MonkeyPatch, Tk, Toplevel, UiTestContext, assert_control_coverage
 
 pytestmark = pytest.mark.skipif(
     not os.environ.get("DISPLAY"),
@@ -31,8 +32,8 @@ CREATE_BLOCK_CONTROLS = {
 }
 
 
-def _new_root(monkeypatch):
-    plugin_actions._load_tkinter()
+def _new_root(monkeypatch: MonkeyPatch) -> tuple[Tk, UiTestContext]:
+    plugin_actions.load_tkinter()
     monkeypatch.setattr(plugin_actions, "_create_action_icon", lambda *_args: None)
     root = plugin_actions.tk.Tk()
     root.title("Create Block UI contract host")
@@ -41,7 +42,7 @@ def _new_root(monkeypatch):
     return root, UiTestContext(root)
 
 
-def _find_dialog(root):
+def _find_dialog(root: Tk) -> Toplevel:
     return next(
         child
         for child in root.winfo_children()
@@ -66,11 +67,13 @@ def _click(
     context.refresh_widgets()
 
 
-def _run_form(root, context, action):
-    callback_errors = []
+def _run_form(
+    root: Tk, context: UiTestContext, action: Callable[[Toplevel], None]
+) -> tuple[str, str] | None:
+    callback_errors: list[Exception] = []
 
-    def drive():
-        dialog = None
+    def drive() -> None:
+        dialog: Toplevel | None = None
         try:
             dialog = _find_dialog(root)
             assert dialog.winfo_viewable()
@@ -93,13 +96,13 @@ def _run_form(root, context, action):
                 dialog.destroy()
 
     root.after(100, drive)
-    result = plugin_actions._ask_create_block_details(root, Path("power_stage.kicad_sch"))
+    result = plugin_actions.ask_create_block_details(root, Path("power_stage.kicad_sch"))
     if callback_errors:
         raise callback_errors[0]
     return result
 
 
-def _assert_initial_form_state(context: UiTestContext, dialog) -> None:
+def _assert_initial_form_state(context: UiTestContext, dialog: Toplevel) -> None:
     widgets = context.refresh_widgets()
     assert dialog.title() == WINDOW_TITLE
     assert dialog.winfo_width() >= 580
@@ -124,10 +127,10 @@ def _assert_initial_form_state(context: UiTestContext, dialog) -> None:
         assert widget.winfo_rooty() + widget.winfo_height() <= window_bottom
 
 
-def test_create_block_form_submits_name_and_optional_description(monkeypatch):
+def test_create_block_form_submits_name_and_optional_description(monkeypatch: MonkeyPatch):
     root, context = _new_root(monkeypatch)
 
-    def create(dialog):
+    def create(dialog: Toplevel) -> None:
         _assert_initial_form_state(context, dialog)
         context.require_widget("create-block-form.name").delete(0, "end")
         context.require_widget("create-block-form.name").insert(0, "USB Power Stage")
@@ -150,7 +153,7 @@ def test_create_block_form_submits_name_and_optional_description(monkeypatch):
         root.destroy()
 
 
-def test_create_block_form_rejects_blank_name_and_recovers(monkeypatch):
+def test_create_block_form_rejects_blank_name_and_recovers(monkeypatch: MonkeyPatch):
     root, context = _new_root(monkeypatch)
     errors = []
     monkeypatch.setattr(
@@ -159,7 +162,7 @@ def test_create_block_form_rejects_blank_name_and_recovers(monkeypatch):
         lambda title, message, **_kwargs: errors.append((title, message)),
     )
 
-    def recover(dialog):
+    def recover(dialog: Toplevel) -> None:
         _assert_initial_form_state(context, dialog)
         name_entry = context.require_widget("create-block-form.name")
         name_entry.delete(0, "end")
@@ -183,10 +186,10 @@ def test_create_block_form_rejects_blank_name_and_recovers(monkeypatch):
         root.destroy()
 
 
-def test_create_block_form_cancel_returns_none_without_creating_block(monkeypatch):
+def test_create_block_form_cancel_returns_none_without_creating_block(monkeypatch: MonkeyPatch):
     root, context = _new_root(monkeypatch)
 
-    def cancel(dialog):
+    def cancel(dialog: Toplevel) -> None:
         _assert_initial_form_state(context, dialog)
         _click(
             context,
@@ -202,10 +205,10 @@ def test_create_block_form_cancel_returns_none_without_creating_block(monkeypatc
         root.destroy()
 
 
-def test_create_block_form_escape_key_cancels(monkeypatch):
+def test_create_block_form_escape_key_cancels(monkeypatch: MonkeyPatch):
     root, context = _new_root(monkeypatch)
 
-    def cancel_with_escape(dialog):
+    def cancel_with_escape(dialog: Toplevel) -> None:
         _assert_initial_form_state(context, dialog)
         dialog.event_generate("<Escape>")
         root.update_idletasks()
