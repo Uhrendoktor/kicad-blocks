@@ -5,17 +5,9 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
-from typing import TYPE_CHECKING, TypedDict, cast
+from typing import TypedDict, cast
 
 from _pytest.monkeypatch import MonkeyPatch
-
-if TYPE_CHECKING:
-    from kicad_blocks.pcb_types import (
-        BatchBlockLayoutMergeResult,
-        BatchBlockLayoutPlacementSource,
-        BlockLayoutMergeResult,
-        BlockLayoutPlacementSource,
-    )
 
 import pytest
 
@@ -23,6 +15,12 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "plugin" / "kicad-blocks"))
 
 from kicad_blocks import plugin as plugin_actions
+from kicad_blocks.pcb_types import (
+    BatchBlockLayoutMergeResult,
+    BatchBlockLayoutPlacementSource,
+    BlockLayoutMergeResult,
+    BlockLayoutPlacementSource,
+)
 from kicad_blocks.repository import BlockRecord
 from ui_contracts import Misc
 
@@ -673,7 +671,10 @@ def _patch_action_environment(
         "tk",
         SimpleNamespace(Tk=lambda: root, TclError=RuntimeError),
     )
-    def no_theme(_root: Misc) -> None:
+    def no_theme(
+        _root: Misc,
+        _kicad: plugin_actions.KiCadApp | None = None,
+    ) -> None:
         return None
 
     def no_attach(_root: Misc, _kicad: plugin_actions.KiCadApp) -> None:
