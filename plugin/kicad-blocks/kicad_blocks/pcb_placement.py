@@ -185,7 +185,6 @@ def read_pcb_placement_manifest(board_path: Path) -> PCBPlacementManifest:
     return payload
 
 
-
 def resolve_placement_item_ids(board: Board, placement: PCBPlacementEntry) -> list[BoardItemId]:
     """Resolve one block's recorded UUIDs to KIID objects on the active board."""
     requested = placement["item_uuids"]
