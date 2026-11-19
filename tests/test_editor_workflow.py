@@ -66,6 +66,78 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
             )
         ]
 
+    def test_native_symbol_placement_uses_verified_eeschema_chooser(self):
+        calls = []
+        focuses = ["0x200", "0x100"]
+
+        def command_runner(arguments, **_kwargs):
+            calls.append(arguments)
+            if arguments[1:3] == ["getwindowname", "0x100"]:
+                return SimpleNamespace(stdout="project — Schematic Editor")
+            if arguments[1:3] == ["getwindowclassname", "0x100"]:
+                return SimpleNamespace(stdout="eeschema")
+            if arguments[1:3] == ["getwindowpid", "0x100"]:
+                return SimpleNamespace(stdout="4242")
+            if arguments[1:2] == ["getwindowfocus"]:
+                return SimpleNamespace(stdout=focuses.pop(0) if focuses else "0x100")
+            if arguments[1:3] == ["getwindowpid", "0x200"]:
+                return SimpleNamespace(stdout="4242")
+            if arguments[1:3] == ["getwindowname", "0x200"]:
+                return SimpleNamespace(stdout="Choose Symbol")
+            return SimpleNamespace(stdout="")
+
+        plugin_actions._start_native_symbol_placement(
+            self.kicad,
+            "0x100",
+            self.block.manifest["symbol_name"],
+            backend="xdotool",
+            executable="/usr/bin/xdotool",
+            command_runner=command_runner,
+            pause=lambda _seconds: None,
+        )
+
+        self.assertIn(
+            ["/usr/bin/xdotool", "key", "--clearmodifiers", "a"],
+            calls,
+        )
+        self.assertIn(
+            [
+                "/usr/bin/xdotool", "type", "--clearmodifiers", "--delay", "12",
+                f"{plugin_actions.LIBRARY_NICKNAME}:{self.block.manifest['symbol_name']}",
+            ],
+            calls,
+        )
+        self.assertIn(
+            ["/usr/bin/xdotool", "key", "--clearmodifiers", "Return"],
+            calls,
+        )
+        self.assertTrue(
+            any(call[1:3] == ["windowfocus", "--sync"] for call in calls)
+        )
+        self.assertFalse(any("run_action" in str(call) for call in calls))
+
+    def test_native_symbol_placement_wayland_backend_types_exact_library_id(self):
+        calls = []
+        plugin_actions._start_native_symbol_placement(
+            self.kicad,
+            None,
+            self.block.manifest["symbol_name"],
+            backend="wtype",
+            executable="/usr/bin/wtype",
+            command_runner=lambda arguments, **_kwargs: (
+                calls.append(arguments) or SimpleNamespace(stdout="", returncode=0)
+            ),
+            pause=lambda _seconds: None,
+        )
+        self.assertEqual(
+            calls,
+            [
+                ["/usr/bin/wtype", "-k", "a"],
+                ["/usr/bin/wtype", f"{plugin_actions.LIBRARY_NICKNAME}:{self.block.manifest['symbol_name']}"],
+                ["/usr/bin/wtype", "-k", "Return"],
+            ],
+        )
+
     def test_open_symbol_library_item_sends_exact_kicad_proto_and_verifies_document(self):
         from google.protobuf.empty_pb2 import Empty
         from kipy.proto.common.commands import editor_commands_pb2
