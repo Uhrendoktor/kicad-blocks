@@ -331,7 +331,9 @@ def test_library_validation_uses_the_correct_warning_dialog(
     assert warnings[0][2] is parent
 
 
-def test_successful_library_validation_does_not_show_a_warning_dialog(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
+def test_successful_library_validation_does_not_show_a_warning_dialog(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+) -> None:
     report = {
         "blocks": [{"name": "Valid block", "status": "passed", "errors": [], "warnings": []}],
         "passed_count": 1,
@@ -349,7 +351,9 @@ def test_successful_library_validation_does_not_show_a_warning_dialog(monkeypatc
     assert warnings == []
 
 
-def test_validation_report_dialog_cancel_skips_all_library_validation(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
+def test_validation_report_dialog_cancel_skips_all_library_validation(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+) -> None:
     validations = []
     monkeypatch.setattr(plugin_actions, "_pick_directory", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(
