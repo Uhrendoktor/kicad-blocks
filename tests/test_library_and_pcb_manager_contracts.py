@@ -778,7 +778,7 @@ def test_manage_libraries_add_registration_error_keeps_existing_roots(
 
     def fail_add(_path: Path) -> None:
         message = "permission denied while registering library"
-            raise OSError(message)
+        raise OSError(message)
 
     monkeypatch.setattr(plugin_actions, "add_library_root", fail_add)
     errors = []
