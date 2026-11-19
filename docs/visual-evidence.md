@@ -18,13 +18,7 @@ Static captures of the same chooser states are available: [initial library view]
 
 ## Create a block from a sheet
 
-After selecting a hierarchical sheet in Eeschema, **Create Block from Sheet** opens the production form shown below. It identifies the source sheet and lets the designer enter a reusable block name and optional description.
-
-<p align="center">
-  <img src="https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/create-block-form-light.png" alt="Create a reusable block from this sheet dialog showing the selected STUSB4500 source sheet, block-name field, optional description, and Create Block action" width="760">
-</p>
-
-The selected root sheet's hierarchical labels define the new facade interface. Its child sheets remain inside the stored implementation, and the source project is left unchanged. The [dark-theme capture](https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/create-block-form-dark.png) shows the same form.
+Select exactly one hierarchical sheet symbol in Eeschema and invoke **Create Block from Sheet** once. With no selection, the currently open sheet is used. The name is derived from the source filename with a numeric suffix on collision; the destination is the configured default library. The action creates the block, copies its child-sheet hierarchy, derives facade pins from root hierarchical labels, and registers the project catalog without rewriting the source schematic. There is no naming form or success popup.
 
 ## Inspect a library entry
 
@@ -48,6 +42,16 @@ The schematic view previews the editable implementation itself, independently of
 
 The same schematic preview is captured in the [dark theme](https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/library-browser-schematic-dark.png).
 
+## Edit facade pin layout
+
+Choose **Edit facade** for a selected block in the Functional Block Library to adjust the generated facade's pin positions, orientation, and length. Each accepted change is written to the project-local KiCad symbol catalog immediately; pin names, numbers, and electrical types remain derived from hierarchical labels. **Publish** transfers the facade changes to the shared library with concurrency protection.
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/facade-editor-light.png" alt="Facade Pin Layout editor in light theme showing pin names, numbers, electrical types and editable X/Y positions, orientation, and length" width="1000">
+</p>
+
+The [dark-theme capture](https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/facade-editor-dark.png) shows the same production editor.
+
 Manage shared library roots with the **Manage Libraries** dialog:
 
 <p align="center">
@@ -70,10 +74,10 @@ The implementation details dialog uses a short **Variant value** label and expla
 
 ## Manage PCB layouts
 
-The PCB layout manager separates the stored layout table and implementation-assignment controls. Add, Remove, Assign, and Set default persist immediately; Save & close retries failed writes.
+The PCB layout manager separates the stored layout table and implementation-assignment controls. Add, Remove, Assign, and Set default persist immediately; Close retries a failed write.
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/pcb-layout-manager-light.png" alt="PCB layouts manager with layout rows, implementation assignment controls, and Close and Save and close footer buttons" width="1000">
+  <img src="https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/pcb-layout-manager-light.png" alt="PCB layouts manager with layout rows, implementation assignment controls, and a Close footer button" width="1000">
 </p>
 
 When creating a named layout from a blank board, the source-file controls are hidden:
@@ -98,7 +102,7 @@ The configuration dialog selects a profile, implementation variant, typed parame
   <img src="https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/instance-configuration-light.png" alt="Instance configuration dialog showing profile, implementation variant, typed parameter, and PCB layout selectors" width="820">
 </p>
 
-The task hub groups less frequent commands by workflow.
+The Task Hub remains available for compatibility and selection-aware access to less frequent commands; direct Eeschema actions and the Functional Block Library are the intended create/place/publish workflow.
 
 ### Use & build
 
