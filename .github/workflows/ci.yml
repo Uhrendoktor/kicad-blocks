@@ -28,12 +28,10 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Synchronize the quality PR branch with current main
+      - name: Merge current main into the quality PR branch
         id: sync
         shell: bash
         env:
-          GH_TOKEN: ${{ github.token }}
-          EXPECTED_HEAD: ${{ github.sha }}
           REF_NAME: ${{ github.ref_name }}
         run: |
           set -euo pipefail
@@ -41,25 +39,46 @@ jobs:
           if [[ "$REF_NAME" != "agents/strict-test-quality-contract-rebased" ]]; then
             exit 0
           fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git fetch --no-tags origin main
-          if git merge-base --is-ancestor origin/main "$EXPECTED_HEAD"; then
+          if git merge-base --is-ancestor origin/main HEAD; then
             echo "The PR head already contains current main."
             exit 0
           fi
-          echo "::notice::Updating PR #40 with the latest main branch."
-          gh api --method PUT "repos/${GITHUB_REPOSITORY}/pulls/40/update-branch" \
-            -f expected_head_sha="$EXPECTED_HEAD"
-          for attempt in $(seq 1 30); do
-            current_head="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/40" --jq '.head.sha')"
-            if [[ "$current_head" != "$EXPECTED_HEAD" ]]; then
-              echo "updated=true" >> "$GITHUB_OUTPUT"
-              echo "::notice::PR #40 now includes the current main branch."
-              exit 0
-            fi
-            sleep 2
-          done
-          echo "::error::GitHub did not update PR #40 after the update-branch request."
+          echo "::notice::Merging current main into $REF_NAME."
+          if git merge --no-commit --no-ff origin/main; then
+            git commit -m "merge: synchronize strict quality PR with current main"
+            git push origin "HEAD:refs/heads/$REF_NAME"
+            echo "updated=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::The PR branch now includes current main; CI will rerun on the merge commit."
+            exit 0
+          fi
+
+          conflict_dir="${RUNNER_TEMP}/main-merge-conflicts"
+          mkdir -p "$conflict_dir"
+          git diff --name-only --diff-filter=U > "$conflict_dir/conflicts.txt"
+          while IFS= read -r path; do
+            [[ -n "$path" ]] || continue
+            target="$conflict_dir/files/$path"
+            mkdir -p "$(dirname "$target")"
+            for stage in 1 2 3; do
+              git show ":$stage:$path" > "$target.stage$stage" 2>/dev/null || true
+            done
+            git diff --cc -- "$path" > "$target.combined.diff" || true
+          done < "$conflict_dir/conflicts.txt"
+          git status --short > "$conflict_dir/git-status.txt"
+          echo "::error::Git reported merge conflicts with current main. Conflict stages were saved as an artifact."
           exit 1
+
+      - name: Upload exact main merge conflict inputs
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: pr40-main-merge-conflicts
+          path: ${{ runner.temp }}/main-merge-conflicts
+          if-no-files-found: ignore
+          compression-level: 1
 
   python-and-kicad:
     needs: synchronize-main
