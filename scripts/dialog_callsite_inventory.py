@@ -7,7 +7,7 @@ import ast
 import json
 import sys
 from pathlib import Path
-from typing import Any
+from typing import TypedDict, cast
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE_PATH = ROOT / "plugin" / "kicad-blocks" / "kicad_blocks" / "plugin.py"
@@ -30,6 +30,35 @@ COVERAGE_LABELS = {
 }
 
 
+class DialogCallSite(TypedDict):
+    """One native-dialog call discovered from the production plugin AST."""
+
+    id: str
+    owner: str
+    method: str
+    line: int
+
+
+class DialogCatalogEntry(TypedDict):
+    """Coverage evidence and rationale for one dialog call site."""
+
+    id: str
+    owner: str
+    method: str
+    line: int
+    coverage: str
+    evidence: list[str]
+    rationale: str
+
+
+class DialogCatalog(TypedDict):
+    """Typed top-level structure of the committed native-dialog catalog."""
+
+    schema_version: int
+    source: str
+    call_sites: list[DialogCatalogEntry]
+
+
 def _dotted_name(node: ast.AST) -> str:
     if isinstance(node, ast.Name):
         return node.id
@@ -42,7 +71,7 @@ class DialogCallVisitor(ast.NodeVisitor):
     def __init__(self) -> None:
         self.function_stack: list[str] = []
         self.counts: dict[tuple[str, str], int] = {}
-        self.calls: list[dict[str, Any]] = []
+        self.calls: list[DialogCallSite] = []
 
     def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
         for decorator in node.decorator_list:
@@ -82,15 +111,18 @@ class DialogCallVisitor(ast.NodeVisitor):
         self.generic_visit(node)
 
 
-def discover_dialog_calls(source_path: Path = SOURCE_PATH) -> list[dict[str, Any]]:
+def discover_dialog_calls(source_path: Path = SOURCE_PATH) -> list[DialogCallSite]:
     tree = ast.parse(source_path.read_text(encoding="utf-8"), filename=str(source_path))
     visitor = DialogCallVisitor()
     visitor.visit(tree)
     return sorted(visitor.calls, key=lambda item: item["line"])
 
 
-def load_catalog(path: Path = CATALOG_PATH) -> dict[str, Any]:
-    catalog = json.loads(path.read_text(encoding="utf-8"))
+def load_catalog(path: Path = CATALOG_PATH) -> DialogCatalog:
+    loaded = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(loaded, dict):
+        raise ValueError("Native dialog catalog must be a JSON object.")
+    catalog = cast(DialogCatalog, loaded)
     if catalog.get("schema_version") != 1:
         raise ValueError("Unsupported native dialog catalog schema_version.")
     calls = catalog.get("call_sites")
@@ -127,10 +159,12 @@ def load_catalog(path: Path = CATALOG_PATH) -> dict[str, Any]:
     return catalog
 
 
-def render_inventory(catalog: dict[str, Any] | None = None) -> str:
-    catalog = catalog or load_catalog()
+def render_inventory(catalog: DialogCatalog | None = None) -> str:
+    catalog = catalog if catalog is not None else load_catalog()
     calls = discover_dialog_calls()
-    by_id = {item["id"]: item for item in catalog["call_sites"]}
+    by_id: dict[str, DialogCatalogEntry] = {
+        item["id"]: item for item in catalog["call_sites"]
+    }
     counts = {
         status: sum(item["coverage"] == status for item in catalog["call_sites"])
         for status in COVERAGE_LABELS

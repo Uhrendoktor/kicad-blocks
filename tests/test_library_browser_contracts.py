@@ -1282,7 +1282,7 @@ def test_edit_facade_failure_shows_recoverable_error(monkeypatch, tmp_path):
 
 def test_edit_facade_without_native_handoff_shows_guidance(monkeypatch, tmp_path):
     root, context, _records, _library, _project = _new_browser(monkeypatch, tmp_path)
-    notices: list[tuple[str, str, object]] = []
+    notices: list[tuple[str, str, Misc | None]] = []
 
     monkeypatch.setattr(plugin_actions, "_edit_facade_symbol", lambda *_args, **_kwargs: False)
     monkeypatch.setattr(

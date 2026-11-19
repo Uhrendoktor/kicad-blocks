@@ -14,7 +14,7 @@ sys.path.insert(0, str(ROOT / "tests"))
 
 from kicad_blocks import plugin as plugin_actions
 from kicad_blocks.model import parse_pins
-from kicad_blocks.repository import create_block
+from kicad_blocks.repository import BlockRecord, create_block
 from ui_contracts import ButtonContract, UiTestContext, assert_control_coverage
 
 pytestmark = pytest.mark.skipif(
@@ -487,7 +487,7 @@ def test_missing_copy_source_is_rejected_and_can_switch_to_existing_variant(
         root.destroy()
 
 
-def _first_path(record: object) -> Path:
+def _first_path(record: BlockRecord) -> Path:
     variants = record.manifest.get("variants", [])
     variant = next(item for item in variants if item["value"] == "3V3")
     return Path(record.path) / str(variant["file"])

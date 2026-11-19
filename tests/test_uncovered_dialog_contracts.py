@@ -12,6 +12,12 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "plugin" / "kicad-blocks"))
 
 from kicad_blocks import plugin as plugin_actions
+from kicad_blocks.pcb_types import (
+    BatchBlockLayoutMergeResult,
+    BatchBlockLayoutPlacementSource,
+    BlockLayoutMergeResult,
+    BlockLayoutPlacementSource,
+)
 
 
 # Native dialog call-site contracts patch the functions and do not need Tk installed.
@@ -51,7 +57,7 @@ def _pcb_placement_entry(
     layout_id: str = "standard",
     layout_name: str | None = "Standard",
     rotation: float = 0.0,
-) -> dict[str, object]:
+) -> BlockLayoutMergeResult:
     return {
         "output": "unused-stage.kicad_pcb",
         "block": block_name,
@@ -79,8 +85,10 @@ def _pcb_placement_entry(
     }
 
 
-def _pcb_merge_result(output: Path, *, rotation: float = 0.0, block_count: int = 1):
-    placements = [
+def _pcb_merge_result(
+    output: Path, *, rotation: float = 0.0, block_count: int = 1
+) -> BlockLayoutMergeResult | BatchBlockLayoutMergeResult:
+    placements: list[BlockLayoutMergeResult] = [
         _pcb_placement_entry(
             f"U{index}",
             f"Power stage U{index}" if block_count > 1 else "Power stage",
@@ -89,16 +97,20 @@ def _pcb_merge_result(output: Path, *, rotation: float = 0.0, block_count: int =
         )
         for index in range(1, block_count + 1)
     ]
-    result = {
+    if block_count == 1:
+        placement = placements[0]
+        placement["output"] = str(output)
+        return placement
+    result: BatchBlockLayoutMergeResult = {
         "output": str(output),
         "project_file": None,
         "block_count": block_count,
         "placements": placements,
         "footprints": [reference for item in placements for reference in item["footprints"]],
-        "footprint_count": sum(int(item["footprint_count"]) for item in placements),
-        "object_count": sum(int(item["object_count"]) for item in placements),
-        "new_net_count": 1 if block_count == 1 else 2,
-        "new_nets": ["VBUS"] if block_count == 1 else ["VBUS", "VBAT"],
+        "footprint_count": sum(item["footprint_count"] for item in placements),
+        "object_count": sum(item["object_count"] for item in placements),
+        "new_net_count": block_count,
+        "new_nets": ["VBUS", "VBAT"][:block_count],
         "merged_netclasses": [],
         "assigned_project_nets": [],
         "applied_project_patterns": [],
@@ -110,15 +122,13 @@ def _pcb_merge_result(output: Path, *, rotation: float = 0.0, block_count: int =
         "ignored_project_patterns": False,
         "ignored_project_chain_classes": False,
     }
-    if block_count == 1:
-        result.update(placements[0])
-        result["output"] = str(output)
-        return result
     return result
 
 
-def _pcb_placement_source(result: dict[str, object]) -> dict[str, object]:
-    source: dict[str, object] = {
+def _pcb_placement_source(
+    result: BlockLayoutMergeResult,
+) -> BlockLayoutPlacementSource:
+    source: BlockLayoutPlacementSource = {
         "instance_reference": result["instance_reference"],
         "interactive_item_uuids": result["interactive_item_uuids"],
         "block": result["block"],
@@ -128,7 +138,9 @@ def _pcb_placement_source(result: dict[str, object]) -> dict[str, object]:
     return source
 
 
-def _pcb_batch_placement_source(result: dict[str, object]) -> dict[str, object]:
+def _pcb_batch_placement_source(
+    result: BatchBlockLayoutMergeResult,
+) -> BatchBlockLayoutPlacementSource:
     return {
         "placements": [
             _pcb_placement_source(item)
