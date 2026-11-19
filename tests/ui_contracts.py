@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING, Generic, TypeVar, TypedDict, cast
 if TYPE_CHECKING:
     import tkinter as tk
     from _pytest.monkeypatch import MonkeyPatch
-    from tkinter import Canvas, Event as TkEvent, Menu, Misc, Tk, Toplevel
+    from tkinter import Canvas, Event as TkEvent, Menu, Misc, Text, Tk, Toplevel
     from tkinter.ttk import (
         Button,
         Checkbutton,
@@ -24,7 +24,6 @@ if TYPE_CHECKING:
         Entry,
         Notebook,
         Panedwindow,
-        Text,
         Treeview,
     )
 else:
