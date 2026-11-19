@@ -290,7 +290,9 @@ def test_library_browser_search_filters_records_and_updates_count(
             summary_contract_id="library-browser.summary",
             expected_summary="1 libraries  ·  1 of 2 blocks",
         ).run(context)
-        assert context.require_label("library-browser.selected-name").cget("text") == "USB power block"
+        assert (
+            context.require_label("library-browser.selected-name").cget("text") == "USB power block"
+        )
     finally:
         root.destroy()
 
