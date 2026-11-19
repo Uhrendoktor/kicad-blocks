@@ -12,7 +12,7 @@ Use a shared implementation when a change should be available to every project t
 
 The manager shows exactly one **Default** row for the active default schematic, followed by the named alternatives. It does not expose a second Base row. **Edit default** opens the schematic currently represented by the Default row.
 
-To add a named implementation, choose **Add variant** in the Implementations dialog. Give it a unique variant value and select an existing schematic, create a blank schematic, or copy another library implementation. The accepted operation is saved immediately. The new row appears at once; **Save & close** is only a retry path after a failed write.
+To add a named implementation, choose **Add variant** in the Implementations dialog. Give it a unique variant value and select an existing schematic, create a blank schematic, or copy another library implementation. The accepted operation is saved immediately and the new row appears at once. There is no separate save step. A failed write is shown in the manager and Close retries it; the window stays open until the change is stored.
 
 ## Edit the facade symbol
 
