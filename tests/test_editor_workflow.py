@@ -82,7 +82,9 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
                 kicad, None, self.block.manifest["symbol_name"]
             )
 
-        self.assertIs(placed, instance)
+        placed_instance, cursor_attached = placed
+        self.assertIs(placed_instance, instance)
+        self.assertFalse(cursor_attached)
         args, kwargs = schematic.place_symbol_from_library.call_args
         self.assertEqual(
             args[0],
@@ -121,7 +123,9 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
                 kicad, None, self.block.manifest["symbol_name"]
             )
 
-        self.assertIs(placed, instance)
+        placed_instance, cursor_attached = placed
+        self.assertIs(placed_instance, instance)
+        self.assertTrue(cursor_attached)
         move.assert_called_once_with(instance.id)
         schematic.begin_commit.assert_called_once_with()
         schematic.push_commit.assert_not_called()

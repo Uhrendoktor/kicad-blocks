@@ -2827,7 +2827,7 @@ def _start_native_symbol_placement(
         try:
             interactive_move(instance.id)
             LOG.info("Started native Eeschema cursor placement for %s.", symbol_id)
-            return instance
+            return instance, True
         except Exception as exc:
             # A new kipy wrapper may be installed before the running KiCad
             # build has the matching server handler. The transaction is still
@@ -2858,7 +2858,7 @@ def _start_native_symbol_placement(
     ):
         raise RuntimeError("KiCad did not confirm selection of the newly placed block.")
     target_schematic.save()
-    return instance
+    return instance, False
 
 
 def _library_record_search_text(record) -> str:
@@ -5773,16 +5773,21 @@ def _show_library_browser(
                     or "The project library is saved, but Eeschema has not reloaded it. Restart Eeschema before placing."
                 )
                 return
-            placed = _start_native_symbol_placement(
+            placed, cursor_attached = _start_native_symbol_placement(
                 kicad, editor_window_id, str(record.manifest["symbol_name"])
             )
         except Exception as exc:
             LOG.exception("Schematic IPC block placement failed")
             notice_value.set(f"Placement could not complete: {exc}")
         else:
-            notice_value.set(
-                f"Placed {record.name} at the active sheet center and selected it in Eeschema."
-            )
+            if cursor_attached:
+                notice_value.set(
+                    f"{record.name} is attached to the Eeschema cursor. Click to place; Esc cancels."
+                )
+            else:
+                notice_value.set(
+                    f"Placed {record.name} at the active sheet center and selected it in Eeschema."
+                )
 
     def open_implementation(_event=None):
         record = selected_record[0]
