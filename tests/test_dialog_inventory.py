@@ -20,7 +20,7 @@ def test_catalog_tracks_every_native_messagebox_and_simpledialog_call_site():
     actual = discover_dialog_calls()
     expected_ids = [item["id"] for item in catalog["call_sites"]]
     actual_ids = [item["id"] for item in actual]
-    assert len(actual) == 50
+    assert len(actual) == 49
     assert actual_ids == expected_ids
 
 

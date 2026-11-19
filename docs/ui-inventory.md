@@ -5,11 +5,12 @@ This page is generated from the declarative UI catalog. It inventories the curre
 
 | Coverage status | Screens | Meaning |
 |---|---:|---|
-| Contracted | 14 | Widget-level execute/result assertions are registered and run in CI. |
-| Partial | 2 | Targeted GUI, integration, model, or screenshot checks exist; the full control matrix is not contracted. |
+| Contracted | 13 | Widget-level execute/result assertions are registered and run in CI. |
+| Partial | 3 | Targeted GUI, integration, model, or screenshot checks exist; the full control matrix is not contracted. |
 | Inventory only | 0 | Inventory only — systematic UI contracts remain future work; window/workflow is documented here for discovery and rollout planning. |
 
-The Functional Block Library, legacy Task Hub, transient choosers, Add PCB Layout, Record picker, Instance Configuration, Implementation details, Implementations Manager, Manage Libraries, PCB Layout Manager, and Facade Pin Layout editor have registered widget contracts. Create Block is a one-click action and no longer opens a details form. All 50 native messagebox/simpledialog call sites have direct result/effect contracts. Place Block uses supported page-aware schematic IPC placement, focus and selection while the schematic interactive-move API is pending; Edit Facade provides a project-local pin-layout editor with immediate persistence and safe publishing. Native Symbol Editor launch and cursor-attached placement remain upstream API gaps, not disabled features or OS-specific automation paths. The shared file chooser wrappers have argument/cancellation contracts; native OS rendering and cross-process KiCad window ownership remain unverified.
+The Functional Block Library, legacy Task Hub, transient choosers, Add PCB Layout, Record picker, Instance Configuration, Implementation details, Implementations Manager, Manage Libraries, PCB Layout Manager, and Facade Pin Layout editor have registered widget contracts. Create Block from Sheet is a one-click Eeschema action rather than a details form. All 49 native messagebox/simpledialog call sites have direct result/effect contracts. Place Block uses supported page-aware schematic IPC placement, focus and selection while the schematic interactive-move API is pending; Edit Facade provides a project-local pin-layout editor with immediate persistence and safe publishing. Native Symbol Editor launch and cursor-attached placement remain upstream API gaps, not disabled features or OS-specific automation paths. The shared file chooser wrappers have argument/cancellation contracts; native OS rendering and cross-process KiCad window ownership remain unverified.
+
 ## Screens
 
 ### Legacy Task Hub
@@ -153,7 +154,7 @@ Adjust the external pin positions, angles, and lengths of a selected block facad
 
 **Coverage:** Contracted — widget action and expected UI transition asserted.
 
-The real Tk editor, selected-pin table, geometry fields, immediate catalog write, project-library reload, optimistic concurrency guard, invalid-value recovery, and Close action are covered by interaction and file-format contracts. Shared-library publication is performed by the normal Publish action.
+The real Tk editor, selected-pin table, geometry fields, immediate catalog write, project-library reload, optimistic concurrency guard, invalid-value recovery, and Close action are covered by interaction and file-format contracts. The capture uses the production editor widget tree in light and dark themes.
 
 **Major functionality**
 
@@ -179,7 +180,13 @@ The real Tk editor, selected-pin table, geometry fields, immediate catalog write
 - `tests/test_library_browser_contracts.py`
 - `tests/test_editor_workflow.py`
 
-**Production screenshots:** Not yet captured for this surface.
+**Production screenshots**
+
+![Facade pin layout editor: facade editor light.png](https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/facade-editor-light.png)
+[Open facade-editor-light.png](https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/facade-editor-light.png)
+
+![Facade pin layout editor: facade editor dark.png](https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/facade-editor-dark.png)
+[Open facade-editor-dark.png](https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/facade-editor-dark.png)
 
 ---
 
@@ -309,41 +316,28 @@ Every actionable control has a stable semantic ID and real-Tk interaction contra
 
 ---
 
-### Create Functional Block
+### Create Block from Sheet
 
-Name a block extracted from a selected hierarchical sheet and provide its description.
+Package one selected hierarchical sheet, or the sheet currently open in Eeschema when nothing is selected, as a reusable functional block.
 
-**Coverage:** Contracted — widget action and expected UI transition asserted.
+**Coverage:** Partial — targeted GUI, integration, or visual checks exist.
 
-Every actionable form control has a stable semantic ID and a real-Tk interaction contract. Tests execute Create Block and Cancel, assert the returned name/description or cancellation result, reject a blank name without closing the dialog, verify recovery after validation, exercise Escape cancellation, and check that the initial form geometry exposes both primary actions. The full live Eeschema selection/extraction/registration workflow remains separately covered by the real KiCad IPC integration test.
+This is a native Eeschema action rather than a Tk window. The real Eeschema IPC integration test verifies typed SheetSymbol selection, active-subsheet creation with an empty selection, derived facade pins, catalog/library registration, collision-safe naming, rollback on failure, and unchanged source files. The action does not open a naming form or success popup.
 
 **Major functionality**
 
-- Display the selected source sheet
-- Enter the required block name and optional description
-- Create or cancel without leaving partial library files
-
-**Registered semantic controls**
-
-- Create Functional Block dialog (`create-block-form.window`; window; behavior asserted)
-- Block name (`create-block-form.name`; entry; behavior asserted)
-- Optional block description (`create-block-form.description`; text; behavior asserted)
-- Create Block (`create-block-form.action.create`; button; behavior asserted)
-- Cancel (`create-block-form.action.cancel`; button; behavior asserted)
+- Select exactly one hierarchical sheet symbol in its parent schematic
+- With no selection, use the sheet currently open in Eeschema
+- Derive a collision-safe block name from the source filename and create it in the configured default library
+- Copy the complete child-sheet hierarchy, derive facade pins from root hierarchical labels, and register the project catalog
 
 **Current automated evidence**
 
-- `tests/test_create_block_form_contracts.py`
+- `tests/test_editor_workflow.py`
 - `tests/create_block_ipc_integration.py`
-- `tests/capture_visual_docs.py`
+- `tests/test_plugin_registration.py`
 
-**Production screenshots**
-
-![Create Functional Block: create block form light.png](https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/create-block-form-light.png)
-[Open create-block-form-light.png](https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/create-block-form-light.png)
-
-![Create Functional Block: create block form dark.png](https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/create-block-form-dark.png)
-[Open create-block-form-dark.png](https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/create-block-form-dark.png)
+**Production screenshots:** Not yet captured for this surface.
 
 ---
 

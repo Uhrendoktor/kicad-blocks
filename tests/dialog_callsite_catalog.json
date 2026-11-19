@@ -113,17 +113,6 @@
       "rationale": "A test invokes this native prompt/notification, asserts its title, choices and parent, and verifies the returned profile/layout or report/cancellation result."
     },
     {
-      "id": "_ask_create_block_details.accept::messagebox.showerror#1",
-      "owner": "_ask_create_block_details.accept",
-      "method": "messagebox.showerror",
-      "line": 2020,
-      "coverage": "tested",
-      "evidence": [
-        "tests/test_create_block_form_contracts.py"
-      ],
-      "rationale": "Blank-name validation is asserted through the production Create Block command; the dialog remains open and the user can recover."
-    },
-    {
       "id": "_ask_layout_details.accept::messagebox.showerror#1",
       "owner": "_ask_layout_details.accept",
       "method": "messagebox.showerror",

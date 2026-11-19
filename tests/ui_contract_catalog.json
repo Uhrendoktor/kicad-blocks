@@ -322,7 +322,7 @@
       "title": "Facade pin layout editor",
       "purpose": "Adjust the external pin positions, angles, and lengths of a selected block facade. Pin names, numbers, and electrical types remain derived from the implementation's hierarchical-label interface.",
       "coverage": "contracted",
-      "coverage_note": "The real Tk editor, selected-pin table, geometry fields, immediate catalog write, project-library reload, optimistic concurrency guard, invalid-value recovery, and Close action are covered by interaction and file-format contracts. Shared-library publication is performed by the normal Publish action.",
+      "coverage_note": "The real Tk editor, selected-pin table, geometry fields, immediate catalog write, project-library reload, optimistic concurrency guard, invalid-value recovery, and Close action are covered by interaction and file-format contracts. The capture uses the production editor widget tree in light and dark themes.",
       "functionality": [
         "View every facade pin with its current number and electrical type",
         "Edit the selected pin's X/Y position, orientation, and length",
@@ -389,7 +389,10 @@
         "tests/test_library_browser_contracts.py",
         "tests/test_editor_workflow.py"
       ],
-      "screenshots": []
+      "screenshots": [
+        "facade-editor-light.png",
+        "facade-editor-dark.png"
+      ]
     },
     {
       "id": "functional-block-picker",
@@ -617,57 +620,24 @@
       ]
     },
     {
-      "id": "create-block-form",
-      "title": "Create Functional Block",
-      "purpose": "Name a block extracted from a selected hierarchical sheet and provide its description.",
-      "coverage": "contracted",
-      "coverage_note": "Every actionable form control has a stable semantic ID and a real-Tk interaction contract. Tests execute Create Block and Cancel, assert the returned name/description or cancellation result, reject a blank name without closing the dialog, verify recovery after validation, exercise Escape cancellation, and check that the initial form geometry exposes both primary actions. The full live Eeschema selection/extraction/registration workflow remains separately covered by the real KiCad IPC integration test.",
+      "id": "create-block-action",
+      "title": "Create Block from Sheet",
+      "purpose": "Package one selected hierarchical sheet, or the sheet currently open in Eeschema when nothing is selected, as a reusable functional block.",
+      "coverage": "partial",
+      "coverage_note": "This is a native Eeschema action rather than a Tk window. The real Eeschema IPC integration test verifies typed SheetSymbol selection, active-subsheet creation with an empty selection, derived facade pins, catalog/library registration, collision-safe naming, rollback on failure, and unchanged source files. The action does not open a naming form or success popup.",
       "evidence": [
-        "tests/test_create_block_form_contracts.py",
+        "tests/test_editor_workflow.py",
         "tests/create_block_ipc_integration.py",
-        "tests/capture_visual_docs.py"
+        "tests/test_plugin_registration.py"
       ],
       "functionality": [
-        "Display the selected source sheet",
-        "Enter the required block name and optional description",
-        "Create or cancel without leaving partial library files"
+        "Select exactly one hierarchical sheet symbol in its parent schematic",
+        "With no selection, use the sheet currently open in Eeschema",
+        "Derive a collision-safe block name from the source filename and create it in the configured default library",
+        "Copy the complete child-sheet hierarchy, derive facade pins from root hierarchical labels, and register the project catalog"
       ],
-      "screenshots": [
-        "create-block-form-light.png",
-        "create-block-form-dark.png"
-      ],
-      "controls": [
-        {
-          "contract_id": "create-block-form.window",
-          "type": "window",
-          "label": "Create Functional Block dialog",
-          "assertion": "asserted"
-        },
-        {
-          "contract_id": "create-block-form.name",
-          "type": "entry",
-          "label": "Block name",
-          "assertion": "asserted"
-        },
-        {
-          "contract_id": "create-block-form.description",
-          "type": "text",
-          "label": "Optional block description",
-          "assertion": "asserted"
-        },
-        {
-          "contract_id": "create-block-form.action.create",
-          "type": "button",
-          "label": "Create Block",
-          "assertion": "asserted"
-        },
-        {
-          "contract_id": "create-block-form.action.cancel",
-          "type": "button",
-          "label": "Cancel",
-          "assertion": "asserted"
-        }
-      ]
+      "screenshots": [],
+      "controls": []
     },
     {
       "id": "manage-libraries",
