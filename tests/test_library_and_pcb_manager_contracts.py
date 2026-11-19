@@ -24,13 +24,13 @@ from kicad_blocks import repository  # noqa: E402
 from kicad_blocks.manifest_types import BlockLayoutEditInput  # noqa: E402
 from kicad_blocks.model import parse_pins  # noqa: E402
 from kicad_blocks.repository import BlockRecord, create_block, read_manifest  # noqa: E402
-from ui_contracts import (
+from ui_contracts import (  # noqa: E402
     ButtonContract,
     Tk,
     Toplevel,
     UiTestContext,
     assert_control_coverage,
-)  # noqa: E402
+)
 
 pytestmark = pytest.mark.skipif(
     not os.environ.get("DISPLAY"),
@@ -184,8 +184,11 @@ def _run_library_manager(
     )
 
 
-def test_manage_libraries_add_existing_registers_and_refreshes_the_real_tree(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
-    """Verify the real Tk workflow for manage libraries add existing registers and refreshes the real tree."""
+def test_manage_libraries_add_existing_registers_and_refreshes_the_real_tree(
+    monkeypatch: MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Verify adding an existing library refreshes the manager."""
     _settings, first, second = _library_fixture(monkeypatch, tmp_path)
     new_library = tmp_path / "third-library"
     new_library.mkdir()
@@ -224,8 +227,11 @@ def test_manage_libraries_add_existing_registers_and_refreshes_the_real_tree(mon
         root.destroy()
 
 
-def test_manage_libraries_create_makes_and_registers_new_folder(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
-    """Verify the real Tk workflow for manage libraries create makes and registers new folder."""
+def test_manage_libraries_create_makes_and_registers_new_folder(
+    monkeypatch: MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Verify library creation persists and refreshes the manager."""
     _settings, _first, _second = _library_fixture(monkeypatch, tmp_path)
     destination = tmp_path / "created-libraries"
     destination.mkdir()
@@ -267,7 +273,7 @@ def test_manage_libraries_create_makes_and_registers_new_folder(monkeypatch: Mon
 def test_manage_libraries_unregister_removes_registration_but_preserves_files(
     monkeypatch: MonkeyPatch, tmp_path: Path
 ) -> None:
-    """Verify the real Tk workflow for manage libraries unregister removes registration but preserves files."""
+    """Verify unregister preserves library files."""
     _settings, first, second = _library_fixture(monkeypatch, tmp_path)
     monkeypatch.setattr(plugin_actions.messagebox, "askyesno", lambda *_a, **_k: True)
     root = _new_root(monkeypatch)
@@ -295,8 +301,11 @@ def test_manage_libraries_unregister_removes_registration_but_preserves_files(
         root.destroy()
 
 
-def test_manage_libraries_confirmation_cancel_keeps_registration(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
-    """Verify the real Tk workflow for manage libraries confirmation cancel keeps registration."""
+def test_manage_libraries_confirmation_cancel_keeps_registration(
+    monkeypatch: MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Verify cancel keeps the library registered."""
     _settings, _first, second = _library_fixture(monkeypatch, tmp_path)
     prompts = []
     monkeypatch.setattr(
@@ -327,8 +336,11 @@ def test_manage_libraries_confirmation_cancel_keeps_registration(monkeypatch: Mo
         root.destroy()
 
 
-def test_manage_libraries_set_default_persists_selected_library(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
-    """Verify the real Tk workflow for manage libraries set default persists selected library."""
+def test_manage_libraries_set_default_persists_selected_library(
+    monkeypatch: MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Verify selecting a default library persists the setting."""
     _settings, first, second = _library_fixture(monkeypatch, tmp_path)
     root = _new_root(monkeypatch)
     context = UiTestContext(root)
@@ -359,8 +371,11 @@ def test_manage_libraries_set_default_persists_selected_library(monkeypatch: Mon
         root.destroy()
 
 
-def test_manage_libraries_change_folder_is_transactional_and_keeps_old_data(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
-    """Verify the real Tk workflow for manage libraries change folder is transactional and keeps old data."""
+def test_manage_libraries_change_folder_is_transactional_and_keeps_old_data(
+    monkeypatch: MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Verify changing a library folder preserves the old data."""
     _settings, first, second = _library_fixture(monkeypatch, tmp_path)
     replacement = tmp_path / "replacement-library"
     replacement.mkdir()
@@ -395,8 +410,11 @@ def test_manage_libraries_change_folder_is_transactional_and_keeps_old_data(monk
         root.destroy()
 
 
-def test_manage_libraries_environment_override_and_empty_selection_states(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
-    """Verify the real Tk workflow for manage libraries environment override and empty selection states."""
+def test_manage_libraries_environment_override_and_empty_selection_states(
+    monkeypatch: MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Verify environment overrides disable selection actions."""
     _settings, first, _second = _library_fixture(monkeypatch, tmp_path)
     monkeypatch.setenv("KICAD_BLOCKS_LIBRARY", str(first))
     root = _new_root(monkeypatch)
@@ -494,7 +512,7 @@ def _select_pcb_row(context: UiTestContext, row_id: str) -> None:
 def test_pcb_layout_manager_updates_default_and_variant_associations_then_removes(
     monkeypatch: MonkeyPatch, tmp_path: Path
 ) -> None:
-    """Verify the real Tk workflow for pcb layout manager updates default and variant associations then removes."""
+    """Verify default and variant layout associations persist."""
     record, _sources = _pcb_fixture(tmp_path, layout_count=2)
     prompts = []
     monkeypatch.setattr(
@@ -547,8 +565,11 @@ def test_pcb_layout_manager_updates_default_and_variant_associations_then_remove
         root.destroy()
 
 
-def test_pcb_layout_manager_add_and_save_failure_can_be_retried(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
-    """Verify the real Tk workflow for pcb layout manager add and save failure can be retried."""
+def test_pcb_layout_manager_add_and_save_failure_can_be_retried(
+    monkeypatch: MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Verify layout save failures can be retried."""
     record, _sources = _pcb_fixture(tmp_path, layout_count=1)
     new_board = tmp_path / "new-boost.kicad_pcb"
     new_board.write_text(
@@ -629,8 +650,11 @@ def test_pcb_layout_manager_add_and_save_failure_can_be_retried(monkeypatch: Mon
         root.destroy()
 
 
-def test_pcb_layout_manager_cancelled_remove_preserves_board_and_manifest(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
-    """Verify the real Tk workflow for pcb layout manager cancelled remove preserves board and manifest."""
+def test_pcb_layout_manager_cancelled_remove_preserves_board_and_manifest(
+    monkeypatch: MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Verify cancelling layout removal preserves files."""
     record, _sources = _pcb_fixture(tmp_path, layout_count=2)
     before = json.loads(json.dumps(read_manifest(record.path)))
     prompts = []
@@ -664,8 +688,11 @@ def test_pcb_layout_manager_cancelled_remove_preserves_board_and_manifest(monkey
         root.destroy()
 
 
-def test_pcb_layout_manager_disables_selection_actions_when_empty(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
-    """Verify the real Tk workflow for pcb layout manager disables selection actions when empty."""
+def test_pcb_layout_manager_disables_selection_actions_when_empty(
+    monkeypatch: MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Verify empty layouts disable selection actions."""
     record, _sources = _pcb_fixture(tmp_path, layout_count=0, with_variant=False)
     root = _new_root(monkeypatch)
     context = UiTestContext(root)
@@ -692,7 +719,7 @@ def test_pcb_layout_manager_disables_selection_actions_when_empty(monkeypatch: M
 def test_pcb_layout_manager_duplicate_name_reports_error_without_mutating_manifest(
     monkeypatch: MonkeyPatch, tmp_path: Path
 ) -> None:
-    """Verify the real Tk workflow for pcb layout manager duplicate name reports error without mutating manifest."""
+    """Verify duplicate layout names do not mutate the manifest."""
     record, _sources = _pcb_fixture(tmp_path, layout_count=2)
     original = read_manifest(record.path)
     duplicate = original["layouts"][0]["name"]
@@ -737,8 +764,11 @@ def test_pcb_layout_manager_duplicate_name_reports_error_without_mutating_manife
         root.destroy()
 
 
-def test_manage_libraries_add_registration_error_keeps_existing_roots(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
-    """Verify the real Tk workflow for manage libraries add registration error keeps existing roots."""
+def test_manage_libraries_add_registration_error_keeps_existing_roots(
+    monkeypatch: MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Verify registration failure preserves existing roots."""
     _settings, first, second = _library_fixture(monkeypatch, tmp_path)
     registered_before = set(repository.library_roots())
     assert {first.resolve(), second.resolve()} <= registered_before
@@ -778,8 +808,11 @@ def test_manage_libraries_add_registration_error_keeps_existing_roots(monkeypatc
         root.destroy()
 
 
-def test_manage_libraries_create_rejects_path_like_folder_name(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
-    """Verify the real Tk workflow for manage libraries create rejects path like folder name."""
+def test_manage_libraries_create_rejects_path_like_folder_name(
+    monkeypatch: MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Verify path-like folder names are rejected."""
     _settings, _first, _second = _library_fixture(monkeypatch, tmp_path)
     destination = tmp_path / "created"
     destination.mkdir()
@@ -815,8 +848,11 @@ def test_manage_libraries_create_rejects_path_like_folder_name(monkeypatch: Monk
         root.destroy()
 
 
-def test_manage_libraries_create_filesystem_error_keeps_existing_folder(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
-    """Verify the real Tk workflow for manage libraries create filesystem error keeps existing folder."""
+def test_manage_libraries_create_filesystem_error_keeps_existing_folder(
+    monkeypatch: MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Verify failed folder creation preserves existing data."""
     _settings, _first, _second = _library_fixture(monkeypatch, tmp_path)
     destination = tmp_path / "created"
     existing = destination / "already-there"
@@ -860,7 +896,7 @@ def test_manage_libraries_create_filesystem_error_keeps_existing_folder(monkeypa
 def test_manage_libraries_change_folder_rolls_back_after_old_root_removal_fails(
     monkeypatch: MonkeyPatch, tmp_path: Path
 ) -> None:
-    """Verify the real Tk workflow for manage libraries change folder rolls back after old root removal fails."""
+    """Verify failed folder changes restore the original root."""
     _settings, first, second = _library_fixture(monkeypatch, tmp_path)
     replacement = tmp_path / "replacement"
     replacement.mkdir()
@@ -905,8 +941,11 @@ def test_manage_libraries_change_folder_rolls_back_after_old_root_removal_fails(
         root.destroy()
 
 
-def test_manage_libraries_unregister_error_keeps_root_registered(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
-    """Verify the real Tk workflow for manage libraries unregister error keeps root registered."""
+def test_manage_libraries_unregister_error_keeps_root_registered(
+    monkeypatch: MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Verify unregister failure keeps the root registered."""
     _settings, first, second = _library_fixture(monkeypatch, tmp_path)
     monkeypatch.setattr(plugin_actions.messagebox, "askyesno", lambda *_a, **_k: True)
     monkeypatch.setattr(
@@ -942,8 +981,11 @@ def test_manage_libraries_unregister_error_keeps_root_registered(monkeypatch: Mo
         root.destroy()
 
 
-def test_manage_libraries_set_default_error_preserves_previous_default(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
-    """Verify the real Tk workflow for manage libraries set default error preserves previous default."""
+def test_manage_libraries_set_default_error_preserves_previous_default(
+    monkeypatch: MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Verify default-setting failure preserves the prior root."""
     _settings, first, second = _library_fixture(monkeypatch, tmp_path)
     monkeypatch.setattr(
         plugin_actions,
