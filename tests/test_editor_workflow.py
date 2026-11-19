@@ -166,7 +166,12 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
         self.assertEqual(str(_direct(pin, "length")[1]), str(old_length[1]))
 
     def test_facade_geometry_edit_rejects_concurrent_catalog_change(self):
-        from kicad_blocks.repository import build_project_symbol_catalog, sha256_file
+        from kicad_blocks.pcb_layout import _all, _direct, _head, parse_sexpr
+        from kicad_blocks.repository import (
+            _named_symbol_node,
+            build_project_symbol_catalog,
+            sha256_file,
+        )
 
         catalog_path = build_project_symbol_catalog(self.project, [self.library])
         symbol_name = self.block.manifest["symbol_name"]
@@ -203,7 +208,12 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
         )
 
     def test_facade_geometry_edit_rejects_invalid_geometry_without_writing(self):
-        from kicad_blocks.repository import build_project_symbol_catalog, sha256_file
+        from kicad_blocks.pcb_layout import _all, _direct, _head, parse_sexpr
+        from kicad_blocks.repository import (
+            _named_symbol_node,
+            build_project_symbol_catalog,
+            sha256_file,
+        )
 
         catalog_path = build_project_symbol_catalog(self.project, [self.library])
         symbol_name = self.block.manifest["symbol_name"]
@@ -1008,17 +1018,20 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
             description="Selected child sheet",
         )
 
-    def test_task_hub_edit_facade_does_not_report_success_without_editor_handoff(self):
+    def test_task_hub_opens_the_portable_facade_layout_editor(self):
         root = SimpleNamespace(
-            title=Mock(), withdraw=Mock(), destroy=Mock(),
+            title=Mock(), withdraw=Mock(), destroy=Mock(), mainloop=Mock()
         )
         fake_tk = SimpleNamespace(Tk=Mock(return_value=root), TclError=RuntimeError)
+        fake_label = SimpleNamespace(pack=Mock())
+        fake_ttk = SimpleNamespace(Label=Mock(return_value=fake_label))
         kicad = SimpleNamespace(get_schematic=Mock(return_value=self.schematic))
         kicad_module = types.ModuleType("kipy")
         kicad_module.KiCad = Mock(return_value=kicad)
         project_catalog = self.project / ".kicad_blocks" / "KBlocks.kicad_sym"
         with (
             patch.object(plugin_actions, "tk", fake_tk),
+            patch.object(plugin_actions, "ttk", fake_ttk),
             patch.object(plugin_actions, "messagebox", self.messagebox),
             patch.object(plugin_actions, "_load_tkinter"),
             patch.object(plugin_actions, "_configure_tk_theme"),
@@ -1029,7 +1042,7 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
             patch.object(plugin_actions, "_list_library_records", return_value=[self.block]),
             patch.object(plugin_actions, "_pick_record", return_value=self.block) as pick_record,
             patch.object(plugin_actions, "_ensure_project_facade_catalog", return_value=project_catalog),
-            patch.object(plugin_actions, "_edit_facade_symbol", return_value=False) as edit_facade,
+            patch.object(plugin_actions, "_edit_facade_symbol", return_value=True) as edit_facade,
             patch.dict(sys.modules, {"kipy": kicad_module}),
         ):
             plugin_actions.run_action("edit-facade")
@@ -1038,9 +1051,11 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
             self.block,
             kicad,
             project_catalog=project_catalog,
-            close_browser=root.destroy,
+            parent=root,
         )
-        root.withdraw.assert_called_once_with()
+        root.title.assert_called_once_with(f"KiCad Blocks — Facade layout: {self.block.name}")
+        root.mainloop.assert_called_once_with()
+        root.withdraw.assert_not_called()
         root.destroy.assert_called_once_with()
 
 
