@@ -134,6 +134,9 @@ def main() -> None:
     save_button = ttk.Button(content, text="Save block")
     save_button.pack(anchor="e")
 
+    root.update_idletasks()
+    root.update()
+
     # Tk 9.1 loads its X11 accessibility bindings only when the screen reader
     # is running before the Tk interpreter starts. Keep that runtime precondition
     # explicit so a D-Bus-enabled but screen-reader-free session cannot silently
