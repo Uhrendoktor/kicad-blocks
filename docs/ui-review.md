@@ -21,7 +21,7 @@ The shared panels follow the compact slate treatment established in
 `kicad-jlcpcb-interface`: restrained surfaces, a cool accent, quiet secondary
 text, flat controls, and compact 29 px table rows. The reusable implementation
 now lives in `kicad_blocks.theme` and `kicad_blocks.ui_components`: shared
-spacing and typography tokens, semantic light/dark palettes, flat text tabs
+spacing and typography tokens, semantic light/dark palettes (using an explicit override or KiCad's active color theme, with a platform-neutral light fallback), flat text tabs
 with an active underline, and scrollbars that reveal their draggable thumb on
 hover or movement. The Functional Block Library uses unbordered preview and
 overview surfaces so hierarchy comes from spacing and typography rather than
