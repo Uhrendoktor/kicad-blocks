@@ -331,12 +331,34 @@ jobs:
           compression-level: 1
 
 
+      - name: Build Tk 9.1 runtime for KiCad-managed plugin environment
+        if: ${{ github.event_name == 'pull_request' && github.head_ref == 'issue-41/tk91-managed-plugin-runtime' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout --signal=TERM --kill-after=15s 840s \
+            bash scripts/build_tk91_accessibility_probe.sh "${RUNNER_TEMP}/kicad-blocks-tk91-managed"
+
       - name: Verify KiCad plugin discovery and managed environment
         shell: bash
         run: |
-          dbus-run-session -- bash scripts/run_with_atspi.sh \
-            xvfb-run -a -s "-screen 0 1280x800x24" \
-            "${RUNNER_TEMP}/kicad-blocks-venv/bin/python" tests/test_plugin_registration.py
+          set -euo pipefail
+          if [[ "${GITHUB_HEAD_REF:-}" == "issue-41/tk91-managed-plugin-runtime" ]]; then
+            TK91_ROOT="${RUNNER_TEMP}/kicad-blocks-tk91-managed"
+            test -x "$TK91_ROOT/cpython/bin/python3.14"
+            env \
+              KICAD_TEST_PYTHON="$TK91_ROOT/cpython/bin/python3.14" \
+              KICAD_EXPECT_TK91=1 \
+              LD_LIBRARY_PATH="$TK91_ROOT/tcltk/lib:$TK91_ROOT/cpython/lib:${LD_LIBRARY_PATH:-}" \
+              dbus-run-session -- bash scripts/run_with_atspi.sh \
+                xvfb-run -a -s "-screen 0 1280x800x24" \
+                bash scripts/run_tk91_with_orca.sh \
+                "${RUNNER_TEMP}/kicad-blocks-venv/bin/python" tests/test_plugin_registration.py
+          else
+            dbus-run-session -- bash scripts/run_with_atspi.sh \
+              xvfb-run -a -s "-screen 0 1280x800x24" \
+              "${RUNNER_TEMP}/kicad-blocks-venv/bin/python" tests/test_plugin_registration.py
+          fi
 
       - name: Upload Edit Facade GUI diagnostics
         if: always()

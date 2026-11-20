@@ -328,9 +328,43 @@ def main() -> None:
         raise RuntimeError(f"Could not determine KiCad MAJOR.MINOR version: {version_output!r}")
     version = version_match.group(1)
 
-    python_interpreter = shutil.which("python3")
+    interpreter_override = os.environ.get("KICAD_TEST_PYTHON")
+    python_interpreter = (
+        str(Path(interpreter_override).expanduser().resolve())
+        if interpreter_override
+        else shutil.which("python3")
+    )
     if not python_interpreter:
         raise FileNotFoundError("System python3 was not found for the KiCad plugin manager.")
+    interpreter_path = Path(python_interpreter)
+    if not interpreter_path.is_file() or not os.access(interpreter_path, os.X_OK):
+        raise FileNotFoundError(
+            f"KiCad plugin-manager interpreter is not executable: {interpreter_path}"
+        )
+    interpreter_probe = subprocess.run(
+        [
+            python_interpreter,
+            "-c",
+            (
+                "import json, sys; "
+                "print(json.dumps({"
+                "'version': list(sys.version_info[:3]), "
+                "'abi': f'cp{sys.version_info.major}{sys.version_info.minor}', "
+                "'executable': sys.executable"
+                "}))"
+            ),
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    target_interpreter = json.loads(interpreter_probe.stdout)
+    expect_tk91 = os.environ.get("KICAD_EXPECT_TK91") == "1"
+    if expect_tk91 and target_interpreter["version"] != [3, 14, 4]:
+        raise AssertionError(
+            "The Tk 9.1 plugin-manager experiment must use CPython 3.14.4; "
+            f"got {target_interpreter['version']!r}."
+        )
 
     with tempfile.TemporaryDirectory(prefix="kicad-blocks-plugin-discovery-") as temp:
         root = Path(temp)
@@ -485,7 +519,7 @@ def main() -> None:
             )
         hub_entrypoint = installed_plugin / expected_schematic_actions["open-hub"][0]
         installed_requirements = (installed_plugin / "requirements.txt").read_text(encoding="utf-8")
-        abi = f"cp{sys.version_info.major}{sys.version_info.minor}"
+        abi = target_interpreter["abi"]
         expected_wheel_url = (
             "https://github.com/Uhrendoktor/kicad-blocks/releases/download/"
             f"kicad-python-76b47d25/kicad_python-0.9.0.dev0-{abi}-{abi}-linux_x86_64.whl"
@@ -556,6 +590,122 @@ def main() -> None:
             )
             if "plugin environment ready" not in package_probe.stdout:
                 raise AssertionError(package_probe.stdout)
+
+            managed_identity = subprocess.run(
+                [
+                    str(env_python),
+                    "-c",
+                    (
+                        "import json, sys; "
+                        "print(json.dumps({"
+                        "'version': list(sys.version_info[:3]), "
+                        "'base_executable': sys._base_executable"
+                        "}))"
+                    ),
+                ],
+                env=env,
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            managed_python = json.loads(managed_identity.stdout)
+            selected_interpreter = Path(target_interpreter["executable"]).resolve()
+            managed_base = Path(managed_python["base_executable"]).resolve()
+            if managed_base != selected_interpreter:
+                raise AssertionError(
+                    "KiCad's managed plugin environment was not created from the "
+                    "configured interpreter: "
+                    f"selected={selected_interpreter}; managed_base={managed_base}; "
+                    f"identity={managed_python!r}"
+                )
+            print(
+                "KiCad managed Python interpreter verified:",
+                json.dumps(
+                    {
+                        "version": managed_python["version"],
+                        "base_executable": str(managed_base),
+                    }
+                ),
+                flush=True,
+            )
+
+            if expect_tk91:
+                tk_runtime_probe = subprocess.run(
+                    [
+                        str(env_python),
+                        "-c",
+                        (
+                            "import json, tkinter; "
+                            "root = tkinter.Tk(); "
+                            "version = root.tk.call('package', 'provide', 'Tk'); "
+                            "tcl_version = root.tk.call('info', 'patchlevel'); "
+                            "result = {'tcl': tcl_version, 'tk': version, "
+                            "'tkinter': tkinter.__file__}; "
+                            "root.destroy(); print(json.dumps(result)); "
+                            "assert version.startswith('9.1.'), result"
+                        ),
+                    ],
+                    env=env,
+                    capture_output=True,
+                    text=True,
+                    check=True,
+                    timeout=15.0,
+                )
+                tk_runtime = json.loads(tk_runtime_probe.stdout)
+                if not tk_runtime["tk"].startswith("9.1."):
+                    raise AssertionError(
+                        f"KiCad's managed plugin venv did not load Tk 9.1: {tk_runtime!r}"
+                    )
+                print(
+                    "KiCad-managed plugin runtime uses Tcl/Tk 9.1:",
+                    json.dumps(tk_runtime),
+                    flush=True,
+                )
+
+                # Install the accessibility reader as a test-only dependency into
+                # the manager-created venv. It is not added to production requirements.
+                subprocess.run(
+                    [str(env_python), "-m", "pip", "install", "xa11y==0.16.0"],
+                    env=env,
+                    capture_output=True,
+                    text=True,
+                    check=True,
+                    timeout=90.0,
+                )
+                managed_a11y_result = root / "managed-plugin-tk91-atspi-result.json"
+                managed_probe_env = env.copy()
+                managed_probe_env["TK91_A11Y_RESULT"] = str(managed_a11y_result)
+                managed_probe = subprocess.run(
+                    [
+                        str(env_python),
+                        str(ROOT / "tests" / "test_tk91_accessibility_probe.py"),
+                    ],
+                    env=managed_probe_env,
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                    timeout=60.0,
+                )
+                if (
+                    managed_probe.returncode != 0
+                    or not managed_a11y_result.is_file()
+                    or "Tk 9.1 accessibility assertions passed" not in managed_probe.stdout
+                ):
+                    raise RuntimeError(
+                        "The standalone Tk 9.1 accessibility probe did not pass inside "
+                        "KiCad's manager-created plugin environment. "
+                        f"exit={managed_probe.returncode}; "
+                        f"stdout={managed_probe.stdout[-12000:]}; "
+                        f"stderr={managed_probe.stderr[-12000:]}"
+                    )
+                managed_summary = json.loads(
+                    managed_a11y_result.read_text(encoding="utf-8")
+                )
+                print(
+                    "KiCad-managed Tk 9.1 AT-SPI summary:",
+                    json.dumps(managed_summary, ensure_ascii=False),
+                    flush=True,
+                )
 
             # Run the installed entrypoint's deterministic GUI smoke mode.
             # It builds the actual Tk widgets and asserts all three groups and
