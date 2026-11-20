@@ -15,17 +15,12 @@ from typing import TypedDict
 
 import pytest
 
-try:
-    import tkinter as tk
-    from tkinter import messagebox, simpledialog
-except ImportError:  # pragma: no cover - exercised by the skip guard below
-    tk = None
-    messagebox = None
-    simpledialog = None
+import tkinter as tk
+from tkinter import messagebox, simpledialog
 
 pytestmark = pytest.mark.skipif(
-    tk is None or (sys.platform == "linux" and not os.environ.get("DISPLAY")),
-    reason="Real Tk dialog smoke tests require Tk and a display (run under xvfb-run).",
+    sys.platform == "linux" and not os.environ.get("DISPLAY"),
+    reason="Real Tk dialog smoke tests require a display (run under xvfb-run).",
 )
 
 _DIALOG_TIMEOUT_SECONDS = 5.0
@@ -42,7 +37,7 @@ class _DialogOutcome(TypedDict, total=False):
     timeout: str
 
 
-def _create_parent():
+def _create_parent() -> tk.Tk:
     root = tk.Tk()
     root.title("KiCad Blocks native dialog smoke host")
     root.geometry("360x180+20+20")

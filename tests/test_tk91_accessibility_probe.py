@@ -7,27 +7,74 @@ import os
 import subprocess
 import sys
 import time
+from collections.abc import Iterator
 from pathlib import Path
+from typing import TypedDict, cast
 
 WINDOW_TITLE = "KiCad Blocks Tk 9.1 Accessibility Probe"
-# xa11y normalizes AT-SPI roles to its cross-platform vocabulary.
-EXPECTED_WIDGETS = {
+EXPECTED_WIDGETS: dict[str, tuple[str, str]] = {
     "Block name": ("static_text", "Identifies the functional block name input."),
     "Block name input": ("text_field", "Text field for the functional block name."),
     "Save block": ("button", "Saves the current functional block."),
 }
 
 
-def _walk(node):
-    if isinstance(node, dict):
-        yield node
-        children = node.get("children", [])
-        if isinstance(children, list):
-            for child in children:
-                yield from _walk(child)
-    elif isinstance(node, list):
+class _AccessibleNode(TypedDict, total=False):
+    """Normalized JSON-safe AT-SPI node from either accessibility adapter."""
+
+    name: str | None
+    role: str | None
+    value: str | None
+    description: str | None
+    children: list["_AccessibleNode"]
+
+
+class _PyAtSpiPayload(TypedDict):
+    tree: _AccessibleNode
+
+
+class _InspectorPayload(TypedDict, total=False):
+    snapshot: _AccessibleNode
+    dump: str
+    pyatspi: _PyAtSpiPayload
+
+
+class _WidgetSummary(TypedDict):
+    role: str
+    native_role: str
+    description: str
+
+
+class _WindowSummary(TypedDict):
+    name: str | None
+    role: str | None
+
+
+class _AccessibilitySummary(TypedDict):
+    window: _WindowSummary
+    widgets: dict[str, _WidgetSummary]
+    tree_nodes: int
+
+
+class _TkAttributes(TypedDict):
+    role: str
+    name: str
+    description: str
+
+
+class _RegisteredAttributes(TypedDict):
+    window: _TkAttributes
+    widgets: dict[str, _TkAttributes]
+
+
+def _walk(node: _AccessibleNode | list[_AccessibleNode]) -> Iterator[_AccessibleNode]:
+    if isinstance(node, list):
         for child in node:
             yield from _walk(child)
+        return
+    yield node
+    for child in node.get("children", []):
+        yield from _walk(child)
 
 
 def _inspect_process(process_id: int) -> None:
@@ -36,13 +83,10 @@ def _inspect_process(process_id: int) -> None:
 
     print(f"Connecting xa11y to Tk probe PID {process_id}.", file=sys.stderr, flush=True)
     app = xa11y.App.by_pid(process_id, timeout=15.0)
-    payload = {
+    payload: _InspectorPayload = {
         "snapshot": app.tree(max_depth=10),
         "dump": app.dump(max_depth=16),
     }
-    # Cross-check xa11y's D-Bus property reader with GNOME's independent
-    # libatspi/pyatspi bindings. This distinguishes a Tk ATK export problem
-    # from a property-decoding issue in a single client implementation.
     pyatspi_script = Path(__file__).with_name("inspect_tk91_atspi_pyatspi.py")
     direct = subprocess.run(
         ["/usr/bin/python3", str(pyatspi_script), str(process_id)],
@@ -51,7 +95,7 @@ def _inspect_process(process_id: int) -> None:
         timeout=15.0,
         check=True,
     )
-    payload["pyatspi"] = json.loads(direct.stdout)
+    payload["pyatspi"] = cast(_PyAtSpiPayload, json.loads(direct.stdout))
     print(
         "GNOME pyatspi cross-check:",
         direct.stdout.strip(),
@@ -61,17 +105,19 @@ def _inspect_process(process_id: int) -> None:
     print(json.dumps(payload, ensure_ascii=False), flush=True)
 
 
-def _role_matches(node: dict, expected: str) -> bool:
+def _role_matches(node: _AccessibleNode, expected: str) -> bool:
     role = str(node.get("role") or "").casefold().replace(" ", "_")
     return expected in role
 
 
-def _assert_accessible_tree(payload: dict) -> dict:
-    snapshot = payload["snapshot"]
+def _assert_accessible_tree(payload: _InspectorPayload) -> _AccessibilitySummary:
+    snapshot = payload.get("snapshot")
+    if snapshot is None:
+        raise AssertionError("AT-SPI inspector omitted its normalized snapshot.")
     nodes = list(_walk(snapshot))
     title_nodes = [node for node in nodes if node.get("name") == WINDOW_TITLE]
     if not title_nodes:
-        observed = [
+        observed: list[dict[str, str | None]] = [
             {
                 "name": node.get("name"),
                 "role": node.get("role"),
@@ -86,7 +132,7 @@ def _assert_accessible_tree(payload: dict) -> dict:
             f"Raw AT-SPI dump: {str(payload.get('dump') or '')[:16000]}"
         )
 
-    widget_summary: dict[str, dict[str, str | None]] = {}
+    widget_summary: dict[str, _WidgetSummary] = {}
     for name, (expected_role, expected_description) in EXPECTED_WIDGETS.items():
         matching = [node for node in nodes if node.get("name") == name]
         if not matching:
@@ -101,10 +147,10 @@ def _assert_accessible_tree(payload: dict) -> dict:
                 f"Accessible object {name!r} had role {node.get('role')!r}; "
                 f"expected a role containing {expected_role!r}."
             )
-        # xa11y intentionally exposes only role/name/value/children in its
-        # normalized tree. Read the description from the independent native
-        # PyAT-SPI snapshot, which surfaces Atspi.Accessible.get_description().
-        pyatspi_tree = payload.get("pyatspi", {}).get("tree", {})
+        native_payload = payload.get("pyatspi")
+        if native_payload is None:
+            raise AssertionError("Independent PyAT-SPI payload is missing.")
+        pyatspi_tree = native_payload["tree"]
         pyatspi_nodes = list(_walk(pyatspi_tree))
         native_matches = [
             item
@@ -130,7 +176,7 @@ def _assert_accessible_tree(payload: dict) -> dict:
             "description": description,
         }
 
-    result = {
+    result: _AccessibilitySummary = {
         "window": {
             "name": title_nodes[0].get("name"),
             "role": title_nodes[0].get("role"),
@@ -141,7 +187,6 @@ def _assert_accessible_tree(payload: dict) -> dict:
     print("--- Tk 9.1 AT-SPI accessibility tree ---", flush=True)
     print(json.dumps(snapshot, ensure_ascii=False, indent=2)[:24000], flush=True)
     print(str(payload.get("dump") or "")[:24000], flush=True)
-    print("--- end Tk 9.1 AT-SPI accessibility tree ---", flush=True)
     print(
         "Tk 9.1 accessibility assertions passed:",
         json.dumps(result, ensure_ascii=False),
@@ -151,8 +196,6 @@ def _assert_accessible_tree(payload: dict) -> dict:
 
 
 def main() -> None:
-    # Import only inside the probe: standard CI Python interpreters need not
-    # ship tkinter, while this file is still collected during the full suite.
     import tkinter as tk
     from tkinter import ttk
 
@@ -173,10 +216,6 @@ def main() -> None:
     root.update_idletasks()
     root.update()
 
-    # Tk 9.1 loads its X11 accessibility bindings only when the screen reader
-    # is running before the Tk interpreter starts. Keep that runtime precondition
-    # explicit so a D-Bus-enabled but screen-reader-free session cannot silently
-    # fall back to Tk's no-op "tk accessible" command.
     screen_reader_running = str(root.tk.call("::tk::accessible::check_screenreader"))
     if screen_reader_running not in {"1", "true"}:
         raise AssertionError(
@@ -184,9 +223,6 @@ def main() -> None:
             f"registration (check_screenreader returned {screen_reader_running!r})."
         )
 
-    # Register the roles explicitly before assigning names/descriptions.
-    # Tk's C setters create the per-widget attribute table on first role write.
-    # Then register the mapped toplevel recursively with the ATK hierarchy.
     accessible_widgets = (
         (root, "Toplevel"),
         (label, "Label"),
@@ -213,27 +249,25 @@ def main() -> None:
         root.tk.call("tk", "accessible", "set_acc_name", widget._w, name)
         root.tk.call("tk", "accessible", "set_acc_description", widget._w, description)
 
-    # ATK derives a label's accessible name from its accessible value.
     root.tk.call("tk", "accessible", "set_acc_value", label._w, "Block name")
-
-    # Populate the ATK hierarchy only after every role/name/description/value
-    # has been assigned. Tk's accessibility Map bindings may create objects
-    # on the first update; adding them earlier prevents the AT-SPI cache from
-    # seeing an incomplete description and retaining it.
     root.tk.call("tk", "accessible", "add_acc_object", root._w)
     root.update_idletasks()
     root.update()
-    registered = {
+    registered: _RegisteredAttributes = {
         "window": {
-            "role": root.tk.call("tk", "accessible", "get_acc_role", root._w),
-            "name": root.tk.call("tk", "accessible", "get_acc_name", root._w),
-            "description": root.tk.call("tk", "accessible", "get_acc_description", root._w),
+            "role": str(root.tk.call("tk", "accessible", "get_acc_role", root._w)),
+            "name": str(root.tk.call("tk", "accessible", "get_acc_name", root._w)),
+            "description": str(
+                root.tk.call("tk", "accessible", "get_acc_description", root._w)
+            ),
         },
         "widgets": {
             name: {
-                "role": widget.tk.call("tk", "accessible", "get_acc_role", widget._w),
-                "name": widget.tk.call("tk", "accessible", "get_acc_name", widget._w),
-                "description": widget.tk.call("tk", "accessible", "get_acc_description", widget._w),
+                "role": str(widget.tk.call("tk", "accessible", "get_acc_role", widget._w)),
+                "name": str(widget.tk.call("tk", "accessible", "get_acc_name", widget._w)),
+                "description": str(
+                    widget.tk.call("tk", "accessible", "get_acc_description", widget._w)
+                ),
             }
             for widget, name in (
                 (label, "Block name"),
@@ -286,8 +320,6 @@ def main() -> None:
 
     def poll_helper() -> None:
         nonlocal helper_completed
-        # A return inside a try/finally still executes finally. Keep the
-        # reschedule path outside the cleanup block so the inspector can run.
         if helper.poll() is None and time.monotonic() < helper_deadline:
             root.after(100, poll_helper)
             return
@@ -319,20 +351,15 @@ def main() -> None:
                     f"exit={helper.returncode}; stdout={stdout[-12000:]}; "
                     f"stderr={stderr[-12000:]}"
                 )
-            try:
-                payload = json.loads(stdout)
-            except json.JSONDecodeError as exc:
-                raise RuntimeError(
-                    "AT-SPI helper returned invalid JSON: "
-                    f"stdout={stdout[-12000:]}; stderr={stderr[-12000:]}"
-                ) from exc
+            payload = cast(_InspectorPayload, json.loads(stdout))
             summary = _assert_accessible_tree(payload)
 
             result_path = os.environ.get("TK91_A11Y_RESULT")
             if not result_path:
                 raise RuntimeError("TK91_A11Y_RESULT must name the accessibility summary file.")
             Path(result_path).write_text(
-                json.dumps(summary, ensure_ascii=False, indent=2) + "\n",
+                json.dumps(summary, ensure_ascii=False, indent=2) + "
+",
                 encoding="utf-8",
             )
             print(f"Validated Tk 9.1 accessibility summary written to {result_path}.", flush=True)
