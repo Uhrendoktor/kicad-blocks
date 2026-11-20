@@ -1169,8 +1169,20 @@ def _add_tooltip(widget: tkinter_types.Misc, text: str) -> None:
         )
         label.pack()
         popup.update_idletasks()
-        x = widget.winfo_rootx()
-        y = widget.winfo_rooty() + widget.winfo_height() + 5
+        popup_width = popup.winfo_reqwidth()
+        popup_height = popup.winfo_reqheight()
+        widget_x = widget.winfo_rootx()
+        widget_y = widget.winfo_rooty()
+        if placement == "above-right":
+            x = widget_x + widget.winfo_width() - popup_width
+            y = widget_y - popup_height - 5
+        else:
+            x = widget_x
+            y = widget_y + widget.winfo_height() + 5
+        screen_width = widget.winfo_screenwidth()
+        screen_height = widget.winfo_screenheight()
+        x = max(0, min(x, screen_width - popup_width))
+        y = max(0, min(y, screen_height - popup_height))
         popup.geometry(f"+{x}+{y}")
         tooltip[0] = popup
 
@@ -3278,7 +3290,7 @@ def _edit_facade_symbol(
     for column, (label, width) in headings.items():
         tree.heading(column, text=label)
         tree.column(column, width=width, minwidth=60, stretch=column == "pin")
-    scrollbar = ttk.Scrollbar(
+    scrollbar = _auto_hide_scrollbar(
         table_frame, orient="vertical", command=tree.yview, style="Vertical.TScrollbar"
     )
     tree.configure(yscrollcommand=scrollbar.set)
@@ -6346,7 +6358,11 @@ def _show_library_browser(
     search_entry = ttk.Entry(left, textvariable=search)
     search_entry._kicad_ui_contract_id = "library-browser.search"
     search_entry.grid(row=1, column=0, sticky="ew", pady=(3, 6))
-    _add_tooltip(search_entry, "Filter blocks · ↑/↓ browse · Enter place")
+    _add_tooltip(
+        search_entry,
+        "Filter blocks · ↑/↓ browse · Enter place",
+        placement="above-right",
+    )
     tree_frame = ttk.Frame(left)
     tree_frame.grid(row=2, column=0, sticky="nsew")
     tree_frame.columnconfigure(0, weight=1)
@@ -6400,10 +6416,18 @@ def _show_library_browser(
     )
     description_label.grid(row=1, column=0, sticky="ew", pady=(3, 6))
 
-    preview_box = ttk.LabelFrame(right, text="Preview", padding=4)
+    preview_box = ttk.Frame(
+        right, style="Card.TFrame", padding=(12, 10)
+    )
     preview_box.grid(row=2, column=0, sticky="nsew")
-    preview_notebook = ttk.Notebook(preview_box)
-    preview_notebook._kicad_ui_contract_id = "library-browser.preview.views"
+    ttk.Label(
+        preview_box, text="PREVIEW", style="SectionTitleSurface.TLabel"
+    ).pack(anchor="w", pady=(0, 6))
+    from .ui_components import FlatTabControl
+
+    preview_notebook = FlatTabControl(
+        preview_box, contract_id="library-browser.preview.views"
+    )
     preview_notebook.pack(fill="both", expand=True)
 
     facade_page = ttk.Frame(preview_notebook)
@@ -6485,13 +6509,13 @@ def _show_library_browser(
         highlightthickness=0,
         borderwidth=0,
     )
-    schematic_y_scroll = ttk.Scrollbar(
+    schematic_y_scroll = _auto_hide_scrollbar(
         schematic_frame,
         orient="vertical",
         command=_scrollbar_command(schematic_preview.yview),
         style="Vertical.TScrollbar",
     )
-    schematic_x_scroll = ttk.Scrollbar(
+    schematic_x_scroll = _auto_hide_scrollbar(
         schematic_frame,
         orient="horizontal",
         command=_scrollbar_command(schematic_preview.xview),
@@ -6508,9 +6532,14 @@ def _show_library_browser(
         schematic_preview, lambda amount: schematic_preview.yview_scroll(amount, "units")
     )
 
-    details_box = ttk.LabelFrame(right, text="Block overview", padding=4)
+    details_box = ttk.Frame(
+        right, style="Card.TFrame", padding=(12, 10)
+    )
     details_box.grid(row=3, column=0, sticky="nsew", pady=(8, 0))
-    details_frame = ttk.Frame(details_box)
+    ttk.Label(
+        details_box, text="BLOCK OVERVIEW", style="SectionTitleSurface.TLabel"
+    ).pack(anchor="w", pady=(0, 6))
+    details_frame = ttk.Frame(details_box, style="Card.TFrame")
     details_frame.pack(fill="both", expand=True)
     details = tk.Text(
         details_frame,
@@ -7949,8 +7978,9 @@ def _show_action_hub(
         wraplength=680,
     ).pack(anchor="w", pady=(0, 7))
 
-    tabs = ttk.Notebook(outer)
-    tabs._kicad_ui_contract_id = "task-hub.views"
+    from .ui_components import FlatTabControl
+
+    tabs = FlatTabControl(outer, contract_id="task-hub.views")
     tabs.pack(fill="both", expand=True)
 
     groups = [

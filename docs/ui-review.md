@@ -19,12 +19,16 @@ Every modal must support Escape/cancel where cancellation is safe, have a useful
 
 The shared panels follow the compact slate treatment established in
 `kicad-jlcpcb-interface`: restrained surfaces, a cool accent, quiet secondary
-text, flat controls, and compact 29 px table rows. Use one clear primary action,
-keep related secondary actions in the same toolbar, and group unrelated actions
-with restrained spacing rather than extra explanatory cards. Prefer concise
-context over repeated descriptions, and expose details only where they support
-the current task. Preserve the selected KiCad theme and the existing keyboard,
-accessibility, and semantic UI contracts.
+text, flat controls, and compact 29 px table rows. The reusable implementation
+now lives in `kicad_blocks.theme` and `kicad_blocks.ui_components`: shared
+spacing and typography tokens, semantic light/dark palettes (using an explicit override or KiCad's active color theme, with a platform-neutral light fallback), flat text tabs
+with an active underline, and scrollbars that reveal their draggable thumb on
+hover or movement. The Functional Block Library uses unbordered preview and
+overview surfaces so hierarchy comes from spacing and typography rather than
+nested outlines. Use one clear primary action, keep related secondary actions
+in the same toolbar, and expose details only where they support the current
+task. Preserve KiCad's active color theme, keyboard access, and semantic UI
+contracts.
 
 ## Window inventory and design decisions
 
@@ -63,7 +67,7 @@ The Functional Block Library preview uses two tabs so facade artwork and the cir
 
 ## Desktop and platform evidence
 
-The system-theme path preserves the native Tk colors while applying the shared Treeview geometry (36 px rows) so text is not clipped. It does **not yet** read KiCad's selected color theme into the Tk palette. KiCad stores the active color theme in its settings and stores theme definitions as JSON in the settings `colors` directory; wiring that active theme into the plugin palette remains an open task.
+The theme follows an explicit `KICAD_BLOCKS_THEME=light|dark` override first, then the color theme read from Eeschema's IPC-reported settings directory. When KiCad does not expose a usable theme (for example, a standalone visual-test host), the shared resolver uses a deterministic light palette; visual tests can select either palette through the same explicit override. Production code does not inspect Windows registry, macOS defaults, GNOME settings, KDE config files, or compositor-specific state. The palette is applied to both ttk and classic Tk controls, and every Treeview keeps compact 29 px rows with readable selected and striped states. This fallback does not change the separate open requirement to validate actual native desktop chooser rendering and cross-process window ownership.
 
 The supported KiCad CI GUI tests run under `xvfb-run`; X11 tools may be used only in the test harness. Production code does not inject global input or inspect OS window IDs. Place Block uses schematic IPC to insert at page center, focus, select, and save. Edit Facade validates the selected project-catalog symbol and reports the unsupported Symbol Editor handoff; it does not modify pin geometry or pretend to open the native editor. Cursor-attached movement and launching/selecting an exact library symbol in Symbol Editor remain upstream IPC gaps.
 

@@ -1081,9 +1081,12 @@ class LibraryBrowserTests(unittest.TestCase):
     ) -> None:
         style = Mock()
         root = SimpleNamespace()
+        expected_palette = {"background": "#f1f4f7", "accent": "#2f6f9f"}
+        fake_theme = ModuleType("kicad_blocks.theme")
+        fake_theme.apply_tk_theme = Mock(return_value=expected_palette)
         with (
             patch.dict(os.environ, {"KICAD_BLOCKS_THEME": "system"}),
-            patch("kicad_blocks.plugin.ttk", SimpleNamespace(Style=Mock(return_value=style))),
+            patch.dict(sys.modules, {"kicad_blocks.theme": fake_theme}),
         ):
             _configure_tk_theme(root)
         self.assertEqual(root.kicad_blocks_palette, {})
