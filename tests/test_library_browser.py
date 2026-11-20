@@ -47,6 +47,7 @@ from kicad_blocks.plugin import (
     _save_block_variants,
     _schematic_page_center_mm,
     _set_window_geometry,
+    _visible_table_rows,
     _start_native_symbol_placement,
     _system_prefers_dark_theme,
 )
@@ -842,6 +843,14 @@ class LibraryBrowserTests(unittest.TestCase):
         )
         with self.assertRaisesRegex(ValueError, "still use an implementation"):
             _save_block_variants(profiled, [])
+
+    def test_visible_table_rows_fit_real_content_and_cap_long_lists(self):
+        self.assertEqual(_visible_table_rows(0), 2)
+        self.assertEqual(_visible_table_rows(1), 2)
+        self.assertEqual(_visible_table_rows(4), 4)
+        self.assertEqual(_visible_table_rows(20), 8)
+        self.assertEqual(_visible_table_rows(20, maximum=10), 10)
+        self.assertEqual(_visible_table_rows(-3), 2)
 
     def test_window_geometry_respects_display_bounds(self):
         class FakeWindow:
