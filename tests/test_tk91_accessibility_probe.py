@@ -52,8 +52,19 @@ def _assert_accessible_tree(payload: dict) -> dict:
     nodes = list(_walk(snapshot))
     title_nodes = [node for node in nodes if node.get("name") == WINDOW_TITLE]
     if not title_nodes:
+        observed = [
+            {
+                "name": node.get("name"),
+                "role": node.get("role"),
+                "description": node.get("description"),
+            }
+            for node in nodes
+        ]
         raise AssertionError(
-            f"AT-SPI did not expose the named Tk top-level window {WINDOW_TITLE!r}."
+            f"AT-SPI did not expose the named Tk top-level window {WINDOW_TITLE!r}. "
+            f"Snapshot: {json.dumps(snapshot, ensure_ascii=False)[:16000]}. "
+            f"Observed accessible nodes: {json.dumps(observed, ensure_ascii=False)[:16000]}. "
+            f"Raw AT-SPI dump: {str(payload.get('dump') or '')[:16000]}"
         )
 
     widget_summary: dict[str, dict[str, str | None]] = {}
@@ -149,6 +160,26 @@ def main() -> None:
 
     root.update_idletasks()
     root.update()
+    registered = {
+        "window": {
+            "role": root.tk.call("tk", "accessible", "get_acc_role", root._w),
+            "name": root.tk.call("tk", "accessible", "get_acc_name", root._w),
+            "description": root.tk.call("tk", "accessible", "get_acc_description", root._w),
+        },
+        "widgets": {
+            name: {
+                "role": widget.tk.call("tk", "accessible", "get_acc_role", widget._w),
+                "name": widget.tk.call("tk", "accessible", "get_acc_name", widget._w),
+                "description": widget.tk.call("tk", "accessible", "get_acc_description", widget._w),
+            }
+            for widget, name in (
+                (label, "Block name"),
+                (entry, "Block name input"),
+                (save_button, "Save block"),
+            )
+        },
+    }
+    print("Tk 9.1 registered accessibility attributes:", json.dumps(registered), flush=True)
     print(
         "Tk 9.1 probe started:",
         json.dumps(
