@@ -154,9 +154,12 @@ def _window_process_id(xdotool: str, window_id: str) -> int:
     return process_id
 
 
-def _dump_accessibility_tree(process_id: int) -> str:
-    """Inspect KiCad's AT-SPI tree; CI can require a named top-level window."""
-    required = os.environ.get("KICAD_BLOCKS_REQUIRE_A11Y") == "1"
+def _dump_accessibility_tree(
+    process_id: int, *, required: bool | None = None
+) -> str:
+    """Inspect a process AT-SPI tree; CI can require a named top-level window."""
+    if required is None:
+        required = os.environ.get("KICAD_BLOCKS_REQUIRE_A11Y") == "1"
     try:
         import xa11y
     except ImportError as exc:
@@ -678,6 +681,10 @@ def main() -> None:
                 if not opened:
                     raise AssertionError("Edit Facade did not open its portable pin-layout editor.")
                 facade_root.update()
+                # Tk 8.6 may not publish an AT-SPI application tree. Capture
+                # the real plugin-owned window anyway so CI logs make that
+                # limitation explicit instead of inferring it from Eeschema.
+                _dump_accessibility_tree(os.getpid(), required=False)
 
                 def find_contract_widget(widget, contract_id):
                     pending = [widget]
