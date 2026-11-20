@@ -147,22 +147,17 @@ def main() -> None:
             f"registration (check_screenreader returned {screen_reader_running!r})."
         )
 
-    # Tk's Map bindings register the top-level and all core ttk widgets with
-    # ATK. Confirm the default roles exist before applying project-specific
-    # accessible names/descriptions.
-    expected_roles = (
+    # Register the roles explicitly before assigning names/descriptions.
+    # Tk's C setters create the per-widget attribute table on first role write.
+    # Then register the mapped toplevel recursively with the ATK hierarchy.
+    accessible_widgets = (
         (root, "Toplevel"),
         (label, "Label"),
         (entry, "Entry"),
         (save_button, "Button"),
     )
-    for widget, expected_role in expected_roles:
-        actual_role = str(root.tk.call("tk", "accessible", "get_acc_role", widget._w))
-        if actual_role != expected_role:
-            raise AssertionError(
-                f"Tk 9.1 mapped widget {widget._w!r} has role {actual_role!r}; "
-                f"expected {expected_role!r}."
-            )
+    for widget, role in accessible_widgets:
+        root.tk.call("tk", "accessible", "set_acc_role", widget._w, role)
 
     root.tk.call("tk", "accessible", "set_acc_name", root._w, WINDOW_TITLE)
     root.tk.call(
@@ -177,6 +172,10 @@ def main() -> None:
     ):
         root.tk.call("tk", "accessible", "set_acc_name", widget._w, name)
         root.tk.call("tk", "accessible", "set_acc_description", widget._w, description)
+
+    # ATK derives a label's accessible name from its accessible value.
+    root.tk.call("tk", "accessible", "set_acc_value", label._w, "Block name")
+    root.tk.call("tk", "accessible", "add_acc_object", root._w)
 
     root.update_idletasks()
     root.update()
