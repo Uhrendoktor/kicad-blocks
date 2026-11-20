@@ -3701,7 +3701,11 @@ def _ask_layout_details(parent, record) -> dict | None:
     )
     link_combo._kicad_ui_contract_id = "add-pcb-layout.implementation"
     link_combo.grid(row=6, column=0, columnspan=3, sticky="ew", pady=(3, 2))
-    _add_tooltip(link_combo, "This layout is available when applying the selected implementation to a board.")
+    _add_tooltip(
+        link_combo,
+        "This layout is available when applying the selected implementation to a board.",
+        placement="above-right",
+    )
     frame.columnconfigure(0, weight=1)
     result = [None]
 
