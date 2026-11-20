@@ -206,6 +206,13 @@ jobs:
           "$PY" -m pip install "$WHEELHOUSE/kicad_python-0.9.0.dev0-cp312-cp312-linux_x86_64.whl"
           "$PY" -c "from kipy import KiCad; from kipy.schematic import Schematic; print('Schematic IPC bindings available')"
 
+      - name: Install system Tkinter for theme tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -o Acquire::Languages=none
+          sudo apt-get install -y --no-install-recommends python3-tk
+
       - name: Run unit tests and compile
         shell: bash
         run: |
