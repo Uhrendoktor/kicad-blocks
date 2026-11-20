@@ -232,13 +232,16 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          package_installed() {
+            [[ "$(dpkg-query -W -f='${db:Status-Status}' "$1" 2>/dev/null || true)" == "installed" ]]
+          }
           if ! command -v xvfb-run >/dev/null 2>&1 \
             || ! command -v xdotool >/dev/null 2>&1 \
             || ! command -v xwd >/dev/null 2>&1 \
             || ! command -v dbus-run-session >/dev/null 2>&1 \
             || ! command -v dbus-send >/dev/null 2>&1 \
-            || ! dpkg-query -W at-spi2-core >/dev/null 2>&1 \
-            || ! dpkg-query -W libatk-bridge2.0-0t64 >/dev/null 2>&1 \
+            || ! package_installed at-spi2-core \
+            || ! package_installed libatk-bridge2.0-0t64 \
             || ! python3 -c "import tkinter" >/dev/null 2>&1; then
             if [[ "$(id -u)" -eq 0 ]]; then
               apt-get -o Acquire::Languages=none update

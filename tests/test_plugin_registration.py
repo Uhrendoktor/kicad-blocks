@@ -181,6 +181,8 @@ def _dump_accessibility_tree(process_id: int) -> str:
     )
     print("--- end xa11y KiCad accessibility tree ---", flush=True)
     return tree
+
+
 def _wait_for_window_title(xdotool: str, predicate, timeout_s: float = 12.0) -> tuple[str, str, str]:
     deadline = time.monotonic() + timeout_s
     last_windows = []
