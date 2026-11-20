@@ -95,9 +95,8 @@ echo "::group::Create a KiCad-style plugin venv and install the AT-SPI probe"
 VENV_PYTHON="$BUILD_ROOT/plugin-venv/bin/python"
 "$VENV_PYTHON" -m pip install --upgrade pip
 "$VENV_PYTHON" -m pip install 'xa11y==0.16.0'
-"$VENV_PYTHON" -c \
-  'import _tkinter, tkinter; root=tkinter.Tk(); version=root.tk.call("package","provide","Tk"); print("Tk package:", version, "Tcl:", tkinter.TclVersion, "Tk:", tkinter.TkVersion, "_tkinter:", _tkinter.__file__); assert version.startswith("9.1."); root.destroy()' \
-  --display 2>/dev/null || true
+xvfb-run -a "$VENV_PYTHON" -c \
+  'import _tkinter, tkinter; root=tkinter.Tk(); version=root.tk.call("package","provide","Tk"); print("Tk package:", version, "Tcl:", tkinter.TclVersion, "Tk:", tkinter.TkVersion, "_tkinter:", _tkinter.__file__); assert version.startswith("9.1."); root.destroy()'
 echo "::endgroup::"
 
 echo "::group::Query real Tk widgets through AT-SPI"
