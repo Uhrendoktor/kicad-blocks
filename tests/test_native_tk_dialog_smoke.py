@@ -11,11 +11,9 @@ import os
 import sys
 import time
 from collections.abc import Callable
-from typing import TypedDict
+from typing import TYPE_CHECKING, TypedDict
 
 import pytest
-
-from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     import tkinter as tk
