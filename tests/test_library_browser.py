@@ -47,9 +47,9 @@ from kicad_blocks.plugin import (
     _save_block_variants,
     _schematic_page_center_mm,
     _set_window_geometry,
-    _visible_table_rows,
     _start_native_symbol_placement,
     _system_prefers_dark_theme,
+    _visible_table_rows,
 )
 from kicad_blocks.repository import (
     LIBRARY_NICKNAME,
