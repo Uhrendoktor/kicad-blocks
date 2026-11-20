@@ -15,12 +15,23 @@ from typing import TypedDict
 
 import pytest
 
-import tkinter as tk
-from tkinter import messagebox, simpledialog
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import tkinter as tk
+    from tkinter import messagebox, simpledialog
+else:
+    try:
+        import tkinter as tk
+        from tkinter import messagebox, simpledialog
+    except ImportError:  # pragma: no cover - the headless interpreter has no Tk
+        tk = None
+        messagebox = None
+        simpledialog = None
 
 pytestmark = pytest.mark.skipif(
-    sys.platform == "linux" and not os.environ.get("DISPLAY"),
-    reason="Real Tk dialog smoke tests require a display (run under xvfb-run).",
+    tk is None or (sys.platform == "linux" and not os.environ.get("DISPLAY")),
+    reason="Real Tk dialog smoke tests require Tk and a display (run under xvfb-run).",
 )
 
 _DIALOG_TIMEOUT_SECONDS = 5.0
