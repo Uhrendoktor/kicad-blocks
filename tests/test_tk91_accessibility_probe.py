@@ -6,6 +6,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 WINDOW_TITLE = "KiCad Blocks Tk 9.1 Accessibility Probe"
@@ -174,13 +175,27 @@ def main() -> None:
         stderr=subprocess.PIPE,
         text=True,
     )
-    failures: list[BaseException] = []
+    failures: list[Exception] = []
+    helper_deadline = time.monotonic() + 25.0
+    helper_completed = False
 
     def poll_helper() -> None:
+        nonlocal helper_completed
         try:
-            if helper.poll() is None:
+            if helper.poll() is None and time.monotonic() < helper_deadline:
                 root.after(100, poll_helper)
                 return
+            if helper.poll() is None:
+                helper.terminate()
+                try:
+                    stdout, stderr = helper.communicate(timeout=2.0)
+                except subprocess.TimeoutExpired:
+                    helper.kill()
+                    stdout, stderr = helper.communicate()
+                raise RuntimeError(
+                    "Timed out waiting for xa11y to inspect the Tk 9.1 window; "
+                    f"stdout={stdout[-12000:]}; stderr={stderr[-12000:]}"
+                )
 
             stdout, stderr = helper.communicate()
             print(
@@ -214,15 +229,35 @@ def main() -> None:
                 encoding="utf-8",
             )
             print(f"Validated Tk 9.1 accessibility summary written to {result_path}.", flush=True)
-        except Exception as exc:
+        except (
+            AssertionError,
+            OSError,
+            RuntimeError,
+            TypeError,
+            ValueError,
+            subprocess.SubprocessError,
+        ) as exc:
             failures.append(exc)
         finally:
+            helper_completed = True
             if helper.poll() is None:
                 helper.terminate()
             root.destroy()
 
+    print("Entering Tk 9.1 mainloop for AT-SPI inspection.", flush=True)
     root.after(250, poll_helper)
     root.mainloop()
+    print(
+        "Tk 9.1 mainloop exited; "
+        f"helper_completed={helper_completed}; helper_returncode={helper.poll()}.",
+        flush=True,
+    )
+    if not helper_completed:
+        if helper.poll() is None:
+            helper.terminate()
+        raise RuntimeError(
+            "Tk 9.1 mainloop exited before the AT-SPI inspection callback completed."
+        )
     if failures:
         raise failures[0]
 
