@@ -430,12 +430,12 @@ def test_add_variant_save_failure_can_be_retried_with_save_and_close(
         _click(context, "implementations-manager.action.add", "Add variant")
         status = context.require_widget("implementations-manager.status")
         status_variable = str(status.cget("textvariable"))
-        assert "Save failed; use Save & close to retry." in str(status.getvar(status_variable))
+        assert "Automatic save failed." in str(status.getvar(status_variable))
         assert len(errors) == 1
         _click(
             context,
-            "implementations-manager.action.close",
-            "Close",
+            "implementations-manager.action.save-close",
+            "Save & close",
             closes=True,
         )
 
