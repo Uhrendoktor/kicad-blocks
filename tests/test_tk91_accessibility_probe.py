@@ -10,9 +10,10 @@ import time
 from pathlib import Path
 
 WINDOW_TITLE = "KiCad Blocks Tk 9.1 Accessibility Probe"
+# xa11y normalizes AT-SPI roles to its cross-platform vocabulary.
 EXPECTED_WIDGETS = {
-    "Block name": ("label", "Identifies the functional block name input."),
-    "Block name input": ("entry", "Text field for the functional block name."),
+    "Block name": ("static_text", "Identifies the functional block name input."),
+    "Block name input": ("text_field", "Text field for the functional block name."),
     "Save block": ("button", "Saves the current functional block."),
 }
 
