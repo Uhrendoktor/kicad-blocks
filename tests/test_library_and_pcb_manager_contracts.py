@@ -124,15 +124,6 @@ def _directory_picker_result(path: Path) -> Callable[..., str]:
         return str(path)
 
     return choose
-
-
-def _string_dialog_result(value: str | None) -> Callable[..., str | None]:
-    def ask(_title: str, _prompt: str, **_kwargs: TkCallbackOption) -> str | None:
-        return value
-
-    return ask
-
-
 def _layout_details_result(
     name: str,
     source: Path,
@@ -146,50 +137,23 @@ def _layout_details_result(
         }
 
     return choose
-
-
-def _path_result(path: Path) -> Callable[[Path], Path]:
-    def locate(_source: Path) -> Path:
-        return path
-
-    return locate
-
-
 def _raise_path_error(message: str) -> Callable[[Path], NoReturn]:
     def fail(_path: Path) -> NoReturn:
         raise OSError(message)
 
     return fail
-
-
-def _remove_root_with_failure(
-    failing_path: Path,
-    message: str,
-    original_remove: Callable[[Path], list[Path]],
-) -> Callable[[Path], list[Path]]:
-    def remove(path: Path) -> list[Path]:
-        if Path(path).expanduser().resolve() == failing_path.resolve():
-            raise OSError(message)
-        return original_remove(path)
-
-    return remove
-
-
 def _return_path_name(value: str) -> Callable[..., str | None]:
     def ask(_title: str, _prompt: str, **_kwargs: TkCallbackOption) -> str | None:
         return value
 
     return ask
 
-
-def _return_none_path_name() -> Callable[..., str | None]:
-    def ask(_title: str, _prompt: str, **_kwargs: TkCallbackOption) -> str | None:
-        return None
-
-    return ask
+def _parent_title(parent: Toplevel | None) -> str:
+    assert parent is not None
+    return parent.title()
 
 
-def _new_root(monkeypatch: MonkeyPatch) -> Tk:
+def _new_root(monkeypatch: MonkeyPatch) -> Tk
     plugin_actions.load_tkinter()
 
     def no_icon(_parent: Misc, _name: str, _stroke_color: str | None = None) -> None:
@@ -379,7 +343,7 @@ def test_manage_libraries_create_makes_and_registers_new_folder(
     def create(_dialog: Toplevel) -> None:
         _click(context, "manage-libraries.action.create", "Create library")
         assert ask_calls[0][0] == "Create block library"
-        assert ask_calls[0][2].title() == "Manage Libraries"
+        assert _parent_title(ask_calls[0][2]) == "Manage Libraries"
         assert created.is_dir()
         assert created.resolve() in repository.library_roots()
         _click(
@@ -780,7 +744,7 @@ def test_pcb_layout_manager_cancelled_remove_preserves_board_and_manifest(
     """Verify cancelling layout removal preserves files."""
     record, _sources = _pcb_fixture(tmp_path, layout_count=2)
     before = read_manifest(record.path)
-    prompts = []
+    prompts: list[tuple[str, str]] = []
     monkeypatch.setattr(
         plugin_actions.messagebox,
         "askyesno",
@@ -851,11 +815,7 @@ def test_pcb_layout_manager_duplicate_name_reports_error_without_mutating_manife
     monkeypatch.setattr(
         plugin_actions,
         "_ask_layout_details",
-        lambda *_args, **_kwargs: {
-            "name": duplicate,
-            "source": str(board),
-            "linked_implementation": "Default",
-        },
+        _layout_details_result(duplicate, board, "Default"),
     )
     errors: list[_RecordedMessage] = []
     monkeypatch.setattr(
@@ -904,11 +864,11 @@ def test_manage_libraries_add_registration_error_keeps_existing_roots(
         raise OSError(message)
 
     monkeypatch.setattr(plugin_actions, "add_library_root", fail_add)
-    errors = []
+    errors: list[_RecordedMessage] = []
     monkeypatch.setattr(
         plugin_actions.messagebox,
         "showerror",
-        lambda title, message, **kwargs: errors.append((title, str(message), kwargs.get("parent"))),
+        _record_message(errors),
     )
     root = _new_root(monkeypatch)
     context = UiTestContext(root)
@@ -945,11 +905,11 @@ def test_manage_libraries_create_rejects_path_like_folder_name(
         "askstring",
         _return_path_name("../outside"),
     )
-    errors = []
+    errors: list[_RecordedMessage] = []
     monkeypatch.setattr(
         plugin_actions.messagebox,
         "showerror",
-        lambda title, message, **kwargs: errors.append((title, str(message), kwargs.get("parent"))),
+        _record_message(errors),
     )
     root = _new_root(monkeypatch)
     context = UiTestContext(root)
@@ -959,7 +919,7 @@ def test_manage_libraries_create_rejects_path_like_folder_name(
         assert len(errors) == 1
         assert errors[0][0] == "Create block library"
         assert errors[0][1] == "Enter a single folder name without a path."
-        assert errors[0][2].title() == "Manage Libraries"
+        assert _parent_title(errors[0][2]) == "Manage Libraries"
         assert not (tmp_path / "outside").exists()
         _click(
             context, "manage-libraries.action.close", "Close", closes=True, title="Manage Libraries"
@@ -983,17 +943,17 @@ def test_manage_libraries_create_filesystem_error_keeps_existing_folder(
     existing.mkdir()
     marker = existing / "preserve.txt"
     marker.write_text("keep", encoding="utf-8")
-    monkeypatch.setattr(plugin_actions, "_pick_directory", lambda *_a, **_k: str(destination))
+    monkeypatch.setattr(plugin_actions, "_pick_directory", _directory_picker_result(destination))
     monkeypatch.setattr(
         plugin_actions.simpledialog,
         "askstring",
         _return_path_name("already-there"),
     )
-    errors = []
+    errors: list[_RecordedMessage] = []
     monkeypatch.setattr(
         plugin_actions.messagebox,
         "showerror",
-        lambda title, message, **kwargs: errors.append((title, str(message), kwargs.get("parent"))),
+        _record_message(errors),
     )
     root = _new_root(monkeypatch)
     context = UiTestContext(root)
@@ -1003,7 +963,7 @@ def test_manage_libraries_create_filesystem_error_keeps_existing_folder(
         assert len(errors) == 1
         assert errors[0][0] == "Create block library"
         assert "exists" in errors[0][1].lower()
-        assert errors[0][2].title() == "Manage Libraries"
+        assert _parent_title(errors[0][2]) == "Manage Libraries"
         assert marker.read_text(encoding="utf-8") == "keep"
         assert existing.resolve() not in repository.library_roots()
         _click(
@@ -1033,11 +993,11 @@ def test_manage_libraries_change_folder_rolls_back_after_old_root_removal_fails(
         return original_remove(path)
 
     monkeypatch.setattr(plugin_actions, "remove_library_root", fail_old_root)
-    errors = []
+    errors: list[_RecordedMessage] = []
     monkeypatch.setattr(
         plugin_actions.messagebox,
         "showerror",
-        lambda title, message, **kwargs: errors.append((title, str(message), kwargs.get("parent"))),
+        _record_message(errors),
     )
     root = _new_root(monkeypatch)
     context = UiTestContext(root)
@@ -1048,7 +1008,7 @@ def test_manage_libraries_change_folder_rolls_back_after_old_root_removal_fails(
         assert len(errors) == 1
         assert errors[0][0] == "Change registered folder"
         assert errors[0][1] == "simulated old-root unregister failure"
-        assert errors[0][2].title() == "Manage Libraries"
+        assert _parent_title(errors[0][2]) == "Manage Libraries"
         assert first.resolve() in repository.library_roots()
         assert second.resolve() in repository.library_roots()
         assert replacement.resolve() not in repository.library_roots()
@@ -1069,17 +1029,21 @@ def test_manage_libraries_unregister_error_keeps_root_registered(
 ) -> None:
     """Verify unregister failure keeps the root registered."""
     _settings, first, second = _library_fixture(monkeypatch, tmp_path)
-    monkeypatch.setattr(plugin_actions.messagebox, "askyesno", lambda *_a, **_k: True)
+    monkeypatch.setattr(
+        plugin_actions.messagebox,
+        "askyesno",
+        _record_question([], True),
+    )
     monkeypatch.setattr(
         plugin_actions,
         "remove_library_root",
         _raise_path_error("settings file is read-only"),
     )
-    errors = []
+    errors: list[_RecordedMessage] = []
     monkeypatch.setattr(
         plugin_actions.messagebox,
         "showerror",
-        lambda title, message, **kwargs: errors.append((title, str(message), kwargs.get("parent"))),
+        _record_message(errors),
     )
     root = _new_root(monkeypatch)
     context = UiTestContext(root)
@@ -1090,7 +1054,7 @@ def test_manage_libraries_unregister_error_keeps_root_registered(
         assert len(errors) == 1
         assert errors[0][0] == "Unregister library"
         assert errors[0][1] == "settings file is read-only"
-        assert errors[0][2].title() == "Manage Libraries"
+        assert _parent_title(errors[0][2]) == "Manage Libraries"
         assert second.resolve() in repository.library_roots()
         assert first.resolve() in repository.library_roots()
         _click(
@@ -1114,11 +1078,11 @@ def test_manage_libraries_set_default_error_preserves_previous_default(
         "set_library_root",
         _raise_path_error("could not write default setting"),
     )
-    errors = []
+    errors: list[_RecordedMessage] = []
     monkeypatch.setattr(
         plugin_actions.messagebox,
         "showerror",
-        lambda title, message, **kwargs: errors.append((title, str(message), kwargs.get("parent"))),
+        _record_message(errors),
     )
     root = _new_root(monkeypatch)
     context = UiTestContext(root)
@@ -1129,7 +1093,7 @@ def test_manage_libraries_set_default_error_preserves_previous_default(
         assert len(errors) == 1
         assert errors[0][0] == "Set default library"
         assert errors[0][1] == "could not write default setting"
-        assert errors[0][2].title() == "Manage Libraries"
+        assert _parent_title(errors[0][2]) == "Manage Libraries"
         assert repository.default_library_root() == first.resolve()
         _click(
             context, "manage-libraries.action.close", "Close", closes=True, title="Manage Libraries"
