@@ -100,3 +100,46 @@ def test_auto_hide_scrollbar_switches_between_idle_and_active_states():
         assert scroll.cget("style") == scroll.idle_style
     finally:
         root.destroy()
+
+def test_search_tooltip_appears_above_focused_field_without_covering_results():
+    import tkinter as tk
+    from tkinter import ttk
+
+    from kicad_blocks import plugin as plugin_actions
+
+    root = tk.Tk()
+    try:
+        apply_tk_theme(root, "light")
+        root.geometry("520x300+0+0")
+        ttk.Label(root, text="Search blocks").pack(anchor="w", padx=12, pady=(48, 3))
+        search = ttk.Entry(root)
+        search.pack(fill="x", padx=12, pady=(0, 6))
+        results = ttk.Treeview(root, columns=("block",), show="headings", height=4)
+        results.heading("block", text="Block")
+        results.pack(fill="both", expand=True, padx=12)
+
+        plugin_actions._add_tooltip(
+            search,
+            "Filter blocks · ↑/↓ browse · Enter place",
+            placement="above-right",
+        )
+        root.update_idletasks()
+        search.focus_force()
+        root.update()
+
+        tooltip = next(
+            child for child in root.winfo_children()
+            if isinstance(child, tk.Toplevel)
+        )
+        tooltip_top = tooltip.winfo_rooty()
+        tooltip_bottom = tooltip_top + tooltip.winfo_height()
+        search_top = search.winfo_rooty()
+        search_right = search.winfo_rootx() + search.winfo_width()
+        tooltip_right = tooltip.winfo_rootx() + tooltip.winfo_width()
+
+        assert tooltip_bottom <= search_top
+        assert tooltip_right <= search_right
+        assert tooltip_top >= 0
+        assert results.winfo_ismapped()
+    finally:
+        root.destroy()
