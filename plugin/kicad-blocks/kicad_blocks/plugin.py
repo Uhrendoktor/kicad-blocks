@@ -31,6 +31,7 @@ if TYPE_CHECKING:
     from kipy.geometry import Vector2
     from kipy.proto.common.types import DocumentSpecifier
     from kipy.proto.common.types.base_types_pb2 import KIID
+    from .ui_components import FlatTabControl
 else:
     tk = None
     ttk = None
@@ -437,18 +438,6 @@ class _TkIdleScheduler(Protocol):
     """Tk idle callback operation provided by Misc at runtime."""
 
     def after_idle(self, callback: Callable[[], None]) -> str: ...
-
-
-class _TkVariableRetainer(Protocol):
-    """Tk window retaining Tcl variable objects for as long as widgets use them."""
-
-    _kicad_ui_variables: list[tkinter_types.Variable]
-
-
-class _TaskHubStateOwner(Protocol):
-    """Tk window exposing enabled task actions to contract-test adapters."""
-
-    _kicad_blocks_hub_enabled_actions: set[str]
 
 
 class _PreviewRaster(Protocol):
@@ -4784,12 +4773,12 @@ def _ask_layout_details(
         str(item["value"]) for item in record.manifest.get("variants", [])
     ]
     link_value = tk.StringVar(master=dialog, value=implementation_values[0])
-    cast(_TkVariableRetainer, dialog)._kicad_ui_variables = [
+    setattr(dialog, "_kicad_ui_variables", [
         name_value,
         mode_value,
         source_value,
         link_value,
-    ]
+    ])
     ttk.Label(frame, text="Use for implementation").grid(row=5, column=0, sticky="w")
     link_combo = ttk.Combobox(
         frame,
@@ -5611,7 +5600,7 @@ def _show_block_variant_editor(
         master=dialog,
         value="Empty KB_VARIANT uses the default implementation.",
     )
-    cast(_TkVariableRetainer, dialog)._kicad_ui_variables = [status_value]
+    setattr(dialog, "_kicad_ui_variables", [status_value])
     status_label = ttk.Label(
         frame,
         textvariable=status_value,
@@ -7995,7 +7984,7 @@ def _show_action_hub(
     schematic: _Schematic | None = None,
     project_dir: Path | None = None,
     library_paths: Path | list[Path] | None = None,
-) -> ttk_types.Notebook:
+) -> FlatTabControl:
     """Show compact, icon-led task actions with secondary guidance in tooltips."""
     _configure_tk_theme(root, kicad)
     root._kicad_ui_screen_id = "task-hub"
@@ -8246,9 +8235,11 @@ def _show_action_hub(
             )
         else:
             status_value.set("Selection does not meet the requirements of the disabled actions.")
-        cast(_TaskHubStateOwner, root)._kicad_blocks_hub_enabled_actions = {
-            action_id for action_id, active in enabled.items() if active
-        }
+        setattr(
+            root,
+            "_kicad_blocks_hub_enabled_actions",
+            {action_id for action_id, active in enabled.items() if active},
+        )
 
     def dispatch(selected_action: str) -> None:
         editor_window_id = getattr(root, "_kicad_blocks_editor_window_id", None)
