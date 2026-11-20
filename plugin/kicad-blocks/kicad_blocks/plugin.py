@@ -250,8 +250,14 @@ def _attach_tk_window_to_editor(window, _editor_window_id: str | None = None) ->
         LOG.debug("Could not associate the Tk dialog with its in-process parent", exc_info=True)
         return False
 
-def _add_tooltip(widget, text: str) -> None:
-    """Attach a small themed tooltip to a compact icon button."""
+def _add_tooltip(widget, text: str, *, placement: str = "below-left") -> None:
+    """Attach a small themed tooltip without obscuring nearby controls.
+
+    `placement="above-right"` is useful for search fields above a results table:
+    keyboard focus can still reveal the hint without covering the table headings.
+    """
+    if placement not in {"below-left", "above-right"}:
+        raise ValueError(f"Unsupported tooltip placement: {placement!r}")
     tooltip = [None]
 
     def show(_event=None):
@@ -277,8 +283,20 @@ def _add_tooltip(widget, text: str) -> None:
         )
         label.pack()
         popup.update_idletasks()
-        x = widget.winfo_rootx()
-        y = widget.winfo_rooty() + widget.winfo_height() + 5
+        popup_width = popup.winfo_reqwidth()
+        popup_height = popup.winfo_reqheight()
+        widget_x = widget.winfo_rootx()
+        widget_y = widget.winfo_rooty()
+        if placement == "above-right":
+            x = widget_x + widget.winfo_width() - popup_width
+            y = widget_y - popup_height - 5
+        else:
+            x = widget_x
+            y = widget_y + widget.winfo_height() + 5
+        screen_width = widget.winfo_screenwidth()
+        screen_height = widget.winfo_screenheight()
+        x = max(0, min(x, screen_width - popup_width))
+        y = max(0, min(y, screen_height - popup_height))
         popup.geometry(f"+{x}+{y}")
         tooltip[0] = popup
 
@@ -5046,7 +5064,7 @@ def _show_library_browser(
     search_entry = ttk.Entry(left, textvariable=search)
     search_entry._kicad_ui_contract_id = "library-browser.search"
     search_entry.grid(row=1, column=0, sticky="ew", pady=(3, 6))
-    _add_tooltip(search_entry, "Filter blocks · ↑/↓ browse · Enter place")
+    _add_tooltip(search_entry, "Filter blocks · ↑/↓ browse · Enter place", placement="above-right")
     tree_frame = ttk.Frame(left)
     tree_frame.grid(row=2, column=0, sticky="nsew")
     tree_frame.columnconfigure(0, weight=1)
