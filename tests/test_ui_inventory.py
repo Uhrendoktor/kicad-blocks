@@ -51,6 +51,11 @@ def test_every_known_top_level_screen_is_in_catalog():
     }
     assert expected <= ids
 
+    facade_editor = next(screen for screen in catalog["screens"] if screen["id"] == "facade-editor")
+    assert facade_editor["coverage"] == "partial"
+    assert "does not expose an operation to open Symbol Editor" in facade_editor["coverage_note"]
+    assert not facade_editor.get("controls")
+
 
 def test_each_semantic_control_has_an_explicit_assertion_level():
     catalog = load_catalog()
