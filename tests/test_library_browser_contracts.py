@@ -270,7 +270,7 @@ def test_library_browser_catalog_labels_each_toolbar_action_coverage_level():
 def test_library_browser_widget_inventory_covers_major_controls(
     monkeypatch: MonkeyPatch, tmp_path: Path
 ):
-    root, _context, _records, _library, _project = _new_browser(monkeypatch, tmp_path)
+    root, context, _records, _library, _project = _new_browser(monkeypatch, tmp_path)
     try:
         discovered = assert_control_coverage(root, LIBRARY_CONTROLS)
         assert set(discovered) == LIBRARY_CONTROLS
