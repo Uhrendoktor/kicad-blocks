@@ -10,7 +10,7 @@ from __future__ import annotations
 import os
 import sys
 import time
-from typing import Callable
+from collections.abc import Callable
 
 import pytest
 
@@ -118,7 +118,7 @@ def _schedule_dialog_action(
                 outcome["geometry"] = str(root.tk.call("wm", "geometry", dialog_path))
                 outcome["transient_parent"] = str(root.tk.call("wm", "transient", dialog_path))
                 callback(dialog_path)
-            except Exception as exc:
+            except (tk.TclError, AssertionError, KeyError, TypeError, ValueError) as exc:
                 outcome["callback_error"] = f"{type(exc).__name__}: {exc}"
                 _dismiss_after_callback_error(root, dialog_path)
             return
