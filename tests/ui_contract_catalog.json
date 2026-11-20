@@ -171,8 +171,7 @@
         "Insert a selected facade at the active sheet's page center, then focus, select, and save it through schematic IPC",
         "Open the selected block's implementation",
         "Publish implementation/facade edits and refresh compatible instances",
-        "Manage variants, PCB layouts, and libraries",
-        "Edit Facade validates the selected project-catalog entry and reports the current unsupported Symbol Editor handoff."
+        "Manage variants, PCB layouts, and libraries"
       ],
       "screenshots": [
         "library-browser-light.png",
@@ -180,9 +179,7 @@
         "library-browser-details-light.png",
         "library-browser-details-dark.png",
         "library-browser-schematic-light.png",
-        "library-browser-schematic-dark.png",
-        "facade-handoff-unavailable-light.png",
-        "facade-handoff-unavailable-dark.png"
+        "library-browser-schematic-dark.png"
       ],
       "controls": [
         {
@@ -317,6 +314,27 @@
           "label": "Publish selected block",
           "assertion": "asserted"
         }
+      ]
+    },
+    {
+      "id": "facade-editor",
+      "title": "Edit Facade — native Symbol Editor handoff",
+      "purpose": "Open the selected generated library symbol in KiCad's native Symbol Editor for artwork and pin-geometry editing.",
+      "coverage": "partial",
+      "coverage_note": "Edit Facade validates the selected project-catalog symbol and reports that the current KiCad public GUI IPC does not expose an operation to open Symbol Editor and select that exact library entry. The action does not edit pin geometry or modify the project catalog. The former in-process pin-layout window code was unreachable after this guard and has been removed. No RunAction, global keyboard injection, or OS-specific window automation is used.",
+      "functionality": [
+        "Validate that the selected symbol exists exactly once in the project-local KBlocks catalog",
+        "Report the missing public KiCad GUI IPC handoff needed to open Symbol Editor and select the exact library entry",
+        "Preserve the project catalog and shared library unchanged when the editor handoff is unavailable"
+      ],
+      "evidence": [
+        "tests/test_library_browser_contracts.py",
+        "tests/test_plugin_registration.py",
+        "tests/capture_visual_docs.py"
+      ],
+      "screenshots": [
+        "facade-handoff-unavailable-light.png",
+        "facade-handoff-unavailable-dark.png"
       ]
     },
     {

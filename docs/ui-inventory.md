@@ -6,7 +6,7 @@ This page is generated from the declarative UI catalog. It inventories the curre
 | Coverage status | Screens | Meaning |
 |---|---:|---|
 | Contracted | 12 | Widget-level execute/result assertions are registered and run in CI. |
-| Partial | 3 | Targeted GUI, integration, model, or screenshot checks exist; the full control matrix is not contracted. |
+| Partial | 4 | Targeted GUI, integration, model, or screenshot checks exist; the full control matrix is not contracted. |
 | Inventory only | 0 | Inventory only — systematic UI contracts remain future work; window/workflow is documented here for discovery and rollout planning. |
 
 The Functional Block Library, legacy Task Hub, transient choosers, Add PCB Layout, Record picker, Instance Configuration, Implementation details, Implementations Manager, Manage Libraries, and PCB Layout Manager have registered widget contracts. Create Block from Sheet is a one-click Eeschema action rather than a details form. All 54 native messagebox/simpledialog call sites have direct result/effect contracts. Place Block uses supported page-aware schematic IPC placement, focus and selection while the schematic interactive-move API is pending; Edit Facade validates its selected project catalog entry but reports that KiCad has no supported GUI IPC operation to open/select it in Symbol Editor. No global-input or OS-specific automation fallback is used. The shared file chooser wrappers have argument/cancellation contracts; native OS rendering and cross-process KiCad window ownership remain unverified.
@@ -92,7 +92,6 @@ Every browser control and chooser route has a real-widget contract. Direct Publi
 - Open the selected block's implementation
 - Publish implementation/facade edits and refresh compatible instances
 - Manage variants, PCB layouts, and libraries
-- Edit Facade validates the selected project-catalog entry and reports the current unsupported Symbol Editor handoff.
 
 **Registered semantic controls**
 
@@ -146,10 +145,34 @@ Every browser control and chooser route has a real-widget contract. Direct Publi
 ![Functional Block Library: library browser schematic dark.png](https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/library-browser-schematic-dark.png)
 [Open library-browser-schematic-dark.png](https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/library-browser-schematic-dark.png)
 
-![Functional Block Library: facade handoff unavailable light.png](https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/facade-handoff-unavailable-light.png)
+---
+
+### Edit Facade — native Symbol Editor handoff
+
+Open the selected generated library symbol in KiCad's native Symbol Editor for artwork and pin-geometry editing.
+
+**Coverage:** Partial — targeted GUI, integration, or screenshot checks exist.
+
+Edit Facade validates the selected project-catalog symbol and reports that the current KiCad public GUI IPC does not expose an operation to open Symbol Editor and select that exact library entry. The action does not edit pin geometry or modify the project catalog. The former in-process pin-layout window code was unreachable after this guard and has been removed. No RunAction, global keyboard injection, or OS-specific window automation is used.
+
+**Major functionality**
+
+- Validate that the selected symbol exists exactly once in the project-local KBlocks catalog
+- Report the missing public KiCad GUI IPC handoff needed to open Symbol Editor and select the exact library entry
+- Preserve the project catalog and shared library unchanged when the editor handoff is unavailable
+
+**Current automated evidence**
+
+- `tests/test_library_browser_contracts.py`
+- `tests/test_plugin_registration.py`
+- `tests/capture_visual_docs.py`
+
+**Production screenshots**
+
+![Edit Facade — native Symbol Editor handoff: facade handoff unavailable light.png](https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/facade-handoff-unavailable-light.png)
 [Open facade-handoff-unavailable-light.png](https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/facade-handoff-unavailable-light.png)
 
-![Functional Block Library: facade handoff unavailable dark.png](https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/facade-handoff-unavailable-dark.png)
+![Edit Facade — native Symbol Editor handoff: facade handoff unavailable dark.png](https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/facade-handoff-unavailable-dark.png)
 [Open facade-handoff-unavailable-dark.png](https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/facade-handoff-unavailable-dark.png)
 
 ---
