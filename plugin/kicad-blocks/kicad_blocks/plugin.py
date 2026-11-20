@@ -5678,7 +5678,7 @@ def _show_block_variant_editor(
         if row_index is None:
             return
         if row_index == 0:
-            finish_manager(default_implementation_path())
+            save_and_close(default_implementation_path())
             return
         index = variant_index_for_row(row_index)
         if index is None:
@@ -6782,10 +6782,14 @@ def _show_library_browser(
         try:
             _register_block(project_dir, record, kicad, current_roots[0])
             if not _last_library_reload_ok:
+                warning = (
+                    _last_library_reload_warning
+                    or "Restart Eeschema to refresh the project library table."
+                )
+                notice_value.set(warning)
                 messagebox.showwarning(
                     "Block library saved",
-                    _last_library_reload_warning
-                    or "Restart Eeschema to refresh the project library table.",
+                    warning,
                     parent=window,
                 )
                 return
@@ -6926,6 +6930,18 @@ def _show_library_browser(
         except (OSError, RuntimeError, ValueError, LookupError, subprocess.SubprocessError) as exc:
             LOG.exception("Could not open generated library facade")
             messagebox.showerror("Edit facade", str(exc), parent=window)
+
+    def publish_selected(_event: tkinter_types.Event[tkinter_types.Misc] | None = None) -> None:
+        record = selected_record[0]
+        if record is None:
+            return
+        try:
+            _publish_block(current_roots[0], kicad, project_dir, window, record=record)
+            if refresh_records():
+                notice_value.set(f"Published {record.name}.")
+        except Exception as exc:
+            LOG.exception("Could not publish selected block %s", record.name)
+            notice_value.set(f"Could not publish {record.name}: {exc}")
 
     def manage_layouts(_event: tkinter_types.Event[tkinter_types.Misc] | None = None):
         record = selected_record[0]
@@ -7158,6 +7174,16 @@ def _show_library_browser(
     )
     facade_button[0] = facade_action
     facade_action.pack(side="left", padx=(4, 0))
+    publish_button = _action_button(
+        action_toolbar,
+        "Publish selected block",
+        publish_selected,
+        "publish",
+        "Import saved facade edits and publish this block to its shared library",
+        state="disabled",
+        contract_id="library-browser.action.publish",
+    )
+    publish_button.pack(side="left", padx=(4, 0))
     variants_button = _action_button(
         action_toolbar,
         "Variants",
@@ -7221,6 +7247,7 @@ def _show_library_browser(
         facade_action = facade_button[0]
         if facade_action is not None:
             facade_action.configure(state="normal" if selected else "disabled")
+        publish_button.configure(state="normal" if selected else "disabled")
         open_pcb_action = open_layout_button[0]
         if open_pcb_action is not None:
             open_pcb_action.configure(state="normal" if has_layouts else "disabled")
@@ -7498,10 +7525,18 @@ def _validate_recursive_erc(
 
 
 def _publish_block(
-    root: Path | list[Path], kicad: _KiCadApp, project_dir: Path, parent: tkinter_types.Misc
+    root: Path | list[Path],
+    kicad: _KiCadApp,
+    project_dir: Path,
+    parent: tkinter_types.Misc,
+    *,
+    record: BlockRecord | None = None,
 ) -> None:
     library_paths = _library_roots_for(root)
-    record = _pick_record(_list_library_records(library_paths), parent, "Publish Library Block")
+    if record is None:
+        record = _pick_record(
+            _list_library_records(library_paths), parent, "Publish Library Block"
+        )
     if record is None:
         return
     project_catalog = (

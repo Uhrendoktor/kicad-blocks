@@ -465,8 +465,9 @@ def test_edit_facade_button_targets_selected_record(monkeypatch: MonkeyPatch, tm
         *,
         project_catalog: Path | None = None,
         close_browser: Callable[[], None] | None = None,
+        parent: Misc | None = None,
     ) -> bool:
-        del project_catalog, close_browser
+        del project_catalog, close_browser, parent
         context.action_calls.append(record.manifest["block_id"])
         return True
 
@@ -479,6 +480,42 @@ def test_edit_facade_button_targets_selected_record(monkeypatch: MonkeyPatch, tm
             destroys_window=False,
             expected_label="Edit facade",
         ).run(context)
+    finally:
+        root.destroy()
+
+
+def test_publish_button_targets_the_selected_record(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+):
+    root, context, records, _library, _project = _new_browser(monkeypatch, tmp_path)
+    published: list[str] = []
+
+    def publish(
+        _roots: Path | list[Path],
+        _kicad: plugin_actions.KiCadApp,
+        _project_dir: Path,
+        _parent: Misc,
+        *,
+        record: BlockRecord | None = None,
+    ) -> None:
+        assert record is not None
+        block_id = str(record.manifest["block_id"])
+        published.append(block_id)
+        context.action_calls.append(block_id)
+
+    monkeypatch.setattr(plugin_actions, "_publish_block", publish)
+    monkeypatch.setattr(
+        plugin_actions, "_list_library_records", lambda _roots=None: list(records)
+    )
+    try:
+        _select_first_record(context)
+        ButtonContract(
+            contract_id="library-browser.action.publish",
+            expected_action="usb-power",
+            destroys_window=False,
+            expected_label="Publish selected block",
+        ).run(context)
+        assert published == ["usb-power"]
     finally:
         root.destroy()
 
@@ -991,12 +1028,6 @@ def test_library_browser_refresh_error_keeps_existing_records(
     monkeypatch: MonkeyPatch, tmp_path: Path
 ):
     root, context, _records, _library, _project = _new_browser(monkeypatch, tmp_path)
-    errors: list[tuple[str, str, Misc | None]] = []
-    monkeypatch.setattr(
-        plugin_actions.messagebox,
-        "showerror",
-        messagebox_recorder(errors),
-    )
 
     def fail_refresh(_roots: list[Path] | None = None) -> None:
         context.action_calls.append("refresh-error")
@@ -1010,17 +1041,17 @@ def test_library_browser_refresh_error_keeps_existing_records(
             destroys_window=False,
             expected_label="Refresh",
         ).run(context)
-        assert len(errors) == 1
-        assert errors[0][0] == "Refresh Block Library"
-        assert "library folder is temporarily unavailable" in errors[0][1]
-        assert errors[0][2] is not None and errors[0][2].winfo_exists()
-        assert context.require_treeview("library-browser.results").get_children()
-        assert "2 of 2 blocks" in context.require_label("library-browser.summary").getvar(
-            context.require_label("library-browser.summary").cget("textvariable")
+        status = context.require_widget("library-browser.status")
+        variable = str(status.cget("textvariable"))
+        assert (
+            status.getvar(variable)
+            == "Could not refresh registered libraries: library folder is temporarily unavailable"
         )
+        assert context.require_treeview("library-browser.results").get_children()
+        summary = context.require_label("library-browser.summary")
+        assert "2 of 2 blocks" in summary.getvar(summary.cget("textvariable"))
     finally:
         root.destroy()
-
 
 def test_place_block_reload_warning_does_not_start_native_placement(
     monkeypatch: MonkeyPatch, tmp_path: Path
@@ -1067,12 +1098,16 @@ def test_place_block_reload_warning_does_not_start_native_placement(
         status = context.require_widget("library-browser.status")
         variable = str(status.cget("textvariable"))
         assert status.getvar(variable) == "Restart Eeschema to reload the project symbol table."
+        assert len(warnings) == 1
+        assert warnings[0][0] == "Block library saved"
+        assert warnings[0][1] == "Restart Eeschema to reload the project symbol table."
+        assert warnings[0][2] is root
         assert placements == []
     finally:
         root.destroy()
 
 
-def test_place_block_registration_failure_shows_error_and_keeps_browser_open(
+def test_place_block_registration_failure_keeps_browser_open_and_reports_status(
     monkeypatch: MonkeyPatch, tmp_path: Path
 ):
     root, context, _records, _library, _project = _new_browser(monkeypatch, tmp_path)

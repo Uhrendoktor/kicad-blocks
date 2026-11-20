@@ -89,7 +89,11 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
             reload_library=Mock(),
             wait_for_libraries=Mock(),
         )
-        self.messagebox = SimpleNamespace(showinfo=Mock())
+        self.messagebox = SimpleNamespace(
+            showinfo=Mock(),
+            showwarning=Mock(),
+            showerror=Mock(),
+        )
         self._dependency_patch = patch.object(
             plugin_actions,
             "synchronize_block_dependencies",
@@ -1240,7 +1244,10 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
             TclError=Exception,
         )
         fake_kipy = types.ModuleType("kipy")
-        kicad_constructor = Mock(side_effect=lambda: events.append("kipy.KiCad") or object())
+        fake_kicad = SimpleNamespace(get_schematic=Mock(return_value=None))
+        kicad_constructor = Mock(
+            side_effect=lambda: events.append("kipy.KiCad") or fake_kicad
+        )
         setattr(fake_kipy, "KiCad", kicad_constructor)
         with (
             patch.object(
@@ -1255,6 +1262,7 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
         ):
             plugin_actions.run_action("open-hub")
         self.assertEqual(events, ["load tkinter", "tk.Tk", "kipy.KiCad"])
+        fake_kicad.get_schematic.assert_called_once_with()
         self.assertNotIn("_kicad_blocks_editor_window_id", root.__dict__)
 
 

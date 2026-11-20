@@ -597,8 +597,10 @@ def test_close_confirmation_can_keep_pending_changes_or_discard_them(
         lambda *_args, **_kwargs: ("3V3", str(source)),
     )
     original_save = plugin_actions._save_block_variants
-    attempts = []
-    errors = []
+    attempts: list[str] = []
+    errors: list[tuple[str, str]] = []
+    confirmations: list[tuple[str, str]] = []
+    decisions = iter([False, True])
 
     def fail_once(*args, **kwargs):
         attempts.append("attempt")
@@ -606,31 +608,48 @@ def test_close_confirmation_can_keep_pending_changes_or_discard_them(
             raise OSError("simulated library write failure")
         return original_save(*args, **kwargs)
 
+    def confirm_discard(title: str, message: str, **_kwargs: object) -> bool:
+        confirmations.append((title, message))
+        return next(decisions)
+
     monkeypatch.setattr(plugin_actions, "_save_block_variants", fail_once)
     monkeypatch.setattr(
         plugin_actions.messagebox,
         "showerror",
         lambda title, message, **_kwargs: errors.append((title, str(message))),
     )
+    monkeypatch.setattr(plugin_actions.messagebox, "askyesno", confirm_discard)
     root = _new_root(monkeypatch)
     context = UiTestContext(root)
 
-    def add_then_close(_dialog):
+    def add_then_confirm_discard(_dialog):
         _click(context, "implementations-manager.action.add", "Add variant")
         status = context.require_widget("implementations-manager.status")
         variable = str(status.cget("textvariable"))
         assert "Automatic save failed" in status.getvar(variable)
         assert attempts == ["attempt"]
         assert errors and errors[0][0] == "Save implementations"
+        # No retains the pending edit; Yes confirms discarding it.
+        _click(context, "implementations-manager.action.close", "Close")
+        assert _manager_dialog(root).winfo_exists()
         _click(context, "implementations-manager.action.close", "Close", closes=True)
 
     try:
-        opened = _run_manager(root, record, context, add_then_close)
+        opened = _run_manager(root, record, context, add_then_confirm_discard)
         saved = read_manifest(record.path)
-        assert [item["value"] for item in saved["variants"]] == ["3V3"]
-        assert attempts == ["attempt", "attempt"]
-        assert opened == record.path / saved["variants"][0]["file"]
-        assert opened.is_file()
+        assert opened is None
+        assert saved["variants"] == []
+        assert attempts == ["attempt"]
+        assert confirmations == [
+            (
+                "Discard implementation changes",
+                "Discard the unsaved implementation changes?",
+            ),
+            (
+                "Discard implementation changes",
+                "Discard the unsaved implementation changes?",
+            ),
+        ]
     finally:
         root.destroy()
 

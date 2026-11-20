@@ -664,10 +664,16 @@ def test_single_pcb_layout_cancelling_any_mapping_prompt_stops_before_merge(
         "_choose_block_layout",
         _standard_layout_callback(),
     )
+    def select_source_board(
+        *_args: _RecordedValue,
+        **_kwargs: _RecordedValue,
+    ) -> str:
+        return str(board)
+
     monkeypatch.setattr(
         plugin_actions,
         "_pick_kicad_file",
-        _no_kicad_file_pick([]),
+        select_source_board,
     )
     monkeypatch.setattr(
         plugin_actions,
