@@ -76,6 +76,10 @@ def test_auto_hide_scrollbar_switches_between_idle_and_active_states():
 
     from kicad_blocks.theme import AutoHideScrollbar, apply_tk_theme, palette_for_theme
 
+    assert AutoHideScrollbar.IDLE_WIDTH == 2
+    assert AutoHideScrollbar.ACTIVE_WIDTH == 10
+    assert AutoHideScrollbar.HIDE_DELAY_MS == 900
+
     root = tk.Tk()
     try:
         apply_tk_theme(root, "light")

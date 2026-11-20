@@ -978,15 +978,14 @@ class LibraryBrowserTests(unittest.TestCase):
     def test_system_theme_uses_the_shared_desktop_palette_when_kicad_theme_is_missing(self):
         root = SimpleNamespace()
         expected_palette = {"background": "#f1f4f7", "accent": "#2f6f9f"}
+        fake_theme = ModuleType("kicad_blocks.theme")
+        fake_theme.apply_tk_theme = Mock(return_value=expected_palette)
         with (
             patch.dict(os.environ, {"KICAD_BLOCKS_THEME": "system"}),
-            patch(
-                "kicad_blocks.theme.apply_tk_theme",
-                return_value=expected_palette,
-            ) as apply_theme,
+            patch.dict(sys.modules, {"kicad_blocks.theme": fake_theme}),
         ):
             result = _configure_tk_theme(root)
-        apply_theme.assert_called_once_with(root, None)
+        fake_theme.apply_tk_theme.assert_called_once_with(root, None)
         self.assertIs(result, expected_palette)
 
     def _theme_ipc_modules(self):
