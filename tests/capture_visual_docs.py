@@ -551,6 +551,8 @@ def capture_ui_workflows(library_roots, record, project_dir: Path, output_dir: P
                 browser_notebooks = [
                     widget for widget in walk_widgets(root)
                     if widget.winfo_class() == "TNotebook"
+                    or getattr(widget, "_kicad_ui_contract_id", None)
+                    == "library-browser.preview.views"
                 ]
                 if not browser_notebooks:
                     raise RuntimeError("The Functional Block Library preview tabs are missing.")

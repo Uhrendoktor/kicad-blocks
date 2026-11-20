@@ -4,6 +4,10 @@ Changes are grouped by project version. Items under **Unreleased** describe chan
 
 ## Unreleased
 
+### Changed
+- Adopt a shared slate UI system for Tk dialogs: explicit light/dark palettes with KiCad-theme selection and a platform-neutral light fallback, consistent spacing and typography, flat preview tabs, compact cards, and auto-hiding scrollbars.
+
+
 ### Added
 - Create blocks from either a selected hierarchical sheet symbol in its parent schematic or the currently open hierarchical sheet when no sheet symbol is selected.
 - Use one name-and-description form when creating a block.

@@ -188,204 +188,22 @@ def _system_prefers_dark_theme(kicad=None) -> bool | None:
 
 
 def _configure_tk_theme(root, kicad=None) -> None:
-    """Apply a compact KiCad-compatible palette to themed and classic Tk widgets."""
+    """Apply the shared slate theme while respecting KiCad's active color theme."""
     dark = _system_prefers_dark_theme(kicad)
-    if dark is None:
-        # Keep the toolkit/host native colors, but preserve the shared control
-        # geometry/accessibility contract. Returning before this style setup
-        # used to drop the fixed Treeview row height and clip table text.
-        root._kicad_blocks_palette = {}
-        style = ttk.Style(root)
-        style.configure("Treeview", rowheight=29, padding=(4, 2))
-        style.configure("Treeview.Heading", padding=(8, 6))
-        style.configure("Vertical.TScrollbar", width=12)
-        style.configure("Horizontal.TScrollbar", width=12)
-        return
-    colors = ({
-        "background": "#171c21", "surface": "#222a31", "surface_alt": "#2b343d",
-        "field": "#171c21", "hover": "#33404a", "selected": "#355169",
-        "foreground": "#e8edf2", "muted": "#a7b2bd", "border": "#414c56",
-        "accent": "#79b8e4", "accent_foreground": "#17232e",
-        "scroll_thumb": "#505d69", "scroll_trough": "#1d242a",
-    } if dark else {
-        "background": "#f1f4f7", "surface": "#ffffff", "surface_alt": "#edf1f5",
-        "field": "#ffffff", "hover": "#e7eff6", "selected": "#d5e6f4",
-        "foreground": "#202934", "muted": "#647180", "border": "#d6dee6",
-        "accent": "#2f6f9f", "accent_foreground": "#ffffff",
-        "scroll_thumb": "#c1cbd5", "scroll_trough": "#e8edf2",
-    })
-    style = ttk.Style(root)
-    try:
-        style.theme_use("clam")
-    except tk.TclError:
-        pass
-    root.configure(background=colors["background"], highlightthickness=0)
-    for option, value in {
-        "*Background": colors["background"], "*Foreground": colors["foreground"],
-        "*Text.background": colors["field"], "*Text.foreground": colors["foreground"],
-        "*Text.insertBackground": colors["foreground"], "*Entry.background": colors["field"],
-        "*Entry.foreground": colors["foreground"], "*Entry.insertBackground": colors["foreground"],
-        "*Listbox.background": colors["field"], "*Listbox.foreground": colors["foreground"],
-        "*Canvas.background": colors["background"], "*selectBackground": colors["selected"],
-        "*selectForeground": colors["foreground"], "*highlightBackground": colors["border"],
-        "*highlightColor": colors["accent"], "*troughColor": colors["scroll_trough"],
-    }.items():
-        root.option_add(option, value)
-    style.configure("TFrame", background=colors["background"])
-    style.configure("TPanedwindow", background=colors["background"])
-    style.configure("TLabel", background=colors["background"], foreground=colors["foreground"])
-    style.configure(
-        "Title.TLabel", background=colors["background"], foreground=colors["foreground"],
-        font=("TkDefaultFont", 12, "bold"),
-    )
-    style.configure(
-        "Section.TLabel", background=colors["background"], foreground=colors["muted"],
-        font=("TkDefaultFont", 9, "bold"),
-    )
-    style.configure(
-        "Muted.TLabel", background=colors["background"], foreground=colors["muted"],
-        font=("TkDefaultFont", 8),
-    )
-    style.configure("TLabelframe", background=colors["background"], foreground=colors["foreground"],
-                    bordercolor=colors["border"], lightcolor=colors["border"],
-                    darkcolor=colors["border"], relief="solid", borderwidth=1)
-    style.configure("TLabelframe.Label", background=colors["background"], foreground=colors["muted"], padding=(4, 0))
-    style.configure(
-        "TButton",
-        background=colors["surface_alt"],
-        foreground=colors["foreground"],
-        bordercolor=colors["surface_alt"],
-        lightcolor=colors["surface_alt"],
-        darkcolor=colors["surface_alt"],
-        borderwidth=0,
-        focuscolor=colors["accent"],
-        focusthickness=1,
-        padding=(11, 7),
-        relief="flat",
-    )
-    style.map(
-        "TButton",
-        background=[
-            ("disabled", colors["surface"]),
-            ("pressed", colors["selected"]),
-            ("active", colors["hover"]),
-        ],
-        foreground=[
-            ("disabled", colors["muted"]),
-            ("!disabled", colors["foreground"]),
-        ],
-        bordercolor=[("focus", colors["accent"]), ("!focus", colors["surface_alt"])],
-        lightcolor=[("focus", colors["accent"]), ("!focus", colors["surface_alt"])],
-        darkcolor=[("focus", colors["accent"]), ("!focus", colors["surface_alt"])],
-    )
-    style.configure(
-        "Primary.TButton",
-        background=colors["accent"], foreground=colors["accent_foreground"],
-        bordercolor=colors["accent"], lightcolor=colors["accent"],
-        darkcolor=colors["accent"], borderwidth=0, focuscolor=colors["accent"],
-        focusthickness=1, padding=(10, 6), relief="flat",
-        font=("TkDefaultFont", 9, "bold"),
-    )
-    style.map(
-        "Primary.TButton",
-        background=[("disabled", colors["surface_alt"]), ("pressed", colors["selected"]), ("active", colors["accent"])],
-        foreground=[("disabled", colors["muted"]), ("!disabled", colors["accent_foreground"])],
-        bordercolor=[("focus", colors["accent"]), ("!focus", colors["accent"])],
-        lightcolor=[("focus", colors["accent"]), ("!focus", colors["accent"])],
-        darkcolor=[("focus", colors["accent"]), ("!focus", colors["accent"])],
-    )
-    style.configure("TEntry", fieldbackground=colors["field"], foreground=colors["foreground"],
-                    insertcolor=colors["foreground"], bordercolor=colors["border"],
-                    lightcolor=colors["border"], darkcolor=colors["border"], padding=(7, 5))
-    style.map("TEntry", bordercolor=[("focus", colors["accent"])],
-              lightcolor=[("focus", colors["accent"])], darkcolor=[("focus", colors["accent"])])
-    style.configure("TCombobox", fieldbackground=colors["field"], background=colors["surface_alt"],
-                    foreground=colors["foreground"], arrowcolor=colors["foreground"],
-                    bordercolor=colors["border"], lightcolor=colors["border"],
-                    darkcolor=colors["border"], padding=(7, 5))
-    style.map("TCombobox", fieldbackground=[("readonly", colors["field"])],
-              selectbackground=[("readonly", colors["selected"])],
-              selectforeground=[("readonly", colors["foreground"])],
-              bordercolor=[("focus", colors["accent"])])
-    style.configure("Treeview", background=colors["surface"], fieldbackground=colors["surface"],
-                    foreground=colors["foreground"], bordercolor=colors["border"],
-                    lightcolor=colors["border"], darkcolor=colors["border"],
-                    rowheight=29, relief="flat", borderwidth=0, padding=(4, 2))
-    style.map("Treeview", background=[("selected", colors["selected"])],
-              foreground=[("selected", colors["foreground"])])
-    style.configure("Treeview.Heading", background=colors["surface_alt"], foreground=colors["muted"],
-                    bordercolor=colors["border"], lightcolor=colors["surface_alt"],
-                    darkcolor=colors["border"], relief="flat", padding=(8, 6),
-                    font=("TkDefaultFont", 9, "bold"))
-    style.map("Treeview.Heading", background=[("active", colors["hover"])],
-              foreground=[("active", colors["foreground"])])
-    style.configure(
-        "TNotebook", background=colors["background"], borderwidth=0,
-        bordercolor=colors["border"], lightcolor=colors["border"],
-        darkcolor=colors["border"], tabmargins=(2, 4, 2, 0)
-    )
-    style.configure("TNotebook.Tab", background=colors["surface_alt"], foreground=colors["muted"],
-                    bordercolor=colors["border"], padding=(13, 8))
-    style.map("TNotebook.Tab", background=[("selected", colors["surface"]), ("active", colors["hover"])],
-              foreground=[("selected", colors["foreground"]), ("active", colors["foreground"])])
-    style.configure(
-        "Vertical.TScrollbar",
-        background=colors["scroll_thumb"],
-        troughcolor=colors["scroll_trough"],
-        bordercolor=colors["scroll_trough"],
-        lightcolor=colors["scroll_thumb"],
-        darkcolor=colors["scroll_thumb"],
-        relief="flat",
-        borderwidth=0,
-        width=12,
-    )
-    style.configure(
-        "Horizontal.TScrollbar",
-        background=colors["scroll_thumb"],
-        troughcolor=colors["scroll_trough"],
-        bordercolor=colors["scroll_trough"],
-        lightcolor=colors["scroll_thumb"],
-        darkcolor=colors["scroll_thumb"],
-        relief="flat",
-        borderwidth=0,
-        width=12,
-    )
-    # Remove legacy arrow buttons; keep a single, low-contrast draggable thumb.
-    style.layout(
-        "Vertical.TScrollbar",
-        [("Vertical.Scrollbar.trough", {
-            "sticky": "ns",
-            "children": [("Vertical.Scrollbar.thumb", {"expand": "1", "sticky": "nswe"})],
-        })],
-    )
-    style.layout(
-        "Horizontal.TScrollbar",
-        [("Horizontal.Scrollbar.trough", {
-            "sticky": "we",
-            "children": [("Horizontal.Scrollbar.thumb", {"expand": "1", "sticky": "nswe"})],
-        })],
-    )
-    style.configure(
-        "TScrollbar",
-        background=colors["scroll_thumb"],
-        troughcolor=colors["scroll_trough"],
-        bordercolor=colors["scroll_trough"],
-        lightcolor=colors["scroll_thumb"],
-        darkcolor=colors["scroll_thumb"],
-        relief="flat",
-        borderwidth=0,
-        width=12,
-    )
-    style.map(
-        "Vertical.TScrollbar",
-        background=[("active", colors["accent"]), ("pressed", colors["accent"])],
-    )
-    style.map(
-        "Horizontal.TScrollbar",
-        background=[("active", colors["accent"]), ("pressed", colors["accent"])],
-    )
-    style.configure("TSeparator", background=colors["border"])
-    root._kicad_blocks_palette = colors
+    from .theme import apply_tk_theme
+
+    selected = "dark" if dark is True else "light" if dark is False else None
+    return apply_tk_theme(root, selected)
+
+
+def _auto_hide_scrollbar(master, **options):
+    """Create the shared compact scrollbar using the window's current palette."""
+    from .theme import AutoHideScrollbar, palette_for_theme
+
+    options.pop("style", None)
+    owner = master.winfo_toplevel()
+    palette = getattr(owner, "_kicad_blocks_palette", None) or palette_for_theme()
+    return AutoHideScrollbar(master, palette=palette, **options)
 
 
 def _set_window_geometry(window, width: int, height: int, min_width: int, min_height: int) -> None:
@@ -432,8 +250,14 @@ def _attach_tk_window_to_editor(window, _editor_window_id: str | None = None) ->
         LOG.debug("Could not associate the Tk dialog with its in-process parent", exc_info=True)
         return False
 
-def _add_tooltip(widget, text: str) -> None:
-    """Attach a small themed tooltip to a compact icon button."""
+def _add_tooltip(widget, text: str, *, placement: str = "below-left") -> None:
+    """Attach a small themed tooltip without obscuring nearby controls.
+
+    `placement="above-right"` is useful for search fields above a results table:
+    keyboard focus can still reveal the hint without covering the table headings.
+    """
+    if placement not in {"below-left", "above-right"}:
+        raise ValueError(f"Unsupported tooltip placement: {placement!r}")
     tooltip = [None]
 
     def show(_event=None):
@@ -459,8 +283,20 @@ def _add_tooltip(widget, text: str) -> None:
         )
         label.pack()
         popup.update_idletasks()
-        x = widget.winfo_rootx()
-        y = widget.winfo_rooty() + widget.winfo_height() + 5
+        popup_width = popup.winfo_reqwidth()
+        popup_height = popup.winfo_reqheight()
+        widget_x = widget.winfo_rootx()
+        widget_y = widget.winfo_rooty()
+        if placement == "above-right":
+            x = widget_x + widget.winfo_width() - popup_width
+            y = widget_y - popup_height - 5
+        else:
+            x = widget_x
+            y = widget_y + widget.winfo_height() + 5
+        screen_width = widget.winfo_screenwidth()
+        screen_height = widget.winfo_screenheight()
+        x = max(0, min(x, screen_width - popup_width))
+        y = max(0, min(y, screen_height - popup_height))
         popup.geometry(f"+{x}+{y}")
         tooltip[0] = popup
 
@@ -1252,7 +1088,7 @@ def _pick_block_for_placement(records, parent):
     tree.heading("library", text="Library")
     tree.column("block", width=220, minwidth=160, stretch=True)
     tree.column("library", width=130, minwidth=100, stretch=False)
-    scroll = ttk.Scrollbar(left, orient="vertical", command=tree.yview, style="Vertical.TScrollbar")
+    scroll = _auto_hide_scrollbar(left, orient="vertical", command=tree.yview, style="Vertical.TScrollbar")
     tree.configure(yscrollcommand=scroll.set)
     palette = getattr(parent, "_kicad_blocks_palette", {})
     tree.tag_configure("even", background=palette.get("surface", "#f4f5f6"))
@@ -1500,7 +1336,7 @@ def _pick_record(records, parent, title: str):
     tree.column("pins", width=55, minwidth=45, stretch=False, anchor="center")
     tree.column("variants", width=75, minwidth=60, stretch=False, anchor="center")
     tree.column("layouts", width=65, minwidth=55, stretch=False, anchor="center")
-    scrollbar = ttk.Scrollbar(results_frame, orient="vertical", command=tree.yview, style="Vertical.TScrollbar")
+    scrollbar = _auto_hide_scrollbar(results_frame, orient="vertical", command=tree.yview, style="Vertical.TScrollbar")
     tree.configure(yscrollcommand=scrollbar.set)
     palette = getattr(parent, "_kicad_blocks_palette", {})
     tree.tag_configure("even", background=palette.get("surface", "#f4f5f6"))
@@ -2397,7 +2233,7 @@ def _edit_facade_symbol(
     for column, (label, width) in headings.items():
         tree.heading(column, text=label)
         tree.column(column, width=width, minwidth=60, stretch=column == "pin")
-    scrollbar = ttk.Scrollbar(
+    scrollbar = _auto_hide_scrollbar(
         table_frame, orient="vertical", command=tree.yview, style="Vertical.TScrollbar"
     )
     tree.configure(yscrollcommand=scrollbar.set)
@@ -3952,7 +3788,7 @@ def _show_block_layout_editor(
     tree.column("name", width=190, minwidth=150, stretch=False)
     tree.column("assigned", width=220, minwidth=160, stretch=False)
     tree.column("file", width=470, minwidth=260, stretch=True)
-    scroll = ttk.Scrollbar(
+    scroll = _auto_hide_scrollbar(
         table_frame, orient="vertical", command=tree.yview, style="Vertical.TScrollbar"
     )
     tree.configure(yscrollcommand=scroll.set)
@@ -4566,7 +4402,7 @@ def _show_block_variant_editor(
     tree.column("value", width=190, minwidth=150, stretch=False)
     tree.column("file", width=430, minwidth=260, stretch=True)
     tree.column("role", width=130, minwidth=110, stretch=False)
-    scroll = ttk.Scrollbar(
+    scroll = _auto_hide_scrollbar(
         table_frame, orient="vertical", command=tree.yview, style="Vertical.TScrollbar"
     )
     tree.configure(yscrollcommand=scroll.set)
@@ -4887,8 +4723,8 @@ def _show_library_roots_dialog(parent) -> bool:
     tree.column("blocks", width=70, minwidth=55, stretch=False, anchor="center")
     tree.column("role", width=140, minwidth=110, stretch=False, anchor="center")
     tree.column("path", width=500, minwidth=220, stretch=True)
-    vertical_scroll = ttk.Scrollbar(table_frame, orient="vertical", command=tree.yview, style="Vertical.TScrollbar")
-    horizontal_scroll = ttk.Scrollbar(table_frame, orient="horizontal", command=tree.xview, style="Horizontal.TScrollbar")
+    vertical_scroll = _auto_hide_scrollbar(table_frame, orient="vertical", command=tree.yview, style="Vertical.TScrollbar")
+    horizontal_scroll = _auto_hide_scrollbar(table_frame, orient="horizontal", command=tree.xview, style="Horizontal.TScrollbar")
     tree.configure(
         yscrollcommand=vertical_scroll.set,
         xscrollcommand=horizontal_scroll.set,
@@ -5228,7 +5064,11 @@ def _show_library_browser(
     search_entry = ttk.Entry(left, textvariable=search)
     search_entry._kicad_ui_contract_id = "library-browser.search"
     search_entry.grid(row=1, column=0, sticky="ew", pady=(3, 6))
-    _add_tooltip(search_entry, "Filter blocks · ↑/↓ browse · Enter place")
+    _add_tooltip(
+        search_entry,
+        "Filter blocks · ↑/↓ browse · Enter place",
+        placement="above-right",
+    )
     tree_frame = ttk.Frame(left)
     tree_frame.grid(row=2, column=0, sticky="nsew")
     tree_frame.columnconfigure(0, weight=1)
@@ -5250,8 +5090,8 @@ def _show_library_browser(
     tree.column("pins", width=44, minwidth=40, stretch=False, anchor="center")
     tree.column("variants", width=78, minwidth=72, stretch=False, anchor="center")
     tree.column("layouts", width=52, minwidth=48, stretch=False, anchor="center")
-    tree_y_scroll = ttk.Scrollbar(tree_frame, orient="vertical", command=tree.yview, style="Vertical.TScrollbar")
-    tree_x_scroll = ttk.Scrollbar(tree_frame, orient="horizontal", command=tree.xview, style="Horizontal.TScrollbar")
+    tree_y_scroll = _auto_hide_scrollbar(tree_frame, orient="vertical", command=tree.yview, style="Vertical.TScrollbar")
+    tree_x_scroll = _auto_hide_scrollbar(tree_frame, orient="horizontal", command=tree.xview, style="Horizontal.TScrollbar")
     tree.configure(
         yscrollcommand=tree_y_scroll.set,
         xscrollcommand=tree_x_scroll.set,
@@ -5272,10 +5112,18 @@ def _show_library_browser(
     )
     description_label.grid(row=1, column=0, sticky="ew", pady=(3, 6))
 
-    preview_box = ttk.LabelFrame(right, text="Preview", padding=4)
+    preview_box = ttk.Frame(
+        right, style="Card.TFrame", padding=(12, 10)
+    )
     preview_box.grid(row=2, column=0, sticky="nsew")
-    preview_notebook = ttk.Notebook(preview_box)
-    preview_notebook._kicad_ui_contract_id = "library-browser.preview.views"
+    ttk.Label(
+        preview_box, text="PREVIEW", style="SectionTitleSurface.TLabel"
+    ).pack(anchor="w", pady=(0, 6))
+    from .ui_components import FlatTabControl
+
+    preview_notebook = FlatTabControl(
+        preview_box, contract_id="library-browser.preview.views"
+    )
     preview_notebook.pack(fill="both", expand=True)
 
     facade_page = ttk.Frame(preview_notebook)
@@ -5292,10 +5140,10 @@ def _show_library_browser(
         highlightthickness=0,
         borderwidth=0,
     )
-    preview_y_scroll = ttk.Scrollbar(
+    preview_y_scroll = _auto_hide_scrollbar(
         facade_frame, orient="vertical", command=preview.yview, style="Vertical.TScrollbar"
     )
-    preview_x_scroll = ttk.Scrollbar(
+    preview_x_scroll = _auto_hide_scrollbar(
         facade_frame, orient="horizontal", command=preview.xview, style="Horizontal.TScrollbar"
     )
     preview.configure(
@@ -5349,13 +5197,13 @@ def _show_library_browser(
         highlightthickness=0,
         borderwidth=0,
     )
-    schematic_y_scroll = ttk.Scrollbar(
+    schematic_y_scroll = _auto_hide_scrollbar(
         schematic_frame,
         orient="vertical",
         command=schematic_preview.yview,
         style="Vertical.TScrollbar",
     )
-    schematic_x_scroll = ttk.Scrollbar(
+    schematic_x_scroll = _auto_hide_scrollbar(
         schematic_frame,
         orient="horizontal",
         command=schematic_preview.xview,
@@ -5370,9 +5218,14 @@ def _show_library_browser(
     schematic_x_scroll.grid(row=1, column=0, sticky="ew")
     _bind_mousewheel(schematic_preview, lambda amount: schematic_preview.yview_scroll(amount, "units"))
 
-    details_box = ttk.LabelFrame(right, text="Block overview", padding=4)
+    details_box = ttk.Frame(
+        right, style="Card.TFrame", padding=(12, 10)
+    )
     details_box.grid(row=3, column=0, sticky="nsew", pady=(8, 0))
-    details_frame = ttk.Frame(details_box)
+    ttk.Label(
+        details_box, text="BLOCK OVERVIEW", style="SectionTitleSurface.TLabel"
+    ).pack(anchor="w", pady=(0, 6))
+    details_frame = ttk.Frame(details_box, style="Card.TFrame")
     details_frame.pack(fill="both", expand=True)
     details = tk.Text(
         details_frame,
@@ -5384,7 +5237,7 @@ def _show_library_browser(
         foreground=theme_foreground,
         font=("TkDefaultFont", 8),
     )
-    details_scroll = ttk.Scrollbar(
+    details_scroll = _auto_hide_scrollbar(
         details_frame, orient="vertical", command=details.yview, style="Vertical.TScrollbar"
     )
     details.configure(yscrollcommand=details_scroll.set)
@@ -6910,8 +6763,9 @@ def _show_action_hub(
         wraplength=680,
     ).pack(anchor="w", pady=(0, 7))
 
-    tabs = ttk.Notebook(outer)
-    tabs._kicad_ui_contract_id = "task-hub.views"
+    from .ui_components import FlatTabControl
+
+    tabs = FlatTabControl(outer, contract_id="task-hub.views")
     tabs.pack(fill="both", expand=True)
 
     groups = [
