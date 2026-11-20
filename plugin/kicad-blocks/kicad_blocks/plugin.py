@@ -5064,7 +5064,11 @@ def _show_library_browser(
     search_entry = ttk.Entry(left, textvariable=search)
     search_entry._kicad_ui_contract_id = "library-browser.search"
     search_entry.grid(row=1, column=0, sticky="ew", pady=(3, 6))
-    _add_tooltip(search_entry, "Filter blocks · ↑/↓ browse · Enter place", placement="above-right")
+    _add_tooltip(
+        search_entry,
+        "Filter blocks · ↑/↓ browse · Enter place",
+        placement="above-right",
+    )
     tree_frame = ttk.Frame(left)
     tree_frame.grid(row=2, column=0, sticky="nsew")
     tree_frame.columnconfigure(0, weight=1)
