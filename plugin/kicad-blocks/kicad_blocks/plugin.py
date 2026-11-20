@@ -6791,7 +6791,7 @@ def _show_library_browser(
                 return
             minimized_windows = _minimize_placement_windows(window)
             try:
-                _start_native_symbol_placement(
+                _instance, cursor_attached = _start_native_symbol_placement(
                     kicad, editor_window_id, str(record.manifest["symbol_name"])
                 )
             except Exception:

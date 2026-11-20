@@ -390,9 +390,9 @@ def test_place_button_registers_selected_block_and_starts_native_placement(
         _kicad: plugin_actions.KiCadApp,
         _editor_window_id: str | None,
         _symbol_name: str,
-    ) -> plugin_actions.SchematicSymbol:
+    ) -> tuple[plugin_actions.SchematicSymbol, bool]:
         context.action_calls.append("start-placement")
-        return cast(plugin_actions.SchematicSymbol, None)
+        return cast(plugin_actions.SchematicSymbol, None), True
 
     monkeypatch.setattr(plugin_actions, "_start_native_symbol_placement", start_placement)
 

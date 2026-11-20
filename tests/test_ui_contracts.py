@@ -6,6 +6,7 @@ import json
 import os
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 from typing import TYPE_CHECKING, Callable, cast
 
 from _pytest.monkeypatch import MonkeyPatch
@@ -26,6 +27,7 @@ sys.path.insert(0, str(PLUGIN_SOURCE))
 sys.path.insert(0, str(TEST_SOURCE))
 
 from kicad_blocks import plugin as plugin_actions
+from kicad_blocks.repository import BlockRecord
 from ui_contracts import (
     ButtonContract,
     ChoiceViewContract,
@@ -74,15 +76,85 @@ _load_tkinter = cast(Callable[[], None], getattr(plugin_actions, "_load_tkinter"
 _show_action_hub = cast(Callable[..., Notebook], getattr(plugin_actions, "_show_action_hub"))
 
 
-def _new_hub(monkeypatch: MonkeyPatch) -> tuple[Tk, Notebook]:
+def _new_hub(
+    monkeypatch: MonkeyPatch,
+    *,
+    action_id: str | None = None,
+) -> tuple[Tk, Notebook]:
     _load_tkinter()
 
     def no_icon(_parent: Misc, _name: str, _stroke_color: str | None = None) -> None:
         return None
 
     monkeypatch.setattr(plugin_actions, "_create_action_icon", no_icon)
+    selected_ids = (
+        ["U1", "U2"] if action_id == "apply-multiple-pcb-layouts" else
+        ["U1"] if action_id in {
+            "open-implementation",
+            "configure-instance",
+            "make-local-copy",
+            "synchronize-local-copy",
+            "apply-pcb-layout",
+        } else []
+    )
+    selected_symbols = [
+        cast(
+            plugin_actions.SchematicSymbol,
+            SimpleNamespace(
+                reference=reference,
+                id=SimpleNamespace(value=f"{reference}-instance"),
+                definition=SimpleNamespace(
+                    id=SimpleNamespace(library="KBlocks", name="usb_power_facade")
+                ),
+            ),
+        )
+        for reference in selected_ids
+    ]
+    record = cast(
+        BlockRecord,
+        SimpleNamespace(
+            name="USB power block",
+            path=Path("/tmp/usb-power"),
+            manifest={"block_id": "usb-power", "layouts": [{"id": "standard"}]},
+        ),
+    )
+    if selected_symbols:
+        monkeypatch.setattr(
+            plugin_actions,
+            "_block_record_for_instance",
+            lambda _roots, _project, _instance: record,
+        )
+        monkeypatch.setattr(
+            plugin_actions,
+            "local_copy_for_instance",
+            lambda _project, _instance_id: (
+                Path("/tmp/local-usb-power")
+                if action_id == "synchronize-local-copy"
+                else None
+            ),
+        )
+        monkeypatch.setattr(
+            plugin_actions,
+            "_layout_choices",
+            lambda _record: [
+                cast(
+                    plugin_actions.ResolvedBlockLayout,
+                    {"id": "standard", "name": "Standard", "file": "layout.kicad_pcb"},
+                )
+            ],
+        )
+
+    class FakeSchematic:
+        def get_selection(self) -> list[plugin_actions.SchematicSymbol]:
+            return selected_symbols
+
     root = plugin_actions.tk.Tk()
-    notebook = _show_action_hub(root)
+    notebook = _show_action_hub(
+        root,
+        schematic=cast(plugin_actions.Schematic, FakeSchematic()),
+        project_dir=Path("/tmp/kicad-project"),
+        library_paths=[Path("/tmp/kicad-library")],
+    )
     root.update_idletasks()
     root.update()
     return root, notebook
@@ -161,7 +233,7 @@ def test_task_hub_exposes_all_three_functional_notebook_views(monkeypatch: Monke
 def test_each_task_hub_button_dispatches_exactly_its_action_id(
     monkeypatch: MonkeyPatch, action_id: str, expected_label: str, _view: str
 ) -> None:
-    root, _notebook = _new_hub(monkeypatch)
+    root, _notebook = _new_hub(monkeypatch, action_id=action_id)
     context = UiTestContext(root)
 
     def record_action(selected: str, *, editor_window_id: str | None = None) -> None:
