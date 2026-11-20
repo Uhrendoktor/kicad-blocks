@@ -358,8 +358,7 @@ def main() -> None:
             if not result_path:
                 raise RuntimeError("TK91_A11Y_RESULT must name the accessibility summary file.")
             Path(result_path).write_text(
-                json.dumps(summary, ensure_ascii=False, indent=2) + "
-",
+                json.dumps(summary, ensure_ascii=False, indent=2) + "\n",
                 encoding="utf-8",
             )
             print(f"Validated Tk 9.1 accessibility summary written to {result_path}.", flush=True)
