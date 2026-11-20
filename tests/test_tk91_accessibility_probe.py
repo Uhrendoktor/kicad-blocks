@@ -9,6 +9,11 @@ import subprocess
 import sys
 
 WINDOW_TITLE = "KiCad Blocks Tk 9.1 Accessibility Probe"
+EXPECTED_WIDGETS = {
+    "Block name": ("label", "Identifies the functional block name input."),
+    "Block name input": ("entry", "Text field for the functional block name."),
+    "Save block": ("button", "Saves the current functional block."),
+}
 
 
 def _walk(node):
@@ -27,6 +32,7 @@ def _inspect_process(process_id: int) -> None:
     """Query AT-SPI from a helper process while Tk's event loop stays live."""
     import xa11y
 
+    print(f"Connecting xa11y to Tk probe PID {process_id}.", flush=True)
     app = xa11y.App.by_pid(process_id, timeout=15.0)
     payload = {
         "snapshot": app.tree(max_depth=10),
@@ -35,58 +41,64 @@ def _inspect_process(process_id: int) -> None:
     print(json.dumps(payload, ensure_ascii=False), flush=True)
 
 
-def _assert_accessible_tree(payload: dict) -> None:
-    snapshot = payload["snapshot"]
-    dump = str(payload.get("dump") or "")
-    print("--- Tk 9.1 AT-SPI tree ---", flush=True)
-    print(json.dumps(snapshot, ensure_ascii=False, indent=2)[:30000], flush=True)
-    print(dump[:30000], flush=True)
-    print("--- end Tk 9.1 AT-SPI tree ---", flush=True)
+def _role_matches(node: dict, expected: str) -> bool:
+    role = str(node.get("role") or "").casefold().replace(" ", "_")
+    return expected in role
 
+
+def _assert_accessible_tree(payload: dict) -> dict:
+    snapshot = payload["snapshot"]
     nodes = list(_walk(snapshot))
     title_nodes = [node for node in nodes if node.get("name") == WINDOW_TITLE]
-    button_nodes = [node for node in nodes if node.get("name") == "Save block"]
-    label_nodes = [node for node in nodes if node.get("name") == "Block name"]
     if not title_nodes:
         raise AssertionError(
-            f"AT-SPI tree did not expose the Tk window {WINDOW_TITLE!r}."
-        )
-    if not button_nodes:
-        raise AssertionError(
-            "AT-SPI tree did not expose the ttk.Button name 'Save block'."
-        )
-    if not label_nodes:
-        raise AssertionError(
-            "AT-SPI tree did not expose the ttk.Label name 'Block name'."
+            f"AT-SPI did not expose the named Tk top-level window {WINDOW_TITLE!r}."
         )
 
-    button_roles = {
-        str(node.get("role") or "").casefold().replace(" ", "_")
-        for node in button_nodes
-    }
-    if not any("button" in role for role in button_roles):
-        raise AssertionError(
-            f"Save block was exposed without a button role: {button_roles!r}"
-        )
+    widget_summary: dict[str, dict[str, str | None]] = {}
+    for name, (expected_role, expected_description) in EXPECTED_WIDGETS.items():
+        matching = [node for node in nodes if node.get("name") == name]
+        if not matching:
+            raise AssertionError(
+                f"AT-SPI tree did not expose accessible name {name!r}. "
+                f"Observed names: {[node.get('name') for node in nodes if node.get('name')]!r}"
+            )
 
-    summary = {
-        "window": title_nodes[0].get("role"),
-        "label": label_nodes[0].get("role"),
-        "button_roles": sorted(button_roles),
+        node = matching[0]
+        if not _role_matches(node, expected_role):
+            raise AssertionError(
+                f"Accessible object {name!r} had role {node.get('role')!r}; "
+                f"expected a role containing {expected_role!r}."
+            )
+        description = str(node.get("description") or "").strip()
+        if description != expected_description:
+            raise AssertionError(
+                f"Accessible object {name!r} had description {description!r}; "
+                f"expected {expected_description!r}."
+            )
+        widget_summary[name] = {
+            "role": str(node.get("role") or ""),
+            "description": description,
+        }
+
+    result = {
+        "window": {
+            "name": title_nodes[0].get("name"),
+            "role": title_nodes[0].get("role"),
+        },
+        "widgets": widget_summary,
         "tree_nodes": len(nodes),
     }
+    print("--- Tk 9.1 AT-SPI accessibility tree ---", flush=True)
+    print(json.dumps(snapshot, ensure_ascii=False, indent=2)[:24000], flush=True)
+    print(str(payload.get("dump") or "")[:24000], flush=True)
+    print("--- end Tk 9.1 AT-SPI accessibility tree ---", flush=True)
     print(
         "Tk 9.1 accessibility assertions passed:",
-        json.dumps(summary, ensure_ascii=False),
+        json.dumps(result, ensure_ascii=False),
         flush=True,
     )
-    result_path = os.environ.get("TK91_A11Y_RESULT")
-    if not result_path:
-        raise RuntimeError("TK91_A11Y_RESULT must name the accessibility summary file.")
-    Path(result_path).write_text(
-        json.dumps(summary, ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
-    )
+    return result
 
 
 def main() -> None:
@@ -101,16 +113,55 @@ def main() -> None:
 
     content = ttk.Frame(root, padding=12)
     content.pack(fill="both", expand=True)
-    ttk.Label(content, text="Block name").pack(anchor="w")
-    ttk.Entry(content, name="block_name").pack(fill="x", pady=(4, 10))
-    ttk.Button(content, text="Save block").pack(anchor="e")
 
-    # Tk 9.1's ATK bridge exposes the registered top-level window and core
-    # ttk widgets. Keep Tk's main loop active while another process queries
-    # AT-SPI; synchronous same-thread discovery starves Tk's event callbacks.
-    root.tk.call("tk", "accessible", "add_acc_object", root._w)
+    label = ttk.Label(content, text="Block name")
+    label.pack(anchor="w")
+    entry = ttk.Entry(content, name="block_name")
+    entry.pack(fill="x", pady=(4, 10))
+    save_button = ttk.Button(content, text="Save block")
+    save_button.pack(anchor="e")
+
     root.update_idletasks()
     root.update()
+
+    # Tk 9.1's default accessible name is the widget role. Visible -text
+    # content is generally a description, so assign explicit useful names,
+    # roles and descriptions before registering each real widget with AT-SPI.
+    root.tk.call(
+        "tk", "accessible", "set_acc_name", root._w, WINDOW_TITLE
+    )
+    root.tk.call(
+        "tk", "accessible", "set_acc_description",
+        root._w, "Tk 9.1 screen-reader accessibility feasibility window."
+    )
+    root.tk.call("tk", "accessible", "add_acc_object", root._w)
+
+    for widget, role, name, description in (
+        (label, "Label", "Block name", EXPECTED_WIDGETS["Block name"][1]),
+        (entry, "Entry", "Block name input", EXPECTED_WIDGETS["Block name input"][1]),
+        (save_button, "Button", "Save block", EXPECTED_WIDGETS["Save block"][1]),
+    ):
+        root.tk.call("tk", "accessible", "set_acc_role", widget._w, role)
+        root.tk.call("tk", "accessible", "set_acc_name", widget._w, name)
+        root.tk.call("tk", "accessible", "set_acc_description", widget._w, description)
+        root.tk.call("tk", "accessible", "add_acc_object", widget._w)
+
+    root.update_idletasks()
+    root.update()
+    print(
+        "Tk 9.1 probe started:",
+        json.dumps(
+            {
+                "pid": os.getpid(),
+                "tcl": tk.TclVersion,
+                "tk": tk.TkVersion,
+                "window": WINDOW_TITLE,
+                "widgets": list(EXPECTED_WIDGETS),
+            },
+            ensure_ascii=False,
+        ),
+        flush=True,
+    )
 
     helper = subprocess.Popen(
         [
@@ -132,6 +183,12 @@ def main() -> None:
                 return
 
             stdout, stderr = helper.communicate()
+            print(
+                f"Tk 9.1 AT-SPI inspector exited {helper.returncode}; "
+                f"stdout_bytes={len(stdout.encode('utf-8'))}; "
+                f"stderr={stderr[-4000:]!r}",
+                flush=True,
+            )
             if helper.returncode != 0:
                 raise RuntimeError(
                     "AT-SPI helper failed: "
@@ -145,7 +202,18 @@ def main() -> None:
                     "AT-SPI helper returned invalid JSON: "
                     f"stdout={stdout[-12000:]}; stderr={stderr[-12000:]}"
                 ) from exc
-            _assert_accessible_tree(payload)
+            summary = _assert_accessible_tree(payload)
+
+            result_path = os.environ.get("TK91_A11Y_RESULT")
+            if not result_path:
+                raise RuntimeError(
+                    "TK91_A11Y_RESULT must name the accessibility summary file."
+                )
+            Path(result_path).write_text(
+                json.dumps(summary, ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
+            )
+            print(f"Validated Tk 9.1 accessibility summary written to {result_path}.", flush=True)
         except BaseException as exc:
             failures.append(exc)
         finally:
