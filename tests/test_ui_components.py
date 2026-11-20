@@ -114,6 +114,7 @@ def test_search_tooltip_appears_above_focused_field_without_covering_results():
     from kicad_blocks import plugin as plugin_actions
     from kicad_blocks.theme import apply_tk_theme
 
+    plugin_actions._load_tkinter()
     root = tk.Tk()
     try:
         apply_tk_theme(root, "light")
