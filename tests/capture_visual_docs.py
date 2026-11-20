@@ -872,21 +872,31 @@ def capture_ui_workflows(
                 notebook.select(notebook.tabs()[0])
                 root.update_idletasks()
                 root.update()
+                search_entry = cast(
+                    ttk.Entry,
+                    _find_contract_widget(root, "library-browser.search"),
+                )
+                search_entry.delete(0, "end")
+                root.update_idletasks()
+                root.update()
                 results = cast(
                     ttk.Treeview,
                     _find_contract_widget(root, "library-browser.results"),
                 )
+                block_id = str(record.manifest["block_id"])
                 target_row = next(
                     (
                         item_id
                         for item_id in results.get_children("")
-                        if results.set(item_id, "block") == record.name
+                        if item_id.split(":", maxsplit=1)[0] == block_id
                     ),
                     None,
                 )
                 if target_row is None:
+                    visible_rows = tuple(results.get_children(""))
                     raise RuntimeError(
-                        f"The production browser did not list the visual target {record.name!r}."
+                        f"The production browser did not list block {block_id!r}; "
+                        f"visible rows: {visible_rows!r}."
                     )
                 results.selection_set(target_row)
                 results.focus(target_row)
