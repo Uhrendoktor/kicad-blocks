@@ -153,7 +153,7 @@ def _parent_title(parent: Toplevel | None) -> str:
     return parent.title()
 
 
-def _new_root(monkeypatch: MonkeyPatch) -> Tk
+def _new_root(monkeypatch: MonkeyPatch) -> Tk:
     plugin_actions.load_tkinter()
 
     def no_icon(_parent: Misc, _name: str, _stroke_color: str | None = None) -> None:
