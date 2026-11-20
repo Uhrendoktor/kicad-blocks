@@ -206,6 +206,13 @@ def _auto_hide_scrollbar(master, **options):
     return AutoHideScrollbar(master, palette=palette, **options)
 
 
+def _visible_table_rows(item_count: int, *, maximum: int = 8) -> int:
+    """Return a compact Treeview height based on real rows, capped for long lists."""
+    rows = max(0, int(item_count))
+    limit = max(2, int(maximum))
+    return min(max(2, rows), limit)
+
+
 def _set_window_geometry(window, width: int, height: int, min_width: int, min_height: int) -> None:
     """Size a completed dialog to its content and keep every action visible."""
     window.update_idletasks()
@@ -757,13 +764,17 @@ def _show_selected_block_configuration(
         text=f"{instance.reference}  ·  {block.name}",
     ).pack(anchor="w")
     content = ttk.Frame(outer)
-    content.pack(fill="both", expand=True)
+    content.pack(fill="x")
+    selector_row = ttk.Frame(content)
+    selector_row.pack(fill="x", pady=(0, 6))
+    selector_row.columnconfigure(0, weight=1)
+    selector_row.columnconfigure(1, weight=1 if profiles and variants else 0)
 
     profile_var = None
     profile_labels: dict[str, dict] = {}
     if profiles:
-        section = ttk.LabelFrame(content, text="Configuration profile", padding=8)
-        section.pack(fill="x", pady=(0, 6))
+        section = ttk.LabelFrame(selector_row, text="Configuration profile", padding=8)
+        section.grid(row=0, column=0, sticky="ew", padx=(0, 4) if variants else 0)
         profile_labels = {
             f"{item['name']}  [{item['id']}]": item
             for item in profiles
@@ -791,8 +802,8 @@ def _show_selected_block_configuration(
     variant_var = None
     variant_combo = None
     if variants:
-        section = ttk.LabelFrame(content, text="Implementation variant", padding=8)
-        section.pack(fill="x", pady=(0, 6))
+        section = ttk.LabelFrame(selector_row, text="Implementation variant", padding=8)
+        section.grid(row=0, column=1 if profiles else 0, sticky="ew")
         variant_var = tk.StringVar(value=_field_value(instance, VARIANT_FIELD_NAME))
         variant_combo = ttk.Combobox(
             section,
@@ -807,7 +818,7 @@ def _show_selected_block_configuration(
     parameter_vars = {}
     if parameters:
         section = ttk.LabelFrame(content, text="Parameters", padding=8)
-        section.pack(fill="both", expand=True, pady=(0, 6))
+        section.pack(fill="x", pady=(0, 6))
         section.columnconfigure(1, weight=1)
         for row, parameter in enumerate(parameters):
             name = parameter["name"]
@@ -958,7 +969,7 @@ def _show_selected_block_configuration(
             linked_variable.trace_add("write", mark_profile_custom)
 
     footer = ttk.Frame(outer)
-    footer.pack(fill="x", pady=(10, 0))
+    footer.pack(fill="x", pady=(8, 0))
 
     def save_configuration() -> None:
         try:
@@ -1031,7 +1042,9 @@ def _show_selected_block_configuration(
     ).pack(side="right")
     dialog.bind("<Escape>", lambda _event: dialog.destroy())
     dialog.protocol("WM_DELETE_WINDOW", dialog.destroy)
-    _set_window_geometry(dialog, 700, 720, 580, 500)
+    _set_window_geometry(
+        dialog, 660, max(360, min(680, 260 + 36 * len(parameters))), 540, 340
+    )
     dialog.grab_set()
     dialog.wait_window()
 
@@ -1079,7 +1092,7 @@ def _pick_block_for_placement(records, parent):
     right = ttk.Frame(panes, padding=(8, 0, 0, 0))
     panes.add(left, weight=2)
     panes.add(right, weight=3)
-    left.rowconfigure(0, weight=1)
+    left.rowconfigure(0, weight=0)
     left.columnconfigure(0, weight=1)
 
     tree = ttk.Treeview(left, columns=("block", "library"), show="headings", selectmode="browse")
@@ -1196,6 +1209,8 @@ def _pick_block_for_placement(records, parent):
                 values=(record.name, record.path.parent.name),
                 tags=("even" if index % 2 == 0 else "odd",),
             )
+        tree.configure(height=_visible_table_rows(len(visible_records), maximum=12))
+        left.rowconfigure(0, weight=1 if len(visible_records) > 12 else 0)
         preferred = _preferred_library_selection(visible_records, selected_record[0])
         if preferred is None:
             selected_record[0] = None
@@ -1288,7 +1303,7 @@ def _pick_block_for_placement(records, parent):
         contract_id="functional-block-picker.action.place",
     ).pack(side="right", padx=(0, 8))
     render_results()
-    _set_window_geometry(dialog, 1080, 720, 900, 580)
+    _set_window_geometry(dialog, 1080, 640, 900, 520)
     dialog.grab_set()
     search_entry.focus_set()
     dialog.wait_window()
@@ -1381,6 +1396,7 @@ def _pick_record(records, parent, title: str):
 
     def render_results(*_args):
         visible = _filter_library_records(records, search.get())
+        tree.configure(height=_visible_table_rows(len(visible), maximum=8))
         preferred = _preferred_library_selection(visible, selected_record[0])
         children = tree.get_children()
         if children:
@@ -1465,7 +1481,7 @@ def _pick_record(records, parent, title: str):
     dialog.protocol("WM_DELETE_WINDOW", dialog.destroy)
     search.trace_add("write", render_results)
     render_results()
-    _set_window_geometry(dialog, 920, 640, 760, 480)
+    _set_window_geometry(dialog, 900, 520, 720, 380)
     dialog.grab_set()
     search_entry.focus_set()
     dialog.wait_window()
@@ -2204,7 +2220,7 @@ def _edit_facade_symbol(
     frame = ttk.Frame(dialog, padding=14)
     frame.pack(fill="both", expand=True)
     frame.columnconfigure(0, weight=1)
-    frame.rowconfigure(1, weight=1)
+    frame.rowconfigure(1, weight=1 if len(pin_rows) > 10 else 0)
 
     ttk.Label(
         frame,
@@ -2218,7 +2234,8 @@ def _edit_facade_symbol(
     table_frame.rowconfigure(0, weight=1)
     columns = ("pin", "number", "type", "x", "y", "angle", "length")
     tree = ttk.Treeview(
-        table_frame, columns=columns, show="headings", selectmode="browse", height=12
+        table_frame, columns=columns, show="headings", selectmode="browse",
+        height=_visible_table_rows(len(pin_rows), maximum=10),
     )
     tree._kicad_ui_contract_id = "facade-editor.pins"
     headings = {
@@ -2392,7 +2409,9 @@ def _edit_facade_symbol(
 
     render("0")
     tree.focus_set()
-    _set_window_geometry(dialog, 1060, 650, 760, 460)
+    _set_window_geometry(
+        dialog, 1020, max(340, min(520, 200 + 30 * min(len(pin_rows), 10))), 760, 320
+    )
     return True
 
 
@@ -3642,7 +3661,7 @@ def _ask_layout_details(parent, record) -> dict | None:
     dialog.title("Add PCB layout")
     dialog.transient(parent)
     frame = ttk.Frame(dialog, padding=12)
-    frame.pack(fill="both", expand=True)
+    frame.pack(fill="x")
     ttk.Label(frame, text="PCB layout name").grid(row=0, column=0, sticky="w")
     name_value = tk.StringVar(value="New layout")
     name_entry = ttk.Entry(frame, textvariable=name_value)
@@ -3745,7 +3764,7 @@ def _ask_layout_details(parent, record) -> dict | None:
     ).pack(side="right", padx=(0, 8))
     dialog.bind("<Return>", lambda _event: accept())
     dialog.bind("<Escape>", lambda _event: dialog.destroy())
-    _set_window_geometry(dialog, 760, 500, 640, 430)
+    _set_window_geometry(dialog, 720, 390, 600, 320)
     dialog.grab_set()
     name_entry.focus_set()
     dialog.wait_window()
@@ -3767,7 +3786,7 @@ def _show_block_layout_editor(
     frame = ttk.Frame(dialog, padding=14)
     frame.pack(fill="both", expand=True)
     frame.columnconfigure(0, weight=1)
-    frame.rowconfigure(1, weight=1)
+    frame.rowconfigure(1, weight=0)
     ttk.Label(frame, text="Stored PCB layouts", font=("TkDefaultFont", 12, "bold")).grid(
         row=0, column=0, sticky="w"
     )
@@ -3801,6 +3820,8 @@ def _show_block_layout_editor(
             item.get("id")
             or slugify(str(item.get("name") or Path(item["file"]).stem))
         ).casefold()
+    tree.configure(height=_visible_table_rows(len(layouts), maximum=8))
+    frame.rowconfigure(1, weight=1 if len(layouts) > 8 else 0)
     default_layout_id = str(record.manifest.get("default_layout") or "").casefold()
     if not default_layout_id and layouts:
         default_layout_id = layouts[0]["id"]
@@ -4076,7 +4097,9 @@ def _show_block_layout_editor(
     dialog.bind("<Escape>", lambda _event: close_layout_manager())
     render(layouts[0]["id"] if layouts else None)
     dialog.protocol("WM_DELETE_WINDOW", close_layout_manager)
-    _set_window_geometry(dialog, 1120, 800, 980, 650)
+    _set_window_geometry(
+        dialog, 1080, max(360, min(540, 270 + 30 * _visible_table_rows(len(layouts)))), 900, 340
+    )
     dialog.grab_set()
     dialog.wait_window()
     return created_layout_to_open[0]
@@ -4182,7 +4205,7 @@ def _ask_implementation_details(
     dialog.title("Implementation details")
     dialog.transient(parent)
     frame = ttk.Frame(dialog, padding=12)
-    frame.pack(fill="both", expand=True)
+    frame.pack(fill="x")
     ttk.Label(
         frame,
         text="New circuit implementation",
@@ -4347,7 +4370,7 @@ def _ask_implementation_details(
     dialog.bind("<Escape>", lambda _event: dialog.destroy())
     source_entry.xview_moveto(1.0)
     selector_entry.focus_set()
-    _set_window_geometry(dialog, 780, 490, 660, 420)
+    _set_window_geometry(dialog, 720, 400, 600, 320)
     dialog.grab_set()
     dialog.wait_window()
     return result[0]
@@ -4369,7 +4392,7 @@ def _show_block_variant_editor(
     frame.pack(fill="both", expand=True)
     palette = getattr(parent, "_kicad_blocks_palette", {})
     frame.columnconfigure(0, weight=1)
-    frame.rowconfigure(2, weight=1)
+    frame.rowconfigure(2, weight=0)
     ttk.Label(
         frame, text="Circuit implementations", font=("TkDefaultFont", 12, "bold")
     ).grid(row=0, column=0, sticky="w")
@@ -4420,6 +4443,8 @@ def _show_block_variant_editor(
         }
         for item in record.manifest.get("variants", [])
     ]
+    tree.configure(height=_visible_table_rows(len(variants) + 1, maximum=8))
+    frame.rowconfigure(2, weight=1 if len(variants) + 1 > 8 else 0)
     default_variant = [str(record.manifest.get("default_variant") or "")]
     dirty = [False]
     new_implementation_to_open = [None]
@@ -4680,7 +4705,9 @@ def _show_block_variant_editor(
     dialog.bind("<Escape>", lambda _event: cancel_variant_edits())
     render(0)
     dialog.protocol("WM_DELETE_WINDOW", cancel_variant_edits)
-    _set_window_geometry(dialog, 980, 650, 820, 520)
+    _set_window_geometry(
+        dialog, 980, max(350, min(520, 250 + 30 * _visible_table_rows(len(variants) + 1))), 800, 320
+    )
     dialog.grab_set()
     dialog.wait_window()
     return new_implementation_to_open[0]
@@ -4697,7 +4724,7 @@ def _show_library_roots_dialog(parent) -> bool:
     outer = ttk.Frame(dialog, padding=10)
     outer.pack(fill="both", expand=True)
     outer.columnconfigure(0, weight=1)
-    outer.rowconfigure(1, weight=1)
+    outer.rowconfigure(1, weight=0)
     ttk.Label(
         outer,
         text="Registered libraries",
@@ -4764,6 +4791,8 @@ def _show_library_roots_dialog(parent) -> bool:
         previous = select_path or selected_path()
         tree.delete(*tree.get_children())
         roots = configured_library_roots()
+        tree.configure(height=_visible_table_rows(len(roots), maximum=8))
+        outer.rowconfigure(1, weight=1 if len(roots) > 8 else 0)
         default = default_library_root()
         for index, library_path in enumerate(roots):
             role = (
@@ -4977,7 +5006,10 @@ def _show_library_roots_dialog(parent) -> bool:
     tree.bind("<<TreeviewSelect>>", update_selection_actions)
     render()
     update_selection_actions()
-    _set_window_geometry(dialog, 1040, 620, 820, 460)
+    library_count = len(configured_library_roots())
+    _set_window_geometry(
+        dialog, 1040, max(340, min(500, 230 + 30 * _visible_table_rows(library_count))), 820, 300
+    )
     dialog.grab_set()
     dialog.wait_window()
     return changed[0]
@@ -5058,7 +5090,7 @@ def _show_library_browser(
     panes.add(right, weight=4)
 
     left.columnconfigure(0, weight=1)
-    left.rowconfigure(2, weight=1)
+    left.rowconfigure(2, weight=0)
     ttk.Label(left, text="Search blocks").grid(row=0, column=0, sticky="w")
     search = tk.StringVar()
     search_entry = ttk.Entry(left, textvariable=search)
@@ -5102,8 +5134,8 @@ def _show_library_browser(
     _bind_mousewheel(tree, lambda amount: tree.yview_scroll(amount, "units"))
 
     right.columnconfigure(0, weight=1)
-    right.rowconfigure(2, weight=3)
-    right.rowconfigure(3, weight=1)
+    right.rowconfigure(2, weight=1)
+    right.rowconfigure(3, weight=0)
     name_label = ttk.Label(right, text="Select a block", style="Title.TLabel")
     name_label._kicad_ui_contract_id = "library-browser.selected-name"
     name_label.grid(row=0, column=0, sticky="ew")
@@ -5229,7 +5261,7 @@ def _show_library_browser(
     details_frame.pack(fill="both", expand=True)
     details = tk.Text(
         details_frame,
-        height=8,
+        height=7,
         wrap="word",
         relief="flat",
         borderwidth=0,
@@ -5497,6 +5529,7 @@ def _show_library_browser(
 
     def render_records(*_args):
         visible = _filter_library_records(records, search.get())
+        tree.configure(height=_visible_table_rows(len(visible), maximum=12))
         preferred = _preferred_library_selection(visible, selected_record[0])
         tree.delete(*tree.get_children())
         records_by_id.clear()
@@ -5971,7 +6004,7 @@ def _show_library_browser(
     libraries_button.pack(side="left", padx=(4, 0))
     refresh_records()
     selection_changed()
-    _set_window_geometry(window, 1440, 900, 1080, 660)
+    _set_window_geometry(window, 1440, 820, 1080, 620)
     window.bind("<FocusIn>", lambda _event: selection_changed(), add="+")
     search_entry.focus_set()
 
