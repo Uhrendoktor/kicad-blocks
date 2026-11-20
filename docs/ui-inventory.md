@@ -88,9 +88,9 @@ Every browser control and chooser route has a real-widget contract. Direct Publi
 
 - Search and filter registered block libraries
 - Inspect facade and implementation schematic previews
-- Place a selected facade with KiCad's native cursor tool
+- Insert a selected facade at the active sheet's page center, then focus, select, and save it through schematic IPC
 - Open the selected block's implementation
-- Edit the exact selected facade in Symbol Editor
+- Edit selected facade pin geometry in the portable Facade Pin Layout editor
 - Publish implementation/facade edits and refresh compatible instances
 - Manage variants, PCB layouts, and libraries
 

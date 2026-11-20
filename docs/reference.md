@@ -1,6 +1,6 @@
 # Feature reference
 
-This page describes exact action names, files, instance fields, parameter syntax, stored PCB layout behavior, and known limits. Use the [tutorial](tutorials/first-block.md) for a first-use sequence and the [how-to guides](workflows.md) for individual tasks.
+This page describes exact action names, files, instance fields, parameter syntax, stored PCB layout behavior, and known limits. Use the [tutorial](tutorials/first-block.md) for a first-use sequence and the [how-to guides](workflows.md) for individual tasks. The [cross-platform acceptance matrix](platform-acceptance-matrix.md) tracks implementation, dependencies, tests, and remaining evidence for [issue #41](https://github.com/Uhrendoktor/kicad-blocks/issues/41).
 
 ## Contents
 
