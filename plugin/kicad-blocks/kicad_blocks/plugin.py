@@ -16,7 +16,7 @@ import xml.etree.ElementTree as ET
 from collections.abc import Callable, Iterator, Sequence
 from importlib import import_module
 from pathlib import Path
-from typing import TYPE_CHECKING, BinaryIO, Protocol, Required, TypeAlias, TypedDict, cast
+from typing import TYPE_CHECKING, BinaryIO, Literal, Protocol, Required, TypeAlias, TypedDict, cast
 
 # The core block model and IPC helpers must remain importable in headless
 # environments. Load Tkinter only when the interactive manager is invoked.
@@ -1142,7 +1142,12 @@ def _attach_tk_window_to_editor(
         return False
 
 
-def _add_tooltip(widget: tkinter_types.Misc, text: str) -> None:
+def _add_tooltip(
+    widget: tkinter_types.Misc,
+    text: str,
+    *,
+    placement: Literal["below", "above-right"] = "below",
+) -> None:
     """Attach a small themed tooltip to a compact icon button."""
     tooltip: list[tkinter_types.Toplevel | None] = [None]
 
@@ -1695,7 +1700,7 @@ def _show_selected_block_configuration(
             ),
             "Custom (manual settings)",
         )
-        profile_var = tk.StringVar(value=current_profile_label)
+        profile_var = tk.StringVar(master=dialog, value=current_profile_label)
         profile_combo = ttk.Combobox(
             section,
             textvariable=profile_var,
@@ -1713,7 +1718,7 @@ def _show_selected_block_configuration(
     if variants:
         section = ttk.LabelFrame(content, text="Implementation variant", padding=8)
         section.pack(fill="x", pady=(0, 6))
-        variant_var = tk.StringVar(value=_field_value(instance, VARIANT_FIELD_NAME))
+        variant_var = tk.StringVar(master=dialog, value=_field_value(instance, VARIANT_FIELD_NAME))
         variant_combo = ttk.Combobox(
             section,
             textvariable=variant_var,
@@ -1737,7 +1742,7 @@ def _show_selected_block_configuration(
                 section,
                 text=f"{name}  ({parameter['type']})",
             ).grid(row=row * 2, column=0, sticky="w", padx=(0, 12), pady=(5, 0))
-            variable = tk.StringVar(value=current_values[name])
+            variable = tk.StringVar(master=dialog, value=current_values[name])
             parameter_vars[name] = variable
             if parameter["type"] == "boolean":
                 widget = ttk.Combobox(
@@ -1792,7 +1797,7 @@ def _show_selected_block_configuration(
                 f"Block {block.name!r} instance {instance.reference} selects unknown "
                 f"layout {current_layout!r}. Refresh the block or select a valid layout."
             )
-        layout_var = tk.StringVar(value=current_label or next(iter(layout_ids)))
+        layout_var = tk.StringVar(master=dialog, value=current_label or next(iter(layout_ids)))
         layout_combo = ttk.Combobox(
             section,
             textvariable=layout_var,
@@ -2011,7 +2016,7 @@ def _pick_block_for_placement(
     outer = ttk.Frame(dialog, padding=10)
     outer.pack(fill="both", expand=True)
     ttk.Label(outer, text="Search").pack(anchor="w")
-    search = tk.StringVar()
+    search = tk.StringVar(master=dialog)
     search_entry = ttk.Entry(outer, textvariable=search)
     search_entry._kicad_ui_contract_id = "functional-block-picker.search"
     search_entry.pack(fill="x", pady=(3, 6))
@@ -2061,12 +2066,12 @@ def _pick_block_for_placement(
     config.pack(fill="x", pady=(0, 8))
     config.columnconfigure(1, weight=1)
     ttk.Label(config, text="Implementation variant").grid(row=0, column=0, sticky="w", padx=(0, 10))
-    variant_value = tk.StringVar()
+    variant_value = tk.StringVar(master=dialog)
     variant_combo = ttk.Combobox(config, textvariable=variant_value, state="readonly", width=32)
     variant_combo._kicad_ui_contract_id = "functional-block-picker.variant"
     variant_combo.grid(row=0, column=1, sticky="ew", pady=2)
     ttk.Label(config, text="Configuration profile").grid(row=1, column=0, sticky="w", padx=(0, 10))
-    profile_value = tk.StringVar()
+    profile_value = tk.StringVar(master=dialog)
     profile_combo = ttk.Combobox(config, textvariable=profile_value, state="readonly", width=32)
     profile_combo._kicad_ui_contract_id = "functional-block-picker.profile"
     profile_combo.grid(row=1, column=1, sticky="ew", pady=2)
@@ -2290,7 +2295,7 @@ def _pick_record(
     outer = ttk.Frame(dialog, padding=12)
     outer.pack(fill="both", expand=True)
     ttk.Label(outer, text="Search the block library").pack(anchor="w")
-    search = tk.StringVar()
+    search = tk.StringVar(master=dialog)
     search_entry = ttk.Entry(outer, textvariable=search)
     search_entry._kicad_ui_contract_id = "record-picker.search"
     search_entry.pack(fill="x", pady=(4, 3))
@@ -2832,7 +2837,10 @@ def _ask_create_block_details(
         foreground=palette.get("muted", ""),
     ).pack(anchor="w", pady=(3, 10))
     ttk.Label(frame, text="Block name").pack(anchor="w")
-    name = tk.StringVar(value=source_sheet.stem.replace("_", " ").replace("-", " ").title())
+    name = tk.StringVar(
+        master=dialog,
+        value=source_sheet.stem.replace("_", " ").replace("-", " ").title(),
+    )
     name_entry = ttk.Entry(frame, textvariable=name)
     name_entry._kicad_ui_contract_id = "create-block-form.name"
     name_entry.pack(fill="x", pady=(3, 8))
@@ -4935,7 +4943,8 @@ def _show_block_layout_editor(
     added_ids: list[str] = []
     created_layout_to_open: list[Path | None] = [None]
     status_value = tk.StringVar(
-        value="Each layout remains assigned to one or more implementations."
+        master=dialog,
+        value="Each layout remains assigned to one or more implementations.",
     )
 
     def assigned_to(layout_id: str) -> str:
@@ -5077,7 +5086,7 @@ def _show_block_layout_editor(
     implementation_values = ["Default"] + [
         str(item["value"]) for item in record.manifest.get("variants", [])
     ]
-    implementation_value = tk.StringVar(value="Default")
+    implementation_value = tk.StringVar(master=dialog, value="Default")
 
     def link_selected() -> None:
         item = selected_layout()
@@ -5372,15 +5381,15 @@ def _ask_implementation_details(
     ).grid(row=0, column=0, columnspan=3, sticky="w", pady=(0, 8))
 
     ttk.Label(frame, text="Variant value").grid(row=1, column=0, columnspan=3, sticky="w")
-    selector_value = tk.StringVar(value=value)
+    selector_value = tk.StringVar(master=dialog, value=value)
     selector_entry = ttk.Entry(frame, textvariable=selector_value)
     selector_entry._kicad_ui_contract_id = "implementation-details.variant"
     selector_entry.grid(row=2, column=0, columnspan=3, sticky="ew", pady=(2, 8))
     _add_tooltip(selector_entry, "Stored in KB_VARIANT on the placed facade.")
 
-    mode_value = tk.StringVar(value="Choose a schematic file")
-    source_value = tk.StringVar(value=source)
-    copy_value = tk.StringVar()
+    mode_value = tk.StringVar(master=dialog, value="Choose a schematic file")
+    source_value = tk.StringVar(master=dialog, value=source)
+    copy_value = tk.StringVar(master=dialog)
     copy_sources: dict[str, Path] = {}
     if allow_create:
         ttk.Label(frame, text="Starting point").grid(row=3, column=0, columnspan=3, sticky="w")
@@ -5567,7 +5576,10 @@ def _show_block_variant_editor(
     ttk.Label(frame, text="Circuit implementations", font=("TkDefaultFont", 12, "bold")).grid(
         row=0, column=0, sticky="w"
     )
-    status_value = tk.StringVar(value="Empty KB_VARIANT uses the default implementation.")
+    status_value = tk.StringVar(
+        master=dialog,
+        value="Empty KB_VARIANT uses the default implementation.",
+    )
     cast(_TkVariableRetainer, dialog)._kicad_ui_variables = [status_value]
     status_label = ttk.Label(
         frame,
@@ -6006,7 +6018,7 @@ def _show_library_roots_dialog(parent: tkinter_types.Misc) -> bool:
     horizontal_scroll.grid(row=1, column=0, sticky="ew")
     _bind_mousewheel(tree, lambda amount: tree.yview_scroll(amount, "units"))
 
-    status = tk.StringVar()
+    status = tk.StringVar(master=dialog)
     status_label = ttk.Label(
         outer,
         textvariable=status,
@@ -6335,8 +6347,8 @@ def _show_library_browser(
     header = ttk.Frame(outer)
     header.pack(fill="x", pady=(0, 6))
     ttk.Label(header, text="Functional Block Library", style="Title.TLabel").pack(side="left")
-    library_path = tk.StringVar()
-    notice_value = tk.StringVar(value="")
+    library_path = tk.StringVar(master=window)
+    notice_value = tk.StringVar(master=window, value="")
     library_summary = ttk.Label(header, textvariable=library_path, style="Muted.TLabel")
     library_summary._kicad_ui_contract_id = "library-browser.summary"
     library_summary.pack(side="right", padx=(12, 0))
@@ -6354,7 +6366,7 @@ def _show_library_browser(
     left.columnconfigure(0, weight=1)
     left.rowconfigure(2, weight=1)
     ttk.Label(left, text="Search blocks").grid(row=0, column=0, sticky="w")
-    search = tk.StringVar()
+    search = tk.StringVar(master=window)
     search_entry = ttk.Entry(left, textvariable=search)
     search_entry._kicad_ui_contract_id = "library-browser.search"
     search_entry.grid(row=1, column=0, sticky="ew", pady=(3, 6))
@@ -6473,7 +6485,7 @@ def _show_library_browser(
     schematic_controls = ttk.Frame(schematic_page)
     schematic_controls.grid(row=0, column=0, sticky="ew", pady=(0, 5))
     ttk.Label(schematic_controls, text="Circuit").pack(side="left")
-    implementation_choice = tk.StringVar(value="Default")
+    implementation_choice = tk.StringVar(master=window, value="Default")
     implementation_selector = ttk.Combobox(
         schematic_controls,
         textvariable=implementation_choice,
@@ -6486,7 +6498,7 @@ def _show_library_browser(
     _add_tooltip(
         implementation_selector, "Choose the implementation shown in the schematic preview"
     )
-    page_choice = tk.StringVar()
+    page_choice = tk.StringVar(master=window)
     page_selector_label = ttk.Label(schematic_controls, text="Sheet")
     page_selector = ttk.Combobox(
         schematic_controls,
@@ -6926,7 +6938,7 @@ def _show_library_browser(
         frame = ttk.Frame(chooser, padding=12)
         frame.pack(fill="both", expand=True)
         ttk.Label(frame, text="Select circuit implementation:").pack(anchor="w")
-        choice = tk.StringVar(value=choices[0]["label"])
+        choice = tk.StringVar(master=chooser, value=choices[0]["label"])
         combo = ttk.Combobox(
             frame,
             textvariable=choice,
@@ -7098,7 +7110,7 @@ def _show_library_browser(
             ),
             labels[0],
         )
-        choice = tk.StringVar(value=default_label)
+        choice = tk.StringVar(master=chooser, value=default_label)
         combo = ttk.Combobox(frame, textvariable=choice, values=labels, state="readonly", width=36)
         combo._kicad_ui_contract_id = "open-pcb-layout-chooser.choice"
         combo.pack(fill="x", pady=8)
