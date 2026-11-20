@@ -4710,33 +4710,38 @@ def _ask_layout_details(
 
     browse_button.configure(command=browse)
 
-    def update_mode(_event: tkinter_types.Event[tkinter_types.Misc] | None = None):
-        use_existing = mode_value.get() == "Choose an existing PCB file"
+    def update_mode(_event: tkinter_types.Event[tkinter_types.Misc] | None = None) -> None:
+        use_existing = mode_combo.get() == "Choose an existing PCB file"
         if use_existing:
-            source_entry.grid()
-            browse_button.grid()
+            source_entry.grid(
+                row=4, column=0, columnspan=2, sticky="ew", pady=(3, 8)
+            )
+            browse_button.grid(row=4, column=2, sticky="ew", padx=(6, 0), pady=(3, 8))
             source_entry.configure(state="normal")
             browse_button.configure(state="normal")
         else:
             cast(_TkGridManaged, source_entry).grid_remove()
             cast(_TkGridManaged, browse_button).grid_remove()
 
+    def schedule_mode_update(*_trace_args: str) -> None:
+        dialog.after_idle(update_mode)
+
     mode_combo.bind("<<ComboboxSelected>>", update_mode)
-    mode_value.trace_add("write", lambda *_args: update_mode())
+    mode_value.trace_add("write", schedule_mode_update)
     update_mode()
 
     def accept():
-        name = name_value.get().strip()
+        name = name_entry.get().strip()
         if not name or len(name) > 80:
             messagebox.showerror(
                 "Add PCB layout", "Enter a layout name of 1 to 80 characters.", parent=dialog
             )
             name_entry.focus_set()
             return
-        if mode_value.get() == "Create a new empty board":
+        if mode_combo.get() == "Create a new empty board":
             source = _new_blank_pcb_source()
         else:
-            source = Path(source_value.get()).expanduser().resolve()
+            source = Path(source_entry.get()).expanduser().resolve()
             if not source.is_file() or source.suffix.casefold() != ".kicad_pcb":
                 messagebox.showerror(
                     "Add PCB layout", "Choose an existing KiCad .kicad_pcb file.", parent=dialog
@@ -4746,7 +4751,7 @@ def _ask_layout_details(
         result[0] = {
             "name": name,
             "source": str(source),
-            "linked_implementation": link_value.get(),
+            "linked_implementation": link_combo.get(),
         }
         dialog.destroy()
 
@@ -6258,6 +6263,7 @@ def _show_library_browser(
     header.pack(fill="x", pady=(0, 6))
     ttk.Label(header, text="Functional Block Library", style="Title.TLabel").pack(side="left")
     library_path = tk.StringVar()
+    notice_value = tk.StringVar(value="")
     library_summary = ttk.Label(header, textvariable=library_path, style="Muted.TLabel")
     library_summary._kicad_ui_contract_id = "library-browser.summary"
     library_summary.pack(side="right", padx=(12, 0))
@@ -7799,7 +7805,11 @@ def _apply_selected_block_pcb_layouts(
 
 
 def _show_action_hub(
-    root: tkinter_types.Misc, kicad: _KiCadApp | None = None
+    root: tkinter_types.Misc,
+    kicad: _KiCadApp | None = None,
+    schematic: _Schematic | None = None,
+    project_dir: Path | None = None,
+    library_paths: Path | list[Path] | None = None,
 ) -> ttk_types.Notebook:
     """Show compact, icon-led task actions with secondary guidance in tooltips."""
     _configure_tk_theme(root, kicad)

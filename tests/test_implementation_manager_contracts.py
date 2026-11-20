@@ -46,6 +46,7 @@ MANAGER_CONTROLS = {
     "implementations-manager.action.edit",
     "implementations-manager.action.default",
     "implementations-manager.action.remove",
+    "implementations-manager.action.save-close",
     "implementations-manager.action.close",
 }
 STATUS_TEXT = "Empty KB_VARIANT uses the default implementation."

@@ -85,7 +85,7 @@ def _new_hub(monkeypatch: MonkeyPatch) -> tuple[Tk, Notebook]:
     notebook = _show_action_hub(root)
     root.update_idletasks()
     root.update()
-    return root, notebook, active_schematic
+    return root, notebook
 
 
 def _button_contract_id(action_id: str) -> str:
