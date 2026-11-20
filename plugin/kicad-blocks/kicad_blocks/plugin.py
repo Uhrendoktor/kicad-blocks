@@ -5532,6 +5532,7 @@ def _show_library_browser(
     def render_records(*_args):
         visible = _filter_library_records(records, search.get())
         tree.configure(height=_visible_table_rows(len(visible), maximum=12))
+        left.rowconfigure(2, weight=1 if len(visible) > 12 else 0)
         preferred = _preferred_library_selection(visible, selected_record[0])
         tree.delete(*tree.get_children())
         records_by_id.clear()
