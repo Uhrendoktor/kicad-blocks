@@ -13,7 +13,7 @@ This page separates the product's current test evidence from targets that the in
 | GUI dependencies | Tkinter and native `filedialog`; Xvfb/xdotool are test-harness-only in Linux CI |
 | KiCad interfaces | Eeschema IPC, PCB IPC, KiCad CLI |
 
-The post-merge main-branch CI run [#43521663508](https://github.com/Uhrendoktor/kicad-blocks/actions/runs/43521663508) passed both `python-and-kicad` and `visual-ui-audit` on merge commit `d75f0b1f0ef59e14868a84e7730cbc517089e0b7`. It exercised unit tests, lint, KiCad CLI validation, Eeschema GUI editing and publishing, plugin discovery, schematic and PCB IPC, layout merging, and rendered UI evidence.
+The main-branch CI run [#43521663508](https://github.com/Uhrendoktor/kicad-blocks/actions/runs/43521663508) records the earlier full product baseline. The later exact-head validation [#44706326103](https://github.com/Uhrendoktor/kicad-blocks/actions/runs/44706326103), on test-code commit `aa4fc8d2d44e3ce9646b17647215047cd47d0c74`, passed all five jobs and verified a named Eeschema AT-SPI window on CPython 3.12, 3.13, and 3.14. This is a smoke test for the Eeschema application tree, not proof that the plugin's Tk windows or their individual controls are screen-reader accessible.
 
 ## Runtime dependency portability
 
@@ -107,6 +107,12 @@ Tk's portable transient relationship is used only between windows created by the
 The repository `VERSION` file currently contains `1.1.0`. A packaged KiCad Blocks 1.1.0 application ZIP is not yet published in GitHub Releases. The published release assets currently provide the pinned KiCad Python IPC dependency wheels, not a complete user-installable KiCad Blocks release archive.
 
 Use the source installation procedure in [Install and enable KiCad Blocks](../getting-started.md). The immutable historical `v1` tag is not a substitute for a current 1.1.0 application package.
+
+## Accessibility evidence boundary
+
+Linux CI runs the Eeschema plugin-discovery workflow inside a private D-Bus session, enables the AT-SPI bus and GTK ATK bridge before Eeschema starts, then resolves Eeschema's X11 client PID from its editor window and inspects the process through `xa11y`. The exact-head run [#44706326103](https://github.com/Uhrendoktor/kicad-blocks/actions/runs/44706326103) passed this check on CPython 3.12, 3.13, and 3.14; each run exposed a named top-level Eeschema `window`.
+
+This proves only that the editor process publishes an application/window accessibility node in the hosted Xvfb session. It does not audit individual Eeschema controls, plugin-owned Tk windows, keyboard navigation, or screen-reader usability. The plugin's Tk runtime is separate from Eeschema's wxWidgets accessibility tree. Ubuntu 24.04's packaged Tk 8.6 does not implement TIP 733's `tk accessible` API; issue #41 tracks evaluating a Tcl/Tk 9.1-enabled Python runtime and the platform-specific screen-reader checks still required.
 
 ## What CI does not prove
 
