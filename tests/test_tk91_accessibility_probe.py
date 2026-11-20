@@ -274,6 +274,7 @@ def main() -> None:
                 f"stderr={stderr[-4000:]!r}",
                 flush=True,
             )
+            print("Tk 9.1 raw xa11y payload:", stdout[-16000:], flush=True)
             if helper.returncode != 0:
                 raise RuntimeError(
                     "AT-SPI helper failed: "
