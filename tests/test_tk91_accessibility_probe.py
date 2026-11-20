@@ -101,14 +101,31 @@ def _assert_accessible_tree(payload: dict) -> dict:
                 f"Accessible object {name!r} had role {node.get('role')!r}; "
                 f"expected a role containing {expected_role!r}."
             )
-        description = str(node.get("description") or "").strip()
+        # xa11y intentionally exposes only role/name/value/children in its
+        # normalized tree. Read the description from the independent native
+        # PyAT-SPI snapshot, which surfaces Atspi.Accessible.get_description().
+        pyatspi_tree = payload.get("pyatspi", {}).get("tree", {})
+        pyatspi_nodes = list(_walk(pyatspi_tree))
+        native_matches = [
+            item for item in pyatspi_nodes
+            if item.get("name") == name and item.get("description") is not None
+        ]
+        if not native_matches:
+            raise AssertionError(
+                f"PyAT-SPI did not expose a native accessible node named {name!r}. "
+                f"PyAT-SPI tree: {json.dumps(pyatspi_tree, ensure_ascii=False)[:16000]}"
+            )
+        native_node = native_matches[0]
+        description = str(native_node.get("description") or "").strip()
         if description != expected_description:
             raise AssertionError(
-                f"Accessible object {name!r} had description {description!r}; "
-                f"expected {expected_description!r}."
+                f"Native AT-SPI description for {name!r} was {description!r}; "
+                f"expected {expected_description!r}. "
+                f"Native node: {json.dumps(native_node, ensure_ascii=False)}"
             )
         widget_summary[name] = {
             "role": str(node.get("role") or ""),
+            "native_role": str(native_node.get("role") or ""),
             "description": description,
         }
 
