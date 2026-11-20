@@ -478,6 +478,12 @@ def _scrollbar_command(
     return invoke
 
 
+class _SchematicCommitHandle(Protocol):
+    """Opaque handle returned by KiCad's optional schematic transaction API."""
+
+    def __str__(self) -> str: ...
+
+
 class _TkGridManaged(Protocol):
     """Grid-managed widget operation used to hide optional editor controls."""
 
@@ -3554,8 +3560,8 @@ def _start_native_symbol_placement(
     kicad: _KiCadApp,
     _editor_window_id: str | None,
     symbol_name: str,
-) -> _SchematicSymbol:
-    """Place a block at the actual sheet center, focus it, and select it."""
+) -> tuple[_SchematicSymbol, bool]:
+    """Place a block at the sheet center and use native cursor move when supported."""
     if not symbol_name or any(char.isspace() for char in symbol_name):
         raise ValueError("The selected block has an invalid KiCad symbol name.")
     schematic = kicad.get_schematic()
@@ -3564,10 +3570,28 @@ def _start_native_symbol_placement(
     from kipy.geometry import Vector2
 
     x_mm, y_mm = _schematic_page_center_mm(schematic)
-    instance = schematic.place_symbol_from_library(
-        f"{LIBRARY_NICKNAME}:{symbol_name}", Vector2.from_xy_mm(x_mm, y_mm)
+    symbol_id = f"{LIBRARY_NICKNAME}:{symbol_name}"
+    position = Vector2.from_xy_mm(x_mm, y_mm)
+
+    begin_commit_raw = getattr(schematic, "begin_commit", None)
+    interactive_move_raw = getattr(schematic, "interactive_move", None)
+    push_commit_raw = getattr(schematic, "push_commit", None)
+    drop_commit_raw = getattr(schematic, "drop_commit", None)
+    supports_transaction_move = all(
+        callable(method)
+        for method in (
+            begin_commit_raw,
+            interactive_move_raw,
+            push_commit_raw,
+            drop_commit_raw,
+        )
     )
-    if can_transfer_commit:
+
+    if supports_transaction_move:
+        begin_commit = cast(Callable[[], _SchematicCommitHandle], begin_commit_raw)
+        interactive_move = cast(Callable[..., None], interactive_move_raw)
+        push_commit = cast(Callable[[_SchematicCommitHandle, str], None], push_commit_raw)
+        drop_commit = cast(Callable[[_SchematicCommitHandle], None], drop_commit_raw)
         commit = begin_commit()
         try:
             instance = schematic.place_symbol_from_library(symbol_id, position)
@@ -3582,14 +3606,9 @@ def _start_native_symbol_placement(
             return instance, True
         except Exception as exc:
             if not _is_unsupported_schematic_move_error(exc):
-                # Busy, stale-ID, validation, transport, and editor failures are
-                # real failures, not evidence that the capability is missing.
                 with contextlib.suppress(Exception):
                     drop_commit(commit)
                 raise
-            # A newer Python wrapper may be installed before the connected
-            # Eeschema server implements the command. Commit at page centre,
-            # then use the same verified focus/selection path as older builds.
             LOG.info(
                 "Schematic interactive move IPC is unavailable; using page-center placement: %s",
                 exc,
@@ -3601,17 +3620,15 @@ def _start_native_symbol_placement(
                     drop_commit(commit)
                 raise
     else:
-        # Keep the supported fixed-coordinate route usable with the public
-        # Schematic API, which does not currently expose begin_commit().
+        # Keep the documented fixed-coordinate route usable when this KiCad
+        # build does not expose the optional transaction/interactive-move API.
         instance = schematic.place_symbol_from_library(symbol_id, position)
 
     target_schematic = _focus_schematic_items_in_editor(schematic, [instance])
     target_schematic.clear_selection()
     target_schematic.add_to_selection([instance])
     selected = _safe_schematic_selection(target_schematic)
-    instance_id = str(
-        getattr(getattr(instance, "id", None), "value", None) or instance.id
-    )
+    instance_id = str(getattr(getattr(instance, "id", None), "value", None) or instance.id)
     if not any(
         str(getattr(getattr(item, "id", None), "value", None) or item.id) == instance_id
         for item in selected

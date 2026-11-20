@@ -16,6 +16,7 @@ PLUGIN = Path(__file__).resolve().parents[1] / "plugin" / "kicad-blocks"
 sys.path.insert(0, str(PLUGIN))
 
 from kipy.proto.common.types import DocumentType
+from kicad_blocks.manifest_types import BlockManifest
 from kicad_blocks.model import parse_parameters, parse_pins
 from kicad_blocks.repository import BlockRecord, create_block, read_manifest
 
@@ -137,46 +138,20 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
         from kicad_blocks.repository import build_project_symbol_catalog
 
         project_catalog = build_project_symbol_catalog(self.project, [self.library])
-        broken = SimpleNamespace(
-            manifest={**self.block.manifest, "symbol_name": "missing_generated_facade"},
+        broken = BlockRecord(
             path=self.block.path,
-            symbol_library=self.block.symbol_library,
-        )
-        # This test models the current documented Schematic API: direct
-        # page-centre placement, without the proposed transaction/move methods.
-        schematic = SimpleNamespace(
-            place_symbol_from_library=Mock(return_value=instance),
-        )
-        kicad = SimpleNamespace(get_schematic=Mock(return_value=schematic))
-        with (
-            patch.object(
-                plugin_actions, "_schematic_page_center_mm", return_value=(100.0, 75.0)
+            manifest=cast(
+                BlockManifest,
+                {**self.block.manifest, "symbol_name": "missing_generated_facade"},
             ),
-            patch.object(
-                plugin_actions, "_focus_schematic_items_in_editor", return_value=target
-            ) as focus_items,
-        ):
-            placed = plugin_actions._start_native_symbol_placement(
-                kicad, None, self.block.manifest["symbol_name"]
+        )
+        with self.assertRaisesRegex(ValueError, "found 0"):
+            plugin_actions._edit_facade_symbol(
+                broken,
+                cast(plugin_actions.KiCadApp, None),
+                project_catalog=project_catalog,
             )
 
-        placed_instance, cursor_attached = placed
-        self.assertIs(placed_instance, instance)
-        self.assertFalse(cursor_attached)
-        args, kwargs = schematic.place_symbol_from_library.call_args
-        self.assertEqual(
-            args[0],
-            f"{plugin_actions.LIBRARY_NICKNAME}:{self.block.manifest['symbol_name']}",
-        )
-        self.assertAlmostEqual(args[1].x, 100_000_000)
-        self.assertAlmostEqual(args[1].y, 75_000_000)
-        self.assertFalse(kwargs)
-        self.assertFalse(hasattr(schematic, "begin_commit"))
-        self.assertFalse(hasattr(schematic, "interactive_move"))
-        focus_items.assert_called_once_with(schematic, [instance])
-        target.clear_selection.assert_called_once_with()
-        target.add_to_selection.assert_called_once_with([instance])
-        target.save.assert_called_once_with()
 
     def test_place_block_starts_native_cursor_move_when_schematic_api_exists(self):
         instance = SimpleNamespace(id=SimpleNamespace(value="block-instance-id"))
@@ -632,6 +607,7 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
             get_hierarchy=Mock(),
         )
         with (
+            patch.object(plugin_actions, "_ask_create_block_details") as details,
             patch.object(plugin_actions, "create_block") as create,
             self.assertRaisesRegex(ValueError, "exactly one hierarchical sheet symbol"),
         ):
@@ -649,6 +625,7 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
             get_hierarchy=Mock(),
         )
         with (
+            patch.object(plugin_actions, "_ask_create_block_details") as details,
             patch.object(plugin_actions, "create_block") as create,
             self.assertRaisesRegex(
                 ValueError, "current selection is not a hierarchical sheet symbol"
@@ -707,6 +684,7 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
         )
         schematic = SimpleNamespace(get_selection=Mock(return_value=[selected_sheet]))
         with (
+            patch.object(plugin_actions, "_ask_create_block_details") as details,
             patch.object(plugin_actions, "create_block") as create,
             self.assertRaisesRegex(ValueError, "no Sheetfile property"),
         ):
@@ -723,6 +701,7 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
         )
         schematic = SimpleNamespace(get_selection=Mock(return_value=[selected_sheet]))
         with (
+            patch.object(plugin_actions, "_ask_create_block_details") as details,
             patch.object(plugin_actions, "create_block") as create,
             self.assertRaisesRegex(ValueError, "no UUID"),
         ):
@@ -739,6 +718,7 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
             get_hierarchy=Mock(),
         )
         with (
+            patch.object(plugin_actions, "_ask_create_block_details") as details,
             patch.object(plugin_actions, "create_block") as create,
             self.assertRaisesRegex(RuntimeError, "selection API is unavailable"),
         ):
@@ -755,6 +735,7 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
         )
         schematic = SimpleNamespace(get_selection=Mock(return_value=[selected_sheet]))
         with (
+            patch.object(plugin_actions, "_ask_create_block_details") as details,
             patch.object(plugin_actions, "create_block") as create,
             self.assertRaisesRegex(FileNotFoundError, "active parent sheet"),
         ):

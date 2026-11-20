@@ -117,11 +117,9 @@
       "owner": "_ask_create_block_details.accept",
       "method": "messagebox.showerror",
       "line": 2822,
-      "coverage": "tested",
-      "evidence": [
-        "tests/test_create_block_form_contracts.py"
-      ],
-      "rationale": "Blank-name validation is asserted through the production Create Block command; the dialog remains open and the user can recover."
+      "coverage": "uncovered",
+      "evidence": [],
+      "rationale": "Blank-name validation is implemented, but this native messagebox path is not currently covered by a dedicated behavior test."
     },
     {
       "id": "_ask_layout_details.accept::messagebox.showerror#1",

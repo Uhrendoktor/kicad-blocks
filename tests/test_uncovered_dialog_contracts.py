@@ -351,6 +351,15 @@ def _record_message(
     return record
 
 
+def _record_message_with_kwargs(
+    calls: list[tuple[str, str, _RecordedKwargs]],
+) -> Callable[..., None]:
+    def record(title: str, message: str, **kwargs: _RecordedValue) -> None:
+        calls.append((title, message, kwargs))
+
+    return record
+
+
 def _record_confirmation_message(
     calls: list[tuple[str, str]],
 ) -> Callable[..., bool]:
@@ -675,11 +684,11 @@ def test_single_pcb_layout_cancelling_any_mapping_prompt_stops_before_merge(
         "merge_block_layout",
         _unexpected_single_merge(merge_calls),
     )
-    confirm_calls = []
+    confirm_calls: list[tuple[str, str]] = []
     monkeypatch.setattr(
         plugin_actions.messagebox,
         "askyesno",
-        _record_message(_confirm_messages),
+        _record_confirmation_message(confirm_calls),
     )
 
     assert (
@@ -999,7 +1008,7 @@ def test_run_action_missing_schematic_shows_attention_warning_and_closes_root(
     monkeypatch.setattr(
         plugin_actions.messagebox,
         "showwarning",
-        _record_message(warnings),
+        _record_message_with_kwargs(warnings),
     )
 
     plugin_actions.run_action("manage-library")
@@ -1031,7 +1040,7 @@ def test_run_action_unexpected_failure_shows_error_and_closes_root(
     monkeypatch.setattr(
         plugin_actions.messagebox,
         "showerror",
-        _record_message(errors),
+        _record_message_with_kwargs(errors),
     )
 
     plugin_actions.run_action("publish-block")
