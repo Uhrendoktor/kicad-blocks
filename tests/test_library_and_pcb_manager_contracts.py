@@ -7,7 +7,7 @@ import os
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, NoReturn, TypedDict, cast
 
 import pytest
 
@@ -15,7 +15,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
     from _pytest.monkeypatch import MonkeyPatch
-    from kicad_blocks.manifest_types import BlockLayoutEditInput
+    from kicad_blocks.manifest_types import BlockLayoutEditInput, BlockLayoutInput, BlockVariantInput
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "plugin" / "kicad-blocks"))
@@ -32,6 +32,8 @@ from ui_contracts import (  # noqa: E402
     Toplevel,
     UiTestContext,
     assert_control_coverage,
+    TkCallbackOption,
+    TkOption,
 )
 
 pytestmark = pytest.mark.skipif(
@@ -61,6 +63,130 @@ PCB_CONTROLS = {
     "pcb-layout-manager.action.assign",
     "pcb-layout-manager.action.close",
 }
+
+
+type _RecordedMessage = tuple[str, str, Toplevel | None]
+type _RecordedPrompt = tuple[str, str, Toplevel | None]
+type _ChooserOptions = dict[str, TkCallbackOption]
+
+
+class _LayoutDetails(TypedDict):
+    name: str
+    source: str
+    linked_implementation: str
+
+
+def _record_message(calls: list[_RecordedMessage]) -> Callable[..., None]:
+    def show(title: str, message: str, **kwargs: TkCallbackOption) -> None:
+        parent = cast(Toplevel | None, kwargs.get("parent"))
+        calls.append((title, str(message), parent))
+
+    return show
+
+
+def _record_question(
+    calls: list[tuple[str, str]],
+    answer: bool,
+) -> Callable[..., bool]:
+    def ask(title: str, message: str, **_kwargs: TkCallbackOption) -> bool:
+        calls.append((title, message))
+        return answer
+
+    return ask
+
+
+def _directory_dialog_result(path: Path) -> Callable[..., str]:
+    def choose(**_kwargs: TkCallbackOption) -> str:
+        return str(path)
+
+    return choose
+
+
+
+def _record_question_string(
+    calls: list[_RecordedPrompt],
+    answer: str | None,
+) -> Callable[..., str | None]:
+    def ask(title: str, prompt: str, **kwargs: TkCallbackOption) -> str | None:
+        calls.append((title, prompt, cast(Toplevel | None, kwargs.get("parent"))))
+        return answer
+
+    return ask
+
+
+def _directory_picker_result(path: Path) -> Callable[..., str]:
+    def choose(
+        _parent: Misc,
+        *,
+        title: str,
+        initial_path: str | Path | None = None,
+    ) -> str:
+        return str(path)
+
+    return choose
+
+
+def _string_dialog_result(value: str | None) -> Callable[..., str | None]:
+    def ask(_title: str, _prompt: str, **_kwargs: TkCallbackOption) -> str | None:
+        return value
+
+    return ask
+
+
+def _layout_details_result(
+    name: str,
+    source: Path,
+    linked_implementation: str,
+) -> Callable[[Misc, BlockRecord], _LayoutDetails]:
+    def choose(_parent: Misc, _record: BlockRecord) -> _LayoutDetails:
+        return {
+            "name": name,
+            "source": str(source),
+            "linked_implementation": linked_implementation,
+        }
+
+    return choose
+
+
+def _path_result(path: Path) -> Callable[[Path], Path]:
+    def locate(_source: Path) -> Path:
+        return path
+
+    return locate
+
+
+def _raise_path_error(message: str) -> Callable[[Path], NoReturn]:
+    def fail(_path: Path) -> NoReturn:
+        raise OSError(message)
+
+    return fail
+
+
+def _remove_root_with_failure(
+    failing_path: Path,
+    message: str,
+    original_remove: Callable[[Path], list[Path]],
+) -> Callable[[Path], list[Path]]:
+    def remove(path: Path) -> list[Path]:
+        if Path(path).expanduser().resolve() == failing_path.resolve():
+            raise OSError(message)
+        return original_remove(path)
+
+    return remove
+
+
+def _return_path_name(value: str) -> Callable[..., str | None]:
+    def ask(_title: str, _prompt: str, **_kwargs: TkCallbackOption) -> str | None:
+        return value
+
+    return ask
+
+
+def _return_none_path_name() -> Callable[..., str | None]:
+    def ask(_title: str, _prompt: str, **_kwargs: TkCallbackOption) -> str | None:
+        return None
+
+    return ask
 
 
 def _new_root(monkeypatch: MonkeyPatch) -> Tk:
@@ -194,11 +320,11 @@ def test_manage_libraries_add_existing_registers_and_refreshes_the_real_tree(
     _settings, first, second = _library_fixture(monkeypatch, tmp_path)
     new_library = tmp_path / "third-library"
     new_library.mkdir()
-    chooser_calls = []
+    chooser_calls: list[_ChooserOptions] = []
     monkeypatch.setattr(
         plugin_actions.filedialog,
         "askdirectory",
-        lambda **_kwargs: chooser_calls.append(_kwargs) or str(new_library),
+        _directory_dialog_result(new_library),
     )
     root = _new_root(monkeypatch)
     context = UiTestContext(root)
@@ -206,12 +332,12 @@ def test_manage_libraries_add_existing_registers_and_refreshes_the_real_tree(
     def add(_dialog: Toplevel) -> None:
         _click(context, "manage-libraries.action.add", "Add library")
         assert chooser_calls[0]["title"] == "Add existing block library folder"
-        assert chooser_calls[0]["parent"].title() == "Manage Libraries"
+        assert cast(Toplevel, chooser_calls[0]["parent"]).title() == "Manage Libraries"
         assert new_library.resolve() in repository.library_roots()
         _select_path(context, "manage-libraries.rows", new_library, path_column="path")
         status = context.require_widget("manage-libraries.status")
         variable = str(status.cget("textvariable"))
-        assert "registered libraries" in status.getvar(variable)
+        assert "registered libraries" in str(status.getvar(variable))
         _click(
             context,
             "manage-libraries.action.close",
@@ -238,15 +364,13 @@ def test_manage_libraries_create_makes_and_registers_new_folder(
     destination = tmp_path / "created-libraries"
     destination.mkdir()
     monkeypatch.setattr(
-        plugin_actions.filedialog, "askdirectory", lambda **_kwargs: str(destination)
+        plugin_actions.filedialog, "askdirectory", _directory_dialog_result(destination)
     )
-    ask_calls = []
+    ask_calls: list[_RecordedPrompt] = []
     monkeypatch.setattr(
         plugin_actions.simpledialog,
         "askstring",
-        lambda title, prompt, **kwargs: (
-            ask_calls.append((title, prompt, kwargs.get("parent"))) or "new-library"
-        ),
+        _record_question_string(ask_calls, "new-library"),
     )
     root = _new_root(monkeypatch)
     context = UiTestContext(root)
@@ -277,7 +401,7 @@ def test_manage_libraries_unregister_removes_registration_but_preserves_files(
 ) -> None:
     """Verify unregister preserves library files."""
     _settings, first, second = _library_fixture(monkeypatch, tmp_path)
-    monkeypatch.setattr(plugin_actions.messagebox, "askyesno", lambda *_a, **_k: True)
+    monkeypatch.setattr(plugin_actions.messagebox, "askyesno", _record_question([], True))
     root = _new_root(monkeypatch)
     context = UiTestContext(root)
 
@@ -309,11 +433,11 @@ def test_manage_libraries_confirmation_cancel_keeps_registration(
 ) -> None:
     """Verify cancel keeps the library registered."""
     _settings, _first, second = _library_fixture(monkeypatch, tmp_path)
-    prompts = []
+    prompts: list[tuple[str, str]] = []
     monkeypatch.setattr(
         plugin_actions.messagebox,
         "askyesno",
-        lambda title, message, **_kwargs: prompts.append((title, message)) or False,
+        _record_question(prompts, False),
     )
     root = _new_root(monkeypatch)
     context = UiTestContext(root)
@@ -384,7 +508,7 @@ def test_manage_libraries_change_folder_is_transactional_and_keeps_old_data(
     monkeypatch.setattr(
         plugin_actions.filedialog,
         "askdirectory",
-        lambda **_kwargs: str(replacement),
+        _directory_dialog_result(replacement),
     )
     root = _new_root(monkeypatch)
     context = UiTestContext(root)
@@ -457,7 +581,7 @@ def _pcb_fixture(
 ) -> tuple[BlockRecord, list[Path]]:
     library = tmp_path / "pcb-library"
     library.mkdir()
-    source_boards = []
+    source_boards: list[Path] = []
     for index in range(layout_count):
         board = tmp_path / f"board-{index + 1}.kicad_pcb"
         board.write_text(
@@ -465,7 +589,7 @@ def _pcb_fixture(
             encoding="utf-8",
         )
         source_boards.append(board)
-    variants = []
+    variants: list[BlockVariantInput] = []
     if with_variant:
         variant_source = tmp_path / "boost.kicad_sch"
         variant_source.write_text(
@@ -473,7 +597,7 @@ def _pcb_fixture(
             encoding="utf-8",
         )
         variants.append({"value": "Boost", "path": variant_source})
-    layout_files = [
+    layout_files: list[BlockLayoutInput] = [
         {"id": f"layout_{index + 1}", "name": f"Layout {index + 1}", "path": board}
         for index, board in enumerate(source_boards)
     ]
@@ -516,11 +640,11 @@ def test_pcb_layout_manager_updates_default_and_variant_associations_then_remove
 ) -> None:
     """Verify default and variant layout associations persist."""
     record, _sources = _pcb_fixture(tmp_path, layout_count=2)
-    prompts = []
+    prompts: list[tuple[str, str]] = []
     monkeypatch.setattr(
         plugin_actions.messagebox,
         "askyesno",
-        lambda title, message, **_kwargs: prompts.append((title, message)) or True,
+        _record_question(prompts, True),
     )
     original_manifest = read_manifest(record.path)
     original_layouts = original_manifest["layouts"]
@@ -541,16 +665,16 @@ def test_pcb_layout_manager_updates_default_and_variant_associations_then_remove
         _click(context, "pcb-layout-manager.action.assign", "Assign")
         manifest = read_manifest(record.path)
         variant = next(item for item in manifest["variants"] if item["value"] == "Boost")
-        assert variant["layout_id"] == second["id"]
+        assert variant.get("layout_id") == second["id"]
         selected_layout = next(item for item in manifest["layouts"] if item["id"] == second["id"])
-        assert "Boost" in selected_layout["implementations"]
+        assert "Boost" in selected_layout.get("implementations", [])
 
         _click(context, "pcb-layout-manager.action.remove", "Remove")
         manifest = read_manifest(record.path)
         assert len(manifest["layouts"]) == 1
         assert manifest["default_layout"] == first_id
         assert not second_path.exists()
-        assert manifest["variants"][0]["layout_id"] == first_id
+        assert manifest["variants"][0].get("layout_id") == first_id
         assert prompts
         assert prompts[0][0] == "Remove PCB layout"
         _click(
@@ -581,15 +705,11 @@ def test_pcb_layout_manager_add_and_save_failure_can_be_retried(
     monkeypatch.setattr(
         plugin_actions,
         "_ask_layout_details",
-        lambda *_args, **_kwargs: {
-            "name": "Boost layout",
-            "source": str(new_board),
-            "linked_implementation": "Boost",
-        },
+        _layout_details_result("Boost layout", new_board, "Boost"),
     )
     original_save = plugin_actions.save_block_layouts
-    attempts = []
-    errors = []
+    attempts: list[str] = []
+    errors: list[_RecordedMessage] = []
 
     def fail_once(
         record: BlockRecord,
@@ -615,7 +735,7 @@ def test_pcb_layout_manager_add_and_save_failure_can_be_retried(
     monkeypatch.setattr(
         plugin_actions.messagebox,
         "showerror",
-        lambda title, message, **_kwargs: errors.append((title, message)),
+        _record_message(errors),
     )
     root = _new_root(monkeypatch)
     context = UiTestContext(root)
@@ -626,7 +746,7 @@ def test_pcb_layout_manager_add_and_save_failure_can_be_retried(
         assert tree.item("1", "values")[2] == "new-boost.kicad_pcb"
         status = context.require_widget("pcb-layout-manager.status")
         variable = str(status.cget("textvariable"))
-        assert "Save failed; use Save & close to retry." in status.getvar(variable)
+        assert "Save failed; use Save & close to retry." in str(status.getvar(variable))
         assert errors
         assert errors[0][0] == "Save PCB layouts"
         assert len(read_manifest(record.path)["layouts"]) == 1
@@ -643,7 +763,8 @@ def test_pcb_layout_manager_add_and_save_failure_can_be_retried(
         manifest = read_manifest(record.path)
         assert len(manifest["layouts"]) == 2
         added = next(item for item in manifest["layouts"] if item["name"] == "Boost layout")
-        assert "Boost" in added["implementations"]
+        assert opened is not None
+        assert "Boost" in added.get("implementations", [])
         assert added["file"] == opened.name
         assert opened.is_file()
         assert opened.read_bytes() == new_board.read_bytes()
@@ -658,12 +779,12 @@ def test_pcb_layout_manager_cancelled_remove_preserves_board_and_manifest(
 ) -> None:
     """Verify cancelling layout removal preserves files."""
     record, _sources = _pcb_fixture(tmp_path, layout_count=2)
-    before = json.loads(json.dumps(read_manifest(record.path)))
+    before = read_manifest(record.path)
     prompts = []
     monkeypatch.setattr(
         plugin_actions.messagebox,
         "askyesno",
-        lambda title, message, **_kwargs: prompts.append((title, message)) or False,
+        _record_question(prompts, False),
     )
     root = _new_root(monkeypatch)
     context = UiTestContext(root)
@@ -736,11 +857,11 @@ def test_pcb_layout_manager_duplicate_name_reports_error_without_mutating_manife
             "linked_implementation": "Default",
         },
     )
-    errors = []
+    errors: list[_RecordedMessage] = []
     monkeypatch.setattr(
         plugin_actions.messagebox,
         "showerror",
-        lambda title, message, **kwargs: errors.append((title, str(message), kwargs.get("parent"))),
+        _record_message(errors),
     )
     root = _new_root(monkeypatch)
     context = UiTestContext(root)
@@ -750,7 +871,7 @@ def test_pcb_layout_manager_duplicate_name_reports_error_without_mutating_manife
         assert len(errors) == 1
         assert errors[0][0] == "Add PCB layout"
         assert f"layout named {duplicate!r} already exists" in errors[0][1]
-        assert errors[0][2].title() == f"PCB layouts — {record.name}"
+        assert cast(Toplevel, errors[0][2]).title() == f"PCB layouts — {record.name}"
         assert read_manifest(record.path) == original
         _click(
             context,
@@ -776,7 +897,7 @@ def test_manage_libraries_add_registration_error_keeps_existing_roots(
     assert {first.resolve(), second.resolve()} <= registered_before
     candidate = tmp_path / "candidate-library"
     candidate.mkdir()
-    monkeypatch.setattr(plugin_actions, "_pick_directory", lambda *_a, **_k: str(candidate))
+    monkeypatch.setattr(plugin_actions, "_pick_directory", _directory_picker_result(candidate))
 
     def fail_add(_path: Path) -> None:
         message = "permission denied while registering library"
@@ -797,7 +918,7 @@ def test_manage_libraries_add_registration_error_keeps_existing_roots(
         assert len(errors) == 1
         assert errors[0][0] == "Add existing library"
         assert errors[0][1] == "permission denied while registering library"
-        assert errors[0][2].title() == "Manage Libraries"
+        assert cast(Toplevel, errors[0][2]).title() == "Manage Libraries"
         assert set(repository.library_roots()) == registered_before
         assert candidate.resolve() not in repository.library_roots()
         _click(
@@ -818,11 +939,11 @@ def test_manage_libraries_create_rejects_path_like_folder_name(
     _settings, _first, _second = _library_fixture(monkeypatch, tmp_path)
     destination = tmp_path / "created"
     destination.mkdir()
-    monkeypatch.setattr(plugin_actions, "_pick_directory", lambda *_a, **_k: str(destination))
+    monkeypatch.setattr(plugin_actions, "_pick_directory", _directory_picker_result(destination))
     monkeypatch.setattr(
         plugin_actions.simpledialog,
         "askstring",
-        lambda *_a, **_k: "../outside",
+        _return_path_name("../outside"),
     )
     errors = []
     monkeypatch.setattr(
@@ -866,7 +987,7 @@ def test_manage_libraries_create_filesystem_error_keeps_existing_folder(
     monkeypatch.setattr(
         plugin_actions.simpledialog,
         "askstring",
-        lambda *_a, **_k: "already-there",
+        _return_path_name("already-there"),
     )
     errors = []
     monkeypatch.setattr(
@@ -902,14 +1023,13 @@ def test_manage_libraries_change_folder_rolls_back_after_old_root_removal_fails(
     _settings, first, second = _library_fixture(monkeypatch, tmp_path)
     replacement = tmp_path / "replacement"
     replacement.mkdir()
-    monkeypatch.setattr(plugin_actions, "_pick_directory", lambda *_a, **_k: str(replacement))
+    monkeypatch.setattr(plugin_actions, "_pick_directory", _directory_picker_result(replacement))
     original_remove = plugin_actions.remove_library_root
 
-    def fail_old_root(path: Path) -> None:
+    def fail_old_root(path: Path) -> list[Path]:
         resolved = Path(path).expanduser().resolve()
         if resolved == first.resolve():
-            message = "simulated old-root unregister failure"
-            raise OSError(message)
+            raise OSError("simulated old-root unregister failure")
         return original_remove(path)
 
     monkeypatch.setattr(plugin_actions, "remove_library_root", fail_old_root)
@@ -953,7 +1073,7 @@ def test_manage_libraries_unregister_error_keeps_root_registered(
     monkeypatch.setattr(
         plugin_actions,
         "remove_library_root",
-        lambda _path: (_ for _ in ()).throw(OSError("settings file is read-only")),
+        _raise_path_error("settings file is read-only"),
     )
     errors = []
     monkeypatch.setattr(
@@ -992,7 +1112,7 @@ def test_manage_libraries_set_default_error_preserves_previous_default(
     monkeypatch.setattr(
         plugin_actions,
         "set_library_root",
-        lambda _path: (_ for _ in ()).throw(OSError("could not write default setting")),
+        _raise_path_error("could not write default setting"),
     )
     errors = []
     monkeypatch.setattr(
