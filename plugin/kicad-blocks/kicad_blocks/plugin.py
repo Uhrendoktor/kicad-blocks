@@ -206,6 +206,13 @@ def _auto_hide_scrollbar(master, **options):
     return AutoHideScrollbar(master, palette=palette, **options)
 
 
+def _visible_table_rows(item_count: int, *, maximum: int = 8) -> int:
+    """Return a compact Treeview height based on real rows, capped for long lists."""
+    rows = max(0, int(item_count))
+    limit = max(1, int(maximum))
+    return min(max(1, rows), limit)
+
+
 def _set_window_geometry(window, width: int, height: int, min_width: int, min_height: int) -> None:
     """Size a completed dialog to its content and keep every action visible."""
     window.update_idletasks()
@@ -757,13 +764,19 @@ def _show_selected_block_configuration(
         text=f"{instance.reference}  ·  {block.name}",
     ).pack(anchor="w")
     content = ttk.Frame(outer)
-    content.pack(fill="both", expand=True)
+    content.pack(fill="x")
+    selector_row = None
+    if profiles or variants:
+        selector_row = ttk.Frame(content)
+        selector_row.pack(fill="x", pady=(0, 6))
+        selector_row.columnconfigure(0, weight=1)
+        selector_row.columnconfigure(1, weight=1 if profiles and variants else 0)
 
     profile_var = None
     profile_labels: dict[str, dict] = {}
     if profiles:
-        section = ttk.LabelFrame(content, text="Configuration profile", padding=8)
-        section.pack(fill="x", pady=(0, 6))
+        section = ttk.LabelFrame(selector_row, text="Configuration profile", padding=8)
+        section.grid(row=0, column=0, sticky="ew", padx=(0, 4) if variants else 0)
         profile_labels = {
             f"{item['name']}  [{item['id']}]": item
             for item in profiles
@@ -791,8 +804,8 @@ def _show_selected_block_configuration(
     variant_var = None
     variant_combo = None
     if variants:
-        section = ttk.LabelFrame(content, text="Implementation variant", padding=8)
-        section.pack(fill="x", pady=(0, 6))
+        section = ttk.LabelFrame(selector_row, text="Implementation variant", padding=8)
+        section.grid(row=0, column=1 if profiles else 0, sticky="ew")
         variant_var = tk.StringVar(value=_field_value(instance, VARIANT_FIELD_NAME))
         variant_combo = ttk.Combobox(
             section,
@@ -807,14 +820,14 @@ def _show_selected_block_configuration(
     parameter_vars = {}
     if parameters:
         section = ttk.LabelFrame(content, text="Parameters", padding=8)
-        section.pack(fill="both", expand=True, pady=(0, 6))
+        section.pack(fill="x", pady=(0, 6))
         section.columnconfigure(1, weight=1)
         for row, parameter in enumerate(parameters):
             name = parameter["name"]
             ttk.Label(
                 section,
                 text=f"{name}  ({parameter['type']})",
-            ).grid(row=row * 2, column=0, sticky="w", padx=(0, 12), pady=(5, 0))
+            ).grid(row=row, column=0, sticky="w", padx=(0, 12), pady=(5, 0))
             variable = tk.StringVar(value=current_values[name])
             parameter_vars[name] = variable
             if parameter["type"] == "boolean":
@@ -829,7 +842,7 @@ def _show_selected_block_configuration(
             widget._kicad_ui_contract_id = (
                 f"instance-configuration.parameter.{name}"
             )
-            widget.grid(row=row * 2, column=1, sticky="ew", pady=(3, 0))
+            widget.grid(row=row, column=1, sticky="ew", pady=(3, 0))
             description = parameter.get("description") or f"Default: {parameter['default']}"
             _add_tooltip(widget, description)
 
@@ -958,7 +971,7 @@ def _show_selected_block_configuration(
             linked_variable.trace_add("write", mark_profile_custom)
 
     footer = ttk.Frame(outer)
-    footer.pack(fill="x", pady=(10, 0))
+    footer.pack(fill="x", pady=(8, 0))
 
     def save_configuration() -> None:
         try:
@@ -1031,7 +1044,9 @@ def _show_selected_block_configuration(
     ).pack(side="right")
     dialog.bind("<Escape>", lambda _event: dialog.destroy())
     dialog.protocol("WM_DELETE_WINDOW", dialog.destroy)
-    _set_window_geometry(dialog, 700, 720, 580, 500)
+    _set_window_geometry(
+        dialog, 660, max(360, min(680, 260 + 36 * len(parameters))), 540, 340
+    )
     dialog.grab_set()
     dialog.wait_window()
 
@@ -1079,7 +1094,7 @@ def _pick_block_for_placement(records, parent):
     right = ttk.Frame(panes, padding=(8, 0, 0, 0))
     panes.add(left, weight=2)
     panes.add(right, weight=3)
-    left.rowconfigure(0, weight=1)
+    left.rowconfigure(0, weight=0)
     left.columnconfigure(0, weight=1)
 
     tree = ttk.Treeview(left, columns=("block", "library"), show="headings", selectmode="browse")
@@ -1196,6 +1211,8 @@ def _pick_block_for_placement(records, parent):
                 values=(record.name, record.path.parent.name),
                 tags=("even" if index % 2 == 0 else "odd",),
             )
+        tree.configure(height=_visible_table_rows(len(visible_records), maximum=12))
+        left.rowconfigure(0, weight=1 if len(visible_records) > 12 else 0)
         preferred = _preferred_library_selection(visible_records, selected_record[0])
         if preferred is None:
             selected_record[0] = None
@@ -1288,7 +1305,7 @@ def _pick_block_for_placement(records, parent):
         contract_id="functional-block-picker.action.place",
     ).pack(side="right", padx=(0, 8))
     render_results()
-    _set_window_geometry(dialog, 1080, 720, 900, 580)
+    _set_window_geometry(dialog, 1080, 640, 900, 520)
     dialog.grab_set()
     search_entry.focus_set()
     dialog.wait_window()
@@ -1381,6 +1398,7 @@ def _pick_record(records, parent, title: str):
 
     def render_results(*_args):
         visible = _filter_library_records(records, search.get())
+        tree.configure(height=_visible_table_rows(len(visible), maximum=8))
         preferred = _preferred_library_selection(visible, selected_record[0])
         children = tree.get_children()
         if children:
@@ -1465,7 +1483,7 @@ def _pick_record(records, parent, title: str):
     dialog.protocol("WM_DELETE_WINDOW", dialog.destroy)
     search.trace_add("write", render_results)
     render_results()
-    _set_window_geometry(dialog, 920, 640, 760, 480)
+    _set_window_geometry(dialog, 900, 520, 720, 380)
     dialog.grab_set()
     search_entry.focus_set()
     dialog.wait_window()
@@ -2204,7 +2222,7 @@ def _edit_facade_symbol(
     frame = ttk.Frame(dialog, padding=14)
     frame.pack(fill="both", expand=True)
     frame.columnconfigure(0, weight=1)
-    frame.rowconfigure(1, weight=1)
+    frame.rowconfigure(1, weight=1 if len(pin_rows) > 10 else 0)
 
     ttk.Label(
         frame,
@@ -2218,7 +2236,8 @@ def _edit_facade_symbol(
     table_frame.rowconfigure(0, weight=1)
     columns = ("pin", "number", "type", "x", "y", "angle", "length")
     tree = ttk.Treeview(
-        table_frame, columns=columns, show="headings", selectmode="browse", height=12
+        table_frame, columns=columns, show="headings", selectmode="browse",
+        height=_visible_table_rows(len(pin_rows), maximum=10),
     )
     tree._kicad_ui_contract_id = "facade-editor.pins"
     headings = {
@@ -2392,7 +2411,9 @@ def _edit_facade_symbol(
 
     render("0")
     tree.focus_set()
-    _set_window_geometry(dialog, 1060, 650, 760, 460)
+    _set_window_geometry(
+        dialog, 1020, max(340, min(520, 200 + 30 * min(len(pin_rows), 10))), 760, 320
+    )
     return True
 
 
@@ -3642,7 +3663,7 @@ def _ask_layout_details(parent, record) -> dict | None:
     dialog.title("Add PCB layout")
     dialog.transient(parent)
     frame = ttk.Frame(dialog, padding=12)
-    frame.pack(fill="both", expand=True)
+    frame.pack(fill="x")
     ttk.Label(frame, text="PCB layout name").grid(row=0, column=0, sticky="w")
     name_value = tk.StringVar(value="New layout")
     name_entry = ttk.Entry(frame, textvariable=name_value)
@@ -3680,7 +3701,11 @@ def _ask_layout_details(parent, record) -> dict | None:
     )
     link_combo._kicad_ui_contract_id = "add-pcb-layout.implementation"
     link_combo.grid(row=6, column=0, columnspan=3, sticky="ew", pady=(3, 2))
-    _add_tooltip(link_combo, "This layout is available when applying the selected implementation to a board.")
+    _add_tooltip(
+        link_combo,
+        "This layout is available when applying the selected implementation to a board.",
+        placement="above-right",
+    )
     frame.columnconfigure(0, weight=1)
     result = [None]
 
@@ -3745,7 +3770,7 @@ def _ask_layout_details(parent, record) -> dict | None:
     ).pack(side="right", padx=(0, 8))
     dialog.bind("<Return>", lambda _event: accept())
     dialog.bind("<Escape>", lambda _event: dialog.destroy())
-    _set_window_geometry(dialog, 760, 500, 640, 430)
+    _set_window_geometry(dialog, 720, 340, 600, 300)
     dialog.grab_set()
     name_entry.focus_set()
     dialog.wait_window()
@@ -3767,7 +3792,7 @@ def _show_block_layout_editor(
     frame = ttk.Frame(dialog, padding=14)
     frame.pack(fill="both", expand=True)
     frame.columnconfigure(0, weight=1)
-    frame.rowconfigure(1, weight=1)
+    frame.rowconfigure(1, weight=0)
     ttk.Label(frame, text="Stored PCB layouts", font=("TkDefaultFont", 12, "bold")).grid(
         row=0, column=0, sticky="w"
     )
@@ -3836,6 +3861,8 @@ def _show_block_layout_editor(
         return ", ".join(layout_implementations.get(layout_id, ["Default"]))
 
     def render(selected_id: str | None = None):
+        tree.configure(height=_visible_table_rows(len(layouts), maximum=8))
+        frame.rowconfigure(1, weight=1 if len(layouts) > 8 else 0)
         tree.delete(*tree.get_children())
         for index, item in enumerate(layouts):
             iid = str(index)
@@ -4076,7 +4103,9 @@ def _show_block_layout_editor(
     dialog.bind("<Escape>", lambda _event: close_layout_manager())
     render(layouts[0]["id"] if layouts else None)
     dialog.protocol("WM_DELETE_WINDOW", close_layout_manager)
-    _set_window_geometry(dialog, 1120, 800, 980, 650)
+    _set_window_geometry(
+        dialog, 1080, max(360, min(540, 270 + 30 * _visible_table_rows(len(layouts)))), 900, 340
+    )
     dialog.grab_set()
     dialog.wait_window()
     return created_layout_to_open[0]
@@ -4182,7 +4211,7 @@ def _ask_implementation_details(
     dialog.title("Implementation details")
     dialog.transient(parent)
     frame = ttk.Frame(dialog, padding=12)
-    frame.pack(fill="both", expand=True)
+    frame.pack(fill="x")
     ttk.Label(
         frame,
         text="New circuit implementation",
@@ -4347,7 +4376,9 @@ def _ask_implementation_details(
     dialog.bind("<Escape>", lambda _event: dialog.destroy())
     source_entry.xview_moveto(1.0)
     selector_entry.focus_set()
-    _set_window_geometry(dialog, 780, 490, 660, 420)
+    dialog_height = 340 if allow_create else 300
+    dialog_min_height = 320 if allow_create else 280
+    _set_window_geometry(dialog, 720, dialog_height, 600, dialog_min_height)
     dialog.grab_set()
     dialog.wait_window()
     return result[0]
@@ -4369,7 +4400,7 @@ def _show_block_variant_editor(
     frame.pack(fill="both", expand=True)
     palette = getattr(parent, "_kicad_blocks_palette", {})
     frame.columnconfigure(0, weight=1)
-    frame.rowconfigure(2, weight=1)
+    frame.rowconfigure(2, weight=0)
     ttk.Label(
         frame, text="Circuit implementations", font=("TkDefaultFont", 12, "bold")
     ).grid(row=0, column=0, sticky="w")
@@ -4451,6 +4482,8 @@ def _show_block_variant_editor(
         return visible[offset] if offset < len(visible) else None
 
     def render(selected_index: int | None = None):
+        tree.configure(height=_visible_table_rows(len(variants) + 1, maximum=8))
+        frame.rowconfigure(2, weight=1 if len(variants) + 1 > 8 else 0)
         tree.delete(*tree.get_children())
         default_path = default_implementation_path()
         tree.insert(
@@ -4680,7 +4713,9 @@ def _show_block_variant_editor(
     dialog.bind("<Escape>", lambda _event: cancel_variant_edits())
     render(0)
     dialog.protocol("WM_DELETE_WINDOW", cancel_variant_edits)
-    _set_window_geometry(dialog, 980, 650, 820, 520)
+    _set_window_geometry(
+        dialog, 980, max(350, min(520, 250 + 30 * _visible_table_rows(len(variants) + 1))), 800, 320
+    )
     dialog.grab_set()
     dialog.wait_window()
     return new_implementation_to_open[0]
@@ -4697,7 +4732,7 @@ def _show_library_roots_dialog(parent) -> bool:
     outer = ttk.Frame(dialog, padding=10)
     outer.pack(fill="both", expand=True)
     outer.columnconfigure(0, weight=1)
-    outer.rowconfigure(1, weight=1)
+    outer.rowconfigure(1, weight=0)
     ttk.Label(
         outer,
         text="Registered libraries",
@@ -4764,6 +4799,8 @@ def _show_library_roots_dialog(parent) -> bool:
         previous = select_path or selected_path()
         tree.delete(*tree.get_children())
         roots = configured_library_roots()
+        tree.configure(height=_visible_table_rows(len(roots), maximum=8))
+        outer.rowconfigure(1, weight=1 if len(roots) > 8 else 0)
         default = default_library_root()
         for index, library_path in enumerate(roots):
             role = (
@@ -4977,7 +5014,10 @@ def _show_library_roots_dialog(parent) -> bool:
     tree.bind("<<TreeviewSelect>>", update_selection_actions)
     render()
     update_selection_actions()
-    _set_window_geometry(dialog, 1040, 620, 820, 460)
+    library_count = len(configured_library_roots())
+    _set_window_geometry(
+        dialog, 1040, max(340, min(500, 230 + 30 * _visible_table_rows(library_count))), 820, 300
+    )
     dialog.grab_set()
     dialog.wait_window()
     return changed[0]
@@ -5058,7 +5098,7 @@ def _show_library_browser(
     panes.add(right, weight=4)
 
     left.columnconfigure(0, weight=1)
-    left.rowconfigure(2, weight=1)
+    left.rowconfigure(2, weight=0)
     ttk.Label(left, text="Search blocks").grid(row=0, column=0, sticky="w")
     search = tk.StringVar()
     search_entry = ttk.Entry(left, textvariable=search)
@@ -5102,8 +5142,8 @@ def _show_library_browser(
     _bind_mousewheel(tree, lambda amount: tree.yview_scroll(amount, "units"))
 
     right.columnconfigure(0, weight=1)
-    right.rowconfigure(2, weight=3)
-    right.rowconfigure(3, weight=1)
+    right.rowconfigure(2, weight=1)
+    right.rowconfigure(3, weight=0)
     name_label = ttk.Label(right, text="Select a block", style="Title.TLabel")
     name_label._kicad_ui_contract_id = "library-browser.selected-name"
     name_label.grid(row=0, column=0, sticky="ew")
@@ -5229,7 +5269,7 @@ def _show_library_browser(
     details_frame.pack(fill="both", expand=True)
     details = tk.Text(
         details_frame,
-        height=8,
+        height=7,
         wrap="word",
         relief="flat",
         borderwidth=0,
@@ -5497,6 +5537,8 @@ def _show_library_browser(
 
     def render_records(*_args):
         visible = _filter_library_records(records, search.get())
+        tree.configure(height=_visible_table_rows(len(visible), maximum=12))
+        left.rowconfigure(2, weight=1 if len(visible) > 12 else 0)
         preferred = _preferred_library_selection(visible, selected_record[0])
         tree.delete(*tree.get_children())
         records_by_id.clear()
@@ -5900,7 +5942,7 @@ def _show_library_browser(
     notice_label._kicad_ui_contract_id = "library-browser.status"
     notice_label.pack(fill="x", pady=(5, 0))
 
-    action_toolbar = ttk.Frame(outer, padding=(0, 7, 0, 0))
+    action_toolbar = ttk.Frame(outer, padding=(0, 5, 0, 0))
     action_toolbar.pack(fill="x")
     place_button[0] = _action_button(
         action_toolbar, "Place block", place_selected, "place",
@@ -5909,69 +5951,96 @@ def _show_library_browser(
         contract_id="library-browser.action.place",
         style="Primary.TButton",
     )
-    place_button[0].pack(side="left")
+    place_button[0].pack(side="left", padx=(0, 8))
+    ttk.Separator(action_toolbar, orient="vertical").pack(
+        side="left", fill="y", padx=(0, 9), pady=3
+    )
+
+    block_group = ttk.Frame(action_toolbar)
+    block_group.pack(side="left", padx=(0, 8))
+    ttk.Label(
+        block_group, text="BLOCK", style="Muted.TLabel", font=("TkDefaultFont", 8)
+    ).pack(anchor="w", pady=(0, 2))
+    block_actions = ttk.Frame(block_group)
+    block_actions.pack(fill="x")
     implementation_button[0] = _action_button(
-        action_toolbar, "Implementation", open_implementation, "implementation",
+        block_actions, "Implementation", open_implementation, "implementation",
         "Open the base or a named circuit implementation",
         state="disabled",
         contract_id="library-browser.action.implementation",
     )
-    implementation_button[0].pack(side="left", padx=(4, 0))
+    implementation_button[0].pack(side="left", padx=(0, 4))
     facade_button[0] = _action_button(
-        action_toolbar, "Edit facade", edit_facade, "facade",
+        block_actions, "Edit facade", edit_facade, "facade",
         "Open the generated library facade in KiCad Symbol Editor",
         contract_id="library-browser.action.facade",
     )
-    facade_button[0].pack(side="left", padx=(4, 0))
+    facade_button[0].pack(side="left", padx=(0, 4))
     publish_button[0] = _action_button(
-        action_toolbar, "Publish", publish_selected, "publish",
+        block_actions, "Publish", publish_selected, "publish",
         "Publish the selected block's saved implementation and facade changes",
         state="disabled",
         contract_id="library-browser.action.publish",
     )
-    publish_button[0].pack(side="left", padx=(4, 0))
+    publish_button[0].pack(side="left", padx=(0, 4))
     variants_button[0] = _action_button(
-        action_toolbar, "Variants", edit_variants, "variants",
+        block_actions, "Variants", edit_variants, "variants",
         "Add, edit, remove, or set the default circuit implementation",
         state="disabled",
         contract_id="library-browser.action.variants",
     )
-    variants_button[0].pack(side="left", padx=(4, 0))
+    variants_button[0].pack(side="left")
+
     ttk.Separator(action_toolbar, orient="vertical").pack(
-        side="left", fill="y", padx=7, pady=4
+        side="left", fill="y", padx=(0, 9), pady=3
     )
+    pcb_group = ttk.Frame(action_toolbar)
+    pcb_group.pack(side="left", padx=(0, 8))
+    ttk.Label(
+        pcb_group, text="PCB", style="Muted.TLabel", font=("TkDefaultFont", 8)
+    ).pack(anchor="w", pady=(0, 2))
+    pcb_actions = ttk.Frame(pcb_group)
+    pcb_actions.pack(fill="x")
     open_layout_button[0] = _action_button(
-        action_toolbar, "Open PCB", open_layout, "pcb",
+        pcb_actions, "Open PCB", open_layout, "pcb",
         "Open one of the block's stored PCB layouts",
         state="disabled",
         contract_id="library-browser.action.open-pcb",
     )
-    open_layout_button[0].pack(side="left", padx=(4, 0))
+    open_layout_button[0].pack(side="left", padx=(0, 4))
     manage_layout_button[0] = _action_button(
-        action_toolbar, "PCB layouts", manage_layouts, "layouts",
+        pcb_actions, "PCB layouts", manage_layouts, "layouts",
         "Add and associate PCB layouts with implementations",
         state="disabled",
         contract_id="library-browser.action.manage-pcb-layouts",
     )
-    manage_layout_button[0].pack(side="left", padx=(4, 0))
+    manage_layout_button[0].pack(side="left")
+
     ttk.Separator(action_toolbar, orient="vertical").pack(
-        side="left", fill="y", padx=7, pady=4
+        side="left", fill="y", padx=(0, 9), pady=3
     )
+    library_group = ttk.Frame(action_toolbar)
+    library_group.pack(side="left")
+    ttk.Label(
+        library_group, text="LIBRARY", style="Muted.TLabel", font=("TkDefaultFont", 8)
+    ).pack(anchor="w", pady=(0, 2))
+    library_actions = ttk.Frame(library_group)
+    library_actions.pack(fill="x")
     refresh_button = _action_button(
-        action_toolbar, "Refresh", refresh_records, "refresh",
+        library_actions, "Refresh", refresh_records, "refresh",
         "Reload registered libraries and block details",
         contract_id="library-browser.action.refresh",
     )
-    refresh_button.pack(side="left", padx=(4, 0))
+    refresh_button.pack(side="left", padx=(0, 4))
     libraries_button = _action_button(
-        action_toolbar, "Libraries", manage_libraries, "libraries",
+        library_actions, "Libraries", manage_libraries, "libraries",
         "Register, create, change, or unregister block libraries",
         contract_id="library-browser.action.libraries",
     )
-    libraries_button.pack(side="left", padx=(4, 0))
+    libraries_button.pack(side="left")
     refresh_records()
     selection_changed()
-    _set_window_geometry(window, 1440, 900, 1080, 660)
+    _set_window_geometry(window, 1440, 820, 1080, 620)
     window.bind("<FocusIn>", lambda _event: selection_changed(), add="+")
     search_entry.focus_set()
 
