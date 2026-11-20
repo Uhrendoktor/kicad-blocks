@@ -108,6 +108,16 @@ The repository `VERSION` file currently contains `1.1.0`. A packaged KiCad Block
 
 Use the source installation procedure in [Install and enable KiCad Blocks](../getting-started.md). The immutable historical `v1` tag is not a substitute for a current 1.1.0 application package.
 
+## Native file chooser evidence boundary
+
+The plugin currently calls Tk's standard `filedialog` API. On Windows and macOS, Tk routes its chooser command to the platform file dialog implementation. The Ubuntu 24.04 GUI validation runner, however, uses the distribution's Tk 8.6.18 runtime. Tk's current Unix/X11 chooser is Tk's own dialog implementation, not an unconditional XDG portal call.
+
+There is an upstream development path, but it must not be counted as shipped support yet: [TIP 763](https://core.tcl-lang.org/tips/doc/trunk/tip/763.md) is still Draft/Pending and proposes routing Tk's existing open/save/directory chooser commands through `org.freedesktop.portal.FileChooser` on X11. The [`x11-desktop-portal` Tk source branch](https://core.tcl-lang.org/tk/timeline?r=x11-desktop-portal) records implementation commits and says it was tested with KDE Plasma 6.6, GTK and GNOME 50 portal backends. This branch is not the current stable Tk dependency, and the proposal's stated scope is X11; do not infer Wayland/Hyprland parity from it.
+
+GTK4 provides another candidate: `Gtk.FileDialog` (since GTK 4.10) supports asynchronous open/save/folder selection, filters and initial paths; GTK's native chooser API documents Windows `IFileDialog`, macOS `NSOpenPanel`/`NSSavePanel`, and use of `org.freedesktop.portal.FileChooser` when available. Its parent argument is a `GtkWindow`, while KiCad Blocks currently creates Tk windows. Adopting it requires a deliberate parent/ownership architecture, not a detached helper that opens an unowned dialog.
+
+Until a portal-capable Tk build or an adopted GTK backend is integrated and exercised in real sessions, the product must continue to describe the Linux chooser path accurately and leave requirement R6 partial.
+
 ## Accessibility evidence boundary
 
 Linux CI runs the Eeschema plugin-discovery workflow inside a private D-Bus session, enables the AT-SPI bus and GTK ATK bridge before Eeschema starts, then resolves Eeschema's X11 client PID from its editor window and inspects the process through `xa11y`. The exact-head run [#44706326103](https://github.com/Uhrendoktor/kicad-blocks/actions/runs/44706326103) passed this check on CPython 3.12, 3.13, and 3.14; each run exposed a named top-level Eeschema `window`.
