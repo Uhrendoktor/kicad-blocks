@@ -235,13 +235,19 @@ jobs:
           if ! command -v xvfb-run >/dev/null 2>&1 \
             || ! command -v xdotool >/dev/null 2>&1 \
             || ! command -v xwd >/dev/null 2>&1 \
+            || ! command -v dbus-run-session >/dev/null 2>&1 \
+            || ! command -v dbus-send >/dev/null 2>&1 \
+            || ! dpkg-query -W at-spi2-core >/dev/null 2>&1 \
+            || ! dpkg-query -W libatk-bridge2.0-0t64 >/dev/null 2>&1 \
             || ! python3 -c "import tkinter" >/dev/null 2>&1; then
             if [[ "$(id -u)" -eq 0 ]]; then
               apt-get -o Acquire::Languages=none update
-              apt-get install -y --no-install-recommends xvfb xdotool python3-tk x11-apps
+              apt-get install -y --no-install-recommends \
+                xvfb xdotool python3-tk x11-apps dbus-daemon at-spi2-core libatk-bridge2.0-0t64
             else
               sudo -n apt-get -o Acquire::Languages=none update
-              sudo -n apt-get install -y --no-install-recommends xvfb xdotool python3-tk x11-apps
+              sudo -n apt-get install -y --no-install-recommends \
+                xvfb xdotool python3-tk x11-apps dbus-daemon at-spi2-core libatk-bridge2.0-0t64
             fi
           fi
           python3 -c "import tkinter; print('System Python Tkinter available')"
@@ -253,6 +259,8 @@ jobs:
           echo "KICAD_EESCHEMA=$EESCHEMA" >> "$GITHUB_ENV"
           xvfb-run --help >/dev/null
           command -v xdotool
+          command -v dbus-run-session
+          command -v dbus-send
 
       - name: Verify Create Block from Sheet against real KiCad IPC
         shell: bash
@@ -321,7 +329,8 @@ jobs:
       - name: Verify KiCad plugin discovery and managed environment
         shell: bash
         run: |
-          xvfb-run -a -s "-screen 0 1280x800x24" \
+          dbus-run-session -- bash scripts/run_with_atspi.sh \
+            xvfb-run -a -s "-screen 0 1280x800x24" \
             "${RUNNER_TEMP}/kicad-blocks-venv/bin/python" tests/test_plugin_registration.py
 
       - name: Upload Edit Facade GUI diagnostics
@@ -385,13 +394,14 @@ jobs:
           python3 scripts/publish_pinned_ipc_wheel.py \
             "$WHEELHOUSE" --repo "$GITHUB_REPOSITORY" --source-sha "$KIPY_SHA"
           "$PY" -m pip install "$WHEELHOUSE/$EXPECTED"
-          "$PY" -m pip install 'resvg_py>=0.5,<0.6' 'Pillow>=10,<14' 'platformdirs>=4.3,<5'
+          "$PY" -m pip install 'resvg_py>=0.5,<0.6' 'Pillow>=10,<14' 'platformdirs>=4.3,<5' 'xa11y==0.16.0'
           "$PY" -c "from kipy import KiCad; from kipy.schematic import Schematic; print('CPython 3.13 KiCad IPC bindings available')"
 
       - name: Verify KiCad plugin discovery on CPython 3.13
         shell: bash
         run: |
-          xvfb-run -a -s "-screen 0 1280x800x24" \
+          dbus-run-session -- bash scripts/run_with_atspi.sh \
+            xvfb-run -a -s "-screen 0 1280x800x24" \
             "${RUNNER_TEMP}/kicad-blocks-venv-cp313/bin/python" tests/test_plugin_registration.py
 
       - name: Set up CPython 3.14.4
@@ -431,13 +441,14 @@ jobs:
           python3 scripts/publish_pinned_ipc_wheel.py \
             "$WHEELHOUSE" --repo "$GITHUB_REPOSITORY" --source-sha "$KIPY_SHA"
           "$PY" -m pip install "$WHEELHOUSE/$EXPECTED"
-          "$PY" -m pip install 'resvg_py>=0.5,<0.6' 'Pillow>=10,<14' 'platformdirs>=4.3,<5'
+          "$PY" -m pip install 'resvg_py>=0.5,<0.6' 'Pillow>=10,<14' 'platformdirs>=4.3,<5' 'xa11y==0.16.0'
           "$PY" -c "from kipy import KiCad; from kipy.schematic import Schematic; print('CPython 3.14 KiCad IPC bindings available')"
 
       - name: Verify KiCad plugin discovery on CPython 3.14
         shell: bash
         run: |
-          xvfb-run -a -s "-screen 0 1280x800x24" \
+          dbus-run-session -- bash scripts/run_with_atspi.sh \
+            xvfb-run -a -s "-screen 0 1280x800x24" \
             "${RUNNER_TEMP}/kicad-blocks-venv-cp314/bin/python" tests/test_plugin_registration.py
 
       - name: Publish verified visual documentation previews

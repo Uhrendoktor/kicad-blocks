@@ -133,25 +133,54 @@ def _wait_for_editor(
 
 
 def _dump_accessibility_tree(process_id: int) -> str:
-    """Diagnostic-only probe of KiCad's native accessibility surface."""
+    """Inspect KiCad's AT-SPI tree; CI can require a named top-level window."""
+    required = os.environ.get("KICAD_BLOCKS_REQUIRE_A11Y") == "1"
     try:
         import xa11y
     except ImportError as exc:
         result = f"xa11y accessibility probe unavailable: {type(exc).__name__}: {exc}"
         print(result, flush=True)
+        if required:
+            raise RuntimeError(result) from exc
         return result
     try:
-        app = xa11y.App.by_pid(process_id, timeout=5.0)
+        app = xa11y.App.by_pid(process_id, timeout=15.0)
+        snapshot = app.tree(max_depth=2)
         tree = app.dump(max_depth=14)
     except xa11y.XA11yError as exc:
         result = f"xa11y accessibility probe unavailable: {type(exc).__name__}: {exc}"
         print(result, flush=True)
+        if required:
+            raise RuntimeError(result) from exc
         return result
+
+    children = snapshot.get("children", []) if isinstance(snapshot, dict) else []
+    named_windows = [
+        child
+        for child in children
+        if isinstance(child, dict) and str(child.get("name") or "").strip()
+    ]
+    if required and not named_windows:
+        raise AssertionError(
+            "AT-SPI connected to Eeschema but exposed no named top-level windows. "
+            f"Accessible snapshot: {json.dumps(snapshot, ensure_ascii=False)[:8000]}"
+        )
+
     print("--- xa11y KiCad accessibility tree ---", flush=True)
     print(tree[:24000], flush=True)
-    print("--- end xa11y accessibility tree ---", flush=True)
+    print(
+        "Accessible top-level windows: "
+        + json.dumps(
+            [
+                {"role": child.get("role"), "name": child.get("name")}
+                for child in named_windows
+            ],
+            ensure_ascii=False,
+        ),
+        flush=True,
+    )
+    print("--- end xa11y KiCad accessibility tree ---", flush=True)
     return tree
-
 def _wait_for_window_title(xdotool: str, predicate, timeout_s: float = 12.0) -> tuple[str, str, str]:
     deadline = time.monotonic() + timeout_s
     last_windows = []
