@@ -1098,6 +1098,13 @@ def _configure_tk_theme(root: tkinter_types.Misc, kicad: _KiCadApp | None = None
     cast(_TkPaletteOwner, root).kicad_blocks_palette = colors
 
 
+def _visible_table_rows(item_count: int, *, maximum: int = 8) -> int:
+    """Return a compact Treeview height based on real rows, capped for long lists."""
+    rows = max(0, int(item_count))
+    limit = max(1, int(maximum))
+    return min(max(1, rows), limit)
+
+
 def _set_window_geometry(
     window: _TkGeometryWindow, width: int, height: int, min_width: int, min_height: int
 ) -> None:
