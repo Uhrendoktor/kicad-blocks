@@ -234,7 +234,7 @@ def _assert_initial_state(context: UiTestContext, dialog: Toplevel) -> None:
     widgets = context.refresh_widgets()
     assert dialog.title() == WINDOW_TITLE
     assert dialog.winfo_width() >= 580
-    assert dialog.winfo_height() >= 500
+    assert 360 <= dialog.winfo_height() < 500
     for contract_id in INSTANCE_CONTROLS - {"instance-configuration.window"}:
         widget = widgets[contract_id]
         assert widget.winfo_viewable()

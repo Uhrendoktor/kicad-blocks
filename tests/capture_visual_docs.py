@@ -872,7 +872,7 @@ def capture_ui_workflows(
                     "Manage Libraries",
                     output_dir / f"library-folders-{theme}.png",
                     xdotool,
-                    minimum_size=(900, 550),
+                    minimum_size=(900, 320),
                     prepare=lambda dialog: _select_first_table_row(dialog),
                 )
 
@@ -1013,7 +1013,7 @@ def capture_ui_workflows(
                     f"Implementations — {record.name}",
                     output_dir / f"implementation-variants-{theme}.png",
                     xdotool,
-                    minimum_size=(800, 500),
+                    minimum_size=(800, 340),
                     prepare=_select_default_implementation,
                 )
                 _capture_modal(
@@ -1022,7 +1022,7 @@ def capture_ui_workflows(
                     f"PCB layouts — {record.name}",
                     output_dir / f"pcb-layout-manager-{theme}.png",
                     xdotool,
-                    minimum_size=(900, 600),
+                    minimum_size=(900, 350),
                     prepare=lambda dialog: (
                         _select_first_table_row(dialog),
                         _assert_layout_manager_footer(dialog),
@@ -1034,7 +1034,7 @@ def capture_ui_workflows(
                     "Add PCB layout",
                     output_dir / f"add-pcb-layout-blank-{theme}.png",
                     xdotool,
-                    minimum_size=(640, 460),
+                    minimum_size=(640, 320),
                     prepare=_assert_blank_pcb_file_picker_hidden,
                 )
                 _capture_modal(
@@ -1043,7 +1043,7 @@ def capture_ui_workflows(
                     "Add PCB layout",
                     output_dir / f"add-pcb-layout-file-{theme}.png",
                     xdotool,
-                    minimum_size=(640, 460),
+                    minimum_size=(640, 320),
                     prepare=_select_existing_pcb_file,
                 )
                 _capture_modal(
