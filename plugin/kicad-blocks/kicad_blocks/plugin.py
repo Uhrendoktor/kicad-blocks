@@ -5936,7 +5936,7 @@ def _show_library_browser(
     notice_label._kicad_ui_contract_id = "library-browser.status"
     notice_label.pack(fill="x", pady=(5, 0))
 
-    action_toolbar = ttk.Frame(outer, padding=(0, 7, 0, 0))
+    action_toolbar = ttk.Frame(outer, padding=(0, 5, 0, 0))
     action_toolbar.pack(fill="x")
     place_button[0] = _action_button(
         action_toolbar, "Place block", place_selected, "place",
@@ -5945,66 +5945,93 @@ def _show_library_browser(
         contract_id="library-browser.action.place",
         style="Primary.TButton",
     )
-    place_button[0].pack(side="left")
+    place_button[0].pack(side="left", padx=(0, 8))
+    ttk.Separator(action_toolbar, orient="vertical").pack(
+        side="left", fill="y", padx=(0, 9), pady=3
+    )
+
+    block_group = ttk.Frame(action_toolbar)
+    block_group.pack(side="left", padx=(0, 8))
+    ttk.Label(
+        block_group, text="BLOCK", style="Muted.TLabel", font=("TkDefaultFont", 8)
+    ).pack(anchor="w", pady=(0, 2))
+    block_actions = ttk.Frame(block_group)
+    block_actions.pack(fill="x")
     implementation_button[0] = _action_button(
-        action_toolbar, "Implementation", open_implementation, "implementation",
+        block_actions, "Implementation", open_implementation, "implementation",
         "Open the base or a named circuit implementation",
         state="disabled",
         contract_id="library-browser.action.implementation",
     )
-    implementation_button[0].pack(side="left", padx=(4, 0))
+    implementation_button[0].pack(side="left", padx=(0, 4))
     facade_button[0] = _action_button(
-        action_toolbar, "Edit facade", edit_facade, "facade",
+        block_actions, "Edit facade", edit_facade, "facade",
         "Open the generated library facade in KiCad Symbol Editor",
         contract_id="library-browser.action.facade",
     )
-    facade_button[0].pack(side="left", padx=(4, 0))
+    facade_button[0].pack(side="left", padx=(0, 4))
     publish_button[0] = _action_button(
-        action_toolbar, "Publish", publish_selected, "publish",
+        block_actions, "Publish", publish_selected, "publish",
         "Publish the selected block's saved implementation and facade changes",
         state="disabled",
         contract_id="library-browser.action.publish",
     )
-    publish_button[0].pack(side="left", padx=(4, 0))
+    publish_button[0].pack(side="left", padx=(0, 4))
     variants_button[0] = _action_button(
-        action_toolbar, "Variants", edit_variants, "variants",
+        block_actions, "Variants", edit_variants, "variants",
         "Add, edit, remove, or set the default circuit implementation",
         state="disabled",
         contract_id="library-browser.action.variants",
     )
-    variants_button[0].pack(side="left", padx=(4, 0))
+    variants_button[0].pack(side="left")
+
     ttk.Separator(action_toolbar, orient="vertical").pack(
-        side="left", fill="y", padx=7, pady=4
+        side="left", fill="y", padx=(0, 9), pady=3
     )
+    pcb_group = ttk.Frame(action_toolbar)
+    pcb_group.pack(side="left", padx=(0, 8))
+    ttk.Label(
+        pcb_group, text="PCB", style="Muted.TLabel", font=("TkDefaultFont", 8)
+    ).pack(anchor="w", pady=(0, 2))
+    pcb_actions = ttk.Frame(pcb_group)
+    pcb_actions.pack(fill="x")
     open_layout_button[0] = _action_button(
-        action_toolbar, "Open PCB", open_layout, "pcb",
+        pcb_actions, "Open PCB", open_layout, "pcb",
         "Open one of the block's stored PCB layouts",
         state="disabled",
         contract_id="library-browser.action.open-pcb",
     )
-    open_layout_button[0].pack(side="left", padx=(4, 0))
+    open_layout_button[0].pack(side="left", padx=(0, 4))
     manage_layout_button[0] = _action_button(
-        action_toolbar, "PCB layouts", manage_layouts, "layouts",
+        pcb_actions, "PCB layouts", manage_layouts, "layouts",
         "Add and associate PCB layouts with implementations",
         state="disabled",
         contract_id="library-browser.action.manage-pcb-layouts",
     )
-    manage_layout_button[0].pack(side="left", padx=(4, 0))
+    manage_layout_button[0].pack(side="left")
+
     ttk.Separator(action_toolbar, orient="vertical").pack(
-        side="left", fill="y", padx=7, pady=4
+        side="left", fill="y", padx=(0, 9), pady=3
     )
+    library_group = ttk.Frame(action_toolbar)
+    library_group.pack(side="left")
+    ttk.Label(
+        library_group, text="LIBRARY", style="Muted.TLabel", font=("TkDefaultFont", 8)
+    ).pack(anchor="w", pady=(0, 2))
+    library_actions = ttk.Frame(library_group)
+    library_actions.pack(fill="x")
     refresh_button = _action_button(
-        action_toolbar, "Refresh", refresh_records, "refresh",
+        library_actions, "Refresh", refresh_records, "refresh",
         "Reload registered libraries and block details",
         contract_id="library-browser.action.refresh",
     )
-    refresh_button.pack(side="left", padx=(4, 0))
+    refresh_button.pack(side="left", padx=(0, 4))
     libraries_button = _action_button(
-        action_toolbar, "Libraries", manage_libraries, "libraries",
+        library_actions, "Libraries", manage_libraries, "libraries",
         "Register, create, change, or unregister block libraries",
         contract_id="library-browser.action.libraries",
     )
-    libraries_button.pack(side="left", padx=(4, 0))
+    libraries_button.pack(side="left")
     refresh_records()
     selection_changed()
     _set_window_geometry(window, 1440, 820, 1080, 620)
