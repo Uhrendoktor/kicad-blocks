@@ -43,6 +43,7 @@ class FlatTabControl(ttk.Frame):
         index = len(self._pages)
         item = ttk.Frame(self._tabbar, style="TabItem.TFrame")
         item.grid(row=0, column=index, sticky="ew")
+        self._tabbar.columnconfigure(index, weight=1, uniform="ui-tabs")
         label = ttk.Label(
             item,
             text=text,
@@ -79,6 +80,21 @@ class FlatTabControl(ttk.Frame):
         """Return page paths using the ttk.Notebook-compatible representation."""
         return [str(page) for page in self._pages]
 
+    def index(self, page: Any) -> int:
+        """Return a page index using the common ttk.Notebook forms."""
+        if page == "current":
+            page = self._selected
+        if isinstance(page, int):
+            return page
+        return self._pages.index(self._resolve_page(page))
+
+    def nametowidget(self, name: str):
+        """Resolve full Tk page paths the same way callers expect from Notebook."""
+        for page in self._pages:
+            if str(page) == str(name):
+                return page
+        return super().nametowidget(name)
+
     def tab(self, page: Any, option: str | None = None):
         """Return a page caption, or a small Notebook-compatible option mapping."""
         selected = self._resolve_page(page)
@@ -93,6 +109,7 @@ class FlatTabControl(ttk.Frame):
         if page is None:
             return str(self._selected) if self._selected is not None else ""
         selected = self._resolve_page(page)
+        previous = self._selected
         self._selected = selected
         for candidate, label, indicator in zip(
             self._pages, self._labels, self._indicators, strict=True
@@ -107,6 +124,8 @@ class FlatTabControl(ttk.Frame):
                 candidate.grid_remove()
                 label.configure(style="Tab.TLabel")
                 indicator.configure(style="TabIndicatorInactive.TFrame")
+        if previous is not selected:
+            self.event_generate("<<NotebookTabChanged>>", when="tail")
         return str(selected)
 
     def _resolve_page(self, page: Any) -> Any:

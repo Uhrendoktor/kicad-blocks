@@ -975,17 +975,19 @@ class LibraryBrowserTests(unittest.TestCase):
             self.assertIsNone(_system_prefers_dark_theme())
         run_process.assert_not_called()
 
-    def test_system_theme_keeps_fixed_treeview_geometry_without_changing_native_colors(self):
-        style = Mock()
+    def test_system_theme_uses_the_shared_desktop_palette_when_kicad_theme_is_missing(self):
         root = SimpleNamespace()
+        expected_palette = {"background": "#f1f4f7", "accent": "#2f6f9f"}
         with (
             patch.dict(os.environ, {"KICAD_BLOCKS_THEME": "system"}),
-            patch("kicad_blocks.plugin.ttk", SimpleNamespace(Style=Mock(return_value=style))),
+            patch(
+                "kicad_blocks.theme.apply_tk_theme",
+                return_value=expected_palette,
+            ) as apply_theme,
         ):
-            _configure_tk_theme(root)
-        self.assertEqual(root._kicad_blocks_palette, {})
-        style.configure.assert_any_call("Treeview", rowheight=29, padding=(4, 2))
-        style.configure.assert_any_call("Treeview.Heading", padding=(8, 6))
+            result = _configure_tk_theme(root)
+        apply_theme.assert_called_once_with(root, None)
+        self.assertIs(result, expected_palette)
 
     def _theme_ipc_modules(self):
         package = ModuleType("kipy")
