@@ -94,7 +94,6 @@ def _block(name: str) -> BlockRecord:
     )
 
 
-
 def _selected_symbol_callback(
     instance: plugin_actions.SchematicSymbol,
 ) -> Callable[[plugin_actions.Schematic], plugin_actions.SchematicSymbol]:
@@ -139,9 +138,7 @@ def _block_map_callback(
     return lookup
 
 
-def _standard_layout_callback(
-    block: BlockRecord,
-) -> Callable[
+def _standard_layout_callback() -> Callable[
     [BlockRecord, Misc, str, plugin_actions.SchematicSymbol | None],
     plugin_actions.ResolvedBlockLayout,
 ]:
@@ -151,7 +148,6 @@ def _standard_layout_callback(
         _title: str = "Select PCB Layout",
         _instance: plugin_actions.SchematicSymbol | None = None,
     ) -> plugin_actions.ResolvedBlockLayout:
-        del block
         return {
             "id": "standard",
             "name": "Standard",
@@ -355,6 +351,25 @@ def _record_message(
     return record
 
 
+def _record_confirmation_message(
+    calls: list[tuple[str, str]],
+) -> Callable[..., bool]:
+    def record(title: str, message: str, **_kwargs: _RecordedValue) -> bool:
+        calls.append((title, message))
+        return False
+
+    return record
+
+
+def _project_directory_callback(
+    directory: Path,
+) -> Callable[[plugin_actions.Schematic], Path]:
+    def locate(_schematic: plugin_actions.Schematic) -> Path:
+        return directory
+
+    return locate
+
+
 def _set_none_tkinter() -> None:
     return None
 
@@ -497,7 +512,7 @@ def _single_layout_context(
     monkeypatch.setattr(
         plugin_actions,
         "_choose_block_layout",
-        _standard_layout_callback(block),
+        _standard_layout_callback(),
     )
     monkeypatch.setattr(
         plugin_actions,
@@ -638,7 +653,7 @@ def test_single_pcb_layout_cancelling_any_mapping_prompt_stops_before_merge(
     monkeypatch.setattr(
         plugin_actions,
         "_choose_block_layout",
-        _standard_layout_callback(_block("Power stage")),
+        _standard_layout_callback(),
     )
     monkeypatch.setattr(
         plugin_actions,
@@ -745,14 +760,14 @@ def _batch_context(
     monkeypatch.setattr(
         plugin_actions,
         "_pick_kicad_file",
-        lambda _parent, **kwargs: calls["board_picker"].append(kwargs) or board,
+        _record_kicad_picker(calls["board_picker"], board),
     )
     monkeypatch.setattr(
         plugin_actions,
         "_pick_save_file",
-        lambda _parent, **kwargs: calls["save_picker"].append(kwargs) or output,
+        _record_save_picker(calls["save_picker"], output),
     )
-    monkeypatch.setattr(plugin_actions, "placement_manifest_path", lambda _path: sidecar)
+    monkeypatch.setattr(plugin_actions, "placement_manifest_path", _placement_path_callback(sidecar))
 
     def merge(
         source: Path,
@@ -1005,7 +1020,7 @@ def test_run_action_unexpected_failure_shows_error_and_closes_root(
     root, _kicad = _patch_action_environment(monkeypatch, schematic=schematic)
     library = tmp_path / "library"
     errors: list[tuple[str, str, _RecordedKwargs]] = []
-    monkeypatch.setattr(plugin_actions, "project_directory", lambda _s: tmp_path)
+    monkeypatch.setattr(plugin_actions, "project_directory", _project_directory_callback(tmp_path))
     monkeypatch.setattr(plugin_actions, "configured_library_roots", lambda: [library])
     monkeypatch.setattr(plugin_actions, "default_library_root", lambda: library)
 
