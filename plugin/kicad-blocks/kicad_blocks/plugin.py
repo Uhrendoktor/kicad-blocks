@@ -765,10 +765,12 @@ def _show_selected_block_configuration(
     ).pack(anchor="w")
     content = ttk.Frame(outer)
     content.pack(fill="x")
-    selector_row = ttk.Frame(content)
-    selector_row.pack(fill="x", pady=(0, 6))
-    selector_row.columnconfigure(0, weight=1)
-    selector_row.columnconfigure(1, weight=1 if profiles and variants else 0)
+    selector_row = None
+    if profiles or variants:
+        selector_row = ttk.Frame(content)
+        selector_row.pack(fill="x", pady=(0, 6))
+        selector_row.columnconfigure(0, weight=1)
+        selector_row.columnconfigure(1, weight=1 if profiles and variants else 0)
 
     profile_var = None
     profile_labels: dict[str, dict] = {}
@@ -3820,8 +3822,6 @@ def _show_block_layout_editor(
             item.get("id")
             or slugify(str(item.get("name") or Path(item["file"]).stem))
         ).casefold()
-    tree.configure(height=_visible_table_rows(len(layouts), maximum=8))
-    frame.rowconfigure(1, weight=1 if len(layouts) > 8 else 0)
     default_layout_id = str(record.manifest.get("default_layout") or "").casefold()
     if not default_layout_id and layouts:
         default_layout_id = layouts[0]["id"]
@@ -3857,6 +3857,8 @@ def _show_block_layout_editor(
         return ", ".join(layout_implementations.get(layout_id, ["Default"]))
 
     def render(selected_id: str | None = None):
+        tree.configure(height=_visible_table_rows(len(layouts), maximum=8))
+        frame.rowconfigure(1, weight=1 if len(layouts) > 8 else 0)
         tree.delete(*tree.get_children())
         for index, item in enumerate(layouts):
             iid = str(index)
@@ -4443,8 +4445,6 @@ def _show_block_variant_editor(
         }
         for item in record.manifest.get("variants", [])
     ]
-    tree.configure(height=_visible_table_rows(len(variants) + 1, maximum=8))
-    frame.rowconfigure(2, weight=1 if len(variants) + 1 > 8 else 0)
     default_variant = [str(record.manifest.get("default_variant") or "")]
     dirty = [False]
     new_implementation_to_open = [None]
@@ -4476,6 +4476,8 @@ def _show_block_variant_editor(
         return visible[offset] if offset < len(visible) else None
 
     def render(selected_index: int | None = None):
+        tree.configure(height=_visible_table_rows(len(variants) + 1, maximum=8))
+        frame.rowconfigure(2, weight=1 if len(variants) + 1 > 8 else 0)
         tree.delete(*tree.get_children())
         default_path = default_implementation_path()
         tree.insert(
