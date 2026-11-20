@@ -16,13 +16,13 @@ pytestmark = pytest.mark.skipif(
     reason="Tk component interaction tests require a display (run under xvfb-run).",
 )
 
-from kicad_blocks.theme import AutoHideScrollbar, apply_tk_theme, palette_for_theme  # noqa: E402
-from kicad_blocks.ui_components import FlatTabControl  # noqa: E402
-
 
 def test_flat_tabs_preserve_notebook_api_and_support_pointer_and_keyboard():
     import tkinter as tk
     from tkinter import ttk
+
+    from kicad_blocks.theme import apply_tk_theme
+    from kicad_blocks.ui_components import FlatTabControl
 
     root = tk.Tk()
     try:
@@ -73,6 +73,8 @@ def test_flat_tabs_preserve_notebook_api_and_support_pointer_and_keyboard():
 
 def test_auto_hide_scrollbar_switches_between_idle_and_active_states():
     import tkinter as tk
+
+    from kicad_blocks.theme import AutoHideScrollbar, apply_tk_theme, palette_for_theme
 
     root = tk.Tk()
     try:

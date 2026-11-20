@@ -10,8 +10,7 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "plugin" / "kicad-blocks"))
 
-from kicad_blocks.theme import (  # noqa: E402
-    AutoHideScrollbar,
+from kicad_blocks.theme_tokens import (  # noqa: E402
     THEME_ENVIRONMENT_VARIABLE,
     UI_FONT_SIZES,
     UI_SPACING,
@@ -30,9 +29,6 @@ def test_shared_tokens_match_the_reference_design_system():
         "card_title": 11,
         "title": 16,
     }
-    assert AutoHideScrollbar.IDLE_WIDTH == 2
-    assert AutoHideScrollbar.ACTIVE_WIDTH == 10
-    assert AutoHideScrollbar.HIDE_DELAY_MS == 900
 
 
 def test_explicit_theme_and_environment_override_take_precedence():
