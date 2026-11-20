@@ -40,12 +40,9 @@ def test_explicit_theme_and_environment_override_take_precedence():
         assert resolve_theme() == "light"
 
 
-def test_system_theme_uses_desktop_detection_when_not_overridden():
+def test_system_theme_uses_deterministic_light_fallback_without_kicad_settings():
     with patch.dict(os.environ, {THEME_ENVIRONMENT_VARIABLE: "system"}):
-        with patch("kicad_blocks.theme._desktop_prefers_dark", return_value=True):
-            assert resolve_theme() == "dark"
-        with patch("kicad_blocks.theme._desktop_prefers_dark", return_value=False):
-            assert resolve_theme() == "light"
+        assert resolve_theme() == "light"
 
 
 def test_palette_returns_independent_semantic_color_maps():
