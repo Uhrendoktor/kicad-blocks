@@ -183,7 +183,7 @@ jobs:
   # One-time maintenance job; remove this job after the formatter commit lands.
   format-python-once:
     needs: synchronize-main
-    if: github.event_name == 'push' && github.ref == 'refs/heads/agents/strict-test-quality-contract-rebased' && github.event.head_commit.message == 'ci: one-time Ruff format'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/agents/strict-test-quality-contract-rebased'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
