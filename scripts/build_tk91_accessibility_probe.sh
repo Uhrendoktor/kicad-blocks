@@ -25,7 +25,7 @@ sudo apt-get install -y --no-install-recommends \
   libx11-dev libxext-dev libxft-dev libxss-dev libcups2-dev \
   libharfbuzz-dev libfontconfig1-dev libfreetype6-dev libtommath-dev \
   libbz2-dev libffi-dev libgdbm-dev libgdbm-compat-dev liblzma-dev \
-  libncursesw5-dev libreadline-dev libsqlite3-dev libssl-dev libuuid-dev \
+  libncursesw5-dev libreadline-dev libsqlite3-dev libssl-dev uuid-dev \
   zlib1g-dev libexpat1-dev xvfb dbus-daemon dbus-bin at-spi2-core
 
 echo "::group::Fetch pinned Tcl/Tk 9.1.0 sources"
