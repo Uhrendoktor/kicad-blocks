@@ -515,7 +515,7 @@ jobs:
     # boundaries. They do not need the KiCad CLI or a running editor.
     if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
 
@@ -538,6 +538,16 @@ jobs:
           "$PY" -m pip install --upgrade pip
           "$PY" -m pip install -r plugin/kicad-blocks/requirements.txt pytest
           "$PY" -c "from kipy import KiCad; import tkinter; print('Tk and KiCad IPC Python modules import')"
+
+      # A one-branch Linux feasibility spike. Normal PRs use the runner's Tk 8.6;
+      # only the Tk 9.1 accessibility branch builds a custom interpreter.
+      - name: Build Tk 9.1 accessibility runtime and probe native widgets
+        if: ${{ github.event_name == 'pull_request' && github.head_ref == 'issue-41/tk91-accessibility-feasibility' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout --signal=TERM --kill-after=15s 840s \
+            bash scripts/build_tk91_accessibility_probe.sh "${RUNNER_TEMP}/kicad-blocks-tk91"
 
       - name: Execute and assert reusable Tk UI component contracts
         shell: bash
