@@ -207,11 +207,15 @@ def _assert_initial_state(context: UiTestContext, dialog):
     widgets = context.refresh_widgets()
     assert dialog.title() == WINDOW_TITLE
     assert dialog.winfo_width() >= 580
-    assert dialog.winfo_height() >= 500
+    assert 360 <= dialog.winfo_height() < 500
     for contract_id in INSTANCE_CONTROLS - {"instance-configuration.window"}:
         widget = widgets[contract_id]
         assert widget.winfo_viewable()
-    assert widgets["instance-configuration.profile"].get() == "Custom (manual settings)"
+    profile = widgets["instance-configuration.profile"]
+    variant = widgets["instance-configuration.variant"]
+    assert profile.get() == "Custom (manual settings)"
+    assert profile.winfo_rooty() == variant.winfo_rooty()
+    assert profile.winfo_rootx() < variant.winfo_rootx()
     assert widgets["instance-configuration.variant"].get() == "3V3"
     assert widgets["instance-configuration.parameter.OUTPUT_VOLTAGE"].get() == "3.3"
     assert widgets["instance-configuration.layout"].get() == LAYOUT_STANDARD
