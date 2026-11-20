@@ -15,6 +15,7 @@ from .theme_tokens import (
     resolve_theme,
 )
 
+
 class AutoHideScrollbar(ttk.Scrollbar):
     """A quiet idle rail that reveals a usable thumb on hover or scrolling."""
 
