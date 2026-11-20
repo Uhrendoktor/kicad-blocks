@@ -349,9 +349,9 @@ jobs:
             env \
               KICAD_TEST_PYTHON="$TK91_ROOT/cpython/bin/python3.14" \
               KICAD_EXPECT_TK91=1 \
+              # Tcl/Tk 9.1's script libraries are packaged in ZipFS archives;
+              # do not override TCL_LIBRARY/TK_LIBRARY with non-existent plain directories.
               LD_LIBRARY_PATH="$TK91_ROOT/tcltk/lib:$TK91_ROOT/cpython/lib:${LD_LIBRARY_PATH:-}" \
-              TCL_LIBRARY="$TK91_ROOT/tcltk/lib/tcl9.1" \
-              TK_LIBRARY="$TK91_ROOT/tcltk/lib/tk9.1" \
               dbus-run-session -- bash scripts/run_with_atspi.sh \
                 xvfb-run -a -s "-screen 0 1280x800x24" \
                 bash scripts/run_tk91_with_orca.sh \
