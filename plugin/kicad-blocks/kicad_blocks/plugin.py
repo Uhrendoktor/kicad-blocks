@@ -4372,7 +4372,7 @@ def _ask_implementation_details(
     dialog.bind("<Escape>", lambda _event: dialog.destroy())
     source_entry.xview_moveto(1.0)
     selector_entry.focus_set()
-    _set_window_geometry(dialog, 720, 400, 600, 320)
+    _set_window_geometry(dialog, 720, 440, 600, 420)
     dialog.grab_set()
     dialog.wait_window()
     return result[0]
