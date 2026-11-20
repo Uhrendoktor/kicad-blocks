@@ -6,7 +6,7 @@ import itertools
 import tkinter as tk
 import weakref
 from tkinter import ttk
-from typing import Any
+from typing import cast
 
 from .theme_tokens import (
     UI_FONT_SIZES,
@@ -183,7 +183,7 @@ class AutoHideScrollbar(ttk.Scrollbar):
         self._cancel_hide()
 
 
-def _configure_classic_widgets(root: Any, palette: dict[str, str]) -> None:
+def _configure_classic_widgets(root: tk.Misc, palette: dict[str, str]) -> None:
     """Apply matching colors to classic Tk widgets inside themed windows."""
     try:
         stack = list(root.winfo_children())
@@ -220,16 +220,17 @@ def _configure_classic_widgets(root: Any, palette: dict[str, str]) -> None:
                     highlightcolor=palette["accent"],
                 )
             elif widget_class == "Treeview":
-                widget.tag_configure("stripe-alt", background=palette["surface_alt"])
-                widget.tag_configure("basic", foreground=palette["basic_foreground"])
-                widget.tag_configure("extended", foreground=palette["muted"])
-                widget.tag_configure("unknown", foreground=palette["muted"])
+                tree = cast(ttk.Treeview, widget)
+                tree.tag_configure("stripe-alt", background=palette["surface_alt"])
+                tree.tag_configure("basic", foreground=palette["basic_foreground"])
+                tree.tag_configure("extended", foreground=palette["muted"])
+                tree.tag_configure("unknown", foreground=palette["muted"])
             stack.extend(widget.winfo_children())
         except (AttributeError, tk.TclError):
             continue
 
 
-def apply_tk_theme(root: Any, theme: str | bool | None = None) -> dict[str, str]:
+def apply_tk_theme(root: tk.Misc, theme: str | bool | None = None) -> dict[str, str]:
     """Apply the shared flat slate system to ttk and classic Tk widgets."""
     selected = resolve_theme(theme)
     palette = palette_for_theme(selected)

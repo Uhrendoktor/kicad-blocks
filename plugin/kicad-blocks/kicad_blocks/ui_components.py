@@ -2,10 +2,17 @@
 
 from __future__ import annotations
 
-from tkinter import ttk
-from typing import Any
+from collections.abc import Callable, Sequence
+from tkinter import TkOption, ttk
+import tkinter as tk
+from typing import TYPE_CHECKING, TypeAlias
 
 from .theme import UI_SPACING
+
+if not TYPE_CHECKING:
+    TkOption: TypeAlias = (
+        str | int | float | bool | bytes | type(None) | tuple | list | dict | Sequence | Callable
+    )
 
 
 class FlatTabControl(ttk.Frame):
@@ -15,18 +22,20 @@ class FlatTabControl(ttk.Frame):
     tabs(), tab(), select(), and nametowidget() just as they did with ttk.Notebook.
     """
 
-    def __init__(self, master: Any, *, contract_id: str | None = None, **kwargs):
+    def __init__(
+        self, master: tk.Misc, *, contract_id: str | None = None, **kwargs: TkOption
+    ) -> None:
         super().__init__(master, style="TabHost.TFrame", **kwargs)
         self._kicad_ui_contract_id = contract_id
         self._tabbar = ttk.Frame(self, style="TabBar.TFrame")
         self._tabbar.grid(row=0, column=0, sticky="ew", pady=(0, UI_SPACING["xs"]))
         self.columnconfigure(0, weight=1)
         self.rowconfigure(1, weight=1)
-        self._pages: list[Any] = []
+        self._pages: list[tk.Widget] = []
         self._captions: list[str] = []
-        self._labels: list[Any] = []
-        self._indicators: list[Any] = []
-        self._selected: Any | None = None
+        self._labels: list[ttk.Label] = []
+        self._indicators: list[ttk.Frame] = []
+        self._selected: tk.Widget | None = None
 
     @property
     def selected_tab(self) -> Any | None:
@@ -37,7 +46,7 @@ class FlatTabControl(ttk.Frame):
         """Expose focusable tab labels for accessibility and interaction tests."""
         return tuple(self._labels)
 
-    def add(self, page: Any, *, text: str) -> None:
+    def add(self, page: tk.Widget, *, text: str) -> None:
         if page.master is not self:
             raise ValueError("Each tab page must be a direct child of FlatTabControl.")
         index = len(self._pages)
@@ -80,7 +89,7 @@ class FlatTabControl(ttk.Frame):
         """Return page paths using the ttk.Notebook-compatible representation."""
         return [str(page) for page in self._pages]
 
-    def index(self, page: Any) -> int:
+    def index(self, page: tk.Widget | str | int) -> int:
         """Return a page index using the common ttk.Notebook forms."""
         if page == "current":
             page = self._selected
@@ -88,14 +97,14 @@ class FlatTabControl(ttk.Frame):
             return page
         return self._pages.index(self._resolve_page(page))
 
-    def nametowidget(self, name: str):
+    def nametowidget(self, name: str) -> tk.Misc:
         """Resolve full Tk page paths the same way callers expect from Notebook."""
         for page in self._pages:
             if str(page) == str(name):
                 return page
         return super().nametowidget(name)
 
-    def tab(self, page: Any, option: str | None = None):
+    def tab(self, page: tk.Widget | str, option: str | None = None) -> str | dict[str, str] | None:
         """Return a page caption, or a small Notebook-compatible option mapping."""
         selected = self._resolve_page(page)
         index = self._pages.index(selected)
@@ -104,7 +113,7 @@ class FlatTabControl(ttk.Frame):
         values = {"text": self._captions[index], "state": "normal"}
         return values if option is None else values.get(option)
 
-    def select(self, page: Any | None = None) -> str:
+    def select(self, page: tk.Widget | str | None = None) -> str:
         """Select a page, or return the selected page path when called without one."""
         if page is None:
             return str(self._selected) if self._selected is not None else ""
@@ -128,7 +137,7 @@ class FlatTabControl(ttk.Frame):
             self.event_generate("<<NotebookTabChanged>>", when="tail")
         return str(selected)
 
-    def _resolve_page(self, page: Any) -> Any:
+    def _resolve_page(self, page: tk.Widget | str) -> tk.Widget:
         selected = next(
             (
                 candidate for candidate in self._pages
@@ -140,7 +149,7 @@ class FlatTabControl(ttk.Frame):
             raise ValueError(f"{page!r} is not a page in this tab control.")
         return selected
 
-    def _activate(self, page: Any) -> str:
+    def _activate(self, page: tk.Widget) -> str:
         self.select(page)
         return "break"
 

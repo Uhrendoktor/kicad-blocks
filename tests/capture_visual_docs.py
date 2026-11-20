@@ -98,6 +98,14 @@ class _TaskHubNotebook(Protocol):
     def select(self, tab_id: str) -> str: ...
 
 
+class _FlatTabControl(Protocol):
+    """Notebook-compatible page selector used by the production FlatTabControl."""
+
+    def tabs(self) -> list[str]: ...
+
+    def select(self, page: str | None = None) -> str: ...
+
+
 class _ContractIdWidget(Protocol):
     """Tk widget carrying one stable semantic interaction identifier."""
 
@@ -765,13 +773,16 @@ def capture_ui_workflows(
                     output_dir / f"library-browser-details-{theme}.png",
                     minimum_size=(1000, 650),
                 )
-                browser_notebooks = [
-                    widget for widget in walk_widgets(root) if widget.winfo_class() == "TNotebook"
-                ]
-                if not browser_notebooks:
-                    raise RuntimeError("The Functional Block Library preview tabs are missing.")
-                notebook = cast(_TaskHubNotebook, browser_notebooks[0])
-                notebook.select(notebook.tabs()[1])
+                preview_tabs = cast(
+                    _FlatTabControl,
+                    _find_contract_widget(root, "library-browser.preview.views"),
+                )
+                preview_pages = preview_tabs.tabs()
+                if len(preview_pages) != 2:
+                    raise RuntimeError(
+                        f"Expected Facade and Schematic preview tabs, found {len(preview_pages)}."
+                    )
+                preview_tabs.select(preview_pages[1])
                 root.update_idletasks()
                 root.update()
                 _capture_visible_window(
@@ -869,7 +880,7 @@ def capture_ui_workflows(
                 # Exercise Edit Facade through the real browser selection and button.
                 # The production helper validates the target catalog item, then reports
                 # that public KiCad GUI IPC cannot open/select it in Symbol Editor.
-                notebook.select(notebook.tabs()[0])
+                preview_tabs.select(preview_pages[0])
                 root.update_idletasks()
                 root.update()
                 search_entry = cast(
