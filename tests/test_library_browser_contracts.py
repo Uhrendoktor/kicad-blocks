@@ -178,6 +178,7 @@ def test_library_browser_widget_inventory_covers_major_controls(monkeypatch, tmp
     try:
         discovered = assert_control_coverage(root, LIBRARY_CONTROLS)
         assert set(discovered) == LIBRARY_CONTROLS
+        assert context.require_widget("library-browser.results").cget("height") == "2"
     finally:
         root.destroy()
 
