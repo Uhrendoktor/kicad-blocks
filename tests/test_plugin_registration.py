@@ -730,9 +730,7 @@ def main() -> None:
                         f"stdout={managed_probe.stdout[-12000:]}; "
                         f"stderr={managed_probe.stderr[-12000:]}"
                     )
-                managed_summary = json.loads(
-                    managed_a11y_result.read_text(encoding="utf-8")
-                )
+                managed_summary = json.loads(managed_a11y_result.read_text(encoding="utf-8"))
                 print(
                     "KiCad-managed Tk 9.1 AT-SPI summary:",
                     json.dumps(managed_summary, ensure_ascii=False),

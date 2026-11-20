@@ -1,5 +1,6 @@
 #!/usr/bin/python3
 """Independent AT-SPI inspection using GNOME's pyatspi bindings."""
+
 from __future__ import annotations
 
 import json
@@ -81,9 +82,7 @@ def main() -> int:
             if app_pid == target_pid:
                 selected = app
         except (GLib.Error, AttributeError, TypeError, ValueError) as exc:
-            applications.append(
-                {"index": index, "error": f"{type(exc).__name__}: {exc}"}
-            )
+            applications.append({"index": index, "error": f"{type(exc).__name__}: {exc}"})
     if selected is None:
         raise RuntimeError(
             f"No AT-SPI application matched PID {target_pid}; "

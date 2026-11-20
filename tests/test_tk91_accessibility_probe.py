@@ -107,7 +107,8 @@ def _assert_accessible_tree(payload: dict) -> dict:
         pyatspi_tree = payload.get("pyatspi", {}).get("tree", {})
         pyatspi_nodes = list(_walk(pyatspi_tree))
         native_matches = [
-            item for item in pyatspi_nodes
+            item
+            for item in pyatspi_nodes
             if item.get("name") == name and item.get("description") is not None
         ]
         if not native_matches:
@@ -197,8 +198,11 @@ def main() -> None:
 
     root.tk.call("tk", "accessible", "set_acc_name", root._w, WINDOW_TITLE)
     root.tk.call(
-        "tk", "accessible", "set_acc_description",
-        root._w, "Tk 9.1 screen-reader accessibility feasibility window."
+        "tk",
+        "accessible",
+        "set_acc_description",
+        root._w,
+        "Tk 9.1 screen-reader accessibility feasibility window.",
     )
 
     for widget, name, description in (
@@ -241,18 +245,11 @@ def main() -> None:
     for label_name, attrs in registered["widgets"].items():
         expected = EXPECTED_WIDGETS[label_name]
         if attrs["name"] != label_name:
-            raise AssertionError(
-                f"Tk accessibility name for {label_name!r} is {attrs['name']!r}."
-            )
+            raise AssertionError(f"Tk accessibility name for {label_name!r} is {attrs['name']!r}.")
         if attrs["description"] != expected[1]:
-            raise AssertionError(
-                f"Tk accessibility description for {label_name!r} is "
-                f"{attrs['description']!r}."
-            )
+            raise AssertionError(f"Tk accessibility description for {label_name!r} is {attrs['description']!r}.")
     if registered["window"]["name"] != WINDOW_TITLE:
-        raise AssertionError(
-            f"Tk accessibility window name is {registered['window']['name']!r}."
-        )
+        raise AssertionError(f"Tk accessibility window name is {registered['window']['name']!r}.")
     print("Tk 9.1 registered accessibility attributes:", json.dumps(registered), flush=True)
     print(
         "Tk 9.1 probe started:",
@@ -331,9 +328,7 @@ def main() -> None:
 
             result_path = os.environ.get("TK91_A11Y_RESULT")
             if not result_path:
-                raise RuntimeError(
-                    "TK91_A11Y_RESULT must name the accessibility summary file."
-                )
+                raise RuntimeError("TK91_A11Y_RESULT must name the accessibility summary file.")
             Path(result_path).write_text(
                 json.dumps(summary, ensure_ascii=False, indent=2) + "\n",
                 encoding="utf-8",

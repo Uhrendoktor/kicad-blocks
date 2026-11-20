@@ -8096,7 +8096,12 @@ def _show_action_hub(
 
         has_schematic = schematic is not None
         create_valid = has_schematic and not selection
-        if schematic is not None and len(selection) == 1 and not symbols and project_dir is not None:
+        if (
+            schematic is not None
+            and len(selection) == 1
+            and not symbols
+            and project_dir is not None
+        ):
             try:
                 create_valid = (
                     _selected_sheet_symbol_source(schematic, project_dir, selection=selection)
