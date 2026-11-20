@@ -180,6 +180,61 @@ jobs:
           include-hidden-files: true
           compression-level: 1
 
+  # Temporary single-use formatting job. Removed immediately after it commits the formatted sources.
+  format-python-once:
+    needs: synchronize-main
+    if: github.event_name == 'push' && github.ref == 'refs/heads/agents/strict-test-quality-contract-rebased' && needs.synchronize-main.outputs.updated != 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply pinned Ruff formatting to the nine reported files
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install --disable-pip-version-check ruff==0.17.2
+          python3 -m ruff format \
+            plugin/kicad-blocks/kicad_blocks/pcb_layout.py \
+            plugin/kicad-blocks/kicad_blocks/plugin.py \
+            plugin/kicad-blocks/kicad_blocks/theme.py \
+            tests/test_extraction.py \
+            tests/test_tk91_accessibility_probe.py \
+            typings/gi/repository.pyi \
+            typings/pyatspi.pyi \
+            typings/tkinter/ttk.pyi \
+            typings/xa11y/__init__.pyi
+          python3 -m ruff format --check \
+            plugin/kicad-blocks/kicad_blocks/pcb_layout.py \
+            plugin/kicad-blocks/kicad_blocks/plugin.py \
+            plugin/kicad-blocks/kicad_blocks/theme.py \
+            tests/test_extraction.py \
+            tests/test_tk91_accessibility_probe.py \
+            typings/gi/repository.pyi \
+            typings/pyatspi.pyi \
+            typings/tkinter/ttk.pyi \
+            typings/xa11y/__init__.pyi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            plugin/kicad-blocks/kicad_blocks/pcb_layout.py \
+            plugin/kicad-blocks/kicad_blocks/plugin.py \
+            plugin/kicad-blocks/kicad_blocks/theme.py \
+            tests/test_extraction.py \
+            tests/test_tk91_accessibility_probe.py \
+            typings/gi/repository.pyi \
+            typings/pyatspi.pyi \
+            typings/tkinter/ttk.pyi \
+            typings/xa11y/__init__.pyi
+          if git diff --cached --quiet; then
+            echo "The tracked Python files are already formatted."
+            exit 0
+          fi
+          git commit -m "style: format tracked Python with Ruff 0.17.2"
+          git push origin "$GITHUB_REF"
+
   python-and-kicad:
     needs: synchronize-main
     if: ${{ needs.synchronize-main.outputs.updated != 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
