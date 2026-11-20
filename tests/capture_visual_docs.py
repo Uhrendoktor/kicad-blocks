@@ -21,7 +21,7 @@ from typing import Protocol, TypedDict, cast
 ROOT = Path(__file__).resolve().parents[1]
 
 # Set by main() to the project catalog created by the production browser.
-project_catalog: Path = Path(".")
+project_catalog: Path | None = None
 
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "plugin" / "kicad-blocks"))
@@ -1206,8 +1206,9 @@ def main() -> int:
         sensor = _create_sensor_fixture(library)
         target = _create_stusb4500_fixture(library, temporary, cli, output_dir)
         extra_library = _create_support_library(temporary)
-        global project_catalog
-        project_catalog = temporary / ".kicad_blocks" / plugin_actions.LIBRARY_CATALOG_NAME
+        globals()["project_catalog"] = (
+            temporary / ".kicad_blocks" / plugin_actions.LIBRARY_CATALOG_NAME
+        )
         capture_ui_workflows([library, extra_library], target, temporary, output_dir)
         capture_picker([target, sensor], output_dir)
         build_gif(output_dir)
