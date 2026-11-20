@@ -136,27 +136,47 @@ def main() -> None:
     root.update_idletasks()
     root.update()
 
-    # Tk 9.1's default accessible name is the widget role. Visible -text
-    # content is generally a description, so assign explicit useful names,
-    # roles and descriptions before registering each real widget with AT-SPI.
-    root.tk.call(
-        "tk", "accessible", "set_acc_name", root._w, WINDOW_TITLE
+    # Tk 9.1 loads its X11 accessibility bindings only when the screen reader
+    # is running before the Tk interpreter starts. Keep that runtime precondition
+    # explicit so a D-Bus-enabled but screen-reader-free session cannot silently
+    # fall back to Tk's no-op "tk accessible" command.
+    screen_reader_running = str(root.tk.call("::tk::accessible::check_screenreader"))
+    if screen_reader_running not in {"1", "true"}:
+        raise AssertionError(
+            "Tk 9.1 did not detect the running Orca screen reader before widget "
+            f"registration (check_screenreader returned {screen_reader_running!r})."
+        )
+
+    # Tk's Map bindings register the top-level and all core ttk widgets with
+    # ATK. Confirm the default roles exist before applying project-specific
+    # accessible names/descriptions.
+    expected_roles = (
+        (root, "Toplevel"),
+        (label, "Label"),
+        (entry, "Entry"),
+        (save_button, "Button"),
     )
+    for widget, expected_role in expected_roles:
+        actual_role = str(root.tk.call("tk", "accessible", "get_acc_role", widget._w))
+        if actual_role != expected_role:
+            raise AssertionError(
+                f"Tk 9.1 mapped widget {widget._w!r} has role {actual_role!r}; "
+                f"expected {expected_role!r}."
+            )
+
+    root.tk.call("tk", "accessible", "set_acc_name", root._w, WINDOW_TITLE)
     root.tk.call(
         "tk", "accessible", "set_acc_description",
         root._w, "Tk 9.1 screen-reader accessibility feasibility window."
     )
-    root.tk.call("tk", "accessible", "add_acc_object", root._w)
 
-    for widget, role, name, description in (
-        (label, "Label", "Block name", EXPECTED_WIDGETS["Block name"][1]),
-        (entry, "Entry", "Block name input", EXPECTED_WIDGETS["Block name input"][1]),
-        (save_button, "Button", "Save block", EXPECTED_WIDGETS["Save block"][1]),
+    for widget, name, description in (
+        (label, "Block name", EXPECTED_WIDGETS["Block name"][1]),
+        (entry, "Block name input", EXPECTED_WIDGETS["Block name input"][1]),
+        (save_button, "Save block", EXPECTED_WIDGETS["Save block"][1]),
     ):
-        root.tk.call("tk", "accessible", "set_acc_role", widget._w, role)
         root.tk.call("tk", "accessible", "set_acc_name", widget._w, name)
         root.tk.call("tk", "accessible", "set_acc_description", widget._w, description)
-        root.tk.call("tk", "accessible", "add_acc_object", widget._w)
 
     root.update_idletasks()
     root.update()
@@ -179,6 +199,21 @@ def main() -> None:
             )
         },
     }
+    for label_name, attrs in registered["widgets"].items():
+        expected = EXPECTED_WIDGETS[label_name]
+        if attrs["name"] != label_name:
+            raise AssertionError(
+                f"Tk accessibility name for {label_name!r} is {attrs['name']!r}."
+            )
+        if attrs["description"] != expected[1]:
+            raise AssertionError(
+                f"Tk accessibility description for {label_name!r} is "
+                f"{attrs['description']!r}."
+            )
+    if registered["window"]["name"] != WINDOW_TITLE:
+        raise AssertionError(
+            f"Tk accessibility window name is {registered['window']['name']!r}."
+        )
     print("Tk 9.1 registered accessibility attributes:", json.dumps(registered), flush=True)
     print(
         "Tk 9.1 probe started:",
@@ -187,6 +222,7 @@ def main() -> None:
                 "pid": os.getpid(),
                 "tcl": tk.TclVersion,
                 "tk": tk.TkVersion,
+                "screen_reader_running": screen_reader_running,
                 "window": WINDOW_TITLE,
                 "widgets": list(EXPECTED_WIDGETS),
             },

@@ -26,7 +26,7 @@ sudo apt-get install -y --no-install-recommends \
   libharfbuzz-dev libfontconfig1-dev libfreetype6-dev libtommath-dev \
   libbz2-dev libffi-dev libgdbm-dev libgdbm-compat-dev liblzma-dev \
   libncursesw5-dev libreadline-dev libsqlite3-dev libssl-dev uuid-dev \
-  zlib1g-dev libexpat1-dev xvfb dbus-daemon dbus-bin at-spi2-core
+  zlib1g-dev libexpat1-dev xvfb dbus-daemon dbus-bin at-spi2-core orca
 
 echo "::group::Fetch pinned Tcl/Tk 9.1.0 sources"
 git clone --quiet --depth 1 --branch "$TCL_TAG" https://github.com/tcltk/tcl.git "$TCL_SOURCE"
@@ -107,6 +107,7 @@ A11Y_RESULT="$BUILD_ROOT/tk91-atspi-result.json"
 rm -f "$A11Y_RESULT"
 TK91_A11Y_RESULT="$A11Y_RESULT" dbus-run-session -- bash "$ROOT_DIR/scripts/run_with_atspi.sh" \
   xvfb-run -a -s "-screen 0 1280x800x24" \
+  bash "$ROOT_DIR/scripts/run_tk91_with_orca.sh" \
   "$VENV_PYTHON" "$ROOT_DIR/tests/test_tk91_accessibility_probe.py" \
   2>&1 | tee "$BUILD_ROOT/tk91-atspi.log"
 if [[ ! -s "$A11Y_RESULT" ]]; then
