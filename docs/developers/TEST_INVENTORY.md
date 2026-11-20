@@ -7,8 +7,8 @@ is listed individually with its assertion purpose. Files that are executable acc
 programs rather than pytest modules are listed separately and must remain explicitly
 registered in STANDALONE_TESTS in scripts/test_inventory.py.
 
-- Pytest modules: **41**
-- Individually inventoried pytest cases: **456**
+- Pytest modules: **43**
+- Individually inventoried pytest cases: **463**
 - Standalone acceptance runners: **8**
 - Additional CI validation runners: **2**
 
@@ -662,6 +662,27 @@ Generated STUSB4500 example schematic, standard external electrical pin shapes, 
 | test_label_glyph_wire_overlap_is_a_dedicated_error | Exercises label glyph wire overlap is a dedicated error. |
 | test_native_text_boxes_have_uniform_padding_and_style_audit_passes | Exercises native text boxes have uniform padding and style audit passes. |
 | test_r55_ground_label_stub_remains_local_and_does_not_cross_cc2 | Exercises r55 ground label stub remains local and does not cross cc2. |
+
+### tests/test_theme.py
+
+Unit tests for the shared desktop theme tokens and palette selection.
+
+| Test | Purpose |
+| --- | --- |
+| test_shared_tokens_match_the_reference_design_system | Exercises shared tokens match the reference design system. |
+| test_explicit_theme_and_environment_override_take_precedence | Exercises explicit theme and environment override take precedence. |
+| test_system_theme_uses_deterministic_light_fallback_without_kicad_settings | Exercises system theme uses deterministic light fallback without kicad settings. |
+| test_palette_returns_independent_semantic_color_maps | Exercises palette returns independent semantic color maps. |
+
+### tests/test_ui_components.py
+
+GUI interaction tests for shared Tk components.
+
+| Test | Purpose |
+| --- | --- |
+| test_flat_tabs_preserve_notebook_api_and_support_pointer_and_keyboard | Exercises flat tabs preserve notebook api and support pointer and keyboard. |
+| test_auto_hide_scrollbar_switches_between_idle_and_active_states | Exercises auto hide scrollbar switches between idle and active states. |
+| test_search_tooltip_appears_above_focused_field_without_covering_results | Exercises search tooltip appears above focused field without covering results. |
 
 ### tests/test_ui_contracts.py
 
