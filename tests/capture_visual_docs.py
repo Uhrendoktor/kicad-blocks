@@ -1213,7 +1213,7 @@ def _create_reference_source(
     reference_source = temporary / "stusb4500-reference.kicad_sch"
     generate_reference_schematic(reference_source)
     layout_source = temporary / "stusb4500-reference.kicad_pcb"
-    layout_source.write_text("(kicad_pcb)\\n", encoding="utf-8")
+    layout_source.write_text("(kicad_pcb)\n", encoding="utf-8")
     parameters: list[BlockParameterInput] = [
         {
             "name": "PDO_CURRENT_A",
@@ -1287,7 +1287,7 @@ def _create_stusb4500_fixture(
     ).hexdigest()
     manifest["revision"] = revision_for_hashes(manifest["hashes"])
     manifest_path.write_text(
-        json.dumps(manifest, indent=2, ensure_ascii=False) + "\\n",
+        json.dumps(manifest, indent=2, ensure_ascii=False) + "\n",
         encoding="utf-8",
     )
     target.manifest.update(manifest)
@@ -1332,7 +1332,7 @@ def _write_bundle_manifest(output_dir: Path) -> None:
         "assets": assets,
     }
     (output_dir / "manifest.json").write_text(
-        json.dumps(bundle_manifest, indent=2, sort_keys=True) + "\\n",
+        json.dumps(bundle_manifest, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )
     print(
