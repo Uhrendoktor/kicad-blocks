@@ -181,10 +181,13 @@ def main() -> None:
 
     def poll_helper() -> None:
         nonlocal helper_completed
+        # A return inside a try/finally still executes finally. Keep the
+        # reschedule path outside the cleanup block so the inspector can run.
+        if helper.poll() is None and time.monotonic() < helper_deadline:
+            root.after(100, poll_helper)
+            return
+
         try:
-            if helper.poll() is None and time.monotonic() < helper_deadline:
-                root.after(100, poll_helper)
-                return
             if helper.poll() is None:
                 helper.terminate()
                 try:
@@ -238,11 +241,11 @@ def main() -> None:
             subprocess.SubprocessError,
         ) as exc:
             failures.append(exc)
-        finally:
-            helper_completed = True
-            if helper.poll() is None:
-                helper.terminate()
-            root.destroy()
+
+        helper_completed = True
+        if helper.poll() is None:
+            helper.terminate()
+        root.destroy()
 
     print("Entering Tk 9.1 mainloop for AT-SPI inspection.", flush=True)
     root.after(250, poll_helper)
