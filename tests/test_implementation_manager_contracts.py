@@ -608,7 +608,13 @@ def test_close_confirmation_can_keep_pending_changes_or_discard_them(
             raise OSError("simulated library write failure")
         return original_save(*args, **kwargs)
 
-    def confirm_discard(title: str, message: str, **_kwargs: object) -> bool:
+    def confirm_discard(
+        title: str,
+        message: str,
+        *,
+        parent: Misc | None = None,
+    ) -> bool:
+        del parent
         confirmations.append((title, message))
         return next(decisions)
 

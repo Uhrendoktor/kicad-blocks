@@ -11,6 +11,7 @@ import os
 import sys
 import time
 from collections.abc import Callable
+from typing import TypedDict
 
 import pytest
 
@@ -28,6 +29,17 @@ pytestmark = pytest.mark.skipif(
 )
 
 _DIALOG_TIMEOUT_SECONDS = 5.0
+
+
+class _DialogOutcome(TypedDict, total=False):
+    """Captured properties and failures from one observed native Tk dialog."""
+
+    path: str
+    mapped: bool
+    geometry: str
+    transient_parent: str
+    callback_error: str
+    timeout: str
 
 
 def _create_parent():
@@ -104,9 +116,9 @@ def _schedule_dialog_action(
     root,
     title: str,
     callback: Callable[[str], None],
-) -> dict[str, object]:
+) -> _DialogOutcome:
     """Observe a modal window once mapped, then interact with its real widgets."""
-    outcome: dict[str, object] = {}
+    outcome: _DialogOutcome = {}
     deadline = time.monotonic() + _DIALOG_TIMEOUT_SECONDS
 
     def poll() -> None:
@@ -138,7 +150,7 @@ def _schedule_dialog_action(
     return outcome
 
 
-def _assert_dialog_window(root, outcome: dict[str, object]) -> str:
+def _assert_dialog_window(root, outcome: _DialogOutcome) -> str:
     assert "timeout" not in outcome, outcome.get("timeout")
     assert "callback_error" not in outcome, outcome.get("callback_error")
     dialog_path = outcome.get("path")

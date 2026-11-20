@@ -887,6 +887,9 @@ def capture_ui_workflows(
                     xdotool,
                     minimum_size=(560, 320),
                 )
+                project_catalog = plugin_actions._ensure_project_facade_catalog(
+                    project_dir, record, kicad
+                )
                 plugin_actions._edit_facade_symbol(
                     record,
                     kicad,

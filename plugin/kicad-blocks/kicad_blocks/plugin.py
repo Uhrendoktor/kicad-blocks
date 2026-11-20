@@ -8007,7 +8007,7 @@ def _show_action_hub(
         ),
     ]
 
-    buttons: dict[str, object] = {}
+    buttons: dict[str, ttk_types.Button] = {}
     status_value = tk.StringVar(
         master=root,
         value="Selection-dependent actions update from the active Eeschema selection.",
