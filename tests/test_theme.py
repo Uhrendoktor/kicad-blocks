@@ -10,7 +10,7 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "plugin" / "kicad-blocks"))
 
-from kicad_blocks.theme_tokens import (  # noqa: E402
+from kicad_blocks.theme_tokens import (
     THEME_ENVIRONMENT_VARIABLE,
     UI_FONT_SIZES,
     UI_SPACING,
