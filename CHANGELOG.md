@@ -5,7 +5,7 @@ Changes are grouped by project version. Items under **Unreleased** describe chan
 ## Unreleased
 
 ### Changed
-- Adopt a shared slate UI system for Tk dialogs: desktop-aware light/dark palettes, consistent spacing and typography, flat preview tabs, compact cards, and auto-hiding scrollbars.
+- Adopt a shared slate UI system for Tk dialogs: explicit light/dark palettes with KiCad-theme selection and a platform-neutral light fallback, consistent spacing and typography, flat preview tabs, compact cards, and auto-hiding scrollbars.
 
 
 ### Added
