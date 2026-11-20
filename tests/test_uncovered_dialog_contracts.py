@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import sys
+from collections.abc import Callable
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
-from typing import TypedDict, cast
+from typing import NoReturn, TypedDict, cast
 
 import pytest
 from _pytest.monkeypatch import MonkeyPatch
@@ -35,6 +36,8 @@ type _RecordedValue = (
     | SimpleNamespace
     | dict[str, str]
     | tuple[float, float]
+    | tuple[str, str]
+    | list[tuple[str, str]]
 )
 type _RecordedKwargs = dict[str, _RecordedValue]
 
@@ -90,6 +93,274 @@ def _block(name: str) -> BlockRecord:
         ),
     )
 
+
+
+def _selected_symbol_callback(
+    instance: plugin_actions.SchematicSymbol,
+) -> Callable[[plugin_actions.Schematic], plugin_actions.SchematicSymbol]:
+    def select(_schematic: plugin_actions.Schematic) -> plugin_actions.SchematicSymbol:
+        return instance
+
+    return select
+
+
+def _selected_symbols_callback(
+    instances: list[plugin_actions.SchematicSymbol],
+) -> Callable[[plugin_actions.Schematic], list[plugin_actions.SchematicSymbol]]:
+    def select(_schematic: plugin_actions.Schematic) -> list[plugin_actions.SchematicSymbol]:
+        return instances
+
+    return select
+
+
+def _block_lookup_callback(
+    block: BlockRecord,
+) -> Callable[[Path | list[Path], Path, plugin_actions.SchematicSymbol], BlockRecord]:
+    def lookup(
+        _library_root: Path | list[Path],
+        _project_dir: Path,
+        _instance: plugin_actions.SchematicSymbol,
+    ) -> BlockRecord:
+        return block
+
+    return lookup
+
+
+def _block_map_callback(
+    blocks: dict[str, BlockRecord],
+) -> Callable[[Path | list[Path], Path, plugin_actions.SchematicSymbol], BlockRecord]:
+    def lookup(
+        _library_root: Path | list[Path],
+        _project_dir: Path,
+        instance: plugin_actions.SchematicSymbol,
+    ) -> BlockRecord:
+        return blocks[instance.reference]
+
+    return lookup
+
+
+def _standard_layout_callback(
+    block: BlockRecord,
+) -> Callable[
+    [BlockRecord, Misc, str, plugin_actions.SchematicSymbol | None],
+    plugin_actions.ResolvedBlockLayout,
+]:
+    def choose(
+        _block: BlockRecord,
+        _parent: Misc,
+        _title: str = "Select PCB Layout",
+        _instance: plugin_actions.SchematicSymbol | None = None,
+    ) -> plugin_actions.ResolvedBlockLayout:
+        del block
+        return {
+            "id": "standard",
+            "name": "Standard",
+            "file": "layout_standard.kicad_pcb",
+            "project_file": None,
+        }
+
+    return choose
+
+
+def _named_layout_callback() -> Callable[
+    [BlockRecord, Misc, str, plugin_actions.SchematicSymbol | None],
+    plugin_actions.ResolvedBlockLayout,
+]:
+    def choose(
+        block: BlockRecord,
+        _parent: Misc,
+        _title: str = "Select PCB Layout",
+        _instance: plugin_actions.SchematicSymbol | None = None,
+    ) -> plugin_actions.ResolvedBlockLayout:
+        return {
+            "id": f"layout-{block.name[-2:]}",
+            "name": block.name,
+            "file": "layout_standard.kicad_pcb",
+            "project_file": None,
+        }
+
+    return choose
+
+
+def _record_kicad_picker(
+    calls: list[_RecordedKwargs],
+    board: Path,
+) -> Callable[..., str]:
+    def pick(
+        _parent: Misc,
+        *,
+        title: str,
+        suffix: str,
+        initial_path: str | Path = "",
+    ) -> str:
+        calls.append({"title": title, "suffix": suffix, "initial_path": initial_path})
+        return str(board)
+
+    return pick
+
+
+def _record_save_picker(
+    calls: list[_RecordedKwargs],
+    output: Path,
+) -> Callable[..., str]:
+    def pick(
+        _parent: Misc,
+        *,
+        title: str,
+        initial_path: str | Path,
+        defaultextension: str,
+        filetypes: list[tuple[str, str]],
+    ) -> str:
+        calls.append(
+            {
+                "title": title,
+                "initial_path": initial_path,
+                "defaultextension": defaultextension,
+                "filetypes": filetypes,
+            }
+        )
+        return str(output)
+
+    return pick
+
+
+def _record_confirmation(
+    calls: list[tuple[str, str, _RecordedKwargs]],
+    result: bool,
+) -> Callable[..., bool]:
+    def askyesno(title: str, message: str, **kwargs: _RecordedValue) -> bool:
+        calls.append((title, message, kwargs))
+        return result
+
+    return askyesno
+
+
+def _record_open(calls: list[Path]) -> Callable[[plugin_actions.KiCadApp, Path], None]:
+    def open_copy(_kicad: plugin_actions.KiCadApp, target: Path) -> None:
+        calls.append(target)
+
+    return open_copy
+
+
+def _record_single_sidecar(
+    calls: list[tuple[Path, BlockLayoutPlacementSource]],
+    sidecar: Path,
+) -> Callable[[Path, BlockLayoutPlacementSource], Path]:
+    def write(target: Path, result: BlockLayoutPlacementSource) -> Path:
+        calls.append((target, result))
+        return sidecar
+
+    return write
+
+
+def _record_batch_sidecar(
+    calls: list[tuple[Path, BatchBlockLayoutPlacementSource]],
+    sidecar: Path,
+) -> Callable[[Path, BatchBlockLayoutPlacementSource], Path]:
+    def write(target: Path, result: BatchBlockLayoutPlacementSource) -> Path:
+        calls.append((target, result))
+        return sidecar
+
+    return write
+
+
+def _placement_path_callback(sidecar: Path) -> Callable[[Path], Path]:
+    def locate(_path: Path) -> Path:
+        return sidecar
+
+    return locate
+
+
+def _askstring_from_responses(
+    prompts: list[tuple[str, _RecordedKwargs]],
+    responses: list[str | None],
+) -> Callable[..., str | None]:
+    iterator = iter(responses)
+
+    def askstring(title: str, prompt: str, **kwargs: _RecordedValue) -> str | None:
+        prompts.append((title, kwargs))
+        return next(iterator)
+
+    return askstring
+
+
+def _no_kicad_file_pick(board_picks: list[bool]) -> Callable[..., str | None]:
+    def pick(
+        _parent: Misc,
+        *,
+        title: str,
+        suffix: str,
+        initial_path: str | Path = "",
+    ) -> str | None:
+        board_picks.append(True)
+        return None
+
+    return pick
+
+
+def _no_save_file_pick(save_calls: list[bool]) -> Callable[..., str | None]:
+    def pick(
+        _parent: Misc,
+        *,
+        title: str,
+        initial_path: str | Path,
+        defaultextension: str,
+        filetypes: list[tuple[str, str]],
+    ) -> str | None:
+        save_calls.append(True)
+        return None
+
+    return pick
+
+
+def _unexpected_single_merge(merge_calls: list[bool]) -> Callable[..., BlockLayoutMergeResult]:
+    def merge(
+        source: Path,
+        block: BlockRecord,
+        target: Path,
+        *,
+        instance_reference: str,
+        position_mm: tuple[float, float],
+        pin_to_board_net: dict[str, str],
+        layout_anchor_mm: tuple[float, float] = (0.0, 0.0),
+        rotation_deg: float = 0.0,
+        layout_id: str | None = None,
+    ) -> BlockLayoutMergeResult:
+        merge_calls.append(True)
+        raise AssertionError("PCB merge must not run after a cancelled prompt.")
+
+    return merge
+
+
+def _unexpected_batch_merge(
+    merge_calls: list[bool],
+) -> Callable[[Path, list[plugin_actions.BlockLayoutPlacement], Path], BatchBlockLayoutMergeResult]:
+    def merge(
+        source: Path,
+        placements: list[plugin_actions.BlockLayoutPlacement],
+        target: Path,
+    ) -> BatchBlockLayoutMergeResult:
+        merge_calls.append(True)
+        raise AssertionError("Batch PCB merge must not run after a cancelled prompt.")
+
+    return merge
+
+
+def _record_message(
+    calls: list[tuple[str, str]],
+) -> Callable[..., None]:
+    def record(title: str, message: str, **_kwargs: _RecordedValue) -> None:
+        calls.append((title, message))
+
+    return record
+
+
+def _set_none_tkinter() -> None:
+    return None
+
+
+def _raise_publish_failure(*_args: _RecordedValue, **_kwargs: _RecordedValue) -> NoReturn:
+    raise RuntimeError("simulated publish failure")
 
 def _pcb_placement_entry(
     instance_reference: str,
@@ -216,32 +487,32 @@ def _single_layout_context(
     monkeypatch.setattr(
         plugin_actions,
         "_selected_symbol",
-        lambda _schematic: instance,
+        _selected_symbol_callback(instance),
     )
     monkeypatch.setattr(
         plugin_actions,
         "_block_record_for_instance",
-        lambda *_args: block,
+        _block_lookup_callback(block),
     )
     monkeypatch.setattr(
         plugin_actions,
         "_choose_block_layout",
-        lambda *_args: {"id": "standard", "name": "Standard"},
+        _standard_layout_callback(block),
     )
     monkeypatch.setattr(
         plugin_actions,
         "_pick_kicad_file",
-        lambda _parent, **kwargs: calls["board_picker"].append(kwargs) or board,
+        _record_kicad_picker(calls["board_picker"], board),
     )
     monkeypatch.setattr(
         plugin_actions,
         "_pick_save_file",
-        lambda _parent, **kwargs: calls["save_picker"].append(kwargs) or output,
+        _record_save_picker(calls["save_picker"], output),
     )
     monkeypatch.setattr(
         plugin_actions,
         "placement_manifest_path",
-        lambda _path: sidecar,
+        _placement_path_callback(sidecar),
     )
 
     def merge(
@@ -260,24 +531,17 @@ def _single_layout_context(
     monkeypatch.setattr(
         plugin_actions,
         "write_pcb_placement_manifest",
-        lambda target, result: (
-            calls["sidecar"].append(
-                (target, _pcb_placement_source(cast(BlockLayoutMergeResult, result)))
-            )
-            or sidecar
-        ),
+        _record_single_sidecar(calls["sidecar"], sidecar),
     )
     monkeypatch.setattr(
         plugin_actions.messagebox,
         "askyesno",
-        lambda title, message, **kwargs: (
-            calls["confirm"].append((title, message, kwargs)) or open_after_merge
-        ),
+        _record_confirmation(calls["confirm"], open_after_merge),
     )
     monkeypatch.setattr(
         plugin_actions,
         "_open_generated_pcb_copy",
-        lambda _kicad, target: calls["open"].append(target),
+        _record_open(calls["open"]),
     )
     return parent, instance, block, board, output, sidecar, calls
 
@@ -332,7 +596,12 @@ def test_single_pcb_layout_prompts_map_anchor_rotation_and_confirms_open(
     assert calls["save_picker"][0]["title"] == "Save merged PCB board copy"
     assert calls["save_picker"][0]["initial_path"] == (tmp_path / "project_U1_blocks.kicad_pcb")
     assert calls["sidecar"] == [
-        (output.resolve(), _pcb_placement_source(_pcb_merge_result(output, rotation=90.0)))
+        (
+            output.resolve(),
+            _pcb_placement_source(
+                cast(BlockLayoutMergeResult, _pcb_merge_result(output, rotation=90.0))
+            ),
+        )
     ]
     assert len(calls["confirm"]) == 1
     title, message, kwargs = calls["confirm"][0]
@@ -359,43 +628,43 @@ def test_single_pcb_layout_cancelling_any_mapping_prompt_stops_before_merge(
     monkeypatch.setattr(
         plugin_actions,
         "_selected_symbol",
-        lambda _schematic: _instance("U1"),
+        _selected_symbol_callback(_instance("U1")),
     )
     monkeypatch.setattr(
         plugin_actions,
         "_block_record_for_instance",
-        lambda *_args: _block("Power stage"),
+        _block_lookup_callback(_block("Power stage")),
     )
     monkeypatch.setattr(
         plugin_actions,
         "_choose_block_layout",
-        lambda *_args: {"id": "standard"},
+        _standard_layout_callback(_block("Power stage")),
     )
     monkeypatch.setattr(
         plugin_actions,
         "_pick_kicad_file",
-        lambda *_args, **_kwargs: board,
+        _no_kicad_file_pick([]),
     )
     monkeypatch.setattr(
         plugin_actions,
         "_pick_save_file",
-        lambda *_args, **_kwargs: save_calls.append(True),
+        _no_save_file_pick(save_calls),
     )
     monkeypatch.setattr(
         plugin_actions.simpledialog,
         "askstring",
-        lambda title, prompt, **kwargs: prompts.append((title, kwargs)) or next(response_iter),
+        _askstring_from_responses(prompts, responses),
     )
     monkeypatch.setattr(
         plugin_actions,
         "merge_block_layout",
-        lambda *_args, **_kwargs: merge_calls.append(True),
+        _unexpected_single_merge(merge_calls),
     )
     confirm_calls = []
     monkeypatch.setattr(
         plugin_actions.messagebox,
         "askyesno",
-        lambda *args, **kwargs: confirm_calls.append(args),
+        _record_message(_confirm_messages),
     )
 
     assert (
@@ -461,17 +730,17 @@ def _batch_context(
     monkeypatch.setattr(
         plugin_actions,
         "_selected_symbols",
-        lambda _schematic: instances,
+        _selected_symbols_callback(instances),
     )
     monkeypatch.setattr(
         plugin_actions,
         "_block_record_for_instance",
-        lambda _library, _project, instance: blocks[instance.reference],
+        _block_map_callback(blocks),
     )
     monkeypatch.setattr(
         plugin_actions,
         "_choose_block_layout",
-        lambda block, *_args: {"id": f"layout-{block.name[-2:]}"},
+        _named_layout_callback(),
     )
     monkeypatch.setattr(
         plugin_actions,
@@ -500,24 +769,17 @@ def _batch_context(
     monkeypatch.setattr(
         plugin_actions,
         "write_pcb_placement_manifest",
-        lambda target, result: (
-            calls["sidecar"].append(
-                (target, _pcb_batch_placement_source(cast(BatchBlockLayoutMergeResult, result)))
-            )
-            or sidecar
-        ),
+        _record_batch_sidecar(calls["sidecar"], sidecar),
     )
     monkeypatch.setattr(
         plugin_actions.messagebox,
         "askyesno",
-        lambda title, message, **kwargs: (
-            calls["confirm"].append((title, message, kwargs)) or open_after_merge
-        ),
+        _record_confirmation(calls["confirm"], open_after_merge),
     )
     monkeypatch.setattr(
         plugin_actions,
         "_open_generated_pcb_copy",
-        lambda _kicad, target: calls["open"].append(target),
+        _record_open(calls["open"]),
     )
     return parent, instances, blocks, board, output, sidecar, calls
 
@@ -530,7 +792,7 @@ def test_batch_pcb_layout_prompts_all_instances_and_confirms_open(
         monkeypatch, tmp_path, open_after_merge=open_after_merge
     )
 
-    plugin_actions._apply_selected_block_pcb_layouts(
+    plugin_actions.apply_selected_block_pcb_layouts(
         cast(plugin_actions.Schematic, object()),
         cast(plugin_actions.KiCadApp, object()),
         tmp_path,
@@ -580,7 +842,12 @@ def test_batch_pcb_layout_prompts_all_instances_and_confirms_open(
     assert calls["sidecar"] == [
         (
             output.resolve(),
-            _pcb_batch_placement_source(_pcb_merge_result(output, rotation=90.0, block_count=2)),
+            _pcb_batch_placement_source(
+                cast(
+                    BatchBlockLayoutMergeResult,
+                    _pcb_merge_result(output, rotation=90.0, block_count=2),
+                )
+            ),
         )
     ]
     assert len(calls["confirm"]) == 1
@@ -611,35 +878,35 @@ def test_batch_pcb_layout_cancelling_any_mapping_prompt_prevents_merge(
     merge_calls: list[bool] = []
     board_picks: list[bool] = []
 
-    monkeypatch.setattr(plugin_actions, "_selected_symbols", lambda _s: instances)
+    monkeypatch.setattr(plugin_actions, "_selected_symbols", _selected_symbols_callback(instances))
     monkeypatch.setattr(
         plugin_actions,
         "_block_record_for_instance",
-        lambda _library, _project, instance: blocks[instance.reference],
+        _block_map_callback(blocks),
     )
     monkeypatch.setattr(
         plugin_actions,
         "_choose_block_layout",
-        lambda block, *_args: {"id": f"layout-{block.name[-2:]}"},
+        _named_layout_callback(),
     )
     monkeypatch.setattr(
         plugin_actions.simpledialog,
         "askstring",
-        lambda title, prompt, **kwargs: prompts.append((title, kwargs)) or next(response_iter),
+        _askstring_from_responses(prompts, responses),
     )
     monkeypatch.setattr(
         plugin_actions,
         "_pick_kicad_file",
-        lambda *_args, **_kwargs: board_picks.append(True),
+        _no_kicad_file_pick(board_picks),
     )
     monkeypatch.setattr(
         plugin_actions,
         "merge_block_layouts",
-        lambda *_args, **_kwargs: merge_calls.append(True),
+        _unexpected_batch_merge(merge_calls),
     )
 
     assert (
-        plugin_actions._apply_selected_block_pcb_layouts(
+        plugin_actions.apply_selected_block_pcb_layouts(
             cast(plugin_actions.Schematic, object()),
             cast(plugin_actions.KiCadApp, object()),
             tmp_path,
@@ -679,12 +946,8 @@ def _patch_action_environment(
         return schematic
 
     kicad = cast(plugin_actions.KiCadApp, SimpleNamespace(get_schematic=get_schematic))
-    monkeypatch.setattr(plugin_actions, "_load_tkinter", lambda: None)
-    monkeypatch.setattr(
-        plugin_actions,
-        "tk",
-        SimpleNamespace(Tk=lambda: root, TclError=RuntimeError),
-    )
+    def create_root() -> _ActionRoot:
+        return root
 
     def no_theme(
         _root: Misc,
@@ -695,6 +958,12 @@ def _patch_action_environment(
     def no_attach(_root: Misc, _kicad: plugin_actions.KiCadApp) -> None:
         return None
 
+    monkeypatch.setattr(plugin_actions, "_load_tkinter", _set_none_tkinter)
+    monkeypatch.setattr(
+        plugin_actions,
+        "tk",
+        SimpleNamespace(Tk=create_root, TclError=RuntimeError),
+    )
     monkeypatch.setattr(plugin_actions, "_configure_tk_theme", no_theme)
     monkeypatch.setattr(plugin_actions, "_attach_tk_window_to_editor", no_attach)
     kipy_module = ModuleType("kipy")
@@ -715,7 +984,7 @@ def test_run_action_missing_schematic_shows_attention_warning_and_closes_root(
     monkeypatch.setattr(
         plugin_actions.messagebox,
         "showwarning",
-        lambda title, message, **kwargs: warnings.append((title, message, kwargs)),
+        _record_message(warnings),
     )
 
     plugin_actions.run_action("manage-library")
@@ -743,11 +1012,11 @@ def test_run_action_unexpected_failure_shows_error_and_closes_root(
     def fail_publish(*_args: _RecordedValue, **_kwargs: _RecordedValue) -> None:
         raise RuntimeError("simulated publish failure")
 
-    monkeypatch.setattr(plugin_actions, "_publish_block", fail_publish)
+    monkeypatch.setattr(plugin_actions, "_publish_block", _raise_publish_failure)
     monkeypatch.setattr(
         plugin_actions.messagebox,
         "showerror",
-        lambda title, message, **kwargs: errors.append((title, message, kwargs)),
+        _record_message(errors),
     )
 
     plugin_actions.run_action("publish-block")
