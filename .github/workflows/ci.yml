@@ -180,6 +180,69 @@ jobs:
           include-hidden-files: true
           compression-level: 1
 
+  # Temporary single-use maintenance job. It deletes itself in the formatter commit.
+  format-python-once:
+    needs: synchronize-main
+    if: ${{ github.event_name == 'push' && github.event.head_commit.message == 'ci: one-time Ruff format' && needs.synchronize-main.outputs.updated != 'true' && github.ref == 'refs/heads/agents/strict-test-quality-contract-rebased' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Format the identified Python files with pinned Ruff
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install --disable-pip-version-check ruff==0.17.2
+          python3 -m ruff format \
+            plugin/kicad-blocks/kicad_blocks/plugin.py \
+            tests/capture_visual_docs.py \
+            tests/test_editor_workflow.py \
+            tests/test_extraction.py \
+            tests/test_library_and_pcb_manager_contracts.py \
+            tests/test_library_browser_contracts.py \
+            tests/test_native_tk_dialog_smoke.py \
+            tests/test_plugin_registration.py \
+            tests/test_ui_contracts.py \
+            tests/test_uncovered_dialog_contracts.py
+          python3 -m ruff format --check \
+            plugin/kicad-blocks/kicad_blocks/plugin.py \
+            tests/capture_visual_docs.py \
+            tests/test_editor_workflow.py \
+            tests/test_extraction.py \
+            tests/test_library_and_pcb_manager_contracts.py \
+            tests/test_library_browser_contracts.py \
+            tests/test_native_tk_dialog_smoke.py \
+            tests/test_plugin_registration.py \
+            tests/test_ui_contracts.py \
+            tests/test_uncovered_dialog_contracts.py
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path(".github/workflows/ci.yml")
+          text = path.read_text(encoding="utf-8")
+          start = text.index("  # Temporary single-use maintenance job. It deletes itself in the formatter commit.\\n")
+          end = text.index("  python-and-kicad:\\n", start)
+          path.write_text(text[:start] + text[end:], encoding="utf-8")
+          PY
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            .github/workflows/ci.yml \
+            plugin/kicad-blocks/kicad_blocks/plugin.py \
+            tests/capture_visual_docs.py \
+            tests/test_editor_workflow.py \
+            tests/test_extraction.py \
+            tests/test_library_and_pcb_manager_contracts.py \
+            tests/test_library_browser_contracts.py \
+            tests/test_native_tk_dialog_smoke.py \
+            tests/test_plugin_registration.py \
+            tests/test_ui_contracts.py \
+            tests/test_uncovered_dialog_contracts.py
+          git commit -m "style: format tracked Python with Ruff 0.17.2"
+          git push origin "$GITHUB_REF"
   python-and-kicad:
     needs: synchronize-main
     if: ${{ needs.synchronize-main.outputs.updated != 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
