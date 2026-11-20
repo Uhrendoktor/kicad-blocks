@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import json
 import os
-from pathlib import Path
 import subprocess
 import sys
+from pathlib import Path
 
 WINDOW_TITLE = "KiCad Blocks Tk 9.1 Accessibility Probe"
 EXPECTED_WIDGETS = {
@@ -214,7 +214,7 @@ def main() -> None:
                 encoding="utf-8",
             )
             print(f"Validated Tk 9.1 accessibility summary written to {result_path}.", flush=True)
-        except BaseException as exc:
+        except Exception as exc:
             failures.append(exc)
         finally:
             if helper.poll() is None:
