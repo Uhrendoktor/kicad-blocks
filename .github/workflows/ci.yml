@@ -180,6 +180,50 @@ jobs:
           include-hidden-files: true
           compression-level: 1
 
+  # One-time maintenance job; remove this job after the formatter commit lands.
+  format-python-once:
+    needs: synchronize-main
+    if: github.event_name == 'push' && github.ref == 'refs/heads/agents/strict-test-quality-contract-rebased' && github.event.head_commit.message == 'ci: one-time Ruff format'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Format the exact Ruff-reported Python files
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install --disable-pip-version-check ruff==0.17.2
+          python3 -m ruff format \
+            plugin/kicad-blocks/kicad_blocks/plugin.py \
+            plugin/kicad-blocks/kicad_blocks/theme.py \
+            plugin/kicad-blocks/kicad_blocks/ui_components.py \
+            tests/test_extraction.py \
+            tests/test_tk91_accessibility_probe.py \
+            tests/test_ui_components.py \
+            tests/capture_visual_docs.py
+          python3 -m ruff format --check \
+            plugin/kicad-blocks/kicad_blocks/plugin.py \
+            plugin/kicad-blocks/kicad_blocks/theme.py \
+            plugin/kicad-blocks/kicad_blocks/ui_components.py \
+            tests/test_extraction.py \
+            tests/test_tk91_accessibility_probe.py \
+            tests/test_ui_components.py \
+            tests/capture_visual_docs.py
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            plugin/kicad-blocks/kicad_blocks/plugin.py \
+            plugin/kicad-blocks/kicad_blocks/theme.py \
+            plugin/kicad-blocks/kicad_blocks/ui_components.py \
+            tests/test_extraction.py \
+            tests/test_tk91_accessibility_probe.py \
+            tests/test_ui_components.py \
+            tests/capture_visual_docs.py
+          git commit -m "style: apply exact Ruff 0.17.2 formatting"
+          git push origin "HEAD:$GITHUB_REF_NAME"
   python-and-kicad:
     needs: synchronize-main
     if: ${{ needs.synchronize-main.outputs.updated != 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}

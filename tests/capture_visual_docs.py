@@ -463,13 +463,8 @@ def _capture_messagebox(
                 time.sleep(0.1)
             if identifier is None:
                 raise TimeoutError(f"Messagebox {title!r} did not become visible.")
-            subprocess.run(
-                [xdotool, "windowactivate", "--sync", identifier],
-                capture_output=True,
-                text=True,
-                check=True,
-                timeout=5,
-            )
+            # ImageGrab captures the window rectangle directly; EWMH activation is
+            # unsupported by the lightweight Xvfb window manager used in CI.
             capture_window(xdotool, identifier, destination, minimum_size=minimum_size)
         except (
             OSError,
@@ -481,8 +476,12 @@ def _capture_messagebox(
         ) as exc:
             errors.append(f"{type(exc).__name__}: {exc}")
         finally:
+            dismiss_command = [xdotool, "key"]
+            if identifier is not None:
+                dismiss_command.extend(["--window", identifier])
+            dismiss_command.extend(["--clearmodifiers", "Return"])
             dismissal = subprocess.run(
-                [xdotool, "key", "--clearmodifiers", "Return"],
+                dismiss_command,
                 capture_output=True,
                 text=True,
                 check=False,
