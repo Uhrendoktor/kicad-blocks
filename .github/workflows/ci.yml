@@ -183,7 +183,7 @@ jobs:
   # Temporary single-use maintenance job. It deletes itself in the formatter commit.
   format-python-once:
     needs: synchronize-main
-    if: ${{ github.event_name == 'push' && github.event.head_commit.message == 'ci: one-time Ruff format' && needs.synchronize-main.outputs.updated != 'true' && github.ref == 'refs/heads/agents/strict-test-quality-contract-rebased' }}
+    if: "${{ github.event_name == 'push' && github.event.head_commit.message == 'ci: one-time Ruff format' && needs.synchronize-main.outputs.updated != 'true' && github.ref == 'refs/heads/agents/strict-test-quality-contract-rebased' }}"
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
@@ -222,10 +222,10 @@ jobs:
           from pathlib import Path
 
           path = Path(".github/workflows/ci.yml")
-          text = path.read_text(encoding="utf-8")
-          start = text.index("  # Temporary single-use maintenance job. It deletes itself in the formatter commit.\\n")
-          end = text.index("  python-and-kicad:\\n", start)
-          path.write_text(text[:start] + text[end:], encoding="utf-8")
+          lines = path.read_text(encoding="utf-8").splitlines()
+          start = lines.index("  # Temporary single-use maintenance job. It deletes itself in the formatter commit.")
+          end = lines.index("  python-and-kicad:", start)
+          path.write_text("\n".join(lines[:start] + lines[end:]) + "\n", encoding="utf-8")
           PY
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
