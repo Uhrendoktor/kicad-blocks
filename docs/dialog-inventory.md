@@ -52,18 +52,18 @@ Source: plugin/kicad-blocks/kicad_blocks/plugin.py — 49 call sites.
 | 5768 | _show_library_browser.manage_layouts | messagebox.showerror | tested | tests/test_library_browser_contracts.py |
 | 5791 | _show_library_browser.edit_variants | messagebox.showerror | tested | tests/test_library_browser_contracts.py |
 | 5853 | _show_library_browser.open_layout.launch_layout | messagebox.showerror | tested | tests/test_library_browser_contracts.py |
-| 6198 | _validate_shared_library | messagebox.showwarning | tested | tests/test_dialog_callsite_contracts.py |
-| 6200 | _validate_shared_library | messagebox.showwarning | tested | tests/test_dialog_callsite_contracts.py |
-| 6524 | _apply_block_pcb_layout | simpledialog.askstring | tested | tests/test_uncovered_dialog_contracts.py |
-| 6540 | _apply_block_pcb_layout | simpledialog.askstring | tested | tests/test_uncovered_dialog_contracts.py |
-| 6556 | _apply_block_pcb_layout | simpledialog.askstring | tested | tests/test_uncovered_dialog_contracts.py |
-| 6602 | _apply_block_pcb_layout | messagebox.askyesno | tested | tests/test_uncovered_dialog_contracts.py |
-| 6663 | _apply_selected_block_pcb_layouts | simpledialog.askstring | tested | tests/test_uncovered_dialog_contracts.py |
-| 6678 | _apply_selected_block_pcb_layouts | simpledialog.askstring | tested | tests/test_uncovered_dialog_contracts.py |
-| 6694 | _apply_selected_block_pcb_layouts | simpledialog.askstring | tested | tests/test_uncovered_dialog_contracts.py |
-| 6748 | _apply_selected_block_pcb_layouts | messagebox.askyesno | tested | tests/test_uncovered_dialog_contracts.py |
-| 7249 | run_action | messagebox.showwarning | tested | tests/test_uncovered_dialog_contracts.py |
-| 7256 | run_action | messagebox.showerror | tested | tests/test_uncovered_dialog_contracts.py |
+| 6225 | _validate_shared_library | messagebox.showwarning | tested | tests/test_dialog_callsite_contracts.py |
+| 6227 | _validate_shared_library | messagebox.showwarning | tested | tests/test_dialog_callsite_contracts.py |
+| 6551 | _apply_block_pcb_layout | simpledialog.askstring | tested | tests/test_uncovered_dialog_contracts.py |
+| 6567 | _apply_block_pcb_layout | simpledialog.askstring | tested | tests/test_uncovered_dialog_contracts.py |
+| 6583 | _apply_block_pcb_layout | simpledialog.askstring | tested | tests/test_uncovered_dialog_contracts.py |
+| 6629 | _apply_block_pcb_layout | messagebox.askyesno | tested | tests/test_uncovered_dialog_contracts.py |
+| 6690 | _apply_selected_block_pcb_layouts | simpledialog.askstring | tested | tests/test_uncovered_dialog_contracts.py |
+| 6705 | _apply_selected_block_pcb_layouts | simpledialog.askstring | tested | tests/test_uncovered_dialog_contracts.py |
+| 6721 | _apply_selected_block_pcb_layouts | simpledialog.askstring | tested | tests/test_uncovered_dialog_contracts.py |
+| 6775 | _apply_selected_block_pcb_layouts | messagebox.askyesno | tested | tests/test_uncovered_dialog_contracts.py |
+| 7276 | run_action | messagebox.showwarning | tested | tests/test_uncovered_dialog_contracts.py |
+| 7283 | run_action | messagebox.showerror | tested | tests/test_uncovered_dialog_contracts.py |
 
 ## Coverage boundaries
 
