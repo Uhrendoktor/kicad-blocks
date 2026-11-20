@@ -61,15 +61,13 @@ def _load_project_settings(path: Path, *, context: str) -> KiCadProjectData:
         raise ValueError(f"{context}: {path}") from exc
     if not isinstance(decoded, dict):
         raise TypeError(f"{context}: {path}")
-    project_data = cast(KiCadProjectData, decoded)
-
-    metadata = project_data.get("meta")
+    metadata = decoded.get("meta")
     if metadata is not None and not isinstance(metadata, dict):
         raise TypeError(f"{context}: invalid meta section in {path}")
 
-    net_settings = project_data.get("net_settings")
+    net_settings = decoded.get("net_settings")
     if net_settings is None:
-        return project_data
+        return cast(KiCadProjectData, decoded)
     if not isinstance(net_settings, dict):
         raise TypeError(f"{context}: invalid net_settings section in {path}")
 
@@ -110,7 +108,7 @@ def _load_project_settings(path: Path, *, context: str) -> KiCadProjectData:
         if any(not isinstance(value, str) for value in chain_map.values()):
             raise TypeError(f"{context}: invalid {key} mapping in {path}")
 
-    return project_data
+    return cast(KiCadProjectData, decoded)
 
 
 # This helper remains available to existing internal integrations and tests.

@@ -129,21 +129,21 @@ def _read_catalog(path: Path) -> DialogCatalog:
     loaded = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(loaded, dict):
         raise TypeError(_CATALOG_OBJECT_ERROR)
+    if loaded.get("schema_version") != 1:
+        raise ValueError(_CATALOG_VERSION_ERROR)
+    calls = loaded.get("call_sites")
+    if not isinstance(calls, list):
+        raise TypeError(_CALL_SITES_LIST_ERROR)
+    if any(not isinstance(item, dict) for item in calls):
+        raise TypeError(_CALL_SITE_RECORD_ERROR)
     return cast("DialogCatalog", loaded)
 
 
 def _catalog_calls(catalog: DialogCatalog) -> list[DialogCatalogEntry]:
-    if catalog.get("schema_version") != 1:
-        raise ValueError(_CATALOG_VERSION_ERROR)
-    calls = catalog.get("call_sites")
-    if not isinstance(calls, list):
-        raise TypeError(_CALL_SITES_LIST_ERROR)
-    return calls
+    return catalog["call_sites"]
 
 
 def _validate_catalog_entry(item: DialogCatalogEntry) -> None:
-    if not isinstance(item, dict):
-        raise TypeError(_CALL_SITE_RECORD_ERROR)
     if not item.get("owner") or item.get("method") not in DIALOG_METHODS:
         message = f"Invalid native dialog call-site record: {item!r}"
         raise ValueError(message)

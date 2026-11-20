@@ -433,6 +433,24 @@ class _TkEntryCursor(Protocol):
     def icursor(self, index: str | int) -> None: ...
 
 
+class _TkIdleScheduler(Protocol):
+    """Tk idle callback operation provided by Misc at runtime."""
+
+    def after_idle(self, callback: Callable[[], None]) -> str: ...
+
+
+class _TkVariableRetainer(Protocol):
+    """Tk window retaining Tcl variable objects for as long as widgets use them."""
+
+    _kicad_ui_variables: list[tkinter_types.Variable]
+
+
+class _TaskHubStateOwner(Protocol):
+    """Tk window exposing enabled task actions to contract-test adapters."""
+
+    _kicad_blocks_hub_enabled_actions: set[str]
+
+
 class _PreviewRaster(Protocol):
     """Minimal Pillow image surface consumed by native symbol preview cropping."""
 
@@ -3106,8 +3124,15 @@ def _apply_facade_pin_geometry(
     expected_sha256: str,
 ) -> dict[str, str]:
     """Atomically update only one pin's geometry in a project symbol catalog."""
-    from .pcb_layout import _all, _direct, _dump, _head, parse_sexpr
-    from .repository import _named_symbol_node, atomic_write, sha256_file
+    from .repository import atomic_write, sha256_file
+    from .sexpr import (
+        SExprList,
+        dump_sexpr,
+        parse_sexpr,
+        sexpr_all,
+        sexpr_direct,
+        sexpr_head,
+    )
 
     target = Path(catalog_path).expanduser().resolve()
     if not target.is_file():
@@ -3136,20 +3161,34 @@ def _apply_facade_pin_geometry(
         return f"{rounded:.6f}".rstrip("0").rstrip(".") or "0"
 
     document = parse_sexpr(target.read_text(encoding="utf-8"))
-    symbol = _named_symbol_node(document, symbol_name, target)
-    units = [
+    if sexpr_head(document) != "kicad_symbol_lib":
+        raise ValueError(f"Invalid KiCad symbol catalog: {target}")
+    symbols = [
+        node
+        for node in sexpr_all(document, "symbol")
+        if len(node) >= 2 and str(node[1]) == symbol_name
+    ]
+    if len(symbols) != 1:
+        raise ValueError(
+            f"Expected exactly one {symbol_name!r} symbol in {target}; found {len(symbols)}."
+        )
+    symbol = symbols[0]
+    units: list[SExprList] = [
         child
         for child in symbol[1:]
-        if _head(child) == "symbol" and len(child) >= 2 and str(child[1]) == unit_name
+        if isinstance(child, list)
+        and sexpr_head(child) == "symbol"
+        and len(child) >= 2
+        and str(child[1]) == unit_name
     ]
     if len(units) != 1:
         raise ValueError(
             f"Expected exactly one pin unit {unit_name!r} in {symbol_name!r}; found {len(units)}."
         )
-    matches = []
-    for pin in _all(units[0], "pin"):
-        name_node = _direct(pin, "name")
-        number_node = _direct(pin, "number")
+    matches: list[SExprList] = []
+    for pin in sexpr_all(units[0], "pin"):
+        name_node = sexpr_direct(pin, "name")
+        number_node = sexpr_direct(pin, "number")
         if (
             name_node is not None
             and len(name_node) >= 2
@@ -3165,15 +3204,15 @@ def _apply_facade_pin_geometry(
             f"found {len(matches)}."
         )
     pin = matches[0]
-    at_node = _direct(pin, "at")
-    length_node = _direct(pin, "length")
+    at_node = sexpr_direct(pin, "at")
+    length_node = sexpr_direct(pin, "length")
     if at_node is None or len(at_node) < 4 or length_node is None or len(length_node) < 2:
         raise ValueError(f"Pin {pin_name!r} has incomplete geometry in {target}.")
     at_node[1] = format_number(x_mm)
     at_node[2] = format_number(y_mm)
     at_node[3] = str(round(normalized_angle) % 360)
     length_node[1] = format_number(length_mm)
-    atomic_write(target, _dump(document) + "\n")
+    atomic_write(target, dump_sexpr(document) + "\n")
     return {
         "x": str(at_node[1]),
         "y": str(at_node[2]),
@@ -4696,7 +4735,12 @@ def _ask_layout_details(
         str(item["value"]) for item in record.manifest.get("variants", [])
     ]
     link_value = tk.StringVar(master=dialog, value=implementation_values[0])
-    dialog._kicad_ui_variables = [name_value, mode_value, source_value, link_value]
+    cast(_TkVariableRetainer, dialog)._kicad_ui_variables = [
+        name_value,
+        mode_value,
+        source_value,
+        link_value,
+    ]
     ttk.Label(frame, text="Use for implementation").grid(row=5, column=0, sticky="w")
     link_combo = ttk.Combobox(
         frame,
@@ -4737,7 +4781,7 @@ def _ask_layout_details(
             cast(_TkGridManaged, browse_button).grid_remove()
 
     def schedule_mode_update(*_trace_args: str) -> None:
-        dialog.after_idle(update_mode)
+        cast(_TkIdleScheduler, dialog).after_idle(update_mode)
 
     mode_combo.bind("<<ComboboxSelected>>", update_mode)
     mode_value.trace_add("write", schedule_mode_update)
@@ -5512,7 +5556,7 @@ def _show_block_variant_editor(
         row=0, column=0, sticky="w"
     )
     status_value = tk.StringVar(value="Empty KB_VARIANT uses the default implementation.")
-    dialog._kicad_ui_variables = [status_value]
+    cast(_TkVariableRetainer, dialog)._kicad_ui_variables = [status_value]
     status_label = ttk.Label(
         frame,
         textvariable=status_value,
@@ -8019,7 +8063,7 @@ def _show_action_hub(
     status._kicad_ui_contract_id = "task-hub.status"
     status.pack(fill="x", pady=(6, 0))
 
-    def refresh_action_states() -> dict[str, bool]:
+    def refresh_action_states() -> None:
         """Re-evaluate the current editor selection; never rely on stale UI state."""
         selection_error = None
         from kipy.errors import ApiError
@@ -8052,7 +8096,7 @@ def _show_action_hub(
 
         has_schematic = schematic is not None
         create_valid = has_schematic and not selection
-        if has_schematic and len(selection) == 1 and not symbols and project_dir is not None:
+        if schematic is not None and len(selection) == 1 and not symbols and project_dir is not None:
             try:
                 create_valid = (
                     _selected_sheet_symbol_source(schematic, project_dir, selection=selection)
@@ -8121,10 +8165,9 @@ def _show_action_hub(
             )
         else:
             status_value.set("Selection does not meet the requirements of the disabled actions.")
-        root._kicad_blocks_hub_enabled_actions = {
+        cast(_TaskHubStateOwner, root)._kicad_blocks_hub_enabled_actions = {
             action_id for action_id, active in enabled.items() if active
         }
-        return enabled
 
     def dispatch(selected_action: str) -> None:
         editor_window_id = getattr(root, "_kicad_blocks_editor_window_id", None)
@@ -8188,11 +8231,14 @@ def _show_action_hub(
         contract_id="task-hub.close",
     ).pack(side="right")
 
-    refresh_action_states()
-    root.bind("<FocusIn>", lambda _event: refresh_action_states(), add="+")
-    refresh_id = [None]
+    def refresh_on_focus(_event: tkinter_types.Event[tkinter_types.Misc]) -> None:
+        refresh_action_states()
 
-    def poll_selection():
+    refresh_action_states()
+    root.bind("<FocusIn>", refresh_on_focus, add="+")
+    refresh_id: list[str | None] = [None]
+
+    def poll_selection() -> None:
         if not root.winfo_exists():
             return
         refresh_action_states()
@@ -8200,13 +8246,19 @@ def _show_action_hub(
 
     refresh_id[0] = root.after(400, poll_selection)
 
-    def stop_polling(_event=None):
+    def stop_polling(_event: tkinter_types.Event[tkinter_types.Misc] | None = None) -> None:
         if refresh_id[0] is not None:
             with contextlib.suppress(tk.TclError):
                 root.after_cancel(refresh_id[0])
             refresh_id[0] = None
 
-    root.bind("<Destroy>", lambda event: stop_polling() if event.widget is root else None, add="+")
+    def stop_polling_on_root_destroy(
+        event: tkinter_types.Event[tkinter_types.Misc],
+    ) -> None:
+        if event.widget is root:
+            stop_polling()
+
+    root.bind("<Destroy>", stop_polling_on_root_destroy, add="+")
     _set_window_geometry(root, 760, 550, 640, 470)
     return tabs
 
@@ -8333,7 +8385,9 @@ def run_action(action: str, *, editor_window_id: str | None = None) -> None:
         elif action == "apply-pcb-layout":
             _apply_block_pcb_layout(schematic, kicad, project_dir, library_paths, root)
         elif action == "apply-multiple-pcb-layouts":
-            _apply_selected_block_pcb_layouts(schematic, kicad, project_dir, library_paths, root)
+            _apply_selected_block_pcb_layouts(
+                schematic, kicad, project_dir, library_paths, parent=root
+            )
     except (ValueError, LookupError, FileNotFoundError, PermissionError) as exc:
         LOG.info("KiCad Blocks action needs user input or context (%s): %s", action, exc)
         messagebox.showwarning(

@@ -143,12 +143,10 @@ def read_pcb_placement_manifest(board_path: Path) -> PCBPlacementManifest:
         raise ValueError(f"Could not read PCB placement manifest {sidecar}: {exc}") from exc
     if not isinstance(decoded, dict):
         raise TypeError("PCB placement manifest must be a JSON object.")
-    payload = cast(PCBPlacementManifest, decoded)
-
-    schema_version = payload.get("schema_version")
+    schema_version = decoded.get("schema_version")
     if schema_version != PLACEMENT_SCHEMA_VERSION:
         raise ValueError(f"Unsupported PCB placement manifest schema: {schema_version!r}.")
-    recorded_path = payload.get("board_path")
+    recorded_path = decoded.get("board_path")
     if (
         not isinstance(recorded_path, str)
         or Path(recorded_path).expanduser().resolve() != board_path
@@ -156,7 +154,7 @@ def read_pcb_placement_manifest(board_path: Path) -> PCBPlacementManifest:
         raise ValueError(
             "PCB placement manifest belongs to a different board path; refusing to move items."
         )
-    placements = payload.get("placements")
+    placements = decoded.get("placements")
     if not isinstance(placements, list) or not placements:
         raise ValueError("PCB placement manifest contains no block placements.")
 
@@ -182,7 +180,7 @@ def read_pcb_placement_manifest(board_path: Path) -> PCBPlacementManifest:
             if not item_id or item_id.casefold() in seen_items:
                 raise ValueError(f"PCB board-item UUID is empty or duplicated: {item_id!r}.")
             seen_items.add(item_id.casefold())
-    return payload
+    return cast(PCBPlacementManifest, decoded)
 
 
 def resolve_placement_item_ids(board: Board, placement: PCBPlacementEntry) -> list[BoardItemId]:
