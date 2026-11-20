@@ -60,7 +60,8 @@ def test_flat_tabs_preserve_notebook_api_and_support_pointer_and_keyboard():
         assert changed_tabs == [1]
         assert schematic.winfo_ismapped()
 
-        tabs.tab_labels[1].focus_set()
+        tabs.tab_labels[1].focus_force()
+        root.update()
         tabs.tab_labels[1].event_generate("<Left>")
         root.update()
         assert tabs.select() == str(facade)
