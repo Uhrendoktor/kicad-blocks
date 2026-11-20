@@ -136,6 +136,6 @@ Source: plugin/kicad-blocks/kicad_blocks/plugin.py — 54 call sites.
 
 - Tested means a test patches the native dialog function, asserts the prompt/choice or resulting branch, and checks the application effect. It does not claim the native OS window was rendered or its platform-specific focus/ownership was verified.
 - Partial means the owning action has tests, but the specific error/confirmation/prompt path is not directly exercised.
-- Uncovered means no direct native-dialog path contract exists yet.
+- Uncovered means no direct call-site behavior contract exists yet.
 
 Coverage is recorded for all 54 native message-dialog call sites; uncovered paths are identified explicitly. These in-process tests do not replace native desktop accessibility, OS-specific dialog ownership, or cross-platform rendering checks.
