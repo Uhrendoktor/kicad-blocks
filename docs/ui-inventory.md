@@ -620,7 +620,7 @@ Explain blocked operations, recoverable errors, destructive confirmations, and c
 
 **Coverage:** Partial — targeted GUI, integration, or visual checks exist.
 
-The production plugin contains 56 native messagebox/simpledialog call sites across profile creation, source/layout selection, validation, library and implementation maintenance, the Functional Block Library, PCB mapping/anchor/rotation, and action dispatch. The AST-generated registry links all 56 call sites to direct result/effect tests (56 tested, 0 partial, 0 uncovered). This screen remains partial only because those tests stub the OS dialogs: actual native-window rendering, focus/ownership, and platform-specific button layout are not covered by the in-process contracts.
+The production plugin has 49 native messagebox/simpledialog call sites. The AST-generated registry links all 49 call sites to direct result/effect tests (49 tested, 0 partial, 0 uncovered). In addition, `tests/test_native_tk_dialog_smoke.py` opens real Tk `showerror`, `askyesno`, and `askstring` windows under Xvfb, checks their displayed text, buttons, mapped state and parent/transient relationship, and exercises accept/cancel results. This closes the basic Linux Tk dialog-rendering smoke gap, but does not claim each call site's native window layout or cross-platform Windows/macOS focus, ownership, or button presentation has been reviewed; this screen remains partial.
 
 **Major functionality**
 
@@ -642,6 +642,7 @@ The production plugin contains 56 native messagebox/simpledialog call sites acro
 - `tests/test_implementation_details_contracts.py`
 - `tests/test_instance_configuration_contracts.py`
 - `tests/test_uncovered_dialog_contracts.py`
+- `tests/test_native_tk_dialog_smoke.py`
 
 **Production screenshots:** Not yet captured for this surface.
 
