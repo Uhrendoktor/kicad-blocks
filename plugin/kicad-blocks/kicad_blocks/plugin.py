@@ -484,6 +484,22 @@ def _after_event(
     return handle
 
 
+def _auto_hide_scrollbar(
+    master: tkinter_types.Misc,
+    **options: TkOption,
+) -> ttk_types.Scrollbar:
+    """Create the shared compact scrollbar using the owning window's palette."""
+    from .theme import AutoHideScrollbar, palette_for_theme
+
+    options.pop("style", None)
+    owner = master.winfo_toplevel()
+    palette = cast(
+        dict[str, str],
+        getattr(owner, "_kicad_blocks_palette", None) or palette_for_theme(),
+    )
+    return AutoHideScrollbar(master, palette=palette, **options)
+
+
 def _scrollbar_command(
     view: Callable[..., tuple[float, float]],
 ) -> Callable[..., str | None]:
