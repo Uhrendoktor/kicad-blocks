@@ -243,7 +243,7 @@ def render_inventory(catalog: DialogCatalog | None = None) -> str:
             "- Partial means the owning action has tests, but the specific error/confirmation/prompt path is not directly exercised.",
             "- Uncovered means no direct call-site behavior contract exists yet.",
             "",
-            f"All {len(calls)} native message-dialog call sites now have direct result/effect assertions. "
+            f"Coverage is recorded for all {len(calls)} native message-dialog call sites; uncovered paths are identified explicitly. "
             "These in-process tests do not replace native desktop accessibility, "
             "OS-specific dialog ownership, or cross-platform rendering checks.",
             "",
