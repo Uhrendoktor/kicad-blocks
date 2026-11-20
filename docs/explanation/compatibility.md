@@ -13,7 +13,7 @@ This page separates the product's current test evidence from targets that the in
 | GUI dependencies | Tkinter and native `filedialog`; Xvfb/xdotool are test-harness-only in Linux CI |
 | KiCad interfaces | Eeschema IPC, PCB IPC, KiCad CLI |
 
-The post-merge main-branch CI run [#43521663508](https://github.com/Uhrendoktor/kicad-blocks/actions/runs/43521663508) passed both `python-and-kicad` and `visual-ui-audit` on merge commit `d75f0b1f0ef59e14868a84e7730cbc517089e0b7`. It exercised unit tests, lint, KiCad CLI validation, Eeschema GUI editing and publishing, plugin discovery, schematic and PCB IPC, layout merging, and rendered UI evidence.
+The main-branch CI run [#43521663508](https://github.com/Uhrendoktor/kicad-blocks/actions/runs/43521663508) records the earlier full product baseline. The later exact-head validation [#44706326103](https://github.com/Uhrendoktor/kicad-blocks/actions/runs/44706326103), on test-code commit `aa4fc8d2d44e3ce9646b17647215047cd47d0c74`, passed all five jobs and verified a named Eeschema AT-SPI window on CPython 3.12, 3.13, and 3.14. This is a smoke test for the Eeschema application tree, not proof that the plugin's Tk windows or their individual controls are screen-reader accessible.
 
 ## Runtime dependency portability
 
@@ -107,6 +107,22 @@ Tk's portable transient relationship is used only between windows created by the
 The repository `VERSION` file currently contains `1.1.0`. A packaged KiCad Blocks 1.1.0 application ZIP is not yet published in GitHub Releases. The published release assets currently provide the pinned KiCad Python IPC dependency wheels, not a complete user-installable KiCad Blocks release archive.
 
 Use the source installation procedure in [Install and enable KiCad Blocks](../getting-started.md). The immutable historical `v1` tag is not a substitute for a current 1.1.0 application package.
+
+## Native file chooser evidence boundary
+
+The plugin currently calls Tk's standard `filedialog` API. On Windows and macOS, Tk routes its chooser command to the platform file dialog implementation. The Ubuntu 24.04 GUI validation runner, however, uses the distribution's Tk 8.6.18 runtime. Tk's current Unix/X11 chooser is Tk's own dialog implementation, not an unconditional XDG portal call.
+
+There is an upstream development path, but it must not be counted as shipped support yet: [TIP 763](https://core.tcl-lang.org/tips/doc/trunk/tip/763.md) is still Draft/Pending and proposes routing Tk's existing open/save/directory chooser commands through `org.freedesktop.portal.FileChooser` on X11. The [`x11-desktop-portal` Tk source branch](https://core.tcl-lang.org/tk/timeline?r=x11-desktop-portal) records implementation commits and says it was tested with KDE Plasma 6.6, GTK and GNOME 50 portal backends. This branch is not the current stable Tk dependency, and the proposal's stated scope is X11; do not infer Wayland/Hyprland parity from it.
+
+GTK4 provides another candidate: `Gtk.FileDialog` (since GTK 4.10) supports asynchronous open/save/folder selection, filters and initial paths; GTK's native chooser API documents Windows `IFileDialog`, macOS `NSOpenPanel`/`NSSavePanel`, and use of `org.freedesktop.portal.FileChooser` when available. Its parent argument is a `GtkWindow`, while KiCad Blocks currently creates Tk windows. Adopting it requires a deliberate parent/ownership architecture, not a detached helper that opens an unowned dialog.
+
+Until a portal-capable Tk build or an adopted GTK backend is integrated and exercised in real sessions, the product must continue to describe the Linux chooser path accurately and leave requirement R6 partial.
+
+## Accessibility evidence boundary
+
+Linux CI runs the Eeschema plugin-discovery workflow inside a private D-Bus session, enables the AT-SPI bus and GTK ATK bridge before Eeschema starts, then resolves Eeschema's X11 client PID from its editor window and inspects the process through `xa11y`. The exact-head run [#44710888957](https://github.com/Uhrendoktor/kicad-blocks/actions/runs/44710888957), on `376bfeb2747ecf5d9150971c3b15a21c029581df`, passed this check on CPython 3.12, 3.13, and 3.14; each run exposed a named top-level Eeschema `window`.
+
+The same integration test also attempts a non-blocking probe of the Python process that owns the Facade Pin Layout Tk window. In this run, xa11y reported `SelectorNotMatchedError` for the Tk PID and listed only the Eeschema process as an AT-SPI registry candidate. The Tk window therefore did not expose an application tree to this AT-SPI session. This is consistent with the separate Tk 8.6 runtime; the Eeschema wxWidgets tree is not a proxy for plugin Tk controls. The result does not audit individual Eeschema controls, keyboard navigation, or screen-reader usability. Ubuntu 24.04's packaged Tk 8.6 does not implement TIP 733's `tk accessible` API; issue #41 tracks evaluating a Tcl/Tk 9.1-enabled Python runtime and the platform-specific screen-reader checks still required.
 
 ## What CI does not prove
 
