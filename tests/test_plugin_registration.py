@@ -172,7 +172,10 @@ def _dump_accessibility_tree(
         app = xa11y.App.by_pid(process_id, timeout=15.0)
         snapshot = app.tree(max_depth=2)
         tree = app.dump(max_depth=14)
-    except xa11y.XA11yError as exc:
+    except Exception as exc:
+        # xa11y discovery failures include selector exceptions that are not
+        # necessarily XA11yError subclasses. The Tk probe is diagnostic-only,
+        # so all discovery/tree failures must remain non-fatal unless required.
         result = f"xa11y accessibility probe unavailable: {type(exc).__name__}: {exc}"
         print(result, flush=True)
         if required:
