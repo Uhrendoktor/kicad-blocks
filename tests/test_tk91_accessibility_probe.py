@@ -247,7 +247,9 @@ def main() -> None:
         if attrs["name"] != label_name:
             raise AssertionError(f"Tk accessibility name for {label_name!r} is {attrs['name']!r}.")
         if attrs["description"] != expected[1]:
-            raise AssertionError(f"Tk accessibility description for {label_name!r} is {attrs['description']!r}.")
+            raise AssertionError(
+                f"Tk accessibility description for {label_name!r} is {attrs['description']!r}."
+            )
     if registered["window"]["name"] != WINDOW_TITLE:
         raise AssertionError(f"Tk accessibility window name is {registered['window']['name']!r}.")
     print("Tk 9.1 registered accessibility attributes:", json.dumps(registered), flush=True)

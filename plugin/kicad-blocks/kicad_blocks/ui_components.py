@@ -106,9 +106,7 @@ class FlatTabControl(ttk.Frame):
                 return page
         return super().nametowidget(name)
 
-    def tab(
-        self, page: tk.Misc | str, option: str | None = None
-    ) -> str | dict[str, str] | None:
+    def tab(self, page: tk.Misc | str, option: str | None = None) -> str | dict[str, str] | None:
         """Return a page caption, or a small Notebook-compatible option mapping."""
         selected = self._resolve_page(page)
         index = self._pages.index(selected)
@@ -144,7 +142,8 @@ class FlatTabControl(ttk.Frame):
     def _resolve_page(self, page: tk.Misc | str) -> tk.Misc:
         selected = next(
             (
-                candidate for candidate in self._pages
+                candidate
+                for candidate in self._pages
                 if candidate is page or str(candidate) == str(page)
             ),
             None,

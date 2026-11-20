@@ -6444,18 +6444,14 @@ def _show_library_browser(
     )
     description_label.grid(row=1, column=0, sticky="ew", pady=(3, 6))
 
-    preview_box = ttk.Frame(
-        right, style="Card.TFrame", padding=(12, 10)
-    )
+    preview_box = ttk.Frame(right, style="Card.TFrame", padding=(12, 10))
     preview_box.grid(row=2, column=0, sticky="nsew")
-    ttk.Label(
-        preview_box, text="PREVIEW", style="SectionTitleSurface.TLabel"
-    ).pack(anchor="w", pady=(0, 6))
+    ttk.Label(preview_box, text="PREVIEW", style="SectionTitleSurface.TLabel").pack(
+        anchor="w", pady=(0, 6)
+    )
     from .ui_components import FlatTabControl
 
-    preview_notebook = FlatTabControl(
-        preview_box, contract_id="library-browser.preview.views"
-    )
+    preview_notebook = FlatTabControl(preview_box, contract_id="library-browser.preview.views")
     preview_notebook.pack(fill="both", expand=True)
 
     facade_page = ttk.Frame(preview_notebook)
@@ -6560,13 +6556,11 @@ def _show_library_browser(
         schematic_preview, lambda amount: schematic_preview.yview_scroll(amount, "units")
     )
 
-    details_box = ttk.Frame(
-        right, style="Card.TFrame", padding=(12, 10)
-    )
+    details_box = ttk.Frame(right, style="Card.TFrame", padding=(12, 10))
     details_box.grid(row=3, column=0, sticky="nsew", pady=(8, 0))
-    ttk.Label(
-        details_box, text="BLOCK OVERVIEW", style="SectionTitleSurface.TLabel"
-    ).pack(anchor="w", pady=(0, 6))
+    ttk.Label(details_box, text="BLOCK OVERVIEW", style="SectionTitleSurface.TLabel").pack(
+        anchor="w", pady=(0, 6)
+    )
     details_frame = ttk.Frame(details_box, style="Card.TFrame")
     details_frame.pack(fill="both", expand=True)
     details = tk.Text(

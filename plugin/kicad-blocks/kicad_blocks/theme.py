@@ -151,9 +151,7 @@ class AutoHideScrollbar(ttk.Scrollbar):
         self._cancel_hide()
         if self._scrollable and not self._hovered:
             try:
-                self._hide_after_id = self.after(
-                    self.HIDE_DELAY_MS, self._hide_if_idle
-                )
+                self._hide_after_id = self.after(self.HIDE_DELAY_MS, self._hide_if_idle)
             except tk.TclError:
                 self._hide_after_id = None
 
@@ -298,13 +296,39 @@ def apply_tk_theme(root: tk.Misc, theme: str | bool | None = None) -> dict[str, 
     style.configure("Card.TFrame", background=palette["surface"], relief="flat", borderwidth=0)
     style.configure("Card.TLabel", background=palette["surface"], foreground=palette["foreground"])
     style.configure("CardMeta.TLabel", background=palette["surface"], foreground=palette["muted"])
-    style.configure("ProductPreview.TFrame", background=palette["surface"], relief="flat", borderwidth=0)
-    style.configure("ProductImage.TFrame", background=palette["surface_alt"], relief="flat", borderwidth=0)
-    style.configure("ProductImage.TLabel", background=palette["surface_alt"], foreground=palette["muted"])
-    style.configure("ProductTitle.TLabel", background=palette["surface"], foreground=palette["foreground"], font=("TkDefaultFont", UI_FONT_SIZES["card_title"], "bold"))
-    style.configure("ProductMeta.TLabel", background=palette["surface"], foreground=palette["muted"], font=("TkDefaultFont", UI_FONT_SIZES["caption"]))
-    style.configure("ProductKey.TLabel", background=palette["surface"], foreground=palette["muted"], font=("TkDefaultFont", UI_FONT_SIZES["caption"], "bold"))
-    style.configure("ProductMetric.TLabel", background=palette["surface"], foreground=palette["foreground"], font=("TkDefaultFont", UI_FONT_SIZES["metric"], "bold"))
+    style.configure(
+        "ProductPreview.TFrame", background=palette["surface"], relief="flat", borderwidth=0
+    )
+    style.configure(
+        "ProductImage.TFrame", background=palette["surface_alt"], relief="flat", borderwidth=0
+    )
+    style.configure(
+        "ProductImage.TLabel", background=palette["surface_alt"], foreground=palette["muted"]
+    )
+    style.configure(
+        "ProductTitle.TLabel",
+        background=palette["surface"],
+        foreground=palette["foreground"],
+        font=("TkDefaultFont", UI_FONT_SIZES["card_title"], "bold"),
+    )
+    style.configure(
+        "ProductMeta.TLabel",
+        background=palette["surface"],
+        foreground=palette["muted"],
+        font=("TkDefaultFont", UI_FONT_SIZES["caption"]),
+    )
+    style.configure(
+        "ProductKey.TLabel",
+        background=palette["surface"],
+        foreground=palette["muted"],
+        font=("TkDefaultFont", UI_FONT_SIZES["caption"], "bold"),
+    )
+    style.configure(
+        "ProductMetric.TLabel",
+        background=palette["surface"],
+        foreground=palette["foreground"],
+        font=("TkDefaultFont", UI_FONT_SIZES["metric"], "bold"),
+    )
     style.configure(
         "ValidationError.TLabel",
         background=palette["surface"],
@@ -461,8 +485,12 @@ def apply_tk_theme(root: tk.Misc, theme: str | bool | None = None) -> dict[str, 
 
     style.configure("TabBar.TFrame", background=palette["surface"], relief="flat", borderwidth=0)
     style.configure("TabItem.TFrame", background=palette["surface"], relief="flat", borderwidth=0)
-    style.configure("TabIndicator.TFrame", background=palette["accent"], relief="flat", borderwidth=0)
-    style.configure("TabIndicatorInactive.TFrame", background=palette["surface"], relief="flat", borderwidth=0)
+    style.configure(
+        "TabIndicator.TFrame", background=palette["accent"], relief="flat", borderwidth=0
+    )
+    style.configure(
+        "TabIndicatorInactive.TFrame", background=palette["surface"], relief="flat", borderwidth=0
+    )
     style.configure(
         "Tab.TLabel",
         background=palette["surface"],
@@ -473,7 +501,11 @@ def apply_tk_theme(root: tk.Misc, theme: str | bool | None = None) -> dict[str, 
     style.map(
         "Tab.TLabel",
         background=[("active", palette["hover"]), ("!disabled", palette["surface"])],
-        foreground=[("focus", palette["accent"]), ("active", palette["foreground"]), ("!disabled", palette["muted"])],
+        foreground=[
+            ("focus", palette["accent"]),
+            ("active", palette["foreground"]),
+            ("!disabled", palette["muted"]),
+        ],
     )
     style.configure(
         "ActiveTab.TLabel",
@@ -512,17 +544,31 @@ def apply_tk_theme(root: tk.Misc, theme: str | bool | None = None) -> dict[str, 
     for scrollbar_style, layout in (
         (
             "Vertical.TScrollbar",
-            [("Vertical.Scrollbar.trough", {
-                "sticky": "ns",
-                "children": [("Vertical.Scrollbar.thumb", {"expand": "1", "sticky": "nswe"})],
-            })],
+            [
+                (
+                    "Vertical.Scrollbar.trough",
+                    {
+                        "sticky": "ns",
+                        "children": [
+                            ("Vertical.Scrollbar.thumb", {"expand": "1", "sticky": "nswe"})
+                        ],
+                    },
+                )
+            ],
         ),
         (
             "Horizontal.TScrollbar",
-            [("Horizontal.Scrollbar.trough", {
-                "sticky": "we",
-                "children": [("Horizontal.Scrollbar.thumb", {"expand": "1", "sticky": "nswe"})],
-            })],
+            [
+                (
+                    "Horizontal.Scrollbar.trough",
+                    {
+                        "sticky": "we",
+                        "children": [
+                            ("Horizontal.Scrollbar.thumb", {"expand": "1", "sticky": "nswe"})
+                        ],
+                    },
+                )
+            ],
         ),
     ):
         try:
@@ -531,8 +577,14 @@ def apply_tk_theme(root: tk.Misc, theme: str | bool | None = None) -> dict[str, 
             pass
 
     style.configure("TSeparator", background=palette["border"])
-    style.configure("TCheckbutton", background=palette["background"], foreground=palette["foreground"])
-    style.map("TCheckbutton", background=[("active", palette["background"])], foreground=[("disabled", palette["muted"])])
+    style.configure(
+        "TCheckbutton", background=palette["background"], foreground=palette["foreground"]
+    )
+    style.map(
+        "TCheckbutton",
+        background=[("active", palette["background"])],
+        foreground=[("disabled", palette["muted"])],
+    )
 
     root._kicad_blocks_theme = selected
     root._kicad_blocks_palette = palette
