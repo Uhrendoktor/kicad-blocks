@@ -151,7 +151,7 @@ Every browser control and chooser route has a real-widget contract. Direct Publi
 
 Open the selected generated library symbol in KiCad's native Symbol Editor for artwork and pin-geometry editing.
 
-**Coverage:** Partial — targeted GUI, integration, or screenshot checks exist.
+**Coverage:** Partial — targeted GUI, integration, or visual checks exist.
 
 Edit Facade validates the selected project-catalog symbol and reports that the current KiCad public GUI IPC does not expose an operation to open Symbol Editor and select that exact library entry. The action does not edit pin geometry or modify the project catalog. The former in-process pin-layout window code was unreachable after this guard and has been removed. No RunAction, global keyboard injection, or OS-specific window automation is used.
 
@@ -307,7 +307,7 @@ Every actionable control has a stable semantic ID and real-Tk interaction contra
 
 Package one selected hierarchical sheet, or the sheet currently open in Eeschema when nothing is selected, as a reusable functional block.
 
-**Coverage:** Partial — targeted GUI, integration, or screenshot checks exist.
+**Coverage:** Partial — targeted GUI, integration, or visual checks exist.
 
 This is a native Eeschema action rather than a Tk window. The real Eeschema IPC integration test verifies typed SheetSymbol selection, active-subsheet creation with an empty selection, derived facade pins, catalog/library registration, collision-safe naming, rollback on failure, and unchanged source files. The action does not open a naming form or success popup.
 
@@ -605,7 +605,7 @@ Every application-owned interactive control in this dialog has a semantic ID and
 
 Explain blocked operations, recoverable errors, destructive confirmations, and completed reports.
 
-**Coverage:** Partial — targeted GUI, integration, or screenshot checks exist.
+**Coverage:** Partial — targeted GUI, integration, or visual checks exist.
 
 The production plugin has 54 native messagebox/simpledialog call sites. The AST-generated registry links all 54 call sites to direct result/effect tests (54 tested, 0 partial, 0 uncovered). In addition, `tests/test_native_tk_dialog_smoke.py` opens real Tk `showerror`, `askyesno`, and `askstring` windows under Xvfb, checks their displayed text, buttons, mapped state and parent/transient relationship, and exercises accept/cancel results. This closes the basic Linux Tk dialog-rendering smoke gap, but does not claim each call site's native window layout or cross-platform Windows/macOS focus, ownership, or button presentation has been reviewed; this screen remains partial.
 
@@ -639,7 +639,7 @@ The production plugin has 54 native messagebox/simpledialog call sites. The AST-
 
 Open and focus KiCad-owned schematic, symbol, and PCB documents, or select files using the operating system's native dialogs.
 
-**Coverage:** Partial — targeted GUI, integration, or screenshot checks exist.
+**Coverage:** Partial — targeted GUI, integration, or visual checks exist.
 
 The shared Tk native-dialog wrappers now have direct execute/result contracts for existing/missing initial paths, extension filters, suggested save names/extensions, parent-window ownership arguments, must-exist directory selection, fallback-to-current-directory behavior, and user cancellation. Real KiCad GUI/IPC tests separately cover schematic editor launch/edit/save, symbol facade placement, and PCB document load/save. Actual OS-native chooser rendering, window-manager focus/ownership, and the complete editor hand-off matrix on Windows and macOS remain unverified; this is not cross-platform sign-off.
 
