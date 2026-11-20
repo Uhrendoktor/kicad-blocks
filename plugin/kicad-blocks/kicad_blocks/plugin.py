@@ -209,8 +209,8 @@ def _auto_hide_scrollbar(master, **options):
 def _visible_table_rows(item_count: int, *, maximum: int = 8) -> int:
     """Return a compact Treeview height based on real rows, capped for long lists."""
     rows = max(0, int(item_count))
-    limit = max(2, int(maximum))
-    return min(max(2, rows), limit)
+    limit = max(1, int(maximum))
+    return min(max(1, rows), limit)
 
 
 def _set_window_geometry(window, width: int, height: int, min_width: int, min_height: int) -> None:
@@ -827,7 +827,7 @@ def _show_selected_block_configuration(
             ttk.Label(
                 section,
                 text=f"{name}  ({parameter['type']})",
-            ).grid(row=row * 2, column=0, sticky="w", padx=(0, 12), pady=(5, 0))
+            ).grid(row=row, column=0, sticky="w", padx=(0, 12), pady=(5, 0))
             variable = tk.StringVar(value=current_values[name])
             parameter_vars[name] = variable
             if parameter["type"] == "boolean":
@@ -842,7 +842,7 @@ def _show_selected_block_configuration(
             widget._kicad_ui_contract_id = (
                 f"instance-configuration.parameter.{name}"
             )
-            widget.grid(row=row * 2, column=1, sticky="ew", pady=(3, 0))
+            widget.grid(row=row, column=1, sticky="ew", pady=(3, 0))
             description = parameter.get("description") or f"Default: {parameter['default']}"
             _add_tooltip(widget, description)
 
