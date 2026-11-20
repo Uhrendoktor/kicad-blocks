@@ -48,6 +48,12 @@ STANDALONE_TESTS: dict[str, tuple[str, str]] = {
         "picker, and instance-configuration entry points.",
         "Run in the virtual display with KiCad nightly; this is the managed-environment gate.",
     ),
+    "tests/test_tk91_accessibility_probe.py": (
+        "Checks real Tk 9.1 screen-reader accessibility through AT-SPI and PyAT-SPI, "
+        "including the top-level window, accessible roles, names, and native descriptions.",
+        "Invoked by scripts/build_tk91_accessibility_probe.sh after building CPython 3.14/Tk 9.1 "
+        "with ATK, and starting Orca inside D-Bus and Xvfb.",
+    ),
 }
 
 MODULE_PURPOSES: dict[str, str] = {

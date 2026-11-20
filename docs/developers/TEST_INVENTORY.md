@@ -9,7 +9,7 @@ registered in STANDALONE_TESTS in scripts/test_inventory.py.
 
 - Pytest modules: **41**
 - Individually inventoried pytest cases: **456**
-- Standalone acceptance runners: **7**
+- Standalone acceptance runners: **8**
 - Additional CI validation runners: **2**
 
 ## Pytest cases
@@ -773,6 +773,7 @@ these registered exceptions to collect zero pytest cases.
 | tests/test_pcb_ipc.py | Exercises native PCB IPC primitives and verifies the board-item operations used by the plugin against a live KiCad PCB Editor IPC server. | Run with the pinned KiCad Python IPC binding and a live PCB Editor server. |
 | tests/test_pcb_layout.py | Runs the PCB block-layout import and merge acceptance path against real board files, checking the generated output with KiCad's own command-line parser. | Run with KiCad CLI and the integration dependencies available. |
 | tests/test_plugin_registration.py | Installs the package into KiCad's managed plugin directory, launches Eeschema, verifies discovery and environment readiness, and exercises the installed task hub, picker, and instance-configuration entry points. | Run in the virtual display with KiCad nightly; this is the managed-environment gate. |
+| tests/test_tk91_accessibility_probe.py | Checks real Tk 9.1 screen-reader accessibility through AT-SPI and PyAT-SPI, including the top-level window, accessible roles, names, and native descriptions. | Invoked by scripts/build_tk91_accessibility_probe.sh after building CPython 3.14/Tk 9.1 with ATK, and starting Orca inside D-Bus and Xvfb. |
 
 ## Additional CI validation runners
 
