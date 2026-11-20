@@ -56,16 +56,18 @@ jobs:
             }
             apt_retry update -o Acquire::Languages=none -o APT::Update::Error-Mode=any
             apt_retry install -y --no-install-recommends software-properties-common
+            command -v timeout >/dev/null
             for attempt in 1 2 3; do
-            if "${SUDO[@]}" add-apt-repository --yes ppa:kicad/kicad-dev-nightly; then
-              break
-            fi
-            if [[ "$attempt" -eq 3 ]]; then
-              echo "::error::Could not reach Launchpad to add the KiCad nightly PPA after 3 attempts."
-              exit 1
-            fi
-            sleep "$((attempt * 5))"
-          done
+              if timeout --signal=TERM --kill-after=15s 120s "${SUDO[@]}" add-apt-repository --yes --no-update ppa:kicad/kicad-dev-nightly; then
+                break
+              fi
+              if [[ "$attempt" -eq 3 ]]; then
+                echo "::error::Could not add the KiCad nightly PPA after 3 timed attempts."
+                exit 1
+              fi
+              echo "::warning::Launchpad PPA request failed or timed out (attempt $attempt/3); retrying."
+              sleep "$((attempt * 5))"
+            done
             apt_retry update -o Acquire::Languages=none -o APT::Update::Error-Mode=any
             apt_retry install -y --no-install-recommends kicad-nightly
             CLI="$(command -v kicad-cli-nightly || command -v kicad-cli || true)"
