@@ -132,11 +132,14 @@ def test_search_tooltip_appears_above_focused_field_without_covering_results():
             placement="above-right",
         )
         root.update_idletasks()
-        search.focus_force()
+        root.update()
+        # The real browser opens with this field focused; generate the same
+        # focus event so the tooltip callback is deterministic under Xvfb.
+        search.event_generate("<FocusIn>")
         root.update()
 
         tooltip = next(
-            child for child in root.winfo_children()
+            child for child in search.winfo_children()
             if isinstance(child, tk.Toplevel)
         )
         tooltip_top = tooltip.winfo_rooty()
