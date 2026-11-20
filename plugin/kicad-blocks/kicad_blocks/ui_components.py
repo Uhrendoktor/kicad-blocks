@@ -1,0 +1,137 @@
+"""Reusable, keyboard-accessible flat tab control for KiCad Blocks dialogs."""
+
+from __future__ import annotations
+
+from tkinter import ttk
+from typing import Any
+
+from .theme import UI_SPACING
+
+
+class FlatTabControl(ttk.Frame):
+    """Flat text tabs with a small active underline and Notebook-compatible API.
+
+    Pages remain direct children of the tab host so callers can continue to use
+    tabs(), tab(), select(), and nametowidget() just as they did with ttk.Notebook.
+    """
+
+    def __init__(self, master: Any, *, contract_id: str | None = None, **kwargs):
+        super().__init__(master, style="TabHost.TFrame", **kwargs)
+        self._kicad_ui_contract_id = contract_id
+        self._tabbar = ttk.Frame(self, style="TabBar.TFrame")
+        self._tabbar.grid(row=0, column=0, sticky="ew")
+        self.columnconfigure(0, weight=1)
+        self.rowconfigure(1, weight=1)
+        self._pages: list[Any] = []
+        self._captions: list[str] = []
+        self._labels: list[Any] = []
+        self._indicators: list[Any] = []
+        self._selected: Any | None = None
+
+    @property
+    def selected_tab(self) -> Any | None:
+        return self._selected
+
+    @property
+    def tab_labels(self) -> tuple[Any, ...]:
+        """Expose focusable tab labels for accessibility and interaction tests."""
+        return tuple(self._labels)
+
+    def add(self, page: Any, *, text: str) -> None:
+        if page.master is not self:
+            raise ValueError("Each tab page must be a direct child of FlatTabControl.")
+        index = len(self._pages)
+        item = ttk.Frame(self._tabbar, style="TabItem.TFrame")
+        item.grid(row=0, column=index, sticky="ew")
+        label = ttk.Label(
+            item,
+            text=text,
+            style="Tab.TLabel",
+            anchor="center",
+            takefocus=True,
+            cursor="hand2",
+        )
+        label.grid(row=0, column=0, sticky="ew")
+        indicator = ttk.Frame(item, style="TabIndicatorInactive.TFrame", height=2)
+        indicator.grid(row=1, column=0, sticky="ew")
+        indicator.grid_propagate(False)
+        item.columnconfigure(0, weight=1)
+
+        page.grid(row=1, column=0, sticky="nsew")
+        page.grid_remove()
+        self._pages.append(page)
+        self._captions.append(str(text))
+        self._labels.append(label)
+        self._indicators.append(indicator)
+
+        label.bind("<Button-1>", lambda _event, selected=page: self.select(selected))
+        label.bind("<Return>", lambda _event, selected=page: self._activate(selected))
+        label.bind("<space>", lambda _event, selected=page: self._activate(selected))
+        label.bind("<Left>", lambda _event, selected=index: self._move(selected, -1))
+        label.bind("<Right>", lambda _event, selected=index: self._move(selected, 1))
+        label.bind("<Home>", lambda _event: self._move(0, 0))
+        label.bind("<End>", lambda _event: self._move(len(self._pages) - 1, 0))
+
+        if self._selected is None:
+            self.select(page)
+
+    def tabs(self) -> list[str]:
+        """Return page paths using the ttk.Notebook-compatible representation."""
+        return [str(page) for page in self._pages]
+
+    def tab(self, page: Any, option: str | None = None):
+        """Return a page caption, or a small Notebook-compatible option mapping."""
+        selected = self._resolve_page(page)
+        index = self._pages.index(selected)
+        if option == "text":
+            return self._captions[index]
+        values = {"text": self._captions[index], "state": "normal"}
+        return values if option is None else values.get(option)
+
+    def select(self, page: Any | None = None) -> str:
+        """Select a page, or return the selected page path when called without one."""
+        if page is None:
+            return str(self._selected) if self._selected is not None else ""
+        selected = self._resolve_page(page)
+        self._selected = selected
+        for candidate, label, indicator in zip(
+            self._pages, self._labels, self._indicators, strict=True
+        ):
+            active = candidate is selected
+            if active:
+                candidate.grid()
+                candidate.tkraise()
+                label.configure(style="ActiveTab.TLabel")
+                indicator.configure(style="TabIndicator.TFrame")
+            else:
+                candidate.grid_remove()
+                label.configure(style="Tab.TLabel")
+                indicator.configure(style="TabIndicatorInactive.TFrame")
+        return str(selected)
+
+    def _resolve_page(self, page: Any) -> Any:
+        selected = next(
+            (
+                candidate for candidate in self._pages
+                if candidate is page or str(candidate) == str(page)
+            ),
+            None,
+        )
+        if selected is None:
+            raise ValueError(f"{page!r} is not a page in this tab control.")
+        return selected
+
+    def _activate(self, page: Any) -> str:
+        self.select(page)
+        return "break"
+
+    def _move(self, index: int, offset: int) -> str:
+        if not self._pages:
+            return "break"
+        if offset == 0:
+            target = min(max(index, 0), len(self._pages) - 1)
+        else:
+            target = (index + offset) % len(self._pages)
+        self._labels[target].focus_set()
+        self.select(self._pages[target])
+        return "break"
