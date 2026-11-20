@@ -193,7 +193,7 @@ def _configure_tk_theme(root, kicad=None) -> None:
     from .theme import apply_tk_theme
 
     selected = "dark" if dark is True else "light" if dark is False else None
-    apply_tk_theme(root, selected)
+    return apply_tk_theme(root, selected)
 
 
 def _auto_hide_scrollbar(master, **options):
