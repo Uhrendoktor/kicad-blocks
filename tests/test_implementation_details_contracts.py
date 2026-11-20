@@ -154,7 +154,9 @@ def _assert_initial_state(context: UiTestContext, dialog, *, allow_create: bool)
     widgets = context.refresh_widgets()
     assert dialog.title() == WINDOW_TITLE
     assert dialog.winfo_width() >= 660
-    assert dialog.winfo_height() >= 420
+    minimum_height = 320 if allow_create else 280
+    maximum_height = 360 if allow_create else 320
+    assert minimum_height <= dialog.winfo_height() < maximum_height
     selector = widgets["implementation-details.variant"]
     source_label = widgets["implementation-details.source-label"]
     source = widgets["implementation-details.source"]
