@@ -165,6 +165,7 @@ def test_add_pcb_layout_creates_blank_board_and_returns_selection(
         assert getattr(dialog, "_kicad_ui_screen_id", None) == "add-pcb-layout"
         assert_control_coverage(dialog, ADD_LAYOUT_CONTROLS)
         context.refresh_widgets()
+        context.require_combobox("add-pcb-layout.mode").set("Create a new empty board")
         _contract_button(context, "add-pcb-layout.add", "Add layout", closes=True)
 
     callback_errors = _schedule_dialog_action(root, context, interact)

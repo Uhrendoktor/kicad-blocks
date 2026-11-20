@@ -704,9 +704,28 @@ def capture_ui_workflows(
                             continue
                         schematic_canvases.append(canvas)
                         break
+                    if canvas not in schematic_canvases:
+                        # The native renderer retains its PhotoImage on the Canvas.
+                        # Some Tk adapters expose the pixels without a queryable
+                        # canvas image item, so validate the live image dimensions too.
+                        preview_photo = cast(
+                            tk.PhotoImage | None,
+                            getattr(canvas, "native_schematic_preview_photo", None),
+                        )
+                        if (
+                            preview_photo is not None
+                            and preview_photo.width() > 0
+                            and preview_photo.height() > 0
+                        ):
+                            schematic_canvases.append(canvas)
                 if not schematic_canvases:
                     canvas_diagnostics: list[
-                        tuple[str, int, tuple[tuple[str, tuple[str, ...], str], ...]]
+                        tuple[
+                            str,
+                            int,
+                            tuple[tuple[str, tuple[str, ...], str], ...],
+                            tuple[int, int] | None,
+                        ]
                     ] = []
                     for widget in walk_widgets(root):
                         if widget.winfo_class() != "Canvas" or not isinstance(widget, tk.Canvas):
@@ -720,11 +739,21 @@ def capture_ui_workflows(
                             )
                             for item in canvas.find_all()
                         )
+                        preview_photo = cast(
+                            tk.PhotoImage | None,
+                            getattr(canvas, "native_schematic_preview_photo", None),
+                        )
+                        photo_dimensions = (
+                            (preview_photo.width(), preview_photo.height())
+                            if preview_photo is not None
+                            else None
+                        )
                         canvas_diagnostics.append(
                             (
                                 str(canvas),
                                 len(canvas.find_withtag("kicad-schematic-preview")),
                                 canvas_items,
+                                photo_dimensions,
                             )
                         )
                     raise RuntimeError(
