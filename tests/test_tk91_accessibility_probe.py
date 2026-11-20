@@ -134,9 +134,6 @@ def main() -> None:
     save_button = ttk.Button(content, text="Save block")
     save_button.pack(anchor="e")
 
-    root.update_idletasks()
-    root.update()
-
     # Tk 9.1 loads its X11 accessibility bindings only when the screen reader
     # is running before the Tk interpreter starts. Keep that runtime precondition
     # explicit so a D-Bus-enabled but screen-reader-free session cannot silently
@@ -176,8 +173,12 @@ def main() -> None:
 
     # ATK derives a label's accessible name from its accessible value.
     root.tk.call("tk", "accessible", "set_acc_value", label._w, "Block name")
-    root.tk.call("tk", "accessible", "add_acc_object", root._w)
 
+    # Populate the ATK hierarchy only after every role/name/description/value
+    # has been assigned. Tk's accessibility Map bindings may create objects
+    # on the first update; adding them earlier prevents the AT-SPI cache from
+    # seeing an incomplete description and retaining it.
+    root.tk.call("tk", "accessible", "add_acc_object", root._w)
     root.update_idletasks()
     root.update()
     registered = {
