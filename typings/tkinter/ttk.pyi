@@ -166,7 +166,6 @@ class Style:
     def layout(
         self,
         style: str,
-        layoutspec: list[
-            tuple[str, dict[str, str | list[tuple[str, dict[str, str]]]]]
-        ] | None = ...,
+        layoutspec: list[tuple[str, dict[str, str | list[tuple[str, dict[str, str]]]]]]
+        | None = ...,
     ) -> list[tuple[str, dict[str, str | list[tuple[str, dict[str, str]]]]]]: ...

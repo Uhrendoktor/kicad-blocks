@@ -1993,9 +1993,7 @@ def _show_selected_block_configuration(
     ).pack(side="right")
     dialog.bind("<Escape>", _after_event(dialog.destroy))
     dialog.protocol("WM_DELETE_WINDOW", dialog.destroy)
-    _set_window_geometry(
-        dialog, 660, max(360, min(680, 260 + 36 * len(parameters))), 540, 340
-    )
+    _set_window_geometry(dialog, 660, max(360, min(680, 260 + 36 * len(parameters))), 540, 340)
     dialog.grab_set()
     dialog.wait_window()
 
@@ -4780,12 +4778,16 @@ def _ask_layout_details(
         str(item["value"]) for item in record.manifest.get("variants", [])
     ]
     link_value = tk.StringVar(master=dialog, value=implementation_values[0])
-    setattr(dialog, "_kicad_ui_variables", [
-        name_value,
-        mode_value,
-        source_value,
-        link_value,
-    ])
+    setattr(
+        dialog,
+        "_kicad_ui_variables",
+        [
+            name_value,
+            mode_value,
+            source_value,
+            link_value,
+        ],
+    )
     ttk.Label(frame, text="Use for implementation").grid(row=5, column=0, sticky="w")
     link_combo = ttk.Combobox(
         frame,

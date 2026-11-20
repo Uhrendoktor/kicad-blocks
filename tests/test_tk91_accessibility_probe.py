@@ -257,9 +257,7 @@ def main() -> None:
         "window": {
             "role": str(root.tk.call("tk", "accessible", "get_acc_role", root._w)),
             "name": str(root.tk.call("tk", "accessible", "get_acc_name", root._w)),
-            "description": str(
-                root.tk.call("tk", "accessible", "get_acc_description", root._w)
-            ),
+            "description": str(root.tk.call("tk", "accessible", "get_acc_description", root._w)),
         },
         "widgets": {
             name: {

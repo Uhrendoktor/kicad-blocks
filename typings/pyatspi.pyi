@@ -1,6 +1,6 @@
 """Small PyAT-SPI registry contract used by the independent accessibility inspector."""
-from typing import Protocol
 
+from typing import Protocol
 
 class Accessible(Protocol):
     def get_name(self) -> str: ...
@@ -10,10 +10,8 @@ class Accessible(Protocol):
     def get_child_count(self) -> int: ...
     def get_child_at_index(self, index: int) -> Accessible | None: ...
 
-
 class _Registry:
     @staticmethod
     def getDesktop(index: int) -> Accessible: ...
-
 
 Registry: _Registry

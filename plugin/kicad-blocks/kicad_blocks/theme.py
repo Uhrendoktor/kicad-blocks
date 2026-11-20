@@ -17,9 +17,9 @@ from .theme_tokens import (
 )
 
 
-_SCROLLBARS: weakref.WeakKeyDictionary[
-    tk.Misc, weakref.WeakSet[AutoHideScrollbar]
-] = weakref.WeakKeyDictionary()
+_SCROLLBARS: weakref.WeakKeyDictionary[tk.Misc, weakref.WeakSet[AutoHideScrollbar]] = (
+    weakref.WeakKeyDictionary()
+)
 
 
 class AutoHideScrollbar(ttk.Scrollbar):
@@ -37,9 +37,7 @@ class AutoHideScrollbar(ttk.Scrollbar):
         palette: Mapping[str, str],
         **kwargs: tk.TkOption,
     ) -> None:
-        self._scroll_command = cast(
-            Callable[..., None] | str | None, kwargs.pop("command", None)
-        )
+        self._scroll_command = cast(Callable[..., None] | str | None, kwargs.pop("command", None))
         orient = str(kwargs.get("orient", "vertical")).casefold()
         orient_name = "Horizontal" if orient.startswith("h") else "Vertical"
         token = next(self._instances)
