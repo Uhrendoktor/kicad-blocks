@@ -69,18 +69,23 @@ def _assert_accessible_tree(payload: dict) -> None:
             f"Save block was exposed without a button role: {button_roles!r}"
         )
 
+    summary = {
+        "window": title_nodes[0].get("role"),
+        "label": label_nodes[0].get("role"),
+        "button_roles": sorted(button_roles),
+        "tree_nodes": len(nodes),
+    }
     print(
         "Tk 9.1 accessibility assertions passed:",
-        json.dumps(
-            {
-                "window": title_nodes[0].get("role"),
-                "label": label_nodes[0].get("role"),
-                "button_roles": sorted(button_roles),
-                "tree_nodes": len(nodes),
-            },
-            ensure_ascii=False,
-        ),
+        json.dumps(summary, ensure_ascii=False),
         flush=True,
+    )
+    result_path = os.environ.get("TK91_A11Y_RESULT")
+    if not result_path:
+        raise RuntimeError("TK91_A11Y_RESULT must name the accessibility summary file.")
+    Path(result_path).write_text(
+        json.dumps(summary, ensure_ascii=False, indent=2) + "\\n",
+        encoding="utf-8",
     )
 
 

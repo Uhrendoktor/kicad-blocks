@@ -103,9 +103,19 @@ xvfb-run -a "$VENV_PYTHON" -c \
 echo "::endgroup::"
 
 echo "::group::Query real Tk widgets through AT-SPI"
-dbus-run-session -- bash "$ROOT_DIR/scripts/run_with_atspi.sh" \
+A11Y_RESULT="$BUILD_ROOT/tk91-atspi-result.json"
+rm -f "$A11Y_RESULT"
+TK91_A11Y_RESULT="$A11Y_RESULT" dbus-run-session -- bash "$ROOT_DIR/scripts/run_with_atspi.sh" \
   xvfb-run -a -s "-screen 0 1280x800x24" \
-  "$VENV_PYTHON" "$ROOT_DIR/tests/test_tk91_accessibility_probe.py"
+  "$VENV_PYTHON" "$ROOT_DIR/tests/test_tk91_accessibility_probe.py" \
+  2>&1 | tee "$BUILD_ROOT/tk91-atspi.log"
+if [[ ! -s "$A11Y_RESULT" ]]; then
+  echo "::error::Tk 9.1 AT-SPI probe exited without writing its validated widget summary."
+  tail -n 120 "$BUILD_ROOT/tk91-atspi.log" || true
+  exit 1
+fi
+echo "Validated Tk 9.1 widget accessibility summary:"
+cat "$A11Y_RESULT"
 echo "::endgroup::"
 
 echo "Tk 9.1 accessibility feasibility probe passed. Runtime build directory: $BUILD_ROOT"
