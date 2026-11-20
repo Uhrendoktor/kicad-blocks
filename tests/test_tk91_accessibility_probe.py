@@ -40,6 +40,24 @@ def _inspect_process(process_id: int) -> None:
         "snapshot": app.tree(max_depth=10),
         "dump": app.dump(max_depth=16),
     }
+    # Cross-check xa11y's D-Bus property reader with GNOME's independent
+    # libatspi/pyatspi bindings. This distinguishes a Tk ATK export problem
+    # from a property-decoding issue in a single client implementation.
+    pyatspi_script = Path(__file__).with_name("inspect_tk91_atspi_pyatspi.py")
+    direct = subprocess.run(
+        ["/usr/bin/python3", str(pyatspi_script), str(process_id)],
+        capture_output=True,
+        text=True,
+        timeout=15.0,
+        check=True,
+    )
+    payload["pyatspi"] = json.loads(direct.stdout)
+    print(
+        "GNOME pyatspi cross-check:",
+        direct.stdout.strip(),
+        file=sys.stderr,
+        flush=True,
+    )
     print(json.dumps(payload, ensure_ascii=False), flush=True)
 
 

@@ -26,7 +26,7 @@ sudo apt-get install -y --no-install-recommends \
   libharfbuzz-dev libfontconfig1-dev libfreetype6-dev libtommath-dev \
   libbz2-dev libffi-dev libgdbm-dev libgdbm-compat-dev liblzma-dev \
   libncursesw5-dev libreadline-dev libsqlite3-dev libssl-dev uuid-dev \
-  zlib1g-dev libexpat1-dev xvfb dbus-daemon dbus-bin at-spi2-core orca
+  zlib1g-dev libexpat1-dev xvfb dbus-daemon dbus-bin at-spi2-core orca python3-pyatspi
 
 echo "::group::Fetch pinned Tcl/Tk 9.1.0 sources"
 git clone --quiet --depth 1 --branch "$TCL_TAG" https://github.com/tcltk/tcl.git "$TCL_SOURCE"
