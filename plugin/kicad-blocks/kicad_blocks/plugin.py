@@ -3766,7 +3766,7 @@ def _ask_layout_details(parent, record) -> dict | None:
     ).pack(side="right", padx=(0, 8))
     dialog.bind("<Return>", lambda _event: accept())
     dialog.bind("<Escape>", lambda _event: dialog.destroy())
-    _set_window_geometry(dialog, 720, 390, 600, 320)
+    _set_window_geometry(dialog, 720, 340, 600, 300)
     dialog.grab_set()
     name_entry.focus_set()
     dialog.wait_window()
@@ -4372,7 +4372,9 @@ def _ask_implementation_details(
     dialog.bind("<Escape>", lambda _event: dialog.destroy())
     source_entry.xview_moveto(1.0)
     selector_entry.focus_set()
-    _set_window_geometry(dialog, 720, 440, 600, 420)
+    dialog_height = 340 if allow_create else 300
+    dialog_min_height = 320 if allow_create else 280
+    _set_window_geometry(dialog, 720, dialog_height, 600, dialog_min_height)
     dialog.grab_set()
     dialog.wait_window()
     return result[0]
