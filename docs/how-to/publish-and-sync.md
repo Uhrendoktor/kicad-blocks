@@ -14,16 +14,13 @@ The manager shows exactly one **Default** row for the active default schematic, 
 
 To add a named implementation, choose **Add variant** in the Implementations dialog. Give it a unique variant value and select an existing schematic, create a blank schematic, or copy another library implementation. The accepted operation is saved immediately and the new row appears at once. There is no separate save step. A failed write is shown in the manager and Close retries it; the window stays open until the change is stored.
 
-## Edit the facade pin layout
+## Edit Facade availability
 
 1. Open **Browse and Place Functional Blocks** and select the block.
 2. Choose **Edit facade**.
-3. Select a pin and adjust its X/Y position, angle, or length.
-4. Choose **Apply pin geometry**. The project catalog is written and reloaded immediately; there is no separate save step.
+3. The action validates the generated symbol in the project-local KBlocks catalog and reports that the current KiCad GUI IPC does not support opening Symbol Editor and selecting an exact library entry.
 
-Pin names, numbers, and electrical types are intentionally read-only in this editor because the implementation's root hierarchical labels are the interface source of truth. Publish the block to copy the changed facade geometry into the shared library revision. Publish uses three-way conflict detection and reports any already-placed instances that need an explicit interface migration.
-
-The current Eeschema IPC API cannot launch a GUI Symbol Editor and select an exact library item. The Facade Pin Layout editor therefore provides the supported project-level editing workflow without keyboard injection or pretending to open Symbol Editor. Full native Symbol Editor access remains an upstream API requirement.
+The action does not change pin geometry or write to the project catalog. It does not use unstable `RunAction`, global keyboard injection, or an OS-specific window-control fallback. Full native Symbol Editor access remains an upstream API requirement.
 
 ## Publish a shared implementation and facade
 
@@ -32,7 +29,7 @@ The current Eeschema IPC API cannot launch a GUI Symbol Editor and select an exa
 3. Return to **Functional Block Library**. The block remains selected; click **Publish**.
 4. The browser reports the new revision, how many placed instances were refreshed, and whether any pin migrations are required.
 
-The same **Publish** action incorporates facade pin-layout edits saved to the project catalog. Publishing updates the shared library revision, synchronizes facade pins from the implementation's root hierarchical labels, rebuilds child dependencies, and updates the project catalog.
+Publish can import project-catalog facade changes that were made through a separately available Symbol Editor session. The Edit Facade button in KiCad Blocks does not currently open that editor; the action reports the upstream GUI IPC limitation. Publishing still updates the shared library revision, synchronizes facade pins from the implementation's root hierarchical labels, rebuilds child dependencies, and updates the project catalog.
 
 When existing pin numbers, units, body styles, and connection coordinates remain unchanged, already-placed instances are refreshed in place. Pin names, electrical types, and artwork can update without changing connectivity. When pins are added, removed, renumbered, or moved, affected instances are left untouched and identified for explicit migration. The plugin does not silently detach or remap nets.
 

@@ -3231,7 +3231,7 @@ def _edit_facade_symbol(
     close_browser: Callable[[], None] | None = None,
     parent: tkinter_types.Misc | None = None,
 ) -> bool:
-    """Validate a facade and explain the currently unsupported editor handoff."""
+    """Validate one project facade and report the unsupported Symbol Editor handoff."""
     del kicad, editor_window_id, close_browser, parent
     symbol_name = str(record.manifest.get("symbol_name") or "").strip()
     catalog_path = (
@@ -7213,7 +7213,7 @@ def _show_library_browser(
         "Edit facade",
         edit_facade,
         "facade",
-        "Open the generated library facade in KiCad Symbol Editor",
+        "Validate the project facade and request the supported Symbol Editor handoff",
         contract_id="library-browser.action.facade",
     )
     facade_button[0] = facade_action

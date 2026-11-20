@@ -42,15 +42,15 @@ The schematic view previews the editable implementation itself, independently of
 
 The same schematic preview is captured in the [dark theme](https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/library-browser-schematic-dark.png).
 
-## Edit facade pin layout
+## Edit Facade availability
 
-Choose **Edit facade** for a selected block in the Functional Block Library to adjust the generated facade's pin positions, orientation, and length. Each accepted change is written to the project-local KiCad symbol catalog immediately; pin names, numbers, and electrical types remain derived from hierarchical labels. **Publish** transfers the facade changes to the shared library with concurrency protection.
+Choose **Edit facade** for a selected block in the Functional Block Library. The action validates that the selected symbol exists in the project-local KBlocks catalog. The current KiCad public GUI IPC does not expose an operation to open Symbol Editor and select that exact library entry, so the production action reports this limitation in a recoverable error dialog. It does not change pin geometry or modify the project catalog. No unstable `RunAction`, global keyboard injection, or OS-specific window automation is used.
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/facade-editor-light.png" alt="Facade Pin Layout editor in light theme showing pin names, numbers, electrical types and editable X/Y positions, orientation, and length" width="1000">
+  <img src="https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/facade-handoff-unavailable-light.png" alt="Edit facade error dialog explaining that KiCad has no supported IPC operation to open and select the generated library symbol in Symbol Editor" width="900">
 </p>
 
-The [dark-theme capture](https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/facade-editor-dark.png) shows the same production editor.
+The [dark-theme capture](https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/facade-handoff-unavailable-dark.png) shows the same recoverable limitation in the dark theme.
 
 Manage shared library roots with the **Manage Libraries** dialog:
 

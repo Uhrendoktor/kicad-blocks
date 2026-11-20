@@ -5,11 +5,11 @@ This page is generated from the declarative UI catalog. It inventories the curre
 
 | Coverage status | Screens | Meaning |
 |---|---:|---|
-| Contracted | 13 | Widget-level execute/result assertions are registered and run in CI. |
+| Contracted | 12 | Widget-level execute/result assertions are registered and run in CI. |
 | Partial | 3 | Targeted GUI, integration, model, or screenshot checks exist; the full control matrix is not contracted. |
 | Inventory only | 0 | Inventory only — systematic UI contracts remain future work; window/workflow is documented here for discovery and rollout planning. |
 
-The Functional Block Library, legacy Task Hub, transient choosers, Add PCB Layout, Record picker, Instance Configuration, Implementation details, Implementations Manager, Manage Libraries, PCB Layout Manager, and Facade Pin Layout editor have registered widget contracts. Create Block from Sheet is a one-click Eeschema action rather than a details form. All 49 native messagebox/simpledialog call sites have direct result/effect contracts. Place Block uses supported page-aware schematic IPC placement, focus and selection while the schematic interactive-move API is pending; Edit Facade provides a project-local pin-layout editor with immediate persistence and safe publishing. Native Symbol Editor launch and cursor-attached placement remain upstream API gaps, not disabled features or OS-specific automation paths. The shared file chooser wrappers have argument/cancellation contracts; native OS rendering and cross-process KiCad window ownership remain unverified.
+The Functional Block Library, legacy Task Hub, transient choosers, Add PCB Layout, Record picker, Instance Configuration, Implementation details, Implementations Manager, Manage Libraries, and PCB Layout Manager have registered widget contracts. Create Block from Sheet is a one-click Eeschema action rather than a details form. All 54 native messagebox/simpledialog call sites have direct result/effect contracts. Place Block uses supported page-aware schematic IPC placement, focus and selection while the schematic interactive-move API is pending; Edit Facade validates its selected project catalog entry but reports that KiCad has no supported GUI IPC operation to open/select it in Symbol Editor. No global-input or OS-specific automation fallback is used. The shared file chooser wrappers have argument/cancellation contracts; native OS rendering and cross-process KiCad window ownership remain unverified.
 
 ## Screens
 
@@ -82,7 +82,7 @@ Search registered block libraries, inspect facade and schematic previews, choose
 
 **Coverage:** Contracted — widget action and expected UI transition asserted.
 
-Every browser control and chooser route has a real-widget contract. Direct Publish is tested, selection-dependent actions disable when no row is selected, and placement/publish feedback is inline. The facade pin-layout editor is separately tested for immediate project-catalog persistence and concurrent-edit protection.
+Every browser control and chooser route has a real-widget contract. Direct Publish is tested, selection-dependent actions disable when no row is selected, and placement/publish feedback is inline. Edit Facade validates the selected project-catalog entry and reports that KiCad currently exposes no supported GUI IPC operation to open/select it in Symbol Editor; the action makes no pin-geometry changes and uses no global-input or OS-specific fallback.
 
 **Major functionality**
 
@@ -90,9 +90,9 @@ Every browser control and chooser route has a real-widget contract. Direct Publi
 - Inspect facade and implementation schematic previews
 - Insert a selected facade at the active sheet's page center, then focus, select, and save it through schematic IPC
 - Open the selected block's implementation
-- Edit selected facade pin geometry in the portable Facade Pin Layout editor
 - Publish implementation/facade edits and refresh compatible instances
 - Manage variants, PCB layouts, and libraries
+- Edit Facade validates the selected project-catalog entry and reports the current unsupported Symbol Editor handoff.
 
 **Registered semantic controls**
 
@@ -146,47 +146,11 @@ Every browser control and chooser route has a real-widget contract. Direct Publi
 ![Functional Block Library: library browser schematic dark.png](https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/library-browser-schematic-dark.png)
 [Open library-browser-schematic-dark.png](https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/library-browser-schematic-dark.png)
 
----
+![Functional Block Library: facade handoff unavailable light.png](https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/facade-handoff-unavailable-light.png)
+[Open facade-handoff-unavailable-light.png](https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/facade-handoff-unavailable-light.png)
 
-### Facade pin layout editor
-
-Adjust the external pin positions, angles, and lengths of a selected block facade. Pin names, numbers, and electrical types remain derived from the implementation's hierarchical-label interface.
-
-**Coverage:** Contracted — widget action and expected UI transition asserted.
-
-The real Tk editor, selected-pin table, geometry fields, immediate catalog write, project-library reload, optimistic concurrency guard, invalid-value recovery, and Close action are covered by interaction and file-format contracts. The capture uses the production editor widget tree in light and dark themes.
-
-**Major functionality**
-
-- View every facade pin with its current number and electrical type
-- Edit the selected pin's X/Y position, orientation, and length
-- Persist each accepted geometry change immediately to the project catalog
-- Reload the project KBlocks library and publish the facade through the normal revision/conflict workflow
-
-**Registered semantic controls**
-
-- Facade pin layout editor (`facade-editor.window`; window; behavior asserted)
-- Facade pin list (`facade-editor.pins`; treeview; behavior asserted)
-- Pin X coordinate (`facade-editor.x`; entry; behavior asserted)
-- Pin Y coordinate (`facade-editor.y`; entry; behavior asserted)
-- Pin orientation (`facade-editor.angle`; entry; behavior asserted)
-- Pin length (`facade-editor.length`; entry; behavior asserted)
-- Apply pin geometry (`facade-editor.action.apply`; button; behavior asserted)
-- Close (`facade-editor.action.close`; button; behavior asserted)
-- Immediate save/reload and conflict status (`facade-editor.status`; status-label; result observed)
-
-**Current automated evidence**
-
-- `tests/test_library_browser_contracts.py`
-- `tests/test_editor_workflow.py`
-
-**Production screenshots**
-
-![Facade pin layout editor: facade editor light.png](https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/facade-editor-light.png)
-[Open facade-editor-light.png](https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/facade-editor-light.png)
-
-![Facade pin layout editor: facade editor dark.png](https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/facade-editor-dark.png)
-[Open facade-editor-dark.png](https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/facade-editor-dark.png)
+![Functional Block Library: facade handoff unavailable dark.png](https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/facade-handoff-unavailable-dark.png)
+[Open facade-handoff-unavailable-dark.png](https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/facade-handoff-unavailable-dark.png)
 
 ---
 
@@ -320,7 +284,7 @@ Every actionable control has a stable semantic ID and real-Tk interaction contra
 
 Package one selected hierarchical sheet, or the sheet currently open in Eeschema when nothing is selected, as a reusable functional block.
 
-**Coverage:** Partial — targeted GUI, integration, or visual checks exist.
+**Coverage:** Partial — targeted GUI, integration, or screenshot checks exist.
 
 This is a native Eeschema action rather than a Tk window. The real Eeschema IPC integration test verifies typed SheetSymbol selection, active-subsheet creation with an empty selection, derived facade pins, catalog/library registration, collision-safe naming, rollback on failure, and unchanged source files. The action does not open a naming form or success popup.
 
@@ -618,9 +582,9 @@ Every application-owned interactive control in this dialog has a semantic ID and
 
 Explain blocked operations, recoverable errors, destructive confirmations, and completed reports.
 
-**Coverage:** Partial — targeted GUI, integration, or visual checks exist.
+**Coverage:** Partial — targeted GUI, integration, or screenshot checks exist.
 
-The production plugin has 49 native messagebox/simpledialog call sites. The AST-generated registry links all 49 call sites to direct result/effect tests (49 tested, 0 partial, 0 uncovered). In addition, `tests/test_native_tk_dialog_smoke.py` opens real Tk `showerror`, `askyesno`, and `askstring` windows under Xvfb, checks their displayed text, buttons, mapped state and parent/transient relationship, and exercises accept/cancel results. This closes the basic Linux Tk dialog-rendering smoke gap, but does not claim each call site's native window layout or cross-platform Windows/macOS focus, ownership, or button presentation has been reviewed; this screen remains partial.
+The production plugin has 54 native messagebox/simpledialog call sites. The AST-generated registry links all 54 call sites to direct result/effect tests (54 tested, 0 partial, 0 uncovered). In addition, `tests/test_native_tk_dialog_smoke.py` opens real Tk `showerror`, `askyesno`, and `askstring` windows under Xvfb, checks their displayed text, buttons, mapped state and parent/transient relationship, and exercises accept/cancel results. This closes the basic Linux Tk dialog-rendering smoke gap, but does not claim each call site's native window layout or cross-platform Windows/macOS focus, ownership, or button presentation has been reviewed; this screen remains partial.
 
 **Major functionality**
 
@@ -652,7 +616,7 @@ The production plugin has 49 native messagebox/simpledialog call sites. The AST-
 
 Open and focus KiCad-owned schematic, symbol, and PCB documents, or select files using the operating system's native dialogs.
 
-**Coverage:** Partial — targeted GUI, integration, or visual checks exist.
+**Coverage:** Partial — targeted GUI, integration, or screenshot checks exist.
 
 The shared Tk native-dialog wrappers now have direct execute/result contracts for existing/missing initial paths, extension filters, suggested save names/extensions, parent-window ownership arguments, must-exist directory selection, fallback-to-current-directory behavior, and user cancellation. Real KiCad GUI/IPC tests separately cover schematic editor launch/edit/save, symbol facade placement, and PCB document load/save. Actual OS-native chooser rendering, window-manager focus/ownership, and the complete editor hand-off matrix on Windows and macOS remain unverified; this is not cross-platform sign-off.
 

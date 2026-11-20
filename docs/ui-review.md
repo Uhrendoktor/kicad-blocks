@@ -65,7 +65,7 @@ The Functional Block Library preview uses two tabs so facade artwork and the cir
 
 The system-theme path preserves the native Tk colors while applying the shared Treeview geometry (36 px rows) so text is not clipped. It does **not yet** read KiCad's selected color theme into the Tk palette. KiCad stores the active color theme in its settings and stores theme definitions as JSON in the settings `colors` directory; wiring that active theme into the plugin palette remains an open task.
 
-The supported KiCad CI GUI tests run under `xvfb-run`; X11 tools may be used only in the test harness. Production code does not inject global input or inspect OS window IDs. Place Block uses schematic IPC to insert at page center, focus, select, and save. The facade pin-layout editor modifies only the project catalog and reloads the library; it does not pretend to be the native Symbol Editor. Cursor-attached movement and launching/selecting an exact library symbol in Symbol Editor remain upstream IPC gaps.
+The supported KiCad CI GUI tests run under `xvfb-run`; X11 tools may be used only in the test harness. Production code does not inject global input or inspect OS window IDs. Place Block uses schematic IPC to insert at page center, focus, select, and save. Edit Facade validates the selected project-catalog symbol and reports the unsupported Symbol Editor handoff; it does not modify pin geometry or pretend to open the native editor. Cursor-attached movement and launching/selecting an exact library symbol in Symbol Editor remain upstream IPC gaps.
 
 File and directory selection now goes through Tk's standard `filedialog.askopenfilename`, `askdirectory`, and `asksaveasfilename` APIs, as required by `AGENTS.md`; the plugin no longer launches separate Zenity/KDialog processes or maintains a custom file browser. Unit tests verify the arguments passed to those APIs, including initial file/directory, filters, parent, save suffix and cancellation. This does not prove that the chooser is visually native, portal-backed or grouped with KiCad on the target desktop. The actual Ubuntu 26 Wayland session, Tk version, desktop portal/theme, parent ownership and returned path must still be recorded in an interactive test.
 
@@ -75,7 +75,7 @@ Do not mark the UI review complete until:
 
 - Every production window above has a fresh light/dark screenshot inspected at a normal and constrained size.
 - Every visible primary button has a test proving the intended side effect or its correct disabled/prerequisite state.
-- Live Eeschema testing confirms page-aware center placement, focus, selection, and save. The Facade Pin Layout editor confirms project-catalog geometry writes, conflict protection, and library reload. Cursor-attached placement and full native Symbol Editor launch require upstream KiCad IPC additions.
+- Live Eeschema testing confirms page-aware center placement, focus, selection, and save. The Edit Facade acceptance check confirms project-catalog symbol validation and the recoverable unsupported-IPC result; no pin editor is opened. Cursor-attached placement and full native Symbol Editor launch require upstream KiCad IPC additions.
 - Ubuntu Wayland behavior has been exercised on a real Wayland session; Xvfb is not accepted as a substitute.
 - File chooser open/save/directory/cancel/filter/path cases have been run against the actual desktop portal/theme.
 - The entire CI suite passes, including documentation, KiCad CLI, editor GUI, PCB IPC, visual audit, and supported Python compatibility checks.

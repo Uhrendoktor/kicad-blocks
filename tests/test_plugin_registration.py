@@ -646,13 +646,12 @@ def main() -> None:
                 )
             print(picker_probe.stdout.strip())
 
-            # Edit Facade is available from a browser-row selection alone;
-            # it opens the portable pin-layout editor even when the active
-            # schematic contains no placed instance of the block.
+            # Edit Facade validates the project catalog, then reports the current
+            # unsupported Symbol Editor handoff. No editor window or file edit is expected
+            # until KiCad exposes a supported GUI IPC operation for selecting a library item.
             facade_editor_client = KiCad(timeout_ms=30000)
             editor_pid = _window_process_id(xdotool, window_id)
             _dump_accessibility_tree(editor_pid)
-            facade_root = None
             try:
                 live_schematic = facade_editor_client.get_schematic()
                 live_selection = plugin_actions.safe_schematic_selection(
@@ -660,7 +659,7 @@ def main() -> None:
                 )
                 if live_selection:
                     raise AssertionError(
-                        "Edit Facade test requires an empty schematic selection; "
+                        "Edit Facade capability check requires an empty schematic selection; "
                         f"found {len(live_selection)} selected item(s)."
                     )
                 refreshed_record = plugin_actions.register_block(
@@ -675,73 +674,36 @@ def main() -> None:
                         "Could not reload the generated KBlocks project catalog before "
                         "checking Edit Facade capability: " + str(reload_warning)
                     )
+                project_catalog_path = project / ".kicad_blocks" / LIBRARY_CATALOG_NAME
+                if not project_catalog_path.is_file():
+                    raise FileNotFoundError(
+                        f"Edit Facade did not register the project catalog: {project_catalog_path}"
+                    )
                 try:
                     plugin_actions.edit_facade_symbol(
                         refreshed_record,
                         cast("KiCadApp", facade_editor_client),
-                        project_catalog=project / ".kicad_blocks" / LIBRARY_CATALOG_NAME,
+                        project_catalog=project_catalog_path,
                     )
                 except RuntimeError as exc:
-                    if "no supported IPC operation" not in str(exc):
+                    message = str(exc)
+                    if "no supported IPC operation" not in message:
                         raise
+                    symbol_id = f"KBlocks:{refreshed_record.manifest['symbol_name']}"
+                    if symbol_id not in message:
+                        raise AssertionError(
+                            "Edit Facade did not validate the selected project symbol identifier: "
+                            + message
+                        ) from exc
                 else:
                     raise AssertionError(
-                        f"Facade editor did not create contract widget {contract_id!r}."
+                        "Edit Facade unexpectedly returned without the expected unsupported-IPC result."
                     )
-
-                pin_table = find_contract_widget(facade_root, "facade-editor.pins")
-                rows = pin_table.get_children()
-                if not rows:
-                    raise AssertionError("Edit Facade opened without any external pins.")
-                first_row = rows[0]
-                original_values = pin_table.item(first_row, "values")
-                x_before = float(original_values[3])
-                x_after = round(x_before + 1.27, 6)
-
-                x_entry = find_contract_widget(facade_root, "facade-editor.x")
-                x_entry.delete(0, "end")
-                x_entry.insert(0, f"{x_after:g}")
-                apply_button = find_contract_widget(facade_root, "facade-editor.action.apply")
-                apply_button.invoke()
-                facade_root.update()
-
-                updated_values = pin_table.item(first_row, "values")
-                if abs(float(updated_values[3]) - x_after) > 0.000001:
-                    raise AssertionError(
-                        "Edit Facade did not update the selected pin's X coordinate: "
-                        f"before={original_values[3]!r}, after={updated_values[3]!r}"
-                    )
-                if project_catalog_path.read_bytes() == before_catalog:
-                    raise AssertionError(
-                        "Edit Facade did not persist the selected pin geometry to KBlocks.kicad_sym."
-                    )
-                if refreshed_record.symbol_library.read_bytes() != before_shared_symbol:
-                    raise AssertionError(
-                        "Edit Facade must edit the project catalog, not rewrite the shared source catalog."
-                    )
-                if not plugin_actions._LAST_LIBRARY_RELOAD_OK:
-                    raise AssertionError(
-                        "Edit Facade persisted the pin change but failed to reload the project library: "
-                        + str(plugin_actions._LAST_LIBRARY_RELOAD_WARNING)
-                    )
-
-                status = find_contract_widget(facade_root, "facade-editor.status")
-                status_value = facade_root.getvar(str(status.cget("textvariable")))
-                if "Saved" not in str(status_value):
-                    raise AssertionError(
-                        f"Edit Facade did not report its immediate save/reload: {status_value!r}"
-                    )
-                close_button = find_contract_widget(facade_root, "facade-editor.action.close")
-                close_button.invoke()
-                facade_root.update()
                 print(
-                    "Edit Facade GUI passed: selected pin geometry was edited, "
-                    "persisted immediately, and the project KBlocks library reloaded."
+                    "Edit Facade capability check passed: the project catalog entry was validated; "
+                    "the supported KiCad IPC surface cannot yet open/select it in Symbol Editor."
                 )
             finally:
-                if facade_root is not None:
-                    with contextlib.suppress(plugin_actions.tk.TclError):
-                        facade_root.destroy()
                 facade_editor_client.close()
 
             placement_client = KiCad(timeout_ms=30000)

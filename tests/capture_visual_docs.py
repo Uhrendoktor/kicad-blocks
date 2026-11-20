@@ -20,9 +20,6 @@ from typing import Protocol, TypedDict, cast
 
 ROOT = Path(__file__).resolve().parents[1]
 
-# Set by main() to the project catalog created by the production browser.
-project_catalog: Path | None = None
-
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "plugin" / "kicad-blocks"))
 
@@ -35,7 +32,12 @@ from kicad_blocks.manifest_types import (
     BlockVariantInput,
 )
 from kicad_blocks.model import parse_pins
-from kicad_blocks.repository import BlockRecord, create_block, revision_for_hashes
+from kicad_blocks.repository import (
+    BlockRecord,
+    create_block,
+    revision_for_hashes,
+    synchronize_project_symbol_catalog,
+)
 
 from scripts.visual_asset_inventory import ASSET_NAMES
 
@@ -94,6 +96,12 @@ class _TaskHubNotebook(Protocol):
     def tabs(self) -> tuple[str, ...]: ...
 
     def select(self, tab_id: str) -> str: ...
+
+
+class _ContractIdWidget(Protocol):
+    """Tk widget carrying one stable semantic interaction identifier."""
+
+    _kicad_ui_contract_id: str
 
 
 plugin_api = cast(_PluginActions, plugin_actions)
@@ -158,6 +166,24 @@ def walk_widgets(widget: tk.Misc) -> Iterator[tk.Misc]:
     yield widget
     for child in widget.winfo_children():
         yield from walk_widgets(child)
+
+
+def _find_contract_widget(root: tk.Misc, contract_id: str) -> tk.Misc:
+    """Find exactly one production widget by its semantic interaction identifier."""
+    matches: list[tk.Misc] = []
+    for widget in walk_widgets(root):
+        try:
+            widget_contract_id = cast(_ContractIdWidget, widget)._kicad_ui_contract_id
+        except AttributeError:
+            continue
+        if widget_contract_id == contract_id:
+            matches.append(widget)
+    if len(matches) != 1:
+        raise RuntimeError(
+            f"Expected one production widget with contract ID {contract_id!r}; "
+            f"found {len(matches)}."
+        )
+    return matches[0]
 
 
 def window_id(
@@ -406,6 +432,68 @@ def _capture_visible_window(
     capture_window(xdotool, identifier, destination, minimum_size=minimum_size)
 
 
+def _capture_messagebox(
+    parent: tk.Misc,
+    opener: Callable[[], None],
+    title: str,
+    destination: Path,
+    xdotool: str,
+    *,
+    minimum_size: tuple[int, int] = (320, 140),
+) -> None:
+    """Capture and dismiss a real Tcl/Tk messagebox while its modal wait is active."""
+    errors: list[str] = []
+
+    def capture_and_dismiss() -> None:
+        try:
+            deadline = time.monotonic() + 8.0
+            identifier = None
+            while time.monotonic() < deadline:
+                identifier = window_id(xdotool, title, minimum_size=minimum_size)
+                if identifier is not None:
+                    break
+                time.sleep(0.1)
+            if identifier is None:
+                raise TimeoutError(f"Messagebox {title!r} did not become visible.")
+            subprocess.run(
+                [xdotool, "windowactivate", "--sync", identifier],
+                capture_output=True,
+                text=True,
+                check=True,
+                timeout=5,
+            )
+            capture_window(xdotool, identifier, destination, minimum_size=minimum_size)
+        except (
+            OSError,
+            RuntimeError,
+            subprocess.SubprocessError,
+            TimeoutError,
+            tk.TclError,
+            ValueError,
+        ) as exc:
+            errors.append(f"{type(exc).__name__}: {exc}")
+        finally:
+            dismissal = subprocess.run(
+                [xdotool, "key", "--clearmodifiers", "Return"],
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=5,
+            )
+            if dismissal.returncode != 0:
+                errors.append(f"Could not dismiss messagebox {title!r}: {dismissal.stderr.strip()}")
+
+    callback_id = parent.after(400, capture_and_dismiss)
+    try:
+        opener()
+    except BaseException:
+        with contextlib.suppress(tk.TclError):
+            parent.after_cancel(callback_id)
+        raise
+    if errors:
+        raise RuntimeError(f"Could not capture {title!r}: {errors[0]}")
+
+
 def _capture_modal(
     parent: tk.Misc,
     opener: Callable[[], _ModalResult],
@@ -607,7 +695,11 @@ def _assert_add_layout_footer(dialog: tk.Toplevel) -> None:
 
 
 def capture_ui_workflows(
-    library_roots: list[Path], record: BlockRecord, project_dir: Path, output_dir: Path
+    library_roots: list[Path],
+    record: BlockRecord,
+    project_dir: Path,
+    project_catalog: Path,
+    output_dir: Path,
 ) -> None:
     """Export actual app windows, using the same theme initialization as run_action."""
     from types import SimpleNamespace
@@ -773,6 +865,71 @@ def capture_ui_workflows(
                     minimum_size=(900, 550),
                     prepare=lambda dialog: _select_first_table_row(dialog),
                 )
+
+                # Exercise Edit Facade through the real browser selection and button.
+                # The production helper validates the target catalog item, then reports
+                # that public KiCad GUI IPC cannot open/select it in Symbol Editor.
+                notebook.select(notebook.tabs()[0])
+                root.update_idletasks()
+                root.update()
+                results = cast(
+                    ttk.Treeview,
+                    _find_contract_widget(root, "library-browser.results"),
+                )
+                target_row = next(
+                    (
+                        item_id
+                        for item_id in results.get_children("")
+                        if results.set(item_id, "block") == record.name
+                    ),
+                    None,
+                )
+                if target_row is None:
+                    raise RuntimeError(
+                        f"The production browser did not list the visual target {record.name!r}."
+                    )
+                results.selection_set(target_row)
+                results.focus(target_row)
+                results.event_generate("<<TreeviewSelect>>")
+                root.update_idletasks()
+                root.update()
+                if not project_catalog.is_file():
+                    raise FileNotFoundError(
+                        f"The project facade catalog was not created: {project_catalog}"
+                    )
+                try:
+                    plugin_actions._edit_facade_symbol(
+                        record,
+                        kicad,
+                        project_catalog=project_catalog,
+                        parent=root,
+                    )
+                except RuntimeError as exc:
+                    if "no supported IPC operation" not in str(exc):
+                        raise
+                else:
+                    raise AssertionError(
+                        "Edit Facade returned without the expected unsupported-IPC result."
+                    )
+                facade_button = cast(
+                    ttk.Button,
+                    _find_contract_widget(root, "library-browser.action.facade"),
+                )
+                if str(facade_button.cget("state")) == "disabled":
+                    raise RuntimeError(
+                        "Edit Facade remained disabled after selecting the target block."
+                    )
+
+                def invoke_facade() -> None:
+                    facade_button.invoke()
+
+                _capture_messagebox(
+                    root,
+                    invoke_facade,
+                    "Edit facade",
+                    output_dir / f"facade-handoff-unavailable-{theme}.png",
+                    xdotool,
+                )
             finally:
                 root.destroy()
 
@@ -891,36 +1048,6 @@ def capture_ui_workflows(
                     xdotool,
                     minimum_size=(560, 320),
                 )
-                plugin_actions._edit_facade_symbol(
-                    record,
-                    kicad,
-                    project_catalog=project_catalog,
-                    parent=root,
-                )
-                root.update_idletasks()
-                root.update()
-                facade_title = f"Facade pin layout — {record.name}"
-                facade_dialog = next(
-                    (
-                        child
-                        for child in root.winfo_children()
-                        if isinstance(child, plugin_actions.tk.Toplevel)
-                        and child.title() == facade_title
-                    ),
-                    None,
-                )
-                if facade_dialog is None:
-                    raise RuntimeError("The production Facade Pin Layout editor did not open.")
-                _select_first_table_row(facade_dialog)
-                facade_dialog.update_idletasks()
-                facade_dialog.update()
-                _capture_visible_window(
-                    xdotool,
-                    facade_title,
-                    output_dir / f"facade-editor-{theme}.png",
-                    minimum_size=(760, 460),
-                )
-                facade_dialog.destroy()
             finally:
                 root.destroy()
     finally:
@@ -1207,10 +1334,17 @@ def main() -> int:
         sensor = _create_sensor_fixture(library)
         target = _create_stusb4500_fixture(library, temporary, cli, output_dir)
         extra_library = _create_support_library(temporary)
-        globals()["project_catalog"] = (
-            temporary / ".kicad_blocks" / plugin_actions.LIBRARY_CATALOG_NAME
+        project_catalog = temporary / ".kicad_blocks" / plugin_actions.LIBRARY_CATALOG_NAME
+        synchronize_project_symbol_catalog(
+            project_catalog,
+            target.path / str(target.manifest["symbol_file"]),
+            str(target.manifest["symbol_name"]),
+            shared_catalog_file=target.symbol_library,
+            baseline_digest=target.manifest.get("catalog_symbol_hash"),
         )
-        capture_ui_workflows([library, extra_library], target, temporary, output_dir)
+        capture_ui_workflows(
+            [library, extra_library], target, temporary, project_catalog, output_dir
+        )
         capture_picker([target, sensor], output_dir)
         build_gif(output_dir)
 
