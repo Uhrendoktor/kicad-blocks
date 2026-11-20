@@ -132,6 +132,28 @@ def _wait_for_editor(
     )
 
 
+def _window_process_id(xdotool: str, window_id: str) -> int:
+    """Resolve the actual X11 client PID, not a launcher/wrapper PID."""
+    result = subprocess.run(
+        [xdotool, "getwindowpid", window_id],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    try:
+        process_id = int(result.stdout.strip())
+    except ValueError as exc:
+        raise RuntimeError(
+            f"xdotool returned an invalid PID for window {window_id!r}: "
+            f"{result.stdout!r}"
+        ) from exc
+    if process_id <= 1:
+        raise RuntimeError(
+            f"xdotool returned an invalid PID {process_id} for window {window_id!r}."
+        )
+    return process_id
+
+
 def _dump_accessibility_tree(process_id: int) -> str:
     """Inspect KiCad's AT-SPI tree; CI can require a named top-level window."""
     required = os.environ.get("KICAD_BLOCKS_REQUIRE_A11Y") == "1"
@@ -612,7 +634,8 @@ def main() -> None:
             # it opens the portable pin-layout editor even when the active
             # schematic contains no placed instance of the block.
             facade_editor_client = KiCad(timeout_ms=30000)
-            _dump_accessibility_tree(process.pid)
+            editor_pid = _window_process_id(xdotool, window_id)
+            _dump_accessibility_tree(editor_pid)
             facade_root = None
             try:
                 live_schematic = facade_editor_client.get_schematic()

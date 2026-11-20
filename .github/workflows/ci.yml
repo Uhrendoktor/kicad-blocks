@@ -246,11 +246,11 @@ jobs:
             if [[ "$(id -u)" -eq 0 ]]; then
               apt-get -o Acquire::Languages=none update
               apt-get install -y --no-install-recommends \
-                xvfb xdotool python3-tk x11-apps dbus-daemon at-spi2-core libatk-bridge2.0-0t64
+                xvfb xdotool python3-tk x11-apps dbus-daemon dbus-bin at-spi2-core libatk-bridge2.0-0t64
             else
               sudo -n apt-get -o Acquire::Languages=none update
               sudo -n apt-get install -y --no-install-recommends \
-                xvfb xdotool python3-tk x11-apps dbus-daemon at-spi2-core libatk-bridge2.0-0t64
+                xvfb xdotool python3-tk x11-apps dbus-daemon dbus-bin at-spi2-core libatk-bridge2.0-0t64
             fi
           fi
           python3 -c "import tkinter; print('System Python Tkinter available')"
