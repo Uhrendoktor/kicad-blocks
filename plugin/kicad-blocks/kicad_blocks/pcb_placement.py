@@ -143,6 +143,7 @@ def read_pcb_placement_manifest(board_path: Path) -> PCBPlacementManifest:
         raise ValueError(f"Could not read PCB placement manifest {sidecar}: {exc}") from exc
     if not isinstance(decoded, dict):
         raise TypeError("PCB placement manifest must be a JSON object.")
+    decoded = cast(dict[str, object], decoded)
     schema_version = decoded.get("schema_version")
     if schema_version != PLACEMENT_SCHEMA_VERSION:
         raise ValueError(f"Unsupported PCB placement manifest schema: {schema_version!r}.")
@@ -154,15 +155,16 @@ def read_pcb_placement_manifest(board_path: Path) -> PCBPlacementManifest:
         raise ValueError(
             "PCB placement manifest belongs to a different board path; refusing to move items."
         )
-    placements = decoded.get("placements")
-    if not isinstance(placements, list) or not placements:
+    placements_raw = decoded.get("placements")
+    if not isinstance(placements_raw, list) or not placements_raw:
         raise ValueError("PCB placement manifest contains no block placements.")
 
     seen_references: set[str] = set()
     seen_items: set[str] = set()
-    for placement in placements:
-        if not isinstance(placement, dict):
+    for raw_placement in cast(list[object], placements_raw):
+        if not isinstance(raw_placement, dict):
             raise TypeError("PCB placement manifest contains a malformed placement.")
+        placement = cast(dict[str, object], raw_placement)
         reference_value = placement.get("instance_reference", "")
         if not isinstance(reference_value, str):
             raise TypeError("PCB placement instance reference must be a string.")
@@ -170,10 +172,10 @@ def read_pcb_placement_manifest(board_path: Path) -> PCBPlacementManifest:
         if not reference or reference.casefold() in seen_references:
             raise ValueError(f"PCB placement reference is missing or duplicated: {reference!r}.")
         seen_references.add(reference.casefold())
-        item_ids = placement.get("item_uuids")
-        if not isinstance(item_ids, list) or not item_ids:
+        item_ids_raw = placement.get("item_uuids")
+        if not isinstance(item_ids_raw, list) or not item_ids_raw:
             raise ValueError(f"PCB placement {reference!r} has no board-item UUIDs.")
-        for value in item_ids:
+        for value in cast(list[object], item_ids_raw):
             if not isinstance(value, str):
                 raise TypeError(f"PCB placement {reference!r} contains a non-string UUID.")
             item_id = value.strip()

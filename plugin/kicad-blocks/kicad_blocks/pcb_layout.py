@@ -61,50 +61,53 @@ def _load_project_settings(path: Path, *, context: str) -> KiCadProjectData:
         raise ValueError(f"{context}: {path}") from exc
     if not isinstance(decoded, dict):
         raise TypeError(f"{context}: {path}")
+    decoded = cast(dict[str, object], decoded)
     metadata = decoded.get("meta")
     if metadata is not None and not isinstance(metadata, dict):
         raise TypeError(f"{context}: invalid meta section in {path}")
 
-    net_settings = decoded.get("net_settings")
-    if net_settings is None:
+    net_settings_raw = decoded.get("net_settings")
+    if net_settings_raw is None:
         return cast(KiCadProjectData, decoded)
-    if not isinstance(net_settings, dict):
+    if not isinstance(net_settings_raw, dict):
         raise TypeError(f"{context}: invalid net_settings section in {path}")
+    net_settings = cast(dict[str, object], net_settings_raw)
 
-    classes = net_settings.get("classes", [])
-    if not isinstance(classes, list):
+    classes_raw = net_settings.get("classes", [])
+    if not isinstance(classes_raw, list):
         raise TypeError(f"{context}: invalid net_settings.classes section in {path}")
-    for item in classes:
+    for item in cast(list[object], classes_raw):
         if not isinstance(item, dict):
             raise TypeError(f"{context}: invalid net_settings.classes section in {path}")
 
-    patterns = net_settings.get("netclass_patterns", [])
-    if not isinstance(patterns, list):
+    patterns_raw = net_settings.get("netclass_patterns", [])
+    if not isinstance(patterns_raw, list):
         raise TypeError(f"{context}: invalid net_settings.netclass_patterns section in {path}")
-    for entry in patterns:
+    for raw_entry in cast(list[object], patterns_raw):
+        if not isinstance(raw_entry, dict):
+            raise TypeError(f"{context}: invalid netclass pattern entry in {path}")
+        entry = cast(dict[str, object], raw_entry)
         if (
-            not isinstance(entry, dict)
-            or not isinstance(entry.get("pattern"), str)
+            not isinstance(entry.get("pattern"), str)
             or not isinstance(entry.get("netclass"), str)
         ):
             raise TypeError(f"{context}: invalid netclass pattern entry in {path}")
 
-    assignments = net_settings.get("netclass_assignments", {})
-    if not isinstance(assignments, dict):
+    assignments_raw = net_settings.get("netclass_assignments", {})
+    if not isinstance(assignments_raw, dict):
         raise TypeError(f"{context}: invalid netclass assignments in {path}")
+    assignments = cast(dict[str, object], assignments_raw)
     for value in assignments.values():
         if isinstance(value, str):
             continue
         if not isinstance(value, list) or any(not isinstance(name, str) for name in value):
             raise TypeError(f"{context}: invalid netclass assignment value in {path}")
 
-    chain_maps = (
-        ("net_chain_classes", net_settings.get("net_chain_classes", {})),
-        ("net_chain_netclasses", net_settings.get("net_chain_netclasses", {})),
-    )
-    for key, chain_map in chain_maps:
-        if not isinstance(chain_map, dict):
+    for key in ("net_chain_classes", "net_chain_netclasses"):
+        chain_map_raw = net_settings.get(key, {})
+        if not isinstance(chain_map_raw, dict):
             raise TypeError(f"{context}: invalid {key} mapping in {path}")
+        chain_map = cast(dict[str, object], chain_map_raw)
         if any(not isinstance(value, str) for value in chain_map.values()):
             raise TypeError(f"{context}: invalid {key} mapping in {path}")
 
