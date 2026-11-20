@@ -648,9 +648,28 @@ def main() -> None:
                     env=env,
                     capture_output=True,
                     text=True,
-                    check=True,
+                    check=False,
                     timeout=15.0,
                 )
+                if tk_runtime_probe.returncode != 0:
+                    raise RuntimeError(
+                        "KiCad-managed Tk 9.1 initialization failed: "
+                        f"exit={tk_runtime_probe.returncode}; "
+                        f"stdout={tk_runtime_probe.stdout!r}; "
+                        f"stderr={tk_runtime_probe.stderr!r}; "
+                        "runtime_env="
+                        + json.dumps(
+                            {
+                                key: env.get(key)
+                                for key in (
+                                    "DISPLAY",
+                                    "LD_LIBRARY_PATH",
+                                    "TCL_LIBRARY",
+                                    "TK_LIBRARY",
+                                )
+                            }
+                        )
+                    )
                 tk_runtime = json.loads(tk_runtime_probe.stdout)
                 if not tk_runtime["tk"].startswith("9.1."):
                     raise AssertionError(
