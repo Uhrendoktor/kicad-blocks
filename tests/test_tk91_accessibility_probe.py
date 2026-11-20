@@ -5,12 +5,6 @@ from __future__ import annotations
 import json
 import os
 import time
-import tkinter as tk
-from tkinter import ttk
-
-import xa11y
-
-
 WINDOW_TITLE = "KiCad Blocks Tk 9.1 Accessibility Probe"
 
 
@@ -27,6 +21,13 @@ def _walk(node):
 
 
 def main() -> None:
+    # Import only inside the probe: standard CI Python interpreters need not
+    # ship tkinter, while this file is still collected during the full suite.
+    import tkinter as tk
+    from tkinter import ttk
+
+    import xa11y
+
     root = tk.Tk()
     root.title(WINDOW_TITLE)
     root.geometry("420x180+20+20")
