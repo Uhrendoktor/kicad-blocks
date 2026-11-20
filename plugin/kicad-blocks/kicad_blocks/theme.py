@@ -73,7 +73,14 @@ def _desktop_prefers_dark() -> bool:
         try:
             import winreg
 
-            key_path = "Software" + chr(92) + "Microsoft" + chr(92) + "Windows" + chr(92) + "CurrentVersion" + chr(92) + "Themes" + chr(92) + "Personalize"
+            key_path = chr(92).join((
+                "Software",
+                "Microsoft",
+                "Windows",
+                "CurrentVersion",
+                "Themes",
+                "Personalize",
+            ))
             with winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path) as key:
                 value, _kind = winreg.QueryValueEx(key, "AppsUseLightTheme")
             return int(value) == 0

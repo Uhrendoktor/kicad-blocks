@@ -48,15 +48,24 @@ def test_flat_tabs_preserve_notebook_api_and_support_pointer_and_keyboard():
         assert facade.winfo_ismapped()
         assert not schematic.winfo_ismapped()
 
+        changed_tabs = []
+        tabs.bind(
+            "<<NotebookTabChanged>>",
+            lambda _event: changed_tabs.append(tabs.index("current")),
+        )
         tabs.tab_labels[1].event_generate("<Button-1>")
         root.update()
         assert tabs.select() == str(schematic)
+        assert tabs.index(tabs.select()) == 1
+        assert changed_tabs == [1]
         assert schematic.winfo_ismapped()
 
         tabs.tab_labels[1].focus_set()
         tabs.tab_labels[1].event_generate("<Left>")
         root.update()
         assert tabs.select() == str(facade)
+        assert tabs.index("current") == 0
+        assert changed_tabs == [1, 0]
         assert facade.winfo_ismapped()
     finally:
         root.destroy()
@@ -86,6 +95,7 @@ def test_auto_hide_scrollbar_switches_between_idle_and_active_states():
         scroll.set("0", "0.45")
         assert scroll.scrollable is True
         assert scroll.cget("style") == scroll.active_style
+        scroll._cancel_hide()
         scroll._hide_if_idle()
         assert scroll.cget("style") == scroll.idle_style
     finally:

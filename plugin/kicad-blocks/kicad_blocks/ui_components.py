@@ -19,7 +19,7 @@ class FlatTabControl(ttk.Frame):
         super().__init__(master, style="TabHost.TFrame", **kwargs)
         self._kicad_ui_contract_id = contract_id
         self._tabbar = ttk.Frame(self, style="TabBar.TFrame")
-        self._tabbar.grid(row=0, column=0, sticky="ew")
+        self._tabbar.grid(row=0, column=0, sticky="ew", pady=(0, UI_SPACING["xs"]))
         self.columnconfigure(0, weight=1)
         self.rowconfigure(1, weight=1)
         self._pages: list[Any] = []
