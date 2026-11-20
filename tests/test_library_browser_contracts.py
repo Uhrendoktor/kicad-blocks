@@ -484,9 +484,7 @@ def test_edit_facade_button_targets_selected_record(monkeypatch: MonkeyPatch, tm
         root.destroy()
 
 
-def test_publish_button_targets_the_selected_record(
-    monkeypatch: MonkeyPatch, tmp_path: Path
-):
+def test_publish_button_targets_the_selected_record(monkeypatch: MonkeyPatch, tmp_path: Path):
     root, context, records, _library, _project = _new_browser(monkeypatch, tmp_path)
     published: list[str] = []
 
@@ -504,9 +502,7 @@ def test_publish_button_targets_the_selected_record(
         context.action_calls.append(block_id)
 
     monkeypatch.setattr(plugin_actions, "_publish_block", publish)
-    monkeypatch.setattr(
-        plugin_actions, "_list_library_records", lambda _roots=None: list(records)
-    )
+    monkeypatch.setattr(plugin_actions, "_list_library_records", lambda _roots=None: list(records))
     try:
         _select_first_record(context)
         ButtonContract(
@@ -1052,6 +1048,7 @@ def test_library_browser_refresh_error_keeps_existing_records(
         assert "2 of 2 blocks" in summary.getvar(summary.cget("textvariable"))
     finally:
         root.destroy()
+
 
 def test_place_block_reload_warning_does_not_start_native_placement(
     monkeypatch: MonkeyPatch, tmp_path: Path

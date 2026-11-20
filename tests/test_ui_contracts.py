@@ -88,14 +88,18 @@ def _new_hub(
 
     monkeypatch.setattr(plugin_actions, "_create_action_icon", no_icon)
     selected_ids = (
-        ["U1", "U2"] if action_id == "apply-multiple-pcb-layouts" else
-        ["U1"] if action_id in {
+        ["U1", "U2"]
+        if action_id == "apply-multiple-pcb-layouts"
+        else ["U1"]
+        if action_id
+        in {
             "open-implementation",
             "configure-instance",
             "make-local-copy",
             "synchronize-local-copy",
             "apply-pcb-layout",
-        } else []
+        }
+        else []
     )
     selected_symbols = [
         cast(
@@ -119,6 +123,7 @@ def _new_hub(
         ),
     )
     if selected_symbols:
+
         def find_record(
             _roots: Path | list[Path],
             _project_dir: Path,
@@ -127,11 +132,7 @@ def _new_hub(
             return record
 
         def local_copy_path(_project_dir: Path, _instance_id: str) -> Path | None:
-            return (
-                Path("/tmp/local-usb-power")
-                if action_id == "synchronize-local-copy"
-                else None
-            )
+            return Path("/tmp/local-usb-power") if action_id == "synchronize-local-copy" else None
 
         def layout_choices(_record: BlockRecord) -> list[plugin_actions.ResolvedBlockLayout]:
             return [

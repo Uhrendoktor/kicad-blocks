@@ -147,8 +147,7 @@ def _window_process_id(xdotool: str, window_id: str) -> int:
         process_id = int(result.stdout.strip())
     except ValueError as exc:
         raise RuntimeError(
-            f"xdotool returned an invalid PID for window {window_id!r}: "
-            f"{result.stdout!r}"
+            f"xdotool returned an invalid PID for window {window_id!r}: {result.stdout!r}"
         ) from exc
     if process_id <= 1:
         raise RuntimeError(
@@ -157,9 +156,7 @@ def _window_process_id(xdotool: str, window_id: str) -> int:
     return process_id
 
 
-def _dump_accessibility_tree(
-    process_id: int, *, required: bool | None = None
-) -> str:
+def _dump_accessibility_tree(process_id: int, *, required: bool | None = None) -> str:
     """Inspect a process AT-SPI tree; CI can require a named top-level window."""
     if required is None:
         required = os.environ.get("KICAD_BLOCKS_REQUIRE_A11Y") == "1"
@@ -202,10 +199,7 @@ def _dump_accessibility_tree(
     print(
         "Accessible top-level windows: "
         + json.dumps(
-            [
-                {"role": child.get("role"), "name": child.get("name")}
-                for child in named_windows
-            ],
+            [{"role": child.get("role"), "name": child.get("name")} for child in named_windows],
             ensure_ascii=False,
         ),
         flush=True,

@@ -902,7 +902,8 @@ def capture_ui_workflows(
                 facade_title = f"Facade pin layout — {record.name}"
                 facade_dialog = next(
                     (
-                        child for child in root.winfo_children()
+                        child
+                        for child in root.winfo_children()
                         if isinstance(child, plugin_actions.tk.Toplevel)
                         and child.title() == facade_title
                     ),

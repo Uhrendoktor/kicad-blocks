@@ -386,6 +386,7 @@ def _set_none_tkinter() -> None:
 def _raise_publish_failure(*_args: _RecordedValue, **_kwargs: _RecordedValue) -> NoReturn:
     raise RuntimeError("simulated publish failure")
 
+
 def _pcb_placement_entry(
     instance_reference: str,
     block_name: str,
@@ -664,6 +665,7 @@ def test_single_pcb_layout_cancelling_any_mapping_prompt_stops_before_merge(
         "_choose_block_layout",
         _standard_layout_callback(),
     )
+
     def select_source_board(
         *_args: _RecordedValue,
         **_kwargs: _RecordedValue,
@@ -782,7 +784,9 @@ def _batch_context(
         "_pick_save_file",
         _record_save_picker(calls["save_picker"], output),
     )
-    monkeypatch.setattr(plugin_actions, "placement_manifest_path", _placement_path_callback(sidecar))
+    monkeypatch.setattr(
+        plugin_actions, "placement_manifest_path", _placement_path_callback(sidecar)
+    )
 
     def merge(
         source: Path,
@@ -976,6 +980,7 @@ def _patch_action_environment(
         return schematic
 
     kicad = cast(plugin_actions.KiCadApp, SimpleNamespace(get_schematic=get_schematic))
+
     def create_root() -> _ActionRoot:
         return root
 

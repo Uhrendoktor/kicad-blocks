@@ -156,7 +156,6 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
                 project_catalog=project_catalog,
             )
 
-
     def test_place_block_starts_native_cursor_move_when_schematic_api_exists(self):
         instance = SimpleNamespace(id=SimpleNamespace(value="block-instance-id"))
         commit = object()
@@ -170,9 +169,7 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
             save=Mock(),
         )
         kicad = SimpleNamespace(get_schematic=Mock(return_value=schematic))
-        with patch.object(
-            plugin_actions, "_schematic_page_center_mm", return_value=(100.0, 75.0)
-        ):
+        with patch.object(plugin_actions, "_schematic_page_center_mm", return_value=(100.0, 75.0)):
             placed = plugin_actions._start_native_symbol_placement(
                 kicad, None, self.block.manifest["symbol_name"]
             )
@@ -204,9 +201,7 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
         )
         kicad = SimpleNamespace(get_schematic=Mock(return_value=schematic))
         with (
-            patch.object(
-                plugin_actions, "_schematic_page_center_mm", return_value=(100.0, 75.0)
-            ),
+            patch.object(plugin_actions, "_schematic_page_center_mm", return_value=(100.0, 75.0)),
             patch.object(
                 plugin_actions, "_focus_schematic_items_in_editor", return_value=target
             ) as focus_items,
@@ -241,9 +236,7 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
         )
         kicad = SimpleNamespace(get_schematic=Mock(return_value=schematic))
         with (
-            patch.object(
-                plugin_actions, "_schematic_page_center_mm", return_value=(100.0, 75.0)
-            ),
+            patch.object(plugin_actions, "_schematic_page_center_mm", return_value=(100.0, 75.0)),
             patch.object(
                 plugin_actions, "_focus_schematic_items_in_editor", return_value=target
             ) as focus_items,
@@ -272,9 +265,7 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
         )
         kicad = SimpleNamespace(get_schematic=Mock(return_value=schematic))
         with (
-            patch.object(
-                plugin_actions, "_schematic_page_center_mm", return_value=(100.0, 75.0)
-            ),
+            patch.object(plugin_actions, "_schematic_page_center_mm", return_value=(100.0, 75.0)),
             self.assertRaisesRegex(RuntimeError, "editor is busy"),
         ):
             plugin_actions._start_native_symbol_placement(
@@ -294,9 +285,7 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
         )
         kicad = SimpleNamespace(get_schematic=Mock(return_value=schematic))
         with (
-            patch.object(
-                plugin_actions, "_schematic_page_center_mm", return_value=(100.0, 75.0)
-            ),
+            patch.object(plugin_actions, "_schematic_page_center_mm", return_value=(100.0, 75.0)),
             self.assertRaisesRegex(RuntimeError, "library is stale"),
         ):
             plugin_actions._start_native_symbol_placement(
@@ -316,14 +305,13 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
 
         catalog_path = build_project_symbol_catalog(self.project, [self.library])
         original_asset = self.block.symbol_library.read_bytes()
-        original_shared_catalog = (
-            self.library / plugin_actions.LIBRARY_CATALOG_NAME
-        ).read_bytes()
+        original_shared_catalog = (self.library / plugin_actions.LIBRARY_CATALOG_NAME).read_bytes()
         tree_before = parse_sexpr(catalog_path.read_text(encoding="utf-8"))
         symbol_name = self.block.manifest["symbol_name"]
         symbol_before = _named_symbol_node(tree_before, symbol_name, catalog_path)
         pin_unit = next(
-            child for child in symbol_before[1:]
+            child
+            for child in symbol_before[1:]
             if _head(child) == "symbol"
             and str(child[1]).startswith(symbol_name + "_")
             and _all(child, "pin")
@@ -336,11 +324,13 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
         expected_document = copy.deepcopy(tree_before)
         expected_symbol = _named_symbol_node(expected_document, symbol_name, catalog_path)
         expected_unit = next(
-            child for child in expected_symbol[1:]
+            child
+            for child in expected_symbol[1:]
             if _head(child) == "symbol" and str(child[1]) == str(pin_unit[1])
         )
         expected_pin = next(
-            item for item in _all(expected_unit, "pin")
+            item
+            for item in _all(expected_unit, "pin")
             if str(_direct(item, "name")[1]) == pin_name
             and str(_direct(item, "number")[1]) == pin_number
         )
@@ -389,8 +379,7 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
         symbol_tree = parse_sexpr(catalog_path.read_text(encoding="utf-8"))
         symbol = _named_symbol_node(symbol_tree, symbol_name, catalog_path)
         unit = next(
-            child for child in symbol[1:]
-            if _head(child) == "symbol" and _all(child, "pin")
+            child for child in symbol[1:] if _head(child) == "symbol" and _all(child, "pin")
         )
         pin = _all(unit, "pin")[0]
         pin_name = str(_direct(pin, "name")[1])
@@ -431,8 +420,7 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
         tree = parse_sexpr(catalog_path.read_text(encoding="utf-8"))
         symbol = _named_symbol_node(tree, symbol_name, catalog_path)
         unit = next(
-            child for child in symbol[1:]
-            if _head(child) == "symbol" and _all(child, "pin")
+            child for child in symbol[1:] if _head(child) == "symbol" and _all(child, "pin")
         )
         pin = _all(unit, "pin")[0]
         before = catalog_path.read_bytes()
@@ -517,11 +505,11 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
     def test_create_block_chooses_collision_safe_name_without_prompting(self):
         source = self.project / "power_stage.kicad_sch"
         source.write_text("(kicad_sch)", encoding="utf-8")
-        selection = '''(sheet
+        selection = """(sheet
             (property "Sheetname" "Power Stage" (at 100 100 0) (effects (font (size 1 1))))
             (property "Sheetfile" "power_stage.kicad_sch" (at 100 100 0) (effects (font (size 1 1))))
             (uuid "dddddddd-dddd-4ddd-8ddd-dddddddddddd")
-        )'''
+        )"""
         schematic = SimpleNamespace(get_selection_as_string=Mock(return_value=selection))
         existing = [SimpleNamespace(name="Power Stage"), SimpleNamespace(name="Power Stage (2)")]
         with (
@@ -1245,9 +1233,7 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
         )
         fake_kipy = types.ModuleType("kipy")
         fake_kicad = SimpleNamespace(get_schematic=Mock(return_value=None))
-        kicad_constructor = Mock(
-            side_effect=lambda: events.append("kipy.KiCad") or fake_kicad
-        )
+        kicad_constructor = Mock(side_effect=lambda: events.append("kipy.KiCad") or fake_kicad)
         setattr(fake_kipy, "KiCad", kicad_constructor)
         with (
             patch.object(

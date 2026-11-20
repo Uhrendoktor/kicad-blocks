@@ -136,7 +136,9 @@ def _schedule_dialog_action(
             return
 
         if time.monotonic() >= deadline:
-            outcome["timeout"] = f"Tk did not map dialog {title!r} within {_DIALOG_TIMEOUT_SECONDS:g}s."
+            outcome["timeout"] = (
+                f"Tk did not map dialog {title!r} within {_DIALOG_TIMEOUT_SECONDS:g}s."
+            )
             # Destroying the root also terminates Tk's nested modal wait, so the
             # outer assertion reports a timeout rather than hanging the runner.
             try:
@@ -166,7 +168,9 @@ def _assert_dialog_window(root, outcome: _DialogOutcome) -> str:
 def _invoke_button(root, dialog_path: str, label: str) -> None:
     buttons = _button_labels(root, dialog_path)
     button = buttons.get(label.casefold())
-    assert button is not None, f"Dialog {dialog_path!r} did not render a {label!r} button; found {sorted(buttons)}."
+    assert button is not None, (
+        f"Dialog {dialog_path!r} did not render a {label!r} button; found {sorted(buttons)}."
+    )
     root.tk.call(button, "invoke")
 
 

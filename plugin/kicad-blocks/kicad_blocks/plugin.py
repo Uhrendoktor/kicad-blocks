@@ -2970,13 +2970,11 @@ def _create_and_place(
     # The source sheet is already a complete specification. Generate a
     # readable name from its filename and add a suffix when this library already
     # contains a block with that name; no second dialog is needed.
-    base_name = " ".join(
-        source_sheet.stem.replace("_", " ").replace("-", " ").split()
-    ).title() or "Functional Block"
-    existing_names = {
-        str(item.name).casefold()
-        for item in _list_library_records([Path(root)])
-    }
+    base_name = (
+        " ".join(source_sheet.stem.replace("_", " ").replace("-", " ").split()).title()
+        or "Functional Block"
+    )
+    existing_names = {str(item.name).casefold() for item in _list_library_records([Path(root)])}
     name = base_name
     suffix = 2
     while name.casefold() in existing_names:
@@ -3140,7 +3138,8 @@ def _apply_facade_pin_geometry(
     document = parse_sexpr(target.read_text(encoding="utf-8"))
     symbol = _named_symbol_node(document, symbol_name, target)
     units = [
-        child for child in symbol[1:]
+        child
+        for child in symbol[1:]
         if _head(child) == "symbol" and len(child) >= 2 and str(child[1]) == unit_name
     ]
     if len(units) != 1:
@@ -3152,8 +3151,10 @@ def _apply_facade_pin_geometry(
         name_node = _direct(pin, "name")
         number_node = _direct(pin, "number")
         if (
-            name_node is not None and len(name_node) >= 2
-            and number_node is not None and len(number_node) >= 2
+            name_node is not None
+            and len(name_node) >= 2
+            and number_node is not None
+            and len(number_node) >= 2
             and str(name_node[1]) == pin_name
             and str(number_node[1]) == pin_number
         ):
@@ -3280,9 +3281,7 @@ def _edit_facade_symbol(
         entry.grid(row=0, column=column + 1, sticky="ew", padx=(0, 10))
         entries[label] = entry
 
-    notice = ttk.Label(
-        frame, textvariable=status_value, style="Muted.TLabel", wraplength=1000
-    )
+    notice = ttk.Label(frame, textvariable=status_value, style="Muted.TLabel", wraplength=1000)
     notice._kicad_ui_contract_id = "facade-editor.status"
     notice.grid(row=3, column=0, sticky="ew", pady=(9, 0))
 
@@ -3399,8 +3398,6 @@ def _edit_facade_symbol(
     tree.focus_set()
     _set_window_geometry(dialog, 1060, 650, 760, 460)
     return True
-
-
 
 
 def _place_existing(
@@ -4731,9 +4728,7 @@ def _ask_layout_details(
     def update_mode(_event: tkinter_types.Event[tkinter_types.Misc] | None = None) -> None:
         use_existing = mode_combo.get() == "Choose an existing PCB file"
         if use_existing:
-            source_entry.grid(
-                row=4, column=0, columnspan=2, sticky="ew", pady=(3, 8)
-            )
+            source_entry.grid(row=4, column=0, columnspan=2, sticky="ew", pady=(3, 8))
             browse_button.grid(row=4, column=2, sticky="ew", padx=(6, 0), pady=(3, 8))
             source_entry.configure(state="normal")
             browse_button.configure(state="normal")
@@ -5171,7 +5166,9 @@ def _show_block_layout_editor(
             else:
                 created_layout_to_open[0] = None
         except (OSError, RuntimeError, TypeError, ValueError, KeyError, StopIteration) as exc:
-            status_value.set("Automatic save failed. Close will retry; the pending change is retained.")
+            status_value.set(
+                "Automatic save failed. Close will retry; the pending change is retained."
+            )
             messagebox.showerror("Save PCB layouts", str(exc), parent=dialog)
             update_actions()
             return False
@@ -5790,7 +5787,9 @@ def _show_block_variant_editor(
                 )
                 new_implementation_to_open[0] = Path(record.path) / str(selected.get("file") or "")
         except (OSError, RuntimeError, TypeError, ValueError, KeyError, StopIteration) as exc:
-            status_value.set("Automatic save failed. Close will retry; the pending change is retained.")
+            status_value.set(
+                "Automatic save failed. Close will retry; the pending change is retained."
+            )
             messagebox.showerror("Save implementations", str(exc), parent=dialog)
             update_actions()
             return False
@@ -7535,9 +7534,7 @@ def _publish_block(
 ) -> None:
     library_paths = _library_roots_for(root)
     if record is None:
-        record = _pick_record(
-            _list_library_records(library_paths), parent, "Publish Library Block"
-        )
+        record = _pick_record(_list_library_records(library_paths), parent, "Publish Library Block")
     if record is None:
         return
     project_catalog = (
@@ -8033,7 +8030,8 @@ def _show_action_hub(
             selection = []
             selection_error = str(exc)
         symbols = [
-            item for item in selection
+            item
+            for item in selection
             if hasattr(item, "definition") and hasattr(item.definition, "id")
         ]
         all_selected_are_symbols = len(selection) == len(symbols)
@@ -8046,12 +8044,8 @@ def _show_action_hub(
             and library_paths
         ):
             try:
-                selected_record = _block_record_for_instance(
-                    library_paths, project_dir, symbols[0]
-                )
-                selected_local = local_copy_for_instance(
-                    project_dir, str(symbols[0].id)
-                )
+                selected_record = _block_record_for_instance(library_paths, project_dir, symbols[0])
+                selected_local = local_copy_for_instance(project_dir, str(symbols[0].id))
             except (OSError, RuntimeError, ValueError, LookupError):
                 selected_record = None
                 selected_local = None
@@ -8060,16 +8054,15 @@ def _show_action_hub(
         create_valid = has_schematic and not selection
         if has_schematic and len(selection) == 1 and not symbols and project_dir is not None:
             try:
-                create_valid = _selected_sheet_symbol_source(
-                    schematic, project_dir, selection=selection
-                ) is not None
+                create_valid = (
+                    _selected_sheet_symbol_source(schematic, project_dir, selection=selection)
+                    is not None
+                )
             except (OSError, RuntimeError, ValueError, LookupError):
                 create_valid = False
 
         one_block = selected_record is not None
-        one_has_layout = bool(
-            one_block and _layout_choices(selected_record)
-        )
+        one_has_layout = bool(one_block and _layout_choices(selected_record))
         multiple_records = []
         if (
             all_selected_are_symbols
@@ -8079,8 +8072,7 @@ def _show_action_hub(
         ):
             try:
                 multiple_records = [
-                    _block_record_for_instance(library_paths, project_dir, item)
-                    for item in symbols
+                    _block_record_for_instance(library_paths, project_dir, item) for item in symbols
                 ]
             except (OSError, RuntimeError, ValueError, LookupError):
                 multiple_records = []
@@ -8120,15 +8112,15 @@ def _show_action_hub(
                 f"{getattr(symbols[0], 'reference', 'Selected instance')}: {local_text} selected."
             )
         elif len(symbols) >= 2 and multiple_have_layouts:
-            status_value.set(f"{len(symbols)} block instances selected; batch PCB layout is available.")
+            status_value.set(
+                f"{len(symbols)} block instances selected; batch PCB layout is available."
+            )
         elif len(selection) == 1:
             status_value.set(
                 "The selection is not a registered KiCad Blocks facade. Select one block instance or a sheet symbol."
             )
         else:
-            status_value.set(
-                "Selection does not meet the requirements of the disabled actions."
-            )
+            status_value.set("Selection does not meet the requirements of the disabled actions.")
         root._kicad_blocks_hub_enabled_actions = {
             action_id for action_id, active in enabled.items() if active
         }

@@ -15,7 +15,11 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
     from _pytest.monkeypatch import MonkeyPatch
-    from kicad_blocks.manifest_types import BlockLayoutEditInput, BlockLayoutInput, BlockVariantInput
+    from kicad_blocks.manifest_types import (
+        BlockLayoutEditInput,
+        BlockLayoutInput,
+        BlockVariantInput,
+    )
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "plugin" / "kicad-blocks"))
@@ -102,7 +106,6 @@ def _directory_dialog_result(path: Path) -> Callable[..., str]:
     return choose
 
 
-
 def _record_question_string(
     calls: list[_RecordedPrompt],
     answer: str | None,
@@ -124,6 +127,8 @@ def _directory_picker_result(path: Path) -> Callable[..., str]:
         return str(path)
 
     return choose
+
+
 def _layout_details_result(
     name: str,
     source: Path,
@@ -137,16 +142,21 @@ def _layout_details_result(
         }
 
     return choose
+
+
 def _raise_path_error(message: str) -> Callable[[Path], NoReturn]:
     def fail(_path: Path) -> NoReturn:
         raise OSError(message)
 
     return fail
+
+
 def _return_path_name(value: str) -> Callable[..., str | None]:
     def ask(_title: str, _prompt: str, **_kwargs: TkCallbackOption) -> str | None:
         return value
 
     return ask
+
 
 def _parent_title(parent: Toplevel | None) -> str:
     assert parent is not None
