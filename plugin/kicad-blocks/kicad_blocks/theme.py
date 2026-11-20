@@ -5,6 +5,7 @@ from __future__ import annotations
 import itertools
 import tkinter as tk
 import weakref
+from collections.abc import Callable, Mapping
 from tkinter import ttk
 from typing import cast
 
@@ -16,6 +17,11 @@ from .theme_tokens import (
 )
 
 
+_SCROLLBARS: weakref.WeakKeyDictionary[
+    tk.Misc, weakref.WeakSet[AutoHideScrollbar]
+] = weakref.WeakKeyDictionary()
+
+
 class AutoHideScrollbar(ttk.Scrollbar):
     """A quiet idle rail that reveals a usable thumb on hover or scrolling."""
 
@@ -24,8 +30,16 @@ class AutoHideScrollbar(ttk.Scrollbar):
     ACTIVE_WIDTH = 10
     HIDE_DELAY_MS = 900
 
-    def __init__(self, master=None, *, palette: dict[str, str], **kwargs):
-        self._scroll_command = kwargs.pop("command", None)
+    def __init__(
+        self,
+        master: tk.Misc | None = None,
+        *,
+        palette: Mapping[str, str],
+        **kwargs: tk.TkOption,
+    ) -> None:
+        self._scroll_command = cast(
+            Callable[..., None] | str | None, kwargs.pop("command", None)
+        )
         orient = str(kwargs.get("orient", "vertical")).casefold()
         orient_name = "Horizontal" if orient.startswith("h") else "Vertical"
         token = next(self._instances)
@@ -33,7 +47,7 @@ class AutoHideScrollbar(ttk.Scrollbar):
         self._idle_style = f"AutoHide{token}.Idle.{orient_name}.TScrollbar"
         self._active_style = f"AutoHide{token}.Active.{orient_name}.TScrollbar"
         self._style = ttk.Style(master)
-        self._hide_after_id = None
+        self._hide_after_id: str | None = None
         self._scrollable = False
         self._hovered = False
         self._last_fractions: tuple[float, float] | None = None
@@ -45,12 +59,8 @@ class AutoHideScrollbar(ttk.Scrollbar):
         self.bind("<Leave>", self._on_leave, add="+")
         self.bind("<Destroy>", self._on_destroy, add="+")
 
-        registry_root = self._root()
-        registry = getattr(registry_root, "_kicad_blocks_auto_hide_scrollbars", None)
-        if registry is None:
-            registry = weakref.WeakSet()
-            registry_root._kicad_blocks_auto_hide_scrollbars = registry
-        registry.add(self)
+        registry_root = self.winfo_toplevel()
+        _SCROLLBARS.setdefault(registry_root, weakref.WeakSet()).add(self)
 
     @property
     def idle_style(self) -> str:
@@ -64,7 +74,7 @@ class AutoHideScrollbar(ttk.Scrollbar):
     def scrollable(self) -> bool:
         return self._scrollable
 
-    def _configure_styles(self, palette: dict[str, str]) -> None:
+    def _configure_styles(self, palette: Mapping[str, str]) -> None:
         try:
             layout = self._style.layout(self._base_style)
         except tk.TclError:
@@ -121,19 +131,18 @@ class AutoHideScrollbar(ttk.Scrollbar):
         elif changed:
             self._reveal()
 
-    def _dispatch_scroll(self, *args):
+    def _dispatch_scroll(self, *args: str) -> None:
         self._reveal()
         if callable(self._scroll_command):
-            return self._scroll_command(*args)
-        if self._scroll_command:
-            return self.tk.call(self._scroll_command, *args)
-        return None
+            self._scroll_command(*args)
+        elif isinstance(self._scroll_command, str):
+            self.tk.call(self._scroll_command, *args)
 
-    def _on_enter(self, _event=None) -> None:
+    def _on_enter(self, _event: tk.Event[tk.Misc]) -> None:
         self._hovered = True
         self._reveal()
 
-    def _on_leave(self, _event=None) -> None:
+    def _on_leave(self, _event: tk.Event[tk.Misc]) -> None:
         self._hovered = False
         self._schedule_hide()
 
@@ -175,13 +184,13 @@ class AutoHideScrollbar(ttk.Scrollbar):
             pass
         self._hide_after_id = None
 
-    def _on_destroy(self, event=None) -> None:
+    def _on_destroy(self, event: tk.Event[tk.Misc] | None = None) -> None:
         if event is not None and getattr(event, "widget", self) is not self:
             return
         self._cancel_hide()
 
 
-def _configure_classic_widgets(root: tk.Misc, palette: dict[str, str]) -> None:
+def _configure_classic_widgets(root: tk.Misc, palette: Mapping[str, str]) -> None:
     """Apply matching colors to classic Tk widgets inside themed windows."""
     try:
         stack = list(root.winfo_children())
@@ -590,8 +599,8 @@ def apply_tk_theme(root: tk.Misc, theme: str | bool | None = None) -> dict[str, 
     root._kicad_blocks_palette = palette
     _configure_classic_widgets(root, palette)
 
-    registry_root = root._root() if hasattr(root, "_root") else root
-    for scrollbar in tuple(getattr(registry_root, "_kicad_blocks_auto_hide_scrollbars", ())):
+    registry_root = root.winfo_toplevel()
+    for scrollbar in tuple(_SCROLLBARS.get(registry_root, ())):
         try:
             scrollbar._configure_styles(palette)
         except tk.TclError:

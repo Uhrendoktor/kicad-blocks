@@ -13,7 +13,17 @@ if TYPE_CHECKING:
     from tkinter import TkOption
 else:
     TkOption: TypeAlias = (
-        str | int | float | bool | bytes | type(None) | tuple | list | dict | Sequence | Callable
+        str
+        | int
+        | float
+        | bool
+        | bytes
+        | None
+        | tk.Variable
+        | tk.PhotoImage
+        | Sequence[str | int | float | bool | bytes | None]
+        | Sequence[tuple[str, str]]
+        | Callable[..., str | None]
     )
 
 
@@ -94,6 +104,8 @@ class FlatTabControl(ttk.Frame):
     def index(self, page: tk.Misc | str | int) -> int:
         """Return a page index using the common ttk.Notebook forms."""
         if page == "current":
+            if self._selected is None:
+                raise ValueError("The tab control has no selected page.")
             page = self._selected
         if isinstance(page, int):
             return page
