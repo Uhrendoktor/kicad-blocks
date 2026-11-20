@@ -48,10 +48,13 @@ echo "::group::Build Tk 9.1.0 with the ATK bridge"
 touch "$TK_SOURCE/doc/man.macros" "$TK_SOURCE/generic/tkStubInit.c"
 (
   cd "$TK_SOURCE/unix"
-  ./configure --prefix="$TCL_PREFIX" --with-tcl="$TCL_SOURCE/unix" --enable-shared --enable-threads
-  if ! grep -Eq '^#define HAVE_ATK 1$' tkConfig.h; then
-    echo "::error::Tk 9.1 was configured without HAVE_ATK; refusing to test a non-accessible build."
-    grep -E 'ATK|Atk-bridge' config.log || true
+  ./configure --prefix="$TCL_PREFIX" --with-tcl="$TCL_SOURCE/unix" --enable-shared
+  # Tk 9.1 writes configure definitions to Makefile (AC_FLAGS), not tkConfig.h.
+  # Require both the ATK define and libraries before compiling a probe runtime.
+  if ! grep -Eq '^AC_FLAGS[[:space:]]*=.*-DHAVE_ATK=1' Makefile \
+    || ! grep -Eq '^ATK_LIBS[[:space:]]*=[[:space:]]*[^[:space:]]+' Makefile; then
+    echo "::error::Tk 9.1 was configured without a complete ATK backend; refusing to test a non-accessible build."
+    grep -E 'ATK|Atk-bridge' config.log Makefile || true
     exit 1
   fi
   make -j"$JOBS" binaries libraries
