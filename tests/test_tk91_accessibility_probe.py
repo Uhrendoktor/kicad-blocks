@@ -33,7 +33,7 @@ def _inspect_process(process_id: int) -> None:
     """Query AT-SPI from a helper process while Tk's event loop stays live."""
     import xa11y
 
-    print(f"Connecting xa11y to Tk probe PID {process_id}.", flush=True)
+    print(f"Connecting xa11y to Tk probe PID {process_id}.", file=sys.stderr, flush=True)
     app = xa11y.App.by_pid(process_id, timeout=15.0)
     payload = {
         "snapshot": app.tree(max_depth=10),
