@@ -112,12 +112,14 @@ def test_search_tooltip_appears_above_focused_field_without_covering_results():
     from tkinter import ttk
 
     from kicad_blocks import plugin as plugin_actions
+    from kicad_blocks.theme import apply_tk_theme
 
     root = tk.Tk()
     try:
         apply_tk_theme(root, "light")
         root.geometry("520x300+0+0")
-        ttk.Label(root, text="Search blocks").pack(anchor="w", padx=12, pady=(48, 3))
+        search_label = ttk.Label(root, text="Search blocks")
+        search_label.pack(anchor="w", padx=12, pady=(48, 3))
         search = ttk.Entry(root)
         search.pack(fill="x", padx=12, pady=(0, 6))
         results = ttk.Treeview(root, columns=("block",), show="headings", height=4)
@@ -141,9 +143,12 @@ def test_search_tooltip_appears_above_focused_field_without_covering_results():
         tooltip_bottom = tooltip_top + tooltip.winfo_height()
         search_top = search.winfo_rooty()
         search_right = search.winfo_rootx() + search.winfo_width()
-        tooltip_right = tooltip.winfo_rootx() + tooltip.winfo_width()
+        tooltip_left = tooltip.winfo_rootx()
+        tooltip_right = tooltip_left + tooltip.winfo_width()
+        label_right = search_label.winfo_rootx() + search_label.winfo_width()
 
         assert tooltip_bottom <= search_top
+        assert tooltip_left >= label_right
         assert tooltip_right <= search_right
         assert tooltip_top >= 0
         assert results.winfo_ismapped()
