@@ -51,7 +51,7 @@ The Functional Block Library browser presents these primary actions:
 
 - **Place block** — inserts the exact `KBlocks:<symbol>` facade at the active sheet's page center, focuses it in Eeschema, selects it, and saves through schematic IPC. Use Eeschema's normal Move command to reposition it. Cursor-attached placement awaits a supported schematic interactive-move request.
 - **Open implementation** — opens the default or selected implementation schematic in Eeschema.
-- **Edit facade** — opens the Facade Pin Layout editor for the selected block. Adjust each pin's position, orientation, and length; each accepted change is written immediately to the project-local `KBlocks.kicad_sym` catalog and the library is reloaded. Pin names, numbers, and electrical types remain derived from implementation hierarchical labels. Use **Publish** to transfer the geometry edits into the shared library with conflict detection.
+- **Edit facade** — validates the selected block's entry in the project-local `KBlocks.kicad_sym` catalog, then reports that the current KiCad GUI IPC cannot open Symbol Editor and select the exact library entry. It does not modify pin geometry. No `RunAction`, global keyboard injection, or OS-specific fallback is used.
 - **Publish** — publishes the selected block without reopening a separate task panel. It incorporates saved facade edits, synchronizes the implementation-derived pin interface, rebuilds child dependencies, and updates project catalog registration.
 - **Implementations** — opens the default and named implementation list. Mutations persist immediately; Close is not a save action.
 - **Open PCB layout** — opens a stored board file for inspection.

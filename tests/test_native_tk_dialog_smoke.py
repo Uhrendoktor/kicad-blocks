@@ -11,16 +11,21 @@ import os
 import sys
 import time
 from collections.abc import Callable
+from typing import TYPE_CHECKING, TypedDict
 
 import pytest
 
-try:
+if TYPE_CHECKING:
     import tkinter as tk
     from tkinter import messagebox, simpledialog
-except ImportError:  # pragma: no cover - exercised by the skip guard below
-    tk = None
-    messagebox = None
-    simpledialog = None
+else:
+    try:
+        import tkinter as tk
+        from tkinter import messagebox, simpledialog
+    except ImportError:  # pragma: no cover - the headless interpreter has no Tk
+        tk = None
+        messagebox = None
+        simpledialog = None
 
 pytestmark = pytest.mark.skipif(
     tk is None or (sys.platform == "linux" and not os.environ.get("DISPLAY")),
@@ -30,7 +35,18 @@ pytestmark = pytest.mark.skipif(
 _DIALOG_TIMEOUT_SECONDS = 5.0
 
 
-def _create_parent():
+class _DialogOutcome(TypedDict, total=False):
+    """Captured properties and failures from one observed native Tk dialog."""
+
+    path: str
+    mapped: bool
+    geometry: str
+    transient_parent: str
+    callback_error: str
+    timeout: str
+
+
+def _create_parent() -> tk.Tk:
     root = tk.Tk()
     root.title("KiCad Blocks native dialog smoke host")
     root.geometry("360x180+20+20")
@@ -104,9 +120,9 @@ def _schedule_dialog_action(
     root,
     title: str,
     callback: Callable[[str], None],
-) -> dict[str, object]:
+) -> _DialogOutcome:
     """Observe a modal window once mapped, then interact with its real widgets."""
-    outcome: dict[str, object] = {}
+    outcome: _DialogOutcome = {}
     deadline = time.monotonic() + _DIALOG_TIMEOUT_SECONDS
 
     def poll() -> None:
@@ -124,7 +140,9 @@ def _schedule_dialog_action(
             return
 
         if time.monotonic() >= deadline:
-            outcome["timeout"] = f"Tk did not map dialog {title!r} within {_DIALOG_TIMEOUT_SECONDS:g}s."
+            outcome["timeout"] = (
+                f"Tk did not map dialog {title!r} within {_DIALOG_TIMEOUT_SECONDS:g}s."
+            )
             # Destroying the root also terminates Tk's nested modal wait, so the
             # outer assertion reports a timeout rather than hanging the runner.
             try:
@@ -138,7 +156,7 @@ def _schedule_dialog_action(
     return outcome
 
 
-def _assert_dialog_window(root, outcome: dict[str, object]) -> str:
+def _assert_dialog_window(root, outcome: _DialogOutcome) -> str:
     assert "timeout" not in outcome, outcome.get("timeout")
     assert "callback_error" not in outcome, outcome.get("callback_error")
     dialog_path = outcome.get("path")
@@ -154,7 +172,9 @@ def _assert_dialog_window(root, outcome: dict[str, object]) -> str:
 def _invoke_button(root, dialog_path: str, label: str) -> None:
     buttons = _button_labels(root, dialog_path)
     button = buttons.get(label.casefold())
-    assert button is not None, f"Dialog {dialog_path!r} did not render a {label!r} button; found {sorted(buttons)}."
+    assert button is not None, (
+        f"Dialog {dialog_path!r} did not render a {label!r} button; found {sorted(buttons)}."
+    )
     root.tk.call(button, "invoke")
 
 

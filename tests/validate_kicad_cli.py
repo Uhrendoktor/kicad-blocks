@@ -8,6 +8,7 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
+from typing import TypedDict
 
 ROOT = Path(__file__).resolve().parents[1]
 PLUGIN = ROOT / "plugin" / "kicad-blocks"
@@ -18,10 +19,66 @@ sys.path.insert(0, str(ROOT / "scripts"))
 from generate_reference import ROOT_UUID, generate_reference_schematic
 from kicad_blocks.model import parse_pins
 from kicad_blocks.operations import export_block_bom, validate_block_tree
-from kicad_blocks.pcb_layout import _all, _direct, _dump, _Quoted, parse_sexpr
-from kicad_blocks.plugin import _new_blank_pcb_source
+from kicad_blocks.plugin import new_blank_pcb_source
+from kicad_blocks.sexpr import (
+    QuotedSExpr as _Quoted,
+    SExpr,
+    SExprList,
+    dump_sexpr as _dump,
+    parse_sexpr,
+    sexpr_all as _all,
+    sexpr_direct as _direct,
+)
 from kicad_blocks.repository import add_dependency, create_block
 from validate_schematic_style import validate_schematic_style
+
+
+class _ProjectMetadata(TypedDict):
+    filename: str
+    version: int
+
+
+class _ERCMetadata(TypedDict):
+    version: int
+
+
+class _ERCSettings(TypedDict):
+    erc_exclusions: list[str]
+    meta: _ERCMetadata
+    rule_severities: dict[str, str]
+
+
+class _TopLevelSheet(TypedDict):
+    filename: str
+    name: str
+    uuid: str
+
+
+class _SchematicSettings(TypedDict):
+    meta: _ERCMetadata
+    top_level_sheets: list[_TopLevelSheet]
+
+
+class _ERCTestProject(TypedDict):
+    meta: _ProjectMetadata
+    erc: _ERCSettings
+    schematic: _SchematicSettings
+    sheets: list[list[str]]
+
+
+def _required_node(node: SExprList, tag: str) -> SExprList:
+    """Return a required child node from a parsed KiCad S-expression."""
+    child = _direct(node, tag)
+    if child is None:
+        raise ValueError(f"Expected a {tag!r} child node.")
+    return child
+
+
+def _number(value: SExpr) -> float:
+    """Convert a scalar S-expression atom to a floating-point coordinate."""
+    if not isinstance(value, str):
+        raise ValueError(f"Expected a scalar numeric S-expression atom, got {value!r}.")
+    return float(value)
 
 
 def _find_kicad_cli() -> str:
@@ -31,10 +88,7 @@ def _find_kicad_cli() -> str:
     for candidate in candidates:
         if candidate and (Path(candidate).is_file() or shutil.which(candidate)):
             return candidate
-    raise RuntimeError(
-        "KiCad CLI was not found. Set KICAD_CLI or add kicad-cli(-nightly) to PATH."
-    )
-
+    raise RuntimeError("KiCad CLI was not found. Set KICAD_CLI or add kicad-cli(-nightly) to PATH.")
 
 
 def _validate_stusb4500_netlist(cli: str, output_dir: Path) -> None:
@@ -68,14 +122,23 @@ def _validate_stusb4500_netlist(cli: str, output_dir: Path) -> None:
         # KiCad CLI reports only "Failed to load schematic" for parser errors.
         # Probe copies with one top-level object class removed to pinpoint the
         # offending construct; keep the real source untouched.
-        tree_for_probe = parse_sexpr(schematic_text)
+        tree_for_probe: SExprList = parse_sexpr(schematic_text)
         probes = {
             "without-graphics": {
-                "rectangle", "polyline", "text", "circle", "arc", "bezier",
+                "rectangle",
+                "polyline",
+                "text",
+                "circle",
+                "arc",
+                "bezier",
             },
             "without-labels-and-wires": {
-                "label", "hierarchical_label", "global_label", "wire",
-                "junction", "no_connect",
+                "label",
+                "hierarchical_label",
+                "global_label",
+                "wire",
+                "junction",
+                "no_connect",
             },
             "without-hierarchical-labels": {"hierarchical_label"},
             "without-local-labels": {"label"},
@@ -89,30 +152,35 @@ def _validate_stusb4500_netlist(cli: str, output_dir: Path) -> None:
         print("KiCad rejected the generated STUSB4500 sheet. Loader isolation probes:")
         print(f"baseline rc={loaded.returncode}; stderr={loaded.stderr.strip()!r}")
         for probe_name, excluded in probes.items():
-            variant = copy.deepcopy(tree_for_probe)
+            variant: SExprList = copy.deepcopy(tree_for_probe)
             variant[1:] = [
-                child for child in variant[1:]
-                if not isinstance(child, list) or not child
-                or str(child[0]) not in excluded
+                child
+                for child in variant[1:]
+                if not isinstance(child, list) or not child or str(child[0]) not in excluded
             ]
             variant_path = output_dir / f"stusb4500-{probe_name}.kicad_sch"
             variant_path.write_text(_dump(variant) + "\n", encoding="utf-8")
             variant_netlist = output_dir / f"stusb4500-{probe_name}.net"
             result = subprocess.run(
                 [
-                    cli, "sch", "export", "netlist", "--output",
-                    str(variant_netlist), str(variant_path),
+                    cli,
+                    "sch",
+                    "export",
+                    "netlist",
+                    "--output",
+                    str(variant_netlist),
+                    str(variant_path),
                 ],
-                capture_output=True, text=True, check=False,
+                capture_output=True,
+                text=True,
+                check=False,
             )
-            print(
-                f"{probe_name}: rc={result.returncode}; "
-                f"stderr={result.stderr.strip()!r}"
-            )
+            print(f"{probe_name}: rc={result.returncode}; stderr={result.stderr.strip()!r}")
         # A hand-built empty sheet distinguishes invalid root metadata from
         # an invalid embedded symbol library or instance graph.
-        minimal = [
-            "kicad_sch", ["version", "20250114"],
+        minimal: SExprList = [
+            "kicad_sch",
+            ["version", "20250114"],
             ["generator", _Quoted("kicad-blocks")],
             ["uuid", _Quoted("4d83d47b-34f6-52b9-a6da-6d2c4794dc61")],
             ["paper", _Quoted("A3")],
@@ -123,9 +191,18 @@ def _validate_stusb4500_netlist(cli: str, output_dir: Path) -> None:
         minimal_path = output_dir / "stusb4500-minimal-root.kicad_sch"
         minimal_path.write_text(_dump(minimal) + "\n", encoding="utf-8")
         minimal_result = subprocess.run(
-            [cli, "sch", "export", "netlist", "--output",
-             str(output_dir / "minimal-root.net"), str(minimal_path)],
-            capture_output=True, text=True, check=False,
+            [
+                cli,
+                "sch",
+                "export",
+                "netlist",
+                "--output",
+                str(output_dir / "minimal-root.net"),
+                str(minimal_path),
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
         )
         print(
             "minimal-empty-sheet: "
@@ -133,56 +210,80 @@ def _validate_stusb4500_netlist(cli: str, output_dir: Path) -> None:
             f"stderr={minimal_result.stderr.strip()!r}"
         )
         root_heads = {
-            "version", "generator", "uuid", "paper",
-            "title_block", "sheet_instances", "embedded_fonts",
+            "version",
+            "generator",
+            "uuid",
+            "paper",
+            "title_block",
+            "sheet_instances",
+            "embedded_fonts",
         }
-        root_only = [
+        root_only: SExprList = [
             "kicad_sch",
-            *copy.deepcopy([
-                child for child in tree_for_probe[1:]
-                if isinstance(child, list) and child
-                and str(child[0]) in root_heads
-            ]),
+            *copy.deepcopy(
+                [
+                    child
+                    for child in tree_for_probe[1:]
+                    if isinstance(child, list) and child and str(child[0]) in root_heads
+                ]
+            ),
         ]
-        top_level = [
-            child for child in tree_for_probe[1:]
-            if isinstance(child, list) and child
-        ]
+        top_level = [child for child in tree_for_probe[1:] if isinstance(child, list) and child]
         print(
             "top-level nodes: "
             f"{[(str(child[0]), sum(str(item[0]) == str(child[0]) for item in top_level if item)) for child in top_level if child]}"
         )
+
         def with_heads(name: str, heads: set[str]) -> tuple[Path, int, str]:
             candidate = copy.deepcopy(root_only)
-            candidate.extend(copy.deepcopy([
-                child for child in top_level if str(child[0]) in heads
-            ]))
+            candidate.extend(
+                copy.deepcopy([child for child in top_level if str(child[0]) in heads])
+            )
             candidate_path = output_dir / f"stusb4500-{name}.kicad_sch"
             candidate_path.write_text(_dump(candidate) + "\n", encoding="utf-8")
             candidate_result = subprocess.run(
                 [
-                    cli, "sch", "export", "netlist", "--output",
-                    str(output_dir / f"{name}.net"), str(candidate_path),
+                    cli,
+                    "sch",
+                    "export",
+                    "netlist",
+                    "--output",
+                    str(output_dir / f"{name}.net"),
+                    str(candidate_path),
                 ],
-                capture_output=True, text=True, check=False,
+                capture_output=True,
+                text=True,
+                check=False,
             )
             return candidate_path, candidate_result.returncode, candidate_result.stderr.strip()
 
         library_heads = {"lib_symbols"}
         component_heads = {"symbol"}
         connectivity_heads = {
-            "wire", "label", "hierarchical_label", "global_label", "junction", "no_connect",
+            "wire",
+            "label",
+            "hierarchical_label",
+            "global_label",
+            "junction",
+            "no_connect",
         }
         graphic_heads = {"rectangle", "polyline", "text", "circle", "arc", "bezier"}
         for name, heads in (
             ("components-only", root_heads | library_heads | component_heads),
             ("graphics-only", root_heads | graphic_heads),
             ("connectivity-only", root_heads | library_heads | connectivity_heads),
-            ("components-and-connectivity", root_heads | library_heads | component_heads | connectivity_heads),
-            ("components-and-graphics", root_heads | library_heads | component_heads | graphic_heads),
+            (
+                "components-and-connectivity",
+                root_heads | library_heads | component_heads | connectivity_heads,
+            ),
+            (
+                "components-and-graphics",
+                root_heads | library_heads | component_heads | graphic_heads,
+            ),
         ):
             _, returncode, stderr = with_heads(
-                name, heads - root_heads,
+                name,
+                heads - root_heads,
             )
             print(f"{name}: rc={returncode}; stderr={stderr!r}")
         for name, include_title, include_libraries in (
@@ -194,13 +295,14 @@ def _validate_stusb4500_netlist(cli: str, output_dir: Path) -> None:
             candidate = copy.deepcopy(root_only)
             if not include_title:
                 candidate[1:] = [
-                    child for child in candidate[1:]
-                    if not isinstance(child, list) or not child
-                    or str(child[0]) != "title_block"
+                    child
+                    for child in candidate[1:]
+                    if not isinstance(child, list) or not child or str(child[0]) != "title_block"
                 ]
             if include_libraries:
                 libraries = next(
-                    child for child in tree_for_probe[1:]
+                    child
+                    for child in tree_for_probe[1:]
                     if isinstance(child, list) and child and str(child[0]) == "lib_symbols"
                 )
                 candidate.append(copy.deepcopy(libraries))
@@ -208,17 +310,27 @@ def _validate_stusb4500_netlist(cli: str, output_dir: Path) -> None:
             candidate_path.write_text(_dump(candidate) + "\n", encoding="utf-8")
             candidate_result = subprocess.run(
                 [
-                    cli, "sch", "export", "netlist", "--output",
-                    str(output_dir / f"{name}.net"), str(candidate_path),
+                    cli,
+                    "sch",
+                    "export",
+                    "netlist",
+                    "--output",
+                    str(output_dir / f"{name}.net"),
+                    str(candidate_path),
                 ],
-                capture_output=True, text=True, check=False,
+                capture_output=True,
+                text=True,
+                check=False,
             )
             print(
                 f"{name}: rc={candidate_result.returncode}; "
                 f"stderr={candidate_result.stderr.strip()!r}"
             )
         raise subprocess.CalledProcessError(
-            loaded.returncode, export_command, loaded.stdout, loaded.stderr,
+            loaded.returncode,
+            export_command,
+            loaded.stdout,
+            loaded.stderr,
         )
     tree = parse_sexpr(netlist_path.read_text(encoding="utf-8"))
     actual: dict[tuple[str, str], str] = {}
@@ -324,7 +436,7 @@ def _validate_stusb4500_netlist(cli: str, output_dir: Path) -> None:
         ("D11", "1"): "VSNK",
         ("D11", "2"): "GND",
     }
-    mismatches = {
+    mismatches: dict[tuple[str, str], tuple[str, str | list[str] | None]] = {
         pin: (expected_name, actual.get(pin))
         for pin, expected_name in expected.items()
         if expected_name is not None and actual.get(pin) != expected_name
@@ -340,44 +452,44 @@ def _validate_stusb4500_netlist(cli: str, output_dir: Path) -> None:
         names = {actual.get(pin) for pin in pins}
         if None in names or len(names) != 1:
             mismatches[("physical-net", net_description)] = (
-                "all pins share one physical net", sorted(str(name) for name in names),
+                "all pins share one physical net",
+                sorted(str(name) for name in names),
             )
         elif next(iter(names)) in {"VREG_1V2", "FET_MID"}:
             mismatches[("physical-net", net_description)] = (
-                "unnamed physical net", next(iter(names)),
+                "unnamed physical net",
+                next(iter(names)),
             )
     if mismatches:
-        schematic_tree = parse_sexpr(schematic_text)
-        all_wires = []
+        schematic_tree: SExprList = parse_sexpr(schematic_text)
+        all_wires: list[list[tuple[float, float]]] = []
         for wire in _all(schematic_tree, "wire"):
-            points = _direct(wire, "pts")
+            points = _required_node(wire, "pts")
             coordinates = [
-                (round(float(point[1]), 3), round(float(point[2]), 3))
+                (round(_number(point[1]), 3), round(_number(point[2]), 3))
                 for point in _all(points, "xy")
             ]
             all_wires.append(coordinates)
-        all_labels = []
+        all_labels: list[tuple[str, str, float, float]] = []
         for head in ("label", "hierarchical_label"):
             for label in _all(schematic_tree, head):
-                at = _direct(label, "at")
-                all_labels.append((
-                    head, str(label[1]), round(float(at[1]), 3), round(float(at[2]), 3)
-                ))
-        raw_nets = []
+                at = _required_node(label, "at")
+                all_labels.append(
+                    (head, str(label[1]), round(_number(at[1]), 3), round(_number(at[2]), 3))
+                )
+        raw_nets: list[tuple[str, list[tuple[str, str]]]] = []
         for net in _all(nets_container, "net"):
             name_node = _direct(net, "name")
             if name_node is None:
                 continue
             name = str(name_node[1]).rsplit("/", 1)[-1]
-            nodes = []
+            nodes: list[tuple[str, str]] = []
             for node in _all(net, "node"):
                 ref_node = _direct(node, "ref")
                 pin_node = _direct(node, "pin")
                 if ref_node is not None and pin_node is not None:
                     nodes.append((str(ref_node[1]), str(pin_node[1])))
-            if name in {"CC1", "CC2", "GND"} or any(
-                pin in mismatches for pin in nodes
-            ):
+            if name in {"CC1", "CC2", "GND"} or any(pin in mismatches for pin in nodes):
                 raw_nets.append((name, nodes))
         raise RuntimeError(
             "STUSB4500 KiCad netlist connectivity mismatch: "
@@ -391,7 +503,7 @@ def _validate_stusb4500_netlist(cli: str, output_dir: Path) -> None:
     # all internal pin conflicts, dangling wires/labels, and other ERC rules
     # retain KiCad's default severities.
     project_file = output_dir / "stusb4500.kicad_pro"
-    project_settings = {
+    project_settings: _ERCTestProject = {
         "meta": {"filename": project_file.name, "version": 3},
         "erc": {
             "erc_exclusions": [],
@@ -407,11 +519,13 @@ def _validate_stusb4500_netlist(cli: str, output_dir: Path) -> None:
         },
         "schematic": {
             "meta": {"version": 1},
-            "top_level_sheets": [{
-                "filename": schematic.name,
-                "name": "Root",
-                "uuid": ROOT_UUID,
-            }],
+            "top_level_sheets": [
+                {
+                    "filename": schematic.name,
+                    "name": "Root",
+                    "uuid": ROOT_UUID,
+                }
+            ],
         },
         "sheets": [[ROOT_UUID, "Root"]],
     }
@@ -423,23 +537,30 @@ def _validate_stusb4500_netlist(cli: str, output_dir: Path) -> None:
     erc_report = output_dir / "stusb4500-erc.rpt"
     erc_result = subprocess.run(
         [
-            cli, "sch", "erc", "--output", str(erc_report),
-            "--severity-all", "--exit-code-violations", str(schematic),
+            cli,
+            "sch",
+            "erc",
+            "--output",
+            str(erc_report),
+            "--severity-all",
+            "--exit-code-violations",
+            str(schematic),
         ],
-        capture_output=True, text=True, check=False,
+        capture_output=True,
+        text=True,
+        check=False,
     )
     if erc_result.returncode:
         report_text = (
             erc_report.read_text(encoding="utf-8", errors="replace")
-            if erc_report.is_file() else erc_result.stderr.strip()
+            if erc_report.is_file()
+            else erc_result.stderr.strip()
         )
         raise RuntimeError(f"STUSB4500 ERC reported violations:\n{report_text}")
     if not erc_report.is_file():
         raise RuntimeError("KiCad ERC did not write its report.")
     print("KiCad ERC: zero unignored violations under the standalone child-block profile.")
-    print(
-        f"KiCad netlist validated {len(expected)} critical STUSB4500 pin-to-net assignments."
-    )
+    print(f"KiCad netlist validated {len(expected)} critical STUSB4500 pin-to-net assignments.")
 
 
 def main() -> None:
@@ -500,13 +621,11 @@ def main() -> None:
         erc_reports = validate_block_tree(
             parent, Path(temp) / "erc-reports", cli, Path(temp) / "library"
         )
-        if len(erc_reports) != 2 or not all(
-            Path(item["report"]).is_file() for item in erc_reports
-        ):
+        if len(erc_reports) != 2 or not all(Path(item["report"]).is_file() for item in erc_reports):
             raise RuntimeError("Recursive KiCad CLI ERC did not report both block implementations.")
         # Validate the exact empty-board document used by Add PCB Layout.
         # A file-copy/unit assertion alone cannot prove that PCBNEW can open it.
-        blank_board = _new_blank_pcb_source()
+        blank_board = new_blank_pcb_source()
         try:
             blank_board_svg = Path(temp) / "blank-board-svg"
             blank_board_svg.mkdir()

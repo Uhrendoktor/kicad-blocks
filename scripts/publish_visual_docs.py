@@ -11,6 +11,12 @@ import shutil
 import subprocess
 import tempfile
 from pathlib import Path
+from typing import NotRequired, TypedDict, cast
+
+try:
+    from .github_api_types import JSONValue, JSONObject
+except ImportError:  # pragma: no cover - direct script execution.
+    from github_api_types import JSONValue, JSONObject
 
 try:  # Package import for tests; direct import when executed as a script.
     from .visual_asset_inventory import ASSET_NAMES
@@ -19,9 +25,35 @@ except ImportError:  # pragma: no cover - exercised by the release CLI.
 BRANCH = "docs/previews"
 
 
-def run(*args: str, cwd: Path | None = None, check: bool = True) -> subprocess.CompletedProcess[str]:
+class VisualDocsManifest(TypedDict):
+    """Validated manifest emitted by the visual UI capture workflow."""
+
+    schema_version: int
+    source_sha: str
+    assets: dict[str, str]
+    example: NotRequired[str]
+
+
+class VisualDocsProvenance(TypedDict):
+    """Commit and workflow provenance for the published preview bundle."""
+
+    source_commit: str
+    workflow_run_id: str
+    workflow_run_number: str
+    assets: dict[str, str]
+    example: str | None
+
+
+def run(
+    *args: str, cwd: Path | None = None, check: bool = True
+) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        args, cwd=cwd, check=check, capture_output=True, text=True, timeout=60,
+        args,
+        cwd=cwd,
+        check=check,
+        capture_output=True,
+        text=True,
+        timeout=60,
     )
 
 
@@ -43,29 +75,55 @@ def git(
     return run(*command, check=check)
 
 
-def verify_bundle(source_dir: Path, source_sha: str) -> dict:
+def verify_bundle(source_dir: Path, source_sha: str) -> VisualDocsManifest:
+    """Validate the exact source commit and every generated visual asset hash."""
     manifest_path = source_dir / "manifest.json"
     if not manifest_path.is_file():
         raise FileNotFoundError(f"Visual documentation manifest is missing: {manifest_path}")
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    if manifest.get("schema_version") != 1:
-        raise ValueError(f"Unsupported visual documentation schema: {manifest.get('schema_version')!r}")
-    if manifest.get("source_sha") != source_sha:
+    raw_manifest: JSONValue = cast(JSONValue, json.loads(manifest_path.read_text(encoding="utf-8")))
+    if not isinstance(raw_manifest, dict):
+        raise ValueError("Visual documentation manifest must be a JSON object.")
+    manifest_data = cast(JSONObject, raw_manifest)
+    if manifest_data.get("schema_version") != 1:
         raise ValueError(
-            f"Visual assets represent {manifest.get('source_sha')!r}, not checked-out source {source_sha!r}."
+            f"Unsupported visual documentation schema: {manifest_data.get('schema_version')!r}"
         )
-    assets = manifest.get("assets")
-    if not isinstance(assets, dict) or set(assets) != ASSET_NAMES:
+    recorded_sha = manifest_data.get("source_sha")
+    if not isinstance(recorded_sha, str) or recorded_sha != source_sha:
         raise ValueError(
-            f"Visual asset inventory mismatch; expected={sorted(ASSET_NAMES)}, actual={sorted(assets or {})}."
+            f"Visual assets represent {recorded_sha!r}, not checked-out source {source_sha!r}."
         )
+    assets_value = manifest_data.get("assets")
+    if not isinstance(assets_value, dict):
+        raise ValueError("Visual documentation assets must be a JSON object.")
+    asset_names = set(assets_value)
+    if asset_names != set(ASSET_NAMES):
+        raise ValueError(
+            "Visual asset inventory mismatch; "
+            f"expected={sorted(ASSET_NAMES)}, actual={sorted(asset_names)}."
+        )
+    assets: dict[str, str] = {}
+    for name, expected_hash in assets_value.items():
+        if not isinstance(expected_hash, str):
+            raise ValueError(f"Visual asset hash must be a string: {name}")
+        assets[name] = expected_hash
     for name, expected_hash in assets.items():
         path = source_dir / name
         if not path.is_file() or path.stat().st_size == 0:
             raise FileNotFoundError(f"Generated visual asset is missing or empty: {name}")
         if hashlib.sha256(path.read_bytes()).hexdigest() != expected_hash:
             raise ValueError(f"Visual asset provenance hash mismatch: {name}")
-    return manifest
+    example_value = manifest_data.get("example")
+    if example_value is not None and not isinstance(example_value, str):
+        raise ValueError("Visual documentation example field must be a string.")
+    result: VisualDocsManifest = {
+        "schema_version": 1,
+        "source_sha": source_sha,
+        "assets": assets,
+    }
+    if isinstance(example_value, str):
+        result["example"] = example_value
+    return result
 
 
 def publish(
@@ -82,14 +140,26 @@ def publish(
     with tempfile.TemporaryDirectory(prefix="kicad-blocks-visual-publish-") as temporary:
         worktree = Path(temporary) / "repository"
         git(
-            token, "clone", "--filter=blob:none",
-            f"https://github.com/{repository}.git", str(worktree),
+            token,
+            "clone",
+            "--filter=blob:none",
+            f"https://github.com/{repository}.git",
+            str(worktree),
         )
 
-        remote_exists = git(
-            token, "ls-remote", "--exit-code", "--heads", "origin", BRANCH,
-            cwd=worktree, check=False,
-        ).returncode == 0
+        remote_exists = (
+            git(
+                token,
+                "ls-remote",
+                "--exit-code",
+                "--heads",
+                "origin",
+                BRANCH,
+                cwd=worktree,
+                check=False,
+            ).returncode
+            == 0
+        )
         if remote_exists:
             git(token, "fetch", "origin", BRANCH, cwd=worktree)
             git(token, "checkout", "-B", BRANCH, f"origin/{BRANCH}", cwd=worktree)
@@ -102,12 +172,12 @@ def publish(
         for name in sorted(ASSET_NAMES):
             shutil.copy2(source_dir / name, published / name)
         shutil.copy2(source_dir / "manifest.json", published / "manifest.json")
-        provenance = {
+        provenance: VisualDocsProvenance = {
             "source_commit": source_sha,
             "workflow_run_id": str(run_id),
             "workflow_run_number": str(run_number),
             "assets": manifest["assets"],
-            "example": manifest.get("example"),
+            "example": manifest.get("example", ""),
         }
         (published / "provenance.json").write_text(
             json.dumps(provenance, indent=2, sort_keys=True) + "\n",
@@ -116,14 +186,25 @@ def publish(
 
         run("git", "-C", str(worktree), "config", "user.name", "github-actions[bot]")
         run(
-            "git", "-C", str(worktree), "config", "user.email",
+            "git",
+            "-C",
+            str(worktree),
+            "config",
+            "user.email",
             "41898282+github-actions[bot]@users.noreply.github.com",
         )
         run("git", "-C", str(worktree), "add", "previews")
-        changed = run("git", "-C", str(worktree), "diff", "--cached", "--quiet", check=False).returncode != 0
+        changed = (
+            run("git", "-C", str(worktree), "diff", "--cached", "--quiet", check=False).returncode
+            != 0
+        )
         if changed:
             run(
-                "git", "-C", str(worktree), "commit", "-m",
+                "git",
+                "-C",
+                str(worktree),
+                "commit",
+                "-m",
                 f"ci: publish KiCad Blocks visual previews for {source_sha[:12]}",
             )
             git(token, "push", "origin", f"HEAD:{BRANCH}", cwd=worktree)
@@ -132,7 +213,9 @@ def publish(
         remote_sha = run("git", "-C", str(worktree), "rev-parse", f"origin/{BRANCH}").stdout.strip()
         local_sha = run("git", "-C", str(worktree), "rev-parse", "HEAD").stdout.strip()
         if remote_sha != local_sha:
-            raise RuntimeError(f"Published visual branch mismatch: remote={remote_sha} local={local_sha}")
+            raise RuntimeError(
+                f"Published visual branch mismatch: remote={remote_sha} local={local_sha}"
+            )
         print(
             f"kicad-visual-publish=passed source_sha={source_sha} "
             f"asset_count={len(ASSET_NAMES)} branch={BRANCH} commit={remote_sha}"

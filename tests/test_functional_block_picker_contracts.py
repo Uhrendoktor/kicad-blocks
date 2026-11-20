@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import os
 import sys
+from collections.abc import Callable, Sequence
 from pathlib import Path
+from typing import cast
 
 import pytest
 
@@ -14,8 +16,17 @@ sys.path.insert(0, str(ROOT / "tests"))
 
 from kicad_blocks import plugin as plugin_actions
 from kicad_blocks.model import parse_parameters, parse_pins
-from kicad_blocks.repository import create_block
-from ui_contracts import ButtonContract, UiTestContext, assert_control_coverage
+from kicad_blocks.repository import BlockRecord, create_block
+from ui_contracts import (
+    ButtonContract,
+    Canvas,
+    Misc,
+    MonkeyPatch,
+    Tk,
+    Toplevel,
+    UiTestContext,
+    assert_control_coverage,
+)
 
 pytestmark = pytest.mark.skipif(
     not os.environ.get("DISPLAY"),
@@ -41,7 +52,7 @@ PROFILE_1V8 = "Low voltage compact"
 PROFILE_3V3 = "Standard 3.3 V"
 
 
-def _fixture(tmp_path: Path):
+def _fixture(tmp_path: Path) -> tuple[BlockRecord, BlockRecord]:
     library = tmp_path / "shared-library"
     library.mkdir()
     standard_board = tmp_path / "standard.kicad_pcb"
@@ -98,11 +109,13 @@ def _fixture(tmp_path: Path):
     return power_stage, usb_interface
 
 
-def _new_root(monkeypatch):
-    plugin_actions._load_tkinter()
-    monkeypatch.setattr(
-        plugin_actions, "_create_action_icon", lambda *_args: None
-    )
+def _new_root(monkeypatch: MonkeyPatch) -> tuple[Tk, UiTestContext]:
+    plugin_actions.load_tkinter()
+
+    def no_icon(_parent: Misc, _name: str, _stroke_color: str | None = None) -> None:
+        return None
+
+    monkeypatch.setattr(plugin_actions, "_create_action_icon", no_icon)
     root = plugin_actions.tk.Tk()
     root.title("Functional Block picker contract host")
     root.geometry("1280x760")
@@ -110,16 +123,16 @@ def _new_root(monkeypatch):
     return root, UiTestContext(root)
 
 
-def _find_dialog(root):
+def _find_dialog(root: Tk) -> Toplevel:
     return next(
-        child
+        cast(Toplevel, child)
         for child in root.winfo_children()
-        if child.winfo_class() == "Toplevel" and child.title() == WINDOW_TITLE
+        if child.winfo_class() == "Toplevel" and cast(Toplevel, child).title() == WINDOW_TITLE
     )
 
 
-def _find_contract_widget(dialog, contract_id: str):
-    pending = [dialog]
+def _find_contract_widget(dialog: Toplevel, contract_id: str) -> Misc:
+    pending: list[Misc] = [dialog]
     while pending:
         widget = pending.pop()
         if getattr(widget, "_kicad_ui_contract_id", None) == contract_id:
@@ -128,22 +141,27 @@ def _find_contract_widget(dialog, contract_id: str):
     raise AssertionError(f"No widget registered as {contract_id!r}.")
 
 
-def _find_dialog_exists(root) -> bool:
+def _find_dialog_exists(root: Tk) -> bool:
     return any(
         child.winfo_class() == "Toplevel" and child.title() == WINDOW_TITLE
         for child in root.winfo_children()
     )
 
 
-def _run_picker(root, context, records, action):
-    callback_errors = []
+def _run_picker(
+    root: Tk,
+    context: UiTestContext,
+    records: Sequence[BlockRecord],
+    action: Callable[[Toplevel], None],
+) -> plugin_actions.BlockPlacementSelection | None:
+    callback_errors: list[Exception] = []
 
-    def drive():
-        dialog = None
+    def drive() -> None:
+        dialog: Toplevel | None = None
         try:
             dialog = _find_dialog(root)
             assert dialog.winfo_viewable()
-            assert dialog._kicad_ui_screen_id == "functional-block-picker"
+            assert getattr(dialog, "_kicad_ui_screen_id", None) == "functional-block-picker"
             context.refresh_widgets()
             assert_control_coverage(dialog, PICKER_CONTROLS)
             action(dialog)
@@ -162,7 +180,7 @@ def _run_picker(root, context, records, action):
                 dialog.destroy()
 
     root.after(100, drive)
-    result = plugin_actions._pick_block_for_placement(records, root)
+    result = plugin_actions.pick_block_for_placement(list(records), root)
     if callback_errors:
         raise callback_errors[0]
     return result
@@ -174,7 +192,7 @@ def _click(
     label: str,
     *,
     closes: bool = False,
-):
+) -> None:
     ButtonContract(
         contract_id=contract_id,
         expected_action=None,
@@ -185,10 +203,10 @@ def _click(
     context.refresh_widgets()
 
 
-def _install_preview_spy(monkeypatch):
-    calls = []
+def _install_preview_spy(monkeypatch: MonkeyPatch) -> list[str]:
+    calls: list[str] = []
 
-    def draw(canvas, record):
+    def draw(canvas: Canvas, record: BlockRecord) -> None:
         calls.append(record.name)
         canvas.delete("all")
         canvas.create_rectangle(10, 10, 110, 70, outline="#4c789f", width=2)
@@ -198,63 +216,66 @@ def _install_preview_spy(monkeypatch):
     return calls
 
 
-def _assert_initial_state(context: UiTestContext, dialog, records):
-    widgets = context.refresh_widgets()
-    tree = widgets["functional-block-picker.results"]
+def _assert_initial_state(
+    context: UiTestContext, dialog: Toplevel, records: list[BlockRecord]
+) -> None:
+    context.refresh_widgets()
+    tree = context.require_treeview("functional-block-picker.results")
     assert dialog.title() == WINDOW_TITLE
     assert dialog.winfo_width() >= 900
     assert dialog.winfo_height() >= 580
     assert len(tree.get_children()) == len(records)
     assert tree.selection()
-    assert widgets["functional-block-picker.search"].get() == ""
-    assert _find_contract_widget(
-        dialog, "functional-block-picker.name"
-    ).cget("text") == "Power Stage"
-    assert _find_contract_widget(
-        dialog, "functional-block-picker.description"
-    ).cget("text") == "Programmable power conversion stage."
-    assert "3 pins" in _find_contract_widget(
-        dialog, "functional-block-picker.metadata"
-    ).cget("text")
-    assert widgets["functional-block-picker.variant"].instate(["!disabled"])
-    assert widgets["functional-block-picker.profile"].instate(["!disabled"])
-    assert widgets["functional-block-picker.action.cancel"].instate(["!disabled"])
-    assert widgets["functional-block-picker.action.place"].instate(["!disabled"])
+    assert context.require_entry("functional-block-picker.search").get() == ""
+    assert (
+        _find_contract_widget(dialog, "functional-block-picker.name").cget("text") == "Power Stage"
+    )
+    assert (
+        _find_contract_widget(dialog, "functional-block-picker.description").cget("text")
+        == "Programmable power conversion stage."
+    )
+    assert "3 pins" in _find_contract_widget(dialog, "functional-block-picker.metadata").cget(
+        "text"
+    )
+    assert context.require_combobox("functional-block-picker.variant").instate(["!disabled"])
+    assert context.require_combobox("functional-block-picker.profile").instate(["!disabled"])
+    assert context.require_button("functional-block-picker.action.cancel").instate(["!disabled"])
+    assert context.require_button("functional-block-picker.action.place").instate(["!disabled"])
 
 
 def test_functional_block_picker_filters_results_and_places_selected_record(
-    monkeypatch, tmp_path
+    monkeypatch: MonkeyPatch, tmp_path: Path
 ):
     records = _fixture(tmp_path)
     root, context = _new_root(monkeypatch)
     preview_calls = _install_preview_spy(monkeypatch)
 
-    def filter_and_place(_dialog):
+    def filter_and_place(_dialog: Toplevel) -> None:
         _assert_initial_state(context, _dialog, records)
-        search = context.require_widget("functional-block-picker.search")
+        search = context.require_entry("functional-block-picker.search")
         search.insert(0, "usb")
         root.update_idletasks()
         root.update()
 
-        tree = context.require_widget("functional-block-picker.results")
+        tree = context.require_treeview("functional-block-picker.results")
         rows = tree.get_children()
         assert len(rows) == 1
         assert tree.item(rows[0], "values")[0] == "USB Interface"
-        assert _find_contract_widget(
-            _dialog, "functional-block-picker.name"
-        ).cget("text") == "USB Interface"
-        assert _find_contract_widget(
-            _dialog, "functional-block-picker.description"
-        ).cget("text") == "USB host interface and ESD protection."
-        assert "4 pins" in _find_contract_widget(
-            _dialog, "functional-block-picker.metadata"
-        ).cget("text")
-        assert _find_contract_widget(
-            _dialog, "functional-block-picker.preview"
-        ).find_all()
+        assert (
+            _find_contract_widget(_dialog, "functional-block-picker.name").cget("text")
+            == "USB Interface"
+        )
+        assert (
+            _find_contract_widget(_dialog, "functional-block-picker.description").cget("text")
+            == "USB host interface and ESD protection."
+        )
+        assert "4 pins" in _find_contract_widget(_dialog, "functional-block-picker.metadata").cget(
+            "text"
+        )
+        assert context.require_canvas("functional-block-picker.preview").find_all()
         assert preview_calls[-1] == "USB Interface"
-        assert context.require_widget("functional-block-picker.variant").instate(["disabled"])
-        assert context.require_widget("functional-block-picker.profile").instate(["disabled"])
+        assert context.require_combobox("functional-block-picker.variant").instate(["disabled"])
+        assert context.require_combobox("functional-block-picker.profile").instate(["disabled"])
 
         _click(
             context,
@@ -265,6 +286,7 @@ def test_functional_block_picker_filters_results_and_places_selected_record(
 
     try:
         selection = _run_picker(root, context, records, filter_and_place)
+        assert selection is not None
         assert selection["record"] is records[1]
         assert selection["variant"] == ""
         assert selection["profile"] == ""
@@ -275,25 +297,25 @@ def test_functional_block_picker_filters_results_and_places_selected_record(
 
 
 def test_functional_block_picker_profile_applies_variant_and_returns_typed_values(
-    monkeypatch, tmp_path
+    monkeypatch: MonkeyPatch, tmp_path
 ):
     records = _fixture(tmp_path)
     root, context = _new_root(monkeypatch)
     preview_calls = _install_preview_spy(monkeypatch)
 
-    def choose_profile(_dialog):
+    def choose_profile(_dialog: Toplevel) -> None:
         _assert_initial_state(context, _dialog, records)
-        assert context.require_widget("functional-block-picker.variant").get() == "3V3"
-        assert context.require_widget("functional-block-picker.profile").get() == "Custom"
+        assert context.require_combobox("functional-block-picker.variant").get() == "3V3"
+        assert context.require_combobox("functional-block-picker.profile").get() == "Custom"
         assert preview_calls and preview_calls[0] == "Power Stage"
 
-        profile = context.require_widget("functional-block-picker.profile")
+        profile = context.require_combobox("functional-block-picker.profile")
         profile.set(PROFILE_1V8)
         profile.event_generate("<<ComboboxSelected>>")
         root.update_idletasks()
         root.update()
 
-        assert context.require_widget("functional-block-picker.variant").get() == "1V8"
+        assert context.require_combobox("functional-block-picker.variant").get() == "1V8"
         _click(
             context,
             "functional-block-picker.action.place",
@@ -315,22 +337,22 @@ def test_functional_block_picker_profile_applies_variant_and_returns_typed_value
 
 
 def test_functional_block_picker_manual_variant_edit_switches_profile_to_custom(
-    monkeypatch, tmp_path
+    monkeypatch: MonkeyPatch, tmp_path
 ):
     records = _fixture(tmp_path)
     root, context = _new_root(monkeypatch)
     _install_preview_spy(monkeypatch)
 
-    def choose_custom(_dialog):
+    def choose_custom(_dialog: Toplevel) -> None:
         _assert_initial_state(context, _dialog, records)
-        profile = context.require_widget("functional-block-picker.profile")
+        profile = context.require_combobox("functional-block-picker.profile")
         profile.set(PROFILE_1V8)
         profile.event_generate("<<ComboboxSelected>>")
         root.update_idletasks()
         root.update()
-        assert context.require_widget("functional-block-picker.variant").get() == "1V8"
+        assert context.require_combobox("functional-block-picker.variant").get() == "1V8"
 
-        variant = context.require_widget("functional-block-picker.variant")
+        variant = context.require_combobox("functional-block-picker.variant")
         variant.set("3V3")
         variant.event_generate("<<ComboboxSelected>>")
         root.update_idletasks()
@@ -345,6 +367,7 @@ def test_functional_block_picker_manual_variant_edit_switches_profile_to_custom(
 
     try:
         selection = _run_picker(root, context, records, choose_custom)
+        assert selection is not None
         assert selection["record"] is records[0]
         assert selection["variant"] == "3V3"
         assert selection["profile"] == ""
@@ -355,40 +378,35 @@ def test_functional_block_picker_manual_variant_edit_switches_profile_to_custom(
 
 
 def test_functional_block_picker_empty_search_disables_selectors_and_cancel_returns_none(
-    monkeypatch, tmp_path
+    monkeypatch: MonkeyPatch, tmp_path
 ):
     records = _fixture(tmp_path)
     root, context = _new_root(monkeypatch)
     preview_calls = _install_preview_spy(monkeypatch)
 
-    def no_match_and_cancel(_dialog):
+    def no_match_and_cancel(_dialog: Toplevel) -> None:
         _assert_initial_state(context, _dialog, records)
-        search = context.require_widget("functional-block-picker.search")
+        search = context.require_entry("functional-block-picker.search")
         search.insert(0, "no-such-block")
         root.update_idletasks()
         root.update()
 
-        tree = context.require_widget("functional-block-picker.results")
+        tree = context.require_treeview("functional-block-picker.results")
         assert tree.get_children() == ()
-        assert _find_contract_widget(
-            _dialog, "functional-block-picker.name"
-        ).cget("text") == "No matching functional blocks"
-        assert _find_contract_widget(
-            _dialog, "functional-block-picker.description"
-        ).cget("text") == ""
-        assert _find_contract_widget(
-            _dialog, "functional-block-picker.metadata"
-        ).cget("text") == ""
-        assert _find_contract_widget(
-            _dialog, "functional-block-picker.preview"
-        ).find_all() == ()
-        assert _find_contract_widget(
-            _dialog, "functional-block-picker.preview"
-        ).cget("height") == "270"
-        assert context.require_widget("functional-block-picker.variant").instate(["disabled"])
-        assert context.require_widget("functional-block-picker.profile").instate(["disabled"])
+        assert (
+            _find_contract_widget(_dialog, "functional-block-picker.name").cget("text")
+            == "No matching functional blocks"
+        )
+        assert (
+            _find_contract_widget(_dialog, "functional-block-picker.description").cget("text") == ""
+        )
+        assert _find_contract_widget(_dialog, "functional-block-picker.metadata").cget("text") == ""
+        assert context.require_canvas("functional-block-picker.preview").find_all() == ()
+        assert context.require_canvas("functional-block-picker.preview").cget("height") == "270"
+        assert context.require_combobox("functional-block-picker.variant").instate(["disabled"])
+        assert context.require_combobox("functional-block-picker.profile").instate(["disabled"])
         assert preview_calls[-1] == "Power Stage"
-        assert context.require_widget("functional-block-picker.action.place").instate(["!disabled"])
+        assert context.require_button("functional-block-picker.action.place").instate(["!disabled"])
 
         # With no selected record the real Place button is a no-op and keeps
         # the picker open, allowing search recovery or explicit cancellation.
@@ -413,15 +431,15 @@ def test_functional_block_picker_empty_search_disables_selectors_and_cancel_retu
 
 
 def test_functional_block_picker_escape_cancels_and_empty_library_is_rejected(
-    monkeypatch, tmp_path
+    monkeypatch: MonkeyPatch, tmp_path
 ):
     records = _fixture(tmp_path)
     root, context = _new_root(monkeypatch)
     _install_preview_spy(monkeypatch)
 
-    def escape(_dialog):
+    def escape(_dialog: Toplevel) -> None:
         _assert_initial_state(context, _dialog, records)
-        search = context.require_widget("functional-block-picker.search")
+        search = context.require_entry("functional-block-picker.search")
         search.focus_force()
         root.update()
         assert root.focus_get() is search
@@ -434,7 +452,7 @@ def test_functional_block_picker_escape_cancels_and_empty_library_is_rejected(
         selection = _run_picker(root, context, records, escape)
         assert selection is None
         with pytest.raises(ValueError, match="No blocks were found"):
-            plugin_actions._pick_block_for_placement([], root)
+            plugin_actions.pick_block_for_placement([], root)
         assert not _find_dialog_exists(root)
     finally:
         root.destroy()

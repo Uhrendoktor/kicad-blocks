@@ -6,13 +6,20 @@ from __future__ import annotations
 import argparse
 import json
 import os
-from pathlib import Path
-import socket
 import ssl
 import time
+from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote
 from urllib.request import Request, urlopen
+
+try:  # Package import in tests; direct import when executed as a script.
+    from .github_api_types import GitHubApiResponse, JSONObject, decode_github_response
+except ImportError:  # Imported from a standalone test module.
+    try:
+        from scripts.github_api_types import GitHubApiResponse, JSONObject, decode_github_response
+    except ImportError:  # pragma: no cover - exercised by the release CLI.
+        from github_api_types import GitHubApiResponse, JSONObject, decode_github_response
 
 RELEASE_TAG = "kicad-python-dev"
 ASSET_PREFIX = "kicad_python-0.9.0.dev0-"
@@ -21,8 +28,7 @@ TRANSIENT_HTTP_STATUS = {408, 425, 429, 500, 502, 503, 504}
 
 def _retry_delay(attempt: int, error: BaseException) -> float:
     """Return a bounded backoff, respecting a numeric Retry-After header."""
-    headers = getattr(error, "headers", None)
-    retry_after = headers.get("Retry-After") if headers is not None else None
+    retry_after = error.headers.get("Retry-After") if isinstance(error, HTTPError) else None
     if retry_after:
         try:
             return min(30.0, max(1.0, float(retry_after)))
@@ -36,13 +42,13 @@ def _api_request(
     url: str,
     token: str,
     *,
-    payload: dict | None = None,
+    payload: JSONObject | None = None,
     body: bytes | None = None,
     content_type: str = "application/vnd.github+json",
     allow_not_found: bool = False,
     timeout: float = 45.0,
     max_retries: int = 3,
-) -> dict | None:
+) -> GitHubApiResponse | None:
     """Call GitHub's API with bounded retries for transient network/API failures."""
     headers = {
         "Accept": "application/vnd.github+json",
@@ -64,7 +70,7 @@ def _api_request(
             if not raw:
                 return {}
             try:
-                return json.loads(raw.decode("utf-8"))
+                return decode_github_response(raw)
             except json.JSONDecodeError as exc:
                 raise RuntimeError(f"GitHub API returned non-JSON data for {url}.") from exc
         except HTTPError as exc:
@@ -82,7 +88,7 @@ def _api_request(
             raise RuntimeError(
                 f"GitHub API {method} {url} failed with HTTP {exc.code}: {details}"
             ) from exc
-        except (TimeoutError, socket.timeout, ssl.SSLError, URLError, ConnectionError) as exc:
+        except (TimeoutError, ssl.SSLError, URLError, ConnectionError) as exc:
             if attempt >= max_retries:
                 raise RuntimeError(
                     f"GitHub API {method} {url} failed after {attempt + 1} attempts: {exc}"
@@ -101,14 +107,14 @@ def _release_url(repo: str) -> str:
     return f"{api}/repos/{repo}/releases/tags/{quote(RELEASE_TAG, safe='')}"
 
 
-def _get_or_create_release(repo: str, token: str) -> dict:
+def _get_or_create_release(repo: str, token: str) -> GitHubApiResponse:
     release_url = _release_url(repo)
     release = _api_request("GET", release_url, token, allow_not_found=True)
     if release is not None:
         return release
 
     api = os.environ.get("GITHUB_API_URL", "https://api.github.com").rstrip("/")
-    payload = {
+    payload: JSONObject = {
         "tag_name": RELEASE_TAG,
         "target_commitish": "main",
         "name": "KiCad Python IPC wheel (nightly)",
@@ -121,12 +127,15 @@ def _get_or_create_release(repo: str, token: str) -> dict:
         "prerelease": True,
     }
     try:
-        return _api_request(
+        created = _api_request(
             "POST",
             f"{api}/repos/{repo}/releases",
             token,
             payload=payload,
         )
+        if created is None:
+            raise RuntimeError("GitHub did not return the development wheel release.")
+        return created
     except RuntimeError:
         # POST may have succeeded even if the TLS response was lost. Re-read
         # the tag before deciding that release creation actually failed.
@@ -136,7 +145,7 @@ def _get_or_create_release(repo: str, token: str) -> dict:
         raise
 
 
-def _matching_asset(release: dict, name: str, size: int) -> dict | None:
+def _matching_asset(release: GitHubApiResponse, name: str, size: int) -> GitHubApiResponse | None:
     for asset in release.get("assets", []):
         if (
             asset.get("name") == name
@@ -150,9 +159,7 @@ def _matching_asset(release: dict, name: str, size: int) -> dict | None:
 
 def publish_wheel(wheelhouse: Path, repo: str, token: str) -> str:
     wheelhouse = Path(wheelhouse).expanduser().resolve()
-    wheels = sorted(
-        path for path in wheelhouse.glob(f"{ASSET_PREFIX}*.whl") if path.is_file()
-    )
+    wheels = sorted(path for path in wheelhouse.glob(f"{ASSET_PREFIX}*.whl") if path.is_file())
     if len(wheels) != 1:
         raise FileNotFoundError(
             f"Expected exactly one {ASSET_PREFIX}*.whl in {wheelhouse}; "
@@ -168,14 +175,17 @@ def publish_wheel(wheelhouse: Path, repo: str, token: str) -> str:
     api = os.environ.get("GITHUB_API_URL", "https://api.github.com").rstrip("/")
     release = _get_or_create_release(repo, token)
     release_id = release.get("id")
-    if not release_id:
+    if release_id is None:
         raise RuntimeError("GitHub did not return a release ID.")
 
     for asset in release.get("assets", []):
         if asset.get("name") == wheel.name:
+            asset_id = asset.get("id")
+            if asset_id is None:
+                continue
             _api_request(
                 "DELETE",
-                f"{api}/repos/{repo}/releases/assets/{asset['id']}",
+                f"{api}/repos/{repo}/releases/assets/{asset_id}",
                 token,
                 allow_not_found=True,
             )
@@ -196,9 +206,7 @@ def publish_wheel(wheelhouse: Path, repo: str, token: str) -> str:
     except RuntimeError:
         # A timed-out upload may nevertheless have reached GitHub. Verify the
         # release state before retrying the whole publication or failing CI.
-        refreshed_release = _api_request(
-            "GET", _release_url(repo), token, allow_not_found=True
-        )
+        refreshed_release = _api_request("GET", _release_url(repo), token, allow_not_found=True)
         uploaded = (
             _matching_asset(refreshed_release, wheel.name, wheel_size)
             if refreshed_release is not None
@@ -207,6 +215,10 @@ def publish_wheel(wheelhouse: Path, repo: str, token: str) -> str:
         if uploaded is None:
             raise
 
+    if uploaded is None:
+        raise RuntimeError(
+            "GitHub did not return a release asset matching the uploaded KiCad IPC wheel."
+        )
     if uploaded.get("name") != wheel.name or uploaded.get("size") != wheel_size:
         raise RuntimeError(f"GitHub release asset verification failed: {uploaded!r}.")
     download_url = uploaded.get("browser_download_url")

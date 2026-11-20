@@ -68,11 +68,14 @@ class ReleasePackageTests(unittest.TestCase):
                 self.assertIn(prefix + "VERSION", names)
                 self.assertIn(prefix + "CHANGELOG.md", names)
                 self.assertIn(prefix + "scripts/install_plugin.py", names)
+                self.assertIn(prefix + "scripts/github_api_types.py", names)
                 self.assertIn(prefix + "plugin/kicad-blocks/plugin.json", names)
                 self.assertIn(prefix + "plugin/kicad-blocks/requirements.txt", names)
                 self.assertIn(prefix + "RELEASE_INFO.json", names)
                 self.assertFalse(any(name.startswith(prefix + "tests/") for name in names))
-                self.assertFalse(any("__pycache__" in name or name.endswith(".pyc") for name in names))
+                self.assertFalse(
+                    any("__pycache__" in name or name.endswith(".pyc") for name in names)
+                )
                 info = json.loads(archive.read(prefix + "RELEASE_INFO.json"))
                 self.assertEqual(info["version"], "1.1.0")
                 self.assertEqual(info["source_commit"], "1" * 40)
@@ -110,14 +113,10 @@ class ReleasePackageTests(unittest.TestCase):
                 text=True,
                 timeout=30,
             )
-            self.assertIn("KiCad Blocks installed at:", result.stdout)
+            assert "KiCad Blocks installed at:" in result.stdout
 
             installed = (
-                documents_home
-                / "kicad"
-                / "10.99"
-                / "plugins"
-                / "org.uhrendoktor.kicadblocks"
+                documents_home / "kicad" / "10.99" / "plugins" / "org.uhrendoktor.kicadblocks"
             )
             self.assertIn(str(installed), result.stdout)
             manifest = json.loads((installed / "plugin.json").read_text(encoding="utf-8"))

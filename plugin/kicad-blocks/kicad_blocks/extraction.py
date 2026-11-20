@@ -4,14 +4,25 @@ The selected sheet's hierarchical labels define the external block interface.
 Its nested hierarchical sheets remain internal and are copied into the block
 asset tree with their relative references and hierarchy paths rebased.
 """
+
 from __future__ import annotations
 
 import re
 import uuid
 from pathlib import Path
+from typing import cast
 
 from .model import BlockPin
-from .pcb_layout import _all, _direct, _dump, _head, _Quoted, parse_sexpr
+from .sexpr import (
+    QuotedSExpr as _Quoted,
+    SExpr,
+    SExprList,
+    dump_sexpr as _dump,
+    parse_sexpr,
+    sexpr_all as _all,
+    sexpr_direct as _direct,
+    sexpr_head as _head,
+)
 
 _LABEL_SHAPES = {
     "input": "input",
@@ -23,13 +34,11 @@ _LABEL_SHAPES = {
 _PIN_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_./+#-]*\Z")
 
 
-def _parse_selection(selection_fragment: str) -> list:
+def _parse_selection(selection_fragment: str) -> SExprList:
     """Parse the clipboard-format fragment returned by Schematic.get_selection_as_string."""
     fragment = str(selection_fragment or "").strip()
     if not fragment:
-        raise ValueError(
-            "Select exactly one hierarchical sheet symbol in the parent schematic."
-        )
+        raise ValueError("Select exactly one hierarchical sheet symbol in the parent schematic.")
     try:
         wrapper = parse_sexpr(f"(selection {fragment})")
     except ValueError as exc:
@@ -39,9 +48,9 @@ def _parse_selection(selection_fragment: str) -> list:
     return wrapper[1:]
 
 
-def _selected_sheet_node(selection_fragment: str) -> list:
+def _selected_sheet_node(selection_fragment: str) -> SExprList:
     nodes = _parse_selection(selection_fragment)
-    if len(nodes) != 1 or _head(nodes[0]) != "sheet":
+    if len(nodes) != 1 or not isinstance(nodes[0], list) or _head(nodes[0]) != "sheet":
         raise ValueError(
             "Select exactly one hierarchical sheet symbol. The block will be built from "
             "that sheet's complete subschematic."
@@ -80,7 +89,7 @@ def selected_sheet_instance_uuid(selection_fragment: str) -> str:
     return str(node[1])
 
 
-def extract_hierarchical_pins(schematic_tree: list) -> list[BlockPin]:
+def extract_hierarchical_pins(schematic_tree: SExprList) -> list[BlockPin]:
     """Derive facade pins from labels on the selected block's root sheet only.
 
     Identically named root-level hierarchical labels represent one interface signal.
@@ -150,27 +159,25 @@ def _join_hierarchy_path(parent: str, child_uuid: str) -> str:
 
 def _path_matches(path_value: str, prefix: str) -> bool:
     prefix = prefix.rstrip("/") or "/"
-    return path_value == prefix or (
-        prefix != "/" and path_value.startswith(prefix + "/")
-    )
+    return path_value == prefix or (prefix != "/" and path_value.startswith(prefix + "/"))
 
 
 def _rebase_path_value(path_value: str, old_prefix: str, new_prefix: str) -> str:
     if not _path_matches(path_value, old_prefix):
         return new_prefix
     normalized_old = old_prefix.rstrip("/") or "/"
-    suffix = path_value[len(normalized_old):]
+    suffix = path_value[len(normalized_old) :]
     if new_prefix == "/":
         return "/" + suffix.lstrip("/")
     return new_prefix.rstrip("/") + suffix
 
 
-def _path_nodes(node: list) -> list[list]:
-    return [child for child in node[1:] if _head(child) == "path"]
+def _path_nodes(node: SExprList) -> list[SExprList]:
+    return [child for child in node[1:] if isinstance(child, list) and _head(child) == "path"]
 
 
 def _normalize_instance_node(
-    node: list,
+    node: SExprList,
     project_name: str,
     old_prefix: str,
     new_prefix: str,
@@ -190,50 +197,55 @@ def _normalize_instance_node(
             return
         unit_node = _direct(node, "unit")
         unit = str(unit_node[1]) if unit_node is not None and len(unit_node) >= 2 else "1"
-        node.append([
-            "instances",
-            ["project", _Quoted(project_name),
-             ["path", _Quoted(new_prefix), ["reference", _Quoted(reference)], ["unit", unit]]],
-        ])
+        path_node: SExprList = [
+            "path",
+            _Quoted(new_prefix),
+            ["reference", _Quoted(reference)],
+            ["unit", unit],
+        ]
+        project_node: SExprList = ["project", _Quoted(project_name), path_node]
+        instances_node: SExprList = ["instances", project_node]
+        node.append(instances_node)
         return
 
-    projects = [item for item in instances[1:] if _head(item) == "project"]
+    projects = [
+        item for item in instances[1:] if isinstance(item, list) and _head(item) == "project"
+    ]
     for project in projects:
         if len(project) >= 2:
             project[1] = _Quoted(project_name)
         paths = _path_nodes(project)
         if paths:
             matching = [
-                path for path in paths
-                if len(path) >= 2 and _path_matches(str(path[1]), old_prefix)
+                path for path in paths if len(path) >= 2 and _path_matches(str(path[1]), old_prefix)
             ]
             kept = matching or paths[:1]
             kept_ids = {id(path) for path in kept}
             project[1:] = [
-                child for child in project[1:]
-                if _head(child) != "path" or id(child) in kept_ids
+                child
+                for child in project[1:]
+                if not (
+                    isinstance(child, list) and _head(child) == "path" and id(child) not in kept_ids
+                )
             ]
             for path in kept:
                 if len(path) >= 2:
-                    path[1] = _Quoted(
-                        _rebase_path_value(str(path[1]), old_prefix, new_prefix)
-                    )
+                    path[1] = _Quoted(_rebase_path_value(str(path[1]), old_prefix, new_prefix))
     if fallback_reference and not projects:
-        node.append([
-            "instances",
-            ["project", _Quoted(project_name),
-             ["path", _Quoted(new_prefix)]],
-        ])
+        path_node: SExprList = ["path", _Quoted(new_prefix)]
+        project_node: SExprList = ["project", _Quoted(project_name), path_node]
+        instances_node: SExprList = ["instances", project_node]
+        node.append(instances_node)
 
 
-def _sheet_instance_paths(tree: list) -> list[list]:
+def _sheet_instance_paths(tree: SExprList) -> list[SExprList]:
     instances = _direct(tree, "sheet_instances")
     if instances is None:
         return []
     return _path_nodes(instances)
 
 
-def _select_root_source_prefix(tree: list, selected_sheet_uuid: str | None) -> str:
+def _select_root_source_prefix(tree: SExprList, selected_sheet_uuid: str | None) -> str:
     paths = _sheet_instance_paths(tree)
     if not paths:
         return "/"
@@ -247,43 +259,49 @@ def _select_root_source_prefix(tree: list, selected_sheet_uuid: str | None) -> s
 
 
 def _normalize_sheet_instances(
-    tree: list,
+    tree: SExprList,
     old_prefix: str,
     new_prefix: str,
     *,
     is_root: bool,
 ) -> None:
-    instances = _direct(tree, "sheet_instances")
-    if instances is None:
-        instances = ["sheet_instances"]
-        tree.append(instances)
+    existing_instances = _direct(tree, "sheet_instances")
+    if existing_instances is None:
+        instances = cast("SExprList", ["sheet_instances"])
+        tree.append(cast("SExpr", instances))
+    else:
+        instances = existing_instances
     paths = _path_nodes(instances)
     matching = [
-        path for path in paths
-        if len(path) >= 2 and _path_matches(str(path[1]), old_prefix)
+        path for path in paths if len(path) >= 2 and _path_matches(str(path[1]), old_prefix)
     ]
     kept = matching or paths[:1]
     if paths:
         kept_ids = {id(path) for path in kept}
         instances[1:] = [
-            child for child in instances[1:]
-            if _head(child) != "path" or id(child) in kept_ids
+            child
+            for child in instances[1:]
+            if not (
+                isinstance(child, list) and _head(child) == "path" and id(child) not in kept_ids
+            )
         ]
     else:
-        kept = [["path", _Quoted(new_prefix), ["page", _Quoted("1" if is_root else "2")]]]
-        instances.extend(kept)
+        page_node: SExprList = ["page", _Quoted("1" if is_root else "2")]
+        path_node: SExprList = ["path", _Quoted(new_prefix), page_node]
+        kept = [path_node]
+        instances.extend(cast("list[SExpr]", kept))
     for path in kept:
         if len(path) >= 2:
             path[1] = _Quoted(new_prefix)
         if is_root:
             page = _direct(path, "page")
             if page is None:
-                path.append(["page", _Quoted("1")])
+                path.append(cast("SExpr", ["page", _Quoted("1")]))
             elif len(page) >= 2:
                 page[1] = _Quoted("1")
 
 
-def _sheet_file_property(sheet: list) -> list:
+def _sheet_file_property(sheet: SExprList) -> SExprList:
     for prop in _all(sheet, "property"):
         if len(prop) >= 3 and str(prop[1]) == "Sheetfile":
             return prop
@@ -304,7 +322,7 @@ def _resolve_nested_sheet(parent_file: Path, sheetfile: str) -> Path:
 
 def _prepare_sheet_tree(
     source_file: Path,
-    tree: list,
+    tree: SExprList,
     display_name: str,
     block_id: str,
     project_name: str,
@@ -334,23 +352,30 @@ def _prepare_sheet_tree(
         if title_block is not None:
             title = _direct(title_block, "title")
             if title is None:
-                title_block.append(["title", _Quoted(display_name)])
+                title_block.append(cast("SExpr", ["title", _Quoted(display_name)]))
             elif len(title) >= 2:
                 title[1] = _Quoted(display_name)
             comment = next(
                 (
-                    item for item in title_block[1:]
-                    if _head(item) == "comment" and len(item) >= 3
+                    item
+                    for item in title_block[1:]
+                    if isinstance(item, list)
+                    and _head(item) == "comment"
+                    and len(item) >= 3
                     and str(item[1]) == "1"
                 ),
                 None,
             )
             if comment is None:
-                title_block.append(["comment", "1", _Quoted("Block ID: " + block_id)])
+                title_block.append(
+                    cast("SExpr", ["comment", "1", _Quoted("Block ID: " + block_id)])
+                )
             else:
                 comment[2] = _Quoted("Block ID: " + block_id)
 
     for node in tree[1:]:
+        if not isinstance(node, list):
+            continue
         if _head(node) == "symbol":
             _normalize_instance_node(
                 node, project_name, old_prefix, new_prefix, fallback_reference=True
@@ -362,13 +387,14 @@ def _prepare_sheet_tree(
 
     _normalize_sheet_instances(tree, old_prefix, new_prefix, is_root=is_root)
 
-    for sheet in [node for node in tree[1:] if _head(node) == "sheet"]:
-        sheet_uuid_node = _direct(sheet, "uuid")
-        if sheet_uuid_node is None or len(sheet_uuid_node) < 2:
+    for sheet in [node for node in tree[1:] if isinstance(node, list) and _head(node) == "sheet"]:
+        existing_sheet_uuid = _direct(sheet, "uuid")
+        if existing_sheet_uuid is None or len(existing_sheet_uuid) < 2:
             original_sheet_uuid = str(uuid.uuid4())
-            sheet_uuid_node = ["uuid", _Quoted(original_sheet_uuid)]
+            sheet_uuid_node: SExprList = ["uuid", _Quoted(original_sheet_uuid)]
             sheet.append(sheet_uuid_node)
         else:
+            sheet_uuid_node = existing_sheet_uuid
             original_sheet_uuid = str(sheet_uuid_node[1])
 
         replacement_uuid = str(uuid.uuid4())

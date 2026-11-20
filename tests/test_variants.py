@@ -7,13 +7,14 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from typing import cast
 
 ROOT = Path(__file__).resolve().parents[1]
 PLUGIN = ROOT / "plugin" / "kicad-blocks"
 sys.path.insert(0, str(PLUGIN))
 
 from kicad_blocks.model import parse_pins, resolve_variant_implementation
-from kicad_blocks.plugin import _resolve_variant_text
+from kicad_blocks.plugin import SchematicProject, resolve_variant_text
 from kicad_blocks.repository import (
     create_block,
     make_local_copy,
@@ -23,10 +24,13 @@ from kicad_blocks.repository import (
 
 
 class _Project:
-    def __init__(self, values):
-        self.values = values
+    path: Path
 
-    def expand_text_variables(self, text):
+    def __init__(self, values: dict[str, str]) -> None:
+        self.values = values
+        self.path = Path(".")
+
+    def expand_text_variables(self, text: str) -> str:
         for name, value in self.values.items():
             text = text.replace("${" + name + "}", value)
         return text
@@ -61,7 +65,9 @@ class BlockVariantTests(unittest.TestCase):
 
     def test_variant_value_maps_to_copied_schematic(self):
         block = self.create_variant_block()
-        self.assertEqual(resolve_variant_implementation(block.manifest, "3v3"), "implementation_3v3.kicad_sch")
+        self.assertEqual(
+            resolve_variant_implementation(block.manifest, "3v3"), "implementation_3v3.kicad_sch"
+        )
         self.assertTrue((block.path / "implementation_3v3.kicad_sch").is_file())
         self.assertEqual({item["value"] for item in block.manifest["variants"]}, {"1V8", "3V3"})
         facade = (block.path / block.manifest["symbol_file"]).read_text(encoding="utf-8")
@@ -91,8 +97,12 @@ class BlockVariantTests(unittest.TestCase):
             resolve_variant_implementation(block.manifest, "5V")
 
     def test_non_variant_block_keeps_single_implementation(self):
-        block = create_block(self.root, "Single Implementation", parse_pins("VIN:input, GND:passive"))
-        self.assertEqual(resolve_variant_implementation(block.manifest, ""), "implementation.kicad_sch")
+        block = create_block(
+            self.root, "Single Implementation", parse_pins("VIN:input, GND:passive")
+        )
+        self.assertEqual(
+            resolve_variant_implementation(block.manifest, ""), "implementation.kicad_sch"
+        )
 
     def test_duplicate_values_are_rejected(self):
         with self.assertRaisesRegex(ValueError, "Duplicate block variant value"):
@@ -109,17 +119,19 @@ class BlockVariantTests(unittest.TestCase):
     def test_project_and_sheet_text_variables_are_expanded(self):
         project = _Project({"RAIL": "1V8"})
         self.assertEqual(
-            _resolve_variant_text("${RAIL}", project, {}),
+            resolve_variant_text("${RAIL}", cast(SchematicProject, project), {}),
             "1V8",
         )
         self.assertEqual(
-            _resolve_variant_text("${SHEET_RAIL}", project, {"SHEET_RAIL": "${RAIL}"}),
+            resolve_variant_text(
+                "${SHEET_RAIL}", cast(SchematicProject, project), {"SHEET_RAIL": "${RAIL}"}
+            ),
             "1V8",
         )
 
     def test_unresolved_variable_is_reported(self):
         with self.assertRaisesRegex(ValueError, "Could not resolve KiCad text variable"):
-            _resolve_variant_text("${MISSING}", _Project({}), {})
+            resolve_variant_text("${MISSING}", cast(SchematicProject, _Project({})), {})
 
     def test_variants_sync_with_local_copy_and_publish_back(self):
         source = self.create_variant_block()
@@ -138,7 +150,9 @@ class BlockVariantTests(unittest.TestCase):
             {"value": "1V8", "file": "implementation_1v8.kicad_sch"},
             {"value": "3V3", "file": "implementation_3v3.kicad_sch"},
         ]
-        (local.path / "manifest.json").write_text(json.dumps(synced, indent=2) + "\n", encoding="utf-8")
+        (local.path / "manifest.json").write_text(
+            json.dumps(synced, indent=2) + "\n", encoding="utf-8"
+        )
         result = publish_local_copy(local)
         self.assertIn("manifest.variants", result["published"])
         latest = json.loads(manifest_path.read_text(encoding="utf-8"))

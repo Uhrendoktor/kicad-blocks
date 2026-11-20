@@ -11,7 +11,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from scripts.generate_ui_inventory import load_catalog, render_inventory
+from scripts.generate_ui_inventory import UIAction, UIControl, load_catalog, render_inventory
 
 CATALOG_PATH = ROOT / "tests" / "ui_contract_catalog.json"
 INVENTORY_PATH = ROOT / "docs" / "ui-inventory.md"
@@ -51,20 +51,24 @@ def test_every_known_top_level_screen_is_in_catalog():
     }
     assert expected <= ids
 
+    facade_editor = next(screen for screen in catalog["screens"] if screen["id"] == "facade-editor")
+    assert facade_editor["coverage"] == "partial"
+    assert "does not expose an operation to open Symbol Editor" in facade_editor["coverage_note"]
+    assert not facade_editor.get("controls")
+
 
 def test_each_semantic_control_has_an_explicit_assertion_level():
     catalog = load_catalog()
     for screen in catalog["screens"]:
-        controls = list(screen.get("controls", []))
-        controls.extend(screen.get("footer_controls", []))
+        controls: list[UIControl | UIAction] = [
+            *screen.get("controls", []),
+            *screen.get("footer_controls", []),
+        ]
         for view in screen.get("views", []):
             controls.extend(view.get("actions", []))
         ids = [item["contract_id"] for item in controls if item.get("contract_id")]
         assert len(ids) == len(set(ids))
-        assert all(
-            item["assertion"] in {"asserted", "observed", "uncovered"}
-            for item in controls
-        )
+        assert all(item["assertion"] in {"asserted", "observed", "uncovered"} for item in controls)
 
 
 def test_inventory_distinguishes_implemented_from_unimplemented_contracts():
@@ -113,7 +117,7 @@ def test_committed_inventory_matches_the_catalog():
     )
 
 
-def test_catalog_rejects_duplicate_screen_ids(tmp_path):
+def test_catalog_rejects_duplicate_screen_ids(tmp_path: Path):
     catalog = json.loads(CATALOG_PATH.read_text(encoding="utf-8"))
     catalog["screens"].append(dict(catalog["screens"][0]))
     path = tmp_path / "catalog.json"
@@ -123,7 +127,7 @@ def test_catalog_rejects_duplicate_screen_ids(tmp_path):
         load_catalog(path)
 
 
-def test_catalog_rejects_unregistered_screenshot_assets(tmp_path):
+def test_catalog_rejects_unregistered_screenshot_assets(tmp_path: Path):
     catalog = json.loads(CATALOG_PATH.read_text(encoding="utf-8"))
     catalog["screens"][0]["screenshots"].append("not-in-the-visual-inventory.png")
     path = tmp_path / "catalog.json"

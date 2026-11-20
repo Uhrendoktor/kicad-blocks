@@ -5,63 +5,68 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
-from types import SimpleNamespace
+from typing import cast
 
 PLUGIN = Path(__file__).resolve().parents[1] / "plugin" / "kicad-blocks"
 sys.path.insert(0, str(PLUGIN))
 
 from kicad_blocks.pcb_layout import (
-    _dump,
-    _merge_project_net_settings,
-    _Quoted,
-    _rewrite_nets,
-    _transform_item,
-    parse_sexpr,
+    merge_project_net_settings,
+    rewrite_nets,
+    transform_item,
     resolve_block_layout,
 )
+from kicad_blocks.manifest_types import BlockManifest
+from kicad_blocks.repository import BlockRecord
+from kicad_blocks.sexpr import QuotedSExpr, dump_sexpr, parse_sexpr
 
 
 class PCBNetRewriteTests(unittest.TestCase):
     def test_resolve_named_layout_and_legacy_single_layout(self):
-        block = SimpleNamespace(
-            name="Power Block",
+        block = BlockRecord(
             path=Path("/tmp/power.kicad_block"),
-            manifest={
-                "layouts": [
-                    {"id": "native", "name": "Native", "file": "layout_native.kicad_pcb"},
-                    {
-                        "id": "low_voltage",
-                        "name": "Low voltage",
-                        "file": "layout_low_voltage.kicad_pcb",
-                        "project_file": "layout_low_voltage.kicad_pro",
-                        "ports": {"VIN": "VDD18"},
-                    },
-                ],
-            },
+            manifest=cast(
+                BlockManifest,
+                {
+                    "name": "Power Block",
+                    "layouts": [
+                        {"id": "native", "name": "Native", "file": "layout_native.kicad_pcb"},
+                        {
+                            "id": "low_voltage",
+                            "name": "Low voltage",
+                            "file": "layout_low_voltage.kicad_pcb",
+                            "project_file": "layout_low_voltage.kicad_pro",
+                            "ports": {"VIN": "VDD18"},
+                        },
+                    ],
+                },
+            ),
         )
         selected = resolve_block_layout(block, "low_voltage")
         self.assertEqual(selected["name"], "Low voltage")
         self.assertEqual(selected["file"], "layout_low_voltage.kicad_pcb")
         self.assertEqual(selected["project_file"], "layout_low_voltage.kicad_pro")
-        self.assertEqual(selected["ports"], {"VIN": "VDD18"})
+        self.assertEqual(selected.get("ports"), {"VIN": "VDD18"})
         with self.assertRaisesRegex(ValueError, "multiple PCB layouts"):
             resolve_block_layout(block)
-        defaulted = SimpleNamespace(
-            name=block.name,
+        defaulted = BlockRecord(
             path=block.path,
-            manifest={**block.manifest, "default_layout": "native"},
+            manifest=cast(BlockManifest, {**block.manifest, "default_layout": "native"}),
         )
         self.assertEqual(resolve_block_layout(defaulted)["id"], "native")
         with self.assertRaisesRegex(ValueError, "Unknown PCB layout"):
             resolve_block_layout(block, "missing")
 
-        legacy = SimpleNamespace(
-            name="Old Block",
+        legacy = BlockRecord(
             path=Path("/tmp/old.kicad_block"),
-            manifest={
-                "layout_file": "layout.kicad_pcb",
-                "layout_project_file": "layout.kicad_pro",
-            },
+            manifest=cast(
+                BlockManifest,
+                {
+                    "name": "Old Block",
+                    "layout_file": "layout.kicad_pcb",
+                    "layout_project_file": "layout.kicad_pro",
+                },
+            ),
         )
         self.assertEqual(
             resolve_block_layout(legacy),
@@ -74,53 +79,51 @@ class PCBNetRewriteTests(unittest.TestCase):
             },
         )
 
-
-
     def test_named_pad_net_keeps_mapped_code_and_net_name(self):
         pad = parse_sexpr('(pad "1" smd rect (net 7 "SW"))')
-        _rewrite_nets(pad, {7: (2, "VIN_BOARD")}, include_net_name=True)
-        self.assertEqual(_dump(pad), '(pad "1" smd rect (net 2 "VIN_BOARD"))')
-        self.assertIsInstance(pad[4][2], _Quoted)
+        rewrite_nets(pad, {7: (2, "VIN_BOARD")}, include_net_name=True)
+        self.assertEqual(dump_sexpr(pad), '(pad "1" smd rect (net 2 "VIN_BOARD"))')
+        self.assertIsInstance(pad[4][2], QuotedSExpr)
 
     def test_track_net_remains_numeric_only(self):
-        segment = parse_sexpr('(segment (start 1 2) (end 3 4) (net 7))')
-        _rewrite_nets(segment, {7: (9, "X1_SW")}, include_net_name=False)
+        segment = parse_sexpr("(segment (start 1 2) (end 3 4) (net 7))")
+        rewrite_nets(segment, {7: (9, "X1_SW")}, include_net_name=False)
         self.assertEqual(
-            _dump(segment),
-            '(segment (start 1 2) (end 3 4) (net 9))',
+            dump_sexpr(segment),
+            "(segment (start 1 2) (end 3 4) (net 9))",
         )
 
     def test_rotation_transforms_footprint_and_absolute_fields_but_not_local_pads(self):
         footprint = parse_sexpr(
             '(footprint "Test:Part" '
-            '(at 100 100 0) '
+            "(at 100 100 0) "
             '(property "Reference" "R1" (at 100 98 0)) '
             '(pad "1" smd rect (at -0.75 0 0) (size 1 1) (net 0 "")))'
         )
-        _transform_item(
+        transform_item(
             footprint,
             anchor_mm=(100.0, 100.0),
             position_mm=(120.0, 130.0),
             rotation_deg=90.0,
         )
 
-        self.assertIn('(at 120 130 90)', _dump(footprint))
-        self.assertIn('(at 118 130 90)', _dump(footprint))
-        self.assertIn('(at -0.75 0 0)', _dump(footprint))
+        self.assertIn("(at 120 130 90)", dump_sexpr(footprint))
+        self.assertIn("(at 118 130 90)", dump_sexpr(footprint))
+        self.assertIn("(at -0.75 0 0)", dump_sexpr(footprint))
 
     def test_rotation_transforms_track_endpoints_about_layout_anchor(self):
         segment = parse_sexpr(
-            '(segment (start 100 100) (end 105 100) (width 0.25) '
+            "(segment (start 100 100) (end 105 100) (width 0.25) "
             '(layer "F.Cu") (net 3) (uuid "old"))'
         )
-        _transform_item(
+        transform_item(
             segment,
             anchor_mm=(100.0, 100.0),
             position_mm=(120.0, 130.0),
             rotation_deg=90.0,
         )
-        self.assertIn('(start 120 130)', _dump(segment))
-        self.assertIn('(end 120 125)', _dump(segment))
+        self.assertIn("(start 120 130)", dump_sexpr(segment))
+        self.assertIn("(end 120 125)", dump_sexpr(segment))
 
     def test_project_netclasses_merge_namespaced_and_external_assignments(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -135,7 +138,12 @@ class PCBNetRewriteTests(unittest.TestCase):
                         "net_settings": {
                             "classes": [
                                 {"name": "Default", "priority": 2147483647, "clearance": 0.2},
-                                {"name": "Fast", "priority": 0, "clearance": 0.2, "track_width": 0.2},
+                                {
+                                    "name": "Fast",
+                                    "priority": 0,
+                                    "clearance": 0.2,
+                                    "track_width": 0.2,
+                                },
                             ],
                             "netclass_assignments": {"VIN_BOARD": ["Fast"]},
                             "net_chain_classes": {"PROJECT_CHAIN": "PROJECT_GROUP"},
@@ -152,7 +160,12 @@ class PCBNetRewriteTests(unittest.TestCase):
                         "net_settings": {
                             "classes": [
                                 {"name": "Default", "priority": 2147483647, "clearance": 0.2},
-                                {"name": "Fast", "priority": 0, "clearance": 0.1, "track_width": 0.15},
+                                {
+                                    "name": "Fast",
+                                    "priority": 0,
+                                    "clearance": 0.1,
+                                    "track_width": 0.15,
+                                },
                             ],
                             "netclass_assignments": {
                                 "VIN": ["Fast"],
@@ -173,7 +186,7 @@ class PCBNetRewriteTests(unittest.TestCase):
             original_target = target.read_bytes()
             original_source = source.read_bytes()
 
-            result = _merge_project_net_settings(
+            result = merge_project_net_settings(
                 target,
                 source,
                 output,
@@ -188,6 +201,8 @@ class PCBNetRewriteTests(unittest.TestCase):
                 source_chain_name_map={"SIG_CHAIN": "X1_SIG_CHAIN"},
             )
 
+            self.assertIsNotNone(result)
+            assert result is not None
             self.assertEqual(result["merged_classes"], ["X1_Fast"])
             self.assertEqual(result["assigned_nets"], ["VIN_BOARD", "X1_SW"])
             self.assertTrue(result["ignored_patterns"])
@@ -199,15 +214,19 @@ class PCBNetRewriteTests(unittest.TestCase):
                 ],
             )
             self.assertEqual(result["unmatched_patterns"], ["NO_MATCH*"])
+            assert result is not None
+            net_settings = result["data"].get("net_settings")
+            self.assertIsNotNone(net_settings)
+            assert net_settings is not None
             self.assertEqual(
-                result["data"]["net_settings"]["net_chain_classes"],
+                net_settings.get("net_chain_classes"),
                 {
                     "PROJECT_CHAIN": "PROJECT_GROUP",
                     "X1_SIG_CHAIN": "SERIAL_GROUP",
                 },
             )
             self.assertEqual(
-                result["data"]["net_settings"]["net_chain_netclasses"],
+                net_settings.get("net_chain_netclasses"),
                 {"X1_SIG_CHAIN": "X1_Fast"},
             )
             self.assertEqual(result["merged_chain_names"], ["X1_SIG_CHAIN"])
@@ -215,15 +234,15 @@ class PCBNetRewriteTests(unittest.TestCase):
             self.assertEqual(target.read_bytes(), original_target)
             self.assertEqual(source.read_bytes(), original_source)
             merged = result["data"]
-            self.assertEqual(
-                merged["net_settings"]["netclass_assignments"]["VIN_BOARD"],
-                ["Fast", "X1_Fast"],
-            )
-            self.assertEqual(
-                merged["net_settings"]["netclass_assignments"]["X1_SW"],
-                ["X1_Fast"],
-            )
-            self.assertEqual(merged["meta"]["filename"], output.name)
+            merged_settings = merged.get("net_settings")
+            assert merged_settings is not None
+            merged_assignments = merged_settings.get("netclass_assignments")
+            assert merged_assignments is not None
+            self.assertEqual(merged_assignments["VIN_BOARD"], ["Fast", "X1_Fast"])
+            self.assertEqual(merged_assignments["X1_SW"], ["X1_Fast"])
+            merged_metadata = merged.get("meta")
+            assert merged_metadata is not None
+            self.assertEqual(merged_metadata.get("filename"), output.name)
 
     def test_kicad_netclass_regex_and_bus_vector_patterns(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -232,7 +251,9 @@ class PCBNetRewriteTests(unittest.TestCase):
             source = root / "layout.kicad_pro"
             output = root / "merged.kicad_pro"
             target.write_text(
-                json.dumps({"net_settings": {"classes": [{"name": "Default", "priority": 2147483647}]} }),
+                json.dumps(
+                    {"net_settings": {"classes": [{"name": "Default", "priority": 2147483647}]}}
+                ),
                 encoding="utf-8",
             )
             source.write_text(
@@ -252,7 +273,7 @@ class PCBNetRewriteTests(unittest.TestCase):
                 ),
                 encoding="utf-8",
             )
-            result = _merge_project_net_settings(
+            result = merge_project_net_settings(
                 target,
                 source,
                 output,
@@ -268,7 +289,14 @@ class PCBNetRewriteTests(unittest.TestCase):
                     "CLK_P": "U1_CLK_P",
                 },
             )
-            assignments = result["data"]["net_settings"]["netclass_assignments"]
+            self.assertIsNotNone(result)
+            assert result is not None
+            net_settings = result["data"].get("net_settings")
+            self.assertIsNotNone(net_settings)
+            assert net_settings is not None
+            assignments = net_settings.get("netclass_assignments")
+            self.assertIsNotNone(assignments)
+            assert assignments is not None
             self.assertEqual(assignments["U1_D0"], ["BusClass"])
             self.assertEqual(assignments["U1_D1"], ["BusClass"])
             self.assertEqual(assignments["U1_D2"], ["BusClass"])
@@ -284,7 +312,9 @@ class PCBNetRewriteTests(unittest.TestCase):
             source = root / "layout.kicad_pro"
             output = root / "merged.kicad_pro"
             target.write_text(
-                json.dumps({"net_settings": {"classes": [{"name": "Default", "priority": 2147483647}]}}),
+                json.dumps(
+                    {"net_settings": {"classes": [{"name": "Default", "priority": 2147483647}]}}
+                ),
                 encoding="utf-8",
             )
             source.write_text(
@@ -299,7 +329,7 @@ class PCBNetRewriteTests(unittest.TestCase):
                 ),
                 encoding="utf-8",
             )
-            result = _merge_project_net_settings(
+            result = merge_project_net_settings(
                 target,
                 source,
                 output,
@@ -308,17 +338,22 @@ class PCBNetRewriteTests(unittest.TestCase):
                 pin_to_board_net={},
                 source_chain_name_map={},
             )
+            self.assertIsNotNone(result)
+            assert result is not None
             self.assertTrue(result["ignored_chain_classes"])
             self.assertEqual(
                 result["unmatched_chains"],
                 ["net_chain_classes:STALE_CHAIN"],
             )
-            self.assertEqual(result["data"]["net_settings"]["net_chain_classes"], {})
+            net_settings = result["data"].get("net_settings")
+            self.assertIsNotNone(net_settings)
+            assert net_settings is not None
+            self.assertEqual(net_settings.get("net_chain_classes"), {})
 
     def test_unknown_net_code_is_rejected(self):
-        segment = parse_sexpr('(segment (net 99))')
+        segment = parse_sexpr("(segment (net 99))")
         with self.assertRaisesRegex(ValueError, "undefined source net code 99"):
-            _rewrite_nets(segment, {7: (9, "X1_SW")}, include_net_name=False)
+            rewrite_nets(segment, {7: (9, "X1_SW")}, include_net_name=False)
 
 
 if __name__ == "__main__":
