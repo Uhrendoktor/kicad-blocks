@@ -1,11 +1,8 @@
-"""Pure palette tokens and desktop appearance resolution for KiCad Blocks."""
+"""Pure palette tokens with a deterministic fallback for unavailable KiCad themes."""
 
 from __future__ import annotations
 
 import os
-import subprocess
-import sys
-from pathlib import Path
 
 THEME_ENVIRONMENT_VARIABLE = "KICAD_BLOCKS_THEME"
 UI_SPACING = {"xs": 4, "sm": 8, "md": 12, "lg": 16, "xl": 24}
@@ -62,85 +59,14 @@ _DARK_VALUES = {"dark", "true", "1", "yes", "on"}
 _LIGHT_VALUES = {"light", "false", "0", "no", "off"}
 
 
-def _desktop_prefers_dark() -> bool:
-    """Read the desktop's appearance preference without requiring a dependency."""
-    if sys.platform == "win32":
-        try:
-            import winreg
-
-            key_path = chr(92).join((
-                "Software",
-                "Microsoft",
-                "Windows",
-                "CurrentVersion",
-                "Themes",
-                "Personalize",
-            ))
-            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path) as key:
-                value, _kind = winreg.QueryValueEx(key, "AppsUseLightTheme")
-            return int(value) == 0
-        except (ImportError, OSError, ValueError):
-            return False
-
-    if sys.platform == "darwin":
-        try:
-            result = subprocess.run(
-                ["defaults", "read", "-g", "AppleInterfaceStyle"],
-                capture_output=True,
-                text=True,
-                timeout=1.0,
-                check=False,
-            )
-            return result.returncode == 0 and result.stdout.strip().casefold() == "dark"
-        except (OSError, subprocess.TimeoutExpired):
-            return False
-
-    if sys.platform.startswith("linux"):
-        gtk_theme = os.environ.get("GTK_THEME", "")
-        if gtk_theme:
-            return "dark" in gtk_theme.casefold()
-
-        for schema, key in (
-            ("org.gnome.desktop.interface", "color-scheme"),
-            ("org.gnome.desktop.interface", "gtk-theme"),
-        ):
-            try:
-                result = subprocess.run(
-                    ["gsettings", "get", schema, key],
-                    capture_output=True,
-                    text=True,
-                    timeout=1.0,
-                    check=False,
-                )
-            except (OSError, subprocess.TimeoutExpired):
-                continue
-            if result.returncode != 0:
-                continue
-            value = result.stdout.strip().strip("'").strip('"').casefold()
-            if key == "color-scheme" and value in {"prefer-dark", "dark"}:
-                return True
-            if key == "color-scheme" and value in {"prefer-light", "light"}:
-                return False
-            if key == "gtk-theme" and "dark" in value:
-                return True
-
-        kdeglobals = Path.home() / ".config" / "kdeglobals"
-        try:
-            in_general = False
-            for line in kdeglobals.read_text(encoding="utf-8").splitlines():
-                line = line.strip()
-                if line.startswith("["):
-                    in_general = line.casefold() == "[general]"
-                elif in_general and line.casefold().startswith("colorscheme="):
-                    return "dark" in line.split("=", 1)[1].casefold()
-        except OSError:
-            pass
-
-    return False
-
-
 def resolve_theme(theme: str | bool | None = None) -> str:
-    """Resolve an explicit palette, the environment override, or desktop mode."""
+    """Resolve an explicit palette or use the stable light fallback.
+
+    KiCad's active palette is resolved by the plugin through its IPC settings
+    directory before this helper is called. A standalone/test host can choose
+    a palette through KICAD_BLOCKS_THEME; this pure module intentionally does
+    not probe operating-system or desktop-environment APIs.
+    """
     requested = (
         str(theme).strip().casefold()
         if theme is not None
@@ -150,7 +76,7 @@ def resolve_theme(theme: str | bool | None = None) -> str:
         return "dark"
     if requested in _LIGHT_VALUES:
         return "light"
-    return "dark" if _desktop_prefers_dark() else "light"
+    return "light"
 
 
 def palette_for_theme(theme: str | bool | None = None) -> dict[str, str]:
