@@ -2961,10 +2961,22 @@ def _create_and_place(
         else:
             source_sheet, source_sheet_uuid = _active_sheet_source(schematic, project_dir)
 
-    details = _ask_create_block_details(parent, source_sheet)
-    if details is None:
-        return
-    name, description = details
+    # The source sheet is already a complete specification. Generate a
+    # readable name from its filename and add a suffix when this library already
+    # contains a block with that name; no second dialog is needed.
+    base_name = " ".join(
+        source_sheet.stem.replace("_", " ").replace("-", " ").split()
+    ).title() or "Functional Block"
+    existing_names = {
+        str(item.name).casefold()
+        for item in _list_library_records([Path(root)])
+    }
+    name = base_name
+    suffix = 2
+    while name.casefold() in existing_names:
+        name = f"{base_name} ({suffix})"
+        suffix += 1
+    description = ""
 
     # Registration can fail after the block has been written (for example, if
     # the existing project's sym-lib-table is malformed). Snapshot the two
@@ -3076,6 +3088,94 @@ def _ensure_project_facade_catalog(
     return catalog
 
 
+def _apply_facade_pin_geometry(
+    catalog_path: Path,
+    symbol_name: str,
+    unit_name: str,
+    pin_name: str,
+    pin_number: str,
+    *,
+    x_mm: float,
+    y_mm: float,
+    angle_degrees: float,
+    length_mm: float,
+    expected_sha256: str,
+) -> dict[str, str]:
+    """Atomically update only one pin's geometry in a project symbol catalog."""
+    from .pcb_layout import _all, _direct, _dump, _head, parse_sexpr
+    from .repository import _named_symbol_node, atomic_write, sha256_file
+
+    target = Path(catalog_path).expanduser().resolve()
+    if not target.is_file():
+        raise FileNotFoundError(f"Project facade catalog is missing: {target}")
+    current_hash = sha256_file(target)
+    if current_hash != expected_sha256:
+        raise RuntimeError(
+            "The project symbol catalog changed outside the facade editor. "
+            "Reopen the editor to preserve the concurrent change."
+        )
+    values = (x_mm, y_mm, angle_degrees, length_mm)
+    if not all(math.isfinite(float(value)) for value in values):
+        raise ValueError("Pin geometry must use finite numeric values.")
+    if abs(x_mm) > 1000 or abs(y_mm) > 1000:
+        raise ValueError("Pin coordinates must be within ±1000 mm.")
+    normalized_angle = angle_degrees % 360
+    if min(abs(normalized_angle - value) for value in (0, 90, 180, 270, 360)) > 1e-6:
+        raise ValueError("Pin angles must be 0, 90, 180, or 270 degrees.")
+    if not 0.1 <= length_mm <= 100:
+        raise ValueError("Pin length must be between 0.1 mm and 100 mm.")
+
+    def format_number(value: float) -> str:
+        rounded = round(value, 6)
+        if abs(rounded) < 0.0000005:
+            rounded = 0.0
+        return f"{rounded:.6f}".rstrip("0").rstrip(".") or "0"
+
+    document = parse_sexpr(target.read_text(encoding="utf-8"))
+    symbol = _named_symbol_node(document, symbol_name, target)
+    units = [
+        child for child in symbol[1:]
+        if _head(child) == "symbol" and len(child) >= 2 and str(child[1]) == unit_name
+    ]
+    if len(units) != 1:
+        raise ValueError(
+            f"Expected exactly one pin unit {unit_name!r} in {symbol_name!r}; found {len(units)}."
+        )
+    matches = []
+    for pin in _all(units[0], "pin"):
+        name_node = _direct(pin, "name")
+        number_node = _direct(pin, "number")
+        if (
+            name_node is not None and len(name_node) >= 2
+            and number_node is not None and len(number_node) >= 2
+            and str(name_node[1]) == pin_name
+            and str(number_node[1]) == pin_number
+        ):
+            matches.append(pin)
+    if len(matches) != 1:
+        raise ValueError(
+            f"Expected exactly one {pin_name!r} (pin {pin_number}) in {unit_name!r}; "
+            f"found {len(matches)}."
+        )
+    pin = matches[0]
+    at_node = _direct(pin, "at")
+    length_node = _direct(pin, "length")
+    if at_node is None or len(at_node) < 4 or length_node is None or len(length_node) < 2:
+        raise ValueError(f"Pin {pin_name!r} has incomplete geometry in {target}.")
+    at_node[1] = format_number(x_mm)
+    at_node[2] = format_number(y_mm)
+    at_node[3] = str(round(normalized_angle) % 360)
+    length_node[1] = format_number(length_mm)
+    atomic_write(target, _dump(document) + "\n")
+    return {
+        "x": str(at_node[1]),
+        "y": str(at_node[2]),
+        "angle": str(at_node[3]),
+        "length": str(length_node[1]),
+        "sha256": sha256_file(target),
+    }
+
+
 def _edit_facade_symbol(
     record: BlockRecord,
     kicad: _KiCadApp,
@@ -3093,7 +3193,7 @@ def _edit_facade_symbol(
         else Path(record.symbol_library).expanduser().resolve()
     )
     if not symbol_name or any(char.isspace() for char in symbol_name):
-        raise ValueError("The highlighted block has an invalid library symbol identifier.")
+        raise ValueError("The selected block has an invalid library symbol identifier.")
     if not catalog_path.is_file():
         raise FileNotFoundError(f"The project facade catalog is missing: {catalog_path}")
 
@@ -3118,6 +3218,182 @@ def _edit_facade_symbol(
         "The unstable RunAction API is not used, and no manual-only or "
         "OS-specific input fallback is provided. This requires an upstream KiCad API."
     )
+    tree._kicad_ui_contract_id = "facade-editor.pins"
+    headings = {
+        "pin": ("Pin", 190),
+        "number": ("Number", 75),
+        "type": ("Electrical type", 115),
+        "x": ("X (mm)", 85),
+        "y": ("Y (mm)", 85),
+        "angle": ("Angle", 85),
+        "length": ("Length (mm)", 105),
+    }
+    for column, (label, width) in headings.items():
+        tree.heading(column, text=label)
+        tree.column(column, width=width, minwidth=60, stretch=column == "pin")
+    scrollbar = ttk.Scrollbar(
+        table_frame, orient="vertical", command=tree.yview, style="Vertical.TScrollbar"
+    )
+    tree.configure(yscrollcommand=scrollbar.set)
+    tree.grid(row=0, column=0, sticky="nsew")
+    scrollbar.grid(row=0, column=1, sticky="ns")
+
+    selected_pin = [None]
+    expected_hash = [sha256_file(catalog_path)]
+    pin_by_id = {str(index): row for index, row in enumerate(pin_rows)}
+    x_value = tk.StringVar(master=dialog)
+    y_value = tk.StringVar(master=dialog)
+    angle_value = tk.StringVar(master=dialog)
+    length_value = tk.StringVar(master=dialog)
+    status_value = tk.StringVar(
+        master=dialog,
+        value="Select a pin to adjust its position, angle, or length. Changes save immediately.",
+    )
+
+    editor = ttk.LabelFrame(frame, text="Selected pin geometry", padding=10)
+    editor.grid(row=2, column=0, sticky="ew")
+    for column in range(8):
+        editor.columnconfigure(column, weight=1 if column in (1, 3, 5, 7) else 0)
+    fields = (
+        ("X (mm)", x_value, 0),
+        ("Y (mm)", y_value, 2),
+        ("Angle", angle_value, 4),
+        ("Length (mm)", length_value, 6),
+    )
+    entries = {}
+    for label, variable, column in fields:
+        ttk.Label(editor, text=label).grid(row=0, column=column, sticky="w", padx=(0, 5))
+        entry = ttk.Entry(editor, textvariable=variable, width=12)
+        entry._kicad_ui_contract_id = {
+            "X (mm)": "facade-editor.x",
+            "Y (mm)": "facade-editor.y",
+            "Angle": "facade-editor.angle",
+            "Length (mm)": "facade-editor.length",
+        }[label]
+        entry.grid(row=0, column=column + 1, sticky="ew", padx=(0, 10))
+        entries[label] = entry
+
+    notice = ttk.Label(
+        frame, textvariable=status_value, style="Muted.TLabel", wraplength=1000
+    )
+    notice._kicad_ui_contract_id = "facade-editor.status"
+    notice.grid(row=3, column=0, sticky="ew", pady=(9, 0))
+
+    def render(selected_id: str | None = None) -> None:
+        tree.delete(*tree.get_children())
+        for row_id, row in pin_by_id.items():
+            tree.insert(
+                "",
+                "end",
+                iid=row_id,
+                values=(
+                    row["name"],
+                    row["number"],
+                    row["electrical_type"],
+                    row["x"],
+                    row["y"],
+                    row["angle"],
+                    row["length"],
+                ),
+            )
+            if row_id == selected_id:
+                tree.selection_set(row_id)
+                tree.focus(row_id)
+        if selected_id is not None:
+            on_pin_selected()
+
+    def on_pin_selected(_event=None) -> None:
+        selection = tree.selection()
+        if not selection:
+            selected_pin[0] = None
+            return
+        row_id = selection[0]
+        row = pin_by_id[row_id]
+        selected_pin[0] = row_id
+        x_value.set(row["x"])
+        y_value.set(row["y"])
+        angle_value.set(row["angle"])
+        length_value.set(row["length"])
+        for entry in entries.values():
+            entry.configure(state="normal")
+
+    def apply_geometry(_event=None) -> None:
+        row_id = selected_pin[0]
+        if row_id is None or row_id not in pin_by_id:
+            status_value.set("Select a pin first.")
+            return
+        row = pin_by_id[row_id]
+        try:
+            x = float(x_value.get().strip())
+            y = float(y_value.get().strip())
+            angle = float(angle_value.get().strip())
+            length = float(length_value.get().strip())
+        except ValueError:
+            status_value.set("Enter valid numeric values for X, Y, angle, and length.")
+            return
+        try:
+            updated = _apply_facade_pin_geometry(
+                catalog_path,
+                symbol_name,
+                row["unit"],
+                row["name"],
+                row["number"],
+                x_mm=x,
+                y_mm=y,
+                angle_degrees=angle,
+                length_mm=length,
+                expected_sha256=expected_hash[0],
+            )
+        except (OSError, RuntimeError, ValueError) as exc:
+            status_value.set(str(exc))
+            return
+
+        row["x"] = updated["x"]
+        row["y"] = updated["y"]
+        row["angle"] = updated["angle"]
+        row["length"] = updated["length"]
+        expected_hash[0] = updated["sha256"]
+        reloaded = _reload_symbol_library(kicad, LIBRARY_NICKNAME)
+        if reloaded:
+            status_value.set(
+                f"Saved {row['name']} (pin {row['number']}) and reloaded the project library."
+            )
+        else:
+            status_value.set(
+                f"Saved {row['name']} (pin {row['number']}). {_LAST_LIBRARY_RELOAD_WARNING or 'Restart Eeschema to reload the library.'}"
+            )
+        render(row_id)
+
+    tree.bind("<<TreeviewSelect>>", on_pin_selected)
+    for entry in entries.values():
+        entry.bind("<Return>", apply_geometry)
+
+    actions = ttk.Frame(frame)
+    actions.grid(row=4, column=0, sticky="ew", pady=(10, 0))
+    _action_button(
+        actions,
+        "Apply pin geometry",
+        apply_geometry,
+        "apply",
+        "Persist the selected pin position, angle, and length immediately",
+        contract_id="facade-editor.action.apply",
+        style="Primary.TButton",
+    ).pack(side="left")
+    _action_button(
+        actions,
+        "Close",
+        dialog.destroy,
+        "close",
+        "Close the facade pin-layout editor",
+        contract_id="facade-editor.action.close",
+    ).pack(side="right")
+
+    render("0")
+    tree.focus_set()
+    _set_window_geometry(dialog, 1060, 650, 760, 460)
+    return True
+
+
 
 
 def _place_existing(
@@ -3259,6 +3535,21 @@ def _focus_schematic_items_in_editor(
     return target_schematic
 
 
+def _is_unsupported_schematic_move_error(exc: Exception) -> bool:
+    """Recognize only a missing Eeschema IPC handler, not arbitrary failures."""
+    detail = str(exc).casefold()
+    return any(
+        marker in detail
+        for marker in (
+            "no handler available for request",
+            "unhandled request",
+            "unhandled interactivemoveitems",
+            "interactive move is not supported",
+            "unknown request type",
+        )
+    )
+
+
 def _start_native_symbol_placement(
     kicad: _KiCadApp,
     _editor_window_id: str | None,
@@ -3276,18 +3567,58 @@ def _start_native_symbol_placement(
     instance = schematic.place_symbol_from_library(
         f"{LIBRARY_NICKNAME}:{symbol_name}", Vector2.from_xy_mm(x_mm, y_mm)
     )
+    if can_transfer_commit:
+        commit = begin_commit()
+        try:
+            instance = schematic.place_symbol_from_library(symbol_id, position)
+        except Exception:
+            with contextlib.suppress(Exception):
+                drop_commit(commit)
+            raise
+
+        try:
+            interactive_move(instance.id)
+            LOG.info("Started native Eeschema cursor placement for %s.", symbol_id)
+            return instance, True
+        except Exception as exc:
+            if not _is_unsupported_schematic_move_error(exc):
+                # Busy, stale-ID, validation, transport, and editor failures are
+                # real failures, not evidence that the capability is missing.
+                with contextlib.suppress(Exception):
+                    drop_commit(commit)
+                raise
+            # A newer Python wrapper may be installed before the connected
+            # Eeschema server implements the command. Commit at page centre,
+            # then use the same verified focus/selection path as older builds.
+            LOG.info(
+                "Schematic interactive move IPC is unavailable; using page-center placement: %s",
+                exc,
+            )
+            try:
+                push_commit(commit, f"Place functional block {symbol_name}")
+            except Exception:
+                with contextlib.suppress(Exception):
+                    drop_commit(commit)
+                raise
+    else:
+        # Keep the supported fixed-coordinate route usable with the public
+        # Schematic API, which does not currently expose begin_commit().
+        instance = schematic.place_symbol_from_library(symbol_id, position)
+
     target_schematic = _focus_schematic_items_in_editor(schematic, [instance])
     target_schematic.clear_selection()
     target_schematic.add_to_selection([instance])
     selected = _safe_schematic_selection(target_schematic)
-    instance_id = str(getattr(getattr(instance, "id", None), "value", None) or instance.id)
+    instance_id = str(
+        getattr(getattr(instance, "id", None), "value", None) or instance.id
+    )
     if not any(
         str(getattr(getattr(item, "id", None), "value", None) or item.id) == instance_id
         for item in selected
     ):
         raise RuntimeError("KiCad did not confirm selection of the newly placed block.")
     target_schematic.save()
-    return instance
+    return instance, False
 
 
 def _library_record_search_text(record: BlockRecord) -> str:
@@ -4702,7 +5033,6 @@ def _show_block_layout_editor(
         remove_button.configure(state="normal" if has_selection else "disabled")
         default_button.configure(state="normal" if has_selection else "disabled")
         link_button.configure(state="normal" if has_selection else "disabled")
-        save_button.configure(state="normal")
 
     palette = cast(dict[str, str], getattr(parent, "_kicad_blocks_palette", {}))
     status_label = ttk.Label(
@@ -4818,7 +5148,7 @@ def _show_block_layout_editor(
             else:
                 created_layout_to_open[0] = None
         except (OSError, RuntimeError, TypeError, ValueError, KeyError, StopIteration) as exc:
-            status_value.set("Save failed; use Save & close to retry.")
+            status_value.set("Automatic save failed. Close will retry; the pending change is retained.")
             messagebox.showerror("Save PCB layouts", str(exc), parent=dialog)
             update_actions()
             return False
@@ -5305,7 +5635,6 @@ def _show_block_variant_editor(
             default_button.configure(text="Set as default", state="normal")
         else:
             default_button.configure(text="Set as default", state="disabled")
-        save_button.configure(state="normal")
 
     def add_variant() -> None:
         details = _ask_implementation_details(dialog, record=record, allow_create=True)
@@ -5327,7 +5656,7 @@ def _show_block_variant_editor(
         if row_index is None:
             return
         if row_index == 0:
-            save_and_close(default_implementation_path())
+            finish_manager(default_implementation_path())
             return
         index = variant_index_for_row(row_index)
         if index is None:
@@ -5376,12 +5705,9 @@ def _show_block_variant_editor(
             if str(item.get("variant", "")).casefold() == candidate["value"].casefold()
         ]
         if referenced_profiles:
-            messagebox.showinfo(
-                "Implementation is in use",
-                f"{candidate['value']} is referenced by: "
+            status_value.set(
+                f"Cannot remove {candidate['value']}: update these profiles first — "
                 + ", ".join(referenced_profiles)
-                + ". Change those profiles before removing this implementation.",
-                parent=dialog,
             )
             return
         if not messagebox.askyesno(
@@ -5441,7 +5767,7 @@ def _show_block_variant_editor(
                 )
                 new_implementation_to_open[0] = Path(record.path) / str(selected.get("file") or "")
         except (OSError, RuntimeError, TypeError, ValueError, KeyError, StopIteration) as exc:
-            status_value.set("Save failed; use Save & close to retry.")
+            status_value.set("Automatic save failed. Close will retry; the pending change is retained.")
             messagebox.showerror("Save implementations", str(exc), parent=dialog)
             update_actions()
             return False
@@ -6399,6 +6725,7 @@ def _show_library_browser(
                 tree.selection_set(preferred_id)
                 tree.focus(preferred_id)
         set_details(preferred)
+        update_toolbar_state(preferred)
 
     def refresh_records():
         try:
@@ -6408,11 +6735,7 @@ def _show_library_browser(
             refreshed = _list_library_records(current_roots[0])
         except Exception as exc:
             LOG.exception("Could not refresh registered block libraries")
-            messagebox.showerror(
-                "Refresh Block Library",
-                f"Could not read registered libraries.\n\n{exc}",
-                parent=window,
-            )
+            notice_value.set(f"Could not refresh registered libraries: {exc}")
             return False
         records[:] = refreshed
         render_records()
@@ -6426,18 +6749,7 @@ def _show_library_browser(
         selection = tree.selection()
         record = records_by_id.get(selection[0]) if selection else None
         set_details(record)
-        if open_layout_button[0] is not None:
-            open_layout_button[0].configure(
-                state="normal" if record is not None and _layout_choices(record) else "disabled"
-            )
-        if facade_button[0] is not None:
-            facade_button[0].configure(
-                state=(
-                    "normal"
-                    if record is not None and selected_project_catalog[0] is not None
-                    else "disabled"
-                )
-            )
+        update_toolbar_state(record)
 
     def place_selected(_event: tkinter_types.Event[tkinter_types.Misc] | None = None):
         nonlocal editor_window_id
@@ -6463,8 +6775,17 @@ def _show_library_browser(
                 _restore_placement_windows(minimized_windows)
                 raise
         except Exception as exc:
-            LOG.exception("Native block placement handoff failed")
-            messagebox.showerror("Place Block", str(exc), parent=window)
+            LOG.exception("Schematic IPC block placement failed")
+            notice_value.set(f"Placement could not complete: {exc}")
+        else:
+            if cursor_attached:
+                notice_value.set(
+                    f"{record.name} is attached to the Eeschema cursor. Click to place; Esc cancels."
+                )
+            else:
+                notice_value.set(
+                    f"Placed {record.name} at the active sheet center and selected it in Eeschema."
+                )
 
     def open_implementation(_event: tkinter_types.Event[tkinter_types.Misc] | None = None):
         record = selected_record[0]
@@ -6568,9 +6889,8 @@ def _show_library_browser(
             opened = _edit_facade_symbol(
                 record,
                 kicad,
-                editor_window_id,
                 project_catalog=project_catalog,
-                close_browser=window.destroy,
+                parent=window,
             )
             if not opened:
                 messagebox.showinfo(
@@ -6773,6 +7093,16 @@ def _show_library_browser(
         ),
     )
 
+    notice_label = ttk.Label(
+        outer,
+        textvariable=notice_value,
+        style="Muted.TLabel",
+        wraplength=1100,
+        justify="left",
+    )
+    notice_label._kicad_ui_contract_id = "library-browser.status"
+    notice_label.pack(fill="x", pady=(5, 0))
+
     action_toolbar = ttk.Frame(outer, padding=(0, 7, 0, 0))
     action_toolbar.pack(fill="x")
     place_button = _action_button(
@@ -6791,6 +7121,7 @@ def _show_library_browser(
         open_implementation,
         "implementation",
         "Open the base or a named circuit implementation",
+        state="disabled",
         contract_id="library-browser.action.implementation",
     )
     implementation_button.pack(side="left", padx=(4, 0))
@@ -6810,6 +7141,7 @@ def _show_library_browser(
         edit_variants,
         "variants",
         "Add, edit, remove, or set the default circuit implementation",
+        state="disabled",
         contract_id="library-browser.action.variants",
     )
     variants_button.pack(side="left", padx=(4, 0))
@@ -6820,6 +7152,7 @@ def _show_library_browser(
         open_layout,
         "pcb",
         "Open one of the block's stored PCB layouts",
+        state="disabled",
         contract_id="library-browser.action.open-pcb",
     )
     open_layout_button[0] = open_layout_action
@@ -6830,6 +7163,7 @@ def _show_library_browser(
         manage_layouts,
         "layouts",
         "Add and associate PCB layouts with implementations",
+        state="disabled",
         contract_id="library-browser.action.manage-pcb-layouts",
     )
     manage_layout_button.pack(side="left", padx=(4, 0))
@@ -7470,7 +7804,16 @@ def _show_action_hub(
     """Show compact, icon-led task actions with secondary guidance in tooltips."""
     _configure_tk_theme(root, kicad)
     root._kicad_ui_screen_id = "task-hub"
-    root.title("KiCad Blocks — Tasks")
+    root.title("KiCad Blocks — Legacy Tasks")
+
+    if schematic is None and kicad is not None:
+        schematic = kicad.get_schematic()
+    if project_dir is None and schematic is not None:
+        with contextlib.suppress(Exception):
+            project_dir = project_directory(schematic)
+    if library_paths is None:
+        library_paths = configured_library_roots()
+    library_paths = _library_roots_for(library_paths) if library_paths else []
 
     outer = ttk.Frame(root, padding=12)
     outer.pack(fill="both", expand=True)
@@ -7478,6 +7821,12 @@ def _show_action_hub(
         outer,
         text="KiCad Blocks",
         font=("TkDefaultFont", 14, "bold"),
+    ).pack(anchor="w", pady=(0, 2))
+    ttk.Label(
+        outer,
+        text="Legacy compatibility panel · use the Functional Block Library for create, place, and publish.",
+        style="Muted.TLabel",
+        wraplength=680,
     ).pack(anchor="w", pady=(0, 7))
 
     tabs = ttk.Notebook(outer)
@@ -7490,13 +7839,13 @@ def _show_action_hub(
             [
                 (
                     "Browse and place blocks",
-                    "Browse registered libraries, configure a facade, and start native placement.",
+                    "Browse registered libraries, preview a block, and start native cursor placement.",
                     "manage-library",
                     "libraries",
                 ),
                 (
                     "Create block from sheet",
-                    "Select a hierarchical sheet symbol, or create from the currently open sheet.",
+                    "Select one hierarchical sheet symbol, or clear the selection to use the open sheet.",
                     "create-block",
                     "create",
                 ),
@@ -7519,13 +7868,13 @@ def _show_action_hub(
                 ),
                 (
                     "Edit facade symbol",
-                    "Edit the generated library facade for the highlighted block.",
+                    "Open Symbol Editor for a selected library block.",
                     "edit-facade",
                     "facade",
                 ),
                 (
                     "Publish implementation",
-                    "Publish the current library implementation and update dependent metadata.",
+                    "Publish a library block and refresh compatible placed instances.",
                     "publish-block",
                     "publish",
                 ),
@@ -7566,19 +7915,145 @@ def _show_action_hub(
                 ),
                 (
                     "Apply selected PCB layout",
-                    "Create a merged board copy from one selected block layout.",
+                    "Create a merged board copy from one selected block instance with a stored layout.",
                     "apply-pcb-layout",
                     "pcb",
                 ),
                 (
                     "Apply multiple PCB layouts",
-                    "Create one combined board copy from multiple selected block layouts.",
+                    "Create one combined board copy from two or more selected block instances with stored layouts.",
                     "apply-multiple-pcb-layouts",
                     "layouts",
                 ),
             ],
         ),
     ]
+
+    buttons: dict[str, object] = {}
+    status_value = tk.StringVar(
+        master=root,
+        value="Selection-dependent actions update from the active Eeschema selection.",
+    )
+    status = ttk.Label(
+        outer,
+        textvariable=status_value,
+        style="Muted.TLabel",
+        wraplength=680,
+    )
+    status._kicad_ui_contract_id = "task-hub.status"
+    status.pack(fill="x", pady=(6, 0))
+
+    def refresh_action_states() -> dict[str, bool]:
+        """Re-evaluate the current editor selection; never rely on stale UI state."""
+        selection_error = None
+        from kipy.errors import ApiError
+
+        try:
+            selection = _safe_schematic_selection(schematic)
+        except (ApiError, OSError, RuntimeError, TypeError, ValueError) as exc:
+            selection = []
+            selection_error = str(exc)
+        symbols = [
+            item for item in selection
+            if hasattr(item, "definition") and hasattr(item.definition, "id")
+        ]
+        all_selected_are_symbols = len(selection) == len(symbols)
+        selected_record = None
+        selected_local = None
+        if (
+            all_selected_are_symbols
+            and len(symbols) == 1
+            and project_dir is not None
+            and library_paths
+        ):
+            try:
+                selected_record = _block_record_for_instance(
+                    library_paths, project_dir, symbols[0]
+                )
+                selected_local = local_copy_for_instance(
+                    project_dir, str(symbols[0].id)
+                )
+            except (OSError, RuntimeError, ValueError, LookupError):
+                selected_record = None
+                selected_local = None
+
+        has_schematic = schematic is not None
+        create_valid = has_schematic and not selection
+        if has_schematic and len(selection) == 1 and not symbols and project_dir is not None:
+            try:
+                create_valid = _selected_sheet_symbol_source(
+                    schematic, project_dir, selection=selection
+                ) is not None
+            except (OSError, RuntimeError, ValueError, LookupError):
+                create_valid = False
+
+        one_block = selected_record is not None
+        one_has_layout = bool(
+            one_block and _layout_choices(selected_record)
+        )
+        multiple_records = []
+        if (
+            all_selected_are_symbols
+            and len(symbols) >= 2
+            and project_dir is not None
+            and library_paths
+        ):
+            try:
+                multiple_records = [
+                    _block_record_for_instance(library_paths, project_dir, item)
+                    for item in symbols
+                ]
+            except (OSError, RuntimeError, ValueError, LookupError):
+                multiple_records = []
+        multiple_have_layouts = len(multiple_records) == len(symbols) and all(
+            _layout_choices(record) for record in multiple_records
+        )
+
+        enabled = {
+            "manage-library": has_schematic,
+            "create-block": create_valid,
+            "open-implementation": has_schematic and one_block,
+            "configure-instance": has_schematic and one_block,
+            "edit-facade": has_schematic,
+            "publish-block": has_schematic,
+            "make-local-copy": has_schematic and one_block and selected_local is None,
+            "synchronize-local-copy": has_schematic and one_block and selected_local is not None,
+            "validate-libraries": has_schematic,
+            "recursive-bom": has_schematic,
+            "recursive-erc": has_schematic,
+            "apply-pcb-layout": has_schematic and one_has_layout,
+            "apply-multiple-pcb-layouts": has_schematic and multiple_have_layouts,
+        }
+        for action_id, button in buttons.items():
+            button.configure(state="normal" if enabled.get(action_id, True) else "disabled")
+
+        if not has_schematic:
+            status_value.set("Open a schematic in Eeschema to enable KiCad Blocks actions.")
+        elif selection_error:
+            status_value.set(f"Could not read the active selection: {selection_error}")
+        elif not selection:
+            status_value.set(
+                "No selection: create from the open sheet or choose a block in the Functional Block Library."
+            )
+        elif one_block:
+            local_text = "local copy" if selected_local is not None else "shared library block"
+            status_value.set(
+                f"{getattr(symbols[0], 'reference', 'Selected instance')}: {local_text} selected."
+            )
+        elif len(symbols) >= 2 and multiple_have_layouts:
+            status_value.set(f"{len(symbols)} block instances selected; batch PCB layout is available.")
+        elif len(selection) == 1:
+            status_value.set(
+                "The selection is not a registered KiCad Blocks facade. Select one block instance or a sheet symbol."
+            )
+        else:
+            status_value.set(
+                "Selection does not meet the requirements of the disabled actions."
+            )
+        root._kicad_blocks_hub_enabled_actions = {
+            action_id for action_id, active in enabled.items() if active
+        }
+        return enabled
 
     def dispatch(selected_action: str) -> None:
         editor_window_id = getattr(root, "_kicad_blocks_editor_window_id", None)
@@ -7602,27 +8077,66 @@ def _show_action_hub(
                 padx=4,
                 pady=3,
             )
+            needs_selection = action_id in {
+                "create-block",
+                "open-implementation",
+                "configure-instance",
+                "make-local-copy",
+                "synchronize-local-copy",
+                "apply-pcb-layout",
+                "apply-multiple-pcb-layouts",
+            }
             button = _action_button(
                 cell,
                 title,
                 command=lambda selected=action_id: dispatch(selected),
                 icon=icon_name,
                 tooltip=description,
+                state="disabled" if needs_selection else "normal",
                 contract_id=f"task-hub.action.{action_id}",
             )
+            buttons[action_id] = button
             button.pack(fill="x", expand=True)
 
     footer = ttk.Frame(outer)
     footer.pack(fill="x", pady=(8, 0))
     _action_button(
         footer,
+        "Refresh selection",
+        refresh_action_states,
+        "refresh",
+        "Re-read the active Eeschema selection and update available actions",
+        contract_id="task-hub.action.refresh-selection",
+    ).pack(side="left")
+    _action_button(
+        footer,
         "Close",
         root.destroy,
         "close",
-        "Close the task hub",
+        "Close the compatibility panel",
         contract_id="task-hub.close",
     ).pack(side="right")
-    _set_window_geometry(root, 760, 520, 640, 440)
+
+    refresh_action_states()
+    root.bind("<FocusIn>", lambda _event: refresh_action_states(), add="+")
+    refresh_id = [None]
+
+    def poll_selection():
+        if not root.winfo_exists():
+            return
+        refresh_action_states()
+        refresh_id[0] = root.after(400, poll_selection)
+
+    refresh_id[0] = root.after(400, poll_selection)
+
+    def stop_polling(_event=None):
+        if refresh_id[0] is not None:
+            with contextlib.suppress(tk.TclError):
+                root.after_cancel(refresh_id[0])
+            refresh_id[0] = None
+
+    root.bind("<Destroy>", lambda event: stop_polling() if event.widget is root else None, add="+")
+    _set_window_geometry(root, 760, 550, 640, 470)
     return tabs
 
 
@@ -7667,7 +8181,15 @@ def run_action(action: str, *, editor_window_id: str | None = None) -> None:
         kicad = cast(_KiCadApp, KiCad())
         _configure_tk_theme(root, kicad)
         if action == "open-hub":
-            _show_action_hub(root, kicad)
+            schematic = kicad.get_schematic()
+            project_dir = project_directory(schematic) if schematic is not None else None
+            _show_action_hub(
+                root,
+                kicad,
+                schematic=schematic,
+                project_dir=project_dir,
+                library_paths=configured_library_roots(),
+            )
             root.mainloop()
             return
 
@@ -7719,15 +8241,18 @@ def run_action(action: str, *, editor_window_id: str | None = None) -> None:
                     record,
                     kicad,
                     project_catalog=project_catalog,
-                    close_browser=root.destroy,
+                    parent=root,
                 )
                 if opened:
-                    LOG.info(
-                        "Edit facade: opened %s in Symbol Editor.",
-                        f"{LIBRARY_NICKNAME}:{record.manifest['symbol_name']}",
-                    )
+                    root.title(f"KiCad Blocks — Facade layout: {record.name}")
+                    ttk.Label(
+                        root,
+                        text="Edit the selected block's facade pin geometry. Changes are saved as you apply them.",
+                        padding=12,
+                    ).pack(fill="x")
+                    root.mainloop()
         elif action == "publish-block":
-            _publish_block(library_paths, kicad, project_dir, root)
+            _publish_block(library_paths, kicad, project_dir, root, schematic)
         elif action == "recursive-bom":
             _export_recursive_bom(library_paths, root, schematic, project_dir)
         elif action == "recursive-erc":

@@ -522,7 +522,7 @@ def main() -> None:
                 raise AssertionError(
                     f"Expected exactly one new block from the selected sheet, found {len(records)}."
                 )
-            selected_record = records[0]
+            selected_record = next(item for item in records if item.name == "Power Stage")
             selected_manifest = selected_record.manifest
             if selected_manifest["interface_source"] != "hierarchical_labels":
                 raise AssertionError(
@@ -585,7 +585,7 @@ def main() -> None:
                 raise AssertionError(
                     f"Expected one additional block from the active subsheet, found {len(records)} total."
                 )
-            active_record = next(item for item in records if item.name == "Control Interface Block")
+            active_record = next(item for item in records if item.name == "Control Interface")
             if [item["name"] for item in active_record.manifest["pins"]] != ["SCL", "SDA", "ALERT"]:
                 raise AssertionError(
                     f"Active-sheet facade pins came from the wrong sheet: {active_record.manifest['pins']!r}"

@@ -85,7 +85,7 @@ def _new_hub(monkeypatch: MonkeyPatch) -> tuple[Tk, Notebook]:
     notebook = _show_action_hub(root)
     root.update_idletasks()
     root.update()
-    return root, notebook
+    return root, notebook, active_schematic
 
 
 def _button_contract_id(action_id: str) -> str:
@@ -96,7 +96,7 @@ def test_task_hub_window_is_registered_and_visible(monkeypatch: MonkeyPatch) -> 
     root, _notebook = _new_hub(monkeypatch)
     try:
         WindowContract(
-            title="KiCad Blocks — Tasks",
+            title="KiCad Blocks — Legacy Tasks",
             screen_id="task-hub",
             required_widget_ids=tuple(sorted(TASK_HUB_CONTROL_IDS)),
         ).run(UiTestContext(root))

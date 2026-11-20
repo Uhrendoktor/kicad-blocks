@@ -60,6 +60,7 @@ LIBRARY_ASSERTED_BUTTONS = {
     "library-browser.action.place",
     "library-browser.action.implementation",
     "library-browser.action.facade",
+    "library-browser.action.publish",
     "library-browser.action.variants",
     "library-browser.action.open-pcb",
     "library-browser.action.manage-pcb-layouts",
@@ -1063,10 +1064,9 @@ def test_place_block_reload_warning_does_not_start_native_placement(
             destroys_window=False,
             expected_label="Place block",
         ).run(context)
-        assert len(warnings) == 1
-        assert warnings[0][0] == "Block library saved"
-        assert warnings[0][1] == "Restart Eeschema to reload the project symbol table."
-        assert warnings[0][2] is not None and warnings[0][2].winfo_exists()
+        status = context.require_widget("library-browser.status")
+        variable = str(status.cget("textvariable"))
+        assert status.getvar(variable) == "Restart Eeschema to reload the project symbol table."
         assert placements == []
     finally:
         root.destroy()
@@ -1096,10 +1096,10 @@ def test_place_block_registration_failure_shows_error_and_keeps_browser_open(
             destroys_window=False,
             expected_label="Place block",
         ).run(context)
-        assert len(errors) == 1
-        assert errors[0][0] == "Place Block"
-        assert errors[0][1] == "project library table could not be written"
-        assert errors[0][2] is not None and errors[0][2].winfo_exists()
+        status = context.require_widget("library-browser.status")
+        variable = str(status.cget("textvariable"))
+        assert "Placement could not complete" in status.getvar(variable)
+        assert "project library table could not be written" in status.getvar(variable)
         assert _select_first_record(context) is not None
     finally:
         root.destroy()

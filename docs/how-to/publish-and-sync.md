@@ -12,29 +12,36 @@ Use a shared implementation when a change should be available to every project t
 
 The manager shows exactly one **Default** row for the active default schematic, followed by the named alternatives. It does not expose a second Base row. **Edit default** opens the schematic currently represented by the Default row.
 
-To add a named implementation, choose **Add variant** in the Implementations dialog. Give it a unique variant value and select an existing schematic, create a blank schematic, or copy another library implementation. The accepted operation is saved immediately. The new row appears at once; **Save & close** is only a retry path after a failed write.
+To add a named implementation, choose **Add variant** in the Implementations dialog. Give it a unique variant value and select an existing schematic, create a blank schematic, or copy another library implementation. The accepted operation is saved immediately and the new row appears at once. There is no separate save step. A failed write is shown in the manager and Close retries it; the window stays open until the change is stored.
 
-## Edit the facade symbol
+## Edit the facade pin layout
 
-Direct facade editing from KiCad Blocks is currently unavailable. The tested Eeschema IPC API does not expose a supported operation to open Symbol Editor and select the exact library symbol. The current action reports this capability gap rather than claiming an editor handoff succeeded.
+1. Open **Browse and Place Functional Blocks** and select the block.
+2. Choose **Edit facade**.
+3. Select a pin and adjust its X/Y position, angle, or length.
+4. Choose **Apply pin geometry**. The project catalog is written and reloaded immediately; there is no separate save step.
 
-Until KiCad exposes that operation, open Symbol Editor manually from Eeschema or the project manager, open/select the project's `KBlocks:<symbol>` library entry, edit and save it, then use **Publish implementation** to reconcile the facade pins with the block's root hierarchical labels. This manual path is a workaround, not a completed plugin feature.
+Pin names, numbers, and electrical types are intentionally read-only in this editor because the implementation's root hierarchical labels are the interface source of truth. Publish the block to copy the changed facade geometry into the shared library revision. Publish uses three-way conflict detection and reports any already-placed instances that need an explicit interface migration.
 
-## Publish a shared implementation
+The current Eeschema IPC API cannot launch a GUI Symbol Editor and select an exact library item. The Facade Pin Layout editor therefore provides the supported project-level editing workflow without keyboard injection or pretending to open Symbol Editor. Full native Symbol Editor access remains an upstream API requirement.
 
-1. Edit and save the desired implementation in Eeschema.
-2. Choose **KiCad Blocks Tasks → Edit & maintain → Publish implementation**.
-3. Select the shared library block when prompted.
-4. Review any interface or validation warnings before distributing the updated library.
+## Publish a shared implementation and facade
 
-Publishing updates the shared library revision and synchronizes the facade's external pins with root-sheet hierarchical labels. Existing pins whose names remain unchanged retain their number and graphics; new labels receive generated initial positions. Renaming or removing an external pin can require migration in projects that already use the block.
+1. Open the block's implementation from the browser, or select the **Default** or named implementation in **Implementations**.
+2. Edit the schematic in Eeschema and save it.
+3. Return to **Functional Block Library**. The block remains selected; click **Publish**.
+4. The browser reports the new revision, how many placed instances were refreshed, and whether any pin migrations are required.
 
-Publishing a shared library update does not silently overwrite a project's independent local implementation.
+The same **Publish** action incorporates facade pin-layout edits saved to the project catalog. Publishing updates the shared library revision, synchronizes facade pins from the implementation's root hierarchical labels, rebuilds child dependencies, and updates the project catalog.
+
+When existing pin numbers, units, body styles, and connection coordinates remain unchanged, already-placed instances are refreshed in place. Pin names, electrical types, and artwork can update without changing connectivity. When pins are added, removed, renumbered, or moved, affected instances are left untouched and identified for explicit migration. The plugin does not silently detach or remap nets.
+
+Publishing a shared library update does not overwrite a project's independent local implementation.
 
 ## Create a project-local copy
 
 1. Select exactly one placed, library-linked facade.
-2. Choose **KiCad Blocks Tasks → Edit & maintain → Make selected instance local**.
+2. Run **Make selected instance local** from the instance's KiCad Blocks action.
 3. Open the implementation for that instance and edit the local schematic.
 
 The local implementation is stored under the project's `.kicad_blocks/local/` directory. The facade, symbol KIID, reference, position, and wiring remain associated with the placed instance.
@@ -42,8 +49,8 @@ The local implementation is stored under the project's `.kicad_blocks/local/` di
 ## Synchronize a local copy
 
 1. Select the instance that is linked to a local copy.
-2. Choose **KiCad Blocks Tasks → Edit & maintain → Synchronize local copy**.
-3. Review the result message to see what was published, pulled, or found to have converged.
+2. Run **Synchronize local copy** from the selected instance's KiCad Blocks action.
+3. Review the non-modal status line/log summary for what was published, pulled, or found to have converged.
 
 Synchronization compares tracked assets with the common baseline:
 

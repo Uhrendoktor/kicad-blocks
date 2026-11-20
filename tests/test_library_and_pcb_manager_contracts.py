@@ -60,7 +60,6 @@ PCB_CONTROLS = {
     "pcb-layout-manager.action.default",
     "pcb-layout-manager.action.assign",
     "pcb-layout-manager.action.close",
-    "pcb-layout-manager.action.save-close",
 }
 
 

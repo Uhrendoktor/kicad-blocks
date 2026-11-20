@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import re
@@ -593,11 +594,12 @@ def main() -> None:
                 )
             print(picker_probe.stdout.strip())
 
-            # Edit Facade must open the exact shared library symbol rendered
-            # in the browser preview, even when the active schematic contains
-            # no placed instance of that block.
+            # Edit Facade is available from a browser-row selection alone;
+            # it opens the portable pin-layout editor even when the active
+            # schematic contains no placed instance of the block.
             facade_editor_client = KiCad(timeout_ms=30000)
             _dump_accessibility_tree(process.pid)
+            facade_root = None
             try:
                 live_schematic = facade_editor_client.get_schematic()
                 live_selection = plugin_actions.safe_schematic_selection(
@@ -605,7 +607,7 @@ def main() -> None:
                 )
                 if live_selection:
                     raise AssertionError(
-                        "Edit Facade capability test requires an empty schematic selection; "
+                        "Edit Facade test requires an empty schematic selection; "
                         f"found {len(live_selection)} selected item(s)."
                     )
                 refreshed_record = plugin_actions.register_block(
@@ -631,13 +633,62 @@ def main() -> None:
                         raise
                 else:
                     raise AssertionError(
-                        "Edit Facade must report the missing supported Symbol Editor API."
+                        f"Facade editor did not create contract widget {contract_id!r}."
                     )
+
+                pin_table = find_contract_widget(facade_root, "facade-editor.pins")
+                rows = pin_table.get_children()
+                if not rows:
+                    raise AssertionError("Edit Facade opened without any external pins.")
+                first_row = rows[0]
+                original_values = pin_table.item(first_row, "values")
+                x_before = float(original_values[3])
+                x_after = round(x_before + 1.27, 6)
+
+                x_entry = find_contract_widget(facade_root, "facade-editor.x")
+                x_entry.delete(0, "end")
+                x_entry.insert(0, f"{x_after:g}")
+                apply_button = find_contract_widget(facade_root, "facade-editor.action.apply")
+                apply_button.invoke()
+                facade_root.update()
+
+                updated_values = pin_table.item(first_row, "values")
+                if abs(float(updated_values[3]) - x_after) > 0.000001:
+                    raise AssertionError(
+                        "Edit Facade did not update the selected pin's X coordinate: "
+                        f"before={original_values[3]!r}, after={updated_values[3]!r}"
+                    )
+                if project_catalog_path.read_bytes() == before_catalog:
+                    raise AssertionError(
+                        "Edit Facade did not persist the selected pin geometry to KBlocks.kicad_sym."
+                    )
+                if refreshed_record.symbol_library.read_bytes() != before_shared_symbol:
+                    raise AssertionError(
+                        "Edit Facade must edit the project catalog, not rewrite the shared source catalog."
+                    )
+                if not plugin_actions._LAST_LIBRARY_RELOAD_OK:
+                    raise AssertionError(
+                        "Edit Facade persisted the pin change but failed to reload the project library: "
+                        + str(plugin_actions._LAST_LIBRARY_RELOAD_WARNING)
+                    )
+
+                status = find_contract_widget(facade_root, "facade-editor.status")
+                status_value = facade_root.getvar(str(status.cget("textvariable")))
+                if "Saved" not in str(status_value):
+                    raise AssertionError(
+                        f"Edit Facade did not report its immediate save/reload: {status_value!r}"
+                    )
+                close_button = find_contract_widget(facade_root, "facade-editor.action.close")
+                close_button.invoke()
+                facade_root.update()
                 print(
-                    "Edit Facade correctly reports the missing supported Symbol Editor "
-                    "open/select API without injecting desktop input."
+                    "Edit Facade GUI passed: selected pin geometry was edited, "
+                    "persisted immediately, and the project KBlocks library reloaded."
                 )
             finally:
+                if facade_root is not None:
+                    with contextlib.suppress(plugin_actions.tk.TclError):
+                        facade_root.destroy()
                 facade_editor_client.close()
 
             placement_client = KiCad(timeout_ms=30000)
@@ -666,9 +717,14 @@ def main() -> None:
                 raise AssertionError(
                     f"Saved schematic does not contain the placed block {expected_lib_id!r}."
                 )
+            placement_mode = (
+                "attached to KiCad's native cursor move tool"
+                if cursor_attached
+                else "at the A4 page centre"
+            )
             print(
                 f"Functional Block Library placement helper placed {expected_lib_id} "
-                "at the A4 page centre and left it selected."
+                f"{placement_mode} and left it selected."
             )
 
             placement_svg = root / "placed-block-svg"

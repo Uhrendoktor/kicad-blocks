@@ -25,7 +25,7 @@ The PCB layout manager shows each stored board, its linked implementation, and i
 2. Set **Assign selected layout to** to **Default** or a named variant.
 3. Choose **Assign**.
 4. Use **Set default** when the selected layout should be used by the Default implementation.
-Each accepted Add, Remove, Assign, or Set default operation is persisted immediately. The table refreshes after the operation. **Save & close** retries a failed write; **Close** exits the manager.
+Each accepted Add, Remove, Assign, or Set default operation is persisted immediately. The table refreshes after the operation. **Close** retries a failed write, then exits the manager.
 
 **Default** is used when `KB_VARIANT` is empty. A named variant can use its own linked layout. Every stored layout remains associated with at least one implementation; there is no unlinked-layout state.
 

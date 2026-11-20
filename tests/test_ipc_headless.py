@@ -28,7 +28,6 @@ from kicad_blocks.model import (
     schematic_symbol_orientation,
     transform_symbol_point_to_schematic,
 )
-from kicad_blocks.pcb_layout import parse_sexpr
 from kicad_blocks.plugin import (
     KiCadApp,
     Schematic,

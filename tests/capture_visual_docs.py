@@ -858,6 +858,35 @@ def capture_ui_workflows(
                     xdotool,
                     minimum_size=(560, 320),
                 )
+                plugin_actions._edit_facade_symbol(
+                    record,
+                    kicad,
+                    project_catalog=project_catalog,
+                    parent=root,
+                )
+                root.update_idletasks()
+                root.update()
+                facade_title = f"Facade pin layout — {record.name}"
+                facade_dialog = next(
+                    (
+                        child for child in root.winfo_children()
+                        if isinstance(child, plugin_actions.tk.Toplevel)
+                        and child.title() == facade_title
+                    ),
+                    None,
+                )
+                if facade_dialog is None:
+                    raise RuntimeError("The production Facade Pin Layout editor did not open.")
+                _select_first_table_row(facade_dialog)
+                facade_dialog.update_idletasks()
+                facade_dialog.update()
+                _capture_visible_window(
+                    xdotool,
+                    facade_title,
+                    output_dir / f"facade-editor-{theme}.png",
+                    minimum_size=(760, 460),
+                )
+                facade_dialog.destroy()
             finally:
                 root.destroy()
     finally:
