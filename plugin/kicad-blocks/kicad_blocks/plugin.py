@@ -3189,9 +3189,10 @@ def _edit_facade_symbol(
     *,
     project_catalog: Path | None = None,
     close_browser: Callable[[], None] | None = None,
+    parent: tkinter_types.Misc | None = None,
 ) -> bool:
     """Validate a facade and explain the currently unsupported editor handoff."""
-    del kicad, editor_window_id, close_browser
+    del kicad, editor_window_id, close_browser, parent
     symbol_name = str(record.manifest.get("symbol_name") or "").strip()
     catalog_path = (
         Path(project_catalog).expanduser().resolve()

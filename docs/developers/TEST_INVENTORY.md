@@ -8,7 +8,7 @@ programs rather than pytest modules are listed separately and must remain explic
 registered in STANDALONE_TESTS in scripts/test_inventory.py.
 
 - Pytest modules: **41**
-- Individually inventoried pytest cases: **446**
+- Individually inventoried pytest cases: **456**
 - Standalone acceptance runners: **7**
 - Additional CI validation runners: **2**
 
@@ -102,17 +102,6 @@ Core block model, facade generation, parameter handling, library registration, c
 | test_nested_symbol_library_table_uses_relative_path_and_can_retarget | Exercises nested symbol library table uses relative path and can retarget. |
 | test_nested_dependencies_are_recorded_and_cycles_rejected | Exercises nested dependencies are recorded and cycles rejected. |
 
-### tests/test_create_block_form_contracts.py
-
-Real Tk interaction contracts for the Create Functional Block form.
-
-| Test | Purpose |
-| --- | --- |
-| test_create_block_form_submits_name_and_optional_description | Creates block form submits name and optional description. |
-| test_create_block_form_rejects_blank_name_and_recovers | Creates block form rejects blank name and recovers. |
-| test_create_block_form_cancel_returns_none_without_creating_block | Creates block form cancel returns none without creating block. |
-| test_create_block_form_escape_key_cancels | Creates block form escape key cancels. |
-
 ### tests/test_dialog_callsite_contracts.py
 
 Dialog-path contracts for native Tk message and text-entry prompts.
@@ -170,8 +159,17 @@ Schematic editor action routing, selected-sheet behavior, facade editing, transa
 | --- | --- |
 | test_edit_facade_reports_missing_supported_editor_selection_api | Exercises edit facade reports missing supported editor selection api. |
 | test_edit_facade_validates_exact_catalog_entry_before_reporting_capability_gap | Exercises edit facade validates exact catalog entry before reporting capability gap. |
+| test_place_block_starts_native_cursor_move_when_schematic_api_exists | Exercises place block starts native cursor move when schematic api exists. |
+| test_place_block_falls_back_when_schematic_move_handler_is_unavailable | Exercises place block falls back when schematic move handler is unavailable. |
+| test_place_block_uses_supported_page_center_api_without_transaction_methods | Exercises place block uses supported page center api without transaction methods. |
+| test_place_block_does_not_mask_non_capability_interactive_move_errors | Exercises place block does not mask non capability interactive move errors. |
+| test_place_block_drops_transaction_when_symbol_creation_fails | Exercises place block drops transaction when symbol creation fails. |
+| test_facade_geometry_edit_changes_only_selected_pin_in_project_catalog | Exercises facade geometry edit changes only selected pin in project catalog. |
+| test_facade_geometry_edit_rejects_concurrent_catalog_change | Exercises facade geometry edit rejects concurrent catalog change. |
+| test_facade_geometry_edit_rejects_invalid_geometry_without_writing | Exercises facade geometry edit rejects invalid geometry without writing. |
 | test_ensure_project_facade_catalog_preserves_existing_unsaved_edits | Exercises ensure project facade catalog preserves existing unsaved edits. |
-| test_create_block_from_selected_sheet_never_prompts_for_manual_pins | Creates block from selected sheet never prompts for manual pins. |
+| test_create_block_from_selected_sheet_is_one_click_and_names_from_source | Creates block from selected sheet is one click and names from source. |
+| test_create_block_chooses_collision_safe_name_without_prompting | Creates block chooses collision safe name without prompting. |
 | test_create_block_rolls_back_new_block_when_project_registration_fails | Creates block rolls back new block when project registration fails. |
 | test_create_block_prefers_typed_sheet_symbol_over_serialized_selection | Creates block prefers typed sheet symbol over serialized selection. |
 | test_create_block_rejects_multiple_selected_items_without_falling_back | Creates block rejects multiple selected items without falling back. |
@@ -392,6 +390,7 @@ Reusable interaction contracts for the production Functional Block Library.
 | test_place_button_registers_selected_block_and_starts_native_placement | Exercises place button registers selected block and starts native placement. |
 | test_implementation_button_registers_and_opens_default_document | Exercises implementation button registers and opens default document. |
 | test_edit_facade_button_targets_selected_record | Exercises edit facade button targets selected record. |
+| test_publish_button_targets_the_selected_record | Publishes button targets the selected record. |
 | test_open_pcb_button_creates_chooser_for_selected_block | Exercises open pcb button creates chooser for selected block. |
 | test_implementation_selector_renders_the_selected_variant | Exercises implementation selector renders the selected variant. |
 | test_sheet_selector_draws_the_selected_schematic_page | Exercises sheet selector draws the selected schematic page. |
@@ -405,7 +404,7 @@ Reusable interaction contracts for the production Functional Block Library.
 | test_open_pcb_chooser_manage_layouts_opens_manager_and_refreshes | Exercises open pcb chooser manage layouts opens manager and refreshes. |
 | test_library_browser_refresh_error_keeps_existing_records | Exercises library browser refresh error keeps existing records. |
 | test_place_block_reload_warning_does_not_start_native_placement | Exercises place block reload warning does not start native placement. |
-| test_place_block_registration_failure_shows_error_and_keeps_browser_open | Exercises place block registration failure shows error and keeps browser open. |
+| test_place_block_registration_failure_keeps_browser_open_and_reports_status | Exercises place block registration failure keeps browser open and reports status. |
 | test_open_implementation_registration_failure_shows_error | Exercises open implementation registration failure shows error. |
 | test_open_default_implementation_launch_failure_shows_error | Exercises open default implementation launch failure shows error. |
 | test_open_named_implementation_launch_failure_shows_error_after_chooser | Exercises open named implementation launch failure shows error after chooser. |
@@ -452,6 +451,17 @@ Real Tk wrapper contracts for native file and directory chooser hand-offs.
 | test_save_file_without_suffix_uses_directory_and_cancel_returns_none | Exercises save file without suffix uses directory and cancel returns none. |
 | test_directory_picker_uses_existing_file_parent_and_requires_existing_directory | Exercises directory picker uses existing file parent and requires existing directory. |
 | test_directory_picker_falls_back_to_cwd_and_cancel_returns_none | Exercises directory picker falls back to cwd and cancel returns none. |
+
+### tests/test_native_tk_dialog_smoke.py
+
+Smoke-test real Tk message and simple dialogs under a display server.
+
+| Test | Purpose |
+| --- | --- |
+| test_real_showerror_dialog_renders_message_parent_and_ok_button | Exercises real showerror dialog renders message parent and ok button. |
+| test_real_askyesno_dialog_renders_both_choices_and_returns_yes | Exercises real askyesno dialog renders both choices and returns yes. |
+| test_real_askstring_dialog_renders_prompt_and_returns_entered_value | Exercises real askstring dialog renders prompt and returns entered value. |
+| test_real_askstring_cancel_button_returns_none | Exercises real askstring cancel button returns none. |
 
 ### tests/test_operations.py
 
