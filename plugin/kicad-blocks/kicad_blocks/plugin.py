@@ -4664,13 +4664,13 @@ def _ask_layout_details(
     frame = ttk.Frame(dialog, padding=12)
     frame.pack(fill="both", expand=True)
     ttk.Label(frame, text="PCB layout name").grid(row=0, column=0, sticky="w")
-    name_value = tk.StringVar(value="New layout")
+    name_value = tk.StringVar(master=dialog, value="New layout")
     name_entry = ttk.Entry(frame, textvariable=name_value)
     name_entry._kicad_ui_variable = name_value
     name_entry._kicad_ui_contract_id = "add-pcb-layout.name"
     name_entry.grid(row=1, column=0, columnspan=3, sticky="ew", pady=(3, 8))
     ttk.Label(frame, text="Starting point").grid(row=2, column=0, sticky="w")
-    mode_value = tk.StringVar(value="Create a new empty board")
+    mode_value = tk.StringVar(master=dialog, value="Create a new empty board")
     mode_combo = ttk.Combobox(
         frame,
         textvariable=mode_value,
@@ -4680,7 +4680,7 @@ def _ask_layout_details(
     mode_combo._kicad_ui_variable = mode_value
     mode_combo._kicad_ui_contract_id = "add-pcb-layout.mode"
     mode_combo.grid(row=3, column=0, columnspan=3, sticky="ew", pady=(3, 8))
-    source_value = tk.StringVar()
+    source_value = tk.StringVar(master=dialog)
     source_entry = ttk.Entry(frame, textvariable=source_value)
     source_entry._kicad_ui_variable = source_value
     source_entry._kicad_ui_contract_id = "add-pcb-layout.source"
@@ -4697,7 +4697,7 @@ def _ask_layout_details(
     implementation_values: list[str] = ["Default"] + [
         str(item["value"]) for item in record.manifest.get("variants", [])
     ]
-    link_value = tk.StringVar(value=implementation_values[0])
+    link_value = tk.StringVar(master=dialog, value=implementation_values[0])
     dialog._kicad_ui_variables = [name_value, mode_value, source_value, link_value]
     ttk.Label(frame, text="Use for implementation").grid(row=5, column=0, sticky="w")
     link_combo = ttk.Combobox(
@@ -7209,6 +7209,22 @@ def _show_library_browser(
         contract_id="library-browser.action.libraries",
     )
     libraries_button.pack(side="left", padx=(4, 0))
+
+    def update_toolbar_state(record: BlockRecord | None) -> None:
+        """Enable browser actions only when the selected record supports them."""
+        selected = record is not None
+        has_layouts = bool(_layout_choices(record)) if record is not None else False
+        place_button.configure(state="normal" if selected else "disabled")
+        implementation_button.configure(state="normal" if selected else "disabled")
+        variants_button.configure(state="normal" if selected else "disabled")
+        manage_layout_button.configure(state="normal" if selected else "disabled")
+        facade_action = facade_button[0]
+        if facade_action is not None:
+            facade_action.configure(state="normal" if selected else "disabled")
+        open_pcb_action = open_layout_button[0]
+        if open_pcb_action is not None:
+            open_pcb_action.configure(state="normal" if has_layouts else "disabled")
+
     refresh_records()
     selection_changed()
     _set_window_geometry(window, 1440, 900, 1080, 660)

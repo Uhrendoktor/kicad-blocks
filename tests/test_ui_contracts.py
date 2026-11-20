@@ -119,30 +119,31 @@ def _new_hub(
         ),
     )
     if selected_symbols:
-        monkeypatch.setattr(
-            plugin_actions,
-            "_block_record_for_instance",
-            lambda _roots, _project, _instance: record,
-        )
-        monkeypatch.setattr(
-            plugin_actions,
-            "local_copy_for_instance",
-            lambda _project, _instance_id: (
+        def find_record(
+            _roots: Path | list[Path],
+            _project_dir: Path,
+            _instance: plugin_actions.SchematicSymbol,
+        ) -> BlockRecord:
+            return record
+
+        def local_copy_path(_project_dir: Path, _instance_id: str) -> Path | None:
+            return (
                 Path("/tmp/local-usb-power")
                 if action_id == "synchronize-local-copy"
                 else None
-            ),
-        )
-        monkeypatch.setattr(
-            plugin_actions,
-            "_layout_choices",
-            lambda _record: [
+            )
+
+        def layout_choices(_record: BlockRecord) -> list[plugin_actions.ResolvedBlockLayout]:
+            return [
                 cast(
                     plugin_actions.ResolvedBlockLayout,
                     {"id": "standard", "name": "Standard", "file": "layout.kicad_pcb"},
                 )
-            ],
-        )
+            ]
+
+        monkeypatch.setattr(plugin_actions, "_block_record_for_instance", find_record)
+        monkeypatch.setattr(plugin_actions, "local_copy_for_instance", local_copy_path)
+        monkeypatch.setattr(plugin_actions, "_layout_choices", layout_choices)
 
     class FakeSchematic:
         def get_selection(self) -> list[plugin_actions.SchematicSymbol]:
