@@ -5,14 +5,20 @@ from __future__ import annotations
 import itertools
 import tkinter as tk
 import weakref
+from collections.abc import Callable, Mapping
 from tkinter import ttk
-from typing import Any
+from typing import cast
 
 from .theme_tokens import (
     UI_FONT_SIZES,
     UI_SPACING,
     palette_for_theme,
     resolve_theme,
+)
+
+
+_SCROLLBARS: weakref.WeakKeyDictionary[tk.Misc, weakref.WeakSet[AutoHideScrollbar]] = (
+    weakref.WeakKeyDictionary()
 )
 
 
@@ -24,8 +30,14 @@ class AutoHideScrollbar(ttk.Scrollbar):
     ACTIVE_WIDTH = 10
     HIDE_DELAY_MS = 900
 
-    def __init__(self, master=None, *, palette: dict[str, str], **kwargs):
-        self._scroll_command = kwargs.pop("command", None)
+    def __init__(
+        self,
+        master: tk.Misc | None = None,
+        *,
+        palette: Mapping[str, str],
+        **kwargs: tk.TkOption,
+    ) -> None:
+        self._scroll_command = cast(Callable[..., None] | str | None, kwargs.pop("command", None))
         orient = str(kwargs.get("orient", "vertical")).casefold()
         orient_name = "Horizontal" if orient.startswith("h") else "Vertical"
         token = next(self._instances)
@@ -33,7 +45,7 @@ class AutoHideScrollbar(ttk.Scrollbar):
         self._idle_style = f"AutoHide{token}.Idle.{orient_name}.TScrollbar"
         self._active_style = f"AutoHide{token}.Active.{orient_name}.TScrollbar"
         self._style = ttk.Style(master)
-        self._hide_after_id = None
+        self._hide_after_id: str | None = None
         self._scrollable = False
         self._hovered = False
         self._last_fractions: tuple[float, float] | None = None
@@ -45,12 +57,8 @@ class AutoHideScrollbar(ttk.Scrollbar):
         self.bind("<Leave>", self._on_leave, add="+")
         self.bind("<Destroy>", self._on_destroy, add="+")
 
-        registry_root = self._root()
-        registry = getattr(registry_root, "_kicad_blocks_auto_hide_scrollbars", None)
-        if registry is None:
-            registry = weakref.WeakSet()
-            registry_root._kicad_blocks_auto_hide_scrollbars = registry
-        registry.add(self)
+        registry_root = self.winfo_toplevel()
+        _SCROLLBARS.setdefault(registry_root, weakref.WeakSet()).add(self)
 
     @property
     def idle_style(self) -> str:
@@ -64,7 +72,7 @@ class AutoHideScrollbar(ttk.Scrollbar):
     def scrollable(self) -> bool:
         return self._scrollable
 
-    def _configure_styles(self, palette: dict[str, str]) -> None:
+    def _configure_styles(self, palette: Mapping[str, str]) -> None:
         try:
             layout = self._style.layout(self._base_style)
         except tk.TclError:
@@ -121,19 +129,18 @@ class AutoHideScrollbar(ttk.Scrollbar):
         elif changed:
             self._reveal()
 
-    def _dispatch_scroll(self, *args):
+    def _dispatch_scroll(self, *args: str) -> None:
         self._reveal()
         if callable(self._scroll_command):
-            return self._scroll_command(*args)
-        if self._scroll_command:
-            return self.tk.call(self._scroll_command, *args)
-        return None
+            self._scroll_command(*args)
+        elif isinstance(self._scroll_command, str):
+            self.tk.call(self._scroll_command, *args)
 
-    def _on_enter(self, _event=None) -> None:
+    def _on_enter(self, _event: tk.Event[tk.Misc]) -> None:
         self._hovered = True
         self._reveal()
 
-    def _on_leave(self, _event=None) -> None:
+    def _on_leave(self, _event: tk.Event[tk.Misc]) -> None:
         self._hovered = False
         self._schedule_hide()
 
@@ -151,9 +158,7 @@ class AutoHideScrollbar(ttk.Scrollbar):
         self._cancel_hide()
         if self._scrollable and not self._hovered:
             try:
-                self._hide_after_id = self.after(
-                    self.HIDE_DELAY_MS, self._hide_if_idle
-                )
+                self._hide_after_id = self.after(self.HIDE_DELAY_MS, self._hide_if_idle)
             except tk.TclError:
                 self._hide_after_id = None
 
@@ -177,13 +182,13 @@ class AutoHideScrollbar(ttk.Scrollbar):
             pass
         self._hide_after_id = None
 
-    def _on_destroy(self, event=None) -> None:
+    def _on_destroy(self, event: tk.Event[tk.Misc] | None = None) -> None:
         if event is not None and getattr(event, "widget", self) is not self:
             return
         self._cancel_hide()
 
 
-def _configure_classic_widgets(root: Any, palette: dict[str, str]) -> None:
+def _configure_classic_widgets(root: tk.Misc, palette: Mapping[str, str]) -> None:
     """Apply matching colors to classic Tk widgets inside themed windows."""
     try:
         stack = list(root.winfo_children())
@@ -220,16 +225,17 @@ def _configure_classic_widgets(root: Any, palette: dict[str, str]) -> None:
                     highlightcolor=palette["accent"],
                 )
             elif widget_class == "Treeview":
-                widget.tag_configure("stripe-alt", background=palette["surface_alt"])
-                widget.tag_configure("basic", foreground=palette["basic_foreground"])
-                widget.tag_configure("extended", foreground=palette["muted"])
-                widget.tag_configure("unknown", foreground=palette["muted"])
+                tree = cast(ttk.Treeview, widget)
+                tree.tag_configure("stripe-alt", background=palette["surface_alt"])
+                tree.tag_configure("basic", foreground=palette["basic_foreground"])
+                tree.tag_configure("extended", foreground=palette["muted"])
+                tree.tag_configure("unknown", foreground=palette["muted"])
             stack.extend(widget.winfo_children())
         except (AttributeError, tk.TclError):
             continue
 
 
-def apply_tk_theme(root: Any, theme: str | bool | None = None) -> dict[str, str]:
+def apply_tk_theme(root: tk.Misc, theme: str | bool | None = None) -> dict[str, str]:
     """Apply the shared flat slate system to ttk and classic Tk widgets."""
     selected = resolve_theme(theme)
     palette = palette_for_theme(selected)
@@ -297,13 +303,39 @@ def apply_tk_theme(root: Any, theme: str | bool | None = None) -> dict[str, str]
     style.configure("Card.TFrame", background=palette["surface"], relief="flat", borderwidth=0)
     style.configure("Card.TLabel", background=palette["surface"], foreground=palette["foreground"])
     style.configure("CardMeta.TLabel", background=palette["surface"], foreground=palette["muted"])
-    style.configure("ProductPreview.TFrame", background=palette["surface"], relief="flat", borderwidth=0)
-    style.configure("ProductImage.TFrame", background=palette["surface_alt"], relief="flat", borderwidth=0)
-    style.configure("ProductImage.TLabel", background=palette["surface_alt"], foreground=palette["muted"])
-    style.configure("ProductTitle.TLabel", background=palette["surface"], foreground=palette["foreground"], font=("TkDefaultFont", UI_FONT_SIZES["card_title"], "bold"))
-    style.configure("ProductMeta.TLabel", background=palette["surface"], foreground=palette["muted"], font=("TkDefaultFont", UI_FONT_SIZES["caption"]))
-    style.configure("ProductKey.TLabel", background=palette["surface"], foreground=palette["muted"], font=("TkDefaultFont", UI_FONT_SIZES["caption"], "bold"))
-    style.configure("ProductMetric.TLabel", background=palette["surface"], foreground=palette["foreground"], font=("TkDefaultFont", UI_FONT_SIZES["metric"], "bold"))
+    style.configure(
+        "ProductPreview.TFrame", background=palette["surface"], relief="flat", borderwidth=0
+    )
+    style.configure(
+        "ProductImage.TFrame", background=palette["surface_alt"], relief="flat", borderwidth=0
+    )
+    style.configure(
+        "ProductImage.TLabel", background=palette["surface_alt"], foreground=palette["muted"]
+    )
+    style.configure(
+        "ProductTitle.TLabel",
+        background=palette["surface"],
+        foreground=palette["foreground"],
+        font=("TkDefaultFont", UI_FONT_SIZES["card_title"], "bold"),
+    )
+    style.configure(
+        "ProductMeta.TLabel",
+        background=palette["surface"],
+        foreground=palette["muted"],
+        font=("TkDefaultFont", UI_FONT_SIZES["caption"]),
+    )
+    style.configure(
+        "ProductKey.TLabel",
+        background=palette["surface"],
+        foreground=palette["muted"],
+        font=("TkDefaultFont", UI_FONT_SIZES["caption"], "bold"),
+    )
+    style.configure(
+        "ProductMetric.TLabel",
+        background=palette["surface"],
+        foreground=palette["foreground"],
+        font=("TkDefaultFont", UI_FONT_SIZES["metric"], "bold"),
+    )
     style.configure(
         "ValidationError.TLabel",
         background=palette["surface"],
@@ -460,8 +492,12 @@ def apply_tk_theme(root: Any, theme: str | bool | None = None) -> dict[str, str]
 
     style.configure("TabBar.TFrame", background=palette["surface"], relief="flat", borderwidth=0)
     style.configure("TabItem.TFrame", background=palette["surface"], relief="flat", borderwidth=0)
-    style.configure("TabIndicator.TFrame", background=palette["accent"], relief="flat", borderwidth=0)
-    style.configure("TabIndicatorInactive.TFrame", background=palette["surface"], relief="flat", borderwidth=0)
+    style.configure(
+        "TabIndicator.TFrame", background=palette["accent"], relief="flat", borderwidth=0
+    )
+    style.configure(
+        "TabIndicatorInactive.TFrame", background=palette["surface"], relief="flat", borderwidth=0
+    )
     style.configure(
         "Tab.TLabel",
         background=palette["surface"],
@@ -472,7 +508,11 @@ def apply_tk_theme(root: Any, theme: str | bool | None = None) -> dict[str, str]
     style.map(
         "Tab.TLabel",
         background=[("active", palette["hover"]), ("!disabled", palette["surface"])],
-        foreground=[("focus", palette["accent"]), ("active", palette["foreground"]), ("!disabled", palette["muted"])],
+        foreground=[
+            ("focus", palette["accent"]),
+            ("active", palette["foreground"]),
+            ("!disabled", palette["muted"]),
+        ],
     )
     style.configure(
         "ActiveTab.TLabel",
@@ -511,17 +551,31 @@ def apply_tk_theme(root: Any, theme: str | bool | None = None) -> dict[str, str]
     for scrollbar_style, layout in (
         (
             "Vertical.TScrollbar",
-            [("Vertical.Scrollbar.trough", {
-                "sticky": "ns",
-                "children": [("Vertical.Scrollbar.thumb", {"expand": "1", "sticky": "nswe"})],
-            })],
+            [
+                (
+                    "Vertical.Scrollbar.trough",
+                    {
+                        "sticky": "ns",
+                        "children": [
+                            ("Vertical.Scrollbar.thumb", {"expand": "1", "sticky": "nswe"})
+                        ],
+                    },
+                )
+            ],
         ),
         (
             "Horizontal.TScrollbar",
-            [("Horizontal.Scrollbar.trough", {
-                "sticky": "we",
-                "children": [("Horizontal.Scrollbar.thumb", {"expand": "1", "sticky": "nswe"})],
-            })],
+            [
+                (
+                    "Horizontal.Scrollbar.trough",
+                    {
+                        "sticky": "we",
+                        "children": [
+                            ("Horizontal.Scrollbar.thumb", {"expand": "1", "sticky": "nswe"})
+                        ],
+                    },
+                )
+            ],
         ),
     ):
         try:
@@ -530,15 +584,21 @@ def apply_tk_theme(root: Any, theme: str | bool | None = None) -> dict[str, str]
             pass
 
     style.configure("TSeparator", background=palette["border"])
-    style.configure("TCheckbutton", background=palette["background"], foreground=palette["foreground"])
-    style.map("TCheckbutton", background=[("active", palette["background"])], foreground=[("disabled", palette["muted"])])
+    style.configure(
+        "TCheckbutton", background=palette["background"], foreground=palette["foreground"]
+    )
+    style.map(
+        "TCheckbutton",
+        background=[("active", palette["background"])],
+        foreground=[("disabled", palette["muted"])],
+    )
 
     root._kicad_blocks_theme = selected
     root._kicad_blocks_palette = palette
     _configure_classic_widgets(root, palette)
 
-    registry_root = root._root() if hasattr(root, "_root") else root
-    for scrollbar in tuple(getattr(registry_root, "_kicad_blocks_auto_hide_scrollbars", ())):
+    registry_root = root.winfo_toplevel()
+    for scrollbar in tuple(_SCROLLBARS.get(registry_root, ())):
         try:
             scrollbar._configure_styles(palette)
         except tk.TclError:

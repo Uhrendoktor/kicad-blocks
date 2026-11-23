@@ -6,7 +6,7 @@
       "id": "_show_selected_block_configuration.save_configuration::messagebox.showerror#1",
       "owner": "_show_selected_block_configuration.save_configuration",
       "method": "messagebox.showerror",
-      "line": 1179,
+      "line": 1967,
       "coverage": "tested",
       "evidence": [
         "tests/test_instance_configuration_contracts.py"
@@ -17,7 +17,7 @@
       "id": "_choose_block_layout::simpledialog.askstring#1",
       "owner": "_choose_block_layout",
       "method": "simpledialog.askstring",
-      "line": 1706,
+      "line": 2568,
       "coverage": "tested",
       "evidence": [
         "tests/test_dialog_callsite_contracts.py"
@@ -28,7 +28,7 @@
       "id": "_collect_block_profiles::messagebox.askyesno#1",
       "owner": "_collect_block_profiles",
       "method": "messagebox.askyesno",
-      "line": 1761,
+      "line": 2630,
       "coverage": "tested",
       "evidence": [
         "tests/test_dialog_callsite_contracts.py"
@@ -39,7 +39,7 @@
       "id": "_collect_block_profiles::simpledialog.askstring#1",
       "owner": "_collect_block_profiles",
       "method": "simpledialog.askstring",
-      "line": 1771,
+      "line": 2640,
       "coverage": "tested",
       "evidence": [
         "tests/test_dialog_callsite_contracts.py"
@@ -50,7 +50,7 @@
       "id": "_collect_block_profiles::messagebox.showwarning#1",
       "owner": "_collect_block_profiles",
       "method": "messagebox.showwarning",
-      "line": 1779,
+      "line": 2648,
       "coverage": "tested",
       "evidence": [
         "tests/test_dialog_callsite_contracts.py"
@@ -61,7 +61,7 @@
       "id": "_collect_block_profiles::simpledialog.askstring#2",
       "owner": "_collect_block_profiles",
       "method": "simpledialog.askstring",
-      "line": 1786,
+      "line": 2655,
       "coverage": "tested",
       "evidence": [
         "tests/test_dialog_callsite_contracts.py"
@@ -72,7 +72,7 @@
       "id": "_collect_block_profiles::simpledialog.askstring#3",
       "owner": "_collect_block_profiles",
       "method": "simpledialog.askstring",
-      "line": 1798,
+      "line": 2667,
       "coverage": "tested",
       "evidence": [
         "tests/test_dialog_callsite_contracts.py"
@@ -83,7 +83,7 @@
       "id": "_collect_block_profiles::simpledialog.askstring#4",
       "owner": "_collect_block_profiles",
       "method": "simpledialog.askstring",
-      "line": 1818,
+      "line": 2687,
       "coverage": "tested",
       "evidence": [
         "tests/test_dialog_callsite_contracts.py"
@@ -94,7 +94,7 @@
       "id": "_collect_block_profiles::simpledialog.askstring#5",
       "owner": "_collect_block_profiles",
       "method": "simpledialog.askstring",
-      "line": 1838,
+      "line": 2705,
       "coverage": "tested",
       "evidence": [
         "tests/test_dialog_callsite_contracts.py"
@@ -105,7 +105,7 @@
       "id": "_collect_block_profiles::messagebox.askyesno#2",
       "owner": "_collect_block_profiles",
       "method": "messagebox.askyesno",
-      "line": 1866,
+      "line": 2736,
       "coverage": "tested",
       "evidence": [
         "tests/test_dialog_callsite_contracts.py"
@@ -113,10 +113,19 @@
       "rationale": "A test invokes this native prompt/notification, asserts its title, choices and parent, and verifies the returned profile/layout or report/cancellation result."
     },
     {
+      "id": "_ask_create_block_details.accept::messagebox.showerror#1",
+      "owner": "_ask_create_block_details.accept",
+      "method": "messagebox.showerror",
+      "line": 2897,
+      "coverage": "uncovered",
+      "evidence": [],
+      "rationale": "Blank-name validation is implemented, but this native messagebox path is not currently covered by a dedicated behavior test."
+    },
+    {
       "id": "_ask_layout_details.accept::messagebox.showerror#1",
       "owner": "_ask_layout_details.accept",
       "method": "messagebox.showerror",
-      "line": 3561,
+      "line": 4838,
       "coverage": "tested",
       "evidence": [
         "tests/test_add_pcb_layout_contracts.py"
@@ -127,7 +136,7 @@
       "id": "_ask_layout_details.accept::messagebox.showerror#2",
       "owner": "_ask_layout_details.accept",
       "method": "messagebox.showerror",
-      "line": 3569,
+      "line": 4848,
       "coverage": "tested",
       "evidence": [
         "tests/test_add_pcb_layout_contracts.py"
@@ -138,7 +147,7 @@
       "id": "_show_block_layout_editor.add_layout::messagebox.showerror#1",
       "owner": "_show_block_layout_editor.add_layout",
       "method": "messagebox.showerror",
-      "line": 3723,
+      "line": 5018,
       "coverage": "tested",
       "evidence": [
         "tests/test_library_and_pcb_manager_contracts.py"
@@ -149,7 +158,18 @@
       "id": "_show_block_layout_editor.remove_layout::messagebox.askyesno#1",
       "owner": "_show_block_layout_editor.remove_layout",
       "method": "messagebox.askyesno",
-      "line": 3760,
+      "line": 5067,
+      "coverage": "tested",
+      "evidence": [
+        "tests/test_library_and_pcb_manager_contracts.py"
+      ],
+      "rationale": "The confirmation or save-error response is exercised, with manifest/file preservation or save retry asserted."
+    },
+    {
+      "id": "_show_block_layout_editor.cancel_layout_edits::messagebox.askyesno#1",
+      "owner": "_show_block_layout_editor.cancel_layout_edits",
+      "method": "messagebox.askyesno",
+      "line": 5211,
       "coverage": "tested",
       "evidence": [
         "tests/test_library_and_pcb_manager_contracts.py"
@@ -160,7 +180,7 @@
       "id": "_show_block_layout_editor.persist_layout_changes::messagebox.showerror#1",
       "owner": "_show_block_layout_editor.persist_layout_changes",
       "method": "messagebox.showerror",
-      "line": 3921,
+      "line": 5262,
       "coverage": "tested",
       "evidence": [
         "tests/test_library_and_pcb_manager_contracts.py"
@@ -171,7 +191,7 @@
       "id": "_ask_implementation_details.accept::messagebox.showerror#1",
       "owner": "_ask_implementation_details.accept",
       "method": "messagebox.showerror",
-      "line": 4158,
+      "line": 5521,
       "coverage": "tested",
       "evidence": [
         "tests/test_implementation_details_contracts.py"
@@ -182,7 +202,7 @@
       "id": "_ask_implementation_details.accept::messagebox.showerror#2",
       "owner": "_ask_implementation_details.accept",
       "method": "messagebox.showerror",
-      "line": 4171,
+      "line": 5534,
       "coverage": "tested",
       "evidence": [
         "tests/test_implementation_details_contracts.py"
@@ -193,7 +213,7 @@
       "id": "_ask_implementation_details.accept::messagebox.showerror#3",
       "owner": "_ask_implementation_details.accept",
       "method": "messagebox.showerror",
-      "line": 4184,
+      "line": 5544,
       "coverage": "tested",
       "evidence": [
         "tests/test_implementation_details_contracts.py"
@@ -204,7 +224,7 @@
       "id": "_show_block_variant_editor.add_variant::messagebox.showerror#1",
       "owner": "_show_block_variant_editor.add_variant",
       "method": "messagebox.showerror",
-      "line": 4364,
+      "line": 5760,
       "coverage": "tested",
       "evidence": [
         "tests/test_implementation_manager_contracts.py"
@@ -215,7 +235,7 @@
       "id": "_show_block_variant_editor.edit_variant::messagebox.showerror#1",
       "owner": "_show_block_variant_editor.edit_variant",
       "method": "messagebox.showerror",
-      "line": 4395,
+      "line": 5791,
       "coverage": "tested",
       "evidence": [
         "tests/test_implementation_manager_contracts.py"
@@ -226,7 +246,7 @@
       "id": "_show_block_variant_editor.remove_variant::messagebox.askyesno#1",
       "owner": "_show_block_variant_editor.remove_variant",
       "method": "messagebox.askyesno",
-      "line": 4432,
+      "line": 5828,
       "coverage": "tested",
       "evidence": [
         "tests/test_implementation_manager_contracts.py"
@@ -237,7 +257,18 @@
       "id": "_show_block_variant_editor.persist_variant_changes::messagebox.showerror#1",
       "owner": "_show_block_variant_editor.persist_variant_changes",
       "method": "messagebox.showerror",
-      "line": 4490,
+      "line": 5888,
+      "coverage": "tested",
+      "evidence": [
+        "tests/test_implementation_manager_contracts.py"
+      ],
+      "rationale": "The profile-reference notice, removal confirmation, save-failure path, and pending-change discard confirmation are asserted."
+    },
+    {
+      "id": "_show_block_variant_editor.cancel_variant_edits::messagebox.askyesno#1",
+      "owner": "_show_block_variant_editor.cancel_variant_edits",
+      "method": "messagebox.askyesno",
+      "line": 5945,
       "coverage": "tested",
       "evidence": [
         "tests/test_implementation_manager_contracts.py"
@@ -248,7 +279,7 @@
       "id": "_show_library_roots_dialog.add_library::messagebox.showerror#1",
       "owner": "_show_library_roots_dialog.add_library",
       "method": "messagebox.showerror",
-      "line": 4680,
+      "line": 6119,
       "coverage": "tested",
       "evidence": [
         "tests/test_library_and_pcb_manager_contracts.py"
@@ -259,7 +290,7 @@
       "id": "_show_library_roots_dialog.create_library::simpledialog.askstring#1",
       "owner": "_show_library_roots_dialog.create_library",
       "method": "simpledialog.askstring",
-      "line": 4688,
+      "line": 6125,
       "coverage": "tested",
       "evidence": [
         "tests/test_library_and_pcb_manager_contracts.py"
@@ -270,7 +301,7 @@
       "id": "_show_library_roots_dialog.create_library::messagebox.showerror#1",
       "owner": "_show_library_roots_dialog.create_library",
       "method": "messagebox.showerror",
-      "line": 4703,
+      "line": 6140,
       "coverage": "tested",
       "evidence": [
         "tests/test_library_and_pcb_manager_contracts.py"
@@ -281,7 +312,7 @@
       "id": "_show_library_roots_dialog.create_library::messagebox.showerror#2",
       "owner": "_show_library_roots_dialog.create_library",
       "method": "messagebox.showerror",
-      "line": 4720,
+      "line": 6157,
       "coverage": "tested",
       "evidence": [
         "tests/test_library_and_pcb_manager_contracts.py"
@@ -292,7 +323,7 @@
       "id": "_show_library_roots_dialog.change_library_folder::messagebox.showerror#1",
       "owner": "_show_library_roots_dialog.change_library_folder",
       "method": "messagebox.showerror",
-      "line": 4756,
+      "line": 6193,
       "coverage": "tested",
       "evidence": [
         "tests/test_library_and_pcb_manager_contracts.py"
@@ -303,7 +334,7 @@
       "id": "_show_library_roots_dialog.remove_library::messagebox.askyesno#1",
       "owner": "_show_library_roots_dialog.remove_library",
       "method": "messagebox.askyesno",
-      "line": 4762,
+      "line": 6199,
       "coverage": "tested",
       "evidence": [
         "tests/test_library_and_pcb_manager_contracts.py"
@@ -314,7 +345,7 @@
       "id": "_show_library_roots_dialog.remove_library::messagebox.showerror#1",
       "owner": "_show_library_roots_dialog.remove_library",
       "method": "messagebox.showerror",
-      "line": 4773,
+      "line": 6210,
       "coverage": "tested",
       "evidence": [
         "tests/test_library_and_pcb_manager_contracts.py"
@@ -325,7 +356,7 @@
       "id": "_show_library_roots_dialog.make_default::messagebox.showerror#1",
       "owner": "_show_library_roots_dialog.make_default",
       "method": "messagebox.showerror",
-      "line": 4784,
+      "line": 6221,
       "coverage": "tested",
       "evidence": [
         "tests/test_library_and_pcb_manager_contracts.py"
@@ -333,10 +364,21 @@
       "rationale": "A Set default persistence failure is reported and the previous default library remains the default."
     },
     {
+      "id": "_show_library_browser.place_selected::messagebox.showwarning#1",
+      "owner": "_show_library_browser.place_selected",
+      "method": "messagebox.showwarning",
+      "line": 6905,
+      "coverage": "tested",
+      "evidence": [
+        "tests/test_library_browser_contracts.py"
+      ],
+      "rationale": "A project-library reload warning is shown after registration, and native symbol placement is not started until the user restarts/reloads KiCad."
+    },
+    {
       "id": "_show_library_browser.open_implementation::messagebox.showerror#1",
       "owner": "_show_library_browser.open_implementation",
       "method": "messagebox.showerror",
-      "line": 5430,
+      "line": 6939,
       "coverage": "tested",
       "evidence": [
         "tests/test_library_browser_contracts.py"
@@ -347,7 +389,7 @@
       "id": "_show_library_browser.open_implementation::messagebox.showerror#2",
       "owner": "_show_library_browser.open_implementation",
       "method": "messagebox.showerror",
-      "line": 5451,
+      "line": 6960,
       "coverage": "tested",
       "evidence": [
         "tests/test_library_browser_contracts.py"
@@ -358,7 +400,7 @@
       "id": "_show_library_browser.open_implementation.launch_variant::messagebox.showerror#1",
       "owner": "_show_library_browser.open_implementation.launch_variant",
       "method": "messagebox.showerror",
-      "line": 5489,
+      "line": 6998,
       "coverage": "tested",
       "evidence": [
         "tests/test_library_browser_contracts.py"
@@ -366,10 +408,21 @@
       "rationale": "A failure launching the explicitly selected named implementation is reported after the chooser closes, without closing the parent library browser."
     },
     {
+      "id": "_show_library_browser.edit_facade::messagebox.showinfo#1",
+      "owner": "_show_library_browser.edit_facade",
+      "method": "messagebox.showinfo",
+      "line": 7038,
+      "coverage": "tested",
+      "evidence": [
+        "tests/test_library_browser_contracts.py"
+      ],
+      "rationale": "The direct Edit Facade contract exercises the no-IPC-handoff branch, asserts the Symbol Editor guidance and parent-window lifetime, and verifies the Functional Block Library remains open."
+    },
+    {
       "id": "_show_library_browser.edit_facade::messagebox.showerror#1",
       "owner": "_show_library_browser.edit_facade",
       "method": "messagebox.showerror",
-      "line": 5525,
+      "line": 7047,
       "coverage": "tested",
       "evidence": [
         "tests/test_library_browser_contracts.py"
@@ -380,7 +433,7 @@
       "id": "_show_library_browser.manage_layouts::messagebox.showerror#1",
       "owner": "_show_library_browser.manage_layouts",
       "method": "messagebox.showerror",
-      "line": 5543,
+      "line": 7077,
       "coverage": "tested",
       "evidence": [
         "tests/test_library_browser_contracts.py"
@@ -391,7 +444,7 @@
       "id": "_show_library_browser.edit_variants::messagebox.showerror#1",
       "owner": "_show_library_browser.edit_variants",
       "method": "messagebox.showerror",
-      "line": 5566,
+      "line": 7100,
       "coverage": "tested",
       "evidence": [
         "tests/test_library_browser_contracts.py"
@@ -402,7 +455,7 @@
       "id": "_show_library_browser.open_layout.launch_layout::messagebox.showerror#1",
       "owner": "_show_library_browser.open_layout.launch_layout",
       "method": "messagebox.showerror",
-      "line": 5628,
+      "line": 7162,
       "coverage": "tested",
       "evidence": [
         "tests/test_library_browser_contracts.py"
@@ -413,7 +466,7 @@
       "id": "_validate_shared_library::messagebox.showwarning#1",
       "owner": "_validate_shared_library",
       "method": "messagebox.showwarning",
-      "line": 5951,
+      "line": 7587,
       "coverage": "tested",
       "evidence": [
         "tests/test_dialog_callsite_contracts.py"
@@ -424,7 +477,7 @@
       "id": "_validate_shared_library::messagebox.showwarning#2",
       "owner": "_validate_shared_library",
       "method": "messagebox.showwarning",
-      "line": 5953,
+      "line": 7589,
       "coverage": "tested",
       "evidence": [
         "tests/test_dialog_callsite_contracts.py"
@@ -435,7 +488,7 @@
       "id": "_apply_block_pcb_layout::simpledialog.askstring#1",
       "owner": "_apply_block_pcb_layout",
       "method": "simpledialog.askstring",
-      "line": 6075,
+      "line": 7739,
       "coverage": "tested",
       "evidence": [
         "tests/test_uncovered_dialog_contracts.py"
@@ -446,7 +499,7 @@
       "id": "_apply_block_pcb_layout::simpledialog.askstring#2",
       "owner": "_apply_block_pcb_layout",
       "method": "simpledialog.askstring",
-      "line": 6091,
+      "line": 7754,
       "coverage": "tested",
       "evidence": [
         "tests/test_uncovered_dialog_contracts.py"
@@ -457,7 +510,7 @@
       "id": "_apply_block_pcb_layout::simpledialog.askstring#3",
       "owner": "_apply_block_pcb_layout",
       "method": "simpledialog.askstring",
-      "line": 6107,
+      "line": 7770,
       "coverage": "tested",
       "evidence": [
         "tests/test_uncovered_dialog_contracts.py"
@@ -468,7 +521,7 @@
       "id": "_apply_block_pcb_layout::messagebox.askyesno#1",
       "owner": "_apply_block_pcb_layout",
       "method": "messagebox.askyesno",
-      "line": 6153,
+      "line": 7816,
       "coverage": "tested",
       "evidence": [
         "tests/test_uncovered_dialog_contracts.py"
@@ -479,7 +532,7 @@
       "id": "_apply_selected_block_pcb_layouts::simpledialog.askstring#1",
       "owner": "_apply_selected_block_pcb_layouts",
       "method": "simpledialog.askstring",
-      "line": 6214,
+      "line": 7880,
       "coverage": "tested",
       "evidence": [
         "tests/test_uncovered_dialog_contracts.py"
@@ -490,7 +543,7 @@
       "id": "_apply_selected_block_pcb_layouts::simpledialog.askstring#2",
       "owner": "_apply_selected_block_pcb_layouts",
       "method": "simpledialog.askstring",
-      "line": 6229,
+      "line": 7895,
       "coverage": "tested",
       "evidence": [
         "tests/test_uncovered_dialog_contracts.py"
@@ -501,7 +554,7 @@
       "id": "_apply_selected_block_pcb_layouts::simpledialog.askstring#3",
       "owner": "_apply_selected_block_pcb_layouts",
       "method": "simpledialog.askstring",
-      "line": 6245,
+      "line": 7911,
       "coverage": "tested",
       "evidence": [
         "tests/test_uncovered_dialog_contracts.py"
@@ -512,7 +565,7 @@
       "id": "_apply_selected_block_pcb_layouts::messagebox.askyesno#1",
       "owner": "_apply_selected_block_pcb_layouts",
       "method": "messagebox.askyesno",
-      "line": 6299,
+      "line": 7965,
       "coverage": "tested",
       "evidence": [
         "tests/test_uncovered_dialog_contracts.py"
@@ -523,7 +576,7 @@
       "id": "run_action::messagebox.showwarning#1",
       "owner": "run_action",
       "method": "messagebox.showwarning",
-      "line": 6597,
+      "line": 8472,
       "coverage": "tested",
       "evidence": [
         "tests/test_uncovered_dialog_contracts.py"
@@ -534,7 +587,7 @@
       "id": "run_action::messagebox.showerror#1",
       "owner": "run_action",
       "method": "messagebox.showerror",
-      "line": 6604,
+      "line": 8479,
       "coverage": "tested",
       "evidence": [
         "tests/test_uncovered_dialog_contracts.py"

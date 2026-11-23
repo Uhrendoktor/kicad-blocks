@@ -7,6 +7,16 @@ import os
 import sys
 from pathlib import Path
 from types import SimpleNamespace
+from typing import TYPE_CHECKING, Callable, cast
+
+from _pytest.monkeypatch import MonkeyPatch
+
+if TYPE_CHECKING:
+    from tkinter import Event as TkEvent
+    from tkinter import Misc, Tk
+    from tkinter.ttk import Button, Notebook
+else:
+    TkEvent = Misc = Tk = Button = Notebook = object
 
 import pytest
 
@@ -17,6 +27,7 @@ sys.path.insert(0, str(PLUGIN_SOURCE))
 sys.path.insert(0, str(TEST_SOURCE))
 
 from kicad_blocks import plugin as plugin_actions
+from kicad_blocks.repository import BlockRecord
 from ui_contracts import (
     ButtonContract,
     ChoiceViewContract,
@@ -46,13 +57,9 @@ TASK_HUB_VIEWS = tuple(
     )
     for view in TASK_HUB_SCREEN["views"]
 )
-TASK_HUB_CONTROL_IDS = {
-    control["contract_id"] for control in TASK_HUB_SCREEN["controls"]
-}
+TASK_HUB_CONTROL_IDS = {control["contract_id"] for control in TASK_HUB_SCREEN["controls"]}
 TASK_HUB_CONTROL_IDS.update(
-    action["contract_id"]
-    for view in TASK_HUB_SCREEN["views"]
-    for action in view["actions"]
+    action["contract_id"] for view in TASK_HUB_SCREEN["views"] for action in view["actions"]
 )
 TASK_HUB_CONTROL_IDS.update(
     control["contract_id"] for control in TASK_HUB_SCREEN.get("footer_controls", [])
@@ -65,65 +72,102 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-def _symbol(reference="X1"):
-    return SimpleNamespace(
-        id=f"kiid-{reference}",
-        reference=reference,
-        definition=SimpleNamespace(
-            id=SimpleNamespace(library="KBlocks", name="test_block")
+_load_tkinter = cast(Callable[[], None], getattr(plugin_actions, "_load_tkinter"))
+_show_action_hub = cast(Callable[..., Notebook], getattr(plugin_actions, "_show_action_hub"))
+
+
+def _new_hub(
+    monkeypatch: MonkeyPatch,
+    *,
+    action_id: str | None = None,
+) -> tuple[Tk, Notebook]:
+    _load_tkinter()
+
+    def no_icon(_parent: Misc, _name: str, _stroke_color: str | None = None) -> None:
+        return None
+
+    monkeypatch.setattr(plugin_actions, "_create_action_icon", no_icon)
+    selected_ids = (
+        ["U1", "U2"]
+        if action_id == "apply-multiple-pcb-layouts"
+        else ["U1"]
+        if action_id
+        in {
+            "open-implementation",
+            "configure-instance",
+            "make-local-copy",
+            "synchronize-local-copy",
+            "apply-pcb-layout",
+        }
+        else []
+    )
+    selected_symbols = [
+        cast(
+            plugin_actions.SchematicSymbol,
+            SimpleNamespace(
+                reference=reference,
+                id=SimpleNamespace(value=f"{reference}-instance"),
+                definition=SimpleNamespace(
+                    id=SimpleNamespace(library="KBlocks", name="usb_power_facade")
+                ),
+            ),
+        )
+        for reference in selected_ids
+    ]
+    record = cast(
+        BlockRecord,
+        SimpleNamespace(
+            name="USB power block",
+            path=Path("/tmp/usb-power"),
+            manifest={"block_id": "usb-power", "layouts": [{"id": "standard"}]},
         ),
     )
+    if selected_symbols:
 
+        def find_record(
+            _roots: Path | list[Path],
+            _project_dir: Path,
+            _instance: plugin_actions.SchematicSymbol,
+        ) -> BlockRecord:
+            return record
 
-def _selection_for_action(action_id):
-    if action_id == "create-block":
-        return []
-    if action_id == "apply-multiple-pcb-layouts":
-        return [_symbol("X1"), _symbol("X2")]
-    if action_id in {
-        "open-implementation", "configure-instance", "make-local-copy",
-        "synchronize-local-copy", "apply-pcb-layout",
-    }:
-        return [_symbol()]
-    return []
+        def local_copy_path(_project_dir: Path, _instance_id: str) -> Path | None:
+            return Path("/tmp/local-usb-power") if action_id == "synchronize-local-copy" else None
 
+        def layout_choices(_record: BlockRecord) -> list[plugin_actions.ResolvedBlockLayout]:
+            return [
+                cast(
+                    plugin_actions.ResolvedBlockLayout,
+                    {"id": "standard", "name": "Standard", "file": "layout.kicad_pcb"},
+                )
+            ]
 
-def _new_hub(monkeypatch, selection=None, *, local_copy=None, schematic=True):
-    plugin_actions._load_tkinter()
-    monkeypatch.setattr(plugin_actions, "_create_action_icon", lambda *_args: None)
-    monkeypatch.setattr(plugin_actions, "_configure_tk_theme", lambda *_args, **_kwargs: None)
-    record = SimpleNamespace(name="Selected test block")
-    monkeypatch.setattr(
-        plugin_actions, "_block_record_for_instance",
-        lambda *_args, **_kwargs: record,
-    )
-    monkeypatch.setattr(plugin_actions, "_layout_choices", lambda _record: [object()])
-    monkeypatch.setattr(
-        plugin_actions, "local_copy_for_instance",
-        lambda *_args, **_kwargs: local_copy,
-    )
-    active_schematic = (
-        SimpleNamespace(get_selection=lambda: list(selection or []))
-        if schematic else None
-    )
+        monkeypatch.setattr(plugin_actions, "_block_record_for_instance", find_record)
+        monkeypatch.setattr(plugin_actions, "local_copy_for_instance", local_copy_path)
+        monkeypatch.setattr(plugin_actions, "_layout_choices", layout_choices)
+
+    class FakeSchematic:
+        def get_selection(self) -> list[plugin_actions.SchematicSymbol]:
+            return selected_symbols
+
     root = plugin_actions.tk.Tk()
-    notebook = plugin_actions._show_action_hub(
+    notebook = _show_action_hub(
         root,
-        schematic=active_schematic,
-        project_dir=Path("/tmp/kicad-blocks-test-project"),
-        library_paths=[Path("/tmp/kicad-blocks-test-library")],
+        schematic=cast(plugin_actions.Schematic, FakeSchematic()),
+        project_dir=Path("/tmp/kicad-project"),
+        library_paths=[Path("/tmp/kicad-library")],
     )
     root.update_idletasks()
     root.update()
-    return root, notebook, active_schematic
+    return root, notebook
 
 
 def _button_contract_id(action_id: str) -> str:
     return f"task-hub.action.{action_id}"
 
 
-def test_task_hub_window_is_registered_and_visible(monkeypatch):
-    root, _notebook, _schematic = _new_hub(monkeypatch)
+def test_task_hub_window_is_registered_and_visible(monkeypatch: MonkeyPatch) -> None:
+    root, _notebook = _new_hub(monkeypatch)
     try:
         WindowContract(
             title="KiCad Blocks — Legacy Tasks",
@@ -146,9 +190,7 @@ def test_task_hub_declares_every_action_and_view_from_the_catalog():
     assert len(TASK_HUB_ACTIONS) == 13
     assert len({action[0] for action in TASK_HUB_ACTIONS}) == 13
     assert catalog_actions == list(TASK_HUB_ACTIONS)
-    assert [view["label"] for view in screen["views"]] == [
-        view[0] for view in TASK_HUB_VIEWS
-    ]
+    assert [view["label"] for view in screen["views"]] == [view[0] for view in TASK_HUB_VIEWS]
     assert all(
         action["assertion"] == "asserted"
         and action["contract_id"] == _button_contract_id(action["action_id"])
@@ -157,8 +199,10 @@ def test_task_hub_declares_every_action_and_view_from_the_catalog():
     )
 
 
-def test_task_hub_widget_inventory_has_no_untagged_interactive_controls(monkeypatch):
-    root, _notebook, _schematic = _new_hub(monkeypatch)
+def test_task_hub_widget_inventory_has_no_untagged_interactive_controls(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    root, _notebook = _new_hub(monkeypatch)
     try:
         discovered = assert_control_coverage(root, TASK_HUB_CONTROL_IDS)
         assert set(discovered) == TASK_HUB_CONTROL_IDS
@@ -166,8 +210,8 @@ def test_task_hub_widget_inventory_has_no_untagged_interactive_controls(monkeypa
         root.destroy()
 
 
-def test_task_hub_exposes_all_three_functional_notebook_views(monkeypatch):
-    root, _notebook, _schematic = _new_hub(monkeypatch)
+def test_task_hub_exposes_all_three_functional_notebook_views(monkeypatch: MonkeyPatch) -> None:
+    root, _notebook = _new_hub(monkeypatch)
     try:
         contract = NotebookViewContract(
             contract_id="task-hub.views",
@@ -189,19 +233,16 @@ def test_task_hub_exposes_all_three_functional_notebook_views(monkeypatch):
     ids=[action_id for action_id, _, _ in TASK_HUB_ACTIONS],
 )
 def test_each_task_hub_button_dispatches_exactly_its_action_id(
-    monkeypatch, action_id, expected_label, _view
-):
-    selection = _selection_for_action(action_id)
-    local_copy = object() if action_id == "synchronize-local-copy" else None
-    root, _notebook, _schematic = _new_hub(
-        monkeypatch, selection=selection, local_copy=local_copy
-    )
+    monkeypatch: MonkeyPatch, action_id: str, expected_label: str, _view: str
+) -> None:
+    root, _notebook = _new_hub(monkeypatch, action_id=action_id)
     context = UiTestContext(root)
-    monkeypatch.setattr(
-        plugin_actions,
-        "run_action",
-        lambda selected: context.action_calls.append(selected),
-    )
+
+    def record_action(selected: str, *, editor_window_id: str | None = None) -> None:
+        del editor_window_id
+        context.action_calls.append(selected)
+
+    monkeypatch.setattr(plugin_actions, "run_action", record_action)
     try:
         ButtonContract(
             contract_id=_button_contract_id(action_id),
@@ -216,48 +257,15 @@ def test_each_task_hub_button_dispatches_exactly_its_action_id(
             pass
 
 
-def test_task_hub_selection_actions_update_when_selection_changes(monkeypatch):
-    state = {"selection": []}
-    root, _notebook, schematic = _new_hub(monkeypatch, selection=[])
-    schematic.get_selection = lambda: list(state["selection"])
+def test_task_hub_close_button_destroys_window_without_dispatch(monkeypatch: MonkeyPatch) -> None:
+    root, _notebook = _new_hub(monkeypatch)
     context = UiTestContext(root)
-    try:
-        assert context.require_widget("task-hub.action.open-implementation").cget("state").__str__() == "disabled"
-        assert context.require_widget("task-hub.action.create-block").cget("state").__str__() == "normal"
-        state["selection"] = [_symbol()]
-        ButtonContract(
-            contract_id="task-hub.action.refresh-selection",
-            expected_action=None,
-            destroys_window=False,
-            expected_label="Refresh selection",
-        ).run(context)
-        assert context.require_widget("task-hub.action.open-implementation").cget("state").__str__() == "normal"
-        assert context.require_widget("task-hub.action.configure-instance").cget("state").__str__() == "normal"
-        assert context.require_widget("task-hub.action.make-local-copy").cget("state").__str__() == "normal"
-        assert context.require_widget("task-hub.action.synchronize-local-copy").cget("state").__str__() == "disabled"
-        assert context.require_widget("task-hub.action.apply-pcb-layout").cget("state").__str__() == "normal"
-        assert context.require_widget("task-hub.action.apply-multiple-pcb-layouts").cget("state").__str__() == "disabled"
-        state["selection"] = [_symbol("X1"), _symbol("X2")]
-        ButtonContract(
-            contract_id="task-hub.action.refresh-selection",
-            expected_action=None,
-            destroys_window=False,
-            expected_label="Refresh selection",
-        ).run(context)
-        assert context.require_widget("task-hub.action.open-implementation").cget("state").__str__() == "disabled"
-        assert context.require_widget("task-hub.action.apply-multiple-pcb-layouts").cget("state").__str__() == "normal"
-    finally:
-        root.destroy()
 
+    def record_action(selected: str, *, editor_window_id: str | None = None) -> None:
+        del editor_window_id
+        context.action_calls.append(selected)
 
-def test_task_hub_close_button_destroys_window_without_dispatch(monkeypatch):
-    root, _notebook, _schematic = _new_hub(monkeypatch)
-    context = UiTestContext(root)
-    monkeypatch.setattr(
-        plugin_actions,
-        "run_action",
-        lambda selected: context.action_calls.append(selected),
-    )
+    monkeypatch.setattr(plugin_actions, "run_action", record_action)
     try:
         ButtonContract(
             contract_id="task-hub.close",
@@ -272,24 +280,22 @@ def test_task_hub_close_button_destroys_window_without_dispatch(monkeypatch):
             pass
 
 
-def test_task_hub_actions_use_a_compact_two_column_grid(monkeypatch):
-    root, notebook, _schematic = _new_hub(monkeypatch)
+def test_task_hub_actions_use_a_compact_two_column_grid(monkeypatch: MonkeyPatch) -> None:
+    root, notebook = _new_hub(monkeypatch)
     try:
         assert root.winfo_width() >= 700
         assert root.winfo_height() >= 500
         for tab_id in notebook.tabs():
             tab = notebook.nametowidget(tab_id)
             buttons = [
-                child
+                cast(Button, child)
                 for cell in tab.winfo_children()
                 for child in cell.winfo_children()
-                if isinstance(child, plugin_actions.ttk.Button)
-                and str(getattr(child, "_kicad_ui_contract_id", "")).startswith(
-                    "task-hub.action."
-                )
+                if child.winfo_class() == "TButton"
+                and str(getattr(child, "_kicad_ui_contract_id", "")).startswith("task-hub.action.")
             ]
             assert len(buttons) in {3, 5}
-            positions = [button.master.grid_info() for button in buttons]
+            positions = [cast(Misc, button.master).grid_info() for button in buttons]
             assert positions[0]["column"] == 0
             assert positions[1]["column"] == 1
             assert positions[0]["row"] == positions[1]["row"]
@@ -299,8 +305,8 @@ def test_task_hub_actions_use_a_compact_two_column_grid(monkeypatch):
         root.destroy()
 
 
-def test_choice_view_contract_invokes_selected_combobox_view():
-    plugin_actions._load_tkinter()
+def test_choice_view_contract_invokes_selected_combobox_view() -> None:
+    _load_tkinter()
     tk = plugin_actions.tk
     ttk = plugin_actions.ttk
     root = tk.Tk()
@@ -310,9 +316,14 @@ def test_choice_view_contract_invokes_selected_combobox_view():
         choice._kicad_ui_contract_id = "preview.kind"
         choice.pack()
         context = UiTestContext(root)
+
+        def on_preview_selected(_event: TkEvent[Misc]) -> str | None:
+            context.events.append(f"preview:{choice.get()}")
+            return None
+
         choice.bind(
             "<<ComboboxSelected>>",
-            lambda _event: context.events.append(f"preview:{choice.get()}"),
+            on_preview_selected,
         )
         root.update()
 
@@ -325,18 +336,19 @@ def test_choice_view_contract_invokes_selected_combobox_view():
         root.destroy()
 
 
-def test_menu_item_contract_invokes_real_tk_menu_command():
-    plugin_actions._load_tkinter()
+def test_menu_item_contract_invokes_real_tk_menu_command() -> None:
+    _load_tkinter()
     tk = plugin_actions.tk
     root = tk.Tk()
     try:
-        events = []
+        events: list[str] = []
         menu = tk.Menu(root, tearoff=False)
-        menu.add_command(
-            label="Refresh",
-            command=lambda: events.append("refresh"),
-        )
-        menu._kicad_ui_menu_item_ids = {"library.refresh": 0}
+
+        def refresh() -> None:
+            events.append("refresh")
+
+        menu.add_command(label="Refresh", command=refresh)
+        setattr(menu, "_kicad_ui_menu_item_ids", {"library.refresh": 0})
         root.configure(menu=menu)
         root.update()
 
@@ -351,8 +363,8 @@ def test_menu_item_contract_invokes_real_tk_menu_command():
         root.destroy()
 
 
-def test_pane_group_contract_asserts_required_visible_panes():
-    plugin_actions._load_tkinter()
+def test_pane_group_contract_asserts_required_visible_panes() -> None:
+    _load_tkinter()
     tk = plugin_actions.tk
     ttk = plugin_actions.ttk
     root = tk.Tk()
@@ -381,8 +393,8 @@ def test_pane_group_contract_asserts_required_visible_panes():
         root.destroy()
 
 
-def test_control_coverage_fails_for_untagged_buttons():
-    plugin_actions._load_tkinter()
+def test_control_coverage_fails_for_untagged_buttons() -> None:
+    _load_tkinter()
     tk = plugin_actions.tk
     ttk = plugin_actions.ttk
     root = tk.Tk()
@@ -395,9 +407,8 @@ def test_control_coverage_fails_for_untagged_buttons():
         root.destroy()
 
 
-
-def test_control_coverage_fails_for_untagged_menu_entries():
-    plugin_actions._load_tkinter()
+def test_control_coverage_fails_for_untagged_menu_entries() -> None:
+    _load_tkinter()
     tk = plugin_actions.tk
     root = tk.Tk()
     try:

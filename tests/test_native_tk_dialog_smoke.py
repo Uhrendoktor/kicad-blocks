@@ -10,28 +10,46 @@ from __future__ import annotations
 import os
 import sys
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from typing import TYPE_CHECKING, TypedDict
 
 import pytest
 
-try:
-    import tkinter as tk
-    from tkinter import messagebox, simpledialog
-except ImportError:  # pragma: no cover - exercised by the skip guard below
-    tk = None
-    messagebox = None
-    simpledialog = None
+if TYPE_CHECKING:
+    from tkinter import Misc, TclError, Tk
+else:
+    try:
+        from tkinter import Misc, TclError, Tk
+    except ImportError:  # pragma: no cover - the headless interpreter has no Tk
+        Misc = object
+        Tk = None
+        TclError = Exception
+
+from importlib.util import find_spec
+
+_TK_AVAILABLE = find_spec("tkinter") is not None
 
 pytestmark = pytest.mark.skipif(
-    tk is None or (sys.platform == "linux" and not os.environ.get("DISPLAY")),
+    not _TK_AVAILABLE or (sys.platform == "linux" and not os.environ.get("DISPLAY")),
     reason="Real Tk dialog smoke tests require Tk and a display (run under xvfb-run).",
 )
 
 _DIALOG_TIMEOUT_SECONDS = 5.0
 
 
-def _create_parent():
-    root = tk.Tk()
+class _DialogOutcome(TypedDict, total=False):
+    """Captured properties and failures from one observed native Tk dialog."""
+
+    path: str
+    mapped: bool
+    geometry: str
+    transient_parent: str
+    callback_error: str
+    timeout: str
+
+
+def _create_parent() -> Misc:
+    root = Tk()
     root.title("KiCad Blocks native dialog smoke host")
     root.geometry("360x180+20+20")
     root.resizable(False, False)
@@ -40,28 +58,28 @@ def _create_parent():
     return root
 
 
-def _children(root, widget_path: str) -> list[str]:
-    return list(root.tk.splitlist(root.tk.call("winfo", "children", widget_path)))
+def _children(root: Misc, widget_path: str) -> list[str]:
+    return list(root.tk.splitlist(str(root.tk.call("winfo", "children", widget_path))))
 
 
-def _walk_widgets(root, widget_path: str):
+def _walk_widgets(root: Misc, widget_path: str) -> Iterator[str]:
     for child in _children(root, widget_path):
         yield child
         yield from _walk_widgets(root, child)
 
 
-def _find_dialog(root, title: str) -> str | None:
+def _find_dialog(root: Misc, title: str) -> str | None:
     for child in _children(root, root._w):
         try:
             if str(root.tk.call("wm", "title", child)) == title:
                 return child
-        except tk.TclError:
+        except TclError:
             continue
     return None
 
 
-def _button_labels(root, dialog_path: str) -> dict[str, str]:
-    buttons = {}
+def _button_labels(root: Misc, dialog_path: str) -> dict[str, str]:
+    buttons: dict[str, str] = {}
     for widget in _walk_widgets(root, dialog_path):
         try:
             widget_class = str(root.tk.call("winfo", "class", widget))
@@ -70,24 +88,24 @@ def _button_labels(root, dialog_path: str) -> dict[str, str]:
             label = str(root.tk.call(widget, "cget", "-text")).strip()
             if label:
                 buttons[label.casefold()] = widget
-        except tk.TclError:
+        except TclError:
             continue
     return buttons
 
 
-def _visible_text(root, dialog_path: str) -> list[str]:
-    values = []
+def _visible_text(root: Misc, dialog_path: str) -> list[str]:
+    values: list[str] = []
     for widget in _walk_widgets(root, dialog_path):
         try:
             value = str(root.tk.call(widget, "cget", "-text")).strip()
-        except tk.TclError:
+        except TclError:
             continue
         if value:
             values.append(value)
     return values
 
 
-def _dismiss_after_callback_error(root, dialog_path: str) -> None:
+def _dismiss_after_callback_error(root: Misc, dialog_path: str) -> None:
     """Avoid leaving a modal window open after recording a callback failure."""
     try:
         buttons = _button_labels(root, dialog_path)
@@ -96,17 +114,17 @@ def _dismiss_after_callback_error(root, dialog_path: str) -> None:
                 root.tk.call(buttons[label], "invoke")
                 return
         root.tk.call("destroy", dialog_path)
-    except tk.TclError:
+    except TclError:
         pass
 
 
 def _schedule_dialog_action(
-    root,
+    root: Misc,
     title: str,
     callback: Callable[[str], None],
-) -> dict[str, object]:
+) -> _DialogOutcome:
     """Observe a modal window once mapped, then interact with its real widgets."""
-    outcome: dict[str, object] = {}
+    outcome: _DialogOutcome = {}
     deadline = time.monotonic() + _DIALOG_TIMEOUT_SECONDS
 
     def poll() -> None:
@@ -118,18 +136,20 @@ def _schedule_dialog_action(
                 outcome["geometry"] = str(root.tk.call("wm", "geometry", dialog_path))
                 outcome["transient_parent"] = str(root.tk.call("wm", "transient", dialog_path))
                 callback(dialog_path)
-            except (tk.TclError, AssertionError, KeyError, TypeError, ValueError) as exc:
+            except (TclError, AssertionError, KeyError, TypeError, ValueError) as exc:
                 outcome["callback_error"] = f"{type(exc).__name__}: {exc}"
                 _dismiss_after_callback_error(root, dialog_path)
             return
 
         if time.monotonic() >= deadline:
-            outcome["timeout"] = f"Tk did not map dialog {title!r} within {_DIALOG_TIMEOUT_SECONDS:g}s."
+            outcome["timeout"] = (
+                f"Tk did not map dialog {title!r} within {_DIALOG_TIMEOUT_SECONDS:g}s."
+            )
             # Destroying the root also terminates Tk's nested modal wait, so the
             # outer assertion reports a timeout rather than hanging the runner.
             try:
                 root.destroy()
-            except tk.TclError:
+            except TclError:
                 pass
             return
         root.after(20, poll)
@@ -138,7 +158,7 @@ def _schedule_dialog_action(
     return outcome
 
 
-def _assert_dialog_window(root, outcome: dict[str, object]) -> str:
+def _assert_dialog_window(root: Misc, outcome: _DialogOutcome) -> str:
     assert "timeout" not in outcome, outcome.get("timeout")
     assert "callback_error" not in outcome, outcome.get("callback_error")
     dialog_path = outcome.get("path")
@@ -151,34 +171,35 @@ def _assert_dialog_window(root, outcome: dict[str, object]) -> str:
     return dialog_path
 
 
-def _invoke_button(root, dialog_path: str, label: str) -> None:
+def _invoke_button(root: Misc, dialog_path: str, label: str) -> None:
     buttons = _button_labels(root, dialog_path)
     button = buttons.get(label.casefold())
-    assert button is not None, f"Dialog {dialog_path!r} did not render a {label!r} button; found {sorted(buttons)}."
+    assert button is not None, (
+        f"Dialog {dialog_path!r} did not render a {label!r} button; found {sorted(buttons)}."
+    )
     root.tk.call(button, "invoke")
 
 
-def _destroy_parent(root) -> None:
+def _destroy_parent(root: Misc) -> None:
     try:
         if root.winfo_exists():
             root.destroy()
-    except tk.TclError:
+    except TclError:
         pass
 
 
-def test_real_showerror_dialog_renders_message_parent_and_ok_button():
+def test_real_showerror_dialog_renders_message_parent_and_ok_button() -> None:
+    from tkinter import messagebox
+
     root = _create_parent()
     title = "Native error dialog smoke"
     message = "The test operation failed and can be retried."
 
-    outcome = _schedule_dialog_action(
-        root,
-        title,
-        lambda dialog: (
-            _assert_message_dialog(root, dialog, message, {"ok"}),
-            _invoke_button(root, dialog, "OK"),
-        ),
-    )
+    def inspect_error_dialog(dialog: str) -> None:
+        _assert_message_dialog(root, dialog, message, {"ok"})
+        _invoke_button(root, dialog, "OK")
+
+    outcome = _schedule_dialog_action(root, title, inspect_error_dialog)
     try:
         result = messagebox.showerror(title, message, parent=root)
         _assert_dialog_window(root, outcome)
@@ -187,19 +208,18 @@ def test_real_showerror_dialog_renders_message_parent_and_ok_button():
         _destroy_parent(root)
 
 
-def test_real_askyesno_dialog_renders_both_choices_and_returns_yes():
+def test_real_askyesno_dialog_renders_both_choices_and_returns_yes() -> None:
+    from tkinter import messagebox
+
     root = _create_parent()
     title = "Native confirmation dialog smoke"
     message = "Apply the selected layout?"
 
-    outcome = _schedule_dialog_action(
-        root,
-        title,
-        lambda dialog: (
-            _assert_message_dialog(root, dialog, message, {"yes", "no"}),
-            _invoke_button(root, dialog, "Yes"),
-        ),
-    )
+    def inspect_confirmation_dialog(dialog: str) -> None:
+        _assert_message_dialog(root, dialog, message, {"yes", "no"})
+        _invoke_button(root, dialog, "Yes")
+
+    outcome = _schedule_dialog_action(root, title, inspect_confirmation_dialog)
     try:
         result = messagebox.askyesno(title, message, parent=root)
         _assert_dialog_window(root, outcome)
@@ -208,7 +228,9 @@ def test_real_askyesno_dialog_renders_both_choices_and_returns_yes():
         _destroy_parent(root)
 
 
-def test_real_askstring_dialog_renders_prompt_and_returns_entered_value():
+def test_real_askstring_dialog_renders_prompt_and_returns_entered_value() -> None:
+    from tkinter import simpledialog
+
     root = _create_parent()
     title = "Native text prompt smoke"
     prompt = "Enter a short block label."
@@ -234,7 +256,9 @@ def test_real_askstring_dialog_renders_prompt_and_returns_entered_value():
         _destroy_parent(root)
 
 
-def test_real_askstring_cancel_button_returns_none():
+def test_real_askstring_cancel_button_returns_none() -> None:
+    from tkinter import simpledialog
+
     root = _create_parent()
     title = "Native cancellable prompt smoke"
     prompt = "A value that will not be accepted."
@@ -253,7 +277,7 @@ def test_real_askstring_cancel_button_returns_none():
 
 
 def _assert_message_dialog(
-    root,
+    root: Misc,
     dialog_path: str,
     message: str,
     expected_buttons: set[str],

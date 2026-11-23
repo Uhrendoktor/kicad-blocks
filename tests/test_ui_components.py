@@ -108,6 +108,7 @@ def test_auto_hide_scrollbar_switches_between_idle_and_active_states():
     finally:
         root.destroy()
 
+
 def test_search_tooltip_appears_above_focused_field_without_covering_results():
     import tkinter as tk
     from tkinter import ttk
@@ -140,10 +141,7 @@ def test_search_tooltip_appears_above_focused_field_without_covering_results():
         search.event_generate("<FocusIn>")
         root.update()
 
-        tooltip = next(
-            child for child in search.winfo_children()
-            if isinstance(child, tk.Toplevel)
-        )
+        tooltip = next(child for child in search.winfo_children() if isinstance(child, tk.Toplevel))
         tooltip_top = tooltip.winfo_rooty()
         tooltip_bottom = tooltip_top + tooltip.winfo_height()
         search_top = search.winfo_rooty()

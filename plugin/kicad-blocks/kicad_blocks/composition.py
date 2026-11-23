@@ -6,9 +6,14 @@ import json
 import shutil
 import tempfile
 import uuid
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Protocol, cast
 
+if TYPE_CHECKING:
+    from kipy.geometry import Vector2
+
+from .manifest_types import BlockDependencyManifest
 from .model import (
     BlockPin,
     facade_pin_connection_points,
@@ -18,31 +23,92 @@ from .model import (
     sha256_file,
     transform_symbol_point_to_schematic,
 )
+from .report_types import BlockCompositionItem, BlockCompositionReport, BlockCompositionStepResult
 from .repository import (
     BlockRecord,
-    _dependency_path,
-    _record,
     atomic_write,
     list_blocks,
+    load_block_record,
     read_manifest,
     refresh_library_block,
     register_project_symbol_library,
+    resolve_dependency_path,
 )
 
 
+class _LabelWithSpinStyle(Protocol):
+    """KiCad label property surface omitted by the generated wrapper stub."""
+
+    spin_style: int
+
+
+class _LabelText(Protocol):
+    value: str
+
+
+class _LabelId(Protocol):
+    value: str
+
+
+class _GlobalLabel(Protocol):
+    """Generated KiCad global-label fields used by the composition routine."""
+
+    position: Vector2
+    text: _LabelText
+    id: _LabelId
+    shape: int
+
+
+class _LibraryIdentifier(Protocol):
+    library: str
+    name: str
+
+
+class _SymbolDefinition(Protocol):
+    id: _LibraryIdentifier
+
+
+class _SymbolTransform(Protocol):
+    orientation: int
+
+
+class _SchematicSymbolInstance(Protocol):
+    reference: str
+    definition: _SymbolDefinition
+    transform: _SymbolTransform
+
+
+class _SchematicSymbolPlacer(Protocol):
+    """Public KiCad schematic placement API exposed by the Python bindings."""
+
+    def place_symbol_from_library(
+        self,
+        lib_id: str,
+        position: Vector2,
+        orientation: int | None = None,
+        reference: str | None = None,
+    ) -> _SchematicSymbolInstance: ...
+
+
+class _SchematicItemWriter(Protocol):
+    """Typed item-creation boundary for generated KiCad wrapper objects."""
+
+    def create_items(self, items: list[_GlobalLabel]) -> None: ...
+
+
 def _child_record(
-    parent: BlockRecord, dependency: dict[str, Any], records: dict[str, BlockRecord]
+    parent: BlockRecord, dependency: BlockDependencyManifest, records: dict[str, BlockRecord]
 ) -> BlockRecord:
     block_id = str(dependency.get("block_id", ""))
     child = records.get(block_id)
     if child is not None:
         return child
-    path = _dependency_path(parent.path, parent.manifest, dependency)
+    path = resolve_dependency_path(parent.path, parent.manifest, dependency)
     if path is None or not path.is_dir():
         raise FileNotFoundError(
             f"Nested block {dependency.get('name', block_id)!r} ({block_id}) was not found."
         )
-    child = _record(path)
+    child = load_block_record(path)
     if child.manifest["block_id"] != block_id:
         raise ValueError(f"Nested dependency path for {block_id} resolves to another block.")
     records[block_id] = child
@@ -60,7 +126,7 @@ def _pin_records(record: BlockRecord) -> list[BlockPin]:
     ]
 
 
-def _point_key(position) -> tuple[int, int]:
+def _point_key(position: Vector2) -> tuple[int, int]:
     return int(position.x), int(position.y)
 
 
@@ -82,15 +148,13 @@ def _refresh_local_revision(record: BlockRecord) -> None:
 
 def _compose_direct_children(
     parent: BlockRecord,
-    dependencies: list[tuple[dict[str, Any], BlockRecord]],
+    dependencies: list[tuple[BlockDependencyManifest, BlockRecord]],
     kicad_cli: str,
-) -> dict[str, Any]:
+) -> BlockCompositionStepResult:
     if not dependencies:
         return {"placed": [], "labels": 0}
 
-    backup_dir = Path(
-        tempfile.mkdtemp(prefix=".kicad-block-compose-backup-", dir=parent.path)
-    )
+    backup_dir = Path(tempfile.mkdtemp(prefix=".kicad-block-compose-backup-", dir=parent.path))
     schematic_path = parent.implementation
     table_path = parent.path / "sym-lib-table"
     shutil.copy2(schematic_path, backup_dir / schematic_path.name)
@@ -103,7 +167,7 @@ def _compose_direct_children(
     try:
         from kipy import KiCad
         from kipy.geometry import Vector2
-        from kipy.schematic import GlobalLabel
+        from kipy.schematic_types import GlobalLabel
 
         for _, child in dependencies:
             register_project_symbol_library(
@@ -122,20 +186,18 @@ def _compose_direct_children(
             timeout_ms=30000,
         )
         schematic = kicad.get_schematic()
-        if schematic is None:
-            raise RuntimeError(f"KiCad could not load block implementation {schematic_path}.")
-        kicad.load_all_libraries(types=[1])
-        kicad.wait_for_libraries(types=[1], timeout_s=120.0)
+        kicad.load_all_libraries()
+        kicad.wait_for_libraries(timeout_s=120.0)
 
-        symbols_by_reference = {
-            item.reference: item for item in schematic.get_symbols()
+        symbols_by_reference: dict[str, _SchematicSymbolInstance] = {
+            item.reference: item
+            for item in cast(Sequence[_SchematicSymbolInstance], schematic.get_symbols())
         }
-        labels_by_position = {
-            _point_key(item.position): item
-            for item in schematic.get_labels()
-            if hasattr(item, "position") and hasattr(item, "text")
+        known_labels = cast(list[_GlobalLabel], schematic.get_labels())
+        labels_by_position: dict[tuple[int, int], _GlobalLabel] = {
+            _point_key(item.position): item for item in known_labels
         }
-        new_labels = []
+        new_labels: list[_GlobalLabel] = []
         placed: list[str] = []
         for dependency, child in dependencies:
             reference = str(dependency.get("reference") or "B1")
@@ -146,10 +208,7 @@ def _compose_direct_children(
             existing = symbols_by_reference.get(reference)
             if existing is not None:
                 lib_id = existing.definition.id
-                if (
-                    lib_id.library != nickname
-                    or lib_id.name != symbol_name
-                ):
+                if lib_id.library != nickname or lib_id.name != symbol_name:
                     raise ValueError(
                         f"Reference {reference!r} already belongs to another symbol in "
                         f"{parent.name!r}; refusing to replace it."
@@ -165,7 +224,7 @@ def _compose_direct_children(
                 position = dependency.get("position_mm", [100.0, 160.0])
                 if len(position) != 2:
                     raise ValueError(f"Invalid position for nested instance {reference!r}.")
-                existing = schematic.place_symbol_from_library(
+                existing = cast(_SchematicSymbolPlacer, schematic).place_symbol_from_library(
                     f"{nickname}:{symbol_name}",
                     Vector2.from_xy_mm(float(position[0]), float(position[1])),
                     orientation=orientation,
@@ -204,10 +263,10 @@ def _compose_direct_children(
                             f"by net {current_text!r}, not {net_name!r}."
                         )
                     continue
-                label = GlobalLabel()
+                label = cast(_GlobalLabel, GlobalLabel())
                 label.position = point
                 label.text.value = net_name
-                label.spin_style = spin_style
+                cast(_LabelWithSpinStyle, label).spin_style = spin_style
                 new_labels.append(label)
                 labels_by_position[key] = label
 
@@ -218,20 +277,19 @@ def _compose_direct_children(
                 label.id.value = str(uuid.uuid4())
                 label.shape = 5  # SLSH_PASSIVE
             try:
-                schematic.create_items(new_labels)
+                # KiCad's generated IPC stub does not currently expose the
+                # concrete generated message type for GlobalLabel.
+                cast(_SchematicItemWriter, schematic).create_items(new_labels)
             except AttributeError as exc:
                 # Some KiCad development builds have returned a CreateItem
-                # result with no packed Any payload even though the object
+                # result without a packed payload even though the object
                 # was applied to the document. Verify document state before
                 # deciding whether this was a harmless response issue.
                 if "type_url" not in str(exc):
                     raise
                 actual_labels = [
-                    (
-                        str(getattr(item.text, "value", "")),
-                        _point_key(item.position),
-                    )
-                    for item in schematic.get_labels()
+                    (str(item.text.value), _point_key(item.position))
+                    for item in cast(list[_GlobalLabel], schematic.get_labels())
                 ]
                 missing_labels = [
                     (str(label.text.value), _point_key(label.position))
@@ -239,7 +297,8 @@ def _compose_direct_children(
                     if (
                         str(label.text.value),
                         _point_key(label.position),
-                    ) not in actual_labels
+                    )
+                    not in actual_labels
                 ]
                 if missing_labels:
                     raise RuntimeError(
@@ -269,7 +328,7 @@ def compose_block_implementation(
     block: BlockRecord,
     library_root: Path,
     kicad_cli: str | Path,
-) -> dict[str, Any]:
+) -> BlockCompositionReport:
     """Recursively compose dependency facade instances into parent implementations."""
     root = Path(library_root).expanduser().resolve()
     cli = str(kicad_cli)
@@ -277,7 +336,7 @@ def compose_block_implementation(
     records[block.manifest["block_id"]] = block
     visiting: set[str] = set()
     completed: set[str] = set()
-    reports: list[dict[str, Any]] = []
+    reports: list[BlockCompositionItem] = []
 
     def compose(current: BlockRecord) -> None:
         block_id = current.manifest["block_id"]
@@ -287,7 +346,7 @@ def compose_block_implementation(
             return
         visiting.add(block_id)
         current_manifest = read_manifest(current.path)
-        direct: list[tuple[dict[str, Any], BlockRecord]] = []
+        direct: list[tuple[BlockDependencyManifest, BlockRecord]] = []
         for dependency in current_manifest.get("dependencies", []):
             child = _child_record(current, dependency, records)
             pinned_revision = dependency.get("revision")
@@ -301,10 +360,10 @@ def compose_block_implementation(
 
         if direct:
             refreshed_manifest = read_manifest(current.path)
-            revised_dependencies = []
+            revised_dependencies: list[BlockDependencyManifest] = []
             for dependency in refreshed_manifest.get("dependencies", []):
                 child = _child_record(current, dependency, records)
-                revised = dict(dependency)
+                revised = cast(BlockDependencyManifest, dict(dependency))
                 revised["revision"] = read_manifest(child.path).get("revision")
                 revised_dependencies.append(revised)
             if revised_dependencies != refreshed_manifest.get("dependencies", []):

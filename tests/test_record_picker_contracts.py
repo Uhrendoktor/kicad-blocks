@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import os
 import sys
+from collections.abc import Callable, Sequence
 from pathlib import Path
+from typing import cast
 
 import pytest
 
@@ -14,10 +16,14 @@ sys.path.insert(0, str(ROOT / "tests"))
 
 from kicad_blocks import plugin as plugin_actions
 from kicad_blocks.model import parse_pins
-from kicad_blocks.repository import create_block
+from kicad_blocks.repository import BlockRecord, create_block
 from ui_contracts import (
     ButtonContract,
     EntryInputContract,
+    Misc,
+    MonkeyPatch,
+    Tk,
+    Toplevel,
     UiTestContext,
     assert_control_coverage,
 )
@@ -39,9 +45,13 @@ RECORD_PICKER_CONTROLS = {
 }
 
 
-def _new_root(monkeypatch):
-    plugin_actions._load_tkinter()
-    monkeypatch.setattr(plugin_actions, "_create_action_icon", lambda *_args: None)
+def _new_root(monkeypatch: MonkeyPatch) -> tuple[Tk, UiTestContext]:
+    plugin_actions.load_tkinter()
+
+    def no_icon(_parent: Misc, _name: str, _stroke_color: str | None = None) -> None:
+        return None
+
+    monkeypatch.setattr(plugin_actions, "_create_action_icon", no_icon)
     root = plugin_actions.tk.Tk()
     root.title("Record picker UI contract host")
     root.geometry("1100x760")
@@ -49,7 +59,7 @@ def _new_root(monkeypatch):
     return root, UiTestContext(root)
 
 
-def _make_records(tmp_path: Path):
+def _make_records(tmp_path: Path) -> tuple[BlockRecord, BlockRecord, BlockRecord]:
     library = tmp_path / "shared-library"
     library.mkdir()
     first = create_block(
@@ -73,23 +83,28 @@ def _make_records(tmp_path: Path):
     return first, second, third
 
 
-def _find_dialog(root):
+def _find_dialog(root: Tk) -> Toplevel:
     return next(
-        child
+        cast(Toplevel, child)
         for child in root.winfo_children()
-        if child.winfo_class() == "Toplevel" and child.title() == WINDOW_TITLE
+        if child.winfo_class() == "Toplevel" and cast(Toplevel, child).title() == WINDOW_TITLE
     )
 
 
-def _run_picker(root, context, records, action):
-    callback_errors = []
+def _run_picker(
+    root: Tk,
+    context: UiTestContext,
+    records: Sequence[BlockRecord],
+    action: Callable[[Toplevel], None],
+) -> BlockRecord | None:
+    callback_errors: list[Exception] = []
 
-    def drive():
-        dialog = None
+    def drive() -> None:
+        dialog: Toplevel | None = None
         try:
             dialog = _find_dialog(root)
             assert dialog.winfo_viewable()
-            assert dialog._kicad_ui_screen_id == "record-picker"
+            assert getattr(dialog, "_kicad_ui_screen_id", None) == "record-picker"
             context.refresh_widgets()
             assert_control_coverage(dialog, RECORD_PICKER_CONTROLS)
             action(dialog)
@@ -108,13 +123,13 @@ def _run_picker(root, context, records, action):
                 dialog.destroy()
 
     root.after(100, drive)
-    result = plugin_actions._pick_record(records, root, WINDOW_TITLE)
+    result = plugin_actions.pick_record(list(records), root, WINDOW_TITLE)
     if callback_errors:
         raise callback_errors[0]
     return result
 
 
-def _click(context, contract_id: str, label: str, *, closes: bool = False):
+def _click(context: UiTestContext, contract_id: str, label: str, *, closes: bool = False) -> None:
     ButtonContract(
         contract_id=contract_id,
         expected_action=None,
@@ -125,24 +140,26 @@ def _click(context, contract_id: str, label: str, *, closes: bool = False):
     context.refresh_widgets()
 
 
-def _assert_initial_state(context):
+def _assert_initial_state(context: UiTestContext) -> None:
     widgets = context.refresh_widgets()
-    tree = widgets["record-picker.results"]
+    tree = context.require_treeview("record-picker.results")
     assert len(tree.get_children()) == 3
     assert widgets["record-picker.count"].cget("text") == "3 of 3 blocks"
     assert tree.item(tree.selection()[0], "values")[0] == "Buck Regulator"
     assert widgets["record-picker.description"].cget("text") == (
         "Synchronous regulator and power conversion stage."
     )
-    assert widgets["record-picker.action.select"].instate(["!disabled"])
-    assert widgets["record-picker.action.cancel"].instate(["!disabled"])
+    assert context.require_button("record-picker.action.select").instate(["!disabled"])
+    assert context.require_button("record-picker.action.cancel").instate(["!disabled"])
 
 
-def test_record_picker_filters_and_selects_the_matching_record(monkeypatch, tmp_path):
+def test_record_picker_filters_and_selects_the_matching_record(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+):
     records = _make_records(tmp_path)
     root, context = _new_root(monkeypatch)
 
-    def filter_and_select(_dialog):
+    def filter_and_select(_dialog: Toplevel) -> None:
         _assert_initial_state(context)
         EntryInputContract(
             contract_id="record-picker.search",
@@ -152,10 +169,13 @@ def test_record_picker_filters_and_selects_the_matching_record(monkeypatch, tmp_
             summary_contract_id="record-picker.count",
             expected_summary="1 of 3 blocks",
         ).run(context)
-        assert context.require_widget("record-picker.results").item(
-            context.require_widget("record-picker.results").get_children()[0],
-            "values",
-        )[0] == "USB Interface"
+        assert (
+            context.require_treeview("record-picker.results").item(
+                context.require_treeview("record-picker.results").get_children()[0],
+                "values",
+            )[0]
+            == "USB Interface"
+        )
         assert context.require_widget("record-picker.description").cget("text") == (
             "USB host interface and protection circuit."
         )
@@ -174,27 +194,27 @@ def test_record_picker_filters_and_selects_the_matching_record(monkeypatch, tmp_
 
 
 def test_record_picker_empty_search_disables_select_and_cancel_returns_none(
-    monkeypatch, tmp_path
+    monkeypatch: MonkeyPatch, tmp_path: Path
 ):
     records = _make_records(tmp_path)
     root, context = _new_root(monkeypatch)
 
-    def no_match_then_cancel(_dialog):
+    def no_match_then_cancel(_dialog: Toplevel) -> None:
         _assert_initial_state(context)
-        search = context.require_widget("record-picker.search")
+        search = context.require_entry("record-picker.search")
         search.delete(0, "end")
         search.insert(0, "not-a-real-block")
         root.update_idletasks()
         root.update()
 
-        tree = context.require_widget("record-picker.results")
+        tree = context.require_treeview("record-picker.results")
         assert tree.get_children() == ()
         assert context.require_widget("record-picker.count").cget("text") == "0 of 3 blocks"
         assert context.require_widget("record-picker.description").cget("text") == (
             "No matching blocks."
         )
-        assert context.require_widget("record-picker.action.select").instate(["disabled"])
-        assert context.require_widget("record-picker.action.cancel").instate(["!disabled"])
+        assert context.require_button("record-picker.action.select").instate(["disabled"])
+        assert context.require_button("record-picker.action.cancel").instate(["!disabled"])
 
         _click(
             context,
@@ -210,17 +230,19 @@ def test_record_picker_empty_search_disables_select_and_cancel_returns_none(
         root.destroy()
 
 
-def test_record_picker_down_and_return_choose_the_highlighted_record(monkeypatch, tmp_path):
+def test_record_picker_down_and_return_choose_the_highlighted_record(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+):
     records = _make_records(tmp_path)
     root, context = _new_root(monkeypatch)
 
-    def choose_with_keyboard(_dialog):
+    def choose_with_keyboard(_dialog: Toplevel) -> None:
         _assert_initial_state(context)
-        search = context.require_widget("record-picker.search")
+        search = context.require_entry("record-picker.search")
         search.event_generate("<Down>")
         root.update_idletasks()
         root.update()
-        tree = context.require_widget("record-picker.results")
+        tree = context.require_treeview("record-picker.results")
         assert root.focus_get() is tree
         assert tree.selection()
         tree.event_generate("<Return>")
@@ -235,26 +257,28 @@ def test_record_picker_down_and_return_choose_the_highlighted_record(monkeypatch
         root.destroy()
 
 
-def _find_dialog_exists(root) -> bool:
+def _find_dialog_exists(root: Tk) -> bool:
     return any(
         child.winfo_class() == "Toplevel" and child.title() == WINDOW_TITLE
         for child in root.winfo_children()
     )
 
 
-def test_record_picker_double_click_selects_the_clicked_record(monkeypatch, tmp_path):
+def test_record_picker_double_click_selects_the_clicked_record(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+):
     records = _make_records(tmp_path)
     root, context = _new_root(monkeypatch)
 
-    def double_click_target(_dialog):
+    def double_click_target(_dialog: Toplevel) -> None:
         _assert_initial_state(context)
-        tree = context.require_widget("record-picker.results")
+        tree = context.require_treeview("record-picker.results")
         row_id = next(
-            iid
-            for iid in tree.get_children()
-            if tree.item(iid, "values")[0] == "USB Interface"
+            iid for iid in tree.get_children() if tree.item(iid, "values")[0] == "USB Interface"
         )
-        x, y, width, height = tree.bbox(row_id)
+        bounds = tree.bbox(row_id)
+        assert isinstance(bounds, tuple)
+        x, y, width, height = bounds
         click_x = x + min(10, width // 2)
         click_y = y + height // 2
         # Tk recognizes a double click from two presses within its
@@ -295,15 +319,15 @@ def test_record_picker_double_click_selects_the_clicked_record(monkeypatch, tmp_
         root.destroy()
 
 
-def test_record_picker_empty_and_single_record_fast_paths(monkeypatch, tmp_path):
+def test_record_picker_empty_and_single_record_fast_paths(monkeypatch: MonkeyPatch, tmp_path: Path):
     first, _second, _third = _make_records(tmp_path)
     root, _context = _new_root(monkeypatch)
     try:
         with pytest.raises(ValueError, match="No blocks were found"):
-            plugin_actions._pick_record([], root, WINDOW_TITLE)
+            plugin_actions.pick_record([], root, WINDOW_TITLE)
         assert not _find_dialog_exists(root)
 
-        chosen = plugin_actions._pick_record([first], root, WINDOW_TITLE)
+        chosen = plugin_actions.pick_record([first], root, WINDOW_TITLE)
         assert chosen is first
         assert not _find_dialog_exists(root)
     finally:

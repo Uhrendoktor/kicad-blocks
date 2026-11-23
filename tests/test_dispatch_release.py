@@ -7,6 +7,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from scripts.github_api_types import GitHubApiResponse, JSONObject
+
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "dispatch_release.py"
 SPEC = importlib.util.spec_from_file_location("dispatch_release", SCRIPT)
 if SPEC is None or SPEC.loader is None:
@@ -22,9 +24,14 @@ ARCHIVE = "kicad-blocks-1.1.0-linux-x86_64.zip"
 
 class DispatchReleaseTests(unittest.TestCase):
     def test_dispatches_release_workflow_when_release_is_not_published(self):
-        calls = []
+        calls: list[tuple[str, str, JSONObject | None]] = []
 
-        def fake_request(method, url, _token, payload=None):
+        def fake_request(
+            method: str,
+            url: str,
+            _token: str,
+            payload: JSONObject | None = None,
+        ) -> GitHubApiResponse | None:
             calls.append((method, url, payload))
             if method == "GET":
                 return None
@@ -34,13 +41,16 @@ class DispatchReleaseTests(unittest.TestCase):
             result = dispatcher.dispatch_release("owner/repo", TAG, SHA, VERSION, "token")
         self.assertTrue(result)
         self.assertEqual(len(calls), 2)
-        self.assertEqual(calls[1][2], {
-            "ref": "main",
-            "inputs": {"tag": TAG, "source_sha": SHA},
-        })
+        self.assertEqual(
+            calls[1][2],
+            {
+                "ref": "main",
+                "inputs": {"tag": TAG, "source_sha": SHA},
+            },
+        )
 
     def test_does_not_dispatch_when_both_release_assets_exist(self):
-        release = {
+        release: GitHubApiResponse = {
             "tag_name": TAG,
             "draft": False,
             "prerelease": False,

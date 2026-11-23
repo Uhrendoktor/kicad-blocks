@@ -158,7 +158,7 @@
       "title": "Functional Block Library",
       "purpose": "Search registered block libraries, inspect facade and schematic previews, choose implementations, configure a block, and start placement.",
       "coverage": "contracted",
-      "coverage_note": "Every browser control and chooser route has a real-widget contract. Direct Publish is tested, selection-dependent actions disable when no row is selected, and placement/publish feedback is inline. The facade pin-layout editor is separately tested for immediate project-catalog persistence and concurrent-edit protection.",
+      "coverage_note": "Every browser control and chooser route has a real-widget contract. Direct Publish is tested, selection-dependent actions disable when no row is selected, and placement/publish feedback is inline. Edit Facade validates the selected project-catalog entry and reports that KiCad currently exposes no supported GUI IPC operation to open/select it in Symbol Editor; the action makes no pin-geometry changes and uses no global-input or OS-specific fallback.",
       "evidence": [
         "tests/test_library_browser_contracts.py",
         "tests/test_library_picker_gui.py",
@@ -170,7 +170,6 @@
         "Inspect facade and implementation schematic previews",
         "Insert a selected facade at the active sheet's page center, then focus, select, and save it through schematic IPC",
         "Open the selected block's implementation",
-        "Edit selected facade pin geometry in the portable Facade Pin Layout editor",
         "Publish implementation/facade edits and refresh compatible instances",
         "Manage variants, PCB layouts, and libraries"
       ],
@@ -319,79 +318,23 @@
     },
     {
       "id": "facade-editor",
-      "title": "Facade pin layout editor",
-      "purpose": "Adjust the external pin positions, angles, and lengths of a selected block facade. Pin names, numbers, and electrical types remain derived from the implementation's hierarchical-label interface.",
-      "coverage": "contracted",
-      "coverage_note": "The real Tk editor, selected-pin table, geometry fields, immediate catalog write, project-library reload, optimistic concurrency guard, invalid-value recovery, and Close action are covered by interaction and file-format contracts. The capture uses the production editor widget tree in light and dark themes.",
+      "title": "Edit Facade — native Symbol Editor handoff",
+      "purpose": "Open the selected generated library symbol in KiCad's native Symbol Editor for artwork and pin-geometry editing.",
+      "coverage": "partial",
+      "coverage_note": "Edit Facade validates the selected project-catalog symbol and reports that the current KiCad public GUI IPC does not expose an operation to open Symbol Editor and select that exact library entry. The action does not edit pin geometry or modify the project catalog. The former in-process pin-layout window code was unreachable after this guard and has been removed. No RunAction, global keyboard injection, or OS-specific window automation is used.",
       "functionality": [
-        "View every facade pin with its current number and electrical type",
-        "Edit the selected pin's X/Y position, orientation, and length",
-        "Persist each accepted geometry change immediately to the project catalog",
-        "Reload the project KBlocks library and publish the facade through the normal revision/conflict workflow"
-      ],
-      "controls": [
-        {
-          "contract_id": "facade-editor.window",
-          "type": "window",
-          "label": "Facade pin layout editor",
-          "assertion": "asserted"
-        },
-        {
-          "contract_id": "facade-editor.pins",
-          "type": "treeview",
-          "label": "Facade pin list",
-          "assertion": "asserted"
-        },
-        {
-          "contract_id": "facade-editor.x",
-          "type": "entry",
-          "label": "Pin X coordinate",
-          "assertion": "asserted"
-        },
-        {
-          "contract_id": "facade-editor.y",
-          "type": "entry",
-          "label": "Pin Y coordinate",
-          "assertion": "asserted"
-        },
-        {
-          "contract_id": "facade-editor.angle",
-          "type": "entry",
-          "label": "Pin orientation",
-          "assertion": "asserted"
-        },
-        {
-          "contract_id": "facade-editor.length",
-          "type": "entry",
-          "label": "Pin length",
-          "assertion": "asserted"
-        },
-        {
-          "contract_id": "facade-editor.action.apply",
-          "type": "button",
-          "label": "Apply pin geometry",
-          "assertion": "asserted"
-        },
-        {
-          "contract_id": "facade-editor.action.close",
-          "type": "button",
-          "label": "Close",
-          "assertion": "asserted"
-        },
-        {
-          "contract_id": "facade-editor.status",
-          "type": "status-label",
-          "label": "Immediate save/reload and conflict status",
-          "assertion": "observed"
-        }
+        "Validate that the selected symbol exists exactly once in the project-local KBlocks catalog",
+        "Report the missing public KiCad GUI IPC handoff needed to open Symbol Editor and select the exact library entry",
+        "Preserve the project catalog and shared library unchanged when the editor handoff is unavailable"
       ],
       "evidence": [
         "tests/test_library_browser_contracts.py",
-        "tests/test_editor_workflow.py"
+        "tests/test_plugin_registration.py",
+        "tests/capture_visual_docs.py"
       ],
       "screenshots": [
-        "facade-editor-light.png",
-        "facade-editor-dark.png"
+        "facade-handoff-unavailable-light.png",
+        "facade-handoff-unavailable-dark.png"
       ]
     },
     {
@@ -1104,7 +1047,7 @@
       "title": "Error, confirmation, and report dialogs",
       "purpose": "Explain blocked operations, recoverable errors, destructive confirmations, and completed reports.",
       "coverage": "partial",
-      "coverage_note": "The production plugin has 49 native messagebox/simpledialog call sites. The AST-generated registry links all 49 call sites to direct result/effect tests (49 tested, 0 partial, 0 uncovered). In addition, `tests/test_native_tk_dialog_smoke.py` opens real Tk `showerror`, `askyesno`, and `askstring` windows under Xvfb, checks their displayed text, buttons, mapped state and parent/transient relationship, and exercises accept/cancel results. This closes the basic Linux Tk dialog-rendering smoke gap, but does not claim each call site's native window layout or cross-platform Windows/macOS focus, ownership, or button presentation has been reviewed; this screen remains partial.",
+      "coverage_note": "The production plugin has 54 native messagebox/simpledialog call sites. The AST-generated registry links all 54 call sites to direct result/effect tests (54 tested, 0 partial, 0 uncovered). In addition, `tests/test_native_tk_dialog_smoke.py` opens real Tk `showerror`, `askyesno`, and `askstring` windows under Xvfb, checks their displayed text, buttons, mapped state and parent/transient relationship, and exercises accept/cancel results. This closes the basic Linux Tk dialog-rendering smoke gap, but does not claim each call site's native window layout or cross-platform Windows/macOS focus, ownership, or button presentation has been reviewed; this screen remains partial.",
       "evidence": [
         "scripts/dialog_callsite_inventory.py",
         "tests/dialog_callsite_catalog.json",

@@ -17,7 +17,7 @@ from kicad_blocks.model import (
     parse_pins,
     resolve_profile_configuration,
 )
-from kicad_blocks.plugin import _parse_profile_parameter_overrides
+from kicad_blocks.plugin import parse_profile_parameter_overrides
 from kicad_blocks.repository import (
     create_block,
     make_local_copy,
@@ -116,15 +116,15 @@ class BlockProfileTests(unittest.TestCase):
             "OUTPUT_VOLTAGE:number=3.3, ENABLE:boolean=true, PHASES:integer=2"
         )
         self.assertEqual(
-            _parse_profile_parameter_overrides(
+            parse_profile_parameter_overrides(
                 "OUTPUT_VOLTAGE=1.8, ENABLE=no, PHASES=1", parameters
             ),
             {"OUTPUT_VOLTAGE": "1.8", "ENABLE": "false", "PHASES": "1"},
         )
         with self.assertRaisesRegex(ValueError, "Unknown profile parameter"):
-            _parse_profile_parameter_overrides("MISSING=1", parameters)
+            parse_profile_parameter_overrides("MISSING=1", parameters)
         with self.assertRaisesRegex(ValueError, "entered more than once"):
-            _parse_profile_parameter_overrides("PHASES=1, PHASES=2", parameters)
+            parse_profile_parameter_overrides("PHASES=1, PHASES=2", parameters)
 
     def test_profile_definitions_are_validated_against_block_declarations(self):
         with self.assertRaisesRegex(ValueError, "declared implementation variant"):
@@ -172,7 +172,10 @@ class BlockProfileTests(unittest.TestCase):
             local_manifest["profiles"][1]["description"],
             "Upstream profile update.",
         )
-        self.assertEqual(local_manifest["base_profiles"], local_manifest["profiles"])
+        base_profiles = local_manifest.get("base_profiles")
+        self.assertIsNotNone(base_profiles)
+        assert base_profiles is not None
+        self.assertEqual(base_profiles, local_manifest["profiles"])
 
         local_manifest["profiles"][1]["parameters"]["OUTPUT_VOLTAGE"] = "1.5"
         (local.path / "manifest.json").write_text(
@@ -185,10 +188,10 @@ class BlockProfileTests(unittest.TestCase):
             read_manifest(source.path)["profiles"][1]["parameters"]["OUTPUT_VOLTAGE"],
             "1.5",
         )
-        self.assertEqual(
-            read_manifest(local.path)["base_profiles"],
-            read_manifest(source.path)["profiles"],
-        )
+        synchronized_profiles = read_manifest(local.path).get("base_profiles")
+        self.assertIsNotNone(synchronized_profiles)
+        assert synchronized_profiles is not None
+        self.assertEqual(synchronized_profiles, read_manifest(source.path)["profiles"])
 
     def test_divergent_profile_changes_are_rejected_without_overwrite(self):
         source = self.create_profile_block()

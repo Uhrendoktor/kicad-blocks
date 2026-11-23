@@ -7,7 +7,7 @@ import ast
 import json
 import sys
 from pathlib import Path
-from typing import Any
+from typing import TypedDict, cast
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE_PATH = ROOT / "plugin" / "kicad-blocks" / "kicad_blocks" / "plugin.py"
@@ -29,6 +29,45 @@ COVERAGE_LABELS = {
     "uncovered": "No direct native-dialog path contract exists yet",
 }
 
+_CATALOG_OBJECT_ERROR = "Native dialog catalog must be a JSON object."
+_CATALOG_VERSION_ERROR = "Unsupported native dialog catalog schema_version."
+_CALL_SITES_LIST_ERROR = "Native dialog catalog call_sites must be a list."
+_CALL_SITE_RECORD_ERROR = "Native dialog catalog entries must be JSON objects."
+_CALL_SITE_IDS_ERROR = "Native dialog call-site IDs must be unique."
+_CATALOG_SOURCE_ERROR = "Native dialog catalog differs from plugin.py call sites."
+
+
+class DialogCallSite(TypedDict):
+    """One native-dialog call discovered from the production plugin AST."""
+
+    id: str
+    owner: str
+    method: str
+    line: int
+
+
+class DialogCatalogEntry(TypedDict):
+    """Coverage evidence and rationale for one dialog call site."""
+
+    id: str
+    owner: str
+    method: str
+    line: int
+    coverage: str
+    evidence: list[str]
+    rationale: str
+
+
+class DialogCatalog(TypedDict):
+    """Typed top-level structure of the committed native-dialog catalog."""
+
+    schema_version: int
+    source: str
+    call_sites: list[DialogCatalogEntry]
+
+
+type JsonValue = str | int | float | bool | None | list[JsonValue] | dict[str, JsonValue]
+
 
 def _dotted_name(node: ast.AST) -> str:
     if isinstance(node, ast.Name):
@@ -42,7 +81,7 @@ class DialogCallVisitor(ast.NodeVisitor):
     def __init__(self) -> None:
         self.function_stack: list[str] = []
         self.counts: dict[tuple[str, str], int] = {}
-        self.calls: list[dict[str, Any]] = []
+        self.calls: list[DialogCallSite] = []
 
     def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
         for decorator in node.decorator_list:
@@ -82,55 +121,84 @@ class DialogCallVisitor(ast.NodeVisitor):
         self.generic_visit(node)
 
 
-def discover_dialog_calls(source_path: Path = SOURCE_PATH) -> list[dict[str, Any]]:
+def discover_dialog_calls(source_path: Path = SOURCE_PATH) -> list[DialogCallSite]:
     tree = ast.parse(source_path.read_text(encoding="utf-8"), filename=str(source_path))
     visitor = DialogCallVisitor()
     visitor.visit(tree)
     return sorted(visitor.calls, key=lambda item: item["line"])
 
 
-def load_catalog(path: Path = CATALOG_PATH) -> dict[str, Any]:
-    catalog = json.loads(path.read_text(encoding="utf-8"))
-    if catalog.get("schema_version") != 1:
-        raise ValueError("Unsupported native dialog catalog schema_version.")
-    calls = catalog.get("call_sites")
-    if not isinstance(calls, list):
-        raise ValueError("Native dialog catalog call_sites must be a list.")
+def _read_catalog(path: Path) -> DialogCatalog:
+    loaded = cast(JsonValue, json.loads(path.read_text(encoding="utf-8")))
+    if not isinstance(loaded, dict):
+        raise TypeError(_CATALOG_OBJECT_ERROR)
+    catalog_data = cast(dict[str, JsonValue], loaded)
+    if catalog_data.get("schema_version") != 1:
+        raise ValueError(_CATALOG_VERSION_ERROR)
+    raw_calls = catalog_data.get("call_sites")
+    if not isinstance(raw_calls, list):
+        raise TypeError(_CALL_SITES_LIST_ERROR)
+    if any(not isinstance(item, dict) for item in raw_calls):
+        raise TypeError(_CALL_SITE_RECORD_ERROR)
+    return cast("DialogCatalog", loaded)
+
+
+def _catalog_calls(catalog: DialogCatalog) -> list[DialogCatalogEntry]:
+    return catalog["call_sites"]
+
+
+def _validate_catalog_entry(item: DialogCatalogEntry) -> None:
+    if not item.get("owner") or item.get("method") not in DIALOG_METHODS:
+        message = f"Invalid native dialog call-site record: {item!r}"
+        raise ValueError(message)
+    if not str(item.get("rationale", "")).strip():
+        message = f"Dialog call site {item['id']!r} needs a rationale."
+        raise ValueError(message)
+    evidence = item.get("evidence", [])
+    for path in evidence:
+        if not (ROOT / path).is_file():
+            message = f"Dialog call site {item['id']!r} references missing evidence {path!r}."
+            raise ValueError(message)
+    if item["coverage"] == "tested" and not evidence:
+        message = f"Tested dialog call site {item['id']!r} needs test evidence."
+        raise ValueError(message)
+
+
+def _validate_catalog_entries(calls: list[DialogCatalogEntry]) -> None:
     ids = [item.get("id") for item in calls]
     if len(ids) != len(set(ids)):
-        raise ValueError("Native dialog call-site IDs must be unique.")
+        raise ValueError(_CALL_SITE_IDS_ERROR)
     invalid = sorted({item.get("coverage") for item in calls} - set(COVERAGE_LABELS))
     if invalid:
-        raise ValueError(f"Unknown dialog call-site coverage: {invalid!r}")
+        message = f"Unknown dialog call-site coverage: {invalid!r}"
+        raise ValueError(message)
     for item in calls:
-        if not item.get("owner") or item.get("method") not in DIALOG_METHODS:
-            raise ValueError(f"Invalid native dialog call-site record: {item!r}")
-        if not str(item.get("rationale", "")).strip():
-            raise ValueError(f"Dialog call site {item['id']!r} needs a rationale.")
-        for evidence in item.get("evidence", []):
-            if not (ROOT / evidence).is_file():
-                raise ValueError(
-                    f"Dialog call site {item['id']!r} references missing evidence {evidence!r}."
-                )
-        if item["coverage"] == "tested" and not item.get("evidence"):
-            raise ValueError(f"Tested dialog call site {item['id']!r} needs test evidence.")
+        _validate_catalog_entry(item)
+
+
+def _validate_catalog_matches_source(calls: list[DialogCatalogEntry]) -> None:
     actual = discover_dialog_calls()
     expected_ids = [item["id"] for item in calls]
     actual_ids = [item["id"] for item in actual]
     if actual_ids != expected_ids:
         missing = sorted(set(actual_ids) - set(expected_ids))
         stale = sorted(set(expected_ids) - set(actual_ids))
-        raise ValueError(
-            "Native dialog catalog differs from plugin.py call sites. "
-            f"New/unregistered: {missing!r}; stale: {stale!r}."
-        )
+        message = f"{_CATALOG_SOURCE_ERROR} New/unregistered: {missing!r}; stale: {stale!r}."
+        raise ValueError(message)
+
+
+def load_catalog(path: Path = CATALOG_PATH) -> DialogCatalog:
+    catalog = _read_catalog(path)
+    calls = _catalog_calls(catalog)
+    _validate_catalog_entries(calls)
+    _validate_catalog_matches_source(calls)
     return catalog
 
 
-def render_inventory(catalog: dict[str, Any] | None = None) -> str:
-    catalog = catalog or load_catalog()
+def render_inventory(catalog: DialogCatalog | None = None) -> str:
+    catalog = catalog if catalog is not None else load_catalog()
     calls = discover_dialog_calls()
-    by_id = {item["id"]: item for item in catalog["call_sites"]}
+    by_id: dict[str, DialogCatalogEntry] = {item["id"]: item for item in catalog["call_sites"]}
     counts = {
         status: sum(item["coverage"] == status for item in catalog["call_sites"])
         for status in COVERAGE_LABELS
@@ -163,9 +231,7 @@ def render_inventory(catalog: dict[str, Any] | None = None) -> str:
         )
     lines.extend(["", "## Coverage boundaries", ""])
     for status in ("tested", "partial", "uncovered"):
-        selected = [
-            item for item in catalog["call_sites"] if item["coverage"] == status
-        ]
+        selected = [item for item in catalog["call_sites"] if item["coverage"] == status]
         if not selected:
             continue
         lines.append(f"### {status.title()}")
@@ -181,7 +247,9 @@ def render_inventory(catalog: dict[str, Any] | None = None) -> str:
             "- Partial means the owning action has tests, but the specific error/confirmation/prompt path is not directly exercised.",
             "- Uncovered means no direct call-site behavior contract exists yet.",
             "",
-            f"All {len(calls)} native message-dialog call sites now have direct result/effect assertions. These in-process tests do not replace native desktop accessibility, OS-specific dialog ownership, or cross-platform rendering checks.",
+            f"Coverage is recorded for all {len(calls)} native message-dialog call sites; uncovered paths are identified explicitly. "
+            "These in-process tests do not replace native desktop accessibility, "
+            "OS-specific dialog ownership, or cross-platform rendering checks.",
             "",
         ]
     )
@@ -201,7 +269,10 @@ def main() -> int:
         return 1
     if args.check:
         if not args.output.is_file() or args.output.read_text(encoding="utf-8") != rendered:
-            print(f"{args.output} is stale; run scripts/dialog_callsite_inventory.py.", file=sys.stderr)
+            print(
+                f"{args.output} is stale; run scripts/dialog_callsite_inventory.py.",
+                file=sys.stderr,
+            )
             return 1
         print(f"Native dialog inventory is current: {args.output}")
         return 0
