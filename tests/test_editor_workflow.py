@@ -19,6 +19,20 @@ from kipy.proto.common.types import DocumentType
 from kicad_blocks.manifest_types import BlockManifest
 from kicad_blocks.model import parse_parameters, parse_pins
 from kicad_blocks.repository import BlockRecord, create_block, read_manifest
+from kicad_blocks import repository as repository_module
+from kicad_blocks.sexpr import SExprList, sexpr_all, sexpr_direct, sexpr_head, parse_sexpr
+
+
+_named_symbol_node_for_test: Callable[..., SExprList] = cast(
+    Callable[..., SExprList], getattr(repository_module, "_named_symbol_node")
+)
+
+
+def _required_direct_node(node: SExprList, tag: str) -> SExprList:
+    child = sexpr_required_direct_node(node, tag)
+    if child is None:
+        raise AssertionError(f"Expected direct S-expression child {tag!r}.")
+    return child
 
 plugin_actions = import_module("kicad_blocks.plugin")
 
@@ -129,7 +143,7 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
         project_catalog = build_project_symbol_catalog(self.project, [self.library])
         run_action = Mock()
         with self.assertRaisesRegex(RuntimeError, "supported KiCad IPC API yet"):
-            plugin_actions._edit_facade_symbol(
+            _edit_facade_symbol(
                 self.block,
                 SimpleNamespace(run_action=run_action),
                 project_catalog=project_catalog,
@@ -150,9 +164,9 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
             ),
         )
         with self.assertRaisesRegex(ValueError, "found 0"):
-            plugin_actions._edit_facade_symbol(
+            _edit_facade_symbol(
                 broken,
-                cast(plugin_actions.KiCadApp, None),
+                None,
                 project_catalog=project_catalog,
             )
 
@@ -295,47 +309,40 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
 
     def test_facade_geometry_edit_changes_only_selected_pin_in_project_catalog(self):
         import copy
-
-        from kicad_blocks.pcb_layout import _all, _direct, _head, parse_sexpr
-        from kicad_blocks.repository import (
-            _named_symbol_node,
-            build_project_symbol_catalog,
-            sha256_file,
-        )
-
+        from kicad_blocks.repository import build_project_symbol_catalog, sha256_file
         catalog_path = build_project_symbol_catalog(self.project, [self.library])
         original_asset = self.block.symbol_library.read_bytes()
         original_shared_catalog = (self.library / plugin_actions.LIBRARY_CATALOG_NAME).read_bytes()
         tree_before = parse_sexpr(catalog_path.read_text(encoding="utf-8"))
         symbol_name = self.block.manifest["symbol_name"]
-        symbol_before = _named_symbol_node(tree_before, symbol_name, catalog_path)
+        symbol_before = _named_symbol_node_for_test(tree_before, symbol_name, catalog_path)
         pin_unit = next(
             child
             for child in symbol_before[1:]
-            if _head(child) == "symbol"
+            if sexpr_head(child) == "symbol"
             and str(child[1]).startswith(symbol_name + "_")
-            and _all(child, "pin")
+            and sexpr_all(child, "pin")
         )
-        pin = _all(pin_unit, "pin")[0]
-        pin_name = str(_direct(pin, "name")[1])
-        pin_number = str(_direct(pin, "number")[1])
-        old_at = copy.deepcopy(_direct(pin, "at"))
-        old_length = copy.deepcopy(_direct(pin, "length"))
+        pin = sexpr_all(pin_unit, "pin")[0]
+        pin_name = str(_required_direct_node(pin, "name")[1])
+        pin_number = str(_required_direct_node(pin, "number")[1])
+        old_at = copy.deepcopy(_required_direct_node(pin, "at"))
+        old_length = copy.deepcopy(_required_direct_node(pin, "length"))
         expected_document = copy.deepcopy(tree_before)
-        expected_symbol = _named_symbol_node(expected_document, symbol_name, catalog_path)
+        expected_symbol = _named_symbol_node_for_test(expected_document, symbol_name, catalog_path)
         expected_unit = next(
             child
             for child in expected_symbol[1:]
-            if _head(child) == "symbol" and str(child[1]) == str(pin_unit[1])
+            if sexpr_head(child) == "symbol" and str(child[1]) == str(pin_unit[1])
         )
         expected_pin = next(
             item
-            for item in _all(expected_unit, "pin")
-            if str(_direct(item, "name")[1]) == pin_name
-            and str(_direct(item, "number")[1]) == pin_number
+            for item in sexpr_all(expected_unit, "pin")
+            if str(_required_direct_node(item, "name")[1]) == pin_name
+            and str(_required_direct_node(item, "number")[1]) == pin_number
         )
-        _direct(expected_pin, "at")[1:4] = ["22.86", "17.78", "180"]
-        _direct(expected_pin, "length")[1] = "5.08"
+        _required_direct_node(expected_pin, "at")[1:4] = ["22.86", "17.78", "180"]
+        _required_direct_node(expected_pin, "length")[1] = "5.08"
 
         updated = plugin_actions._apply_facade_pin_geometry(
             catalog_path,
@@ -363,27 +370,21 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
             (self.library / plugin_actions.LIBRARY_CATALOG_NAME).read_bytes(),
             original_shared_catalog,
         )
-        self.assertEqual(str(_direct(pin, "at")[1]), str(old_at[1]))
-        self.assertEqual(str(_direct(pin, "length")[1]), str(old_length[1]))
+        self.assertEqual(str(_required_direct_node(pin, "at")[1]), str(old_at[1]))
+        self.assertEqual(str(_required_direct_node(pin, "length")[1]), str(old_length[1]))
 
     def test_facade_geometry_edit_rejects_concurrent_catalog_change(self):
-        from kicad_blocks.pcb_layout import _all, _direct, _head, parse_sexpr
-        from kicad_blocks.repository import (
-            _named_symbol_node,
-            build_project_symbol_catalog,
-            sha256_file,
-        )
-
+        from kicad_blocks.repository import build_project_symbol_catalog, sha256_file
         catalog_path = build_project_symbol_catalog(self.project, [self.library])
         symbol_name = self.block.manifest["symbol_name"]
         symbol_tree = parse_sexpr(catalog_path.read_text(encoding="utf-8"))
-        symbol = _named_symbol_node(symbol_tree, symbol_name, catalog_path)
+        symbol = _named_symbol_node_for_test(symbol_tree, symbol_name, catalog_path)
         unit = next(
-            child for child in symbol[1:] if _head(child) == "symbol" and _all(child, "pin")
+            child for child in symbol[1:] if sexpr_head(child) == "symbol" and sexpr_all(child, "pin")
         )
-        pin = _all(unit, "pin")[0]
-        pin_name = str(_direct(pin, "name")[1])
-        pin_number = str(_direct(pin, "number")[1])
+        pin = sexpr_all(unit, "pin")[0]
+        pin_name = str(_required_direct_node(pin, "name")[1])
+        pin_number = str(_required_direct_node(pin, "number")[1])
         previous_hash = sha256_file(catalog_path)
         original = catalog_path.read_text(encoding="utf-8")
         catalog_path.write_text(original + "\n", encoding="utf-8")
@@ -408,29 +409,23 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
         )
 
     def test_facade_geometry_edit_rejects_invalid_geometry_without_writing(self):
-        from kicad_blocks.pcb_layout import _all, _direct, _head, parse_sexpr
-        from kicad_blocks.repository import (
-            _named_symbol_node,
-            build_project_symbol_catalog,
-            sha256_file,
-        )
-
+        from kicad_blocks.repository import build_project_symbol_catalog, sha256_file
         catalog_path = build_project_symbol_catalog(self.project, [self.library])
         symbol_name = self.block.manifest["symbol_name"]
         tree = parse_sexpr(catalog_path.read_text(encoding="utf-8"))
-        symbol = _named_symbol_node(tree, symbol_name, catalog_path)
+        symbol = _named_symbol_node_for_test(tree, symbol_name, catalog_path)
         unit = next(
-            child for child in symbol[1:] if _head(child) == "symbol" and _all(child, "pin")
+            child for child in symbol[1:] if sexpr_head(child) == "symbol" and sexpr_all(child, "pin")
         )
-        pin = _all(unit, "pin")[0]
+        pin = sexpr_all(unit, "pin")[0]
         before = catalog_path.read_bytes()
         with self.assertRaisesRegex(ValueError, "angles must be"):
             plugin_actions._apply_facade_pin_geometry(
                 catalog_path,
                 symbol_name,
                 str(unit[1]),
-                str(_direct(pin, "name")[1]),
-                str(_direct(pin, "number")[1]),
+                str(_required_direct_node(pin, "name")[1]),
+                str(_required_direct_node(pin, "number")[1]),
                 x_mm=25.4,
                 y_mm=25.4,
                 angle_degrees=45,
