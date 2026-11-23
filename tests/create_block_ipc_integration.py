@@ -501,9 +501,10 @@ def main() -> None:
             ).strip()
             if not selected_label_name:
                 raise AssertionError("The selected IPC label has no text value.")
-            original_files[child_paths["Control Interface"]] = (
-                child_paths["Control Interface"].read_bytes()
-            )
+            original_files = {
+                path: path.read_bytes()
+                for path in (parent_path, project_path, *child_paths.values())
+            }
 
             schematic.clear_selection()
             open_sheet.add_to_selection(component)
