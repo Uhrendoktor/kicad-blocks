@@ -523,6 +523,41 @@ def main() -> None:
                 [xdotool, "windowfocus", "--sync", window_id],
                 check=True,
             )
+            window_geometry = subprocess.run(
+                [xdotool, "getwindowgeometry", "--shell", window_id],
+                capture_output=True,
+                text=True,
+                check=True,
+            ).stdout
+            geometry_values = {
+                key: int(value)
+                for key, value in re.findall(
+                    r"^(WIDTH|HEIGHT)=(\\d+)$",
+                    window_geometry,
+                    flags=re.MULTILINE,
+                )
+            }
+            if not {"WIDTH", "HEIGHT"}.issubset(geometry_values):
+                raise RuntimeError(
+                    "Could not determine the Eeschema window size for canvas focus: "
+                    f"{window_geometry!r}."
+                )
+            # The frame may still have a toolbar/panel focused. A single click
+            # in the blank lower-middle canvas area transfers input focus to
+            # the drawing canvas without selecting any fixture item.
+            subprocess.run(
+                [
+                    xdotool,
+                    "mousemove",
+                    "--sync",
+                    "--window",
+                    window_id,
+                    str(geometry_values["WIDTH"] // 2),
+                    str(geometry_values["HEIGHT"] - 120),
+                ],
+                check=True,
+            )
+            subprocess.run([xdotool, "click", "1"], check=True)
 
             def wait_for_active_sheet(expected_name: str) -> None:
                 deadline = time.monotonic() + 5.0
