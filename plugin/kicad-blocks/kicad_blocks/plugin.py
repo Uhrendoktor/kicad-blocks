@@ -3296,7 +3296,7 @@ def _draw_preview_message(canvas, message: str) -> None:
 def _pcb_layout_for_variant(record, implementation: str = "") -> dict | None:
     """Return the PCB layout linked to a selected circuit implementation."""
     layouts = _layout_choices(record)
-    selected = str(implementation or "").strip()
+    selected = str(implementation or record.manifest.get("default_variant") or "").strip()
     variant = next(
         (
             item for item in record.manifest.get("variants", [])
