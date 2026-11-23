@@ -23,7 +23,12 @@ messagebox = None
 simpledialog = None
 
 from .auto_dependencies import synchronize_block_dependencies
-from .extraction import selected_sheet_file, selected_sheet_instance_uuid
+from .extraction import (
+    selected_sheet_file,
+    selected_sheet_instance_uuid,
+    selection_node_types,
+    write_selection_schematic,
+)
 from .model import (
     LAYOUT_FIELD_NAME,
     PARAMETER_FIELD_PREFIX,
@@ -1797,7 +1802,7 @@ def _active_sheet_instance(schematic):
         return root
     raise ValueError(
         "Could not identify the sheet currently displayed in Eeschema from the IPC sheet path. "
-        "Select that sheet's symbol in its parent sheet and run Create Block from Sheet again."
+        "Select that sheet's symbol in its parent sheet and run Create Block from Selection or Sheet again."
     )
 
 
@@ -1867,59 +1872,102 @@ def _create_and_place(
     root, schematic, kicad, project_dir, parent,
     editor_window_id: str | None = None,
 ) -> None:
-    """Create a block from one selected SheetSymbol or the currently open sheet."""
+    """Create a block from selected circuit items, one sheet symbol, or the active sheet."""
     selection = _safe_schematic_selection(schematic)
-    if len(selection) > 1:
-        raise ValueError(
-            "Select exactly one hierarchical sheet symbol. Clear any other selected items and retry."
-        )
+    selection_source_directory = None
+    source_kind = "active sheet"
+    source_display_name = ""
 
     selected_sheet = (
         _selected_sheet_symbol_source(
             schematic, project_dir, selection=selection
         )
-        if selection else None
+        if len(selection) == 1 else None
     )
     if selected_sheet is not None:
         # Prefer the typed SheetSymbol returned by KiCad's IPC API. It avoids
         # depending on clipboard serialization and provides the instance UUID.
         source_sheet, source_sheet_uuid = selected_sheet
+        base_name_stem = source_sheet.stem
+        source_kind = "hierarchical sheet"
+        source_display_name = source_sheet.name
     else:
         fragment = _selection_fragment(schematic)
         if fragment:
-            # Compatibility fallback for IPC versions/adapters which expose
-            # the serialized selection but not a typed SheetSymbol object.
-            try:
-                active_sheet, _active_sheet_uuid = _active_sheet_source(
+            item_types = selection_node_types(fragment)
+            if "sheet" in item_types:
+                if len(item_types) != 1:
+                    raise ValueError(
+                        "Select one hierarchical sheet symbol by itself, or select "
+                        "ordinary circuit items. A sheet symbol cannot be mixed with "
+                        "other items in the same selection."
+                    )
+                # Compatibility fallback for IPC versions/adapters which expose
+                # the serialized selection but not a typed SheetSymbol object.
+                try:
+                    active_sheet, _active_sheet_uuid = _active_sheet_source(
+                        schematic, project_dir
+                    )
+                    sheet_base_directory = active_sheet.parent
+                except (FileNotFoundError, ValueError, AttributeError):
+                    sheet_base_directory = Path(project_dir)
+                try:
+                    source_sheet = selected_sheet_file(
+                        fragment, sheet_base_directory
+                    )
+                    source_sheet_uuid = selected_sheet_instance_uuid(fragment)
+                except ValueError as exc:
+                    raise ValueError(
+                        "Select exactly one hierarchical sheet symbol in the parent "
+                        "schematic, or select ordinary circuit items, or clear the "
+                        "selection to create from the currently open sheet. "
+                        f"KiCad selection details: {exc}"
+                    ) from exc
+                base_name_stem = source_sheet.stem
+                source_kind = "hierarchical sheet"
+                source_display_name = source_sheet.name
+            else:
+                active_sheet, source_sheet_uuid = _active_sheet_source(
                     schematic, project_dir
                 )
-                sheet_base_directory = active_sheet.parent
-            except (FileNotFoundError, ValueError, AttributeError):
-                sheet_base_directory = Path(project_dir)
-            try:
-                source_sheet = selected_sheet_file(fragment, sheet_base_directory)
-                source_sheet_uuid = selected_sheet_instance_uuid(fragment)
-            except ValueError as exc:
-                raise ValueError(
-                    "Select exactly one hierarchical sheet symbol in the parent schematic, "
-                    "or clear the selection to create from the currently open sheet. "
-                    f"KiCad selection details: {exc}"
-                ) from exc
+                selection_source_directory = tempfile.TemporaryDirectory(
+                    prefix="kicad-blocks-selection-"
+                )
+                source_sheet = Path(selection_source_directory.name) / "selection.kicad_sch"
+                try:
+                    write_selection_schematic(
+                        active_sheet, fragment, source_sheet
+                    )
+                except Exception:
+                    selection_source_directory.cleanup()
+                    selection_source_directory = None
+                    raise
+                base_name_stem = active_sheet.stem + " Selection"
+                source_kind = "selected schematic items"
+                source_display_name = active_sheet.name
         elif selection:
+            if len(selection) == 1:
+                raise ValueError(
+                    "The current selection is not a hierarchical sheet symbol, and KiCad "
+                    "could not serialize the selected schematic item for block extraction. "
+                    "Clear the selection to use the open sheet, or retry after saving the schematic."
+                )
             raise ValueError(
-                "The current selection is not a hierarchical sheet symbol. "
-                "Select exactly one sheet symbol, or clear the selection to use the open sheet."
+                "Select exactly one hierarchical sheet symbol, or make sure KiCad can "
+                "serialize the selected schematic items before creating a block."
             )
         else:
             source_sheet, source_sheet_uuid = _active_sheet_source(
                 schematic, project_dir
             )
+            base_name_stem = source_sheet.stem
+            source_display_name = source_sheet.name
 
-    # The source sheet is already a complete specification. Generate a
-    # readable name from its filename and add a suffix when this library already
-    # contains a block with that name; no second dialog is needed.
+    # The selected source is already a complete specification. Generate a
+    # readable name from the source sheet (adding "Selection" for extracted
+    # circuit items) and suffix collisions rather than overwriting a block.
     base_name = " ".join(
-        source_sheet.stem.replace("_", " ").replace("-", " ").split()
+        base_name_stem.replace("_", " ").replace("-", " ").split()
     ).title() or "Functional Block"
     existing_names = {
         str(item.name).casefold()
@@ -1944,14 +1992,19 @@ def _create_and_place(
         path: path.read_bytes() if path.is_file() else None
         for path in project_registration_files
     }
-    record = create_block(
-        root,
-        name,
-        source_schematic=source_sheet,
-        source_project_name=Path(project_dir).name,
-        source_sheet_uuid=source_sheet_uuid,
-        description=description,
-    )
+    try:
+        record = create_block(
+            root,
+            name,
+            source_schematic=source_sheet,
+            source_project_name=Path(project_dir).name,
+            source_sheet_uuid=source_sheet_uuid,
+            description=description,
+        )
+    finally:
+        if selection_source_directory is not None:
+            selection_source_directory.cleanup()
+
     try:
         library_roots = _library_roots_for(root)
         record = synchronize_block_dependencies(
@@ -1992,7 +2045,7 @@ def _create_and_place(
         f"  • {pin['name']} — {pin['electrical_type']}"
         for pin in record.manifest.get("pins", [])
     )
-    LOG.info("%s: %s", "Block Created", f"Created {name} from hierarchical sheet {source_sheet.name}.\\n\\n"
+    LOG.info("%s: %s", "Block Created", f"Created {name} from {source_kind} ({source_display_name}).\\n\\n"
         f"Facade pins were generated from hierarchical labels and their shapes:\\n"
         f"{pins_summary}\\n\\n"
         f"Implementation: {record.implementation}\\n"
@@ -2002,7 +2055,6 @@ def _create_and_place(
         "implementation's hierarchical labels change, Publish synchronizes "
         "facade pin names and electrical types automatically."
         + (f"\\n\\nLibrary reload note: {_LAST_LIBRARY_RELOAD_WARNING}" if _LAST_LIBRARY_RELOAD_WARNING else ""))
-
 
 
 def _ensure_project_facade_catalog(
@@ -6848,8 +6900,8 @@ def _show_action_hub(
                     "libraries",
                 ),
                 (
-                    "Create block from sheet",
-                    "Select one hierarchical sheet symbol, or clear the selection to use the open sheet.",
+                    "Create block from selection or sheet",
+                    "Select circuit items, including a component and named net labels; select one sheet symbol, or clear the selection to use the open sheet.",
                     "create-block",
                     "create",
                 ),

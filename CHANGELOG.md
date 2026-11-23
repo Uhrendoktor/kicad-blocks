@@ -4,6 +4,9 @@ Changes are grouped by project version. Items under **Unreleased** describe chan
 
 ## Unreleased
 
+### Added
+- Create reusable blocks directly from a selection of schematic circuit items. Selected net labels become facade pins; hierarchical-sheet and active-sheet creation remain available.
+
 ### Changed
 - Adopt a shared slate UI system for Tk dialogs: explicit light/dark palettes with KiCad-theme selection and a platform-neutral light fallback, consistent spacing and typography, flat preview tabs, compact cards, and auto-hiding scrollbars.
 
@@ -29,7 +32,7 @@ Changes are grouped by project version. Items under **Unreleased** describe chan
 - Hide the generated facade Value field by default and remove it from native SVG previews so the symbol artwork remains the focus.
 - Avoid GUI-only calls to KiCad's headless `LoadAllLibraries` API; report reload warnings only when GUI reload fails after the block has been saved.
 - Keep visual-capture and publishing inventories in one shared module so new screenshots remain included in provenance-checked publishing.
-- Document the current toolbar action name, **Create Block from Sheet**, and the working **Edit default** implementation action.
+- Document the current toolbar action name, **Create Block from Selection or Sheet**, and the working **Edit default** implementation action.
 - Correct installation guidance so a source checkout is not presented as a published plugin release package.
 - Add automated checks for broken local Markdown/HTML links, heading anchors, and missing image descriptions.
 

@@ -8,7 +8,13 @@ from pathlib import Path
 PLUGIN = Path(__file__).resolve().parents[1] / "plugin" / "kicad-blocks"
 sys.path.insert(0, str(PLUGIN))
 
-from kicad_blocks.extraction import selected_sheet_file, selected_sheet_instance_uuid
+from kicad_blocks.extraction import (
+    extract_hierarchical_pins,
+    selected_sheet_file,
+    selected_sheet_instance_uuid,
+    selection_node_types,
+    write_selection_schematic,
+)
 from kicad_blocks.pcb_layout import _all, _direct, _dump, _head, parse_sexpr
 from kicad_blocks.repository import (
     build_project_symbol_catalog,
@@ -77,6 +83,121 @@ class HierarchicalSheetExtractionTests(unittest.TestCase):
 
     def tearDown(self):
         self.temp.cleanup()
+
+    def test_selection_schematic_contains_only_selected_items_and_promotes_labels(self):
+        source = self.project / "selection_source.kicad_sch"
+        source.write_text(
+            '''(kicad_sch
+              (version 20250114)
+              (generator "eeschema")
+              (uuid "11111111-1111-4111-8111-111111111111")
+              (paper "A4")
+              (lib_symbols
+                (symbol "Device:R"
+                  (pin_names (offset 0.5))
+                  (property "Reference" "R" (at 0 0 0) (effects (font (size 1 1))))
+                  (symbol "R_0_1"
+                    (rectangle (start -1 -2) (end 1 2)
+                      (stroke (width 0) (type default))
+                      (fill (type background)))
+                  )
+                )
+              )
+              (symbol
+                (lib_id "Device:R")
+                (at 50 50 0)
+                (unit 1)
+                (property "Reference" "R1" (at 50 50 0) (effects (font (size 1 1))))
+                (property "Value" "10k" (at 50 50 0) (effects (font (size 1 1))))
+                (uuid "22222222-2222-4222-8222-222222222222")
+              )
+              (label "UNSELECTED" (at 10 10 0)
+                (effects (font (size 1.27 1.27)) (justify left bottom))
+                (uuid "33333333-3333-4333-8333-333333333333"))
+              (sheet_instances (path "/" (page "1")))
+            )''',
+            encoding="utf-8",
+        )
+        selection = '''(symbol
+            (lib_id "Device:R")
+            (at 50 50 0)
+            (unit 1)
+            (property "Reference" "R1" (at 50 50 0) (effects (font (size 1 1))))
+            (property "Value" "10k" (at 50 50 0) (effects (font (size 1 1))))
+            (uuid "22222222-2222-4222-8222-222222222222")
+          )
+          (label "VIN" (at 40 40 0)
+            (effects (font (size 1.27 1.27)) (justify left bottom))
+            (uuid "44444444-4444-4444-8444-444444444444"))
+          (global_label "GND" (shape passive) (at 40 50 0)
+            (effects (font (size 1.27 1.27)) (justify left bottom))
+            (uuid "55555555-5555-4555-8555-555555555555"))
+          (wire (pts (xy 50 50) (xy 40 40))
+            (stroke (width 0) (type default))
+            (uuid "66666666-6666-4666-8666-666666666666"))'''
+        self.assertEqual(
+            selection_node_types(selection),
+            ("symbol", "label", "global_label", "wire"),
+        )
+
+        destination = self.project / "temporary" / "selection.kicad_sch"
+        write_selection_schematic(source, selection, destination)
+        extracted = parse_sexpr(destination.read_text(encoding="utf-8"))
+
+        self.assertEqual(
+            sum(1 for item in extracted[1:] if _head(item) == "symbol"),
+            1,
+        )
+        self.assertEqual(len(_all(extracted, "label")), 0)
+        self.assertEqual(len(_all(extracted, "global_label")), 0)
+        self.assertEqual(len(_all(extracted, "hierarchical_label")), 2)
+        self.assertEqual(sum(1 for item in extracted[1:] if _head(item) == "wire"), 1)
+        self.assertEqual(
+            sum(1 for item in _direct(extracted, "lib_symbols")[1:] if _head(item) == "symbol"),
+            1,
+        )
+        self.assertIn("Device:R", destination.read_text(encoding="utf-8"))
+        self.assertNotIn("UNSELECTED", destination.read_text(encoding="utf-8"))
+
+        local_pin = next(
+            item for item in _all(extracted, "hierarchical_label")
+            if str(item[1]) == "VIN"
+        )
+        global_pin = next(
+            item for item in _all(extracted, "hierarchical_label")
+            if str(item[1]) == "GND"
+        )
+        self.assertEqual(str(_direct(local_pin, "shape")[1]), "passive")
+        self.assertEqual(str(_direct(global_pin, "shape")[1]), "passive")
+        pins = extract_hierarchical_pins(extracted)
+        self.assertEqual(
+            [(pin.name, pin.electrical_type) for pin in pins],
+            [("VIN", "passive"), ("GND", "passive")],
+        )
+
+    def test_selection_schematic_requires_symbols_and_named_interface_labels(self):
+        source = _source_sheet(self.project / "source.kicad_sch")
+        with self.assertRaisesRegex(ValueError, "at least one component symbol"):
+            write_selection_schematic(
+                source,
+                '(label "VIN" (at 1 1 0) (effects (font (size 1 1))))',
+                self.project / "no-symbol.kicad_sch",
+            )
+        with self.assertRaisesRegex(ValueError, "at least one named net label"):
+            write_selection_schematic(
+                source,
+                '(symbol (lib_id "Device:R") (at 1 1 0))',
+                self.project / "no-label.kicad_sch",
+            )
+
+    def test_selection_schematic_rejects_hierarchical_sheet_mixed_with_circuit_items(self):
+        source = _source_sheet(self.project / "source.kicad_sch")
+        fragment = '''(sheet (property "Sheetfile" "child.kicad_sch"))
+          (symbol (lib_id "Device:R"))'''
+        with self.assertRaisesRegex(ValueError, "cannot be mixed"):
+            write_selection_schematic(
+                source, fragment, self.project / "mixed.kicad_sch"
+            )
 
     def test_selected_hierarchical_sheet_resolves_its_sheetfile(self):
         fragment = '''(sheet

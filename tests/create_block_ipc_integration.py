@@ -1,4 +1,4 @@
-"""Exercise Create Block from Sheet against a live KiCad schematic editor."""
+"""Exercise Create Block from Selection or Sheet against a live KiCad editor."""
 
 from __future__ import annotations
 
@@ -25,10 +25,13 @@ from kicad_blocks.model import parse_pins, render_implementation_schematic
 from kicad_blocks.repository import (
     LIBRARY_CATALOG_NAME,
     LIBRARY_NICKNAME,
+    build_project_symbol_catalog,
     list_blocks,
+    register_project_symbol_library,
 )
 from kipy import KiCad
 from kipy.errors import ApiError
+from kipy.geometry import Vector2
 from pynng.exceptions import NNGException
 from test_plugin_registration import _close_editor, _find_executable, _launch
 
@@ -343,6 +346,60 @@ def _validate_hierarchy_fixture(cli: str, parent_path: Path, child_paths: dict[s
             )
 
 
+def _capture_navigation_diagnostics(xdotool: str, window_id: str) -> str:
+    """Describe the X11 focus target and capture the failed Eeschema canvas state."""
+    lines = []
+
+    def run(label: str, command: list[str]) -> str:
+        result = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        output = (result.stdout + result.stderr).strip()
+        lines.append(
+            f"{label}: exit={result.returncode}; "
+            f"{output or '<no output>'}"
+        )
+        return result.stdout.strip()
+
+    focus_id = run("focused_window_id", [xdotool, "getwindowfocus"])
+    run("pointer_location", [xdotool, "getmouselocation", "--shell"])
+    run("editor_geometry", [xdotool, "getwindowgeometry", "--shell", window_id])
+    run("editor_title", [xdotool, "getwindowname", window_id])
+    run("editor_class", [xdotool, "getwindowclassname", window_id])
+    if focus_id.isdigit():
+        run("focused_window_title", [xdotool, "getwindowname", focus_id])
+        run("focused_window_class", [xdotool, "getwindowclassname", focus_id])
+        run("focused_window_geometry", [xdotool, "getwindowgeometry", "--shell", focus_id])
+
+    xwininfo = shutil.which("xwininfo")
+    if xwininfo:
+        run("editor_window_tree", [xwininfo, "-id", window_id, "-tree"])
+        if focus_id.isdigit():
+            run("focused_window_tree", [xwininfo, "-id", focus_id, "-tree"])
+
+    xwd = shutil.which("xwd")
+    if xwd:
+        debug_path = (
+            Path(os.environ.get("RUNNER_TEMP", tempfile.gettempdir()))
+            / "create-block-navigation-debug.xwd"
+        )
+        result = subprocess.run(
+            [xwd, "-root", "-silent", "-out", str(debug_path)],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        lines.append(
+            f"root_screenshot: exit={result.returncode}; path={debug_path}; "
+            f"{(result.stderr or '').strip() or '<no stderr>'}"
+        )
+
+    return "\\n".join(lines)
+
+
 def main() -> None:
     cli = _find_cli()
     with tempfile.TemporaryDirectory(prefix="kicad-blocks-create-sheet-ipc-") as temp:
@@ -354,6 +411,18 @@ def main() -> None:
         parent_path, child_paths = _write_source_sheets(project_dir)
         project_path = project_dir / "CreateBlockFromSheetIPC.kicad_pro"
         _validate_hierarchy_fixture(cli, parent_path, child_paths, root)
+
+        # Eeschema reload_library refreshes a nickname already discovered from
+        # the project table; it cannot introduce a new project-table row after
+        # the editor has started. Seed the stable KBlocks row before launch so
+        # the first _register_block call can reload the newly populated catalog.
+        initial_catalog = build_project_symbol_catalog(project_dir, [library_root])
+        register_project_symbol_library(
+            project_dir,
+            LIBRARY_NICKNAME,
+            initial_catalog,
+            description="KiCad Blocks — all registered functional-block libraries",
+        )
 
         original_files = {
             path: path.read_bytes()
@@ -405,19 +474,29 @@ def main() -> None:
                 )
 
             def run_creation(parent_schematic):
+                # Exercise the registered Eeschema action entrypoint, not the
+                # private extraction helper. The existing live KiCad client is
+                # reused, but its returned sheet view is the exact IPC context
+                # that Eeschema currently exposes for this test operation.
                 with (
+                    patch("kipy.KiCad", return_value=kicad),
+                    patch.object(
+                        kicad,
+                        "get_schematic",
+                        return_value=parent_schematic,
+                    ),
                     patch.object(
                         plugin_actions,
                         "configured_library_roots",
                         return_value=[library_root],
                     ),
                     patch.object(
-                        plugin_actions, "_reload_symbol_library", return_value=True
+                        plugin_actions,
+                        "default_library_root",
+                        return_value=library_root,
                     ),
                 ):
-                    plugin_actions._create_and_place(
-                        library_root, parent_schematic, kicad, project_dir, object()
-                    )
+                    plugin_actions.run_action("create-block")
 
             run_creation(schematic)
 
@@ -469,6 +548,83 @@ def main() -> None:
             if open_selection:
                 raise AssertionError("Subsheet IPC view unexpectedly retained the previous sheet selection.")
 
+            # for_sheet() scopes IPC requests to a child sheet but does not
+            # change the visible Eeschema page. Navigate the real editor using
+            # its global Next Sheet (Page Down) hotkey, and verify each visible
+            # page from the live window title. This ensures the empty-selection
+            # creation below really runs while Control Interface is active.
+            subprocess.run(
+                [xdotool, "windowfocus", "--sync", window_id],
+                check=True,
+            )
+            window_geometry = subprocess.run(
+                [xdotool, "getwindowgeometry", "--shell", window_id],
+                capture_output=True,
+                text=True,
+                check=True,
+            ).stdout
+            geometry_values = {
+                key: int(value)
+                for key, value in re.findall(
+                    r"^(WIDTH|HEIGHT)=(\d+)$",
+                    window_geometry,
+                    flags=re.MULTILINE,
+                )
+            }
+            if not {"WIDTH", "HEIGHT"}.issubset(geometry_values):
+                raise RuntimeError(
+                    "Could not determine the Eeschema window size for canvas focus: "
+                    f"{window_geometry!r}."
+                )
+            subprocess.run(
+                [
+                    xdotool,
+                    "mousemove",
+                    "--sync",
+                    "--window",
+                    window_id,
+                    str(geometry_values["WIDTH"] // 2),
+                    str(geometry_values["HEIGHT"] - 120),
+                ],
+                check=True,
+            )
+            subprocess.run([xdotool, "click", "1"], check=True)
+
+            def wait_for_visible_sheet(expected_name: str) -> None:
+                deadline = time.monotonic() + 5.0
+                expected_title = " ".join(
+                    expected_name.replace("_", " ").replace("-", " ").casefold().split()
+                )
+                window_title = ""
+                while time.monotonic() < deadline:
+                    window_title = subprocess.run(
+                        [xdotool, "getwindowname", window_id],
+                        capture_output=True,
+                        text=True,
+                        check=True,
+                    ).stdout.strip()
+                    normalized_title = " ".join(
+                        window_title.replace("_", " ").replace("-", " ").casefold().split()
+                    )
+                    if expected_title in normalized_title:
+                        return
+                    time.sleep(0.1)
+                diagnostics = _capture_navigation_diagnostics(xdotool, window_id)
+                raise AssertionError(
+                    f"Eeschema window title does not identify the active {expected_name!r} "
+                    f"sheet: {window_title!r}. X11 diagnostics:\\n{diagnostics}"
+                )
+
+            def advance_to_sheet(expected_name: str) -> None:
+                subprocess.run(
+                    [xdotool, "key", "--clearmodifiers", "Page_Down"],
+                    check=True,
+                )
+                wait_for_visible_sheet(expected_name)
+
+            advance_to_sheet("Power Stage")
+            advance_to_sheet("Control Interface")
+
             run_creation(open_sheet)
 
             records = list_blocks(library_root)
@@ -482,15 +638,134 @@ def main() -> None:
                     f"Active-sheet facade pins came from the wrong sheet: {active_record.manifest['pins']!r}"
                 )
 
+            # Add a real standard-library component to the test subsheet,
+            # save it as part of the fixture, then select it with a real
+            # hierarchical label using the live Eeschema IPC selection API.
+            component = open_sheet.place_symbol_from_library(
+                "Device:R",
+                Vector2.from_xy_mm(100, 100),
+                reference="R1",
+            )
+            open_sheet.save()
+            labels = list(open_sheet.get_labels())
+            if not labels:
+                raise AssertionError("The test subsheet has no selectable named labels.")
+            selected_label = labels[0]
+            selected_label_name = str(
+                getattr(getattr(selected_label, "text", None), "value", "")
+            ).strip()
+            if not selected_label_name:
+                raise AssertionError("The selected IPC label has no text value.")
+            original_files = {
+                path: path.read_bytes()
+                for path in (parent_path, project_path, *child_paths.values())
+            }
+
+            # First distinguish the ordinary full-sheet formatter from the
+            # separate SavedSelection formatter. The latter formats the
+            # current selection through KiCad's clipboard/S-expression path.
+            live_sheet_text = open_sheet.get_as_string()
+            if not live_sheet_text.lstrip().startswith("(kicad_sch"):
+                raise AssertionError("KiCad did not serialize the active child sheet as a schematic.")
+            print(
+                "Live Control Interface document serialization passed: "
+                f"{len(live_sheet_text)} characters.",
+                flush=True,
+            )
+
+            selected_component_id = str(getattr(component.id, "value", component.id))
+            selected_label_id = str(getattr(selected_label.id, "value", selected_label.id))
+            print(
+                "Live child-sheet selection fixture: "
+                f"symbol UUID={selected_component_id}; "
+                f"label UUID={selected_label_id}; "
+                f"label name={selected_label_name!r}.",
+                flush=True,
+            )
+
+            open_sheet.clear_selection()
+            label_selection = list(open_sheet.add_to_selection([selected_label]))
+            if len(label_selection) != 1:
+                raise AssertionError(
+                    "KiCad did not select the named label on its own before "
+                    f"serialization; selected {len(label_selection)} item(s)."
+                )
+            label_fragment = open_sheet.get_selection_as_string()
+            if selected_label_name not in label_fragment:
+                raise AssertionError(
+                    "KiCad serialized a label-only selection without its label name: "
+                    f"{label_fragment!r}"
+                )
+            print("SavedSelection serialization passed for label-only selection.", flush=True)
+
+            open_sheet.clear_selection()
+            symbol_selection = list(open_sheet.add_to_selection([component]))
+            if len(symbol_selection) != 1:
+                raise AssertionError(
+                    "KiCad did not select the component on its own before "
+                    f"serialization; selected {len(symbol_selection)} item(s)."
+                )
+            symbol_fragment = open_sheet.get_selection_as_string()
+            if "Device:R" not in symbol_fragment:
+                raise AssertionError(
+                    "KiCad serialized a standard Device:R symbol-only selection "
+                    f"without its library ID: {symbol_fragment!r}"
+                )
+            print("SavedSelection serialization passed for symbol-only selection.", flush=True)
+
+            open_sheet.clear_selection()
+            circuit_selection = list(
+                open_sheet.add_to_selection([component, selected_label])
+            )
+            if len(circuit_selection) != 2:
+                selected_types = [
+                    type(item).__name__ for item in circuit_selection
+                ]
+                raise AssertionError(
+                    "KiCad IPC did not preserve the component and label as a "
+                    "two-item selection on the active Control Interface sheet; "
+                    f"found {len(circuit_selection)} item(s): {selected_types!r}."
+                )
+            selection_text = open_sheet.get_selection_as_string()
+            if selected_label_name not in selection_text or selected_manifest["symbol_name"] not in selection_text:
+                raise AssertionError(
+                    "KiCad's combined selection serialization omitted a selected item: "
+                    f"{selection_text!r}"
+                )
+            print("SavedSelection serialization passed for component+label selection.", flush=True)
+
+            run_creation(open_sheet)
+
+            records = list_blocks(library_root)
+            if len(records) != 3:
+                raise AssertionError(
+                    f"Expected a third block from selected circuit items, found {len(records)} total."
+                )
+            selection_record = next(
+                item for item in records if item.name == "Control Interface Selection"
+            )
+            selection_pins = selection_record.manifest["pins"]
+            if [item["name"] for item in selection_pins] != [selected_label_name]:
+                raise AssertionError(
+                    "Selected-item facade pins did not match the selected named label: "
+                    f"{selection_pins!r}"
+                )
+            if selection_record.manifest["interface_source"] != "hierarchical_labels":
+                raise AssertionError(
+                    "The selection-based block did not retain hierarchical-label extraction provenance."
+                )
+
             if not all(path.read_bytes() == original for path, original in original_files.items()):
                 raise AssertionError("Create Block modified one or more original project sheet files.")
 
             _assert_cli_exports(cli, selected_record, parent_path, root)
             _assert_cli_exports(cli, active_record, parent_path, root)
+            _assert_cli_exports(cli, selection_record, parent_path, root)
             print(
-                "Create Block from Sheet passed against live KiCad IPC: selected typed SheetSymbol, "
-                "active subsheet with empty selection, facade/catalog registration, extraction "
-                "metadata, unchanged source files, and KiCad CLI exports."
+                "Create Block from Selection or Sheet passed against live KiCad IPC: selected typed "
+                "SheetSymbol, active subsheet with empty selection, selected component and label, "
+                "facade/catalog registration, extraction metadata, unchanged source files, and "
+                "KiCad CLI exports."
             )
         finally:
             if kicad is not None:

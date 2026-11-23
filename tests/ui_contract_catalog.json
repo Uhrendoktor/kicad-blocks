@@ -22,7 +22,7 @@
               "assertion": "asserted"
             },
             {
-              "label": "Create block from sheet",
+              "label": "Create block from selection or sheet",
               "action_id": "create-block",
               "contract_id": "task-hub.action.create-block",
               "assertion": "asserted"
@@ -621,20 +621,21 @@
     },
     {
       "id": "create-block-action",
-      "title": "Create Block from Sheet",
-      "purpose": "Package one selected hierarchical sheet, or the sheet currently open in Eeschema when nothing is selected, as a reusable functional block.",
+      "title": "Create Block from Selection or Sheet",
+      "purpose": "Package selected schematic circuit items, one hierarchical sheet, or the sheet currently open in Eeschema when nothing is selected, as a reusable functional block.",
       "coverage": "partial",
-      "coverage_note": "This is a native Eeschema action rather than a Tk window. The real Eeschema IPC integration test verifies typed SheetSymbol selection, active-subsheet creation with an empty selection, derived facade pins, catalog/library registration, collision-safe naming, rollback on failure, and unchanged source files. The action does not open a naming form or success popup.",
+      "coverage_note": "This is a native Eeschema action rather than a Tk window. Unit tests verify extraction of selected symbols and named labels into a standalone schematic, local/global label promotion, selected-item filtering, and validation. The real Eeschema IPC integration test verifies typed SheetSymbol selection, active-subsheet creation with an empty selection, and a live component-plus-label circuit selection. The action does not open a naming form or success popup.",
       "evidence": [
         "tests/test_editor_workflow.py",
         "tests/create_block_ipc_integration.py",
         "tests/test_plugin_registration.py"
       ],
       "functionality": [
-        "Select exactly one hierarchical sheet symbol in its parent schematic",
+        "Select circuit symbols, wires, and named labels to package only those items; labels become facade pins",
+        "Select exactly one hierarchical sheet symbol to copy that sheet and its child hierarchy",
         "With no selection, use the sheet currently open in Eeschema",
-        "Derive a collision-safe block name from the source filename and create it in the configured default library",
-        "Copy the complete child-sheet hierarchy, derive facade pins from root hierarchical labels, and register the project catalog"
+        "Derive a collision-safe block name and create it in the configured default library",
+        "Register the facade catalog in the project without changing the source schematic"
       ],
       "screenshots": [],
       "controls": []

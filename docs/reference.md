@@ -38,7 +38,7 @@ The common Eeschema entry points are separate toolbar actions:
 | Entry point | Action | Context |
 | --- | --- | --- |
 | Eeschema toolbar | **Browse and Place Functional Blocks** | Browse all registered shared libraries. |
-| Eeschema toolbar | **Create Block from Sheet** | Select a hierarchical sheet symbol in its parent, or run with no selection from the open sheet. |
+| Eeschema toolbar | **Create Block from Selection or Sheet** | Select ordinary circuit items (including a component and named net labels), one hierarchical sheet symbol, or nothing to use the currently open sheet. |
 | Eeschema toolbar | **Open Block Implementation** | Select one placed block instance. |
 
 The grouped Task Hub remains available as a legacy compatibility entry point, but it is not the intended workflow. The primary create/place/publish path is available directly from the Eeschema toolbar and the Functional Block Library browser. Other context-sensitive maintenance actions remain available through their existing KiCad action entry points.

@@ -16,9 +16,9 @@ Static captures of the same chooser states are available: [initial library view]
 
 **Fixture limitation:** the chooser's 5 V, 9 V, and 12 V variant entries point to the same static reference schematic. The profile selections demonstrate the configuration UI; they do not electrically rewrite the reference circuit.
 
-## Create a block from a sheet
+## Create a block from a selection or sheet
 
-Select exactly one hierarchical sheet symbol in Eeschema and invoke **Create Block from Sheet** once. With no selection, the currently open sheet is used. The name is derived from the source filename with a numeric suffix on collision; the destination is the configured default library. The action creates the block, copies its child-sheet hierarchy, derives facade pins from root hierarchical labels, and registers the project catalog without rewriting the source schematic. There is no naming form or success popup.
+Select ordinary circuit items (including at least one component symbol and named net labels) and invoke **Create Block from Selection or Sheet** to package only those items. Selected local, global, and hierarchical labels become facade pins; local labels default to passive electrical type. Alternatively, select one hierarchical sheet symbol to copy that sheet and its child hierarchy, or clear the selection to use the currently open sheet. The name is derived from the active/source filename, with Selection appended for circuit selections and a numeric suffix on collision. The destination is the configured default library. The action registers the project catalog without rewriting the source schematic. There is no naming form or success popup.
 
 ## Inspect a library entry
 

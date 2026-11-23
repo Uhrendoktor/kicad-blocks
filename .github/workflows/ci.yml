@@ -69,6 +69,52 @@ jobs:
               sleep "$((attempt * 5))"
             done
             apt_retry update -o Acquire::Languages=none -o APT::Update::Error-Mode=any
+            seed_kicad_package_from_mirror() {
+              local package="$1"
+              local record filename expected_sha archive_name destination download_path
+              record="$(apt-cache show "${package}:amd64" | awk 'BEGIN { RS = "" } NR == 1 { print; exit }')"
+              filename="$(awk -F': ' '$1 == "Filename" { print $2; exit }' <<< "$record")"
+              expected_sha="$(awk -F': ' '$1 == "SHA256" { print $2; exit }' <<< "$record")"
+              if [[ -z "$filename" || -z "$expected_sha" ]]; then
+                echo "::warning::No signed APT filename/checksum metadata for $package; using the Launchpad download path."
+                return 0
+              fi
+              if [[ "$filename" != pool/* || ! "$expected_sha" =~ ^[[:xdigit:]]{64}$ ]]; then
+                echo "::error::Unexpected APT metadata for $package; refusing mirror cache fallback."
+                return 1
+              fi
+
+              archive_name="${filename##*/}"
+              destination="/var/cache/apt/archives/$archive_name"
+              if [[ -f "$destination" ]] && printf '%s  %s\n' "$expected_sha" "$destination" | sha256sum --check --status; then
+                echo "Verified cached archive for $package."
+                return 0
+              fi
+
+              download_path="${RUNNER_TEMP}/$archive_name"
+              if ! curl --fail --location --silent --show-error \
+                --retry 2 --retry-all-errors --retry-delay 2 \
+                --connect-timeout 20 --max-time 180 \
+                "https://deb.kicad.org/kicad-dev-nightly/ubuntu/$filename" \
+                --output "$download_path"; then
+                rm -f "$download_path"
+                echo "::warning::KiCad mirror fallback unavailable for $package; APT will try Launchpad."
+                return 0
+              fi
+
+              if ! printf '%s  %s\n' "$expected_sha" "$download_path" | sha256sum --check --status; then
+                rm -f "$download_path"
+                echo "::error::KiCad mirror archive checksum does not match signed APT metadata for $package."
+                return 1
+              fi
+
+              "${SUDO[@]}" install -d -m 0755 /var/cache/apt/archives
+              "${SUDO[@]}" install -m 0644 "$download_path" "$destination"
+              rm -f "$download_path"
+              echo "Seeded APT cache from the KiCad mirror; SHA-256 matches signed Launchpad metadata for $package."
+            }
+            seed_kicad_package_from_mirror libngspice-kicad
+            seed_kicad_package_from_mirror kicad-nightly
             apt_retry install -y --no-install-recommends kicad-nightly
             CLI="$(command -v kicad-cli-nightly || command -v kicad-cli || true)"
           fi
@@ -362,12 +408,14 @@ jobs:
               "${RUNNER_TEMP}/kicad-blocks-venv/bin/python" tests/test_plugin_registration.py
           fi
 
-      - name: Upload Edit Facade GUI diagnostics
+      - name: Upload Eeschema GUI diagnostics
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: edit-facade-gui-diagnostics
-          path: ${{ runner.temp }}/edit-facade-gui-debug.xwd
+          name: eeschema-gui-diagnostics
+          path: |
+            ${{ runner.temp }}/edit-facade-gui-debug.xwd
+            ${{ runner.temp }}/create-block-navigation-debug.xwd
           if-no-files-found: ignore
           compression-level: 1
 
@@ -682,6 +730,53 @@ jobs:
             sleep "$((attempt * 5))"
           done
           apt_retry update -o Acquire::Languages=none -o APT::Update::Error-Mode=any
+          seed_kicad_package_from_mirror() {
+            local package="$1"
+            local record filename expected_sha archive_name destination download_path
+            record="$(apt-cache show "${package}:amd64" | awk 'BEGIN { RS = "" } NR == 1 { print; exit }')"
+            filename="$(awk -F': ' '$1 == "Filename" { print $2; exit }' <<< "$record")"
+            expected_sha="$(awk -F': ' '$1 == "SHA256" { print $2; exit }' <<< "$record")"
+            if [[ -z "$filename" || -z "$expected_sha" ]]; then
+              echo "::warning::No signed APT filename/checksum metadata for $package; using the Launchpad download path."
+              return 0
+            fi
+            if [[ "$filename" != pool/* || ! "$expected_sha" =~ ^[[:xdigit:]]{64}$ ]]; then
+              echo "::error::Unexpected APT metadata for $package; refusing mirror cache fallback."
+              return 1
+            fi
+
+            archive_name="${filename##*/}"
+            destination="/var/cache/apt/archives/$archive_name"
+            if [[ -f "$destination" ]] && printf '%s  %s\n' "$expected_sha" "$destination" | sha256sum --check --status; then
+              echo "Verified cached archive for $package."
+              return 0
+            fi
+
+            download_path="${RUNNER_TEMP}/$archive_name"
+            if ! curl --fail --location --silent --show-error \
+              --retry 2 --retry-all-errors --retry-delay 2 \
+              --connect-timeout 20 --max-time 180 \
+              "https://deb.kicad.org/kicad-dev-nightly/ubuntu/$filename" \
+              --output "$download_path"; then
+              rm -f "$download_path"
+              echo "::warning::KiCad mirror fallback unavailable for $package; APT will try Launchpad."
+              return 0
+            fi
+
+            if ! printf '%s  %s\n' "$expected_sha" "$download_path" | sha256sum --check --status; then
+              rm -f "$download_path"
+              echo "::error::KiCad mirror archive checksum does not match signed APT metadata for $package."
+              return 1
+            fi
+
+            "${SUDO[@]}" install -d -m 0755 /var/cache/apt/archives
+            "${SUDO[@]}" install -m 0644 "$download_path" "$destination"
+            rm -f "$download_path"
+            echo "Seeded APT cache from the KiCad mirror; SHA-256 matches signed Launchpad metadata for $package."
+          }
+          SUDO=(sudo)
+          seed_kicad_package_from_mirror libngspice-kicad
+          seed_kicad_package_from_mirror kicad-nightly
           apt_retry install -y --no-install-recommends kicad-nightly
           CLI="$(command -v kicad-cli-nightly || command -v kicad-cli || true)"
           if [[ -z "$CLI" ]]; then
