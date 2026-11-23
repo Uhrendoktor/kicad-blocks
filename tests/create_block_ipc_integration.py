@@ -1,4 +1,4 @@
-"""Exercise Create Block from Sheet against a live KiCad schematic editor."""
+"""Exercise Create Block from Selection or Sheet against a live KiCad editor."""
 
 from __future__ import annotations
 
@@ -28,6 +28,7 @@ from kicad_blocks.repository import (
     list_blocks,
 )
 from kipy import KiCad
+from kipy.geometry import Vector2
 from kipy.errors import ApiError
 from pynng.exceptions import NNGException
 from test_plugin_registration import _close_editor, _find_executable, _launch
@@ -482,15 +483,72 @@ def main() -> None:
                     f"Active-sheet facade pins came from the wrong sheet: {active_record.manifest['pins']!r}"
                 )
 
+            # Add a real standard-library component to the test subsheet,
+            # save it as part of the fixture, then select it with a real
+            # hierarchical label using the live Eeschema IPC selection API.
+            component = open_sheet.place_symbol_from_library(
+                "Device:R",
+                Vector2.from_xy_mm(100, 100),
+                reference="R1",
+            )
+            open_sheet.save()
+            labels = list(open_sheet.get_labels())
+            if not labels:
+                raise AssertionError("The test subsheet has no selectable named labels.")
+            selected_label = labels[0]
+            selected_label_name = str(
+                getattr(getattr(selected_label, "text", None), "value", "")
+            ).strip()
+            if not selected_label_name:
+                raise AssertionError("The selected IPC label has no text value.")
+            original_files[child_paths["Control Interface"]] = (
+                child_paths["Control Interface"].read_bytes()
+            )
+
+            schematic.clear_selection()
+            open_sheet.add_to_selection(component)
+            open_sheet.add_to_selection(selected_label)
+            circuit_selection = list(open_sheet.get_selection())
+            if len(circuit_selection) != 2:
+                raise AssertionError(
+                    "KiCad IPC did not preserve the component and label as a two-item selection."
+                )
+            selection_text = open_sheet.get_selection_as_string()
+            if not selection_text.strip():
+                raise AssertionError("KiCad IPC returned an empty serialized circuit selection.")
+
+            run_creation(open_sheet)
+
+            records = list_blocks(library_root)
+            if len(records) != 3:
+                raise AssertionError(
+                    f"Expected a third block from selected circuit items, found {len(records)} total."
+                )
+            selection_record = next(
+                item for item in records if item.name == "Control Interface Selection"
+            )
+            selection_pins = selection_record.manifest["pins"]
+            if [item["name"] for item in selection_pins] != [selected_label_name]:
+                raise AssertionError(
+                    "Selected-item facade pins did not match the selected named label: "
+                    f"{selection_pins!r}"
+                )
+            if selection_record.manifest["interface_source"] != "hierarchical_labels":
+                raise AssertionError(
+                    "The selection-based block did not retain hierarchical-label extraction provenance."
+                )
+
             if not all(path.read_bytes() == original for path, original in original_files.items()):
                 raise AssertionError("Create Block modified one or more original project sheet files.")
 
             _assert_cli_exports(cli, selected_record, parent_path, root)
             _assert_cli_exports(cli, active_record, parent_path, root)
+            _assert_cli_exports(cli, selection_record, parent_path, root)
             print(
-                "Create Block from Sheet passed against live KiCad IPC: selected typed SheetSymbol, "
-                "active subsheet with empty selection, facade/catalog registration, extraction "
-                "metadata, unchanged source files, and KiCad CLI exports."
+                "Create Block from Selection or Sheet passed against live KiCad IPC: selected typed "
+                "SheetSymbol, active subsheet with empty selection, selected component and label, "
+                "facade/catalog registration, extraction metadata, unchanged source files, and "
+                "KiCad CLI exports."
             )
         finally:
             if kicad is not None:
