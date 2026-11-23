@@ -131,10 +131,13 @@ class HierarchicalSheetExtractionTests(unittest.TestCase):
             (uuid "44444444-4444-4444-8444-444444444444"))
           (global_label "GND" (shape passive) (at 40 50 0)
             (effects (font (size 1.27 1.27)) (justify left bottom))
-            (uuid "55555555-5555-4555-8555-555555555555"))'''
+            (uuid "55555555-5555-4555-8555-555555555555"))
+          (wire (pts (xy 50 50) (xy 40 40))
+            (stroke (width 0) (type default))
+            (uuid "66666666-6666-4666-8666-666666666666"))'''
         self.assertEqual(
             selection_node_types(selection),
-            ("symbol", "label", "global_label"),
+            ("symbol", "label", "global_label", "wire"),
         )
 
         destination = self.project / "temporary" / "selection.kicad_sch"
@@ -148,6 +151,7 @@ class HierarchicalSheetExtractionTests(unittest.TestCase):
         self.assertEqual(len(_all(extracted, "label")), 0)
         self.assertEqual(len(_all(extracted, "global_label")), 0)
         self.assertEqual(len(_all(extracted, "hierarchical_label")), 2)
+        self.assertEqual(sum(1 for item in extracted[1:] if _head(item) == "wire"), 1)
         self.assertEqual(
             sum(1 for item in _direct(extracted, "lib_symbols")[1:] if _head(item) == "symbol"),
             1,
