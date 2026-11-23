@@ -11,6 +11,10 @@ from types import SimpleNamespace
 
 import pytest
 from PIL import Image
+
+ROOT = Path(__file__).resolve().parents[1]
+
+from ui_contracts import (
     ChoiceViewContract,
     EntryInputContract,
     NotebookViewContract,
