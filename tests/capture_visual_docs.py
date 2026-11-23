@@ -568,10 +568,8 @@ def capture_ui_workflows(library_roots, record, project_dir: Path, output_dir: P
                 schematic_canvases = [
                     widget for widget in walk_widgets(root)
                     if widget.winfo_class() == "Canvas"
-                    and (
-                        getattr(widget, "_native_schematic_preview_photo", None) is not None
-                        or getattr(widget, "_kicad_preview_state", {}).get("image") is not None
-                    )
+                    and widget.winfo_ismapped()
+                    and getattr(widget, "_kicad_preview_state", {}).get("image") is not None
                 ]
                 if not schematic_canvases:
                     raise RuntimeError("The library schematic preview did not render a KiCad image.")
@@ -588,6 +586,7 @@ def capture_ui_workflows(library_roots, record, project_dir: Path, output_dir: P
                 pcb_canvases = [
                     widget for widget in walk_widgets(root)
                     if widget.winfo_class() == "Canvas"
+                    and widget.winfo_ismapped()
                     and getattr(widget, "_kicad_preview_state", {}).get("image") is not None
                 ]
                 if not pcb_canvases:
