@@ -5,10 +5,12 @@ from __future__ import annotations
 import json
 import os
 import sys
+from io import BytesIO
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from PIL import Image
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "plugin" / "kicad-blocks"))
@@ -56,6 +58,7 @@ LIBRARY_ASSERTED_BUTTONS = {
 PREVIEW_VIEWS = (
     ("Facade", ("library-browser.preview.facade",)),
     ("Schematic", ("library-browser.preview.schematic",)),
+    ("PCB", ("library-browser.preview.pcb",)),
 )
 
 
@@ -114,6 +117,7 @@ def _new_browser(monkeypatch, tmp_path: Path, *, layouts=None):
         lambda *_args, **_kwargs: [("Main", None)],
     )
     monkeypatch.setattr(plugin_actions, "_draw_schematic_preview", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(plugin_actions, "_draw_pcb_preview", lambda *_args, **_kwargs: "Test PCB")
     monkeypatch.setattr(plugin_actions, "_block_overview_text", lambda record: record.name)
 
     root = plugin_actions.tk.Tk()
@@ -315,6 +319,77 @@ def test_library_browser_preview_switches_between_facade_and_schematic(monkeypat
         root.destroy()
 
 
+
+def test_facade_schematic_and_pcb_previews_support_zoom_and_fit_reset(
+    monkeypatch, tmp_path
+):
+    root, context, _records, _library, _project = _new_browser(monkeypatch, tmp_path)
+    try:
+        canvases = []
+
+        def collect(widget):
+            if getattr(widget, "_kicad_preview_state", None) is not None:
+                canvases.append(widget)
+            for child in widget.winfo_children():
+                collect(child)
+
+        collect(root)
+        assert len(canvases) == 3
+
+        buffer = BytesIO()
+        Image.new("RGB", (1600, 1200), "white").save(buffer, format="PNG")
+        png_data = buffer.getvalue()
+        notebook = context.require_widget("library-browser.preview.views")
+
+        for index, canvas in enumerate(canvases):
+            notebook.select(notebook.tabs()[index])
+            root.update_idletasks()
+            root.update()
+            assert canvas.winfo_width() > 10
+            assert canvas.winfo_height() > 10
+
+            canvas.set_preview_image(png_data)
+            root.update_idletasks()
+            root.update()
+            assert canvas._kicad_preview_state["zoom"] == 1.0
+
+            canvas.event_generate(
+                "<MouseWheel>",
+                delta=120,
+                x=canvas.winfo_width() // 2,
+                y=canvas.winfo_height() // 2,
+            )
+            root.update_idletasks()
+            root.update()
+            assert canvas._kicad_preview_state["zoom"] > 1.0
+            assert canvas.find_withtag("preview-image")
+
+            center_x = canvas.winfo_width() // 2
+            center_y = canvas.winfo_height() // 2
+            # Tk does not permit synthetic <Double-...> event modifiers. Emit
+            # two real press/release pairs within the platform double-click window.
+            canvas.event_generate(
+                "<ButtonPress-1>", x=center_x, y=center_y, time=1000
+            )
+            canvas.event_generate(
+                "<ButtonRelease-1>", x=center_x, y=center_y, time=1010
+            )
+            canvas.event_generate(
+                "<ButtonPress-1>", x=center_x, y=center_y, time=1100
+            )
+            canvas.event_generate(
+                "<ButtonRelease-1>", x=center_x, y=center_y, time=1110
+            )
+            root.update_idletasks()
+            root.update()
+            assert canvas._kicad_preview_state["zoom"] == 1.0
+
+            assert canvas.bind("<ButtonPress-1>")
+            assert canvas.bind("<B1-Motion>")
+    finally:
+        root.destroy()
+
+
 def test_library_browser_split_panes_have_visible_geometry(monkeypatch, tmp_path):
     root, context, _records, _library, _project = _new_browser(monkeypatch, tmp_path)
     try:
@@ -328,6 +403,47 @@ def test_library_browser_split_panes_have_visible_geometry(monkeypatch, tmp_path
         ).run(context)
     finally:
         root.destroy()
+
+
+
+def test_library_browser_scrollbars_keep_stable_geometry(monkeypatch, tmp_path):
+    from kicad_blocks.theme import AutoHideScrollbar
+
+    root, context, _records, _library, _project = _new_browser(monkeypatch, tmp_path)
+    try:
+        tree = context.require_widget("library-browser.results")
+
+        def descendants(widget):
+            for child in widget.winfo_children():
+                yield child
+                yield from descendants(child)
+
+        browser_scrollbars = [
+            widget for widget in descendants(root)
+            if widget.winfo_class() == "TScrollbar"
+        ]
+        assert browser_scrollbars
+        assert all(type(widget) is not AutoHideScrollbar for widget in browser_scrollbars)
+        assert len(browser_scrollbars) >= 7
+        assert all(widget.winfo_width() > 0 or widget.winfo_height() > 0 for widget in browser_scrollbars)
+    finally:
+        root.destroy()
+
+
+def test_library_browser_preview_and_overview_heights_are_resizable(monkeypatch, tmp_path):
+    root, context, _records, _library, _project = _new_browser(monkeypatch, tmp_path)
+    try:
+        PaneGroupContract(
+            contract_id="library-browser.preview-stack",
+            orientation="vertical",
+            pane_ids=(
+                "library-browser.preview-area",
+                "library-browser.overview-pane",
+            ),
+        ).run(context)
+    finally:
+        root.destroy()
+
 
 
 def test_refresh_button_reloads_records_through_real_ui_callback(monkeypatch, tmp_path):

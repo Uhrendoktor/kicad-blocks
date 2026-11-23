@@ -28,6 +28,7 @@ from kicad_blocks.plugin import (
     _choose_block_layout,
     _clean_facade_preview_svg,
     _configure_tk_theme,
+    _enable_last_column_left_resize,
     _filter_library_records,
     _layout_choices,
     _library_record_for_instance,
@@ -37,6 +38,7 @@ from kicad_blocks.plugin import (
     _native_symbol_preview_photo,
     _new_blank_pcb_source,
     _normalize_schematic_preview_svg,
+    _pcb_layout_for_variant,
     _pick_directory,
     _pick_kicad_file,
     _pick_record,
@@ -94,6 +96,54 @@ class LibraryBrowserTests(unittest.TestCase):
     def tearDown(self):
         self.temp.cleanup()
 
+
+    def test_last_treeview_column_resizes_from_its_left_separator(self):
+        class FakeTreeview:
+            def __init__(self):
+                self.tk = SimpleNamespace(
+                    splitlist=lambda value: tuple(str(value).split())
+                )
+                self.widths = {
+                    "library": {"width": 200, "minwidth": 60},
+                    "blocks": {"width": 100, "minwidth": 40},
+                    "layout": {"width": 300, "minwidth": 50},
+                }
+                self.bindings = {}
+
+            def __getitem__(self, key):
+                return {
+                    "columns": ("library", "blocks", "layout"),
+                    "displaycolumns": "#all",
+                }[key]
+
+            def column(self, name, option=None, **values):
+                if values:
+                    self.widths[name].update(values)
+                if option is None:
+                    return dict(self.widths[name])
+                return self.widths[name][option]
+
+            def xview(self):
+                return (0.0, 1.0)
+
+            def identify_region(self, _x, _y):
+                return "separator"
+
+            def bind(self, sequence, callback, add=None):
+                self.bindings[sequence] = callback
+
+        tree = FakeTreeview()
+        _enable_last_column_left_resize(tree)
+        press = tree.bindings["<ButtonPress-1>"]
+        drag = tree.bindings["<B1-Motion>"]
+        release = tree.bindings["<ButtonRelease-1>"]
+
+        self.assertEqual(press(SimpleNamespace(x=300, y=8)), "break")
+        self.assertEqual(drag(SimpleNamespace(x=280, y=8)), "break")
+        self.assertEqual(tree.column("layout", "width"), 320)
+        self.assertEqual(tree.column("blocks", "width"), 80)
+        release()
+
     def test_search_matches_description_pins_and_variant_values(self):
         records = [self.block, self.filter_block]
         self.assertEqual(_filter_library_records(records, "buck")[0].name, "Buck Converter")
@@ -102,6 +152,23 @@ class LibraryBrowserTests(unittest.TestCase):
         self.assertEqual(_filter_library_records(records, "1v8")[0].name, "Buck Converter")
         self.assertEqual(_filter_library_records(records, "vout")[0].name, "Buck Converter")
         self.assertEqual(_filter_library_records(records, ""), records)
+
+    def test_pcb_preview_selects_the_layout_linked_to_the_circuit_variant(self):
+        self.block.manifest["layouts"] = [
+            {"id": "default-board", "name": "Default board", "file": "layout_default.kicad_pcb"},
+            {"id": "compact-board", "name": "Compact board", "file": "layout_compact.kicad_pcb"},
+        ]
+        self.block.manifest["default_layout"] = "default-board"
+        self.block.manifest["variants"] = [
+            {"value": "1V8", "file": "implementation_1v8.kicad_sch", "layout_id": "compact-board"},
+            {"value": "3V3", "file": "implementation_3v3.kicad_sch", "layout_id": "default-board"},
+        ]
+        self.assertEqual(_pcb_layout_for_variant(self.block, ""), self.block.manifest["layouts"][0])
+        self.assertEqual(_pcb_layout_for_variant(self.block, "1V8"), self.block.manifest["layouts"][1])
+        self.assertEqual(_pcb_layout_for_variant(self.block, "3V3"), self.block.manifest["layouts"][0])
+
+        self.block.manifest["default_variant"] = "1V8"
+        self.assertEqual(_pcb_layout_for_variant(self.block, ""), self.block.manifest["layouts"][1])
 
     def test_native_facade_preview_exports_from_the_project_catalog_override(self):
         symbol_name = self.block.manifest["symbol_name"]

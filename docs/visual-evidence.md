@@ -22,7 +22,7 @@ Select exactly one hierarchical sheet symbol in Eeschema and invoke **Create Blo
 
 ## Inspect a library entry
 
-The Functional Block Library presents registered blocks in a searchable list with two preview modes. The **Facade** tab shows the generated library symbol; the **Schematic** tab renders the actual selected implementation with KiCad CLI. When a block has named implementations, the circuit selector switches between them; hierarchical implementations also expose a sheet selector.
+The Functional Block Library presents registered blocks in a searchable list with three preview modes. **Facade** shows the generated library symbol, **Schematic** renders the selected circuit implementation with KiCad CLI, and **PCB** renders the board layout linked to that implementation. The circuit selector switches the schematic and PCB variant together; hierarchical implementations also expose a sheet selector. Each preview supports wheel zoom and drag pan, and the preview height can be resized against the compact overview.
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/library-browser-light.png" alt="Functional Block Library with searchable block rows, facade preview, and Place block, Implementation, Edit facade, Variants, Open PCB, PCB layouts, Refresh, and Libraries actions" width="1000">
@@ -41,6 +41,14 @@ The schematic view previews the editable implementation itself, independently of
 </p>
 
 The same schematic preview is captured in the [dark theme](https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/library-browser-schematic-dark.png).
+
+The **PCB** tab follows the layout associated with the selected circuit variant. It uses the same zoom and pan controls as the schematic and facade views:
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/library-browser-pcb-light.png" alt="Functional Block Library with the PCB tab selected, showing the KiCad-rendered board associated with the selected implementation" width="1000">
+</p>
+
+The [dark-theme PCB capture](https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/library-browser-pcb-dark.png) shows the same board view.
 
 ## Edit facade pin layout
 

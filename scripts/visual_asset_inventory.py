@@ -16,6 +16,8 @@ ASSET_NAMES = frozenset(
         "library-browser-details-dark.png",
         "library-browser-schematic-light.png",
         "library-browser-schematic-dark.png",
+        "library-browser-pcb-light.png",
+        "library-browser-pcb-dark.png",
         "library-folders-light.png",
         "library-folders-dark.png",
         "task-hub-light.png",

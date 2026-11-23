@@ -82,7 +82,7 @@ Search registered block libraries, inspect facade and schematic previews, choose
 
 **Coverage:** Contracted — widget action and expected UI transition asserted.
 
-Every browser control and chooser route has a real-widget contract. Direct Publish is tested, selection-dependent actions disable when no row is selected, and placement/publish feedback is inline. The facade pin-layout editor is separately tested for immediate project-catalog persistence and concurrent-edit protection.
+Search, selection, three preview tabs, pan/zoom canvases, the resizable preview/overview split, and browser actions are contracted. PCB previews follow the selected implementation's layout link.
 
 **Major functionality**
 
@@ -93,6 +93,7 @@ Every browser control and chooser route has a real-widget contract. Direct Publi
 - Edit selected facade pin geometry in the portable Facade Pin Layout editor
 - Publish implementation/facade edits and refresh compatible instances
 - Manage variants, PCB layouts, and libraries
+- Inspect the PCB layout linked to the selected circuit implementation, with pan and zoom
 
 **Registered semantic controls**
 
@@ -103,9 +104,10 @@ Every browser control and chooser route has a real-widget contract. Direct Publi
 - Block list (`library-browser.results`; treeview; behavior asserted)
 - Library and filtered-result count (`library-browser.summary`; status-label; result observed)
 - Selected block name (`library-browser.selected-name`; selection-label; result observed)
-- Facade and Schematic tabs (`library-browser.preview.views`; notebook; behavior asserted)
+- Facade, Schematic and PCB tabs (`library-browser.preview.views`; notebook; behavior asserted)
 - Facade preview (`library-browser.preview.facade`; view; result observed)
 - Schematic preview (`library-browser.preview.schematic`; view; result observed)
+- Linked PCB layout preview (`library-browser.preview.pcb`; view; result observed)
 - Implementation selector (`library-browser.implementation`; combobox; behavior asserted)
 - Sheet selector (`library-browser.sheet`; combobox; behavior asserted)
 - Place block (`library-browser.action.place`; button; behavior asserted)
@@ -118,6 +120,9 @@ Every browser control and chooser route has a real-widget contract. Direct Publi
 - Libraries (`library-browser.action.libraries`; button; behavior asserted)
 - Non-modal action status and recovery feedback (`library-browser.status`; status-label; result observed)
 - Publish selected block (`library-browser.action.publish`; button; behavior asserted)
+- Resizable preview and overview split (`library-browser.preview-stack`; pane-group; result observed)
+- Interactive facade, schematic or PCB preview (`library-browser.preview-area`; pane; result observed)
+- Compact block overview (`library-browser.overview-pane`; pane; result observed)
 
 **Current automated evidence**
 
@@ -145,6 +150,12 @@ Every browser control and chooser route has a real-widget contract. Direct Publi
 
 ![Functional Block Library: library browser schematic dark.png](https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/library-browser-schematic-dark.png)
 [Open library-browser-schematic-dark.png](https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/library-browser-schematic-dark.png)
+
+![Functional Block Library: library browser pcb light.png](https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/library-browser-pcb-light.png)
+[Open library-browser-pcb-light.png](https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/library-browser-pcb-light.png)
+
+![Functional Block Library: library browser pcb dark.png](https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/library-browser-pcb-dark.png)
+[Open library-browser-pcb-dark.png](https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/library-browser-pcb-dark.png)
 
 ---
 

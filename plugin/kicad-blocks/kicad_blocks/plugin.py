@@ -213,6 +213,73 @@ def _visible_table_rows(item_count: int, *, maximum: int = 8) -> int:
     return min(max(1, rows), limit)
 
 
+def _enable_last_column_left_resize(tree) -> None:
+    """Allow resizing the final visible table column from its leading edge."""
+    state = {"drag": None}
+
+    def visible_columns():
+        columns = tuple(str(item) for item in tree["columns"])
+        try:
+            display = tuple(str(item) for item in tree.tk.splitlist(tree["displaycolumns"]))
+        except (AttributeError, tk.TclError, TypeError):
+            display = ()
+        if not display or display == ("#all",):
+            display = columns
+        return tuple(item for item in display if item in columns)
+
+    def separator_x(columns):
+        widths = [int(tree.column(column, "width")) for column in columns]
+        try:
+            offset = int(float(tree.xview()[0]) * sum(widths))
+        except (AttributeError, IndexError, TypeError, ValueError, tk.TclError):
+            offset = 0
+        return sum(widths[:-1]) - offset
+
+    def press(event):
+        columns = visible_columns()
+        if len(columns) < 2:
+            return None
+        try:
+            if tree.identify_region(event.x, event.y) != "separator":
+                return None
+        except (AttributeError, tk.TclError):
+            return None
+        if abs(int(event.x) - separator_x(columns)) > 8:
+            return None
+        previous, trailing = columns[-2:]
+        state["drag"] = {
+            "start_x": int(event.x),
+            "previous": previous,
+            "trailing": trailing,
+            "previous_width": int(tree.column(previous, "width")),
+            "trailing_width": int(tree.column(trailing, "width")),
+            "previous_min": int(tree.column(previous, "minwidth")),
+            "trailing_min": int(tree.column(trailing, "minwidth")),
+        }
+        return "break"
+
+    def drag(event):
+        current = state["drag"]
+        if current is None:
+            return None
+        delta = int(event.x) - current["start_x"]
+        delta = max(
+            current["trailing_min"] - current["trailing_width"],
+            min(delta, current["previous_width"] - current["previous_min"]),
+        )
+        tree.column(current["previous"], width=current["previous_width"] + delta)
+        tree.column(current["trailing"], width=current["trailing_width"] - delta)
+        return "break"
+
+    def release(_event=None):
+        state["drag"] = None
+        return None
+
+    tree.bind("<ButtonPress-1>", press, add="+")
+    tree.bind("<B1-Motion>", drag, add="+")
+    tree.bind("<ButtonRelease-1>", release, add="+")
+
+
 def _set_window_geometry(window, width: int, height: int, min_width: int, min_height: int) -> None:
     """Size a completed dialog to its content and keep every action visible."""
     window.update_idletasks()
@@ -1099,6 +1166,7 @@ def _pick_block_for_placement(records, parent):
 
     tree = ttk.Treeview(left, columns=("block", "library"), show="headings", selectmode="browse")
     tree._kicad_ui_contract_id = "functional-block-picker.results"
+    _enable_last_column_left_resize(tree)
     tree.heading("block", text="Functional block")
     tree.heading("library", text="Library")
     tree.column("block", width=220, minwidth=160, stretch=True)
@@ -1343,6 +1411,7 @@ def _pick_record(records, parent, title: str):
         selectmode="browse",
     )
     tree._kicad_ui_contract_id = "record-picker.results"
+    _enable_last_column_left_resize(tree)
     tree.heading("block", text="Block")
     tree.heading("library", text="Library")
     tree.heading("pins", text="Pins")
@@ -2240,6 +2309,7 @@ def _edit_facade_symbol(
         height=_visible_table_rows(len(pin_rows), maximum=10),
     )
     tree._kicad_ui_contract_id = "facade-editor.pins"
+    _enable_last_column_left_resize(tree)
     headings = {
         "pin": ("Pin", 190),
         "number": ("Number", 75),
@@ -2936,7 +3006,14 @@ def _native_symbol_preview_photo(
         _NATIVE_PREVIEW_CACHE[cache_key] = png_data
 
     # Tk images belong to a particular Tcl interpreter, so cache only PNG bytes.
-    return tk.PhotoImage(data=base64.b64encode(png_data).decode("ascii"))
+    photo = tk.PhotoImage(data=base64.b64encode(png_data).decode("ascii"))
+    try:
+        photo._kicad_blocks_png_data = png_data
+    except (AttributeError, TypeError):
+        # Some Tk test doubles are immutable; the production Tk image accepts
+        # attributes, while the legacy drawing path remains available to mocks.
+        pass
+    return photo
 
 _NATIVE_PREVIEW_CACHE: dict[tuple, object] = {}
 
@@ -3066,22 +3143,311 @@ def _native_schematic_preview_pages(
 _SCHEMATIC_PREVIEW_CACHE: dict[tuple, tuple[tuple[str, bytes], ...]] = {}
 
 
+def _enable_preview_pan_zoom(canvas) -> None:
+    """Enable wheel zoom, drag panning, double-click fit, and resize-aware redraw."""
+    if getattr(canvas, "_kicad_preview_state", None) is not None:
+        return
+    canvas._kicad_preview_state = {
+        "image": None, "zoom": 1.0, "scale": 1.0, "photo": None,
+        "origin": (0, 0), "size": (1, 1), "drag": None,
+    }
+    state = canvas._kicad_preview_state
+
+    def render(center=None, anchor=None):
+        from PIL import Image, ImageTk
+
+        image = state["image"]
+        if image is None:
+            return
+        viewport_width = max(1, int(canvas.winfo_width()))
+        viewport_height = max(1, int(canvas.winfo_height()))
+        fit_scale = min(
+            max(1, viewport_width - 24) / max(1, image.width),
+            max(1, viewport_height - 24) / max(1, image.height),
+            1.0,
+        )
+        scale = fit_scale * float(state["zoom"])
+        width = max(1, round(image.width * scale))
+        height = max(1, round(image.height * scale))
+        photo = ImageTk.PhotoImage(
+            image.resize((width, height), Image.Resampling.LANCZOS), master=canvas
+        )
+        origin_x = max(0, (viewport_width - width) // 2)
+        origin_y = max(0, (viewport_height - height) // 2)
+        scroll_width = max(viewport_width, origin_x + width)
+        scroll_height = max(viewport_height, origin_y + height)
+        if center is None:
+            center = (image.width / 2, image.height / 2)
+        if anchor is None:
+            anchor = (viewport_width / 2, viewport_height / 2)
+        canvas.delete("preview-image")
+        canvas.create_image(
+            origin_x, origin_y, image=photo, anchor="nw", tags=("preview-image",)
+        )
+        canvas.configure(scrollregion=(0, 0, scroll_width, scroll_height))
+        canvas._kicad_preview_photo = photo
+        state["photo"] = photo
+        state["scale"] = scale
+        state["origin"] = (origin_x, origin_y)
+        state["size"] = (width, height)
+        left = origin_x + center[0] * scale - anchor[0]
+        top = origin_y + center[1] * scale - anchor[1]
+        canvas.xview_moveto(max(0.0, min(1.0, left / max(1, scroll_width))))
+        canvas.yview_moveto(max(0.0, min(1.0, top / max(1, scroll_height))))
+
+    def set_image(png_data):
+        from io import BytesIO
+        from PIL import Image
+
+        state["image"] = Image.open(BytesIO(bytes(png_data))).convert("RGBA")
+        state["zoom"] = 1.0
+        canvas.after_idle(render)
+
+    def clear():
+        state["image"] = None
+        state["photo"] = None
+        state["drag"] = None
+        canvas.delete("all")
+        canvas.configure(scrollregion=(0, 0, 0, 0))
+
+    def zoom(event, factor):
+        if state["image"] is None:
+            return "break"
+        old_scale = max(float(state["scale"]), 0.0001)
+        logical_x = (
+            canvas.canvasx(event.x) - state["origin"][0]
+        ) / old_scale
+        logical_y = (
+            canvas.canvasy(event.y) - state["origin"][1]
+        ) / old_scale
+        state["zoom"] = max(0.2, min(8.0, float(state["zoom"]) * factor))
+        render(center=(logical_x, logical_y), anchor=(event.x, event.y))
+        return "break"
+
+    def wheel(event):
+        number = getattr(event, "num", None)
+        delta = getattr(event, "delta", 0) or 0
+        return zoom(event, 1.15 if number == 4 or delta > 0 else 1 / 1.15)
+
+    def resize(event):
+        if state["image"] is None:
+            return
+        old_scale = max(float(state["scale"]), 0.0001)
+        center = (
+            (
+                canvas.canvasx(max(1, int(event.width)) / 2) - state["origin"][0]
+            ) / old_scale,
+            (
+                canvas.canvasy(max(1, int(event.height)) / 2) - state["origin"][1]
+            ) / old_scale,
+        )
+        render(center=center)
+
+    def reset(_event=None):
+        if state["image"] is not None:
+            state["zoom"] = 1.0
+            render()
+        return "break"
+
+    canvas.set_preview_image = set_image
+    canvas.clear_preview_image = clear
+    canvas.bind("<MouseWheel>", wheel, add="+")
+    canvas.bind("<Button-4>", lambda event: zoom(event, 1.15), add="+")
+    canvas.bind("<Button-5>", lambda event: zoom(event, 1 / 1.15), add="+")
+    canvas.bind(
+        "<ButtonPress-1>",
+        lambda event: (canvas.scan_mark(event.x, event.y), "break")[1],
+        add="+",
+    )
+    canvas.bind(
+        "<B1-Motion>",
+        lambda event: (canvas.scan_dragto(event.x, event.y, gain=1), "break")[1],
+        add="+",
+    )
+    canvas.bind("<Double-Button-1>", reset, add="+")
+    canvas.bind("<Configure>", resize, add="+")
+
+
+def _set_preview_image(canvas, png_data) -> bool:
+    setter = getattr(canvas, "set_preview_image", None)
+    if not callable(setter):
+        return False
+    setter(png_data)
+    return True
+
+
+def _clear_preview_image(canvas) -> None:
+    clearer = getattr(canvas, "clear_preview_image", None)
+    if callable(clearer):
+        clearer()
+    else:
+        canvas.delete("all")
+
+
+def _draw_preview_message(canvas, message: str) -> None:
+    _clear_preview_image(canvas)
+    canvas.update_idletasks()
+    width = max(320, int(canvas.winfo_width()))
+    height = max(160, int(canvas.winfo_height()))
+    style = ttk.Style(canvas)
+    foreground = style.lookup("TLabel", "foreground") or canvas.cget("foreground")
+    canvas.create_text(
+        width / 2, height / 2, text=message, fill=foreground,
+        justify="center", width=max(240, width - 32),
+    )
+    canvas.configure(scrollregion=(0, 0, width, height))
+
+
+def _pcb_layout_for_variant(record, implementation: str = "") -> dict | None:
+    """Return the PCB layout linked to a selected circuit implementation."""
+    layouts = _layout_choices(record)
+    selected = str(implementation or record.manifest.get("default_variant") or "").strip()
+    variant = next(
+        (
+            item for item in record.manifest.get("variants", [])
+            if str(item.get("value", "")).casefold() == selected.casefold()
+        ),
+        None,
+    ) if selected else None
+    layout_id = str(
+        (variant or {}).get("layout_id")
+        or record.manifest.get("default_layout")
+        or ""
+    ).strip().casefold()
+    if layout_id:
+        return next(
+            (
+                item for item in layouts
+                if layout_id in {
+                    str(item.get("id", "")).casefold(),
+                    str(item.get("name", "")).casefold(),
+                }
+            ),
+            None,
+        )
+    return layouts[0] if len(layouts) == 1 else None
+
+
+def _native_pcb_preview_png(
+    record,
+    implementation: str = "",
+    *,
+    width: int = 1200,
+) -> tuple[str, bytes]:
+    """Render the PCB layout associated with the selected implementation."""
+    layout = _pcb_layout_for_variant(record, implementation)
+    if layout is None:
+        raise LookupError(
+            "No PCB layout is linked to this implementation. Assign one in PCB layouts."
+        )
+    filename = str(layout.get("file", "")).strip()
+    if (
+        not filename
+        or Path(filename).name != filename
+        or Path(filename).suffix.casefold() != ".kicad_pcb"
+    ):
+        raise ValueError(f"The selected PCB layout has an invalid filename: {filename!r}.")
+    block_path = Path(record.path).resolve()
+    board_path = (block_path / filename).resolve()
+    try:
+        board_path.relative_to(block_path)
+    except ValueError as exc:
+        raise ValueError("The selected PCB layout resolves outside its block folder.") from exc
+    if not board_path.is_file():
+        raise FileNotFoundError(f"The selected PCB layout is missing: {board_path}")
+
+    cache_key = (
+        str(board_path), board_path.stat().st_mtime_ns,
+        board_path.stat().st_size, int(width),
+    )
+    cached = _PCB_PREVIEW_CACHE.get(cache_key)
+    if cached is not None:
+        return str(layout.get("name") or layout.get("id") or board_path.stem), cached
+
+    cli = find_kicad_cli()
+    with tempfile.TemporaryDirectory(prefix="kicad-block-pcb-preview-") as temporary:
+        svg_file = Path(temporary) / "board.svg"
+        result = subprocess.run(
+            [
+                cli, "pcb", "export", "svg",
+                "--mode-single", "--fit-page-to-board", "--exclude-drawing-sheet",
+                "--layers", "F.Cu,F.SilkS,Edge.Cuts",
+                "--output", str(svg_file), str(board_path),
+            ],
+            capture_output=True, text=True, check=False, timeout=60,
+        )
+        if result.returncode != 0:
+            detail = (result.stderr or result.stdout).strip()
+            raise RuntimeError(
+                "KiCad could not render the PCB layout"
+                + (f": {detail}" if detail else ".")
+            )
+        if not svg_file.is_file():
+            raise RuntimeError("KiCad did not produce the PCB SVG preview.")
+        try:
+            import resvg_py
+        except ImportError as exc:
+            raise RuntimeError(
+                "The native KiCad preview rasterizer is missing. Reinstall KiCad Blocks."
+            ) from exc
+        png_data = bytes(
+            resvg_py.svg_to_bytes(
+                svg_path=str(svg_file), width=int(width), height=int(width)
+            )
+        )
+
+    if len(_PCB_PREVIEW_CACHE) >= 24:
+        _PCB_PREVIEW_CACHE.pop(next(iter(_PCB_PREVIEW_CACHE)))
+    _PCB_PREVIEW_CACHE[cache_key] = png_data
+    return str(layout.get("name") or layout.get("id") or board_path.stem), png_data
+
+
+_PCB_PREVIEW_CACHE: dict[tuple, bytes] = {}
+
+
+def _draw_pcb_preview(canvas, record, implementation: str = "") -> str | None:
+    """Render the PCB variant linked to the current circuit selection."""
+    if record is None:
+        _draw_preview_message(canvas, "Select a block to preview its PCB layout.")
+        return None
+    try:
+        label, png_data = _native_pcb_preview_png(
+            record, implementation,
+            width=max(720, min(1400, int(canvas.winfo_width()))),
+        )
+    except LookupError as exc:
+        _draw_preview_message(canvas, str(exc))
+        return None
+    except Exception as exc:
+        LOG.exception("Could not render PCB preview for %s", record.name)
+        _draw_preview_message(canvas, f"PCB preview unavailable\\n{exc}")
+        return None
+    if not _set_preview_image(canvas, png_data):
+        photo = tk.PhotoImage(data=base64.b64encode(png_data).decode("ascii"))
+        canvas._native_pcb_preview_photo = photo
+        canvas.delete("all")
+        canvas.create_image(8, 8, image=photo, anchor="nw")
+        canvas.configure(scrollregion=(0, 0, photo.width() + 16, photo.height() + 16))
+    return label
+
+
 def _draw_schematic_preview(canvas, pages, page_label: str | None = None) -> None:
-    """Display one KiCad-rendered schematic sheet in a scrollable canvas."""
-    canvas.delete("all")
+    """Display one KiCad-rendered schematic sheet with pan and zoom controls."""
     selected = next(
         (item for item in pages if item[0] == page_label),
         pages[0] if pages else None,
     )
     if selected is None:
+        _draw_preview_message(canvas, "No schematic sheet is available.")
         return
     _label, png_data = selected
+    if _set_preview_image(canvas, png_data):
+        return
     photo = tk.PhotoImage(data=base64.b64encode(png_data).decode("ascii"))
     canvas._native_schematic_preview_photo = photo
+    canvas.delete("all")
     canvas.create_image(8, 8, image=photo, anchor="nw")
-    canvas.configure(
-        scrollregion=(0, 0, photo.width() + 16, photo.height() + 16)
-    )
+    canvas.configure(scrollregion=(0, 0, photo.width() + 16, photo.height() + 16))
     canvas.xview_moveto(0)
     canvas.yview_moveto(0)
 
@@ -3092,10 +3458,9 @@ def _draw_facade_preview(
     *,
     library_file: str | Path | None = None,
 ) -> None:
-    """Display a faithful KiCad-rendered facade preview; never approximate it."""
-    canvas.delete("all")
-    height = max(int(canvas.winfo_height()), 250)
-    max_preview_height = max(160, min(280, height - 24))
+    """Display a faithful KiCad-rendered facade preview with pan and zoom."""
+    height = max(int(canvas.winfo_height()), 180)
+    max_preview_height = max(160, min(280, height - 16))
     try:
         photo = _native_symbol_preview_photo(
             record,
@@ -3104,22 +3469,16 @@ def _draw_facade_preview(
         )
     except Exception as exc:
         LOG.exception("Native facade preview failed for %s", record.name)
-        style = ttk.Style(canvas)
-        foreground = style.lookup("TLabel", "foreground") or canvas.cget("foreground")
-        canvas.create_text(
-            max(int(canvas.winfo_width()), 480) / 2,
-            max(int(canvas.winfo_height()), 250) / 2,
-            text=f"KiCad preview unavailable\\n{exc}",
-            fill=foreground,
-            justify="center",
-            width=max(int(canvas.winfo_width()), 480) - 32,
-        )
-        canvas.configure(scrollregion=(0, 0, max(int(canvas.winfo_width()), 480), max(int(canvas.winfo_height()), 250)))
+        _draw_preview_message(canvas, f"KiCad preview unavailable\\n{exc}")
         return
-
+    png_data = getattr(photo, "_kicad_blocks_png_data", None)
+    if png_data is not None and _set_preview_image(canvas, png_data):
+        canvas._native_preview_photo = photo
+        return
     canvas._native_preview_photo = photo
-    width = max(int(canvas.winfo_width()), 480)
-    height = max(int(canvas.winfo_height()), 250)
+    canvas.delete("all")
+    width = max(int(canvas.winfo_width()), 320)
+    height = max(int(canvas.winfo_height()), 180)
     canvas.create_image(width / 2, height / 2, image=photo, anchor="center")
     canvas.configure(
         scrollregion=(0, 0, max(width, photo.width()), max(height, photo.height()))
@@ -3807,6 +4166,7 @@ def _show_block_layout_editor(
         selectmode="browse",
     )
     tree._kicad_ui_contract_id = "pcb-layout-manager.rows"
+    _enable_last_column_left_resize(tree)
     tree.heading("name", text="Layout")
     tree.heading("assigned", text="Available to")
     tree.heading("file", text="PCB file")
@@ -4427,6 +4787,7 @@ def _show_block_variant_editor(
         selectmode="browse",
     )
     tree._kicad_ui_contract_id = "implementations-manager.rows"
+    _enable_last_column_left_resize(tree)
     tree.heading("value", text="Implementation")
     tree.heading("file", text="Schematic file")
     tree.heading("role", text="Role")
@@ -4750,6 +5111,7 @@ def _show_library_roots_dialog(parent) -> bool:
         selectmode="browse",
     )
     tree._kicad_ui_contract_id = "manage-libraries.rows"
+    _enable_last_column_left_resize(tree)
     tree.heading("library", text="Library")
     tree.heading("blocks", text="Blocks")
     tree.heading("role", text="Use")
@@ -5080,8 +5442,10 @@ def _show_library_browser(
     outer = ttk.Frame(window, padding=8)
     outer.pack(fill="both", expand=True)
     header = ttk.Frame(outer)
-    header.pack(fill="x", pady=(0, 6))
-    ttk.Label(header, text="Functional Block Library", style="Title.TLabel").pack(side="left")
+    header.pack(fill="x", pady=(0, 3))
+    ttk.Label(
+        header, text="Functional Block Library", style="SectionTitleSurface.TLabel"
+    ).pack(side="left")
     library_path = tk.StringVar()
     library_summary = ttk.Label(header, textvariable=library_path, style="Muted.TLabel")
     library_summary._kicad_ui_contract_id = "library-browser.summary"
@@ -5120,6 +5484,7 @@ def _show_library_browser(
         selectmode="browse",
     )
     tree._kicad_ui_contract_id = "library-browser.results"
+    _enable_last_column_left_resize(tree)
     tree.heading("block", text="Block")
     tree.heading("library", text="Library")
     tree.heading("pins", text="I/O")
@@ -5130,8 +5495,12 @@ def _show_library_browser(
     tree.column("pins", width=44, minwidth=40, stretch=False, anchor="center")
     tree.column("variants", width=78, minwidth=72, stretch=False, anchor="center")
     tree.column("layouts", width=52, minwidth=48, stretch=False, anchor="center")
-    tree_y_scroll = _auto_hide_scrollbar(tree_frame, orient="vertical", command=tree.yview, style="Vertical.TScrollbar")
-    tree_x_scroll = _auto_hide_scrollbar(tree_frame, orient="horizontal", command=tree.xview, style="Horizontal.TScrollbar")
+    tree_y_scroll = ttk.Scrollbar(
+        tree_frame, orient="vertical", command=tree.yview, style="Vertical.TScrollbar"
+    )
+    tree_x_scroll = ttk.Scrollbar(
+        tree_frame, orient="horizontal", command=tree.xview, style="Horizontal.TScrollbar"
+    )
     tree.configure(
         yscrollcommand=tree_y_scroll.set,
         xscrollcommand=tree_x_scroll.set,
@@ -5143,7 +5512,6 @@ def _show_library_browser(
 
     right.columnconfigure(0, weight=1)
     right.rowconfigure(2, weight=1)
-    right.rowconfigure(3, weight=0)
     name_label = ttk.Label(right, text="Select a block", style="Title.TLabel")
     name_label._kicad_ui_contract_id = "library-browser.selected-name"
     name_label.grid(row=0, column=0, sticky="ew")
@@ -5152,13 +5520,12 @@ def _show_library_browser(
     )
     description_label.grid(row=1, column=0, sticky="ew", pady=(3, 6))
 
-    preview_box = ttk.Frame(
-        right, style="Card.TFrame", padding=(12, 10)
-    )
-    preview_box.grid(row=2, column=0, sticky="nsew")
-    ttk.Label(
-        preview_box, text="PREVIEW", style="SectionTitleSurface.TLabel"
-    ).pack(anchor="w", pady=(0, 6))
+    right_split = ttk.Panedwindow(right, orient="vertical")
+    right_split._kicad_ui_contract_id = "library-browser.preview-stack"
+    right_split.grid(row=2, column=0, sticky="nsew")
+    preview_box = ttk.Frame(right_split, style="Card.TFrame", padding=(8, 6))
+    preview_box._kicad_ui_contract_id = "library-browser.preview-area"
+    right_split.add(preview_box, weight=4)
     from .ui_components import FlatTabControl
 
     preview_notebook = FlatTabControl(
@@ -5180,10 +5547,10 @@ def _show_library_browser(
         highlightthickness=0,
         borderwidth=0,
     )
-    preview_y_scroll = _auto_hide_scrollbar(
+    preview_y_scroll = ttk.Scrollbar(
         facade_frame, orient="vertical", command=preview.yview, style="Vertical.TScrollbar"
     )
-    preview_x_scroll = _auto_hide_scrollbar(
+    preview_x_scroll = ttk.Scrollbar(
         facade_frame, orient="horizontal", command=preview.xview, style="Horizontal.TScrollbar"
     )
     preview.configure(
@@ -5193,7 +5560,8 @@ def _show_library_browser(
     preview.grid(row=0, column=0, sticky="nsew")
     preview_y_scroll.grid(row=0, column=1, sticky="ns")
     preview_x_scroll.grid(row=1, column=0, sticky="ew")
-    _bind_mousewheel(preview, lambda amount: preview.yview_scroll(amount, "units"))
+    _enable_preview_pan_zoom(preview)
+    _add_tooltip(preview, "Wheel to zoom · Drag to pan · Double-click to fit")
 
     schematic_page = ttk.Frame(preview_notebook)
     schematic_page._kicad_ui_contract_id = "library-browser.preview.schematic"
@@ -5230,20 +5598,19 @@ def _show_library_browser(
     schematic_frame.rowconfigure(0, weight=1)
     schematic_preview = tk.Canvas(
         schematic_frame,
-        height=230,
         # KiCad's SVG uses the traditional light-sheet palette. Keep the
         # drawing surface paper-white in both UI themes for readable contrast.
         background="#ffffff",
         highlightthickness=0,
         borderwidth=0,
     )
-    schematic_y_scroll = _auto_hide_scrollbar(
+    schematic_y_scroll = ttk.Scrollbar(
         schematic_frame,
         orient="vertical",
         command=schematic_preview.yview,
         style="Vertical.TScrollbar",
     )
-    schematic_x_scroll = _auto_hide_scrollbar(
+    schematic_x_scroll = ttk.Scrollbar(
         schematic_frame,
         orient="horizontal",
         command=schematic_preview.xview,
@@ -5256,20 +5623,51 @@ def _show_library_browser(
     schematic_preview.grid(row=0, column=0, sticky="nsew")
     schematic_y_scroll.grid(row=0, column=1, sticky="ns")
     schematic_x_scroll.grid(row=1, column=0, sticky="ew")
-    _bind_mousewheel(schematic_preview, lambda amount: schematic_preview.yview_scroll(amount, "units"))
+    _enable_preview_pan_zoom(schematic_preview)
+    _add_tooltip(schematic_preview, "Wheel to zoom · Drag to pan · Double-click to fit")
 
-    details_box = ttk.Frame(
-        right, style="Card.TFrame", padding=(12, 10)
+    pcb_page = ttk.Frame(preview_notebook)
+    pcb_page._kicad_ui_contract_id = "library-browser.preview.pcb"
+    preview_notebook.add(pcb_page, text="PCB")
+    pcb_page.columnconfigure(0, weight=1)
+    pcb_page.rowconfigure(1, weight=1)
+    pcb_label = ttk.Label(pcb_page, text="PCB layout", style="Muted.TLabel")
+    pcb_label.grid(row=0, column=0, sticky="w", pady=(0, 5))
+    pcb_frame = ttk.Frame(pcb_page)
+    pcb_frame.grid(row=1, column=0, sticky="nsew")
+    pcb_frame.columnconfigure(0, weight=1)
+    pcb_frame.rowconfigure(0, weight=1)
+    pcb_preview = tk.Canvas(
+        pcb_frame, background="#ffffff", highlightthickness=0, borderwidth=0
     )
-    details_box.grid(row=3, column=0, sticky="nsew", pady=(8, 0))
+    pcb_y_scroll = ttk.Scrollbar(
+        pcb_frame, orient="vertical", command=pcb_preview.yview,
+        style="Vertical.TScrollbar",
+    )
+    pcb_x_scroll = ttk.Scrollbar(
+        pcb_frame, orient="horizontal", command=pcb_preview.xview,
+        style="Horizontal.TScrollbar",
+    )
+    pcb_preview.configure(
+        yscrollcommand=pcb_y_scroll.set, xscrollcommand=pcb_x_scroll.set
+    )
+    pcb_preview.grid(row=0, column=0, sticky="nsew")
+    pcb_y_scroll.grid(row=0, column=1, sticky="ns")
+    pcb_x_scroll.grid(row=1, column=0, sticky="ew")
+    _enable_preview_pan_zoom(pcb_preview)
+    _add_tooltip(pcb_preview, "Wheel to zoom · Drag to pan · Double-click to fit")
+
+    details_box = ttk.Frame(right_split, style="Card.TFrame", padding=(8, 5))
+    details_box._kicad_ui_contract_id = "library-browser.overview-pane"
+    right_split.add(details_box, weight=1)
     ttk.Label(
         details_box, text="BLOCK OVERVIEW", style="SectionTitleSurface.TLabel"
-    ).pack(anchor="w", pady=(0, 6))
+    ).pack(anchor="w", pady=(0, 3))
     details_frame = ttk.Frame(details_box, style="Card.TFrame")
     details_frame.pack(fill="both", expand=True)
     details = tk.Text(
         details_frame,
-        height=7,
+        height=3,
         wrap="word",
         relief="flat",
         borderwidth=0,
@@ -5277,8 +5675,8 @@ def _show_library_browser(
         foreground=theme_foreground,
         font=("TkDefaultFont", 8),
     )
-    details_scroll = _auto_hide_scrollbar(
-        details_frame, orient="vertical", command=details.yview, style="Vertical.TScrollbar"
+    details_scroll = ttk.Scrollbar(
+        details_frame, orient="vertical", command=details.yview
     )
     details.configure(yscrollcommand=details_scroll.set)
     details.pack(side="left", fill="both", expand=True)
@@ -5431,8 +5829,10 @@ def _show_library_browser(
             details.configure(state="normal")
             details.delete("1.0", "end")
             details.configure(state="disabled")
-            preview.delete("all")
-            schematic_preview.delete("all")
+            _clear_preview_image(preview)
+            _clear_preview_image(schematic_preview)
+            _clear_preview_image(pcb_preview)
+            pcb_label.configure(text="PCB layout")
             implementation_selector.configure(values=(), state="disabled")
             implementation_choice.set("")
             implementation_choices[0] = {}
@@ -5446,8 +5846,8 @@ def _show_library_browser(
         description = " ".join(
             str(record.manifest.get("description", "") or "").split()
         )
-        if len(description) > 150:
-            description = description[:147].rstrip() + "…"
+        if len(description) > 120:
+            description = description[:117].rstrip() + "…"
         description_label.configure(text=description)
         details.configure(state="normal")
         details.delete("1.0", "end")
@@ -5510,19 +5910,36 @@ def _show_library_browser(
                 width=max(int(preview.winfo_width()), 480) - 32,
             )
 
-        if preview_notebook.index(preview_notebook.select()) == 0:
+        selected_tab = preview_notebook.index(preview_notebook.select())
+        if selected_tab == 0:
             draw_facade_for_selection()
-        else:
+        elif selected_tab == 1:
             render_schematic_for_selection()
+        else:
+            render_pcb_for_selection()
+
+    def render_pcb_for_selection():
+        record = selected_record[0]
+        selected_implementation = implementation_choices[0].get(
+            implementation_choice.get(), ""
+        )
+        label = _draw_pcb_preview(pcb_preview, record, selected_implementation)
+        pcb_label.configure(text=label or "PCB layout")
 
     def preview_tab_changed(_event=None):
-        if preview_notebook.index(preview_notebook.select()) == 0:
+        selected_tab = preview_notebook.index(preview_notebook.select())
+        if selected_tab == 0:
             draw_facade_for_selection()
-        else:
+        elif selected_tab == 1:
             render_schematic_for_selection()
+        else:
+            render_pcb_for_selection()
 
     def implementation_changed(_event=None):
-        render_schematic_for_selection()
+        if preview_notebook.index(preview_notebook.select()) == 1:
+            render_schematic_for_selection()
+        elif preview_notebook.index(preview_notebook.select()) == 2:
+            render_pcb_for_selection()
 
     def sheet_changed(_event=None):
         _draw_schematic_preview(
@@ -5942,20 +6359,32 @@ def _show_library_browser(
     notice_label._kicad_ui_contract_id = "library-browser.status"
     notice_label.pack(fill="x", pady=(5, 0))
 
-    action_toolbar = ttk.Frame(outer, padding=(0, 5, 0, 0))
+    action_toolbar = ttk.Frame(outer, padding=(0, 4, 0, 0))
     action_toolbar.pack(fill="x")
-    place_button[0] = _action_button(
-        action_toolbar, "Place block", place_selected, "place",
-        "Insert the selected facade at the active sheet center, focus it, and select it.",
-        state="disabled",
-        contract_id="library-browser.action.place",
-        style="Primary.TButton",
+
+    library_group = ttk.Frame(action_toolbar)
+    library_group.pack(side="left", padx=(0, 8))
+    ttk.Label(
+        library_group, text="LIBRARY", style="Muted.TLabel", font=("TkDefaultFont", 8)
+    ).pack(anchor="w", pady=(0, 2))
+    library_actions = ttk.Frame(library_group)
+    library_actions.pack(fill="x")
+    refresh_button = _action_button(
+        library_actions, "Refresh", refresh_records, "refresh",
+        "Reload registered libraries and block details",
+        contract_id="library-browser.action.refresh",
     )
-    place_button[0].pack(side="left", padx=(0, 8))
+    refresh_button.pack(side="left", padx=(0, 4))
+    libraries_button = _action_button(
+        library_actions, "Libraries", manage_libraries, "libraries",
+        "Register, create, change, or unregister block libraries",
+        contract_id="library-browser.action.libraries",
+    )
+    libraries_button.pack(side="left")
+
     ttk.Separator(action_toolbar, orient="vertical").pack(
         side="left", fill="y", padx=(0, 9), pady=3
     )
-
     block_group = ttk.Frame(action_toolbar)
     block_group.pack(side="left", padx=(0, 8))
     ttk.Label(
@@ -5972,7 +6401,7 @@ def _show_library_browser(
     implementation_button[0].pack(side="left", padx=(0, 4))
     facade_button[0] = _action_button(
         block_actions, "Edit facade", edit_facade, "facade",
-        "Open the generated library facade in KiCad Symbol Editor",
+        "Adjust generated facade pin geometry; names and electrical types follow the implementation",
         contract_id="library-browser.action.facade",
     )
     facade_button[0].pack(side="left", padx=(0, 4))
@@ -6016,31 +6445,23 @@ def _show_library_browser(
     )
     manage_layout_button[0].pack(side="left")
 
+    ttk.Frame(action_toolbar).pack(side="left", fill="x", expand=True)
     ttk.Separator(action_toolbar, orient="vertical").pack(
         side="left", fill="y", padx=(0, 9), pady=3
     )
-    library_group = ttk.Frame(action_toolbar)
-    library_group.pack(side="left")
-    ttk.Label(
-        library_group, text="LIBRARY", style="Muted.TLabel", font=("TkDefaultFont", 8)
-    ).pack(anchor="w", pady=(0, 2))
-    library_actions = ttk.Frame(library_group)
-    library_actions.pack(fill="x")
-    refresh_button = _action_button(
-        library_actions, "Refresh", refresh_records, "refresh",
-        "Reload registered libraries and block details",
-        contract_id="library-browser.action.refresh",
+    place_button[0] = _action_button(
+        action_toolbar, "Place block", place_selected, "place",
+        "Insert the selected facade into the active schematic using KiCad's supported placement API",
+        state="disabled",
+        contract_id="library-browser.action.place",
+        style="Primary.TButton",
     )
-    refresh_button.pack(side="left", padx=(0, 4))
-    libraries_button = _action_button(
-        library_actions, "Libraries", manage_libraries, "libraries",
-        "Register, create, change, or unregister block libraries",
-        contract_id="library-browser.action.libraries",
-    )
-    libraries_button.pack(side="left")
+    place_button[0].pack(side="right", anchor="s")
     refresh_records()
     selection_changed()
-    _set_window_geometry(window, 1440, 820, 1080, 620)
+    _set_window_geometry(window, 1440, 780, 1080, 580)
+    with contextlib.suppress(tk.TclError):
+        window.after_idle(lambda: right_split.sashpos(0, max(260, right.winfo_height() - 110)))
     window.bind("<FocusIn>", lambda _event: selection_changed(), add="+")
     search_entry.focus_set()
 
