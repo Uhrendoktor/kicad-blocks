@@ -451,6 +451,83 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
             self.project, self.block, self.kicad, [self.library.resolve()]
         )
 
+    def test_create_block_from_selected_schematic_items(self):
+        source = self.project / "power_stage.kicad_sch"
+        source.write_text(
+            '''(kicad_sch
+              (version 20250114)
+              (generator "eeschema")
+              (uuid "11111111-1111-4111-8111-111111111111")
+              (paper "A4")
+              (lib_symbols
+                (symbol "Device:R"
+                  (pin_names (offset 0.5))
+                  (symbol "R_0_1"
+                    (rectangle (start -1 -2) (end 1 2)
+                      (stroke (width 0) (type default))
+                      (fill (type background)))
+                  )
+                )
+              )
+              (symbol (lib_id "Device:R") (at 50 50 0) (unit 1)
+                (property "Reference" "R1" (at 50 50 0) (effects (font (size 1 1))))
+                (property "Value" "10k" (at 50 50 0) (effects (font (size 1 1))))
+                (uuid "22222222-2222-4222-8222-222222222222"))
+              (label "UNSELECTED" (at 10 10 0)
+                (effects (font (size 1.27 1.27)) (justify left bottom))
+                (uuid "33333333-3333-4333-8333-333333333333"))
+              (sheet_instances (path "/" (page "1")))
+            )''',
+            encoding="utf-8",
+        )
+        selection = '''(symbol (lib_id "Device:R") (at 50 50 0) (unit 1)
+            (property "Reference" "R1" (at 50 50 0) (effects (font (size 1 1))))
+            (property "Value" "10k" (at 50 50 0) (effects (font (size 1 1))))
+            (uuid "22222222-2222-4222-8222-222222222222"))
+          (label "VIN" (at 40 40 0)
+            (effects (font (size 1.27 1.27)) (justify left bottom))
+            (uuid "44444444-4444-4444-8444-444444444444"))'''
+        schematic = SimpleNamespace(
+            get_selection=Mock(return_value=[object(), object()]),
+            get_selection_as_string=Mock(return_value=selection),
+        )
+        captured = {}
+
+        def capture_created_block(_root, name, **kwargs):
+            captured["name"] = name
+            captured["source_schematic"] = kwargs["source_schematic"]
+            captured["source_content"] = kwargs["source_schematic"].read_text(
+                encoding="utf-8"
+            )
+            captured["source_sheet_uuid"] = kwargs["source_sheet_uuid"]
+            return self.block
+
+        with (
+            patch.object(
+                plugin_actions, "_active_sheet_source",
+                return_value=(source.resolve(), None),
+            ),
+            patch.object(plugin_actions, "_list_library_records", return_value=[]),
+            patch.object(plugin_actions, "create_block", side_effect=capture_created_block) as create,
+            patch.object(plugin_actions, "_register_block", return_value=self.block) as register,
+        ):
+            plugin_actions._create_and_place(
+                self.library, schematic, self.kicad, self.project, self.parent
+            )
+
+        self.assertEqual(captured["name"], "Power Stage Selection")
+        self.assertIsNone(captured["source_sheet_uuid"])
+        self.assertNotEqual(captured["source_schematic"], source.resolve())
+        self.assertIn('(hierarchical_label "VIN"', captured["source_content"])
+        self.assertIn('(shape passive)', captured["source_content"])
+        self.assertIn('(lib_id "Device:R")', captured["source_content"])
+        self.assertNotIn("UNSELECTED", captured["source_content"])
+        self.assertFalse(captured["source_schematic"].exists())
+        create.assert_called_once()
+        register.assert_called_once_with(
+            self.project, self.block, self.kicad, [self.library.resolve()]
+        )
+
     def test_create_block_chooses_collision_safe_name_without_prompting(self):
         source = self.project / "power_stage.kicad_sch"
         source.write_text("(kicad_sch)", encoding="utf-8")
