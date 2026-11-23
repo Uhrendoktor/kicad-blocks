@@ -331,6 +331,7 @@ def test_library_browser_split_panes_have_visible_geometry(monkeypatch, tmp_path
     finally:
         root.destroy()
 
+
 def test_library_browser_preview_and_overview_heights_are_resizable(monkeypatch, tmp_path):
     root, context, _records, _library, _project = _new_browser(monkeypatch, tmp_path)
     try:
