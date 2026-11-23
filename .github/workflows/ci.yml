@@ -86,23 +86,23 @@ jobs:
 
               archive_name="${filename##*/}"
               destination="/var/cache/apt/archives/$archive_name"
-              if [[ -f "$destination" ]] && printf '%s  %s\\n' "$expected_sha" "$destination" | sha256sum --check --status; then
+              if [[ -f "$destination" ]] && printf '%s  %s\n' "$expected_sha" "$destination" | sha256sum --check --status; then
                 echo "Verified cached archive for $package."
                 return 0
               fi
 
               download_path="${RUNNER_TEMP}/$archive_name"
-              if ! curl --fail --location --silent --show-error \\
-                --retry 2 --retry-all-errors --retry-delay 2 \\
-                --connect-timeout 20 --max-time 180 \\
-                "https://deb.kicad.org/kicad-dev-nightly/ubuntu/$filename" \\
+              if ! curl --fail --location --silent --show-error \
+                --retry 2 --retry-all-errors --retry-delay 2 \
+                --connect-timeout 20 --max-time 180 \
+                "https://deb.kicad.org/kicad-dev-nightly/ubuntu/$filename" \
                 --output "$download_path"; then
                 rm -f "$download_path"
                 echo "::warning::KiCad mirror fallback unavailable for $package; APT will try Launchpad."
                 return 0
               fi
 
-              if ! printf '%s  %s\\n' "$expected_sha" "$download_path" | sha256sum --check --status; then
+              if ! printf '%s  %s\n' "$expected_sha" "$download_path" | sha256sum --check --status; then
                 rm -f "$download_path"
                 echo "::error::KiCad mirror archive checksum does not match signed APT metadata for $package."
                 return 1
@@ -744,23 +744,23 @@ jobs:
 
             archive_name="${filename##*/}"
             destination="/var/cache/apt/archives/$archive_name"
-            if [[ -f "$destination" ]] && printf '%s  %s\\n' "$expected_sha" "$destination" | sha256sum --check --status; then
+            if [[ -f "$destination" ]] && printf '%s  %s\n' "$expected_sha" "$destination" | sha256sum --check --status; then
               echo "Verified cached archive for $package."
               return 0
             fi
 
             download_path="${RUNNER_TEMP}/$archive_name"
-            if ! curl --fail --location --silent --show-error \\
-              --retry 2 --retry-all-errors --retry-delay 2 \\
-              --connect-timeout 20 --max-time 180 \\
-              "https://deb.kicad.org/kicad-dev-nightly/ubuntu/$filename" \\
+            if ! curl --fail --location --silent --show-error \
+              --retry 2 --retry-all-errors --retry-delay 2 \
+              --connect-timeout 20 --max-time 180 \
+              "https://deb.kicad.org/kicad-dev-nightly/ubuntu/$filename" \
               --output "$download_path"; then
               rm -f "$download_path"
               echo "::warning::KiCad mirror fallback unavailable for $package; APT will try Launchpad."
               return 0
             fi
 
-            if ! printf '%s  %s\\n' "$expected_sha" "$download_path" | sha256sum --check --status; then
+            if ! printf '%s  %s\n' "$expected_sha" "$download_path" | sha256sum --check --status; then
               rm -f "$download_path"
               echo "::error::KiCad mirror archive checksum does not match signed APT metadata for $package."
               return 1
