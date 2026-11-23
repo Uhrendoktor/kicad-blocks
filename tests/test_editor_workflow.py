@@ -29,7 +29,7 @@ _named_symbol_node_for_test: Callable[..., SExprList] = cast(
 
 
 def _required_direct_node(node: SExprList, tag: str) -> SExprList:
-    child = sexpr_required_direct_node(node, tag)
+    child = sexpr_direct(node, tag)
     if child is None:
         raise AssertionError(f"Expected direct S-expression child {tag!r}.")
     return child
