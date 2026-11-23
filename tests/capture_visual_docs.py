@@ -568,10 +568,30 @@ def capture_ui_workflows(library_roots, record, project_dir: Path, output_dir: P
                 schematic_canvases = [
                     widget for widget in walk_widgets(root)
                     if widget.winfo_class() == "Canvas"
-                    and getattr(widget, "_native_schematic_preview_photo", None) is not None
+                    and (
+                        getattr(widget, "_native_schematic_preview_photo", None) is not None
+                        or getattr(widget, "_kicad_preview_state", {}).get("image") is not None
+                    )
                 ]
                 if not schematic_canvases:
                     raise RuntimeError("The library schematic preview did not render a KiCad image.")
+
+                browser_notebooks[0].select(browser_notebooks[0].tabs()[2])
+                root.update_idletasks()
+                root.update()
+                _capture_visible_window(
+                    xdotool,
+                    "Functional Block Library",
+                    output_dir / f"library-browser-pcb-{theme}.png",
+                    minimum_size=(1000, 650),
+                )
+                pcb_canvases = [
+                    widget for widget in walk_widgets(root)
+                    if widget.winfo_class() == "Canvas"
+                    and getattr(widget, "_kicad_preview_state", {}).get("image") is not None
+                ]
+                if not pcb_canvases:
+                    raise RuntimeError("The library PCB preview did not render its linked layout.")
                 _capture_modal(
                     root,
                     lambda target=root: plugin_actions._show_library_roots_dialog(target),
@@ -843,7 +863,11 @@ def main() -> int:
         reference_source = Path(temporary) / "stusb4500-reference.kicad_sch"
         generate_reference_schematic(reference_source)
         layout_source = Path(temporary) / "stusb4500-reference.kicad_pcb"
-        layout_source.write_text("(kicad_pcb)\n", encoding="utf-8")
+        blank_board = plugin_actions._new_blank_pcb_source()
+        try:
+            shutil.copy2(blank_board, layout_source)
+        finally:
+            blank_board.unlink(missing_ok=True)
         target = create_block(
             library, "STUSB4500 USB-PD Sink",
             parse_pins(
