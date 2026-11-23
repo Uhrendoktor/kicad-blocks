@@ -20,6 +20,7 @@ from kicad_blocks.repository import BlockRecord, create_block
 from ui_contracts import (
     ButtonContract,
     EntryInputContract,
+    Misc,
     MonkeyPatch,
     Tk,
     Toplevel,
