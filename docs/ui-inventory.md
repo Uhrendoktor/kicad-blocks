@@ -322,7 +322,7 @@ Package selected schematic circuit items, one hierarchical sheet, or the sheet c
 
 **Coverage:** Partial — targeted GUI, integration, or visual checks exist.
 
-This is a native Eeschema action rather than a Tk window. Unit tests verify extraction of selected symbols and named labels into a standalone schematic, local/global label promotion, selected-item filtering, and validation. The real Eeschema IPC integration test verifies typed SheetSymbol selection and active-subsheet creation with an empty selection; live ordinary-item selection remains a desktop integration requirement. The action does not open a naming form or success popup.
+This is a native Eeschema action rather than a Tk window. Unit tests verify extraction of selected symbols and named labels into a standalone schematic, local/global label promotion, selected-item filtering, and validation. The real Eeschema IPC integration test verifies typed SheetSymbol selection, active-subsheet creation with an empty selection, and a live component-plus-label circuit selection. The action does not open a naming form or success popup.
 
 **Major functionality**
 
