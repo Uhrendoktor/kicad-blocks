@@ -548,6 +548,83 @@ def main() -> None:
             if open_selection:
                 raise AssertionError("Subsheet IPC view unexpectedly retained the previous sheet selection.")
 
+            # for_sheet() scopes IPC requests to a child sheet but does not
+            # change the visible Eeschema page. Navigate the real editor using
+            # its global Next Sheet (Page Down) hotkey, and verify each visible
+            # page from the live window title. This ensures the empty-selection
+            # creation below really runs while Control Interface is active.
+            subprocess.run(
+                [xdotool, "windowfocus", "--sync", window_id],
+                check=True,
+            )
+            window_geometry = subprocess.run(
+                [xdotool, "getwindowgeometry", "--shell", window_id],
+                capture_output=True,
+                text=True,
+                check=True,
+            ).stdout
+            geometry_values = {
+                key: int(value)
+                for key, value in re.findall(
+                    r"^(WIDTH|HEIGHT)=(\d+)$",
+                    window_geometry,
+                    flags=re.MULTILINE,
+                )
+            }
+            if not {"WIDTH", "HEIGHT"}.issubset(geometry_values):
+                raise RuntimeError(
+                    "Could not determine the Eeschema window size for canvas focus: "
+                    f"{window_geometry!r}."
+                )
+            subprocess.run(
+                [
+                    xdotool,
+                    "mousemove",
+                    "--sync",
+                    "--window",
+                    window_id,
+                    str(geometry_values["WIDTH"] // 2),
+                    str(geometry_values["HEIGHT"] - 120),
+                ],
+                check=True,
+            )
+            subprocess.run([xdotool, "click", "1"], check=True)
+
+            def wait_for_visible_sheet(expected_name: str) -> None:
+                deadline = time.monotonic() + 5.0
+                expected_title = " ".join(
+                    expected_name.replace("_", " ").replace("-", " ").casefold().split()
+                )
+                window_title = ""
+                while time.monotonic() < deadline:
+                    window_title = subprocess.run(
+                        [xdotool, "getwindowname", window_id],
+                        capture_output=True,
+                        text=True,
+                        check=True,
+                    ).stdout.strip()
+                    normalized_title = " ".join(
+                        window_title.replace("_", " ").replace("-", " ").casefold().split()
+                    )
+                    if expected_title in normalized_title:
+                        return
+                    time.sleep(0.1)
+                diagnostics = _capture_navigation_diagnostics(xdotool, window_id)
+                raise AssertionError(
+                    f"Eeschema window title does not identify the active {expected_name!r} "
+                    f"sheet: {window_title!r}. X11 diagnostics:\\n{diagnostics}"
+                )
+
+            def advance_to_sheet(expected_name: str) -> None:
+                subprocess.run(
+                    [xdotool, "key", "--clearmodifiers", "Page_Down"],
+                    check=True,
+                )
+                wait_for_visible_sheet(expected_name)
+
+            advance_to_sheet("Power Stage")
+            advance_to_sheet("Control Interface")
+
             run_creation(open_sheet)
 
             records = list_blocks(library_root)
@@ -583,79 +660,6 @@ def main() -> None:
                 path: path.read_bytes()
                 for path in (parent_path, project_path, *child_paths.values())
             }
-
-            # The IPC view returned by for_sheet() is path-bound, but it does
-            # not navigate Eeschema's canvas. AddToSelection intentionally
-            # ignores objects outside the sheet currently displayed in the GUI.
-            # Move from page 1 -> 2 -> 3 so Control Interface is the active sheet.
-            subprocess.run(
-                [xdotool, "windowfocus", "--sync", window_id],
-                check=True,
-            )
-            window_geometry = subprocess.run(
-                [xdotool, "getwindowgeometry", "--shell", window_id],
-                capture_output=True,
-                text=True,
-                check=True,
-            ).stdout
-            geometry_values = {
-                key: int(value)
-                for key, value in re.findall(
-                    r"^(WIDTH|HEIGHT)=(\d+)$",
-                    window_geometry,
-                    flags=re.MULTILINE,
-                )
-            }
-            if not {"WIDTH", "HEIGHT"}.issubset(geometry_values):
-                raise RuntimeError(
-                    "Could not determine the Eeschema window size for canvas focus: "
-                    f"{window_geometry!r}."
-                )
-            # The frame may still have a toolbar/panel focused. A single click
-            # in the blank lower-middle canvas area transfers input focus to
-            # the drawing canvas without selecting any fixture item.
-            subprocess.run(
-                [
-                    xdotool,
-                    "mousemove",
-                    "--sync",
-                    "--window",
-                    window_id,
-                    str(geometry_values["WIDTH"] // 2),
-                    str(geometry_values["HEIGHT"] - 120),
-                ],
-                check=True,
-            )
-            subprocess.run([xdotool, "click", "1"], check=True)
-
-            def wait_for_visible_sheet(expected_name: str) -> None:
-                deadline = time.monotonic() + 5.0
-                expected_title = " ".join(expected_name.replace("_", " ").replace("-", " ").casefold().split())
-                window_title = ""
-                while time.monotonic() < deadline:
-                    window_title = subprocess.run(
-                        [xdotool, "getwindowname", window_id],
-                        capture_output=True,
-                        text=True,
-                        check=True,
-                    ).stdout.strip()
-                    normalized_title = " ".join(
-                        window_title.replace("_", " ").replace("-", " ").casefold().split()
-                    )
-                    if expected_title in normalized_title:
-                        return
-                    time.sleep(0.1)
-                diagnostics = _capture_navigation_diagnostics(xdotool, window_id)
-                raise AssertionError(
-                    f"Eeschema window title does not identify the active {expected_name!r} "
-                    f"sheet: {window_title!r}. X11 diagnostics:\\n{diagnostics}"
-                )
-
-            # Creating and saving through the path-bound Control Interface IPC
-            # view opens that child sheet in Eeschema. Verify the live editor
-            # page from its window title; the original root-bound schematic
-            # handle remains rooted at page 1 and is not a reliable GUI-page probe.
-            wait_for_visible_sheet("Control Interface")
 
             open_sheet.clear_selection()
             circuit_selection = list(
