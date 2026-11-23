@@ -118,6 +118,9 @@ class LibraryBrowserTests(unittest.TestCase):
         self.assertEqual(_pcb_layout_for_variant(self.block, "1V8"), self.block.manifest["layouts"][1])
         self.assertEqual(_pcb_layout_for_variant(self.block, "3V3"), self.block.manifest["layouts"][0])
 
+        self.block.manifest["default_variant"] = "1V8"
+        self.assertEqual(_pcb_layout_for_variant(self.block, ""), self.block.manifest["layouts"][1])
+
     def test_native_facade_preview_exports_from_the_project_catalog_override(self):
         symbol_name = self.block.manifest["symbol_name"]
         project_catalog = self.root / "project" / "KBlocks.kicad_sym"
