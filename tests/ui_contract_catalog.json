@@ -181,7 +181,9 @@
         "library-browser-details-light.png",
         "library-browser-details-dark.png",
         "library-browser-schematic-light.png",
-        "library-browser-schematic-dark.png"
+        "library-browser-schematic-dark.png",
+        "library-browser-pcb-light.png",
+        "library-browser-pcb-dark.png"
       ],
       "controls": [
         {
