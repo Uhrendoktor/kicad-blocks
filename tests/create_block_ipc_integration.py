@@ -661,6 +661,58 @@ def main() -> None:
                 for path in (parent_path, project_path, *child_paths.values())
             }
 
+            # First distinguish the ordinary full-sheet formatter from the
+            # separate SavedSelection formatter. The latter formats the
+            # current selection through KiCad's clipboard/S-expression path.
+            live_sheet_text = open_sheet.get_as_string()
+            if not live_sheet_text.lstrip().startswith("(kicad_sch"):
+                raise AssertionError("KiCad did not serialize the active child sheet as a schematic.")
+            print(
+                "Live Control Interface document serialization passed: "
+                f"{len(live_sheet_text)} characters.",
+                flush=True,
+            )
+
+            selected_component_id = str(getattr(component.id, "value", component.id))
+            selected_label_id = str(getattr(selected_label.id, "value", selected_label.id))
+            print(
+                "Live child-sheet selection fixture: "
+                f"symbol UUID={selected_component_id}; "
+                f"label UUID={selected_label_id}; "
+                f"label name={selected_label_name!r}.",
+                flush=True,
+            )
+
+            open_sheet.clear_selection()
+            label_selection = list(open_sheet.add_to_selection([selected_label]))
+            if len(label_selection) != 1:
+                raise AssertionError(
+                    "KiCad did not select the named label on its own before "
+                    f"serialization; selected {len(label_selection)} item(s)."
+                )
+            label_fragment = open_sheet.get_selection_as_string()
+            if selected_label_name not in label_fragment:
+                raise AssertionError(
+                    "KiCad serialized a label-only selection without its label name: "
+                    f"{label_fragment!r}"
+                )
+            print("SavedSelection serialization passed for label-only selection.", flush=True)
+
+            open_sheet.clear_selection()
+            symbol_selection = list(open_sheet.add_to_selection([component]))
+            if len(symbol_selection) != 1:
+                raise AssertionError(
+                    "KiCad did not select the component on its own before "
+                    f"serialization; selected {len(symbol_selection)} item(s)."
+                )
+            symbol_fragment = open_sheet.get_selection_as_string()
+            if selected_manifest["symbol_name"] not in symbol_fragment:
+                raise AssertionError(
+                    "KiCad serialized a symbol-only selection without its selected "
+                    f"library symbol name: {symbol_fragment!r}"
+                )
+            print("SavedSelection serialization passed for symbol-only selection.", flush=True)
+
             open_sheet.clear_selection()
             circuit_selection = list(
                 open_sheet.add_to_selection([component, selected_label])
@@ -675,8 +727,12 @@ def main() -> None:
                     f"found {len(circuit_selection)} item(s): {selected_types!r}."
                 )
             selection_text = open_sheet.get_selection_as_string()
-            if not selection_text.strip():
-                raise AssertionError("KiCad IPC returned an empty serialized circuit selection.")
+            if selected_label_name not in selection_text or selected_manifest["symbol_name"] not in selection_text:
+                raise AssertionError(
+                    "KiCad's combined selection serialization omitted a selected item: "
+                    f"{selection_text!r}"
+                )
+            print("SavedSelection serialization passed for component+label selection.", flush=True)
 
             run_creation(open_sheet)
 
