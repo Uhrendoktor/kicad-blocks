@@ -400,7 +400,7 @@ def test_add_variant_save_failure_can_be_retried_with_save_and_close(
         allow_create: bool = False,
     ) -> tuple[str, str] | None:
         del value, source, record, allow_create
-        return "3V3", str(source_path)
+        return "3V3", str(selected_source)
 
     source_path = source
     monkeypatch.setattr(plugin_actions, "_ask_implementation_details", ask_implementation_details)
@@ -600,6 +600,8 @@ def test_close_confirmation_can_keep_pending_changes_or_discard_them(
         '(kicad_sch (version 20250114) (generator "retry-on-close"))\n',
         encoding="utf-8",
     )
+    selected_source = source
+
     def ask_implementation_details(
         _parent: Misc,
         *,
