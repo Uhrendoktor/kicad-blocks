@@ -3007,7 +3007,12 @@ def _native_symbol_preview_photo(
 
     # Tk images belong to a particular Tcl interpreter, so cache only PNG bytes.
     photo = tk.PhotoImage(data=base64.b64encode(png_data).decode("ascii"))
-    photo._kicad_blocks_png_data = png_data
+    try:
+        photo._kicad_blocks_png_data = png_data
+    except (AttributeError, TypeError):
+        # Some Tk test doubles are immutable; the production Tk image accepts
+        # attributes, while the legacy drawing path remains available to mocks.
+        pass
     return photo
 
 _NATIVE_PREVIEW_CACHE: dict[tuple, object] = {}

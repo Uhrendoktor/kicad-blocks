@@ -33,7 +33,6 @@ from kicad_blocks.plugin import (
     _layout_choices,
     _library_record_for_instance,
     _library_record_for_tree_row,
-    _load_tkinter,
     _minimize_placement_windows,
     _native_schematic_preview_pages,
     _native_symbol_preview_photo,
@@ -99,8 +98,6 @@ class LibraryBrowserTests(unittest.TestCase):
 
 
     def test_last_treeview_column_resizes_from_its_left_separator(self):
-        _load_tkinter()
-
         class FakeTreeview:
             def __init__(self):
                 self.tk = SimpleNamespace(
@@ -119,9 +116,11 @@ class LibraryBrowserTests(unittest.TestCase):
                     "displaycolumns": "#all",
                 }[key]
 
-            def column(self, name, option, **values):
+            def column(self, name, option=None, **values):
                 if values:
                     self.widths[name].update(values)
+                if option is None:
+                    return dict(self.widths[name])
                 return self.widths[name][option]
 
             def xview(self):
