@@ -409,8 +409,10 @@ def test_add_variant_save_failure_can_be_retried_with_save_and_close(
     errors: list[tuple[str, str]] = []
 
     def fail_once(
-        *args: BlockRecord | list[BlockVariantInput] | str | None,
-        **kwargs: str | None,
+        record: BlockRecord,
+        variants: list[BlockVariantEditInput],
+        *,
+        default_variant: str | None = None,
     ) -> None:
         attempts.append("attempt")
         if len(attempts) == 1:
