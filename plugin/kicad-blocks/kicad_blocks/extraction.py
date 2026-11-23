@@ -6,6 +6,7 @@ asset tree with their relative references and hierarchy paths rebased.
 """
 from __future__ import annotations
 
+import copy
 import re
 import uuid
 from pathlib import Path
@@ -22,6 +23,29 @@ _LABEL_SHAPES = {
 }
 _PIN_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_./+#-]*\Z")
 
+_SELECTION_ITEM_TYPES = frozenset({
+    "symbol",
+    "wire",
+    "bus",
+    "bus_entry",
+    "junction",
+    "no_connect",
+    "label",
+    "global_label",
+    "hierarchical_label",
+    "text",
+    "text_box",
+    "polyline",
+    "polygon",
+    "rectangle",
+    "circle",
+    "arc",
+    "image",
+    "rule_area",
+})
+_SELECTION_SOURCE_CONTENT_TYPES = _SELECTION_ITEM_TYPES | {"sheet"}
+_SELECTION_LABEL_TYPES = {"label", "global_label", "hierarchical_label"}
+
 
 def _parse_selection(selection_fragment: str) -> list:
     """Parse the clipboard-format fragment returned by Schematic.get_selection_as_string."""
@@ -37,6 +61,110 @@ def _parse_selection(selection_fragment: str) -> list:
     if _head(wrapper) != "selection":
         raise ValueError("KiCad returned an unexpected selected-item format.")
     return wrapper[1:]
+
+
+
+def selection_node_types(selection_fragment: str) -> tuple[str, ...]:
+    """Return the top-level KiCad item types in a serialized editor selection."""
+    return tuple(_head(node) for node in _parse_selection(selection_fragment))
+
+
+def write_selection_schematic(
+    source_schematic: Path,
+    selection_fragment: str,
+    destination: Path,
+) -> Path:
+    """Write a standalone schematic containing only the selected circuit items.
+
+    Selected local and global labels are converted to hierarchical labels. This
+    makes the selected, named nets explicit facade pins without pulling
+    unrelated items or labels from the source sheet into the block.
+    """
+    source_schematic = Path(source_schematic).expanduser().resolve()
+    destination = Path(destination).expanduser().resolve()
+    try:
+        source_tree = parse_sexpr(source_schematic.read_text(encoding="utf-8"))
+    except OSError as exc:
+        raise ValueError(
+            f"Could not read the active source sheet {source_schematic}: {exc}"
+        ) from exc
+    if _head(source_tree) != "kicad_sch":
+        raise ValueError(f"Source file is not a KiCad schematic: {source_schematic}")
+
+    selected_nodes = _parse_selection(selection_fragment)
+    if any(_head(node) == "sheet" for node in selected_nodes):
+        raise ValueError(
+            "A hierarchical sheet symbol cannot be mixed with ordinary schematic "
+            "items in one selection. Select the sheet by itself, or select circuit items."
+        )
+
+    unsupported = sorted({
+        _head(node) for node in selected_nodes
+        if _head(node) not in _SELECTION_ITEM_TYPES
+    })
+    if unsupported:
+        raise ValueError(
+            "The selection contains unsupported schematic item type(s): "
+            + ", ".join(item or "<unknown>" for item in unsupported)
+            + ". Select circuit symbols, wiring, and labels."
+        )
+
+    if not any(_head(node) == "symbol" for node in selected_nodes):
+        raise ValueError(
+            "Select at least one component symbol as part of the circuit block."
+        )
+    if not any(_head(node) in _SELECTION_LABEL_TYPES for node in selected_nodes):
+        raise ValueError(
+            "Select at least one named net label (local, global, or hierarchical) "
+            "to define the block's external facade pins."
+        )
+
+    # KiCad embeds the symbol definitions used by a sheet in its lib_symbols
+    # section. Retain the source definitions so the extracted schematic stays
+    # independently editable and can be opened by KiCad CLI as well as Eeschema.
+    library_node = _direct(source_tree, "lib_symbols")
+    available_library_ids = {
+        str(item[1])
+        for item in (library_node[1:] if library_node is not None else ())
+        if _head(item) == "symbol" and len(item) >= 2
+    }
+    required_library_ids = set()
+    for item in selected_nodes:
+        if _head(item) != "symbol":
+            continue
+        library_id = _direct(item, "lib_id")
+        if library_id is not None and len(library_id) >= 2:
+            required_library_ids.add(str(library_id[1]))
+    missing_library_ids = sorted(required_library_ids - available_library_ids)
+    if missing_library_ids:
+        raise ValueError(
+            "The active sheet does not contain embedded definitions for selected "
+            "symbol(s): "
+            + ", ".join(missing_library_ids)
+            + ". Save or update the source schematic in KiCad, then retry."
+        )
+
+    copied_nodes = copy.deepcopy(selected_nodes)
+    for item in copied_nodes:
+        item_type = _head(item)
+        if item_type in {"label", "global_label"}:
+            item[0] = "hierarchical_label"
+            if _direct(item, "shape") is None:
+                # Local KiCad labels have no electrical shape. Passive is the
+                # conservative facade type unless the user selects a typed
+                # global or hierarchical label.
+                item.insert(2, ["shape", "passive"])
+
+    result_tree = copy.deepcopy(source_tree)
+    result_tree[1:] = [
+        item for item in result_tree[1:]
+        if _head(item) not in _SELECTION_SOURCE_CONTENT_TYPES
+    ]
+    result_tree.extend(copied_nodes)
+
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_text(_dump(result_tree) + "\n", encoding="utf-8")
+    return destination
 
 
 def _selected_sheet_node(selection_fragment: str) -> list:
