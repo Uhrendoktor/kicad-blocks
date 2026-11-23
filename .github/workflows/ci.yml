@@ -259,7 +259,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          KIPY_SHA="$(tr -d '\\r\\n' < plugin/kicad-blocks/kicad-python.lock)"
+          KIPY_SHA="$(tr -d '\r\n' < plugin/kicad-blocks/kicad-python.lock)"
           if [[ ! "$KIPY_SHA" =~ ^[0-9a-f]{40}$ ]]; then
             echo "::error::plugin/kicad-blocks/kicad-python.lock must contain one 40-character lowercase commit SHA."
             exit 1
@@ -286,14 +286,14 @@ jobs:
           mkdir -p "$WHEELHOUSE"
           if [[ ! -s "$WHEELHOUSE/$EXPECTED" ]]; then
             set +e
-            python3 scripts/download_pinned_ipc_wheel.py "$WHEELHOUSE" \\
+            python3 scripts/download_pinned_ipc_wheel.py "$WHEELHOUSE" \
               --repo "$GITHUB_REPOSITORY" --source-sha "$KIPY_SHA"
             DOWNLOAD_STATUS=$?
             set -e
             if [[ "$DOWNLOAD_STATUS" -eq 3 ]]; then
               echo "No published CPython 3.12 wheel for $KIPY_SHA; building it from source."
               rm -f "$WHEELHOUSE"/kicad_python-*.whl
-              "$PY" -m pip wheel --wheel-dir "$WHEELHOUSE" \\
+              "$PY" -m pip wheel --wheel-dir "$WHEELHOUSE" \
                 "git+https://gitlab.com/kicad/code/kicad-python.git@$KIPY_SHA"
             elif [[ "$DOWNLOAD_STATUS" -ne 0 ]]; then
               exit "$DOWNLOAD_STATUS"
