@@ -28,8 +28,8 @@ from kicad_blocks.repository import (
     list_blocks,
 )
 from kipy import KiCad
-from kipy.geometry import Vector2
 from kipy.errors import ApiError
+from kipy.geometry import Vector2
 from pynng.exceptions import NNGException
 from test_plugin_registration import _close_editor, _find_executable, _launch
 
