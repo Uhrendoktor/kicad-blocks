@@ -532,7 +532,7 @@ def main() -> None:
             geometry_values = {
                 key: int(value)
                 for key, value in re.findall(
-                    r"^(WIDTH|HEIGHT)=(\\d+)$",
+                    r"^(WIDTH|HEIGHT)=(\d+)$",
                     window_geometry,
                     flags=re.MULTILINE,
                 )
