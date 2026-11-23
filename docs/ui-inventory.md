@@ -9,7 +9,7 @@ This page is generated from the declarative UI catalog. It inventories the curre
 | Partial | 3 | Targeted GUI, integration, model, or screenshot checks exist; the full control matrix is not contracted. |
 | Inventory only | 0 | Inventory only — systematic UI contracts remain future work; window/workflow is documented here for discovery and rollout planning. |
 
-The Functional Block Library, legacy Task Hub, transient choosers, Add PCB Layout, Record picker, Instance Configuration, Implementation details, Implementations Manager, Manage Libraries, PCB Layout Manager, and Facade Pin Layout editor have registered widget contracts. Create Block from Sheet is a one-click Eeschema action rather than a details form. All 49 native messagebox/simpledialog call sites have direct result/effect contracts. Place Block uses supported page-aware schematic IPC placement, focus and selection while the schematic interactive-move API is pending; Edit Facade provides a project-local pin-layout editor with immediate persistence and safe publishing. Native Symbol Editor launch and cursor-attached placement remain upstream API gaps, not disabled features or OS-specific automation paths. The shared file chooser wrappers have argument/cancellation contracts; native OS rendering and cross-process KiCad window ownership remain unverified.
+The Functional Block Library, legacy Task Hub, transient choosers, Add PCB Layout, Record picker, Instance Configuration, Implementation details, Implementations Manager, Manage Libraries, PCB Layout Manager, and Facade Pin Layout editor have registered widget contracts. Create Block from Selection or Sheet is a one-click Eeschema action rather than a details form. All 49 native messagebox/simpledialog call sites have direct result/effect contracts. Place Block uses supported page-aware schematic IPC placement, focus and selection while the schematic interactive-move API is pending; Edit Facade provides a project-local pin-layout editor with immediate persistence and safe publishing. Native Symbol Editor launch and cursor-attached placement remain upstream API gaps, not disabled features or OS-specific automation paths. The shared file chooser wrappers have argument/cancellation contracts; native OS rendering and cross-process KiCad window ownership remain unverified.
 
 ## Screens
 
@@ -25,7 +25,7 @@ Legacy compatibility screen. Action buttons track the live Eeschema selection an
 
 - **Use & build**
   - Browse and place blocks (`task-hub.action.manage-library`; behavior asserted)
-  - Create block from sheet (`task-hub.action.create-block`; behavior asserted)
+  - Create block from selection or sheet (`task-hub.action.create-block`; behavior asserted)
   - Open block implementation (`task-hub.action.open-implementation`; behavior asserted)
 - **Edit & maintain**
   - Configure selected instance (`task-hub.action.configure-instance`; behavior asserted)
@@ -316,20 +316,21 @@ Every actionable control has a stable semantic ID and real-Tk interaction contra
 
 ---
 
-### Create Block from Sheet
+### Create Block from Selection or Sheet
 
-Package one selected hierarchical sheet, or the sheet currently open in Eeschema when nothing is selected, as a reusable functional block.
+Package selected schematic circuit items, one hierarchical sheet, or the sheet currently open in Eeschema when nothing is selected, as a reusable functional block.
 
 **Coverage:** Partial — targeted GUI, integration, or visual checks exist.
 
-This is a native Eeschema action rather than a Tk window. The real Eeschema IPC integration test verifies typed SheetSymbol selection, active-subsheet creation with an empty selection, derived facade pins, catalog/library registration, collision-safe naming, rollback on failure, and unchanged source files. The action does not open a naming form or success popup.
+This is a native Eeschema action rather than a Tk window. Unit tests verify extraction of selected symbols and named labels into a standalone schematic, local/global label promotion, selected-item filtering, and validation. The real Eeschema IPC integration test verifies typed SheetSymbol selection and active-subsheet creation with an empty selection; live ordinary-item selection remains a desktop integration requirement. The action does not open a naming form or success popup.
 
 **Major functionality**
 
-- Select exactly one hierarchical sheet symbol in its parent schematic
+- Select circuit symbols, wires, and named labels to package only those items; labels become facade pins
+- Select exactly one hierarchical sheet symbol to copy that sheet and its child hierarchy
 - With no selection, use the sheet currently open in Eeschema
-- Derive a collision-safe block name from the source filename and create it in the configured default library
-- Copy the complete child-sheet hierarchy, derive facade pins from root hierarchical labels, and register the project catalog
+- Derive a collision-safe block name and create it in the configured default library
+- Register the facade catalog in the project without changing the source schematic
 
 **Current automated evidence**
 
