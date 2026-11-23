@@ -474,14 +474,29 @@ def main() -> None:
                 )
 
             def run_creation(parent_schematic):
-                with patch.object(
-                    plugin_actions,
-                    "configured_library_roots",
-                    return_value=[library_root],
+                # Exercise the registered Eeschema action entrypoint, not the
+                # private extraction helper. The existing live KiCad client is
+                # reused, but its returned sheet view is the exact IPC context
+                # that Eeschema currently exposes for this test operation.
+                with (
+                    patch("kipy.KiCad", return_value=kicad),
+                    patch.object(
+                        kicad,
+                        "get_schematic",
+                        return_value=parent_schematic,
+                    ),
+                    patch.object(
+                        plugin_actions,
+                        "configured_library_roots",
+                        return_value=[library_root],
+                    ),
+                    patch.object(
+                        plugin_actions,
+                        "default_library_root",
+                        return_value=library_root,
+                    ),
                 ):
-                    plugin_actions._create_and_place(
-                        library_root, parent_schematic, kicad, project_dir, object()
-                    )
+                    plugin_actions.run_action("create-block")
 
             run_creation(schematic)
 
