@@ -406,15 +406,10 @@ def main() -> None:
                 )
 
             def run_creation(parent_schematic):
-                with (
-                    patch.object(
-                        plugin_actions,
-                        "configured_library_roots",
-                        return_value=[library_root],
-                    ),
-                    patch.object(
-                        plugin_actions, "_reload_symbol_library", return_value=True
-                    ),
+                with patch.object(
+                    plugin_actions,
+                    "configured_library_roots",
+                    return_value=[library_root],
                 ):
                     plugin_actions._create_and_place(
                         library_root, parent_schematic, kicad, project_dir, object()
