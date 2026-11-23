@@ -117,7 +117,7 @@ def test_profile_wizard_accepts_name_description_variant_parameters_and_layout(
 
     confirmation_prompts: list[PromptRecord] = []
 
-    def askyesno(title: str, message: str, **kwargs: TkOption) -> bool:
+    def askyesno(title: str, message: str, **kwargs: TkCallbackOption) -> bool:
         confirmation_prompts.append((title, message, kwargs.get("parent")))
         return next(confirmations)
 
@@ -173,7 +173,7 @@ def test_profile_wizard_cancel_discards_an_incomplete_profile(monkeypatch: Monke
     simple_calls: list[tuple[str, Misc | None]] = []
     monkeypatch.setattr(plugin_actions.messagebox, "askyesno", _confirmation_response(True))
 
-    def askstring(title: str, prompt: str, **kwargs: TkOption) -> str | None:
+    def askstring(title: str, prompt: str, **kwargs: TkCallbackOption) -> str | None:
         simple_calls.append((title, kwargs.get("parent")))
         return next(prompts)
 
@@ -213,7 +213,7 @@ def test_profile_wizard_rejects_unknown_variant_before_requesting_overrides(
     calls: list[str] = []
     monkeypatch.setattr(plugin_actions.messagebox, "askyesno", _confirmation_response(True))
 
-    def askstring(title: str, prompt: str, **kwargs: TkOption) -> str | None:
+    def askstring(title: str, prompt: str, **kwargs: TkCallbackOption) -> str | None:
         calls.append(title)
         return next(prompts)
 
