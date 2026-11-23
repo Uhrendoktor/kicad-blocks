@@ -346,6 +346,60 @@ def _validate_hierarchy_fixture(cli: str, parent_path: Path, child_paths: dict[s
             )
 
 
+def _capture_navigation_diagnostics(xdotool: str, window_id: str) -> str:
+    """Describe the X11 focus target and capture the failed Eeschema canvas state."""
+    lines = []
+
+    def run(label: str, command: list[str]) -> str:
+        result = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        output = (result.stdout + result.stderr).strip()
+        lines.append(
+            f"{label}: exit={result.returncode}; "
+            f"{output or '<no output>'}"
+        )
+        return result.stdout.strip()
+
+    focus_id = run("focused_window_id", [xdotool, "getwindowfocus"])
+    run("pointer_location", [xdotool, "getmouselocation", "--shell"])
+    run("editor_geometry", [xdotool, "getwindowgeometry", "--shell", window_id])
+    run("editor_title", [xdotool, "getwindowname", window_id])
+    run("editor_class", [xdotool, "getwindowclassname", window_id])
+    if focus_id.isdigit():
+        run("focused_window_title", [xdotool, "getwindowname", focus_id])
+        run("focused_window_class", [xdotool, "getwindowclassname", focus_id])
+        run("focused_window_geometry", [xdotool, "getwindowgeometry", "--shell", focus_id])
+
+    xwininfo = shutil.which("xwininfo")
+    if xwininfo:
+        run("editor_window_tree", [xwininfo, "-id", window_id, "-tree"])
+        if focus_id.isdigit():
+            run("focused_window_tree", [xwininfo, "-id", focus_id, "-tree"])
+
+    xwd = shutil.which("xwd")
+    if xwd:
+        debug_path = (
+            Path(os.environ.get("RUNNER_TEMP", tempfile.gettempdir()))
+            / "create-block-navigation-debug.xwd"
+        )
+        result = subprocess.run(
+            [xwd, "-root", "-silent", "-out", str(debug_path)],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        lines.append(
+            f"root_screenshot: exit={result.returncode}; path={debug_path}; "
+            f"{(result.stderr or '').strip() or '<no stderr>'}"
+        )
+
+    return "\\n".join(lines)
+
+
 def main() -> None:
     cli = _find_cli()
     with tempfile.TemporaryDirectory(prefix="kicad-blocks-create-sheet-ipc-") as temp:
@@ -578,16 +632,48 @@ def main() -> None:
                     f"active sheet is {active_sheet_name!r}."
                 )
 
-            subprocess.run(
-                [xdotool, "key", "--clearmodifiers", "Next"],
-                check=True,
-            )
-            wait_for_active_sheet("Power Stage")
-            subprocess.run(
-                [xdotool, "key", "--clearmodifiers", "Next"],
-                check=True,
-            )
-            wait_for_active_sheet("Control Interface")
+            def advance_to_sheet(expected_name: str) -> None:
+                subprocess.run(
+                    [xdotool, "key", "--clearmodifiers", "Next"],
+                    check=True,
+                )
+                try:
+                    wait_for_active_sheet(expected_name)
+                except AssertionError:
+                    diagnostics = _capture_navigation_diagnostics(
+                        xdotool, window_id
+                    )
+                    print(
+                        "Eeschema did not respond to the focused-window Next Sheet "
+                        f"key event; X11 diagnostics follow:\\n{diagnostics}",
+                        flush=True,
+                    )
+                    # Isolate input-routing from hierarchy metadata: dispatch the
+                    # same Page Down keysym directly to the Eeschema frame.
+                    subprocess.run(
+                        [
+                            xdotool,
+                            "key",
+                            "--clearmodifiers",
+                            "--window",
+                            window_id,
+                            "Page_Down",
+                        ],
+                        check=True,
+                    )
+                    try:
+                        wait_for_active_sheet(expected_name)
+                    except AssertionError as direct_error:
+                        diagnostics = _capture_navigation_diagnostics(
+                            xdotool, window_id
+                        )
+                        raise AssertionError(
+                            f"{direct_error}\\nX11 diagnostics after direct-to-frame "
+                            f"Page_Down:\\n{diagnostics}"
+                        ) from direct_error
+
+            advance_to_sheet("Power Stage")
+            advance_to_sheet("Control Interface")
 
             open_sheet.clear_selection()
             circuit_selection = list(
