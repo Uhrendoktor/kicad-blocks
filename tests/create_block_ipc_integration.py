@@ -613,67 +613,34 @@ def main() -> None:
             )
             subprocess.run([xdotool, "click", "1"], check=True)
 
-            def wait_for_active_sheet(expected_name: str) -> None:
+            def wait_for_visible_sheet(expected_name: str) -> None:
                 deadline = time.monotonic() + 5.0
-                active_sheet_name = ""
+                expected_title = " ".join(expected_name.replace("_", " ").replace("-", " ").casefold().split())
+                window_title = ""
                 while time.monotonic() < deadline:
-                    live_schematic = kicad.get_schematic()
-                    active_instance = plugin_actions._active_sheet_instance(
-                        live_schematic
+                    window_title = subprocess.run(
+                        [xdotool, "getwindowname", window_id],
+                        capture_output=True,
+                        text=True,
+                        check=True,
+                    ).stdout.strip()
+                    normalized_title = " ".join(
+                        window_title.replace("_", " ").replace("-", " ").casefold().split()
                     )
-                    active_sheet_name = str(
-                        getattr(active_instance, "name", "") or ""
-                    )
-                    if active_sheet_name == expected_name:
+                    if expected_title in normalized_title:
                         return
                     time.sleep(0.1)
+                diagnostics = _capture_navigation_diagnostics(xdotool, window_id)
                 raise AssertionError(
-                    f"Eeschema did not navigate to {expected_name!r}; "
-                    f"active sheet is {active_sheet_name!r}."
+                    f"Eeschema window title does not identify the active {expected_name!r} "
+                    f"sheet: {window_title!r}. X11 diagnostics:\\n{diagnostics}"
                 )
 
-            def advance_to_sheet(expected_name: str) -> None:
-                subprocess.run(
-                    [xdotool, "key", "--clearmodifiers", "Next"],
-                    check=True,
-                )
-                try:
-                    wait_for_active_sheet(expected_name)
-                except AssertionError:
-                    diagnostics = _capture_navigation_diagnostics(
-                        xdotool, window_id
-                    )
-                    print(
-                        "Eeschema did not respond to the focused-window Next Sheet "
-                        f"key event; X11 diagnostics follow:\\n{diagnostics}",
-                        flush=True,
-                    )
-                    # Isolate input-routing from hierarchy metadata: dispatch the
-                    # same Page Down keysym directly to the Eeschema frame.
-                    subprocess.run(
-                        [
-                            xdotool,
-                            "key",
-                            "--clearmodifiers",
-                            "--window",
-                            window_id,
-                            "Page_Down",
-                        ],
-                        check=True,
-                    )
-                    try:
-                        wait_for_active_sheet(expected_name)
-                    except AssertionError as direct_error:
-                        diagnostics = _capture_navigation_diagnostics(
-                            xdotool, window_id
-                        )
-                        raise AssertionError(
-                            f"{direct_error}\\nX11 diagnostics after direct-to-frame "
-                            f"Page_Down:\\n{diagnostics}"
-                        ) from direct_error
-
-            advance_to_sheet("Power Stage")
-            advance_to_sheet("Control Interface")
+            # Creating and saving through the path-bound Control Interface IPC
+            # view opens that child sheet in Eeschema. Verify the live editor
+            # page from its window title; the original root-bound schematic
+            # handle remains rooted at page 1 and is not a reliable GUI-page probe.
+            wait_for_visible_sheet("Control Interface")
 
             open_sheet.clear_selection()
             circuit_selection = list(
