@@ -1802,7 +1802,7 @@ def _active_sheet_instance(schematic):
         return root
     raise ValueError(
         "Could not identify the sheet currently displayed in Eeschema from the IPC sheet path. "
-        "Select that sheet's symbol in its parent sheet and run Create Block from Sheet again."
+        "Select that sheet's symbol in its parent sheet and run Create Block from Selection or Sheet again."
     )
 
 
@@ -6900,8 +6900,8 @@ def _show_action_hub(
                     "libraries",
                 ),
                 (
-                    "Create block from sheet",
-                    "Select one hierarchical sheet symbol, or clear the selection to use the open sheet.",
+                    "Create block from selection or sheet",
+                    "Select circuit items, including a component and named net labels; select one sheet symbol, or clear the selection to use the open sheet.",
                     "create-block",
                     "create",
                 ),
