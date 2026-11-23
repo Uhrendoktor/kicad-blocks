@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import sys
+from collections.abc import Callable, Sequence
 from pathlib import Path
 from types import SimpleNamespace
-from typing import cast
+from typing import NoReturn, cast
 
 import pytest
 
@@ -16,7 +17,9 @@ from kicad_blocks import plugin as plugin_actions
 
 
 # Native dialog call-site contracts patch the functions and do not need Tk installed.
-def _unpatched_native_dialog(*_args: TkOption, **_kwargs: TkOption) -> None:
+def _unpatched_native_dialog(
+    *_args: TkCallbackOption, **_kwargs: TkCallbackOption
+) -> NoReturn:
     raise AssertionError("A native dialog call was not patched by this test.")
 
 
@@ -36,7 +39,33 @@ from kicad_blocks.model import parse_parameters
 from kicad_blocks.pcb_types import ResolvedBlockLayout
 from kicad_blocks.report_types import LibraryValidationReport
 from kicad_blocks.repository import BlockRecord
-from ui_contracts import Misc, MonkeyPatch, TkOption
+from ui_contracts import Misc, MonkeyPatch, TkCallbackOption
+
+
+type PromptRecord = tuple[str, str, Misc | None]
+type ValidationCall = tuple[tuple[Path, Path, str | Path | None], dict[str, bool]]
+
+
+def _fake_parent() -> Misc:
+    return cast(Misc, object())
+
+
+def _confirmation_response(response: bool) -> Callable[..., bool]:
+    def answer(*_args: str, **_kwargs: TkCallbackOption) -> bool:
+        return response
+
+    return answer
+
+
+def _string_response(response: str | None) -> Callable[..., str | None]:
+    def answer(*_args: str, **_kwargs: TkCallbackOption) -> str | None:
+        return response
+
+    return answer
+
+
+def _unexpected_warning(*_args: str, **_kwargs: TkCallbackOption) -> NoReturn:
+    pytest.fail("No report dialog should be shown")
 
 
 def _profile_inputs() -> tuple[
@@ -79,14 +108,14 @@ def test_profile_wizard_accepts_name_description_variant_parameters_and_layout(
             "Compact  [compact]",
         ]
     )
-    simple_prompts = []
+    simple_prompts: list[PromptRecord] = []
     confirmations = iter([True, False])
 
-    def askstring(title: str, prompt: str, **kwargs: TkOption) -> str | None:
+    def askstring(title: str, prompt: str, **kwargs: TkCallbackOption) -> str | None:
         simple_prompts.append((title, prompt, kwargs.get("parent")))
         return next(answers)
 
-    confirmation_prompts = []
+    confirmation_prompts: list[PromptRecord] = []
 
     def askyesno(title: str, message: str, **kwargs: TkOption) -> bool:
         confirmation_prompts.append((title, message, kwargs.get("parent")))
@@ -125,24 +154,24 @@ def test_profile_wizard_accepts_name_description_variant_parameters_and_layout(
 def test_profile_wizard_decline_returns_empty_without_opening_text_prompts(
     monkeypatch: MonkeyPatch,
 ) -> None:
-    prompts = []
-    monkeypatch.setattr(plugin_actions.messagebox, "askyesno", lambda *_args, **_kwargs: False)
-    monkeypatch.setattr(
-        plugin_actions.simpledialog,
-        "askstring",
-        lambda *args, **_kwargs: prompts.append(args),
-    )
-    parameters, variants, layouts = _profile_inputs()
-    assert plugin_actions.collect_block_profiles(object(), parameters, variants, layouts) == []
-    assert prompts == []
+    prompts: list[tuple[str, ...]] = []
 
+    def record_prompt(*args: str, **_kwargs: TkCallbackOption) -> str | None:
+        prompts.append(args)
+        return None
+
+    monkeypatch.setattr(plugin_actions.messagebox, "askyesno", _confirmation_response(False))
+    monkeypatch.setattr(plugin_actions.simpledialog, "askstring", record_prompt)
+    parameters, variants, layouts = _profile_inputs()
+    assert plugin_actions.collect_block_profiles(_fake_parent(), parameters, variants, layouts) == []
+    assert prompts == []
 
 def test_profile_wizard_cancel_discards_an_incomplete_profile(monkeypatch: MonkeyPatch) -> None:
     parent = cast(Misc, object())
     parameters, variants, layouts = _profile_inputs()
     prompts = iter(["Low voltage", None])
-    simple_calls = []
-    monkeypatch.setattr(plugin_actions.messagebox, "askyesno", lambda *_args, **_kwargs: True)
+    simple_calls: list[tuple[str, Misc | None]] = []
+    monkeypatch.setattr(plugin_actions.messagebox, "askyesno", _confirmation_response(True))
 
     def askstring(title: str, prompt: str, **kwargs: TkOption) -> str | None:
         simple_calls.append((title, kwargs.get("parent")))
@@ -159,16 +188,15 @@ def test_profile_wizard_cancel_discards_an_incomplete_profile(monkeypatch: Monke
 def test_profile_wizard_blank_name_warns_and_does_not_create_partial_profile(
     monkeypatch: MonkeyPatch,
 ) -> None:
-    parent = object()
+    parent = _fake_parent()
     parameters, variants, layouts = _profile_inputs()
-    warnings = []
-    monkeypatch.setattr(plugin_actions.messagebox, "askyesno", lambda *_args, **_kwargs: True)
-    monkeypatch.setattr(plugin_actions.simpledialog, "askstring", lambda *_args, **_kwargs: "   ")
-    monkeypatch.setattr(
-        plugin_actions.messagebox,
-        "showwarning",
-        lambda title, message, **kwargs: warnings.append((title, message, kwargs.get("parent"))),
-    )
+    warnings: list[PromptRecord] = []
+    monkeypatch.setattr(plugin_actions.messagebox, "askyesno", _confirmation_response(True))
+    monkeypatch.setattr(plugin_actions.simpledialog, "askstring", _string_response("   "))
+    def record_warning(title: str, message: str, **kwargs: TkCallbackOption) -> None:
+        warnings.append((title, message, cast(Misc | None, kwargs.get("parent"))))
+
+    monkeypatch.setattr(plugin_actions.messagebox, "showwarning", record_warning)
     assert plugin_actions.collect_block_profiles(parent, parameters, variants, layouts) is None
     assert len(warnings) == 1
     assert warnings[0][0] == "Configuration Profile"
@@ -179,11 +207,11 @@ def test_profile_wizard_blank_name_warns_and_does_not_create_partial_profile(
 def test_profile_wizard_rejects_unknown_variant_before_requesting_overrides(
     monkeypatch: MonkeyPatch,
 ) -> None:
-    parent = object()
+    parent = _fake_parent()
     parameters, variants, layouts = _profile_inputs()
     prompts = iter(["Bad profile", "Description", "9V9"])
-    calls: list[tuple[tuple[Path, ...], dict[str, TkOption]]] = []
-    monkeypatch.setattr(plugin_actions.messagebox, "askyesno", lambda *_args, **_kwargs: True)
+    calls: list[str] = []
+    monkeypatch.setattr(plugin_actions.messagebox, "askyesno", _confirmation_response(True))
 
     def askstring(title: str, prompt: str, **kwargs: TkOption) -> str | None:
         calls.append(title)
@@ -218,15 +246,14 @@ def _layout_block() -> BlockRecord:
 
 
 def test_layout_selector_returns_the_user_selected_layout(monkeypatch: MonkeyPatch) -> None:
-    parent = object()
-    calls = []
-    monkeypatch.setattr(
-        plugin_actions.simpledialog,
-        "askstring",
-        lambda title, prompt, **kwargs: (
-            calls.append((title, prompt, kwargs.get("parent"))) or "Compact"
-        ),
-    )
+    parent = _fake_parent()
+    calls: list[PromptRecord] = []
+
+    def ask_layout(title: str, prompt: str, **kwargs: TkCallbackOption) -> str:
+        calls.append((title, prompt, cast(Misc | None, kwargs.get("parent"))))
+        return "Compact"
+
+    monkeypatch.setattr(plugin_actions.simpledialog, "askstring", ask_layout)
     selected = plugin_actions.choose_block_layout(
         _layout_block(), parent, "Select PCB layout", None
     )
@@ -236,16 +263,15 @@ def test_layout_selector_returns_the_user_selected_layout(monkeypatch: MonkeyPat
     assert "Compact [compact]" in calls[0][1]
     assert calls[0][2] is parent
 
-
 def test_layout_selector_cancel_and_invalid_choice_are_distinct(monkeypatch: MonkeyPatch) -> None:
-    parent = object()
-    monkeypatch.setattr(plugin_actions.simpledialog, "askstring", lambda *_args, **_kwargs: None)
+    parent = _fake_parent()
+    monkeypatch.setattr(plugin_actions.simpledialog, "askstring", _string_response(None))
     assert (
         plugin_actions.choose_block_layout(_layout_block(), parent, "Select PCB layout", None)
         is None
     )
     monkeypatch.setattr(
-        plugin_actions.simpledialog, "askstring", lambda *_args, **_kwargs: "Missing"
+        plugin_actions.simpledialog, "askstring", _string_response("Missing")
     )
     with pytest.raises(ValueError, match="No PCB layout"):
         plugin_actions.choose_block_layout(_layout_block(), parent, "Select PCB layout", None)
@@ -253,24 +279,47 @@ def test_layout_selector_cancel_and_invalid_choice_are_distinct(monkeypatch: Mon
 
 def _install_validation_fakes(
     monkeypatch: MonkeyPatch, tmp_path: Path, report: LibraryValidationReport
-) -> tuple[Path, Path, Misc, list[tuple[tuple[Path, ...], dict[str, TkOption]]]]:
+) -> tuple[Path, Path, Misc, list[ValidationCall]]:
     library = tmp_path / "library"
     library.mkdir()
     output = tmp_path / "reports"
     output.mkdir()
-    parent = object()
-    calls = []
-    monkeypatch.setattr(plugin_actions, "_pick_directory", lambda _parent, **_kwargs: output)
-    monkeypatch.setattr(plugin_actions, "_library_roots_for", lambda _root: [library])
-    monkeypatch.setattr(plugin_actions, "list_blocks", lambda _root: [])
-    monkeypatch.setattr(plugin_actions, "find_kicad_cli", lambda: "kicad-cli")
-    monkeypatch.setattr(
-        plugin_actions,
-        "validate_block_library",
-        lambda *args, **kwargs: calls.append((args, kwargs)) or report,
-    )
-    return library, output, parent, calls
+    parent = _fake_parent()
+    calls: list[ValidationCall] = []
 
+    def pick_directory(
+        _parent: Misc, *, title: str, initial_path: str | Path | None = None
+    ) -> str:
+        del title, initial_path
+        return str(output)
+
+    def library_roots(
+        _root: str | Path | Sequence[str | Path] | None = None,
+    ) -> list[Path]:
+        return [library]
+
+    def empty_blocks(_root: Path) -> list[BlockRecord]:
+        return []
+
+    def find_cli() -> str:
+        return "kicad-cli"
+
+    def validate(
+        library_root: Path,
+        report_directory: Path,
+        kicad_cli: str | Path | None = None,
+        *,
+        run_erc: bool = True,
+    ) -> LibraryValidationReport:
+        calls.append(((library_root, report_directory, kicad_cli), {"run_erc": run_erc}))
+        return report
+
+    monkeypatch.setattr(plugin_actions, "_pick_directory", pick_directory)
+    monkeypatch.setattr(plugin_actions, "_library_roots_for", library_roots)
+    monkeypatch.setattr(plugin_actions, "list_blocks", empty_blocks)
+    monkeypatch.setattr(plugin_actions, "find_kicad_cli", find_cli)
+    monkeypatch.setattr(plugin_actions, "validate_block_library", validate)
+    return library, output, parent, calls
 
 @pytest.mark.parametrize(
     ("report", "expected_title"),
@@ -316,7 +365,7 @@ def test_library_validation_uses_the_correct_warning_dialog(
     expected_title: str,
 ) -> None:
     _library, output, parent, calls = _install_validation_fakes(monkeypatch, tmp_path, report)
-    warnings = []
+    warnings: list[PromptRecord] = []
     monkeypatch.setattr(
         plugin_actions.messagebox,
         "showwarning",
@@ -334,37 +383,44 @@ def test_library_validation_uses_the_correct_warning_dialog(
 def test_successful_library_validation_does_not_show_a_warning_dialog(
     monkeypatch: MonkeyPatch, tmp_path: Path
 ) -> None:
-    report = {
-        "blocks": [{"name": "Valid block", "status": "passed", "errors": [], "warnings": []}],
-        "passed_count": 1,
-        "warning_count": 0,
-        "failed_count": 0,
-    }
-    _install_validation_fakes(monkeypatch, tmp_path, report)
-    warnings = []
-    monkeypatch.setattr(
-        plugin_actions.messagebox,
-        "showwarning",
-        lambda *args, **kwargs: warnings.append((args, kwargs)),
+    report = cast(
+        LibraryValidationReport,
+        {
+            "blocks": [{"name": "Valid block", "status": "passed", "errors": [], "warnings": []}],
+            "passed_count": 1,
+            "warning_count": 0,
+            "failed_count": 0,
+        },
     )
-    plugin_actions.validate_shared_library(tmp_path, object())
-    assert warnings == []
+    _install_validation_fakes(monkeypatch, tmp_path, report)
+    warnings: list[tuple[str, ...]] = []
 
+    def record_warning(*args: str, **_kwargs: TkCallbackOption) -> None:
+        warnings.append(args)
+
+    monkeypatch.setattr(plugin_actions.messagebox, "showwarning", record_warning)
+    plugin_actions.validate_shared_library(tmp_path, _fake_parent())
+    assert warnings == []
 
 def test_validation_report_dialog_cancel_skips_all_library_validation(
     monkeypatch: MonkeyPatch, tmp_path: Path
 ) -> None:
-    validations = []
-    monkeypatch.setattr(plugin_actions, "_pick_directory", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(
-        plugin_actions,
-        "_library_roots_for",
-        lambda *_args, **_kwargs: validations.append("roots") or [],
-    )
-    monkeypatch.setattr(
-        plugin_actions.messagebox,
-        "showwarning",
-        lambda *_args, **_kwargs: pytest.fail("No report dialog should be shown"),
-    )
-    plugin_actions.validate_shared_library(tmp_path, object())
+    validations: list[str] = []
+
+    def cancel_directory(
+        _parent: Misc, *, title: str, initial_path: str | Path | None = None
+    ) -> None:
+        del _parent, title, initial_path
+        return None
+
+    def record_roots(
+        _root: str | Path | Sequence[str | Path] | None = None,
+    ) -> list[Path]:
+        validations.append("roots")
+        return []
+
+    monkeypatch.setattr(plugin_actions, "_pick_directory", cancel_directory)
+    monkeypatch.setattr(plugin_actions, "_library_roots_for", record_roots)
+    monkeypatch.setattr(plugin_actions.messagebox, "showwarning", _unexpected_warning)
+    plugin_actions.validate_shared_library(tmp_path, _fake_parent())
     assert validations == []
