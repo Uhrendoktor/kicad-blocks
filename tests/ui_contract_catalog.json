@@ -624,7 +624,7 @@
       "title": "Create Block from Selection or Sheet",
       "purpose": "Package selected schematic circuit items, one hierarchical sheet, or the sheet currently open in Eeschema when nothing is selected, as a reusable functional block.",
       "coverage": "partial",
-      "coverage_note": "This is a native Eeschema action rather than a Tk window. Unit tests verify selected-item extraction and label promotion. The real Eeschema IPC integration test verifies typed SheetSymbol selection, active-subsheet creation with an empty selection, and a live component-plus-label circuit selection. The action does not open a naming form or success popup.",
+      "coverage_note": "This is a native Eeschema action rather than a Tk window. Unit tests verify extraction of selected symbols and named labels into a standalone schematic, local/global label promotion, selected-item filtering, and validation. The real Eeschema IPC integration test verifies typed SheetSymbol selection, active-subsheet creation with an empty selection, and a live component-plus-label circuit selection. The action does not open a naming form or success popup.",
       "evidence": [
         "tests/test_editor_workflow.py",
         "tests/create_block_ipc_integration.py",
