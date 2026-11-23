@@ -66,6 +66,9 @@ class DialogCatalog(TypedDict):
     call_sites: list[DialogCatalogEntry]
 
 
+type JsonValue = str | int | float | bool | None | list[JsonValue] | dict[str, JsonValue]
+
+
 def _dotted_name(node: ast.AST) -> str:
     if isinstance(node, ast.Name):
         return node.id
@@ -126,16 +129,16 @@ def discover_dialog_calls(source_path: Path = SOURCE_PATH) -> list[DialogCallSit
 
 
 def _read_catalog(path: Path) -> DialogCatalog:
-    loaded = json.loads(path.read_text(encoding="utf-8"))
+    loaded = cast(JsonValue, json.loads(path.read_text(encoding="utf-8")))
     if not isinstance(loaded, dict):
         raise TypeError(_CATALOG_OBJECT_ERROR)
-    if loaded.get("schema_version") != 1:
+    catalog_data = cast(dict[str, JsonValue], loaded)
+    if catalog_data.get("schema_version") != 1:
         raise ValueError(_CATALOG_VERSION_ERROR)
-    raw_calls: object = cast("dict[str, object]", loaded).get("call_sites")
+    raw_calls = catalog_data.get("call_sites")
     if not isinstance(raw_calls, list):
         raise TypeError(_CALL_SITES_LIST_ERROR)
-    calls: list[object] = cast("list[object]", raw_calls)
-    if any(not isinstance(item, dict) for item in calls):
+    if any(not isinstance(item, dict) for item in raw_calls):
         raise TypeError(_CALL_SITE_RECORD_ERROR)
     return cast("DialogCatalog", loaded)
 

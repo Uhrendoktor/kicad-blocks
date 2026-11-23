@@ -22,13 +22,19 @@ sys.path.insert(0, str(ROOT / "plugin" / "kicad-blocks"))
 sys.path.insert(0, str(ROOT / "tests"))
 
 from kicad_blocks import plugin as plugin_actions
-from kicad_blocks.manifest_types import BlockProfileInput, BlockVariantInput
+from kicad_blocks.manifest_types import (
+    BlockProfileInput,
+    BlockVariantEditInput,
+    BlockVariantInput,
+)
 from kicad_blocks.repository import BlockRecord
 from kicad_blocks.model import parse_pins
 from kicad_blocks.repository import create_block, read_manifest
 from ui_contracts import (
     Button,
     ButtonContract,
+    Misc,
+    TkCallbackOption,
     TreeSelectionContract,
     UiTestContext,
     assert_control_coverage,
@@ -409,7 +415,7 @@ def test_add_variant_save_failure_can_be_retried_with_save_and_close(
         attempts.append("attempt")
         if len(attempts) == 1:
             raise OSError("simulated write failure")
-        original_save(*args, **kwargs)
+        original_save(record, variants, default_variant=default_variant)
 
     monkeypatch.setattr(plugin_actions, "_save_block_variants", fail_once)
 
@@ -555,7 +561,7 @@ def test_remove_confirmation_cancel_preserves_manifest_row_and_source_file(
     original_bytes = variant_file.read_bytes()
     prompts: list[tuple[str, str]] = []
 
-    def cancel_confirmation(title: str, message: str, **_kwargs: object) -> bool:
+    def cancel_confirmation(title: str, message: str, **_kwargs: TkCallbackOption) -> bool:
         prompts.append((title, message))
         return False
 
@@ -603,7 +609,12 @@ def test_close_confirmation_can_keep_pending_changes_or_discard_them(
     confirmations: list[tuple[str, str]] = []
     decisions = iter([False, True])
 
-    def fail_once(*args: object, **kwargs: object) -> None:
+    def fail_once(
+        record: BlockRecord,
+        variants: list[BlockVariantEditInput],
+        *,
+        default_variant: str | None = None,
+    ) -> None:
         attempts.append("attempt")
         if len(attempts) == 1:
             raise OSError("simulated library write failure")
@@ -736,10 +747,10 @@ def test_add_variant_duplicate_value_reports_error_and_preserves_manifest(
         "_ask_implementation_details",
         cast(Callable[..., tuple[str, str]], lambda *_args, **_kwargs: ("1V8", str(sources["1V8"]))),
     )
-    errors: list[tuple[str, str, object]] = []
+    errors: list[tuple[str, str, Misc | None]] = []
 
-    def record_error(title: str, message: str, **kwargs: object) -> None:
-        errors.append((title, str(message), kwargs.get("parent")))
+    def record_error(title: str, message: str, **kwargs: TkCallbackOption) -> None:
+        errors.append((title, str(message), cast(Misc | None, kwargs.get("parent"))))
 
     monkeypatch.setattr(plugin_actions.messagebox, "showerror", record_error)
     root = _new_root(monkeypatch)
