@@ -33,7 +33,6 @@ from kicad_blocks.plugin import (
     _library_record_for_instance,
     _library_record_for_tree_row,
     _minimize_placement_windows,
-    _native_pcb_preview_png,
     _native_schematic_preview_pages,
     _native_symbol_preview_photo,
     _pcb_layout_for_variant,
