@@ -520,36 +520,39 @@ def main() -> None:
             # ignores objects outside the sheet currently displayed in the GUI.
             # Move from page 1 -> 2 -> 3 so Control Interface is the active sheet.
             subprocess.run(
-                [xdotool, "windowactivate", "--sync", window_id],
-                check=True,
-            )
-            subprocess.run(
-                [xdotool, "key", "--clearmodifiers", "Next"],
-                check=True,
-            )
-            subprocess.run(
-                [xdotool, "key", "--clearmodifiers", "Next"],
+                [xdotool, "windowfocus", "--sync", window_id],
                 check=True,
             )
 
-            deadline = time.monotonic() + 5.0
-            active_sheet_name = ""
-            while time.monotonic() < deadline:
-                live_schematic = kicad.get_schematic()
-                active_instance = plugin_actions._active_sheet_instance(
-                    live_schematic
-                )
-                active_sheet_name = str(
-                    getattr(active_instance, "name", "") or ""
-                )
-                if active_sheet_name == "Control Interface":
-                    break
-                time.sleep(0.1)
-            else:
+            def wait_for_active_sheet(expected_name: str) -> None:
+                deadline = time.monotonic() + 5.0
+                active_sheet_name = ""
+                while time.monotonic() < deadline:
+                    live_schematic = kicad.get_schematic()
+                    active_instance = plugin_actions._active_sheet_instance(
+                        live_schematic
+                    )
+                    active_sheet_name = str(
+                        getattr(active_instance, "name", "") or ""
+                    )
+                    if active_sheet_name == expected_name:
+                        return
+                    time.sleep(0.1)
                 raise AssertionError(
-                    "Eeschema did not navigate to the Control Interface sheet; "
+                    f"Eeschema did not navigate to {expected_name!r}; "
                     f"active sheet is {active_sheet_name!r}."
                 )
+
+            subprocess.run(
+                [xdotool, "key", "--clearmodifiers", "Next"],
+                check=True,
+            )
+            wait_for_active_sheet("Power Stage")
+            subprocess.run(
+                [xdotool, "key", "--clearmodifiers", "Next"],
+                check=True,
+            )
+            wait_for_active_sheet("Control Interface")
 
             open_sheet.clear_selection()
             circuit_selection = list(
