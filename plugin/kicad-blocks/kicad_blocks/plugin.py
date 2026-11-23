@@ -1946,9 +1946,15 @@ def _create_and_place(
                 source_kind = "selected schematic items"
                 source_display_name = active_sheet.name
         elif selection:
+            if len(selection) == 1:
+                raise ValueError(
+                    "The current selection is not a hierarchical sheet symbol, and KiCad "
+                    "could not serialize the selected schematic item for block extraction. "
+                    "Clear the selection to use the open sheet, or retry after saving the schematic."
+                )
             raise ValueError(
-                "KiCad could not serialize the current selection. Clear the selection "
-                "to use the open sheet, or select a sheet symbol and retry."
+                "Select exactly one hierarchical sheet symbol, or make sure KiCad can "
+                "serialize the selected schematic items before creating a block."
             )
         else:
             source_sheet, source_sheet_uuid = _active_sheet_source(
@@ -2040,7 +2046,7 @@ def _create_and_place(
         for pin in record.manifest.get("pins", [])
     )
     LOG.info("%s: %s", "Block Created", f"Created {name} from {source_kind} ({source_display_name}).\\n\\n"
-        f"Facade pins were generated from selected hierarchical labels and their shapes:\\n"
+        f"Facade pins were generated from hierarchical labels and their shapes:\\n"
         f"{pins_summary}\\n\\n"
         f"Implementation: {record.implementation}\\n"
         f"Facade symbol: {record.symbol_library}\\n\\n"
