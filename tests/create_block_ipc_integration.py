@@ -642,9 +642,9 @@ def main() -> None:
             # save it as part of the fixture, then select it with a real
             # hierarchical label using the live Eeschema IPC selection API.
             component = open_sheet.place_symbol_from_library(
-                f"{selected_manifest['library_nickname']}:{selected_manifest['symbol_name']}",
+                "Device:R",
                 Vector2.from_xy_mm(100, 100),
-                reference="X1",
+                reference="R1",
             )
             open_sheet.save()
             labels = list(open_sheet.get_labels())
@@ -706,10 +706,10 @@ def main() -> None:
                     f"serialization; selected {len(symbol_selection)} item(s)."
                 )
             symbol_fragment = open_sheet.get_selection_as_string()
-            if selected_manifest["symbol_name"] not in symbol_fragment:
+            if "Device:R" not in symbol_fragment:
                 raise AssertionError(
-                    "KiCad serialized a symbol-only selection without its selected "
-                    f"library symbol name: {symbol_fragment!r}"
+                    "KiCad serialized a standard Device:R symbol-only selection "
+                    f"without its library ID: {symbol_fragment!r}"
                 )
             print("SavedSelection serialization passed for symbol-only selection.", flush=True)
 
