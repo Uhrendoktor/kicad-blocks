@@ -18,6 +18,7 @@ sys.path.insert(0, str(ROOT / "tests"))
 
 from kicad_blocks import plugin as plugin_actions
 from ui_contracts import (
+    ButtonContract,
     ChoiceViewContract,
     EntryInputContract,
     NotebookViewContract,
@@ -363,10 +364,21 @@ def test_facade_schematic_and_pcb_previews_support_zoom_and_fit_reset(
             assert canvas._kicad_preview_state["zoom"] > 1.0
             assert canvas.find_withtag("preview-image")
 
+            center_x = canvas.winfo_width() // 2
+            center_y = canvas.winfo_height() // 2
+            # Tk does not permit synthetic <Double-...> event modifiers. Emit
+            # two real press/release pairs within the platform double-click window.
             canvas.event_generate(
-                "<Double-Button-1>",
-                x=canvas.winfo_width() // 2,
-                y=canvas.winfo_height() // 2,
+                "<ButtonPress-1>", x=center_x, y=center_y, time=1000
+            )
+            canvas.event_generate(
+                "<ButtonRelease-1>", x=center_x, y=center_y, time=1010
+            )
+            canvas.event_generate(
+                "<ButtonPress-1>", x=center_x, y=center_y, time=1100
+            )
+            canvas.event_generate(
+                "<ButtonRelease-1>", x=center_x, y=center_y, time=1110
             )
             root.update_idletasks()
             root.update()
