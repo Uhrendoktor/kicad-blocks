@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+from io import BytesIO
 import json
 import os
 import sys
 from pathlib import Path
+
+from PIL import Image
 from types import SimpleNamespace
 
 import pytest
@@ -313,6 +316,66 @@ def test_library_browser_preview_switches_between_facade_and_schematic(monkeypat
             contract_id="library-browser.preview.views",
             views=PREVIEW_VIEWS,
         ).run(context)
+    finally:
+        root.destroy()
+
+
+
+def test_facade_schematic_and_pcb_previews_support_zoom_and_fit_reset(
+    monkeypatch, tmp_path
+):
+    root, context, _records, _library, _project = _new_browser(monkeypatch, tmp_path)
+    try:
+        canvases = []
+
+        def collect(widget):
+            if getattr(widget, "_kicad_preview_state", None) is not None:
+                canvases.append(widget)
+            for child in widget.winfo_children():
+                collect(child)
+
+        collect(root)
+        assert len(canvases) == 3
+
+        buffer = BytesIO()
+        Image.new("RGB", (1600, 1200), "white").save(buffer, format="PNG")
+        png_data = buffer.getvalue()
+        notebook = context.require_widget("library-browser.preview.views")
+
+        for index, canvas in enumerate(canvases):
+            notebook.select(notebook.tabs()[index])
+            root.update_idletasks()
+            root.update()
+            assert canvas.winfo_width() > 10
+            assert canvas.winfo_height() > 10
+
+            canvas.set_preview_image(png_data)
+            root.update_idletasks()
+            root.update()
+            assert canvas._kicad_preview_state["zoom"] == 1.0
+
+            canvas.event_generate(
+                "<MouseWheel>",
+                delta=120,
+                x=canvas.winfo_width() // 2,
+                y=canvas.winfo_height() // 2,
+            )
+            root.update_idletasks()
+            root.update()
+            assert canvas._kicad_preview_state["zoom"] > 1.0
+            assert canvas.find_withtag("preview-image")
+
+            canvas.event_generate(
+                "<Double-Button-1>",
+                x=canvas.winfo_width() // 2,
+                y=canvas.winfo_height() // 2,
+            )
+            root.update_idletasks()
+            root.update()
+            assert canvas._kicad_preview_state["zoom"] == 1.0
+
+            assert canvas.bind("<ButtonPress-1>")
+            assert canvas.bind("<B1-Motion>")
     finally:
         root.destroy()
 

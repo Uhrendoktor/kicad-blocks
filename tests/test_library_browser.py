@@ -23,6 +23,8 @@ from kicad_blocks.model import (
 from kicad_blocks.pcb_layout import parse_sexpr
 from kicad_blocks.plugin import (
     _attach_tk_window_to_editor,
+    _enable_last_column_left_resize,
+    _load_tkinter,
     _bind_mousewheel,
     _block_overview_text,
     _choose_block_layout,
@@ -94,6 +96,54 @@ class LibraryBrowserTests(unittest.TestCase):
 
     def tearDown(self):
         self.temp.cleanup()
+
+
+    def test_last_treeview_column_resizes_from_its_left_separator(self):
+        _load_tkinter()
+
+        class FakeTreeview:
+            def __init__(self):
+                self.tk = SimpleNamespace(
+                    splitlist=lambda value: tuple(str(value).split())
+                )
+                self.widths = {
+                    "library": {"width": 200, "minwidth": 60},
+                    "blocks": {"width": 100, "minwidth": 40},
+                    "layout": {"width": 300, "minwidth": 50},
+                }
+                self.bindings = {}
+
+            def __getitem__(self, key):
+                return {
+                    "columns": ("library", "blocks", "layout"),
+                    "displaycolumns": "#all",
+                }[key]
+
+            def column(self, name, option, **values):
+                if values:
+                    self.widths[name].update(values)
+                return self.widths[name][option]
+
+            def xview(self):
+                return (0.0, 1.0)
+
+            def identify_region(self, _x, _y):
+                return "separator"
+
+            def bind(self, sequence, callback, add=None):
+                self.bindings[sequence] = callback
+
+        tree = FakeTreeview()
+        _enable_last_column_left_resize(tree)
+        press = tree.bindings["<ButtonPress-1>"]
+        drag = tree.bindings["<B1-Motion>"]
+        release = tree.bindings["<ButtonRelease-1>"]
+
+        self.assertEqual(press(SimpleNamespace(x=300, y=8)), "break")
+        self.assertEqual(drag(SimpleNamespace(x=280, y=8)), "break")
+        self.assertEqual(tree.column("layout", "width"), 320)
+        self.assertEqual(tree.column("blocks", "width"), 80)
+        release()
 
     def test_search_matches_description_pins_and_variant_values(self):
         records = [self.block, self.filter_block]
