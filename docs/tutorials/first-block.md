@@ -1,6 +1,6 @@
 # Create and place your first block
 
-This tutorial takes one existing hierarchical-sheet circuit and turns it into a reusable library block. At the end, the source design remains intact, the library contains a separate implementation, and a consuming project contains one ordinary facade symbol.
+This tutorial shows how to turn a selected circuit or an existing hierarchical-sheet circuit into a reusable library block. At the end, the source design remains intact, the library contains a separate implementation, and a consuming project contains one ordinary facade symbol.
 
 The tutorial assumes that KiCad Blocks is installed and that a shared library folder is registered. Complete [installation and setup](../getting-started.md) first.
 
@@ -14,15 +14,17 @@ If you want a concrete reference circuit to inspect, see the [STUSB4500 example]
 
 ## 2. Create the block
 
-1. Open the parent schematic in Eeschema.
-2. Select exactly one hierarchical sheet symbol.
-3. Click **Create Block from Sheet** once.
+Choose one of the following creation modes, then click **Create Block from Selection or Sheet**:
 
-No form or confirmation appears. The block name is derived from the sheet filename; if it already exists in the default library, a numeric suffix is added. The block is created in the configured default library. Change that destination through **Browse and Place Functional Blocks → Manage Libraries → Set default** before creating the block.
+- **Selected circuit:** Select the component symbols, connected wires, and named net labels that make up the circuit. Include at least one component symbol and one named label. The selected labels become facade pins; local labels default to passive electrical type, while global and hierarchical labels retain their electrical shape. Only the selected items are copied.
+- **Selected hierarchical sheet:** In the parent schematic, select exactly one hierarchical sheet symbol by itself. The sheet and its child schematic files are copied, and hierarchical labels on that sheet become facade pins.
+- **Currently open sheet:** Clear the selection to package the sheet that is open in Eeschema, including its child-sheet hierarchy.
 
-To package the sheet currently open in Eeschema, open it and leave nothing selected before clicking **Create Block from Sheet**. Selecting ordinary components or multiple items is not a substitute for selecting one hierarchical sheet symbol.
+Do not mix a hierarchical sheet symbol with ordinary circuit items in one selection. For circuit selection, include every net label that should be exposed as a block pin; wire geometry alone does not define the facade interface.
 
-The plugin copies the selected or open sheet and its child schematic files into a new `.kicad_block` folder. It does not remove or rewrite the source project. The root labels become the facade pins; the copied schematic tree becomes the editable implementation.
+No naming or confirmation form appears. A circuit selection is named from the active sheet filename with Selection appended; sheet-based creation uses the source filename. If that name already exists in the default library, a numeric suffix is added. The block is created in the configured default library. Change that destination through **Browse and Place Functional Blocks → Manage Libraries → Set default** before creating the block.
+
+The plugin copies the selected circuit items or selected/open sheet into a new `.kicad_block` folder. It does not remove or rewrite the source project. The copied schematic becomes the editable implementation.
 
 ## 3. Inspect the generated block
 
