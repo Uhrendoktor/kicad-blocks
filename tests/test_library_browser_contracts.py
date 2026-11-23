@@ -2,24 +2,15 @@
 
 from __future__ import annotations
 
-from io import BytesIO
 import json
 import os
 import sys
+from io import BytesIO
 from pathlib import Path
-
-from PIL import Image
 from types import SimpleNamespace
 
 import pytest
-
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "plugin" / "kicad-blocks"))
-sys.path.insert(0, str(ROOT / "tests"))
-
-from kicad_blocks import plugin as plugin_actions
-from ui_contracts import (
-    ButtonContract,
+from PIL import Image
     ChoiceViewContract,
     EntryInputContract,
     NotebookViewContract,
