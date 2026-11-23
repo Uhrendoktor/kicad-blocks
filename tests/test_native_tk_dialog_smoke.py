@@ -25,8 +25,15 @@ else:
         Tk = None
         TclError = Exception
 
+try:
+    import tkinter as _tkinter
+except ImportError:  # pragma: no cover - the headless interpreter has no Tk
+    _TK_AVAILABLE = False
+else:
+    _TK_AVAILABLE = True
+
 pytestmark = pytest.mark.skipif(
-    Tk is None or (sys.platform == "linux" and not os.environ.get("DISPLAY")),
+    not _TK_AVAILABLE or (sys.platform == "linux" and not os.environ.get("DISPLAY")),
     reason="Real Tk dialog smoke tests require Tk and a display (run under xvfb-run).",
 )
 
@@ -45,8 +52,6 @@ class _DialogOutcome(TypedDict, total=False):
 
 
 def _create_parent() -> Misc:
-    if Tk is None:
-        raise RuntimeError("Tkinter is unavailable in this test environment.")
     root = Tk()
     root.title("KiCad Blocks native dialog smoke host")
     root.geometry("360x180+20+20")
@@ -57,7 +62,7 @@ def _create_parent() -> Misc:
 
 
 def _children(root: Misc, widget_path: str) -> list[str]:
-    return list(root.tk.splitlist(root.tk.call("winfo", "children", widget_path)))
+    return list(root.tk.splitlist(str(root.tk.call("winfo", "children", widget_path))))
 
 
 def _walk_widgets(root: Misc, widget_path: str) -> Iterator[str]:
@@ -193,14 +198,11 @@ def test_real_showerror_dialog_renders_message_parent_and_ok_button() -> None:
     title = "Native error dialog smoke"
     message = "The test operation failed and can be retried."
 
-    outcome = _schedule_dialog_action(
-        root,
-        title,
-        lambda dialog: (
-            _assert_message_dialog(root, dialog, message, {"ok"}),
-            _invoke_button(root, dialog, "OK"),
-        ),
-    )
+    def inspect_error_dialog(dialog: str) -> None:
+        _assert_message_dialog(root, dialog, message, {"ok"})
+        _invoke_button(root, dialog, "OK")
+
+    outcome = _schedule_dialog_action(root, title, inspect_error_dialog)
     try:
         result = messagebox.showerror(title, message, parent=root)
         _assert_dialog_window(root, outcome)
@@ -216,14 +218,11 @@ def test_real_askyesno_dialog_renders_both_choices_and_returns_yes() -> None:
     title = "Native confirmation dialog smoke"
     message = "Apply the selected layout?"
 
-    outcome = _schedule_dialog_action(
-        root,
-        title,
-        lambda dialog: (
-            _assert_message_dialog(root, dialog, message, {"yes", "no"}),
-            _invoke_button(root, dialog, "Yes"),
-        ),
-    )
+    def inspect_confirmation_dialog(dialog: str) -> None:
+        _assert_message_dialog(root, dialog, message, {"yes", "no"})
+        _invoke_button(root, dialog, "Yes")
+
+    outcome = _schedule_dialog_action(root, title, inspect_confirmation_dialog)
     try:
         result = messagebox.askyesno(title, message, parent=root)
         _assert_dialog_window(root, outcome)

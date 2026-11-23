@@ -131,9 +131,10 @@ def _read_catalog(path: Path) -> DialogCatalog:
         raise TypeError(_CATALOG_OBJECT_ERROR)
     if loaded.get("schema_version") != 1:
         raise ValueError(_CATALOG_VERSION_ERROR)
-    calls = loaded.get("call_sites")
-    if not isinstance(calls, list):
+    raw_calls: object = cast("dict[str, object]", loaded).get("call_sites")
+    if not isinstance(raw_calls, list):
         raise TypeError(_CALL_SITES_LIST_ERROR)
+    calls: list[object] = cast("list[object]", raw_calls)
     if any(not isinstance(item, dict) for item in calls):
         raise TypeError(_CALL_SITE_RECORD_ERROR)
     return cast("DialogCatalog", loaded)

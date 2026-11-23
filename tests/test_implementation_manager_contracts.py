@@ -27,6 +27,7 @@ from kicad_blocks.repository import BlockRecord
 from kicad_blocks.model import parse_pins
 from kicad_blocks.repository import create_block, read_manifest
 from ui_contracts import (
+    Button,
     ButtonContract,
     TreeSelectionContract,
     UiTestContext,
@@ -315,9 +316,9 @@ def test_remove_is_blocked_when_an_implementation_is_referenced_by_a_profile(
         tree = context.require_treeview("implementations-manager.rows")
         _select_variant(context, "1", tuple(tree.item("1", "values")))
         _click(context, "implementations-manager.action.remove", "Remove")
-        status = context.require_widget("implementations-manager.status")
+        status = context.require_label("implementations-manager.status")
         variable = str(status.cget("textvariable"))
-        assert "Low voltage" in status.getvar(variable)
+        assert "Low voltage" in str(status.getvar(variable))
         assert len(read_manifest(record.path)["variants"]) == 1
         _click(context, "implementations-manager.action.close", "Close", closes=True)
 
@@ -444,8 +445,8 @@ def test_add_variant_save_failure_can_be_retried_with_save_and_close(
         saved = read_manifest(record.path)
         assert [item["value"] for item in saved["variants"]] == ["3V3"]
         assert len(attempts) == 2
-        assert opened == record.path / saved["variants"][0]["file"]
         assert opened is not None
+        assert opened == record.path / saved["variants"][0]["file"]
         assert opened.is_file()
     finally:
         root.destroy()
@@ -458,15 +459,14 @@ def test_implementation_manager_selection_controls_follow_row_state(
     root = _new_root(monkeypatch)
     context = UiTestContext(root)
 
-    def assert_state(widget, state: str):
+    def assert_state(widget: Button, state: str) -> None:
         assert widget.instate([state])
 
-    def inspect_states(_dialog):
-        widgets = context.refresh_widgets()
-        tree = widgets["implementations-manager.rows"]
-        edit = widgets["implementations-manager.action.edit"]
-        default = widgets["implementations-manager.action.default"]
-        remove = widgets["implementations-manager.action.remove"]
+    def inspect_states(_dialog: Toplevel) -> None:
+        tree = context.require_treeview("implementations-manager.rows")
+        edit = context.require_button("implementations-manager.action.edit")
+        default = context.require_button("implementations-manager.action.default")
+        remove = context.require_button("implementations-manager.action.remove")
 
         # Initial selection is the Default row: edit is enabled, but promote
         # and remove are disabled.
@@ -510,7 +510,7 @@ def test_implementation_manager_selection_controls_follow_row_state(
             "implementations-manager.action.add",
             "implementations-manager.action.close",
         ):
-            assert_state(widgets[contract_id], "!disabled")
+            assert_state(context.require_button(contract_id), "!disabled")
         _click(context, "implementations-manager.action.close", "Close", closes=True)
 
     try:
@@ -528,8 +528,8 @@ def test_edit_default_row_returns_default_schematic_and_closes_manager(
     root = _new_root(monkeypatch)
     context = UiTestContext(root)
 
-    def open_default(_dialog):
-        assert context.require_widget("implementations-manager.rows").selection() == ("0",)
+    def open_default(_dialog: Toplevel) -> None:
+        assert context.require_treeview("implementations-manager.rows").selection() == ("0",)
         _click(
             context,
             "implementations-manager.action.edit",
@@ -540,6 +540,7 @@ def test_edit_default_row_returns_default_schematic_and_closes_manager(
     try:
         result = _run_manager(root, record, context, open_default)
         assert result == default_path
+        assert result is not None
         assert result.is_file()
     finally:
         root.destroy()
@@ -552,9 +553,9 @@ def test_remove_confirmation_cancel_preserves_manifest_row_and_source_file(
     variant_file = record.path / record.manifest["variants"][0]["file"]
     original_manifest = read_manifest(record.path)
     original_bytes = variant_file.read_bytes()
-    prompts = []
+    prompts: list[tuple[str, str]] = []
 
-    def cancel_confirmation(title, message, **_kwargs):
+    def cancel_confirmation(title: str, message: str, **_kwargs: object) -> bool:
         prompts.append((title, message))
         return False
 
@@ -566,8 +567,8 @@ def test_remove_confirmation_cancel_preserves_manifest_row_and_source_file(
     root = _new_root(monkeypatch)
     context = UiTestContext(root)
 
-    def cancel_remove(_dialog):
-        tree = context.require_widget("implementations-manager.rows")
+    def cancel_remove(_dialog: Toplevel) -> None:
+        tree = context.require_treeview("implementations-manager.rows")
         _select_variant(context, "1", tuple(tree.item("1", "values")))
         _click(context, "implementations-manager.action.remove", "Remove")
         assert prompts == [("Remove implementation", "Remove 1V8?")]
@@ -594,19 +595,19 @@ def test_close_confirmation_can_keep_pending_changes_or_discard_them(
     monkeypatch.setattr(
         plugin_actions,
         "_ask_implementation_details",
-        lambda *_args, **_kwargs: ("3V3", str(source)),
+        cast(Callable[..., tuple[str, str]], lambda *_args, **_kwargs: ("3V3", str(source))),
     )
-    original_save = plugin_actions._save_block_variants
+    original_save = _save_block_variants
     attempts: list[str] = []
     errors: list[tuple[str, str]] = []
     confirmations: list[tuple[str, str]] = []
     decisions = iter([False, True])
 
-    def fail_once(*args, **kwargs):
+    def fail_once(*args: object, **kwargs: object) -> None:
         attempts.append("attempt")
         if len(attempts) == 1:
             raise OSError("simulated library write failure")
-        return original_save(*args, **kwargs)
+        original_save(*args, **kwargs)
 
     def confirm_discard(
         title: str,
@@ -628,11 +629,11 @@ def test_close_confirmation_can_keep_pending_changes_or_discard_them(
     root = _new_root(monkeypatch)
     context = UiTestContext(root)
 
-    def add_then_confirm_discard(_dialog):
+    def add_then_confirm_discard(_dialog: Toplevel) -> None:
         _click(context, "implementations-manager.action.add", "Add variant")
         status = context.require_widget("implementations-manager.status")
         variable = str(status.cget("textvariable"))
-        assert "Automatic save failed" in status.getvar(variable)
+        assert "Automatic save failed" in str(status.getvar(variable))
         assert attempts == ["attempt"]
         assert errors and errors[0][0] == "Save implementations"
         # No retains the pending edit; Yes confirms discarding it.
@@ -669,16 +670,16 @@ def test_add_button_routes_to_create_mode_details_and_persists_source(
         '(kicad_sch (version 20250114) (generator "nested-dialog-contract"))\n',
         encoding="utf-8",
     )
-    requests = []
+    requests: list[tuple[str, str, str, BlockRecord, bool]] = []
 
     def ask_details(
-        parent,
+        parent: Misc,
         *,
-        value="",
-        source="",
-        record=None,
-        allow_create=False,
-    ):
+        value: str = "",
+        source: str = "",
+        record: BlockRecord | None = None,
+        allow_create: bool = False,
+    ) -> tuple[str, str] | None:
         requests.append((parent.title(), value, source, record, allow_create))
         return "5V", str(source_file)
 
@@ -690,7 +691,7 @@ def test_add_button_routes_to_create_mode_details_and_persists_source(
     root = _new_root(monkeypatch)
     context = UiTestContext(root)
 
-    def add_from_details(_dialog):
+    def add_from_details(_dialog: Toplevel) -> None:
         _click(context, "implementations-manager.action.add", "Add variant")
         assert requests == [
             (
@@ -701,7 +702,7 @@ def test_add_button_routes_to_create_mode_details_and_persists_source(
                 True,
             )
         ]
-        tree = context.require_widget("implementations-manager.rows")
+        tree = context.require_treeview("implementations-manager.rows")
         assert tree.get_children() == ("0", "1")
         assert tree.item("1", "values")[0] == "5V"
         saved_variant = read_manifest(record.path)["variants"][0]
@@ -718,6 +719,7 @@ def test_add_button_routes_to_create_mode_details_and_persists_source(
     try:
         result = _run_manager(root, record, context, add_from_details)
         saved_variant = read_manifest(record.path)["variants"][0]
+        assert result is not None
         assert result == Path(record.path) / saved_variant["file"]
         assert result.is_file()
     finally:
@@ -732,18 +734,18 @@ def test_add_variant_duplicate_value_reports_error_and_preserves_manifest(
     monkeypatch.setattr(
         plugin_actions,
         "_ask_implementation_details",
-        lambda *_args, **_kwargs: ("1V8", str(sources["1V8"])),
+        cast(Callable[..., tuple[str, str]], lambda *_args, **_kwargs: ("1V8", str(sources["1V8"]))),
     )
-    errors = []
-    monkeypatch.setattr(
-        plugin_actions.messagebox,
-        "showerror",
-        lambda title, message, **kwargs: errors.append((title, str(message), kwargs.get("parent"))),
-    )
+    errors: list[tuple[str, str, object]] = []
+
+    def record_error(title: str, message: str, **kwargs: object) -> None:
+        errors.append((title, str(message), kwargs.get("parent")))
+
+    monkeypatch.setattr(plugin_actions.messagebox, "showerror", record_error)
     root = _new_root(monkeypatch)
     context = UiTestContext(root)
 
-    def add_duplicate(_dialog):
+    def add_duplicate(_dialog: Toplevel) -> None:
         _click(context, "implementations-manager.action.add", "Add variant")
         assert len(errors) == 1
         assert errors[0][0] == "Add implementation"
@@ -771,7 +773,7 @@ def test_edit_variant_duplicate_value_reports_error_and_preserves_manifest(
     monkeypatch.setattr(
         plugin_actions,
         "_ask_implementation_details",
-        lambda *_args, **_kwargs: ("3V3", str(sources["3V3"])),
+        cast(Callable[..., tuple[str, str]], lambda *_args, **_kwargs: ("3V3", str(sources["3V3"]))),
     )
     errors = []
     monkeypatch.setattr(
@@ -782,8 +784,8 @@ def test_edit_variant_duplicate_value_reports_error_and_preserves_manifest(
     root = _new_root(monkeypatch)
     context = UiTestContext(root)
 
-    def edit_duplicate(_dialog):
-        tree = context.require_widget("implementations-manager.rows")
+    def edit_duplicate(_dialog: Toplevel) -> None:
+        tree = context.require_treeview("implementations-manager.rows")
         _select_variant(context, "1", tuple(tree.item("1", "values")))
         _click(context, "implementations-manager.action.edit", "Edit implementation")
         assert len(errors) == 1
