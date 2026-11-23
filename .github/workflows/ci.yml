@@ -235,6 +235,92 @@ jobs:
           git commit -m "style: format tracked Python with Ruff 0.17.2"
           git push origin "$GITHUB_REF"
 
+  python-static-quality:
+    needs: synchronize-main
+    if: ${{ needs.synchronize-main.outputs.updated != 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Create Python quality environment
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m venv "${RUNNER_TEMP}/kicad-blocks-venv"
+          PY="${RUNNER_TEMP}/kicad-blocks-venv/bin/python"
+          "$PY" -m pip install --upgrade pip
+          "$PY" -m pip install -r requirements-dev.txt
+
+      - name: Resolve pinned KiCad Python IPC revision
+        id: kipy
+        shell: bash
+        run: |
+          set -euo pipefail
+          KIPY_SHA="$(tr -d '\\r\\n' < plugin/kicad-blocks/kicad-python.lock)"
+          if [[ ! "$KIPY_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::plugin/kicad-blocks/kicad-python.lock must contain one 40-character lowercase commit SHA."
+            exit 1
+          fi
+          echo "sha=$KIPY_SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Restore cached KiCad Python IPC wheel
+        id: kipy-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}/kicad-blocks-wheelhouse
+          key: kicad-python-${{ runner.os }}-${{ runner.arch }}-py312-${{ steps.kipy.outputs.sha }}
+
+      - name: Reuse or build pinned KiCad Python IPC wheel
+        shell: bash
+        env:
+          KIPY_SHA: ${{ steps.kipy.outputs.sha }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          PY="${RUNNER_TEMP}/kicad-blocks-venv/bin/python"
+          WHEELHOUSE="${RUNNER_TEMP}/kicad-blocks-wheelhouse"
+          EXPECTED="kicad_python-0.9.0.dev0-cp312-cp312-linux_x86_64.whl"
+          mkdir -p "$WHEELHOUSE"
+          if [[ ! -s "$WHEELHOUSE/$EXPECTED" ]]; then
+            set +e
+            python3 scripts/download_pinned_ipc_wheel.py "$WHEELHOUSE" \\
+              --repo "$GITHUB_REPOSITORY" --source-sha "$KIPY_SHA"
+            DOWNLOAD_STATUS=$?
+            set -e
+            if [[ "$DOWNLOAD_STATUS" -eq 3 ]]; then
+              echo "No published CPython 3.12 wheel for $KIPY_SHA; building it from source."
+              rm -f "$WHEELHOUSE"/kicad_python-*.whl
+              "$PY" -m pip wheel --wheel-dir "$WHEELHOUSE" \\
+                "git+https://gitlab.com/kicad/code/kicad-python.git@$KIPY_SHA"
+            elif [[ "$DOWNLOAD_STATUS" -ne 0 ]]; then
+              exit "$DOWNLOAD_STATUS"
+            fi
+          fi
+          test -s "$WHEELHOUSE/$EXPECTED"
+          "$PY" -m pip install "$WHEELHOUSE/$EXPECTED"
+          "$PY" -c "from kipy import KiCad; from kipy.schematic import Schematic; print('Schematic IPC bindings available')"
+
+      - name: Enforce strict Python quality contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="${RUNNER_TEMP}/kicad-blocks-venv/bin:$PATH"
+          PY="${RUNNER_TEMP}/kicad-blocks-venv/bin/python"
+          "$PY" scripts/check_python_quality.py
+          "$PY" scripts/test_inventory.py --check
+          "$PY" scripts/check_test_quality.py
+          "$PY" scripts/check_ruff_quality.py
+          mapfile -d '' TRACKED_PYTHON < <(git ls-files -z -- '*.py' '*.pyi')
+          if (("${#TRACKED_PYTHON[@]}")); then
+            "$PY" -m ruff format --check "${TRACKED_PYTHON[@]}"
+          fi
+          "$PY" -m pyright -p pyrightconfig.json --pythonpath "$PY"
+          ty check plugin/kicad-blocks
+          vulture --min-confidence 100 plugin/kicad-blocks/kicad_blocks scripts
+
   python-and-kicad:
     needs: synchronize-main
     if: ${{ needs.synchronize-main.outputs.updated != 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
@@ -442,24 +528,6 @@ jobs:
           PY="${RUNNER_TEMP}/kicad-blocks-venv/bin/python"
           "$PY" -m pytest -q
           "$PY" -m compileall -q plugin tests scripts
-
-      - name: Strict Python quality contract
-        shell: bash
-        run: |
-          set -euo pipefail
-          export PATH="${RUNNER_TEMP}/kicad-blocks-venv/bin:$PATH"
-          PY="${RUNNER_TEMP}/kicad-blocks-venv/bin/python"
-          "$PY" scripts/check_python_quality.py
-          "$PY" scripts/test_inventory.py --check
-          "$PY" scripts/check_test_quality.py
-          "$PY" scripts/check_ruff_quality.py
-          mapfile -d '' TRACKED_PYTHON < <(git ls-files -z -- '*.py' '*.pyi')
-          if (("${#TRACKED_PYTHON[@]}")); then
-            "$PY" -m ruff format --check "${TRACKED_PYTHON[@]}"
-          fi
-          "$PY" -m pyright -p pyrightconfig.json --pythonpath "$PY"
-          ty check plugin/kicad-blocks
-          vulture --min-confidence 100 plugin/kicad-blocks/kicad_blocks scripts
 
       - name: Validate documentation links and images
         shell: bash
