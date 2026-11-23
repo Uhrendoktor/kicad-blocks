@@ -3366,7 +3366,7 @@ def _native_pcb_preview_png(
             [
                 cli, "pcb", "export", "svg",
                 "--mode-single", "--fit-page-to-board", "--exclude-drawing-sheet",
-                "--layers", "F.Cu,F.Silkscreen,Edge.Cuts",
+                "--layers", "F.Cu,F.SilkS,Edge.Cuts",
                 "--output", str(svg_file), str(board_path),
             ],
             capture_output=True, text=True, check=False, timeout=60,
