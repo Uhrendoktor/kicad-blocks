@@ -747,7 +747,9 @@ def test_add_variant_duplicate_value_reports_error_and_preserves_manifest(
     monkeypatch.setattr(
         plugin_actions,
         "_ask_implementation_details",
-        cast(Callable[..., tuple[str, str]], lambda *_args, **_kwargs: ("1V8", str(sources["1V8"]))),
+        cast(
+            Callable[..., tuple[str, str]], lambda *_args, **_kwargs: ("1V8", str(sources["1V8"]))
+        ),
     )
     errors: list[tuple[str, str, Misc | None]] = []
 
@@ -786,7 +788,9 @@ def test_edit_variant_duplicate_value_reports_error_and_preserves_manifest(
     monkeypatch.setattr(
         plugin_actions,
         "_ask_implementation_details",
-        cast(Callable[..., tuple[str, str]], lambda *_args, **_kwargs: ("3V3", str(sources["3V3"]))),
+        cast(
+            Callable[..., tuple[str, str]], lambda *_args, **_kwargs: ("3V3", str(sources["3V3"]))
+        ),
     )
     errors = []
     monkeypatch.setattr(
