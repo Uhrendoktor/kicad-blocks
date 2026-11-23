@@ -15,7 +15,7 @@ KiCad Blocks keeps a circuit's editable implementation in a shared library while
 
 A hierarchical sheet is useful for organizing a design inside one project. KiCad Blocks addresses a different need: keep a complete, editable circuit as a reusable library asset, then expose it in each consuming project through a standard symbol.
 
-- **Create** a block from a selected hierarchical sheet. Root-sheet hierarchical labels define the facade pins and their electrical types.
+- **Create** a block from selected schematic items or a hierarchical sheet. For a selection, include component symbols and named net labels; selected labels become facade pins. For a sheet, root-sheet hierarchical labels define the facade pins and their electrical types.
 - **Browse and place** blocks from registered shared folders. The selected facade is created at the active sheet center, focused in the viewport and selected; cursor-attached placement awaits a supported KiCad schematic IPC operation. See the [compatibility notes](docs/explanation/compatibility.md).
 - **Configure per instance** with a variant, named profile, typed parameter overrides, and optional PCB layout.
 - **Maintain** shared implementations, adjust facade pin geometry, publish revisions, or create project-local copies and synchronize them.
@@ -64,9 +64,12 @@ Then enable the KiCad API in Eeschema's plugin preferences, select the supported
 ## First use
 
 1. **Install and enable the plugin.** Register a shared library folder using the [installation guide](docs/getting-started.md).
-2. **Create a reusable implementation.** In Eeschema, select a hierarchical sheet symbol
-   in its parent schematic and run **Create Block from Sheet**. Root-sheet labels
-   become the facade pins; the copied implementation stays in the shared library.
+2. **Create a reusable implementation.** In Eeschema, select the circuit items you
+   want to package (including component symbols and named net labels), or select
+   one hierarchical sheet symbol. Run **Create Block from Selection or Sheet**.
+   Selected labels or root-sheet hierarchical labels become facade pins; the copied
+   implementation stays in the shared library. With nothing selected, the open sheet
+   is used.
 3. **Browse a facade in another project.** Use **Browse and Place Functional Blocks**
    to search and preview blocks. Interactive placement remains blocked pending a supported KiCad schematic IPC API.
 4. **Validate the stored circuit.** Run registered-library validation and use
