@@ -145,7 +145,10 @@ class HierarchicalSheetExtractionTests(unittest.TestCase):
         self.assertEqual(len(_all(extracted, "label")), 0)
         self.assertEqual(len(_all(extracted, "global_label")), 0)
         self.assertEqual(len(_all(extracted, "hierarchical_label")), 2)
-        self.assertEqual(len(_all(_direct(extracted, "lib_symbols"), "symbol")), 1)
+        self.assertEqual(
+            sum(1 for item in _direct(extracted, "lib_symbols")[1:] if _head(item) == "symbol"),
+            1,
+        )
         self.assertIn("Device:R", destination.read_text(encoding="utf-8"))
         self.assertNotIn("UNSELECTED", destination.read_text(encoding="utf-8"))
 
