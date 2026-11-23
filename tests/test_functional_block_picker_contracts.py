@@ -297,7 +297,7 @@ def test_functional_block_picker_filters_results_and_places_selected_record(
 
 
 def test_functional_block_picker_profile_applies_variant_and_returns_typed_values(
-    monkeypatch: MonkeyPatch, tmp_path
+    monkeypatch: MonkeyPatch, tmp_path: Path
 ):
     records = _fixture(tmp_path)
     root, context = _new_root(monkeypatch)
@@ -337,7 +337,7 @@ def test_functional_block_picker_profile_applies_variant_and_returns_typed_value
 
 
 def test_functional_block_picker_manual_variant_edit_switches_profile_to_custom(
-    monkeypatch: MonkeyPatch, tmp_path
+    monkeypatch: MonkeyPatch, tmp_path: Path
 ):
     records = _fixture(tmp_path)
     root, context = _new_root(monkeypatch)
@@ -378,7 +378,7 @@ def test_functional_block_picker_manual_variant_edit_switches_profile_to_custom(
 
 
 def test_functional_block_picker_empty_search_disables_selectors_and_cancel_returns_none(
-    monkeypatch: MonkeyPatch, tmp_path
+    monkeypatch: MonkeyPatch, tmp_path: Path
 ):
     records = _fixture(tmp_path)
     root, context = _new_root(monkeypatch)
@@ -431,7 +431,7 @@ def test_functional_block_picker_empty_search_disables_selectors_and_cancel_retu
 
 
 def test_functional_block_picker_escape_cancels_and_empty_library_is_rejected(
-    monkeypatch: MonkeyPatch, tmp_path
+    monkeypatch: MonkeyPatch, tmp_path: Path
 ):
     records = _fixture(tmp_path)
     root, context = _new_root(monkeypatch)
