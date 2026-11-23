@@ -25,13 +25,14 @@ This file is the durable design contract for UI changes. It consolidates the rev
 - Every stored PCB layout must be associated with at least one implementation. There must be no "No link", "Not linked", or unlink option in the UI.
 - Creating a PCB layout must have a visible, complete workflow: choose or create a board, save it to the block, update the list, and open the saved board. Validate generated board files with KiCad CLI or IPC, not only string assertions.
 
-## Create Block from Sheet regression contract
+## Create Block from Selection or Sheet regression contract
 
 - Test the registered `create-block` action through `run_action("create-block")`, not only the private helper.
-- Exercise a real KiCad IPC `SheetSymbol` selection and run the production Create Block workflow against it. A mocked selection parser is not sufficient.
-- Also test an empty selection while a child sheet is active; the created block must come from that active sheet, not silently from the root.
-- Verify the new block manifest, extracted hierarchical-label pins, project symbol catalog, symbol-library table registration, and KiCad CLI exports. Assert the original project sheets remain unchanged.
-- Cover multiple selections, non-sheet selections, empty/missing `Sheetfile`, missing sheet UUID, unresolvable relative paths, missing hierarchical labels, typed-selection IPC failures, and registration failures. Invalid operations must not leave a partial library block behind.
+- Exercise a real KiCad IPC `SheetSymbol` selection and run the production workflow against it. Also exercise a real multi-item circuit selection containing a component, connectivity, and named interface labels; a mocked selection parser alone is not sufficient for the end-to-end contract.
+- Test an empty selection while a child sheet is active; creation must use that active sheet, not the root.
+- For circuit selections, verify only selected items are copied, local/global/hierarchical labels become facade pins with the documented electrical-type behavior, embedded symbol definitions are retained, and the original source schematic remains byte-for-byte unchanged.
+- Verify the block manifest, project symbol catalog, symbol-library table registration, and KiCad CLI exports for sheet and selection modes.
+- Cover unsupported selected item types, a sheet symbol mixed with ordinary items, no selected component, no selected named label, missing symbol definitions, empty/missing `Sheetfile`, missing sheet UUID, unresolvable relative paths, missing hierarchical labels, typed-selection IPC failures, and registration failures. Invalid operations must not leave a partial library block behind.
 - Validate hand-written KiCad hierarchy fixtures with `kicad-cli sch export svg` before starting the IPC server. Keep root sheet-instance metadata only in the root schematic; do not invent a root `sheet_instances` block in child files.
 
 ## Required review before merging
