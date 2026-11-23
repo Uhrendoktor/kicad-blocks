@@ -41,10 +41,7 @@ from kicad_blocks.repository import (
     BlockRecord,
     add_dependency,
     create_block,
-    ensure_stable_block_identity,
     local_copy_for_instance,
-    read_manifest,
-    refresh_library_block,
     register_project_symbol_library,
 )
 from kipy import KiCad
