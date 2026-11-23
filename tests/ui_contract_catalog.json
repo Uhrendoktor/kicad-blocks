@@ -158,7 +158,7 @@
       "title": "Functional Block Library",
       "purpose": "Search registered block libraries, inspect facade and schematic previews, choose implementations, configure a block, and start placement.",
       "coverage": "contracted",
-      "coverage_note": "Every browser control and chooser route has a real-widget contract. Direct Publish is tested, selection-dependent actions disable when no row is selected, and placement/publish feedback is inline. The facade pin-layout editor is separately tested for immediate project-catalog persistence and concurrent-edit protection.",
+      "coverage_note": "Search, selection, three preview tabs, pan/zoom canvases, the resizable preview/overview split, and browser actions are contracted. PCB previews follow the selected implementation's layout link.",
       "evidence": [
         "tests/test_library_browser_contracts.py",
         "tests/test_library_picker_gui.py",
@@ -172,7 +172,8 @@
         "Open the selected block's implementation",
         "Edit selected facade pin geometry in the portable Facade Pin Layout editor",
         "Publish implementation/facade edits and refresh compatible instances",
-        "Manage variants, PCB layouts, and libraries"
+        "Manage variants, PCB layouts, and libraries",
+        "Inspect the PCB layout linked to the selected circuit implementation, with pan and zoom"
       ],
       "screenshots": [
         "library-browser-light.png",
@@ -228,7 +229,7 @@
         {
           "contract_id": "library-browser.preview.views",
           "type": "notebook",
-          "label": "Facade and Schematic tabs",
+          "label": "Facade, Schematic and PCB tabs",
           "assertion": "asserted"
         },
         {
@@ -241,6 +242,12 @@
           "contract_id": "library-browser.preview.schematic",
           "type": "view",
           "label": "Schematic preview",
+          "assertion": "observed"
+        },
+        {
+          "contract_id": "library-browser.preview.pcb",
+          "type": "view",
+          "label": "Linked PCB layout preview",
           "assertion": "observed"
         },
         {
@@ -314,6 +321,24 @@
           "type": "button",
           "label": "Publish selected block",
           "assertion": "asserted"
+        },
+        {
+          "contract_id": "library-browser.preview-stack",
+          "type": "pane-group",
+          "label": "Resizable preview and overview split",
+          "assertion": "observed"
+        },
+        {
+          "contract_id": "library-browser.preview-area",
+          "type": "pane",
+          "label": "Interactive facade, schematic or PCB preview",
+          "assertion": "observed"
+        },
+        {
+          "contract_id": "library-browser.overview-pane",
+          "type": "pane",
+          "label": "Compact block overview",
+          "assertion": "observed"
         }
       ]
     },

@@ -33,8 +33,10 @@ from kicad_blocks.plugin import (
     _library_record_for_instance,
     _library_record_for_tree_row,
     _minimize_placement_windows,
+    _native_pcb_preview_png,
     _native_schematic_preview_pages,
     _native_symbol_preview_photo,
+    _pcb_layout_for_variant,
     _new_blank_pcb_source,
     _normalize_schematic_preview_svg,
     _pick_directory,
@@ -102,6 +104,20 @@ class LibraryBrowserTests(unittest.TestCase):
         self.assertEqual(_filter_library_records(records, "1v8")[0].name, "Buck Converter")
         self.assertEqual(_filter_library_records(records, "vout")[0].name, "Buck Converter")
         self.assertEqual(_filter_library_records(records, ""), records)
+
+    def test_pcb_preview_selects_the_layout_linked_to_the_circuit_variant(self):
+        self.block.manifest["layouts"] = [
+            {"id": "default-board", "name": "Default board", "file": "layout_default.kicad_pcb"},
+            {"id": "compact-board", "name": "Compact board", "file": "layout_compact.kicad_pcb"},
+        ]
+        self.block.manifest["default_layout"] = "default-board"
+        self.block.manifest["variants"] = [
+            {"value": "1V8", "file": "implementation_1v8.kicad_sch", "layout_id": "compact-board"},
+            {"value": "3V3", "file": "implementation_3v3.kicad_sch", "layout_id": "default-board"},
+        ]
+        self.assertEqual(_pcb_layout_for_variant(self.block, ""), self.block.manifest["layouts"][0])
+        self.assertEqual(_pcb_layout_for_variant(self.block, "1V8"), self.block.manifest["layouts"][1])
+        self.assertEqual(_pcb_layout_for_variant(self.block, "3V3"), self.block.manifest["layouts"][0])
 
     def test_native_facade_preview_exports_from_the_project_catalog_override(self):
         symbol_name = self.block.manifest["symbol_name"]

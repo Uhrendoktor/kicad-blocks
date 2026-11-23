@@ -56,6 +56,7 @@ LIBRARY_ASSERTED_BUTTONS = {
 PREVIEW_VIEWS = (
     ("Facade", ("library-browser.preview.facade",)),
     ("Schematic", ("library-browser.preview.schematic",)),
+    ("PCB", ("library-browser.preview.pcb",)),
 )
 
 
@@ -114,6 +115,7 @@ def _new_browser(monkeypatch, tmp_path: Path, *, layouts=None):
         lambda *_args, **_kwargs: [("Main", None)],
     )
     monkeypatch.setattr(plugin_actions, "_draw_schematic_preview", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(plugin_actions, "_draw_pcb_preview", lambda *_args, **_kwargs: "Test PCB")
     monkeypatch.setattr(plugin_actions, "_block_overview_text", lambda record: record.name)
 
     root = plugin_actions.tk.Tk()
@@ -328,6 +330,21 @@ def test_library_browser_split_panes_have_visible_geometry(monkeypatch, tmp_path
         ).run(context)
     finally:
         root.destroy()
+
+def test_library_browser_preview_and_overview_heights_are_resizable(monkeypatch, tmp_path):
+    root, context, _records, _library, _project = _new_browser(monkeypatch, tmp_path)
+    try:
+        PaneGroupContract(
+            contract_id="library-browser.preview-stack",
+            orientation="vertical",
+            pane_ids=(
+                "library-browser.preview-area",
+                "library-browser.overview-pane",
+            ),
+        ).run(context)
+    finally:
+        root.destroy()
+
 
 
 def test_refresh_button_reloads_records_through_real_ui_callback(monkeypatch, tmp_path):
