@@ -9,7 +9,6 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import cast
 from unittest.mock import Mock
-from typing import cast
 
 import pytest
 
@@ -22,11 +21,10 @@ from kicad_blocks.model import parameter_field_name, parse_parameters, parse_pin
 from kicad_blocks.repository import BlockRecord, create_block
 from ui_contracts import (
     ButtonContract,
-    Combobox,
-    Entry,
     MonkeyPatch,
     Tk,
     Toplevel,
+    TkCallbackOption,
     UiTestContext,
     assert_control_coverage,
 )
@@ -142,11 +140,18 @@ def _fixture(
         ),
     )
     commit = SimpleNamespace()
+
+    def expand_text_variables(value: str) -> str:
+        return value
+
+    def get_project() -> SimpleNamespace:
+        return SimpleNamespace(expand_text_variables=expand_text_variables)
+
     schematic = cast(
         plugin_actions.Schematic,
         SimpleNamespace(
             get_selection=lambda: [instance],
-            get_project=lambda: SimpleNamespace(expand_text_variables=lambda value: value),
+            get_project=get_project,
             begin_commit=Mock(return_value=commit),
             push_commit=Mock(),
             drop_commit=Mock(),
@@ -158,7 +163,12 @@ def _fixture(
 
 def _new_root(monkeypatch: MonkeyPatch) -> tuple[Tk, UiTestContext]:
     plugin_actions.load_tkinter()
-    monkeypatch.setattr(plugin_actions, "_create_action_icon", lambda *_args: None)
+    def no_action_icon(
+        _parent: Misc, _name: str, _stroke_color: str | None = None
+    ) -> None:
+        return None
+
+    monkeypatch.setattr(plugin_actions, "_create_action_icon", no_action_icon)
     root = plugin_actions.tk.Tk()
     root.title("Instance configuration contract host")
     root.geometry("900x900")
@@ -167,10 +177,13 @@ def _new_root(monkeypatch: MonkeyPatch) -> tuple[Tk, UiTestContext]:
 
 
 def _find_dialog(root: Tk) -> Toplevel:
-    return next(
-        child
-        for child in root.winfo_children()
-        if child.winfo_class() == "Toplevel" and child.title() == WINDOW_TITLE
+    return cast(
+        Toplevel,
+        next(
+            child
+            for child in root.winfo_children()
+            if child.winfo_class() == "Toplevel" and child.title() == WINDOW_TITLE
+        ),
     )
 
 
@@ -206,7 +219,7 @@ def _run_dialog(
         try:
             dialog = _find_dialog(root)
             assert dialog.winfo_viewable()
-            assert dialog._kicad_ui_screen_id == "instance-configuration"
+            assert getattr(dialog, "_kicad_ui_screen_id", None) == "instance-configuration"
             context.refresh_widgets()
             assert_control_coverage(dialog, INSTANCE_CONTROLS)
             action(dialog)
@@ -262,7 +275,7 @@ def _install_update_spy(monkeypatch: MonkeyPatch) -> list[str]:
 
 
 def test_profile_selection_updates_variant_parameter_and_layout_then_saves_one_ipc_edit(
-    monkeypatch: MonkeyPatch, tmp_path
+    monkeypatch: MonkeyPatch, tmp_path: Path
 ):
     library, project, _block, instance, schematic, commit = _fixture(tmp_path)
     root, context = _new_root(monkeypatch)
@@ -299,10 +312,10 @@ def test_profile_selection_updates_variant_parameter_and_layout_then_saves_one_i
             "KB_LAYOUT": "compact",
         }
         assert updates == ["X1"]
-        schematic.begin_commit.assert_called_once_with()
-        schematic.push_commit.assert_called_once_with(commit, "Configure KiCad block instance")
-        schematic.save.assert_called_once_with()
-        schematic.drop_commit.assert_not_called()
+        cast(Mock, schematic.begin_commit).assert_called_once_with()
+        cast(Mock, schematic.push_commit).assert_called_once_with(commit, "Configure KiCad block instance")
+        cast(Mock, schematic.save).assert_called_once_with()
+        cast(Mock, schematic.drop_commit).assert_not_called()
     finally:
         root.destroy()
 
@@ -340,9 +353,9 @@ def test_manual_parameter_edit_changes_profile_to_custom_and_saves(
         assert values["KB_VARIANT"] == "3V3"
         assert values["KB_LAYOUT"] == "standard"
         assert updates == ["X1"]
-        schematic.begin_commit.assert_called_once_with()
-        schematic.push_commit.assert_called_once_with(commit, "Configure KiCad block instance")
-        schematic.save.assert_called_once_with()
+        cast(Mock, schematic.begin_commit).assert_called_once_with()
+        cast(Mock, schematic.push_commit).assert_called_once_with(commit, "Configure KiCad block instance")
+        cast(Mock, schematic.save).assert_called_once_with()
     finally:
         root.destroy()
 
@@ -353,12 +366,11 @@ def test_invalid_parameter_shows_error_without_ipc_edit_then_recovers(
     library, project, _block, instance, schematic, _commit = _fixture(tmp_path)
     root, context = _new_root(monkeypatch)
     updates = _install_update_spy(monkeypatch)
-    errors = []
-    monkeypatch.setattr(
-        plugin_actions.messagebox,
-        "showerror",
-        lambda title, message, **_kwargs: errors.append((title, str(message))),
-    )
+    errors: list[tuple[str, str]] = []
+    def record_error(title: str, message: str, **_kwargs: TkCallbackOption) -> None:
+        errors.append((title, str(message)))
+
+    monkeypatch.setattr(plugin_actions.messagebox, "showerror", record_error)
 
     def recover_from_invalid_parameter(dialog: Toplevel) -> None:
         _assert_initial_state(context, dialog)
@@ -368,7 +380,7 @@ def test_invalid_parameter_shows_error_without_ipc_edit_then_recovers(
         _click(context, "instance-configuration.action.save", "Save instance")
         assert dialog.winfo_exists()
         assert errors and errors[0][0] == "Invalid Block Configuration"
-        schematic.begin_commit.assert_not_called()
+        cast(Mock, schematic.begin_commit).assert_not_called()
         assert updates == []
 
         parameter.delete(0, "end")
@@ -384,9 +396,9 @@ def test_invalid_parameter_shows_error_without_ipc_edit_then_recovers(
         _run_dialog(root, context, library, project, schematic, recover_from_invalid_parameter)
         values = {field.name: field.text.value for field in instance.user_fields}
         assert values["KB_PARAM_OUTPUT_VOLTAGE"] == "1.9"
-        schematic.begin_commit.assert_called_once_with()
-        schematic.push_commit.assert_called_once()
-        schematic.save.assert_called_once_with()
+        cast(Mock, schematic.begin_commit).assert_called_once_with()
+        cast(Mock, schematic.push_commit).assert_called_once()
+        cast(Mock, schematic.save).assert_called_once_with()
         assert updates == ["X1"]
     finally:
         root.destroy()
@@ -416,8 +428,8 @@ def test_cancel_and_escape_discard_pending_instance_changes(
         _run_dialog(root, context, library, project, schematic, cancel_after_edit)
         assert {field.name: field.text.value for field in instance.user_fields} == original_values
         assert updates == []
-        schematic.begin_commit.assert_not_called()
-        schematic.save.assert_not_called()
+        cast(Mock, schematic.begin_commit).assert_not_called()
+        cast(Mock, schematic.save).assert_not_called()
     finally:
         root.destroy()
 
@@ -439,8 +451,8 @@ def test_cancel_and_escape_discard_pending_instance_changes(
         _run_dialog(root, context, library, project, schematic, escape)
         assert {field.name: field.text.value for field in instance.user_fields} == original_values
         assert updates == []
-        schematic.begin_commit.assert_not_called()
-        schematic.save.assert_not_called()
+        cast(Mock, schematic.begin_commit).assert_not_called()
+        cast(Mock, schematic.save).assert_not_called()
     finally:
         root.destroy()
 
@@ -478,10 +490,10 @@ def test_failed_instance_update_rolls_back_field_values_and_keeps_form_open(
         assert dialog.winfo_exists()
         assert errors and errors[0][0] == "Invalid Block Configuration"
         assert {field.name: field.text.value for field in instance.user_fields} == original_values
-        schematic.begin_commit.assert_called_once_with()
-        schematic.drop_commit.assert_called_once_with(commit)
-        schematic.push_commit.assert_not_called()
-        schematic.save.assert_not_called()
+        cast(Mock, schematic.begin_commit).assert_called_once_with()
+        cast(Mock, schematic.drop_commit).assert_called_once_with(commit)
+        cast(Mock, schematic.push_commit).assert_not_called()
+        cast(Mock, schematic.save).assert_not_called()
         _click(
             context,
             "instance-configuration.action.cancel",
@@ -500,7 +512,7 @@ def test_missing_required_configuration_field_fails_before_opening_dialog(
 ):
     library, project, _block, instance, schematic, _commit = _fixture(tmp_path)
     root, _context = _new_root(monkeypatch)
-    instance.user_fields = [field for field in instance.user_fields if field.name != "KB_LAYOUT"]
+    setattr(instance, "user_fields", [field for field in instance.user_fields if field.name != "KB_LAYOUT"])
     try:
         with pytest.raises(RuntimeError, match="KB_LAYOUT"):
             plugin_actions.show_selected_block_configuration(schematic, project, library, root)
