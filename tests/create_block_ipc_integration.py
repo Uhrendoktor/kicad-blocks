@@ -515,13 +515,54 @@ def main() -> None:
                 for path in (parent_path, project_path, *child_paths.values())
             }
 
-            schematic.clear_selection()
-            open_sheet.add_to_selection(component)
-            open_sheet.add_to_selection(selected_label)
-            circuit_selection = list(open_sheet.get_selection())
-            if len(circuit_selection) != 2:
+            # The IPC view returned by for_sheet() is path-bound, but it does
+            # not navigate Eeschema's canvas. AddToSelection intentionally
+            # ignores objects outside the sheet currently displayed in the GUI.
+            # Move from page 1 -> 2 -> 3 so Control Interface is the active sheet.
+            subprocess.run(
+                [xdotool, "windowactivate", "--sync", window_id],
+                check=True,
+            )
+            subprocess.run(
+                [xdotool, "key", "--clearmodifiers", "Next"],
+                check=True,
+            )
+            subprocess.run(
+                [xdotool, "key", "--clearmodifiers", "Next"],
+                check=True,
+            )
+
+            deadline = time.monotonic() + 5.0
+            active_sheet_name = ""
+            while time.monotonic() < deadline:
+                live_schematic = kicad.get_schematic()
+                active_instance = plugin_actions._active_sheet_instance(
+                    live_schematic
+                )
+                active_sheet_name = str(
+                    getattr(active_instance, "name", "") or ""
+                )
+                if active_sheet_name == "Control Interface":
+                    break
+                time.sleep(0.1)
+            else:
                 raise AssertionError(
-                    "KiCad IPC did not preserve the component and label as a two-item selection."
+                    "Eeschema did not navigate to the Control Interface sheet; "
+                    f"active sheet is {active_sheet_name!r}."
+                )
+
+            open_sheet.clear_selection()
+            circuit_selection = list(
+                open_sheet.add_to_selection([component, selected_label])
+            )
+            if len(circuit_selection) != 2:
+                selected_types = [
+                    type(item).__name__ for item in circuit_selection
+                ]
+                raise AssertionError(
+                    "KiCad IPC did not preserve the component and label as a "
+                    "two-item selection on the active Control Interface sheet; "
+                    f"found {len(circuit_selection)} item(s): {selected_types!r}."
                 )
             selection_text = open_sheet.get_selection_as_string()
             if not selection_text.strip():
