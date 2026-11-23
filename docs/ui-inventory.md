@@ -151,6 +151,12 @@ Search, selection, three preview tabs, pan/zoom canvases, the resizable preview/
 ![Functional Block Library: library browser schematic dark.png](https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/library-browser-schematic-dark.png)
 [Open library-browser-schematic-dark.png](https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/library-browser-schematic-dark.png)
 
+![Functional Block Library: library browser pcb light.png](https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/library-browser-pcb-light.png)
+[Open library-browser-pcb-light.png](https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/library-browser-pcb-light.png)
+
+![Functional Block Library: library browser pcb dark.png](https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/library-browser-pcb-dark.png)
+[Open library-browser-pcb-dark.png](https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/library-browser-pcb-dark.png)
+
 ---
 
 ### Facade pin layout editor
