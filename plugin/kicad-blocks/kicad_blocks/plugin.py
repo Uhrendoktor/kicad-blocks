@@ -3209,8 +3209,12 @@ def _enable_preview_pan_zoom(canvas) -> None:
         if state["image"] is None:
             return "break"
         old_scale = max(float(state["scale"]), 0.0001)
-        logical_x = canvas.canvasx(event.x) / old_scale
-        logical_y = canvas.canvasy(event.y) / old_scale
+        logical_x = (
+            canvas.canvasx(event.x) - state["origin"][0]
+        ) / old_scale
+        logical_y = (
+            canvas.canvasy(event.y) - state["origin"][1]
+        ) / old_scale
         state["zoom"] = max(0.2, min(8.0, float(state["zoom"]) * factor))
         render(center=(logical_x, logical_y), anchor=(event.x, event.y))
         return "break"
@@ -3225,8 +3229,12 @@ def _enable_preview_pan_zoom(canvas) -> None:
             return
         old_scale = max(float(state["scale"]), 0.0001)
         center = (
-            canvas.canvasx(max(1, int(event.width)) / 2) / old_scale,
-            canvas.canvasy(max(1, int(event.height)) / 2) / old_scale,
+            (
+                canvas.canvasx(max(1, int(event.width)) / 2) - state["origin"][0]
+            ) / old_scale,
+            (
+                canvas.canvasy(max(1, int(event.height)) / 2) - state["origin"][1]
+            ) / old_scale,
         )
         render(center=center)
 
@@ -5802,15 +5810,6 @@ def _show_library_browser(
 
     def set_details(record):
         selected_record[0] = record
-    def render_pcb_for_selection():
-        record = selected_record[0]
-        selected_implementation = implementation_choices[0].get(
-            implementation_choice.get(), ""
-        )
-        label = _draw_pcb_preview(pcb_preview, record, selected_implementation)
-        pcb_label.configure(text=label or "PCB layout")
-
-
         selected_project_catalog[0] = None
         schematic_pages[0] = []
         if record is None:
@@ -5909,6 +5908,14 @@ def _show_library_browser(
             render_schematic_for_selection()
         else:
             render_pcb_for_selection()
+
+    def render_pcb_for_selection():
+        record = selected_record[0]
+        selected_implementation = implementation_choices[0].get(
+            implementation_choice.get(), ""
+        )
+        label = _draw_pcb_preview(pcb_preview, record, selected_implementation)
+        pcb_label.configure(text=label or "PCB layout")
 
     def preview_tab_changed(_event=None):
         selected_tab = preview_notebook.index(preview_notebook.select())
