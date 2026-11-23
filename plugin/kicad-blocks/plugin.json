@@ -37,8 +37,8 @@
     },
     {
       "identifier": "create-block",
-      "name": "Create Block from Sheet",
-      "description": "Create and place a reusable block from the selected sheet symbol or the sheet currently open in Eeschema.",
+      "name": "Create Block from Selection or Sheet",
+      "description": "Create a reusable block from selected schematic items, a selected hierarchical sheet symbol, or the sheet currently open in Eeschema.",
       "show-button": true,
       "icons-light": [
         "icons/create-light-24.png"
