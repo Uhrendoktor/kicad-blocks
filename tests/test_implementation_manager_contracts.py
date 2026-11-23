@@ -600,10 +600,19 @@ def test_close_confirmation_can_keep_pending_changes_or_discard_them(
         '(kicad_sch (version 20250114) (generator "retry-on-close"))\n',
         encoding="utf-8",
     )
+    def ask_implementation_details(
+        _parent: Misc,
+        *,
+        value: str = "",
+        source: str = "",
+        record: BlockRecord | None = None,
+        allow_create: bool = False,
+    ) -> tuple[str, str]:
+        del value, source, record, allow_create
+        return "3V3", str(source_path)
+
     monkeypatch.setattr(
-        plugin_actions,
-        "_ask_implementation_details",
-        cast(Callable[..., tuple[str, str]], lambda *_args, **_kwargs: ("3V3", str(source))),
+        plugin_actions, "_ask_implementation_details", ask_implementation_details
     )
     original_save = _save_block_variants
     attempts: list[str] = []
@@ -620,7 +629,7 @@ def test_close_confirmation_can_keep_pending_changes_or_discard_them(
         attempts.append("attempt")
         if len(attempts) == 1:
             raise OSError("simulated library write failure")
-        original_save(*args, **kwargs)
+        original_save(record, variants, default_variant=default_variant)
 
     def confirm_discard(
         title: str,
@@ -633,11 +642,10 @@ def test_close_confirmation_can_keep_pending_changes_or_discard_them(
         return next(decisions)
 
     monkeypatch.setattr(plugin_actions, "_save_block_variants", fail_once)
-    monkeypatch.setattr(
-        plugin_actions.messagebox,
-        "showerror",
-        lambda title, message, **_kwargs: errors.append((title, str(message))),
-    )
+    def record_error(title: str, message: str, **_kwargs: TkCallbackOption) -> None:
+        errors.append((title, str(message)))
+
+    monkeypatch.setattr(plugin_actions.messagebox, "showerror", record_error)
     monkeypatch.setattr(plugin_actions.messagebox, "askyesno", confirm_discard)
     root = _new_root(monkeypatch)
     context = UiTestContext(root)
@@ -683,7 +691,7 @@ def test_add_button_routes_to_create_mode_details_and_persists_source(
         '(kicad_sch (version 20250114) (generator "nested-dialog-contract"))\n',
         encoding="utf-8",
     )
-    requests: list[tuple[str, str, str, BlockRecord, bool]] = []
+    requests: list[tuple[str, str, str, BlockRecord | None, bool]] = []
 
     def ask_details(
         parent: Misc,
@@ -744,13 +752,18 @@ def test_add_variant_duplicate_value_reports_error_and_preserves_manifest(
 ):
     record, sources = _new_manager_fixture(tmp_path, variants=("1V8",))
     original = read_manifest(record.path)
-    monkeypatch.setattr(
-        plugin_actions,
-        "_ask_implementation_details",
-        cast(
-            Callable[..., tuple[str, str]], lambda *_args, **_kwargs: ("1V8", str(sources["1V8"]))
-        ),
-    )
+    def ask_duplicate_add(
+        _parent: Misc,
+        *,
+        value: str = "",
+        source: str = "",
+        record: BlockRecord | None = None,
+        allow_create: bool = False,
+    ) -> tuple[str, str]:
+        del value, source, record, allow_create
+        return "1V8", str(sources["1V8"])
+
+    monkeypatch.setattr(plugin_actions, "_ask_implementation_details", ask_duplicate_add)
     errors: list[tuple[str, str, Misc | None]] = []
 
     def record_error(title: str, message: str, **kwargs: TkCallbackOption) -> None:
@@ -785,19 +798,24 @@ def test_edit_variant_duplicate_value_reports_error_and_preserves_manifest(
 ):
     record, sources = _new_manager_fixture(tmp_path, variants=("1V8", "3V3"))
     original = read_manifest(record.path)
-    monkeypatch.setattr(
-        plugin_actions,
-        "_ask_implementation_details",
-        cast(
-            Callable[..., tuple[str, str]], lambda *_args, **_kwargs: ("3V3", str(sources["3V3"]))
-        ),
-    )
-    errors = []
-    monkeypatch.setattr(
-        plugin_actions.messagebox,
-        "showerror",
-        lambda title, message, **kwargs: errors.append((title, str(message), kwargs.get("parent"))),
-    )
+    def ask_duplicate_edit(
+        _parent: Misc,
+        *,
+        value: str = "",
+        source: str = "",
+        record: BlockRecord | None = None,
+        allow_create: bool = False,
+    ) -> tuple[str, str]:
+        del value, source, record, allow_create
+        return "3V3", str(sources["3V3"])
+
+    monkeypatch.setattr(plugin_actions, "_ask_implementation_details", ask_duplicate_edit)
+    errors: list[tuple[str, str, Misc | None]] = []
+
+    def record_error(title: str, message: str, **kwargs: TkCallbackOption) -> None:
+        errors.append((title, str(message), cast(Misc | None, kwargs.get("parent"))))
+
+    monkeypatch.setattr(plugin_actions.messagebox, "showerror", record_error)
     root = _new_root(monkeypatch)
     context = UiTestContext(root)
 

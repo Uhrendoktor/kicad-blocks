@@ -25,12 +25,9 @@ else:
         Tk = None
         TclError = Exception
 
-try:
-    import tkinter as _tkinter
-except ImportError:  # pragma: no cover - the headless interpreter has no Tk
-    _TK_AVAILABLE = False
-else:
-    _TK_AVAILABLE = True
+from importlib.util import find_spec
+
+_TK_AVAILABLE = find_spec("tkinter") is not None
 
 pytestmark = pytest.mark.skipif(
     not _TK_AVAILABLE or (sys.platform == "linux" and not os.environ.get("DISPLAY")),
