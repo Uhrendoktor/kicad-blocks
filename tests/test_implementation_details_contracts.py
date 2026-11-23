@@ -18,12 +18,11 @@ from kicad_blocks.model import parse_pins
 from kicad_blocks.repository import BlockRecord, create_block
 from ui_contracts import (
     ButtonContract,
-    Combobox,
-    Entry,
     MonkeyPatch,
     Misc,
     Tk,
     Toplevel,
+    TkCallbackOption,
     UiTestContext,
     assert_control_coverage,
 )
@@ -78,7 +77,12 @@ def _fixture(tmp_path: Path) -> tuple[BlockRecord, Path, Path, Path]:
 
 def _new_root(monkeypatch: MonkeyPatch) -> tuple[Tk, UiTestContext]:
     plugin_actions.load_tkinter()
-    monkeypatch.setattr(plugin_actions, "_create_action_icon", lambda *_args: None)
+    def no_action_icon(
+        _parent: Misc, _name: str, _stroke_color: str | None = None
+    ) -> None:
+        return None
+
+    monkeypatch.setattr(plugin_actions, "_create_action_icon", no_action_icon)
     root = plugin_actions.tk.Tk()
     root.title("Implementation details contract host")
     root.geometry("900x640")
@@ -159,7 +163,7 @@ def _click(
     label: str,
     *,
     closes: bool = False,
-):
+) -> None:
     ButtonContract(
         contract_id=contract_id,
         expected_action=None,
@@ -199,7 +203,7 @@ def _assert_initial_state(context: UiTestContext, dialog: Toplevel, *, allow_cre
         assert "implementation-details.mode" not in widgets
 
 
-def _select_mode(root, context, mode: str):
+def _select_mode(root: Tk, context: UiTestContext, mode: str) -> None:
     combo = context.require_combobox("implementation-details.mode")
     combo.set(mode)
     combo.event_generate("<<ComboboxSelected>>")
@@ -208,8 +212,8 @@ def _select_mode(root, context, mode: str):
 
 
 def test_existing_schematic_source_is_returned_and_non_create_mode_has_no_mode_selector(
-    monkeypatch: MonkeyPatch, tmp_path
-):
+    monkeypatch: MonkeyPatch, tmp_path: Path
+) -> None:
     source = tmp_path / "existing.kicad_sch"
     source.write_text("(kicad_sch (version 20250114))\n", encoding="utf-8")
     root, context = _new_root(monkeypatch)
@@ -242,16 +246,15 @@ def test_existing_schematic_source_is_returned_and_non_create_mode_has_no_mode_s
 
 def test_blank_selector_validation_keeps_form_open_and_recovers(
     monkeypatch: MonkeyPatch, tmp_path: Path
-):
+) -> None:
     source = tmp_path / "existing.kicad_sch"
     source.write_text("(kicad_sch (version 20250114))\n", encoding="utf-8")
     root, context = _new_root(monkeypatch)
-    errors = []
-    monkeypatch.setattr(
-        plugin_actions.messagebox,
-        "showerror",
-        lambda title, message, **_kwargs: errors.append((title, str(message))),
-    )
+    errors: list[tuple[str, str]] = []
+    def record_error(title: str, message: str, **_kwargs: TkCallbackOption) -> None:
+        errors.append((title, str(message)))
+
+    monkeypatch.setattr(plugin_actions.messagebox, "showerror", record_error)
 
     def recover(_dialog: Toplevel) -> None:
         _assert_initial_state(context, _dialog, allow_create=False)
@@ -279,14 +282,14 @@ def test_blank_selector_validation_keeps_form_open_and_recovers(
 
 def test_browse_button_uses_kicad_schematic_picker_and_accepts_selected_file(
     monkeypatch: MonkeyPatch, tmp_path: Path
-):
+) -> None:
     source = tmp_path / "selected.kicad_sch"
     source.write_text("(kicad_sch (version 20250114))\n", encoding="utf-8")
-    calls = []
+    calls: list[tuple[str, str, str, str | Path]] = []
 
     def choose_file(parent: Misc, *, title: str, suffix: str, initial_path: Path) -> str:
         calls.append((parent.title(), title, suffix, initial_path))
-        return source
+        return str(source)
 
     monkeypatch.setattr(plugin_actions, "_pick_kicad_file", choose_file)
     root, context = _new_root(monkeypatch)
@@ -314,25 +317,30 @@ def test_browse_button_uses_kicad_schematic_picker_and_accepts_selected_file(
 
 def test_invalid_source_extension_is_rejected_then_browse_recovers(
     monkeypatch: MonkeyPatch, tmp_path: Path
-):
+) -> None:
     invalid = tmp_path / "notes.txt"
     invalid.write_text("not a schematic\n", encoding="utf-8")
     source = tmp_path / "selected.kicad_sch"
     source.write_text("(kicad_sch (version 20250114))\n", encoding="utf-8")
-    errors = []
-    monkeypatch.setattr(
-        plugin_actions.messagebox,
-        "showerror",
-        lambda title, message, **_kwargs: errors.append((title, str(message))),
-    )
-    monkeypatch.setattr(
-        plugin_actions,
-        "_pick_kicad_file",
-        lambda *_args, **_kwargs: source,
-    )
+    errors: list[tuple[str, str]] = []
+    def record_error(title: str, message: str, **_kwargs: TkCallbackOption) -> None:
+        errors.append((title, str(message)))
+
+    monkeypatch.setattr(plugin_actions.messagebox, "showerror", record_error)
+    def pick_file(
+        _parent: Misc,
+        *,
+        title: str,
+        suffix: str,
+        initial_path: str | Path = "",
+    ) -> str:
+        del title, suffix, initial_path
+        return str(source)
+
+    monkeypatch.setattr(plugin_actions, "_pick_kicad_file", pick_file)
     root, context = _new_root(monkeypatch)
 
-    def recover(dialog):
+    def recover(dialog: Toplevel) -> None:
         _assert_initial_state(context, dialog, allow_create=False)
         context.require_entry("implementation-details.source").insert(0, str(invalid))
         _click(context, "implementation-details.action.use", "Use implementation")
@@ -361,16 +369,16 @@ def test_invalid_source_extension_is_rejected_then_browse_recovers(
 
 def test_create_blank_schematic_mode_returns_a_valid_temporary_source(
     monkeypatch: MonkeyPatch, tmp_path: Path
-):
+) -> None:
     record, _first, _second, _default = _fixture(tmp_path)
     root, context = _new_root(monkeypatch)
-    created = []
-    create_source = plugin_actions.new_blank_schematic_source
+    created: list[Path] = []
+    create_source = cast(Callable[[], Path], getattr(plugin_actions, "_new_blank_schematic_source"))
 
     def capture_blank_source() -> Path:
         path = Path(create_source())
         created.append(path)
-        return str(path)
+        return path
 
     monkeypatch.setattr(
         plugin_actions,
@@ -416,7 +424,7 @@ def test_create_blank_schematic_mode_returns_a_valid_temporary_source(
 
 def test_copy_existing_implementation_uses_selected_library_variant(
     monkeypatch: MonkeyPatch, tmp_path: Path
-):
+) -> None:
     record, first, second, _default = _fixture(tmp_path)
     root, context = _new_root(monkeypatch)
 
@@ -429,7 +437,7 @@ def test_copy_existing_implementation_uses_selected_library_variant(
         )
         assert not context.require_entry("implementation-details.source").winfo_viewable()
         assert not context.require_widget("implementation-details.action.browse").winfo_viewable()
-        copy = context.require_button("implementation-details.copy")
+        copy = context.require_combobox("implementation-details.copy")
         assert copy.winfo_viewable()
         assert tuple(copy.cget("values")) == ("Default", "3V3", "1V8")
         copy.set("1V8")
@@ -463,16 +471,15 @@ def test_copy_existing_implementation_uses_selected_library_variant(
 
 def test_missing_copy_source_is_rejected_and_can_switch_to_existing_variant(
     monkeypatch: MonkeyPatch, tmp_path: Path
-):
+) -> None:
     record, _first, second, default = _fixture(tmp_path)
     default.unlink()
     root, context = _new_root(monkeypatch)
-    errors = []
-    monkeypatch.setattr(
-        plugin_actions.messagebox,
-        "showerror",
-        lambda title, message, **_kwargs: errors.append((title, str(message))),
-    )
+    errors: list[tuple[str, str]] = []
+    def record_error(title: str, message: str, **_kwargs: TkCallbackOption) -> None:
+        errors.append((title, str(message)))
+
+    monkeypatch.setattr(plugin_actions.messagebox, "showerror", record_error)
 
     def recover_copy(dialog: Toplevel) -> None:
         _assert_initial_state(context, dialog, allow_create=True)
@@ -519,7 +526,7 @@ def _first_path(record: BlockRecord) -> Path:
 
 def test_cancel_and_escape_leave_library_sources_unchanged(
     monkeypatch: MonkeyPatch, tmp_path: Path
-):
+) -> None:
     record, _first, _second, default = _fixture(tmp_path)
     root, context = _new_root(monkeypatch)
 
