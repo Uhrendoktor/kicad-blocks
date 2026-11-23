@@ -41,7 +41,7 @@ def _smoke_test() -> None:
         expected_tabs = ["Use & build", "Edit & maintain", "Checks & PCB"]
         expected_actions = {
             "Browse and place blocks",
-            "Create block from sheet",
+            "Create block from selection or sheet",
             "Open block implementation",
             "Configure selected instance",
             "Edit facade symbol",
