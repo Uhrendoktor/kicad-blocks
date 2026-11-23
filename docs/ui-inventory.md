@@ -82,7 +82,7 @@ Search registered block libraries, inspect facade and schematic previews, choose
 
 **Coverage:** Contracted — widget action and expected UI transition asserted.
 
-Every browser control and chooser route has a real-widget contract. Direct Publish is tested, selection-dependent actions disable when no row is selected, and placement/publish feedback is inline. The facade pin-layout editor is separately tested for immediate project-catalog persistence and concurrent-edit protection.
+Search, selection, three preview tabs, pan/zoom canvases, the resizable preview/overview split, and browser actions are contracted. PCB previews follow the selected implementation's layout link.
 
 **Major functionality**
 
@@ -93,6 +93,7 @@ Every browser control and chooser route has a real-widget contract. Direct Publi
 - Edit selected facade pin geometry in the portable Facade Pin Layout editor
 - Publish implementation/facade edits and refresh compatible instances
 - Manage variants, PCB layouts, and libraries
+- Inspect the PCB layout linked to the selected circuit implementation, with pan and zoom
 
 **Registered semantic controls**
 
@@ -103,9 +104,10 @@ Every browser control and chooser route has a real-widget contract. Direct Publi
 - Block list (`library-browser.results`; treeview; behavior asserted)
 - Library and filtered-result count (`library-browser.summary`; status-label; result observed)
 - Selected block name (`library-browser.selected-name`; selection-label; result observed)
-- Facade and Schematic tabs (`library-browser.preview.views`; notebook; behavior asserted)
+- Facade, Schematic and PCB tabs (`library-browser.preview.views`; notebook; behavior asserted)
 - Facade preview (`library-browser.preview.facade`; view; result observed)
 - Schematic preview (`library-browser.preview.schematic`; view; result observed)
+- Linked PCB layout preview (`library-browser.preview.pcb`; view; result observed)
 - Implementation selector (`library-browser.implementation`; combobox; behavior asserted)
 - Sheet selector (`library-browser.sheet`; combobox; behavior asserted)
 - Place block (`library-browser.action.place`; button; behavior asserted)
@@ -118,6 +120,9 @@ Every browser control and chooser route has a real-widget contract. Direct Publi
 - Libraries (`library-browser.action.libraries`; button; behavior asserted)
 - Non-modal action status and recovery feedback (`library-browser.status`; status-label; result observed)
 - Publish selected block (`library-browser.action.publish`; button; behavior asserted)
+- Resizable preview and overview split (`library-browser.preview-stack`; pane-group; result observed)
+- Interactive facade, schematic or PCB preview (`library-browser.preview-area`; pane; result observed)
+- Compact block overview (`library-browser.overview-pane`; pane; result observed)
 
 **Current automated evidence**
 
@@ -320,7 +325,7 @@ Every actionable control has a stable semantic ID and real-Tk interaction contra
 
 Package one selected hierarchical sheet, or the sheet currently open in Eeschema when nothing is selected, as a reusable functional block.
 
-**Coverage:** Partial — targeted GUI, integration, or visual checks exist.
+**Coverage:** Partial — targeted GUI, integration, model, or screenshot checks exist.
 
 This is a native Eeschema action rather than a Tk window. The real Eeschema IPC integration test verifies typed SheetSymbol selection, active-subsheet creation with an empty selection, derived facade pins, catalog/library registration, collision-safe naming, rollback on failure, and unchanged source files. The action does not open a naming form or success popup.
 
@@ -618,7 +623,7 @@ Every application-owned interactive control in this dialog has a semantic ID and
 
 Explain blocked operations, recoverable errors, destructive confirmations, and completed reports.
 
-**Coverage:** Partial — targeted GUI, integration, or visual checks exist.
+**Coverage:** Partial — targeted GUI, integration, model, or screenshot checks exist.
 
 The production plugin has 49 native messagebox/simpledialog call sites. The AST-generated registry links all 49 call sites to direct result/effect tests (49 tested, 0 partial, 0 uncovered). In addition, `tests/test_native_tk_dialog_smoke.py` opens real Tk `showerror`, `askyesno`, and `askstring` windows under Xvfb, checks their displayed text, buttons, mapped state and parent/transient relationship, and exercises accept/cancel results. This closes the basic Linux Tk dialog-rendering smoke gap, but does not claim each call site's native window layout or cross-platform Windows/macOS focus, ownership, or button presentation has been reviewed; this screen remains partial.
 
@@ -652,7 +657,7 @@ The production plugin has 49 native messagebox/simpledialog call sites. The AST-
 
 Open and focus KiCad-owned schematic, symbol, and PCB documents, or select files using the operating system's native dialogs.
 
-**Coverage:** Partial — targeted GUI, integration, or visual checks exist.
+**Coverage:** Partial — targeted GUI, integration, model, or screenshot checks exist.
 
 The shared Tk native-dialog wrappers now have direct execute/result contracts for existing/missing initial paths, extension filters, suggested save names/extensions, parent-window ownership arguments, must-exist directory selection, fallback-to-current-directory behavior, and user cancellation. Real KiCad GUI/IPC tests separately cover schematic editor launch/edit/save, symbol facade placement, and PCB document load/save. Actual OS-native chooser rendering, window-manager focus/ownership, and the complete editor hand-off matrix on Windows and macOS remain unverified; this is not cross-platform sign-off.
 
