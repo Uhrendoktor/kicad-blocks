@@ -52,7 +52,7 @@ The plugin identifier is `org.uhrendoktor.kicadblocks`. KiCad creates a managed 
 The common Eeschema toolbar actions are:
 
 - **Browse and Place Functional Blocks**
-- **Create Block from Sheet**
+- **Create Block from Selection or Sheet**
 - **Open Block Implementation**
 
 Other operations are grouped under **Tools → External Plugins → KiCad Blocks Tasks** in the **Use & build**, **Edit & maintain**, and **Checks & PCB** tabs. The PCB Editor also provides **Place Imported Block Layout** for an already merged layout group.
