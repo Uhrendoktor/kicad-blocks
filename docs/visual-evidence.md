@@ -42,6 +42,14 @@ The schematic view previews the editable implementation itself, independently of
 
 The same schematic preview is captured in the [dark theme](https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/library-browser-schematic-dark.png).
 
+The **PCB** tab follows the layout associated with the selected circuit variant. It uses the same zoom and pan controls as the schematic and facade views:
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/library-browser-pcb-light.png" alt="Functional Block Library with the PCB tab selected, showing the KiCad-rendered board associated with the selected implementation" width="1000">
+</p>
+
+The [dark-theme PCB capture](https://raw.githubusercontent.com/Uhrendoktor/kicad-blocks/refs/heads/docs/previews/previews/library-browser-pcb-dark.png) shows the same board view.
+
 ## Edit facade pin layout
 
 Choose **Edit facade** for a selected block in the Functional Block Library to adjust the generated facade's pin positions, orientation, and length. Each accepted change is written to the project-local KiCad symbol catalog immediately; pin names, numbers, and electrical types remain derived from hierarchical labels. **Publish** transfers the facade changes to the shared library with concurrency protection.
