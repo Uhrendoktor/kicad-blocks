@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import os
 import sys
 from dataclasses import dataclass
@@ -37,7 +36,6 @@ from ui_contracts import (  # noqa: E402
     UiTestContext,
     assert_control_coverage,
     TkCallbackOption,
-    TkOption,
 )
 
 pytestmark = pytest.mark.skipif(
