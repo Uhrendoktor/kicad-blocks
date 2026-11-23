@@ -5495,8 +5495,12 @@ def _show_library_browser(
     tree.column("pins", width=44, minwidth=40, stretch=False, anchor="center")
     tree.column("variants", width=78, minwidth=72, stretch=False, anchor="center")
     tree.column("layouts", width=52, minwidth=48, stretch=False, anchor="center")
-    tree_y_scroll = _auto_hide_scrollbar(tree_frame, orient="vertical", command=tree.yview, style="Vertical.TScrollbar")
-    tree_x_scroll = _auto_hide_scrollbar(tree_frame, orient="horizontal", command=tree.xview, style="Horizontal.TScrollbar")
+    tree_y_scroll = ttk.Scrollbar(
+        tree_frame, orient="vertical", command=tree.yview, style="Vertical.TScrollbar"
+    )
+    tree_x_scroll = ttk.Scrollbar(
+        tree_frame, orient="horizontal", command=tree.xview, style="Horizontal.TScrollbar"
+    )
     tree.configure(
         yscrollcommand=tree_y_scroll.set,
         xscrollcommand=tree_x_scroll.set,
@@ -5543,10 +5547,10 @@ def _show_library_browser(
         highlightthickness=0,
         borderwidth=0,
     )
-    preview_y_scroll = _auto_hide_scrollbar(
+    preview_y_scroll = ttk.Scrollbar(
         facade_frame, orient="vertical", command=preview.yview, style="Vertical.TScrollbar"
     )
-    preview_x_scroll = _auto_hide_scrollbar(
+    preview_x_scroll = ttk.Scrollbar(
         facade_frame, orient="horizontal", command=preview.xview, style="Horizontal.TScrollbar"
     )
     preview.configure(
@@ -5600,13 +5604,13 @@ def _show_library_browser(
         highlightthickness=0,
         borderwidth=0,
     )
-    schematic_y_scroll = _auto_hide_scrollbar(
+    schematic_y_scroll = ttk.Scrollbar(
         schematic_frame,
         orient="vertical",
         command=schematic_preview.yview,
         style="Vertical.TScrollbar",
     )
-    schematic_x_scroll = _auto_hide_scrollbar(
+    schematic_x_scroll = ttk.Scrollbar(
         schematic_frame,
         orient="horizontal",
         command=schematic_preview.xview,
@@ -5636,11 +5640,11 @@ def _show_library_browser(
     pcb_preview = tk.Canvas(
         pcb_frame, background="#ffffff", highlightthickness=0, borderwidth=0
     )
-    pcb_y_scroll = _auto_hide_scrollbar(
+    pcb_y_scroll = ttk.Scrollbar(
         pcb_frame, orient="vertical", command=pcb_preview.yview,
         style="Vertical.TScrollbar",
     )
-    pcb_x_scroll = _auto_hide_scrollbar(
+    pcb_x_scroll = ttk.Scrollbar(
         pcb_frame, orient="horizontal", command=pcb_preview.xview,
         style="Horizontal.TScrollbar",
     )

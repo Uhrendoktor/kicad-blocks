@@ -405,6 +405,31 @@ def test_library_browser_split_panes_have_visible_geometry(monkeypatch, tmp_path
         root.destroy()
 
 
+
+def test_library_browser_scrollbars_keep_stable_geometry(monkeypatch, tmp_path):
+    from kicad_blocks.theme import AutoHideScrollbar
+
+    root, context, _records, _library, _project = _new_browser(monkeypatch, tmp_path)
+    try:
+        tree = context.require_widget("library-browser.results")
+
+        def descendants(widget):
+            for child in widget.winfo_children():
+                yield child
+                yield from descendants(child)
+
+        browser_scrollbars = [
+            widget for widget in descendants(root)
+            if widget.winfo_class() == "TScrollbar"
+        ]
+        assert browser_scrollbars
+        assert all(type(widget) is not AutoHideScrollbar for widget in browser_scrollbars)
+        assert len(browser_scrollbars) >= 7
+        assert all(widget.winfo_width() > 0 or widget.winfo_height() > 0 for widget in browser_scrollbars)
+    finally:
+        root.destroy()
+
+
 def test_library_browser_preview_and_overview_heights_are_resizable(monkeypatch, tmp_path):
     root, context, _records, _library, _project = _new_browser(monkeypatch, tmp_path)
     try:
