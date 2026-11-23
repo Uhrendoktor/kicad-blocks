@@ -487,9 +487,9 @@ def main() -> None:
             # save it as part of the fixture, then select it with a real
             # hierarchical label using the live Eeschema IPC selection API.
             component = open_sheet.place_symbol_from_library(
-                "Device:R",
+                f"{selected_manifest['library_nickname']}:{selected_manifest['symbol_name']}",
                 Vector2.from_xy_mm(100, 100),
-                reference="R1",
+                reference="X1",
             )
             open_sheet.save()
             labels = list(open_sheet.get_labels())
