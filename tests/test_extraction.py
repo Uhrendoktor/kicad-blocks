@@ -141,7 +141,10 @@ class HierarchicalSheetExtractionTests(unittest.TestCase):
         write_selection_schematic(source, selection, destination)
         extracted = parse_sexpr(destination.read_text(encoding="utf-8"))
 
-        self.assertEqual(len(_all(extracted, "symbol")), 1)
+        self.assertEqual(
+            sum(1 for item in extracted[1:] if _head(item) == "symbol"),
+            1,
+        )
         self.assertEqual(len(_all(extracted, "label")), 0)
         self.assertEqual(len(_all(extracted, "global_label")), 0)
         self.assertEqual(len(_all(extracted, "hierarchical_label")), 2)
