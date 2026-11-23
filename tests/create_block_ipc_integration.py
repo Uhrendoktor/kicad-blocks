@@ -25,7 +25,9 @@ from kicad_blocks.model import parse_pins, render_implementation_schematic
 from kicad_blocks.repository import (
     LIBRARY_CATALOG_NAME,
     LIBRARY_NICKNAME,
+    build_project_symbol_catalog,
     list_blocks,
+    register_project_symbol_library,
 )
 from kipy import KiCad
 from kipy.errors import ApiError
@@ -355,6 +357,18 @@ def main() -> None:
         parent_path, child_paths = _write_source_sheets(project_dir)
         project_path = project_dir / "CreateBlockFromSheetIPC.kicad_pro"
         _validate_hierarchy_fixture(cli, parent_path, child_paths, root)
+
+        # Eeschema reload_library refreshes a nickname already discovered from
+        # the project table; it cannot introduce a new project-table row after
+        # the editor has started. Seed the stable KBlocks row before launch so
+        # the first _register_block call can reload the newly populated catalog.
+        initial_catalog = build_project_symbol_catalog(project_dir, [library_root])
+        register_project_symbol_library(
+            project_dir,
+            LIBRARY_NICKNAME,
+            initial_catalog,
+            description="KiCad Blocks — all registered functional-block libraries",
+        )
 
         original_files = {
             path: path.read_bytes()
