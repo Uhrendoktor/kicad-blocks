@@ -613,9 +613,7 @@ def test_close_confirmation_can_keep_pending_changes_or_discard_them(
         del value, source, record, allow_create
         return "3V3", str(selected_source)
 
-    monkeypatch.setattr(
-        plugin_actions, "_ask_implementation_details", ask_implementation_details
-    )
+    monkeypatch.setattr(plugin_actions, "_ask_implementation_details", ask_implementation_details)
     original_save = _save_block_variants
     attempts: list[str] = []
     errors: list[tuple[str, str]] = []
@@ -644,6 +642,7 @@ def test_close_confirmation_can_keep_pending_changes_or_discard_them(
         return next(decisions)
 
     monkeypatch.setattr(plugin_actions, "_save_block_variants", fail_once)
+
     def record_error(title: str, message: str, **_kwargs: TkCallbackOption) -> None:
         errors.append((title, str(message)))
 
@@ -754,6 +753,7 @@ def test_add_variant_duplicate_value_reports_error_and_preserves_manifest(
 ):
     record, sources = _new_manager_fixture(tmp_path, variants=("1V8",))
     original = read_manifest(record.path)
+
     def ask_duplicate_add(
         _parent: Misc,
         *,
@@ -800,6 +800,7 @@ def test_edit_variant_duplicate_value_reports_error_and_preserves_manifest(
 ):
     record, sources = _new_manager_fixture(tmp_path, variants=("1V8", "3V3"))
     original = read_manifest(record.path)
+
     def ask_duplicate_edit(
         _parent: Misc,
         *,

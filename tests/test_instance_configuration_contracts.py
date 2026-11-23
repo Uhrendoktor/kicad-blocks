@@ -163,9 +163,8 @@ def _fixture(
 
 def _new_root(monkeypatch: MonkeyPatch) -> tuple[Tk, UiTestContext]:
     plugin_actions.load_tkinter()
-    def no_action_icon(
-        _parent: Misc, _name: str, _stroke_color: str | None = None
-    ) -> None:
+
+    def no_action_icon(_parent: Misc, _name: str, _stroke_color: str | None = None) -> None:
         return None
 
     monkeypatch.setattr(plugin_actions, "_create_action_icon", no_action_icon)
@@ -313,7 +312,9 @@ def test_profile_selection_updates_variant_parameter_and_layout_then_saves_one_i
         }
         assert updates == ["X1"]
         cast(Mock, schematic.begin_commit).assert_called_once_with()
-        cast(Mock, schematic.push_commit).assert_called_once_with(commit, "Configure KiCad block instance")
+        cast(Mock, schematic.push_commit).assert_called_once_with(
+            commit, "Configure KiCad block instance"
+        )
         cast(Mock, schematic.save).assert_called_once_with()
         cast(Mock, schematic.drop_commit).assert_not_called()
     finally:
@@ -354,7 +355,9 @@ def test_manual_parameter_edit_changes_profile_to_custom_and_saves(
         assert values["KB_LAYOUT"] == "standard"
         assert updates == ["X1"]
         cast(Mock, schematic.begin_commit).assert_called_once_with()
-        cast(Mock, schematic.push_commit).assert_called_once_with(commit, "Configure KiCad block instance")
+        cast(Mock, schematic.push_commit).assert_called_once_with(
+            commit, "Configure KiCad block instance"
+        )
         cast(Mock, schematic.save).assert_called_once_with()
     finally:
         root.destroy()
@@ -367,6 +370,7 @@ def test_invalid_parameter_shows_error_without_ipc_edit_then_recovers(
     root, context = _new_root(monkeypatch)
     updates = _install_update_spy(monkeypatch)
     errors: list[tuple[str, str]] = []
+
     def record_error(title: str, message: str, **_kwargs: TkCallbackOption) -> None:
         errors.append((title, str(message)))
 
@@ -512,7 +516,11 @@ def test_missing_required_configuration_field_fails_before_opening_dialog(
 ):
     library, project, _block, instance, schematic, _commit = _fixture(tmp_path)
     root, _context = _new_root(monkeypatch)
-    setattr(instance, "user_fields", [field for field in instance.user_fields if field.name != "KB_LAYOUT"])
+    setattr(
+        instance,
+        "user_fields",
+        [field for field in instance.user_fields if field.name != "KB_LAYOUT"],
+    )
     try:
         with pytest.raises(RuntimeError, match="KB_LAYOUT"):
             plugin_actions.show_selected_block_configuration(schematic, project, library, root)

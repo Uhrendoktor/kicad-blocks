@@ -34,6 +34,7 @@ def _required_direct_node(node: SExprList, tag: str) -> SExprList:
         raise AssertionError(f"Expected direct S-expression child {tag!r}.")
     return child
 
+
 plugin_actions = import_module("kicad_blocks.plugin")
 
 
@@ -310,6 +311,7 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
     def test_facade_geometry_edit_changes_only_selected_pin_in_project_catalog(self):
         import copy
         from kicad_blocks.repository import build_project_symbol_catalog, sha256_file
+
         catalog_path = build_project_symbol_catalog(self.project, [self.library])
         original_asset = self.block.symbol_library.read_bytes()
         original_shared_catalog = (self.library / plugin_actions.LIBRARY_CATALOG_NAME).read_bytes()
@@ -375,12 +377,15 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
 
     def test_facade_geometry_edit_rejects_concurrent_catalog_change(self):
         from kicad_blocks.repository import build_project_symbol_catalog, sha256_file
+
         catalog_path = build_project_symbol_catalog(self.project, [self.library])
         symbol_name = self.block.manifest["symbol_name"]
         symbol_tree = parse_sexpr(catalog_path.read_text(encoding="utf-8"))
         symbol = _named_symbol_node_for_test(symbol_tree, symbol_name, catalog_path)
         unit = next(
-            child for child in symbol[1:] if sexpr_head(child) == "symbol" and sexpr_all(child, "pin")
+            child
+            for child in symbol[1:]
+            if sexpr_head(child) == "symbol" and sexpr_all(child, "pin")
         )
         pin = sexpr_all(unit, "pin")[0]
         pin_name = str(_required_direct_node(pin, "name")[1])
@@ -410,12 +415,15 @@ class LibraryEditorWorkflowTests(unittest.TestCase):
 
     def test_facade_geometry_edit_rejects_invalid_geometry_without_writing(self):
         from kicad_blocks.repository import build_project_symbol_catalog, sha256_file
+
         catalog_path = build_project_symbol_catalog(self.project, [self.library])
         symbol_name = self.block.manifest["symbol_name"]
         tree = parse_sexpr(catalog_path.read_text(encoding="utf-8"))
         symbol = _named_symbol_node_for_test(tree, symbol_name, catalog_path)
         unit = next(
-            child for child in symbol[1:] if sexpr_head(child) == "symbol" and sexpr_all(child, "pin")
+            child
+            for child in symbol[1:]
+            if sexpr_head(child) == "symbol" and sexpr_all(child, "pin")
         )
         pin = sexpr_all(unit, "pin")[0]
         before = catalog_path.read_bytes()

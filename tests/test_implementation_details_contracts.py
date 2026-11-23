@@ -78,9 +78,8 @@ def _fixture(tmp_path: Path) -> tuple[BlockRecord, Path, Path, Path]:
 
 def _new_root(monkeypatch: MonkeyPatch) -> tuple[Tk, UiTestContext]:
     plugin_actions.load_tkinter()
-    def no_action_icon(
-        _parent: Misc, _name: str, _stroke_color: str | None = None
-    ) -> None:
+
+    def no_action_icon(_parent: Misc, _name: str, _stroke_color: str | None = None) -> None:
         return None
 
     monkeypatch.setattr(plugin_actions, "_create_action_icon", no_action_icon)
@@ -252,6 +251,7 @@ def test_blank_selector_validation_keeps_form_open_and_recovers(
     source.write_text("(kicad_sch (version 20250114))\n", encoding="utf-8")
     root, context = _new_root(monkeypatch)
     errors: list[tuple[str, str]] = []
+
     def record_error(title: str, message: str, **_kwargs: TkCallbackOption) -> None:
         errors.append((title, str(message)))
 
@@ -324,10 +324,12 @@ def test_invalid_source_extension_is_rejected_then_browse_recovers(
     source = tmp_path / "selected.kicad_sch"
     source.write_text("(kicad_sch (version 20250114))\n", encoding="utf-8")
     errors: list[tuple[str, str]] = []
+
     def record_error(title: str, message: str, **_kwargs: TkCallbackOption) -> None:
         errors.append((title, str(message)))
 
     monkeypatch.setattr(plugin_actions.messagebox, "showerror", record_error)
+
     def pick_file(
         _parent: Misc,
         *,
@@ -477,6 +479,7 @@ def test_missing_copy_source_is_rejected_and_can_switch_to_existing_variant(
     default.unlink()
     root, context = _new_root(monkeypatch)
     errors: list[tuple[str, str]] = []
+
     def record_error(title: str, message: str, **_kwargs: TkCallbackOption) -> None:
         errors.append((title, str(message)))
 

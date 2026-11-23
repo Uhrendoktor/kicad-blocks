@@ -17,9 +17,7 @@ from kicad_blocks import plugin as plugin_actions
 
 
 # Native dialog call-site contracts patch the functions and do not need Tk installed.
-def _unpatched_native_dialog(
-    *_args: TkCallbackOption, **_kwargs: TkCallbackOption
-) -> NoReturn:
+def _unpatched_native_dialog(*_args: TkCallbackOption, **_kwargs: TkCallbackOption) -> NoReturn:
     raise AssertionError("A native dialog call was not patched by this test.")
 
 
@@ -163,7 +161,9 @@ def test_profile_wizard_decline_returns_empty_without_opening_text_prompts(
     monkeypatch.setattr(plugin_actions.messagebox, "askyesno", _confirmation_response(False))
     monkeypatch.setattr(plugin_actions.simpledialog, "askstring", record_prompt)
     parameters, variants, layouts = _profile_inputs()
-    assert plugin_actions.collect_block_profiles(_fake_parent(), parameters, variants, layouts) == []
+    assert (
+        plugin_actions.collect_block_profiles(_fake_parent(), parameters, variants, layouts) == []
+    )
     assert prompts == []
 
 def test_profile_wizard_cancel_discards_an_incomplete_profile(monkeypatch: MonkeyPatch) -> None:
@@ -193,6 +193,7 @@ def test_profile_wizard_blank_name_warns_and_does_not_create_partial_profile(
     warnings: list[PromptRecord] = []
     monkeypatch.setattr(plugin_actions.messagebox, "askyesno", _confirmation_response(True))
     monkeypatch.setattr(plugin_actions.simpledialog, "askstring", _string_response("   "))
+
     def record_warning(title: str, message: str, **kwargs: TkCallbackOption) -> None:
         warnings.append((title, message, cast(Misc | None, kwargs.get("parent"))))
 
@@ -263,6 +264,7 @@ def test_layout_selector_returns_the_user_selected_layout(monkeypatch: MonkeyPat
     assert "Compact [compact]" in calls[0][1]
     assert calls[0][2] is parent
 
+
 def test_layout_selector_cancel_and_invalid_choice_are_distinct(monkeypatch: MonkeyPatch) -> None:
     parent = _fake_parent()
     monkeypatch.setattr(plugin_actions.simpledialog, "askstring", _string_response(None))
@@ -270,9 +272,7 @@ def test_layout_selector_cancel_and_invalid_choice_are_distinct(monkeypatch: Mon
         plugin_actions.choose_block_layout(_layout_block(), parent, "Select PCB layout", None)
         is None
     )
-    monkeypatch.setattr(
-        plugin_actions.simpledialog, "askstring", _string_response("Missing")
-    )
+    monkeypatch.setattr(plugin_actions.simpledialog, "askstring", _string_response("Missing"))
     with pytest.raises(ValueError, match="No PCB layout"):
         plugin_actions.choose_block_layout(_layout_block(), parent, "Select PCB layout", None)
 
@@ -287,9 +287,7 @@ def _install_validation_fakes(
     parent = _fake_parent()
     calls: list[ValidationCall] = []
 
-    def pick_directory(
-        _parent: Misc, *, title: str, initial_path: str | Path | None = None
-    ) -> str:
+    def pick_directory(_parent: Misc, *, title: str, initial_path: str | Path | None = None) -> str:
         del title, initial_path
         return str(output)
 
@@ -320,6 +318,7 @@ def _install_validation_fakes(
     monkeypatch.setattr(plugin_actions, "find_kicad_cli", find_cli)
     monkeypatch.setattr(plugin_actions, "validate_block_library", validate)
     return library, output, parent, calls
+
 
 @pytest.mark.parametrize(
     ("report", "expected_title"),
@@ -401,6 +400,7 @@ def test_successful_library_validation_does_not_show_a_warning_dialog(
     monkeypatch.setattr(plugin_actions.messagebox, "showwarning", record_warning)
     plugin_actions.validate_shared_library(tmp_path, _fake_parent())
     assert warnings == []
+
 
 def test_validation_report_dialog_cancel_skips_all_library_validation(
     monkeypatch: MonkeyPatch, tmp_path: Path
